@@ -27,7 +27,9 @@ export interface PhysicalTopologyEndpointPod {
   server_id: string | null;
   usage_pct: number | null;
   cpu_mcores: number | null;
+  cpu_request_mcores: number | null;
   mem_mib: number | null;
+  mem_request_mib: number | null;
   phase: string;
   health: string;
   restarts: number;

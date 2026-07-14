@@ -41,7 +41,9 @@ const livePodValueSchema = z.object({
   health: z.string().min(1).optional(),
   restarts: z.number().int().nonnegative().optional(),
   cpu_mcores: optionalMetricSchema,
+  cpu_request_mcores: optionalMetricSchema,
   mem_mib: optionalMetricSchema,
+  mem_request_mib: optionalMetricSchema,
   cpu_request_pct: optionalMetricSchema,
   mem_request_pct: optionalMetricSchema,
   observed_at: z.string().min(1).nullable().optional(),
@@ -68,7 +70,9 @@ export interface LivePodMeasurement {
   name: string;
   usagePercent?: number | null;
   cpuMillicores?: number | null;
+  cpuRequestMillicores?: number | null;
   memoryMebibytes?: number | null;
+  memoryRequestMebibytes?: number | null;
   phase?: string;
   health?: string;
   restartCount?: number;
@@ -150,25 +154,38 @@ function livePodMeasurement(
     (parsed.data.name !== undefined && parsed.data.name !== identity.name)
   ) return null;
   const usagePresent = "cpu_request_pct" in parsed.data || "mem_request_pct" in parsed.data;
-  const usageValues = [parsed.data.cpu_request_pct, parsed.data.mem_request_pct]
-    .filter((candidate): candidate is number => typeof candidate === "number");
+  const usagePercent = completeUsagePercent(parsed.data);
   return {
     namespace: identity.namespace,
     name: identity.name,
-    ...(usagePresent
-      ? { usagePercent: usageValues.length > 0 ? Math.max(...usageValues) : null }
-      : {}),
+    ...(usagePresent ? { usagePercent } : {}),
     ...(hasOwn(parsed.data, "cpu_mcores")
       ? { cpuMillicores: parsed.data.cpu_mcores ?? null }
       : {}),
+    ...(hasOwn(parsed.data, "cpu_request_mcores")
+      ? { cpuRequestMillicores: parsed.data.cpu_request_mcores ?? null }
+      : {}),
     ...(hasOwn(parsed.data, "mem_mib")
       ? { memoryMebibytes: parsed.data.mem_mib ?? null }
+      : {}),
+    ...(hasOwn(parsed.data, "mem_request_mib")
+      ? { memoryRequestMebibytes: parsed.data.mem_request_mib ?? null }
       : {}),
     ...(parsed.data.phase === undefined ? {} : { phase: parsed.data.phase }),
     ...(parsed.data.health === undefined ? {} : { health: parsed.data.health }),
     ...(parsed.data.restarts === undefined ? {} : { restartCount: parsed.data.restarts }),
     ...(parsed.data.observed_at === undefined ? {} : { observedAt: parsed.data.observed_at }),
   };
+}
+
+function completeUsagePercent(value: z.infer<typeof livePodValueSchema>): number | null {
+  if (
+    typeof value.cpu_request_mcores !== "number" ||
+    typeof value.mem_request_mib !== "number"
+  ) return null;
+  const ratios = [value.cpu_request_pct, value.mem_request_pct]
+    .filter((candidate): candidate is number => typeof candidate === "number");
+  return ratios.length > 0 ? Math.max(...ratios) : null;
 }
 
 function resourceDeltaIdentity(

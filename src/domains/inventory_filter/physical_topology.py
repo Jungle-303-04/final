@@ -80,8 +80,14 @@ def build_physical_topology(
         measured = _mapping(pod_usage.get(f"{namespace}/{name}"))
         cpu_mcores = _number(measured.get("cpu_mcores"))
         mem_mib = _number(_first(measured, "mem_mib", "memory_mib"))
-        usage_pct = _requests_usage_pct(summary, cpu_mcores=cpu_mcores, mem_mib=mem_mib)
-        metric_values.extend((cpu_mcores, mem_mib, usage_pct))
+        cpu_request_mcores, mem_request_mib = _request_denominators(summary)
+        usage_pct = _requests_usage_pct(
+            cpu_mcores=cpu_mcores,
+            cpu_request_mcores=cpu_request_mcores,
+            mem_mib=mem_mib,
+            mem_request_mib=mem_request_mib,
+        )
+        metric_values.extend((cpu_mcores, cpu_request_mcores, mem_mib, mem_request_mib, usage_pct))
         pods.append(
             {
                 "id": pod_id,
@@ -90,7 +96,9 @@ def build_physical_topology(
                 "server_id": server_id,
                 "usage_pct": usage_pct,
                 "cpu_mcores": cpu_mcores,
+                "cpu_request_mcores": cpu_request_mcores,
                 "mem_mib": mem_mib,
+                "mem_request_mib": mem_request_mib,
                 "phase": _text(row.get("status") or summary.get("phase"), "Unknown"),
                 "health": _text(row.get("health"), "unknown"),
                 "restarts": _non_negative_int(summary.get("restart_total")),
@@ -133,22 +141,40 @@ def build_physical_topology(
 
 
 def _requests_usage_pct(
-    summary: Mapping[str, Any],
     *,
     cpu_mcores: float | None,
+    cpu_request_mcores: float | None,
     mem_mib: float | None,
+    mem_request_mib: float | None,
 ) -> float | None:
-    """Return requests-relative usage only when both facts were observed."""
-    cpu_request = _number(
-        _first(summary, "cpu_request_mcores", "request_cpu_mcores", "requests_cpu_mcores")
-    )
-    mem_request = _number(_first(summary, "mem_request_mib", "request_mem_mib", "requests_mem_mib"))
-    ratios = [
-        value / request * 100.0
-        for value, request in ((cpu_mcores, cpu_request), (mem_mib, mem_request))
-        if value is not None and request is not None and request > 0
-    ]
+    """Return usage only when both request denominators and a measurement exist."""
+    if (
+        cpu_request_mcores is None
+        or mem_request_mib is None
+        or cpu_request_mcores <= 0
+        or mem_request_mib <= 0
+    ):
+        return None
+    ratios = []
+    if cpu_mcores is not None:
+        ratios.append(cpu_mcores / cpu_request_mcores * 100.0)
+    if mem_mib is not None:
+        ratios.append(mem_mib / mem_request_mib * 100.0)
     return round(max(ratios), 1) if ratios else None
+
+
+def _request_denominators(summary: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    return (
+        _positive_number(
+            _first(
+                summary,
+                "cpu_request_mcores",
+                "request_cpu_mcores",
+                "requests_cpu_mcores",
+            )
+        ),
+        _positive_number(_first(summary, "mem_request_mib", "request_mem_mib", "requests_mem_mib")),
+    )
 
 
 def _usage_pct(
@@ -189,6 +215,11 @@ def _number(value: object) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed >= 0 else None
+
+
+def _positive_number(value: object) -> float | None:
+    parsed = _number(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _non_negative_int(value: object) -> int:

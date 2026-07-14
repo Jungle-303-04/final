@@ -24,7 +24,9 @@ export interface PhysicalTopologyPod {
   serverId: string | null;
   usagePercent: number | null;
   cpuMillicores: number | null;
+  cpuRequestMillicores: number | null;
   memoryMebibytes: number | null;
+  memoryRequestMebibytes: number | null;
   phase: string;
   health: string;
   restartCount: number;

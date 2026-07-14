@@ -50,9 +50,15 @@ function mergePod(
     ...(measurement.cpuMillicores === undefined
       ? {}
       : { cpuMillicores: measurement.cpuMillicores }),
+    ...(measurement.cpuRequestMillicores === undefined
+      ? {}
+      : { cpuRequestMillicores: measurement.cpuRequestMillicores }),
     ...(measurement.memoryMebibytes === undefined
       ? {}
       : { memoryMebibytes: measurement.memoryMebibytes }),
+    ...(measurement.memoryRequestMebibytes === undefined
+      ? {}
+      : { memoryRequestMebibytes: measurement.memoryRequestMebibytes }),
     ...(measurement.phase === undefined ? {} : { phase: measurement.phase }),
     ...(measurement.health === undefined ? {} : { health: measurement.health }),
     ...(measurement.restartCount === undefined

@@ -102,6 +102,8 @@ export const resourcesKo = {
   "resources.graph.server.more": "+{count}개",
   "resources.graph.metric.memory.short": "메모리",
   "resources.graph.pod.aria": "파드 {name}, {phase}, 사용률 {usage}",
+  "resources.graph.pod.request.cpu": "요청량 대비 {usage} ({actual} / {request} 코어)",
+  "resources.graph.pod.request.memory": "요청량 대비 {usage} ({actual} / {request} MiB)",
   "resources.graph.pod.badge.crash-loop": "CrashLoop",
   "resources.graph.pod.badge.pending": "Pending",
   "resources.graph.pod.badge.restarting": "반복 재시작",

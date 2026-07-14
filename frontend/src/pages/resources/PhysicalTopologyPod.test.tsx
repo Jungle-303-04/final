@@ -112,9 +112,9 @@ describe("PhysicalTopologyPod", () => {
     }));
 
     const button = screen.getByRole("button");
-    expect(button.getAttribute("aria-label")).toContain("106%");
+    expect(button.getAttribute("aria-label")).toContain("106.2%");
     expect(button.getAttribute("title")).toContain(
-      "요청량 대비 106% (0.531 / 0.5 코어)",
+      "요청량 대비 106.2% (0.531 / 0.5 코어)",
     );
   });
 });
