@@ -196,6 +196,28 @@ proxy_pass $api_upstream;
 **해법**: `source_sha`가 **dev의 조상 + 그 SHA의 Dev Gate SUCCESS**면 진행.
 배포 대상은 "최신"이 아니라 **"검증된 것"**이면 된다. (단일 세션이 되면 완화됨.)
 
+## 5-6. 리소스 단일화 전에 참조 그래프를 확인한다
+`console` LoadBalancer를 지웠지만 Cloudflare DNS는 삭제된 ELB를 계속 참조해 사이트 전체가
+1016으로 중단됐다. DNS를 터널로 돌린 뒤에는 원격 tunnel ingress도 존재하지 않는
+`console.management.svc.cluster.local`을 가리켜 502가 이어졌다. 현재 클러스터 정본은
+`console-dev` Deployment/Service이며, `k8s.woonyong.org`는 활성 `kubeheal` 터널을 거쳐
+`http://console-dev.management.svc.cluster.local:80`으로 연결된다.
+
+**클러스터 리소스를 지우기 전에 누가 그것을 참조하는지 먼저 확인하라.** 이번 참조자는
+Cloudflare DNS와 원격 tunnel ingress였고, 사이트 전체가 죽었다. "단일화"를 할 때는
+DNS → tunnel → ingress → Service → Endpoint 참조 그래프를 먼저 그리고, 변경 후 외부
+health와 cloudflared 로그를 함께 검증한다.
+
+**Cloudflare DNS와 원격 tunnel ingress는 클러스터 밖에 있다.** `kubectl`에는 보이지
+않으므로 Cloudflare API/CLI로 별도 확인한다. GitHub secret도 이름이 존재한다고 유효한
+것이 아니다. 잘못된 account/tunnel ID와 무효 API token은 workflow 실행 단계에서만
+드러날 수 있으므로 scheduled dry-run preflight로 주기적으로 검증한다.
+
+현재 이름 정본은 `console-dev` Deployment/Service다. `k8s.woonyong.org`는 일반 공개·데모,
+`dev-k8s.woonyong.org`는 Bruno/API와 개발 콘솔용 client-certificate mTLS endpoint다.
+둘 다 같은 `console-dev` origin을 사용한다. `console`로 이름을 바꾸려면 두 Cloudflare
+원격 ingress와 저장소 workflow·`CONSOLE_ORIGIN`·Service/Endpoint를 한 번에 바꾼다.
+
 ---
 
 # 6. 규율
