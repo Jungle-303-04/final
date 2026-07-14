@@ -1,5 +1,4 @@
 import { useRef, useState, useMemo, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { Input } from "./primitives/input";
@@ -75,12 +74,8 @@ export function SearchPillInput({
 }: SearchPillInputProps) {
   const internalRef = useRef<HTMLInputElement>(null);
   const inputRef = inputRefProp ?? internalRef;
-  const containerRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  const [anchor, setAnchor] = useState<{ left: number; bottom: number } | null>(
-    null,
-  );
   const mod = useMemo(
     () => activeSearchModifier(text, aliases),
     [text, aliases],
@@ -95,27 +90,6 @@ export function SearchPillInput({
   useEffect(() => {
     onSuggestingChange?.(suggesting);
   }, [suggesting, onSuggestingChange]);
-
-  // Anchor the portaled suggestion dropdown under the input box.
-  useEffect(() => {
-    if (!suggesting) return;
-    let frame = 0;
-    const update = () => {
-      const el = containerRef.current;
-      if (el) {
-        const r = el.getBoundingClientRect();
-        setAnchor({ left: r.left, bottom: r.bottom });
-      }
-    };
-    frame = window.requestAnimationFrame(update);
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [suggesting]);
 
   const commitPill = (key: string, value: string, before: string) => {
     onChange({ pills: [...pills, { key, value }], text: before });
@@ -171,15 +145,15 @@ export function SearchPillInput({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "flex min-w-0 items-center gap-1.5 overflow-x-auto",
-        className,
-      )}
-      data-slot="search-pill-input"
-      onClick={() => inputRef.current?.focus()}
-    >
+    <div className="relative min-w-0">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 overflow-x-auto",
+          className,
+        )}
+        data-slot="search-pill-input"
+        onClick={() => inputRef.current?.focus()}
+      >
       {leftSlot}
       {pills.map((p, i) => (
         <span
@@ -224,21 +198,10 @@ export function SearchPillInput({
           inputClassName ?? "text-sm",
         )}
       />
-      {rightSlot}
-      {suggesting &&
-        anchor &&
-        mod &&
-        createPortal(
-          <div
-            style={{
-              position: "fixed",
-              top: anchor.bottom + 4,
-              left: anchor.left,
-              width: 280,
-              maxWidth: "calc(100vw - 2rem)",
-            }}
-            className="z-[130] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg"
-          >
+        {rightSlot}
+      </div>
+      {suggesting && mod ? (
+        <div className="absolute left-0 top-full z-[130] mt-1 w-70 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg">
             <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/75">
               {mod.canon}
             </div>
@@ -264,9 +227,8 @@ export function SearchPillInput({
                 </button>
               ))}
             </div>
-          </div>,
-          document.body,
-        )}
+        </div>
+      ) : null}
     </div>
   );
 }

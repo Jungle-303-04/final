@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { computeSaturation } from './saturation'
-import type { ReferenceLine, TimeSeries } from './types'
+import { describe, expect, it } from "vitest";
+import { computeSaturation } from "./saturation";
+import type { ReferenceLine, TimeSeries } from "./types";
 
 const series = (values: number[]): TimeSeries => ({
   labels: { pod: 'p' },

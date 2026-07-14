@@ -2,9 +2,9 @@ import { cn } from '@/shared/lib/cn'
 import { BarChart3, Wifi, WifiOff, Loader2 } from 'lucide-react'
 import { AreaChart } from './AreaChart'
 import { PaneLoader } from '../ui/PaneLoader'
-import { MetricsSummary } from './MetricsSummary'
-import { SeriesLegend } from './SeriesLegend'
-import type { TimeSeries, ReferenceLine } from './types'
+import { MetricsSummary } from '@/shared/ui/charts/MetricsSummary'
+import { SeriesLegend } from '@/shared/ui/charts/SeriesLegend'
+import type { TimeSeries, ReferenceLine } from '@/shared/ui/charts/types'
 
 // Pure presentational Prometheus charts view, shared between opsia's WorkloadView
 // and Opsia Hub's Application metrics tab. It owns NO data fetching — the host
@@ -186,7 +186,12 @@ export function PrometheusChartsView({
           </div>
         ) : series.length ? (
           <div className="flex h-full flex-col gap-4">
-            <MetricsSummary series={series} unit={metrics!.unit} currentColorClass={activeCategoryDef.color} />
+            <MetricsSummary
+              labels={{ current: '현재', average: '평균', peak: '최대' }}
+              series={series}
+              unit={metrics!.unit}
+              currentColorClass={activeCategoryDef.color}
+            />
             <div className="min-h-0 flex-1">
               <AreaChart
                 series={series}
@@ -196,7 +201,13 @@ export function PrometheusChartsView({
                 referenceLines={referenceLines}
               />
             </div>
-            {series.length > 1 && <SeriesLegend series={series} color={activeCategoryDef.chartColor} />}
+            {series.length > 1 && (
+              <SeriesLegend
+                series={series}
+                color={activeCategoryDef.chartColor}
+                formatOverflowCount={(count) => `+${count}개`}
+              />
+            )}
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-muted-foreground/75">

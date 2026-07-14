@@ -1,4 +1,4 @@
-// Compact human-readable formatters for chart values and timestamps.
+// Compact caller-independent formatters for chart values and timestamps.
 // Unit-tier breakpoints chosen so the rendered text stays short enough to
 // fit inside chart axis labels and tooltips at typical font sizes.
 

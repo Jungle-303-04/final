@@ -1,6 +1,4 @@
-// Shared time-series chart types. The shape originated from Prometheus query
-// results but is generic — any source emitting time-stamped numeric samples
-// can feed AreaChart.
+// Source-neutral time-series contracts for product chart surfaces.
 
 export interface TimeSeriesPoint {
   timestamp: number
@@ -15,14 +13,6 @@ export interface TimeSeries {
    *  0. */
   dataPoints: TimeSeriesPoint[]
 }
-
-/** @deprecated Use {@link TimeSeriesPoint}. Kept for one release for callers
- *  still importing the Prom-prefixed name. */
-export type PrometheusDataPoint = TimeSeriesPoint
-
-/** @deprecated Use {@link TimeSeries}. Kept for one release for callers still
- *  importing the Prom-prefixed name. */
-export type PrometheusSeries = TimeSeries
 
 /**
  * Horizontal reference line overlaid on a chart. `kind` is semantic — it

@@ -1,10 +1,9 @@
-import { seriesColor, seriesFill } from '../components/charts/colors'
+import { seriesColor, seriesFill } from '@/shared/ui/charts/colors'
 
 // Per-workload color encoding for the application topology graph. A workload's
 // exclusive satellites (its Service, config, pods) carry its hue; shared and
-// unattached resources stay neutral. Reuses SERIES_COLORS — the codebase's
-// categorical palette for multi-series charts (10 well-separated 500-level
-// shades, vetted on both themes) — so workload colors match the rest of the UI.
+// unattached resources stay neutral. Reuses the product's token-derived
+// categorical palette so workload colors match the rest of the UI.
 //
 // Solid swatch for the rail legend; faint fill for node card ownership. Health
 // remains encoded separately by the node border and status dot.
@@ -25,7 +24,7 @@ export const NEUTRAL_OWNER = '__neutral__'
  *  workload key (see `workloadKey`) whose neighborhood stays lit. */
 export type WorkloadFocus = string | null
 
-const NEUTRAL_FALLBACK = '#64748b' // slate-500
+const NEUTRAL_FALLBACK = 'var(--muted-foreground)'
 
 export function workloadHue(index: number): WorkloadHue {
   return {

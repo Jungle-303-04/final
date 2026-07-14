@@ -1,25 +1,25 @@
-// Distinct colors for multi-series charts (up to 10 series).
-// Uses 500-level shades for adequate contrast on both dark (#1e293b) and
-// light (#ffffff) surfaces.
-export const SERIES_COLORS: readonly string[] = [
-  '#3b82f6', // blue-500
-  '#10b981', // emerald-500
-  '#f97316', // orange-500
-  '#a855f7', // purple-500
-  '#ec4899', // pink-500
-  '#eab308', // yellow-500
-  '#06b6d4', // cyan-500
-  '#84cc16', // lime-500
-  '#ef4444', // red-500
-  '#6366f1', // indigo-500
-]
+// Multi-series colors are derived from product tokens. A theme switch changes
+// the palette without leaving raw light/dark hex values inside a component.
+const SERIES_MIXES: readonly string[] = [
+  "var(--primary)",
+  "color-mix(in oklch, var(--primary) 70%, var(--destructive))",
+  "color-mix(in oklch, var(--primary) 65%, var(--foreground))",
+  "color-mix(in oklch, var(--primary) 55%, var(--muted-foreground))",
+  "var(--destructive)",
+  "color-mix(in oklch, var(--destructive) 62%, var(--foreground))",
+  "color-mix(in oklch, var(--accent-foreground) 70%, var(--primary))",
+  "var(--muted-foreground)",
+  "color-mix(in oklch, var(--foreground) 72%, var(--primary))",
+  "var(--accent-foreground)",
+];
 
 export function seriesColor(index: number, fallback: string): string {
-  return SERIES_COLORS[index % SERIES_COLORS.length] ?? fallback
+  return SERIES_MIXES[index % SERIES_MIXES.length] ?? fallback;
 }
 
 export function seriesFill(index: number, fallback: string): string {
-  return (SERIES_COLORS[index % SERIES_COLORS.length] ?? fallback) + '22'
+  const color = SERIES_MIXES[index % SERIES_MIXES.length] ?? fallback;
+  return `color-mix(in oklch, ${color} 14%, transparent)`;
 }
 
 /**
