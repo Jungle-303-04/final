@@ -95,7 +95,7 @@ describe("ResourcesPage S4 physical topology", () => {
       ?.getAttribute("data-phase")).toBe("ready");
   });
 
-  it("uses the large remembered graph height and keeps collapse in graph=0", async () => {
+  it("uses content height for servers and keeps collapse in graph=0", async () => {
     const user = userEvent.setup();
     renderEnglishResources(
       "/resources?clusters=cluster-1&resources.types=pod",
@@ -104,10 +104,12 @@ describe("ResourcesPage S4 physical topology", () => {
 
     await screen.findByRole("article", { name: "Server worker-a" });
     const graph = document.querySelector('[data-slot="resources-graph-shell"]');
-    expect(graph?.getAttribute("data-height")).toBe("720");
-    expect(graph?.className).toContain("h-(--product-graph-height-mobile)");
-    expect(graph?.className).not.toContain("h-96");
-    expect(document.querySelector('[data-slot="resources-graph-resize-handle"]')).toBeTruthy();
+    expect(graph?.getAttribute("data-height")).toBeNull();
+    expect(graph?.className).toContain("h-auto");
+    expect(graph?.className).not.toContain("h-(--product-graph-height-mobile)");
+    expect(document.querySelector('[data-slot="topology-canvas"]')?.className)
+      .toContain("shrink-0");
+    expect(document.querySelector('[data-slot="resources-graph-resize-handle"]')).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Collapse graph" }));
     await waitFor(() => expect(readResourcesQuery().get("graph")).toBe("0"));

@@ -37,7 +37,7 @@ export function ResourcesPhysicalTopologyScene({
     return (
       <UsageSmoothingBoundary markCount={usageMarkCount}>
         <div
-          className="grid h-full grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-auto p-4 sm:p-5"
+          className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-auto p-4 sm:p-5"
           data-slot="physical-topology-grid"
         >
           {placements.map((placement, index) => (
@@ -59,7 +59,7 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
   return (
     <div
       aria-label={t("resources.graph.loading")}
-      className="grid h-full grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
+      className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
       role="status"
     >
       {Array.from({ length: visible }, (_, index) => (
@@ -89,7 +89,7 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
 function GraphUnavailable({ failed }: { failed: boolean }) {
   const { t } = useI18n();
   return (
-    <div className="grid h-full place-items-center px-6 pb-10 text-center">
+    <div className="grid min-h-60 place-items-center px-6 py-10 text-center">
       <div className="grid max-w-lg justify-items-center gap-2">
         <div className="grid size-12 place-items-center rounded-xl border border-dashed bg-background/70 shadow-sm">
           <Waypoints aria-hidden="true" className="size-6 text-muted-foreground" />
