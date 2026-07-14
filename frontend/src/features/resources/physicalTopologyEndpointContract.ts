@@ -13,6 +13,11 @@ export interface PhysicalTopologyEndpointServer {
   name: string;
   cpu_pct: number | null;
   mem_pct: number | null;
+  cpu_mcores: number | null;
+  mem_mib: number | null;
+  allocatable_cpu_mcores: number | null;
+  allocatable_mem_mib: number | null;
+  pod_capacity: number | null;
   status: string;
   matched_pod_count: number | null;
   total_pod_count: number | null;
@@ -28,6 +33,10 @@ export interface PhysicalTopologyEndpointPod {
   usage_pct: number | null;
   cpu_mcores: number | null;
   mem_mib: number | null;
+  cpu_request_mcores: number | null;
+  mem_request_mib: number | null;
+  cpu_limit_mcores: number | null;
+  mem_limit_mib: number | null;
   phase: string;
   health: string;
   restarts: number;

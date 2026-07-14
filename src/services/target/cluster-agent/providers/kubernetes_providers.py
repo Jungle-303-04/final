@@ -644,6 +644,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "host_ip": pod_status.get("hostIP"),
         "conditions": pod_status.get("conditions", []),
         "containers": containers,
+        **pod_resource_requirements_summary(pod_spec),
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),
         "restart_total": sum(int(container.get("restart_count", 0)) for container in containers),
@@ -668,6 +669,80 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
             ),
         ],
     }
+
+
+def pod_resource_requirements_summary(pod_spec: JsonObject) -> JsonObject:
+    """Return Pod-level CPU and memory requests/limits in normalized units."""
+    containers = items_from_value(pod_spec.get("containers"))
+    init_containers = items_from_value(pod_spec.get("initContainers"))
+    regular = resource_totals(containers)
+    init = resource_maxima(init_containers)
+    return compact_dict(
+        {
+            "cpu_request_mcores": max_optional(
+                regular.get("cpu_request_mcores"),
+                init.get("cpu_request_mcores"),
+            ),
+            "mem_request_mib": max_optional(
+                regular.get("mem_request_mib"),
+                init.get("mem_request_mib"),
+            ),
+            "cpu_limit_mcores": max_optional(
+                regular.get("cpu_limit_mcores"),
+                init.get("cpu_limit_mcores"),
+            ),
+            "mem_limit_mib": max_optional(
+                regular.get("mem_limit_mib"),
+                init.get("mem_limit_mib"),
+            ),
+        }
+    )
+
+
+def resource_totals(containers: list[JsonObject]) -> JsonObject:
+    totals: JsonObject = {}
+    for container in containers:
+        values = container_resource_values(container)
+        for key, value in values.items():
+            if value is not None:
+                totals[key] = float(totals.get(key) or 0.0) + value
+    return totals
+
+
+def resource_maxima(containers: list[JsonObject]) -> JsonObject:
+    maxima: JsonObject = {}
+    for container in containers:
+        values = container_resource_values(container)
+        for key, value in values.items():
+            if value is not None:
+                maxima[key] = max(float(maxima.get(key) or 0.0), value)
+    return maxima
+
+
+def container_resource_values(container: JsonObject) -> dict[str, float | None]:
+    resources = container.get("resources") if isinstance(container.get("resources"), dict) else {}
+    requests = resources.get("requests") if isinstance(resources.get("requests"), dict) else {}
+    limits = resources.get("limits") if isinstance(resources.get("limits"), dict) else {}
+    return {
+        "cpu_request_mcores": parse_cpu_mcores(requests.get("cpu")),
+        "mem_request_mib": parse_memory_mib(requests.get("memory")),
+        "cpu_limit_mcores": parse_cpu_mcores(limits.get("cpu")),
+        "mem_limit_mib": parse_memory_mib(limits.get("memory")),
+    }
+
+
+def items_from_value(value: Any) -> list[JsonObject]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def max_optional(left: float | None, right: float | None) -> float | None:
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return max(left, right)
 
 
 def container_summary(item: JsonObject) -> JsonObject:
@@ -828,6 +903,12 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
     allocatable_mem = parse_memory_mib(
         allocatable.get("memory") if isinstance(allocatable, dict) else None
     )
+    capacity = node_status.get("capacity", {}) if isinstance(node_status.get("capacity"), dict) else {}
+    pod_capacity = parse_non_negative_int(
+        allocatable.get("pods") if isinstance(allocatable, dict) else None
+    )
+    if pod_capacity is None:
+        pod_capacity = parse_non_negative_int(capacity.get("pods"))
     conditions = node_status.get("conditions", [])
     ready_condition = next(
         (
@@ -846,8 +927,11 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "ready": ready_condition.get("status") == "True",
         "conditions": conditions,
         "taints": spec(item).get("taints", []),
-        "capacity": node_status.get("capacity", {}),
+        "capacity": capacity,
         "allocatable": allocatable,
+        "allocatable_cpu_mcores": allocatable_cpu,
+        "allocatable_mem_mib": allocatable_mem,
+        "pod_capacity": pod_capacity,
         "cpu_mcores": cpu_mcores,
         "mem_mib": mem_mib,
         "cpu_ratio": safe_ratio(cpu_mcores, allocatable_cpu),
@@ -958,6 +1042,16 @@ def as_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def parse_non_negative_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
 
 
 def workload_summaries(kind: str, rows: list[JsonObject]) -> list[JsonObject]:

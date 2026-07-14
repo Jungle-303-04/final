@@ -10,6 +10,11 @@ export interface PhysicalTopologyServer {
   name: string;
   cpuPercent: number | null;
   memoryPercent: number | null;
+  cpuMillicores: number | null;
+  memoryMebibytes: number | null;
+  allocatableCpuMillicores: number | null;
+  allocatableMemoryMebibytes: number | null;
+  podCapacity: number | null;
   status: string;
   matchedPodCount: number | null;
   totalPodCount: number | null;
@@ -25,6 +30,10 @@ export interface PhysicalTopologyPod {
   usagePercent: number | null;
   cpuMillicores: number | null;
   memoryMebibytes: number | null;
+  cpuRequestMillicores: number | null;
+  memoryRequestMebibytes: number | null;
+  cpuLimitMillicores: number | null;
+  memoryLimitMebibytes: number | null;
   phase: string;
   health: string;
   restartCount: number;

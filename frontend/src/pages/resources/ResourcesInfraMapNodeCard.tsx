@@ -52,12 +52,20 @@ export function InfraMapNodeCard({
           <RatioMetric
             label={t("resources.infraMap.metric.cpu")}
             ratio={node.cpuRatio}
-            valueText={null}
+            valueText={node.cpuMillicores === null
+              ? null
+              : t("resources.infraMap.cpuValue", {
+                  value: formatNumber(node.cpuMillicores, { maximumFractionDigits: 1 }),
+                })}
           />
           <RatioMetric
             label={t("resources.infraMap.metric.memory")}
             ratio={node.memoryRatio}
-            valueText={null}
+            valueText={node.memoryMebibytes === null
+              ? null
+              : t("resources.infraMap.memoryValue", {
+                  value: formatNumber(node.memoryMebibytes, { maximumFractionDigits: 1 }),
+                })}
           />
           <RatioMetric
             label={t("resources.infraMap.metric.pods")}

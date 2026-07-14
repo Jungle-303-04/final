@@ -25,10 +25,12 @@ export interface InfraMapPod {
 
 export interface InfraMapNode {
   assignedPodCount: number;
+  cpuMillicores: number | null;
   cpuRatio: number | null;
   health: string;
   hiddenPodCount: number;
   id: string;
+  memoryMebibytes: number | null;
   memoryRatio: number | null;
   name: string;
   podCapacity: number | null;
@@ -77,13 +79,23 @@ export function buildInfraMapModel({
     const sortedPods = [...displayedPods].sort(comparePodsByWeight);
     return {
       assignedPodCount: server.totalPodCount ?? allPods.length,
-      cpuRatio: percentToRatio(server.cpuPercent),
+      cpuMillicores: server.cpuMillicores,
+      cpuRatio: ratioFromPercentOrValues(
+        server.cpuPercent,
+        server.cpuMillicores,
+        server.allocatableCpuMillicores,
+      ),
       health: serverStatusToHealth(server.status),
       hiddenPodCount: Math.max(0, sortedPods.length - maxPodsPerNode),
       id: server.id,
-      memoryRatio: percentToRatio(server.memoryPercent),
+      memoryMebibytes: server.memoryMebibytes,
+      memoryRatio: ratioFromPercentOrValues(
+        server.memoryPercent,
+        server.memoryMebibytes,
+        server.allocatableMemoryMebibytes,
+      ),
       name: server.name,
-      podCapacity: server.totalPodCount,
+      podCapacity: server.podCapacity,
       ready: server.status.toLowerCase() === "ready"
         ? true
         : server.status.toLowerCase() === "notready"
@@ -108,10 +120,22 @@ export function buildInfraMapModel({
 
 function toInfraMapPod(pod: PhysicalTopologyPod): InfraMapPod {
   return {
-    cpu: { ratio: null, value: pod.cpuMillicores },
+    cpu: {
+      ratio: ratioFromValues(
+        pod.cpuMillicores,
+        pod.cpuRequestMillicores ?? pod.cpuLimitMillicores,
+      ),
+      value: pod.cpuMillicores,
+    },
     health: pod.health,
     id: pod.id,
-    memory: { ratio: null, value: pod.memoryMebibytes },
+    memory: {
+      ratio: ratioFromValues(
+        pod.memoryMebibytes,
+        pod.memoryRequestMebibytes ?? pod.memoryLimitMebibytes,
+      ),
+      value: pod.memoryMebibytes,
+    },
     name: pod.name,
     namespace: pod.namespace,
     phase: pod.phase,
@@ -139,10 +163,23 @@ function podWeight(pod: PhysicalTopologyPod): number {
   );
 }
 
+function ratioFromPercentOrValues(
+  percent: number | null,
+  value: number | null,
+  total: number | null,
+): number | null {
+  return percentToRatio(percent) ?? ratioFromValues(value, total);
+}
+
 function percentToRatio(value: number | null): number | null {
   if (value === null) return null;
   if (!Number.isFinite(value)) return null;
   return Math.max(0, Math.min(100, value)) / 100;
+}
+
+function ratioFromValues(value: number | null, total: number | null): number | null {
+  if (value === null || total === null || total <= 0) return null;
+  return Math.max(0, value / total);
 }
 
 function serverStatusToHealth(status: string): string {
@@ -155,12 +192,17 @@ function serverStatusToHealth(status: string): string {
 
 function unassignedServer(): PhysicalTopologyServer {
   return {
+    allocatableCpuMillicores: null,
+    allocatableMemoryMebibytes: null,
+    cpuMillicores: null,
     cpuPercent: null,
     id: UNASSIGNED_NODE_ID,
     matchedPodCount: null,
     matchedPodCountCompleteness: "unavailable",
+    memoryMebibytes: null,
     memoryPercent: null,
     name: "unassigned",
+    podCapacity: null,
     status: "unknown",
     totalPodCount: null,
     totalPodCountCompleteness: "unavailable",

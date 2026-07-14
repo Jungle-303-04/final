@@ -19,6 +19,11 @@ def _payload() -> dict[str, object]:
                 "name": "node-a",
                 "cpu_pct": 42.0,
                 "mem_pct": 73.4,
+                "cpu_mcores": 420.0,
+                "mem_mib": 1500.0,
+                "allocatable_cpu_mcores": 1000.0,
+                "allocatable_mem_mib": 2048.0,
+                "pod_capacity": 110,
                 "status": "Ready",
                 "matched_pod_count": 1,
                 "total_pod_count": 2,
@@ -35,6 +40,10 @@ def _payload() -> dict[str, object]:
                 "usage_pct": None,
                 "cpu_mcores": 120.5,
                 "mem_mib": 256.0,
+                "cpu_request_mcores": 250.0,
+                "mem_request_mib": 512.0,
+                "cpu_limit_mcores": 500.0,
+                "mem_limit_mib": 1024.0,
                 "phase": "Running",
                 "health": "healthy",
                 "restarts": 0,
@@ -103,7 +112,18 @@ def test_physical_topology_rejects_unknown_server_links_and_truncation() -> None
 
 def test_physical_topology_builder_uses_measured_values_and_never_invents_requests() -> None:
     result = {
-        "servers": [{"inventory_key": "node-key-a", "name": "node-a", "status": "Ready"}],
+        "servers": [
+            {
+                "inventory_key": "node-key-a",
+                "name": "node-a",
+                "status": "Ready",
+                "summary": {
+                    "allocatable_cpu_mcores": 1000,
+                    "allocatable_mem_mib": 2048,
+                    "pod_capacity": 110,
+                },
+            }
+        ],
         "pods": [
             {
                 "inventory_key": "pod-key-a",
@@ -125,7 +145,14 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
         latest_usage_sample={
             "sampled_at": "2026-07-14T05:00:00Z",
             "usage": {
-                "nodes": {"node-a": {"cpu_ratio": 0.42, "memory_pct": 73.4}},
+                "nodes": {
+                    "node-a": {
+                        "cpu_mcores": 420,
+                        "mem_mib": 1500,
+                        "cpu_ratio": 0.42,
+                        "memory_pct": 73.4,
+                    }
+                },
                 "pods": {"shop/checkout-a": {"cpu_mcores": 120.5, "mem_mib": 256}},
             },
         },
@@ -138,6 +165,11 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
         "name": "node-a",
         "cpu_pct": 42.0,
         "mem_pct": 73.4,
+        "cpu_mcores": 420.0,
+        "mem_mib": 1500.0,
+        "allocatable_cpu_mcores": 1000.0,
+        "allocatable_mem_mib": 2048.0,
+        "pod_capacity": 110,
         "status": "Ready",
         "matched_pod_count": 17,
         "total_pod_count": 20,
@@ -147,6 +179,10 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
     assert built["pods"][0]["usage_pct"] is None
     assert built["pods"][0]["cpu_mcores"] == 120.5
     assert built["pods"][0]["mem_mib"] == 256.0
+    assert built["pods"][0]["cpu_request_mcores"] is None
+    assert built["pods"][0]["mem_request_mib"] is None
+    assert built["pods"][0]["cpu_limit_mcores"] is None
+    assert built["pods"][0]["mem_limit_mib"] is None
     assert built["pods"][0]["restarts"] == 2
     assert built["truncated"] == {"node-key-a": 8}
     assert "topology_pod_budget_exceeded" in built["partial_reason_codes"]
@@ -162,7 +198,13 @@ def test_physical_topology_builder_derives_requests_ratio_only_from_observed_req
                 "namespace": "shop",
                 "status": "Running",
                 "health": "healthy",
-                "summary": {"cpu_request_mcores": 200, "restart_total": 0},
+                "summary": {
+                    "cpu_request_mcores": 200,
+                    "mem_request_mib": 256,
+                    "cpu_limit_mcores": 500,
+                    "mem_limit_mib": 1024,
+                    "restart_total": 0,
+                },
                 "placement_node_name": "",
                 "matches_filter": False,
             }
@@ -180,3 +222,7 @@ def test_physical_topology_builder_derives_requests_ratio_only_from_observed_req
 
     assert built["pods"][0]["usage_pct"] == 50.0
     assert built["pods"][0]["server_id"] is None
+    assert built["pods"][0]["cpu_request_mcores"] == 200.0
+    assert built["pods"][0]["mem_request_mib"] == 256.0
+    assert built["pods"][0]["cpu_limit_mcores"] == 500.0
+    assert built["pods"][0]["mem_limit_mib"] == 1024.0

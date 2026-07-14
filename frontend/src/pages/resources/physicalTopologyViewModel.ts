@@ -56,7 +56,12 @@ export function physicalServerPlacements(
         id: "__unassigned__",
         name: "Unassigned",
         cpuPercent: null,
+        cpuMillicores: null,
         memoryPercent: null,
+        memoryMebibytes: null,
+        allocatableCpuMillicores: null,
+        allocatableMemoryMebibytes: null,
+        podCapacity: null,
         status: "Pending",
         matchedPodCount: omittedCount === 0
           ? unassignedPods.filter((pod) => pod.matchesFilter).length

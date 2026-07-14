@@ -128,6 +128,66 @@ def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
     assert by_type["endpoint"]["summary"]["service_name"] == "checkout-api"
 
 
+def test_pod_and_node_summaries_normalize_resource_capacity() -> None:
+    _, kubernetes_module = load_evidence_modules()
+
+    pod = kubernetes_module.pod_summary(
+        {
+            "metadata": {"name": "checkout-api", "namespace": "target", "uid": "pod-1"},
+            "spec": {
+                "nodeName": "node-a",
+                "containers": [
+                    {
+                        "name": "app",
+                        "resources": {
+                            "requests": {"cpu": "100m", "memory": "128Mi"},
+                            "limits": {"cpu": "500m", "memory": "512Mi"},
+                        },
+                    },
+                    {
+                        "name": "sidecar",
+                        "resources": {
+                            "requests": {"cpu": "250m", "memory": "64Mi"},
+                            "limits": {"cpu": "1", "memory": "1Gi"},
+                        },
+                    },
+                ],
+                "initContainers": [
+                    {
+                        "name": "migrate",
+                        "resources": {
+                            "requests": {"cpu": "600m", "memory": "256Mi"},
+                            "limits": {"cpu": "1500m", "memory": "2Gi"},
+                        },
+                    }
+                ],
+            },
+            "status": {"phase": "Running", "containerStatuses": []},
+        }
+    )
+    node = kubernetes_module.node_summary(
+        {
+            "metadata": {"name": "node-a", "uid": "node-1"},
+            "status": {
+                "allocatable": {"cpu": "2", "memory": "4Gi", "pods": "110"},
+                "capacity": {"cpu": "4", "memory": "8Gi", "pods": "120"},
+                "conditions": [{"type": "Ready", "status": "True"}],
+            },
+        },
+        {"cpu_mcores": 500, "mem_mib": 1024},
+    )
+
+    assert pod["cpu_request_mcores"] == 600.0
+    assert pod["mem_request_mib"] == 256.0
+    assert pod["cpu_limit_mcores"] == 1500.0
+    assert pod["mem_limit_mib"] == 2048.0
+    assert node["allocatable_cpu_mcores"] == 2000.0
+    assert node["allocatable_mem_mib"] == 4096.0
+    assert node["pod_capacity"] == 110
+    assert node["cpu_ratio"] == 0.25
+    assert node["mem_ratio"] == 0.25
+
+
 @pytest.mark.parametrize(
     ("node", "expected"),
     [
