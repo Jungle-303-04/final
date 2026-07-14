@@ -628,26 +628,95 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 **`components/ui/provider-logos/` 에 `aws.png` `aws-dark.png` `azure.svg` `gcp.png` 가 이미 있다.**
 §5.1(클러스터 provider 실제 로고)이 요구한 것이 **저장소에 이미 존재하는데 안 쓰고 있다.**
 
-### 11.4 확정 — 남은 224파일을 **전부 착륙시킨다**
+### 11.4 확정 — **일괄 이식 + 토큰 어댑터 한 장** (우녕 확정)
 
-**부분 이식은 최악이다.** 우리가 지금 손으로 다시 짜고 있는 것들
-(검색 칩 입력, 신선도 표시, 정렬 헤더, 차트, 타임라인)이 **원본에 이미 있다.**
+> "상세페이지부터 대부분 해당 레퍼런스 전부 가져오고, 디자인은 디자인 레퍼런스에
+>  일관되게 매핑하는 방식으로 빠르게 합쳐서 우리 시스템으로 가져와." — 우녕
 
-**단, 이식 순서는 슬라이스를 따른다.** 한꺼번에 224개를 붙이지 않는다.
-**각 슬라이스가 필요한 파일을 그때 가져와서 우리 문법으로 다시 칠한다** (§10.1-b).
+**슬라이스마다 조금씩 가져오는 방식을 폐기한다. 한 번에 다 가져온다.**
+그리고 **224개 파일의 클래스를 손으로 고치지 않는다.**
 
-| 슬라이스 | 그때 가져올 Radar 파일 |
+#### 왜 손으로 안 고쳐도 되나 — Radar의 테마는 **얇은 별칭 레이어**다
+
+`theme/tailwind-theme.css` 실측:
+```css
+--color-theme-base:         var(--bg-base);
+--color-theme-surface:      var(--bg-surface);
+--color-theme-elevated:     var(--bg-elevated);
+--color-theme-hover:        var(--bg-hover);
+--color-theme-text-primary: var(--text-primary);
+--color-theme-border:       var(--border-default);
+…
+```
+**전부 19개뿐**이고, 컴포넌트는 이 별칭만 쓴다 (`bg-theme-surface`, `text-theme-text-tertiary` …).
+→ **이 한 파일이 가리키는 곳을 우리 shadcn 토큰으로 바꾸면, 224개 파일이 전부 우리 색이 된다.**
+클래스를 1,170번 치환할 필요가 없다.
+
+#### 어댑터 (`shared/ui/radar/radar-theme.css` — **이 파일 하나가 전부다**)
+
+| Radar 별칭 | → shadcn 시맨틱 토큰 |
 |---|---|
-| **C3** 검색 | **`ui/SearchPillInput.tsx`** ★ `ui/SearchBox.tsx` `ui/Facet.tsx` `ui/MultiSelectPicker.tsx` `filter-state/*` |
-| **C4** 그래프 | `topology/` 나머지 3 · `utils/topology-neighborhood.ts` `utils/workload-colors.ts` |
-| **C7** 클러스터 | **`ui/provider-logos/*`** (이미 있음) · `ui/FreshnessControl.tsx`("N초 전 갱신") · `cluster-switcher/` `namespace-switcher/` `scope-pill/` |
-| **C9** 차트 | **`charts/*` 전체 10개** — 특히 `AreaChart.tsx` (shadcn `/charts/area` 와 대응) |
-| **S11** 타임라인 | **`timeline/TimelineStrip.tsx` `scrubber-math.ts` `TimelineToolbar.tsx` `TimelineSwimlanes.tsx`** |
-| **S12** Issues | `issues/*` 전체 9 |
-| **S14** GitOps | `gitops/*` 나머지 18 · `assets/gitops/*` · `types/gitops-*.ts` |
-| **S15** Checks | `checks/*` 전체 5 · `audit/AuditBadgeTooltip.tsx` |
-| **S10** Applications | `applications/*` 전체 9 · `utils/applications.ts` `utils/application-topology.ts` |
-| 공통 | `ui/SortableTh` `DistributionBar` `SummaryTile` `PageHeader` `Collapse` `CardSection` `FetchResult` `RestrictedState` `RowActionMenu` `CenteredEmpty` `BoardSkeleton` · `shared/DetailShell` |
+| `--color-theme-base` | `var(--background)` |
+| `--color-theme-sidebar` | `var(--sidebar)` |
+| `--color-theme-surface` | `var(--card)` |
+| `--color-theme-elevated` | `var(--popover)` |
+| `--color-theme-hover` | `var(--accent)` |
+| `--color-theme-active` | `var(--accent)` |
+| `--color-theme-text-primary` | `var(--foreground)` |
+| `--color-theme-text-secondary` | `var(--muted-foreground)` |
+| `--color-theme-text-tertiary` | `color-mix(in oklch, var(--muted-foreground) 75%, transparent)` |
+| `--color-theme-text-quaternary` | `color-mix(in oklch, var(--muted-foreground) 55%, transparent)` |
+| `--color-theme-text-disabled` | `color-mix(in oklch, var(--muted-foreground) 45%, transparent)` |
+| `--color-theme-border` | `var(--border)` |
+| `--color-theme-border-light` | `color-mix(in oklch, var(--border) 60%, transparent)` |
+| `--color-theme-border-subtle` | `color-mix(in oklch, var(--border) 35%, transparent)` |
+
+**다크/라이트는 자동으로 따라온다.** 우리 `:root` / `.dark` 가 이미 짝을 이루고 있으므로(§6),
+Radar 컴포넌트도 **테마 토글에 그대로 반응한다.** 이게 §6을 먼저 고쳐야 하는 이유다.
+
+#### 손으로 고쳐야 하는 것은 **딱 세 가지뿐**
+
+1. **팔레트 직접 사용** — Radar가 `bg-red-500/15` `text-amber-800` 같은 걸 쓰는 곳
+   (예: `FilterPill.tsx` 의 `TONE_ACTIVE`). → `bg-destructive/15` `text-warning` 등 시맨틱으로.
+   **grep 으로 전부 찾을 수 있다.** `-(red|amber|emerald|rose|sky|zinc|gray|slate)-\d` 패턴.
+2. **`skyhook-*` / `radar-accent` 브랜드 색** → `var(--primary)`
+3. **`clsx` → `cn()`** (import 한 줄 치환. 동작 동일 + tailwind-merge 이득)
+
+이 셋은 **기계적 치환(codemod)** 으로 한 번에 끝난다. 파일당 판단이 필요 없다.
+
+#### 두 개의 문법이 공존한다 — 그리고 그건 모순이 아니다
+
+| 위치 | 문법 |
+|---|---|
+| **`shared/ui/radar/**`** (이식본) | Radar 문법 허용: `theme-*` 별칭 · 원본 구조 유지. **단 팔레트 색·`clsx`·브랜드 색은 금지** |
+| **그 외 전부** (우리가 쓰는 코드) | **§10.1-b shadcn 문법 필수**: `cn()` · `cva` · `data-slot` · 시맨틱 토큰만 |
+
+**경계가 폴더 하나로 명확하다.** "어디까지가 Radar 코드냐"를 매번 판단하지 않는다.
+회귀 가드도 이 경계로 건다: `theme-*` 클래스가 `shared/ui/radar/` **밖**에 나타나면 **FAIL**.
+
+**새 화면은 우리 문법으로 짜고, 이식본을 부품으로 쓴다.** 이식본을 점진적으로 우리 문법으로
+옮길 수는 있지만 **지금 그걸 하느라 시간을 쓰지 않는다.** 화면이 먼저다.
+
+#### 이식 순서 (한 슬라이스 = 한 덩어리, 하지만 전부 이번에 끝낸다)
+
+```
+R0  어댑터 + codemod        radar-theme.css · 팔레트/clsx/브랜드색 치환 · NOTICE
+R1  ui/ 나머지 24  ★         SearchPillInput · SearchBox · Facet · MultiSelectPicker · SelectMenu
+                            Input · SortableTh · DistributionBar · SummaryTile · FreshnessControl
+                            PageHeader · Collapse · CardSection · FetchResult · RestrictedState
+                            RowActionMenu · CenteredEmpty · BoardSkeleton · severity-tone · tooltip-position
+R2  shared/DetailShell  ★    ← 상세 페이지의 뼈대. 우녕이 "상세페이지부터"라고 한 그것
+R3  filter-state/ 3          filter-state-core.ts (VP-010 엔진 정본)
+R4  charts/ 10               AreaChart · MetricsSummary · PrometheusChartsView · SeriesLegend · saturation
+R5  timeline/ 나머지 16      TimelineStrip · scrubber-math · TimelineSwimlanes · TimelineToolbar
+R6  gitops/ 나머지 18        GitOpsTableView · tree/ · insights/ · RollbackDialog · SyncOptionsDialog
+R7  issues/ 9 · checks/ 5 · audit/ 1 · applications/ 9
+R8  compare/ 13 · namespace-switcher/ 2 · scope-pill/ 2 · cluster-switcher(있음)
+R9  topology/ 3 · resources/ 51 · utils/ 30 · types/ 4 · assets/ 2 · perf/ 2
+```
+
+**각 R은 그 자체로 배포 가능하다** (부품만 늘어난다. 화면은 안 깨진다).
+**R0 → R1 → R2 를 먼저 한다.** 그래야 C1(상세)·C3(검색)이 원본 부품 위에서 만들어진다.
 
 ### 11.5 **헷갈리지 말 것** — Radar에서 가져올 것 / 안 가져올 것
 
