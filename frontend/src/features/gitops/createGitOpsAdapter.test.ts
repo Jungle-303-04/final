@@ -92,6 +92,73 @@ describe("createGitOpsAdapter", () => {
     });
   });
 
+  it("maps real deployment poll observations into the GitOps sync table", async () => {
+    const endpoints = endpointFixture({
+      listApplications: vi.fn().mockResolvedValue({ applications: [{
+        application_id: "checkout-api",
+        name: "Checkout API",
+      }] }),
+      listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [{
+        binding_id: "binding-production",
+        cluster_id: "prod-east",
+        namespace: "checkout",
+        environment: "production",
+        gitops_poll: {
+          status: "synced",
+          last_seen_commit_sha: "81de44f",
+          last_polled_at: "2026-07-15T01:02:03Z",
+        },
+      }, {
+        binding_id: "binding-staging",
+        cluster_id: "staging-east",
+        namespace: "checkout",
+        environment: "staging",
+      }] }),
+    });
+
+    await expect(createGitOpsAdapter(endpoints).listSyncTargets()).resolves.toEqual([{
+      id: "checkout-api:binding-production",
+      applicationId: "checkout-api",
+      applicationName: "Checkout API",
+      clusterId: "prod-east",
+      namespace: "checkout",
+      environment: "production",
+      syncStatus: "synced",
+      revision: "81de44f",
+      observedAt: "2026-07-15T01:02:03Z",
+    }, {
+      id: "checkout-api:binding-staging",
+      applicationId: "checkout-api",
+      applicationName: "Checkout API",
+      clusterId: "staging-east",
+      namespace: "checkout",
+      environment: "staging",
+      syncStatus: null,
+      revision: null,
+      observedAt: null,
+    }]);
+    expect(endpoints.listApplicationDeployments).toHaveBeenCalledWith(
+      "checkout-api",
+      { signal: undefined },
+    );
+  });
+
+  it("rejects deployment rows without a stable binding identity", async () => {
+    const endpoints = endpointFixture({
+      listApplications: vi.fn().mockResolvedValue({ applications: [{
+        application_id: "checkout-api",
+        name: "Checkout API",
+      }] }),
+      listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [{
+        cluster_id: "prod-east",
+      }] }),
+    });
+
+    await expect(createGitOpsAdapter(endpoints).listSyncTargets()).rejects.toMatchObject({
+      code: "invalid-response",
+    });
+  });
+
   it("maps invalid API payloads to the stable port failure contract", async () => {
     const endpoints = endpointFixture({
       listPlans: vi.fn().mockRejectedValue({ kind: "invalid-payload" }),
@@ -110,6 +177,7 @@ function endpointFixture(
   const unsupported = vi.fn().mockRejectedValue(new Error("not implemented"));
   return {
     listApplications: vi.fn().mockResolvedValue({ applications: [] }),
+    listApplicationDeployments: vi.fn().mockResolvedValue({ deployments: [] }),
     listClusters: vi.fn().mockResolvedValue({ clusters: [] }),
     connectApplication: unsupported,
     listPlans: vi.fn().mockResolvedValue({ plans: [] }),

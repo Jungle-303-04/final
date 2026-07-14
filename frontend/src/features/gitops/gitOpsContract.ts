@@ -36,6 +36,18 @@ export interface ReleaseCluster {
   connectionStatus: string;
 }
 
+export interface GitOpsSyncTarget {
+  id: string;
+  applicationId: string;
+  applicationName: string;
+  clusterId: string | null;
+  namespace: string | null;
+  environment: string | null;
+  syncStatus: string | null;
+  revision: string | null;
+  observedAt: string | null;
+}
+
 export interface ReleaseTargetInput {
   name: string;
   repository: string;
@@ -210,6 +222,7 @@ export type ReleaseRunAction =
 
 export interface GitOpsPort {
   listApplications(signal?: AbortSignal): Promise<ReleaseApplication[]>;
+  listSyncTargets(signal?: AbortSignal): Promise<GitOpsSyncTarget[]>;
   listClusters(signal?: AbortSignal): Promise<ReleaseCluster[]>;
   listPlans(signal?: AbortSignal): Promise<ReleasePlan[]>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<ReleaseRun[]>;

@@ -2,6 +2,7 @@ import {
   GitOpsPortFailure,
   type GitOpsFailureCode,
   type GitOpsPort,
+  type GitOpsSyncTarget,
   type ReleaseApplication,
   type ReleaseCluster,
 } from "./gitOpsContract";
@@ -13,6 +14,19 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       return withPortFailure(async () => {
         const response = await endpoints.listApplications(signal);
         return response.applications.map(toApplication).filter((item): item is ReleaseApplication => item !== null);
+      });
+    },
+    async listSyncTargets(signal) {
+      return withPortFailure(async () => {
+        const response = await endpoints.listApplications(signal);
+        const applications = response.applications
+          .map(toApplication)
+          .filter((item): item is ReleaseApplication => item !== null);
+        const groups = await Promise.all(applications.map(async (application) => {
+          const deployments = await endpoints.listApplicationDeployments(application.id, { signal });
+          return deployments.deployments.map((deployment) => toSyncTarget(application, deployment));
+        }));
+        return groups.flat().sort(compareSyncTargets);
       });
     },
     async listClusters(signal) {
@@ -46,6 +60,32 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
   };
+}
+
+function toSyncTarget(
+  application: ReleaseApplication,
+  value: Record<string, unknown>,
+): GitOpsSyncTarget {
+  const bindingId = stringValue(value.binding_id);
+  if (!bindingId) throw new GitOpsPortFailure("invalid-response");
+  const poll = mapValue(value.gitops_poll);
+  return {
+    id: `${application.id}:${bindingId}`,
+    applicationId: application.id,
+    applicationName: application.name,
+    clusterId: nullableStringValue(value.cluster_id),
+    namespace: nullableStringValue(value.namespace),
+    environment: nullableStringValue(value.environment),
+    syncStatus: poll ? nullableStringValue(poll.status) : null,
+    revision: poll ? nullableStringValue(poll.last_seen_commit_sha) : null,
+    observedAt: poll ? nullableStringValue(poll.last_polled_at) : null,
+  };
+}
+
+function compareSyncTargets(left: GitOpsSyncTarget, right: GitOpsSyncTarget): number {
+  return left.applicationName.localeCompare(right.applicationName) ||
+    (left.clusterId ?? "").localeCompare(right.clusterId ?? "") ||
+    left.id.localeCompare(right.id);
 }
 
 function toCluster(value: {
@@ -85,6 +125,17 @@ function firstStringValue(value: Record<string, unknown>, keys: readonly string[
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function nullableStringValue(value: unknown): string | null {
+  const normalized = stringValue(value).trim();
+  return normalized || null;
+}
+
+function mapValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {

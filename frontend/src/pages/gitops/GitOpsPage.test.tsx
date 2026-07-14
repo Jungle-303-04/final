@@ -30,6 +30,28 @@ afterEach(() => {
 });
 
 describe("GitOpsPage workspace navigation", () => {
+  it("separates incoming changes from real deployment sync observations", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    renderGitOps("/gitops", port);
+
+    const sections = screen.getByRole("navigation", { name: "GitOps views" });
+    expect(within(sections).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Changes",
+      "Sync status",
+    ]);
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+
+    await user.click(within(sections).getByRole("tab", { name: "Sync status" }));
+
+    expect(await screen.findByRole("heading", { name: "Deployment sync status" })).toBeTruthy();
+    expect(await screen.findByText("Checkout API")).toBeTruthy();
+    expect(screen.getByText("production-cluster")).toBeTruthy();
+    expect(screen.getByText("Synced")).toBeTruthy();
+    expect(screen.getByText("81de44f")).toBeTruthy();
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+  });
+
   it("starts with plan blocks and opens the selected plan overview", async () => {
     const user = userEvent.setup();
     renderGitOps("/gitops");
