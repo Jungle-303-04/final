@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from domains.alert.models import AlertChannel
+from domains.alert.models import AlertChannel, AlertRule
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
@@ -142,3 +142,32 @@ class AlertChannelRepository(DatabaseConnection):
         if row:
             return serialize_alert_channel(dict(row))
         raise LookupError("alert channel not found in workspace")
+
+
+class AlertRuleRepository(DatabaseConnection):
+    """Opsia 소유 알림 규칙 저장소. Git/클러스터 writer 경계를 타지 않는다."""
+
+    def create_alert_rule(self, payload: JsonObject) -> JsonObject:
+        table = AlertRule.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                rule_id=str(payload["rule_id"]),
+                workspace_id=str(payload["workspace_id"]),
+                name=str(payload["name"]),
+                scope=dict(payload["scope"]),
+                metric=str(payload["metric"]),
+                comparator=str(payload["comparator"]),
+                threshold=float(payload["threshold"]),
+                for_seconds=int(payload["for_seconds"]),
+                severity=str(payload["severity"]),
+                channels=list(payload.get("channels") or []),
+                enabled=bool(payload["enabled"]),
+                created_by=str(payload["created_by"]),
+                updated_at=func.now(),
+            )
+            .returning(table)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return dict(row)

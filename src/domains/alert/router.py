@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from domains.alert.delivery import post_alert_webhook
 from domains.alert.events import AlertRequestedBody
+from domains.alert.schemas import AlertRuleCreatedResponse, AlertRuleCreateRequest
+from domains.alert.service import AlertChannelNotFoundError, create_alert_rule_setting
 from domains.identity.dependencies import require_admin_session
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
@@ -25,6 +27,39 @@ NOT_FOUND_CODE = 404
 CHANNEL_NOT_FOUND = "alert channel not found"
 UNSAFE_WEBHOOK_URL_CODE = "unsafe_webhook_url"
 UNSAFE_WEBHOOK_URL_DETAIL = "안전하지 않은 웹훅 URL입니다."
+ALERT_CHANNEL_NOT_FOUND_CODE = "alert_channel_not_found"
+ALERT_CHANNEL_NOT_FOUND_DETAIL = "선택한 알림 채널을 찾을 수 없습니다."
+
+
+@router.post(
+    gateway_routes.ALERT_RULES_PATH,
+    response_model=AlertRuleCreatedResponse,
+    status_code=201,
+)
+async def create_alert_rule(
+    payload: AlertRuleCreateRequest,
+    response: Response,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertRuleCreatedResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        created = create_alert_rule_setting(
+            db,
+            payload,
+            workspace_id=workspace_id,
+            actor_id=str(current.user_id),
+        )
+    except AlertChannelNotFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": ALERT_CHANNEL_NOT_FOUND_CODE,
+                "detail": ALERT_CHANNEL_NOT_FOUND_DETAIL,
+            },
+        ) from exc
+    response.headers["Location"] = gateway_routes.ALERT_RULE_PATH.format(rule_id=created.rule_id)
+    return created
 
 
 @router.get(gateway_routes.ALERT_CHANNELS_PATH, response_model=AlertChannelListResponse)

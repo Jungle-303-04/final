@@ -6,12 +6,12 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from domains.alert.schemas import AlertRuleCreateRequest, AlertRuleScope
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from domains.alert.router import router as alert_router
+from domains.alert.schemas import AlertRuleCreateRequest, AlertRuleScope
 from domains.identity.dependencies import require_admin_session
 from packages.runtime.dependencies import get_db
 
