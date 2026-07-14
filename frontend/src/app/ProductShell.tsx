@@ -1,17 +1,7 @@
-import {
-  Activity,
-  Boxes,
-  GitBranch,
-  Home,
-  Layers3,
-  Server,
-  Settings,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import { Activity, Settings } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import { useI18n, type MessageKey } from "../shared/i18n";
+import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
 import {
   SidebarMenu,
@@ -44,7 +34,6 @@ import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
   productRouteForPath,
-  type ProductRouteIcon,
   type ProductSurfaceId,
 } from "./productRoutes";
 import { shellShortcutDefinitions } from "./shortcutRegistry";
@@ -62,6 +51,7 @@ import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-strea
 import { BottomDock } from "./BottomDock";
 import { SidebarProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
 import { SidebarWorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
+import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -71,26 +61,6 @@ interface ProductShellProps {
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
 }
-
-const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
-  clusters: Server,
-  home: Home,
-  resources: Boxes,
-  issues: TriangleAlert,
-  applications: Layers3,
-  gitops: GitBranch,
-  settings: Settings,
-};
-
-const navLabelKeys = {
-  clusters: "shell.nav.clusters",
-  applications: "shell.nav.applications",
-  gitops: "shell.nav.gitops",
-  home: "shell.nav.home",
-  issues: "shell.nav.issues",
-  resources: "shell.nav.resources",
-  settings: "shell.nav.settings",
-} satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function ProductShell({
   auth,
