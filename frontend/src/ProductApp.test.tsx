@@ -89,8 +89,8 @@ describe("ProductApp root recovery", () => {
     expect(screen.queryByRole("navigation")).toBeNull();
   }, 15_000);
 
-  it("loads the real Home contract once in StrictMode and drills into Node Pods", async () => {
-    window.history.replaceState({}, "", "/?cluster=cluster-1");
+  it("loads the real Home contract once from its explicit route and drills into Node Pods", async () => {
+    window.history.replaceState({}, "", "/home?cluster=cluster-1");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {

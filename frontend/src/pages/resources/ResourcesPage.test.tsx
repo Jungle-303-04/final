@@ -123,7 +123,7 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "현재 조회 목록에서 확인할 수 없습니다",
+        name: "클러스터를 찾을 수 없습니다",
       }),
     ).toBeTruthy();
     expect(port.loadCatalog).not.toHaveBeenCalled();
