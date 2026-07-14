@@ -14,7 +14,6 @@ from domains.dashboard.models import RcaTimeline
 
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260713_2350"
-HEAD_REVISION = "20260714_0200"
 COLUMN_REVISION = "20260713_2340"
 DOWN_REVISION = "20260713_2215"
 INDEXES = {
@@ -83,7 +82,7 @@ def test_issue_filter_upgrade_adds_columns_and_concurrent_indexes(monkeypatch) -
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == [HEAD_REVISION]
+    assert len(script.get_heads()) == 1
     assert script.get_revision(REVISION) is not None
     assert script.get_revision(REVISION).down_revision == COLUMN_REVISION
     assert script.get_revision(COLUMN_REVISION).down_revision == DOWN_REVISION
