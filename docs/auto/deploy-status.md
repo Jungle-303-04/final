@@ -11,13 +11,13 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : console S5 포함 `7354ee91` public · S6 `fba675e2` rollout 진행 중
+배포 SHA : S7 `86e5b2248` public · S8 local gate 대기
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 17:01 KST  topology 200 복구 · S5 public · S6 rollout · S7 local green
+갱신     : 2026-07-14 17:55 KST  S6·S7 public · S8 targeted green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-DDzxYCh0.js`
+- console bundle: `assets/index-Daugb6IC.js`
 - backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
 - console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
 - 로그인·클러스터·리소스 read smoke: 통과
@@ -42,8 +42,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
 - [x] **S4**  물리 뷰 그래프 (2층) ★  ← public strict topology 200 실측
 - [x] **S5**  표 + 스파크라인 (3층)    ← `7354ee91` 자동 배포·public bundle 확인
-- [ ] **S6**  상세 = 전체화면 덮기
-- [ ] **S7**  AI 패널
+- [x] **S6**  상세 = 전체화면 덮기
+- [x] **S7**  AI 패널
 - [ ] **S8**  하단 독 + 로그 스트림
 - [ ] S9   관계 뷰 토글
 - [ ] S10  Applications
@@ -111,14 +111,27 @@ URL      : https://k8s.woonyong.org
 - [x] S6 local 검증 — backend capability 67 tests 및 topology 회귀 11 tests,
   `make gate-fast` PASS, frontend 171 files / 1062 tests, design guard 534 files, production build PASS
 - [x] S6 dev push·Dev Gate — `fba675e2`, Dev Gate `29315633512` SUCCESS
-- [ ] S6 자동 배포/public 체크리스트 — run `29315860051` service rollout 진행 중;
-  중간 실측 health/root/topology 200, console은 선행 S5 bundle
+- [x] S6 자동 배포/public 체크리스트 — run `29315860051` SUCCESS;
+  health/root/topology 200, S6 console bundle 확인
 - [x] S7 BQ-052/053/066 evidence-bound AI facade — strict context, `inventory.read`
   concrete cluster scope, 내부 링크 allowlist, raw metadata 차단, 근거 없으면 정본 no-data
 - [x] S7 오른쪽 AI 패널 — 고정 ✦, 420px/300ms 1단계, 내부 고정폭,
   360~640px resize, 정확한 화면·필터·선택 칩, 좁은 상세 자동 닫힘+toast
 - [x] S7 회귀 검증 — 오른쪽 sibling·고정 trigger·단일 transition·근거 없는 답변 차단,
-  strict API/Zod/adapter·production build·`make gate-fast` 175 files/1072 tests PASS; dev push 대기
+  strict API/Zod/adapter·production build·`make gate-fast` 175 files/1072 tests PASS
+- [x] S7 dev push·Dev Gate·자동 배포 — `86e5b2248`, gate `29317039043` SUCCESS,
+  deploy `29317259067` SUCCESS, public health/root/topology 200,
+  bundle `index-Daugb6IC.js`; trusted-proxy public session과 direct gateway 무인증 401 경계 재확인
+- [x] S8 BQ-058/059 SSE — Pod/workload exact target, `inventory.read`+`evidence.read`,
+  server-built Loki selector, persisted command, 4096자 redact/truncate, strict default `data:` envelope
+- [x] S8 하단 로그 독 — 여러 탭·`l`·높이 조절·접기·상세 동시 표시·수동 재시도,
+  8탭/탭당 2,000줄 상한, 종료 subscription 회수와 generation guard
+- [x] S8 AI 로그 맥락 — raw line 대신 최초 persisted command ID만 전달하고 같은 correlation의
+  후속 완료 배치를 사용자·workspace·논리 target으로 다시 검증해 최신 근거만 소비
+- [x] S8 스트림 경계 — EOF terminal 필수, split CRLF, 64KiB frame 상한, reader cleanup,
+  REST nginx buffering off를 image/live ConfigMap exact location에 고정
+- [x] S8 검증 — backend targeted 71 tests, frontend 전체 181 files/1,095 tests,
+  typecheck·lint·567-file design guard·production build·rebase 후 `make gate-fast` PASS
 
 ---
 

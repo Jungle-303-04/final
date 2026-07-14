@@ -401,6 +401,9 @@ class AiAssistantContext(StrictModel):
     filters: AiAssistantFilters
     selection: AiAssistantSelection | None = None
     time: datetime | None = None
+    # Opaque handle for a persisted, server-authorized browser log query. Raw
+    # log text is never accepted in assistant context.
+    log_stream_id: str | None = Field(default=None, min_length=1, max_length=255)
 
     @model_validator(mode="after")
     def require_offset_time(self) -> AiAssistantContext:

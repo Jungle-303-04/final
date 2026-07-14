@@ -9,6 +9,7 @@ export {
   ApiError,
   apiRequest,
   apiRequestNoContent,
+  apiStreamResponse,
   isApiError,
   type ApiErrorKind,
   type ApiPath,

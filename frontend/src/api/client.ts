@@ -123,10 +123,24 @@ export async function apiRequestNoContent(
   }
 }
 
+export async function apiStreamResponse(
+  path: ApiPath,
+  mediaType: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const response = await request(path, {
+    headers: { accept: mediaType },
+    signal,
+  });
+  if (response.ok) return response;
+  const body = await readResponseBody(response);
+  throw httpError(response, body.value);
+}
+
 async function request(path: ApiPath, init: RequestInit): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
-  headers.set("accept", "application/json");
+  if (!headers.has("accept")) headers.set("accept", "application/json");
 
   if (STATE_CHANGING_METHODS.has(method)) {
     headers.set(CSRF_HEADER, CSRF_VALUE);

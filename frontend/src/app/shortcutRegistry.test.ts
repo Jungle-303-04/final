@@ -61,6 +61,7 @@ describe("shell shortcut registry", () => {
       "resources:first-row",
       "resources:last-row",
       "resources:open-row",
+      "resources:open-logs",
       "theme",
       "help",
     ]);
@@ -72,6 +73,7 @@ describe("shell shortcut registry", () => {
       "g g",
       "shift+g",
       "d",
+      "l",
       "t",
       "?",
     ]);

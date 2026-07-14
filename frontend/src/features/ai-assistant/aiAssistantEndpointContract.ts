@@ -11,6 +11,7 @@ export interface AiAssistantContextEndpoint {
   };
   selection: { type: "resource"; identity: string } | null;
   time: string | null;
+  log_stream_id: string | null;
 }
 
 export interface AiChatEndpointResponse {

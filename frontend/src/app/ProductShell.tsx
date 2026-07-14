@@ -59,6 +59,9 @@ import { Toaster, toast } from "../shared/ui/primitives/sonner";
 import { AiAssistantPanel } from "./AiAssistantPanel";
 import { createAiAssistantContext } from "./aiAssistantContext";
 import { ProductSidebarTrigger, useDetailSidebarRail } from "./ProductShellSidebar";
+import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
+import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
+import { BottomDock } from "./BottomDock";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -66,6 +69,7 @@ interface ProductShellProps {
   defaultSidebarCollapsed?: boolean;
   globalFilterPort?: GlobalFilterPort;
   aiAssistantPort?: AiAssistantPort;
+  logStreamPort?: LogStreamPort;
 }
 
 const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
@@ -96,17 +100,20 @@ export function ProductShell({
   defaultSidebarCollapsed,
   globalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
+  logStreamPort = EMPTY_LOG_STREAM_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-          <ProductShellFrame
-            auth={auth}
-            aiAssistantPort={aiAssistantPort}
-            globalFilterPort={globalFilterPort}
-            releasedSurfaceIds={releasedSurfaceIds}
-          />
+          <BottomDockProvider port={logStreamPort}>
+            <ProductShellFrame
+              auth={auth}
+              aiAssistantPort={aiAssistantPort}
+              globalFilterPort={globalFilterPort}
+              releasedSurfaceIds={releasedSurfaceIds}
+            />
+          </BottomDockProvider>
         </SidebarProvider>
       </TooltipProvider>
     </ProductSessionProvider>
@@ -123,6 +130,7 @@ function ProductShellFrame({
   const [isAiOpen, setAiOpen] = useState(false);
   const location = useLocation();
   const filter = useUnifiedFilter();
+  const dock = useBottomDock();
   const { isMobile, open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
@@ -141,6 +149,7 @@ function ProductShellFrame({
     activeSurfaceId ?? "home",
     filter.state,
     filter.detail,
+    dock.activeStreamId,
   );
   useDetailSidebarRail(
     detailWorkspaceOpen,
@@ -253,20 +262,23 @@ function ProductShellFrame({
           </div>
         </header>
 
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <main
-            className="min-h-0 min-w-0 flex-1 overflow-y-auto"
-            id="product-main"
-            tabIndex={-1}
-          >
-            <Outlet />
-          </main>
-          <AiAssistantPanel
-            context={aiContext}
-            onOpenChange={changeAiOpen}
-            open={isAiOpen}
-            port={aiAssistantPort}
-          />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <main
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+              id="product-main"
+              tabIndex={-1}
+            >
+              <Outlet />
+            </main>
+            <AiAssistantPanel
+              context={aiContext}
+              onOpenChange={changeAiOpen}
+              open={isAiOpen}
+              port={aiAssistantPort}
+            />
+          </div>
+          <BottomDock onAskAi={() => changeAiOpen(true)} />
         </div>
       </SidebarInset>
       <Toaster />

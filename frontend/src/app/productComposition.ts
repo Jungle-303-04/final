@@ -13,6 +13,10 @@ import {
   EMPTY_AI_ASSISTANT_PORT,
   type AiAssistantPort,
 } from "../features/ai-assistant/aiAssistantContract";
+import {
+  EMPTY_LOG_STREAM_PORT,
+  type LogStreamPort,
+} from "../features/log-stream/logStreamContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -24,6 +28,7 @@ export interface ProductComposition {
   clusterScope: ClusterScopePort;
   globalFilter: GlobalFilterPort;
   aiAssistant: AiAssistantPort;
+  logStream: LogStreamPort;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
@@ -34,6 +39,7 @@ export function createProductComposition(
   clusterScope: ClusterScopePort,
   globalFilter: GlobalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
   aiAssistant: AiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
+  logStream: LogStreamPort = EMPTY_LOG_STREAM_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -60,6 +66,7 @@ export function createProductComposition(
     clusterScope,
     globalFilter,
     aiAssistant,
+    logStream,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };

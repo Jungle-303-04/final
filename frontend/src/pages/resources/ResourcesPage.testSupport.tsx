@@ -3,10 +3,7 @@ import { createMemoryRouter, RouterProvider, useLocation } from "react-router-do
 import { vi } from "vitest";
 
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
-import {
-  ClusterScopeProvider,
-  useClusterScope,
-} from "../../features/cluster-scope/ClusterScopeProvider";
+import { ClusterScopeProvider, useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
@@ -14,20 +11,14 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type { ResourceActionsPort, ResourceCapabilitiesPort } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
-import type {
-  ResourcesFilterPort,
-  ResourcesFilterResourcePage,
-} from "../../features/resources/resourcesFilterContract";
+import type { ResourcesFilterPort, ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import { ResourcesPage } from "./ResourcesPage";
-import {
-  CATALOG,
-  CLUSTERS,
-  POD_DETAIL,
-  POD_LIST,
-} from "./ResourcesPage.testFixtures";
+import { CATALOG, CLUSTERS, POD_DETAIL, POD_LIST } from "./ResourcesPage.testFixtures";
 import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
 import { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage.testRuntime";
+import { BottomDockProvider } from "../../features/bottom-dock/BottomDockProvider";
+import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../../features/log-stream/logStreamContract";
 
 export {
   CATALOG,
@@ -53,6 +44,7 @@ export function renderResources(
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort = resourcesMetricHistoryPort(),
   resourceCapabilitiesPort: ResourceCapabilitiesPort = resourcesCapabilitiesPort(),
   resourceActionsPort: ResourceActionsPort = resourcesActionsPort(),
+  logStreamPort: LogStreamPort = EMPTY_LOG_STREAM_PORT,
 ) {
   const router = createMemoryRouter(
     [
@@ -69,14 +61,16 @@ export function renderResources(
                   authorityKey="test-workspace:test-user"
                   port={clusterPort}
                 >
-                  <ResourcesPage
-                    filterPort={filterPort}
-                    physicalTopologyPort={physicalTopologyPort}
-                    resourceMetricsHistoryPort={resourceMetricsHistoryPort}
-                    resourceCapabilitiesPort={resourceCapabilitiesPort}
-                    resourceActionsPort={resourceActionsPort}
-                    port={port}
-                  />
+                  <BottomDockProvider port={logStreamPort}>
+                    <ResourcesPage
+                      filterPort={filterPort}
+                      physicalTopologyPort={physicalTopologyPort}
+                      resourceMetricsHistoryPort={resourceMetricsHistoryPort}
+                      resourceCapabilitiesPort={resourceCapabilitiesPort}
+                      resourceActionsPort={resourceActionsPort}
+                      port={port}
+                    />
+                  </BottomDockProvider>
                   <LocationProbe />
                   <ClusterScopeProbe />
                 </ClusterScopeProvider>

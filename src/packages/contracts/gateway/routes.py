@@ -35,6 +35,10 @@ AI_CHAT_PATH = "/ai/chat"
 AI_SUGGESTIONS_PATH = "/ai/suggestions"
 AI_RESOURCES_PATH = "/ai/resources/{kind}"
 AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
+# Browser log SSE. Multi-cluster identity is a required query parameter; these
+# path constants own only the target identity portion.
+POD_LOG_STREAM_PATH = "/pods/{namespace}/{name}/logs/stream"
+WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
 # 관리 콘솔 — 조직/그룹/멤버/권한 (프론트 콘솔 전용, admin 세션)
 ORGS_PATH = "/orgs"
 ORG_PATH = "/orgs/{org_id}"

@@ -15,6 +15,7 @@ const CONTEXT = {
   },
   selection: { type: "resource" as const, identity: "Pod/shop/checkout-api-0" },
   time: null,
+  log_stream_id: null,
 };
 
 describe("AI assistant API", () => {

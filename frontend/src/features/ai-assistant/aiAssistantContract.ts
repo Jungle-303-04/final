@@ -13,6 +13,7 @@ export interface AiAssistantContext {
   filters: AiAssistantFilters;
   selection: { type: "resource"; identity: string } | null;
   time: string | null;
+  logStreamId: string | null;
 }
 
 export interface AiEvidenceLink {

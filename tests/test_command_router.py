@@ -340,6 +340,34 @@ def test_agent_debug_query_requires_cluster_read_access_and_queues_agent_command
     asyncio.run(run())
 
 
+def test_agent_debug_query_rejects_reserved_browser_log_stream_handle() -> None:
+    async def run() -> None:
+        db = SpyDebugQueryDb(allowed=True)
+        try:
+            await agent_debug_query(
+                AgentDebugQueryRequest(
+                    cluster_id="cluster-1",
+                    query={
+                        "source": "loki",
+                        "name": "browser_log_stream_forged",
+                        "query": '{k8s_namespace_name=~".*"}',
+                        "log_stream": {"protocol": "log-stream.v1"},
+                    },
+                ),
+                current_session(),
+                db,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert exc.detail == "reserved browser log stream query"
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert db.queued == []
+
+    asyncio.run(run())
+
+
 def test_scale_deployment_wrapper_emits_typed_command_payload() -> None:
     async def run() -> None:
         db = SpyAccessDb(allowed=True)

@@ -31,6 +31,26 @@ describe("AI assistant shell context", () => {
       },
       selection: { type: "resource", identity: "Pod/shop/checkout-api-0" },
       time: null,
+      logStreamId: null,
     });
+  });
+
+  it("binds only the opaque server stream handle to log-aware AI context", () => {
+    const context = createAiAssistantContext(
+      "resources",
+      createEmptyUnifiedFilterState(),
+      {
+        detail: null,
+        resource: null,
+        resourceKind: null,
+        tab: null,
+        full: false,
+        node: null,
+      },
+      "stream-command-1",
+    );
+
+    expect(context.logStreamId).toBe("stream-command-1");
+    expect(JSON.stringify(context)).not.toContain("log line");
   });
 });

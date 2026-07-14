@@ -9,6 +9,7 @@ export function createAiAssistantContext(
   screen: ProductSurfaceId,
   state: UnifiedFilterState,
   detail: ProductDetailQuery,
+  logStreamId: string | null = null,
 ): AiAssistantContext {
   return {
     screen,
@@ -25,6 +26,7 @@ export function createAiAssistantContext(
     },
     selection: resourceSelection(detail),
     time: null,
+    logStreamId,
   };
 }
 
@@ -39,6 +41,7 @@ export function aiAssistantContextChips(context: AiAssistantContext): string[] {
     ...context.filters.health,
     ...(context.filters.query ? [context.filters.query] : []),
     ...(context.selection ? [context.selection.identity] : []),
+    ...(context.logStreamId ? ["log-stream"] : []),
   ];
 }
 

@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from fastapi import HTTPException
 
 from domains.identity.dependencies import resolve_allowed_cluster_ids
+from domains.log_stream.service import read_log_stream_evidence
 from packages.contracts.gateway.requests import AiAssistantContext
 from packages.contracts.gateway.responses import (
     AI_NO_DATA_ANSWER,
@@ -76,13 +77,44 @@ SUPPORTED_CONTEXT_RESOURCE_TYPES = frozenset(
 )
 
 
-def answer_from_context(
+async def answer_from_context(
     db: Any,
     *,
     current: Any,
     workspace_id: str,
     context: AiAssistantContext,
 ) -> AiChatResponse:
+    if context.log_stream_id is not None:
+        evidence = await read_log_stream_evidence(
+            db,
+            current=current,
+            workspace_id=workspace_id,
+            stream_id=context.log_stream_id,
+        )
+        if not evidence:
+            return AiChatResponse(answer=AI_NO_DATA_ANSWER, evidence=[])
+        lines = [
+            f"{item.event.observed_at.isoformat()} "
+            f"{item.event.pod}/{item.event.container}: {item.event.line[:300]}"
+            for item in evidence
+        ]
+        answer = "현재 권한으로 확인한 로그 근거입니다: " + "; ".join(lines)
+        return AiChatResponse(
+            answer=answer[:4000],
+            evidence=[
+                AiEvidenceLink(
+                    type="log-stream",
+                    id=item.event.id,
+                    label=(
+                        f"{item.event.pod}/{item.event.container} "
+                        f"@ {item.event.observed_at.isoformat()}"
+                    ),
+                    link=item.link,
+                )
+                for item in evidence
+            ],
+        )
+
     resources = evidence_resources(
         db,
         current=current,
@@ -114,6 +146,14 @@ def answer_from_context(
 
 def suggestions_for_context(context: AiAssistantContext) -> AiSuggestionsResponse:
     suggestions: list[AiSuggestion] = []
+    if context.log_stream_id is not None:
+        suggestions.append(
+            AiSuggestion(
+                id="log-stream-summary",
+                label="현재 로그 요약",
+                prompt="현재 로그 스트림에서 권한으로 확인 가능한 근거만 요약해 줘.",
+            )
+        )
     if context.selection is not None:
         suggestions.append(
             AiSuggestion(

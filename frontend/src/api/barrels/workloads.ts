@@ -24,3 +24,18 @@ export {
   commandAcceptedSchema,
   type CommandAccepted,
 } from "../commands-schemas";
+export {
+  openPodLogStream,
+  openWorkloadLogStream,
+  parseFrames,
+  type LogStreamEndpointHandlers,
+} from "../log-stream";
+export {
+  logStreamConnectedSchema,
+  logStreamEndSchema,
+  logStreamErrorSchema,
+  logStreamEventSchema,
+  logStreamLineSchema,
+  logStreamPodMembershipSchema,
+  type LogStreamEventEndpoint,
+} from "../log-stream-schemas";

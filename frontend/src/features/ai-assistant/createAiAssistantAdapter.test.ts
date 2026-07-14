@@ -16,6 +16,7 @@ const CONTEXT: AiAssistantContext = {
   },
   selection: { type: "resource", identity: "Pod/shop/checkout-api-0" },
   time: null,
+  logStreamId: "stream-command-1",
 };
 
 describe("AI assistant adapter", () => {
@@ -34,7 +35,10 @@ describe("AI assistant adapter", () => {
       evidence: [{ type: "event", id: "1", label: "BackOff", link: "/issues/1" }],
     });
     expect(postAiChat).toHaveBeenCalledWith(
-      expect.objectContaining({ filters: expect.objectContaining({ resource_types: ["pod"] }) }),
+      expect.objectContaining({
+        filters: expect.objectContaining({ resource_types: ["pod"] }),
+        log_stream_id: "stream-command-1",
+      }),
       "Why?",
       undefined,
     );

@@ -34,8 +34,11 @@ import {
   createReleaseFlowClient,
   getAiSuggestions,
   postAiChat,
+  openPodLogStream,
+  openWorkloadLogStream,
 } from "../api";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
+import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
 import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
 import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
@@ -104,6 +107,7 @@ export function createApiComposition() {
   });
   const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
   const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
+  const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   return createProductComposition([
     {
       id: "clusters",
@@ -140,5 +144,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort, globalFilterPort, aiAssistantPort);
+  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort);
 }
