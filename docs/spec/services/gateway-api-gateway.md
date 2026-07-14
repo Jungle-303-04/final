@@ -321,7 +321,7 @@ scalar: `event_dead_letters_open_total`, `outbox_pending_total`, `command_queue_
 | `SERVICE_NAME` (상수) | str | `api-gateway` | 서비스 이름·outbox source |
 | `APP_TITLE` / `APP_VERSION` (상수) | str | `API Gateway` / `0.1.0` | FastAPI 메타 |
 | `PORT` | int | `8000` | HTTP 포트 (`FastApiService`) |
-| `CONSOLE_ORIGIN` | str | `http://console.management.svc.cluster.local:80` | 콘솔 정적 자산 프록시 upstream |
+| `CONSOLE_ORIGIN` | str | `http://console-dev.management.svc.cluster.local:80` | 콘솔 정적 자산 프록시 upstream (`console-dev`가 현재 Service 정본) |
 | `REALTIME_ORIGIN` | str | `ws://realtime-gateway.management.svc.cluster.local:8000` | `/api/live/*` WS 중계 upstream |
 | `FRONTEND_PROXY_TIMEOUT_SECONDS` (상수) | float | `10.0` | 콘솔 프록시 httpx 타임아웃 |
 | `COMMAND_NOTIFY_DATABASE_URL` | str | 미설정 | 설정 시 lifespan 이 command 롱폴 웨이크업용 Postgres LISTEN 직결 연결(`WAKEUP.start`)을 연다 |

@@ -1,8 +1,10 @@
 name: Cloudflare Route Reconcile
 
-run-name: Cloudflare route reconcile / ${{ inputs.dry_run && 'dry-run' || 'apply' }}
+run-name: Cloudflare route reconcile / ${{ github.event_name == 'schedule' && 'scheduled-preflight' || inputs.dry_run && 'dry-run' || 'apply' }}
 
 "on":
+  schedule:
+    - cron: "17 0 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -49,7 +51,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_TUNNEL_ID: ${{ secrets.CLOUDFLARE_TUNNEL_ID }}
-          DRY_RUN: ${{ inputs.dry_run }}
+          DRY_RUN: ${{ github.event_name == 'schedule' || inputs.dry_run }}
         run: |
           python -m scripts.cloudflare.reconcile_tunnel_route \
             --account-id "$CLOUDFLARE_ACCOUNT_ID" \

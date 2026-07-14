@@ -1,12 +1,15 @@
 name: Cloudflare Dev Tunnel and mTLS
 
+# console-dev is the canonical in-cluster console Service until a coordinated
+# DNS -> Tunnel -> ingress -> Service migration renames every reference.
+
 run-name: Cloudflare dev mTLS / ${{ inputs.dry_run && 'dry-run' || 'apply' }}
 
 "on":
   workflow_dispatch:
     inputs:
       origin_service:
-        description: Existing cloudflared origin service URL for the dev console.
+        description: Canonical console-dev origin; override only during a coordinated rename.
         required: false
         default: http://console-dev.management.svc.cluster.local:80
         type: string

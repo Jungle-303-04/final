@@ -9,6 +9,25 @@
 - WAF: 해당 hostname에서 `cf.tls_client_auth.cert_verified`가 false인 요청 차단
 - 인증서 발급: 외부에서 만든 CSR 다섯 개를 서명하고 공개 인증서만 artifact로 반환
 
+## 라우트와 이름 정본
+
+| 외부 hostname | 용도 | Cloudflare 정책 | in-cluster origin |
+| --- | --- | --- | --- |
+| `k8s.woonyong.org` | 운영·데모 콘솔과 공개 API | 일반 proxied Tunnel route | `http://console-dev.management.svc.cluster.local:80` |
+| `dev-k8s.woonyong.org` | Bruno/API 테스트와 개발 콘솔 | client certificate mTLS + WAF | `http://console-dev.management.svc.cluster.local:80` |
+
+현재 Deployment/Service의 **정본 이름은 `console-dev`**다. `console` Service는 존재하지
+않으며 임시 alias를 만들지 않는다. 이름에서 `-dev`를 제거하려면 다음 참조를 한 번에
+바꾼다: Kubernetes Deployment/Service와 Endpoint, `CONSOLE_ORIGIN`, production route
+reconcile workflow, dev mTLS workflow, Cloudflare 원격 ingress 두 개. 순서는
+DNS → Tunnel → ingress → Service → Endpoint 참조 그래프로 검토하고 외부 health와
+cloudflared 로그를 함께 검증한다.
+
+Cloudflare DNS와 원격 ingress는 클러스터 밖의 상태이므로 `kubectl`만으로 보이지 않는다.
+`.github/workflows/cloudflare-route-reconcile.yml`이 production route를 저장소 정본으로
+수렴하며, 매일 09:17 KST dry-run preflight로 API token·account·tunnel 식별자와 route
+drift를 검증한다. 수동 apply 전에는 항상 dry-run 계획을 먼저 확인한다.
+
 ## GitHub Environment
 
 Environment는 권한 상승 선택을 막기 위해 `development`로 고정되어 있다. 아래 secret 네 개를
@@ -26,6 +45,10 @@ Environment는 권한 상승 선택을 막기 위해 `development`로 고정되�
 Rulesets, client certificate 읽기를 수행한다. Cloudflare는 token verify 응답에 permission
 목록을 반환하지 않으므로 dry-run은 읽기 scope와 리소스 일치를 검증하고, 실제 write
 capability는 apply 중 각 제한된 endpoint가 fail-closed 방식으로 검증한다.
+
+GitHub secret은 이름이 존재해도 값이 만료됐거나 다른 식별자면 workflow가 실행 단계에서
+실패한다. secret 목록 존재 여부를 성공으로 간주하지 말고 scheduled preflight 결과를
+확인한다.
 
 Tunnel은 `config_src=cloudflare`인 원격 관리 Tunnel이어야 한다. 로컬 YAML 관리 Tunnel은
 전체 configuration을 API로 교체하지 않도록 preflight에서 거부한다.

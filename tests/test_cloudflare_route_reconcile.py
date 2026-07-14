@@ -107,11 +107,24 @@ def test_manifest_and_workflow_lock_the_canonical_cloudflare_route() -> None:
     )
     command = workflow["jobs"]["reconcile"]["steps"][-1]["run"]
 
-    assert annotations == {
-        "opsia.io/cloudflare-hostname": "k8s.woonyong.org",
-        "opsia.io/cloudflare-origin-service": (
-            "http://console-dev.management.svc.cluster.local:80"
-        ),
-    }
+    assert annotations["opsia.io/cloudflare-hostname"] == "k8s.woonyong.org"
+    assert annotations["opsia.io/cloudflare-origin-service"] == (
+        "http://console-dev.management.svc.cluster.local:80"
+    )
+    assert annotations["opsia.io/cloudflare-mtls-hostname"] == "dev-k8s.woonyong.org"
+    assert annotations["opsia.io/canonical-console-service"] == (
+        "console-dev.management.svc.cluster.local"
+    )
     assert '--hostname "k8s.woonyong.org"' in command
     assert '--origin-service "http://console-dev.management.svc.cluster.local:80"' in command
+
+
+def test_route_workflow_runs_a_daily_read_only_secret_and_drift_preflight() -> None:
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/cloudflare-route-reconcile.yml").read_text()
+    )
+    assert workflow["on"]["schedule"] == [{"cron": "17 0 * * *"}]
+    reconcile = workflow["jobs"]["reconcile"]["steps"][-1]
+    assert reconcile["env"]["DRY_RUN"] == (
+        "${{ github.event_name == 'schedule' || inputs.dry_run }}"
+    )
