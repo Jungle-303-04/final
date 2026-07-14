@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   FirstAppearanceMotionBoundary,
   useFirstAppearanceMotion,
 } from "../useFirstAppearanceMotion";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("first appearance motion", () => {
   it("animates a stable identity once even when its element remounts", () => {
@@ -28,6 +31,18 @@ describe("first appearance motion", () => {
     view.rerender(<Scene scope="cluster-b" visible />);
 
     expect(screen.getByTestId("resource").dataset.entering).toBe("true");
+  });
+
+  it("skips entrance motion when reduced motion is requested", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+
+    render(<Scene visible />);
+
+    expect(screen.getByTestId("resource").dataset.entering).toBe("false");
   });
 });
 
