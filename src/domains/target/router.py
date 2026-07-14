@@ -66,6 +66,7 @@ from packages.contracts.gateway.requests import (
     AgentPolicyResponse,
     AgentPolicyStatusRequest,
     AgentReconcileStatusRequest,
+    ClusterConnectRequest,
     EvidenceJobResultRequest,
     EvidenceJobScheduleRequest,
     SchedulingPolicy,
@@ -75,6 +76,8 @@ from packages.contracts.gateway.requests import (
 from packages.contracts.gateway.responses import (
     BootstrapStep,
     ClusterConnectionStatusResponse,
+    ClusterConnectResponse,
+    ClusterConnectStatusResponse,
     ClusterListResponse,
     ClusterResponse,
     ClusterSummary,
@@ -112,6 +115,12 @@ KUBE_CONTEXT_CONNECTION_FAILED = "kubernetes preflight connection failed"
 KUBE_CONTEXT_CONNECTION_TIMEOUT = "kubernetes preflight connection timed out"
 DIRECT_APPLY_DEPLOY_PROVIDER = "kube-context"
 MANUAL_MANIFEST_DEPLOY_PROVIDER = "manual-manifest"
+CONNECT_PROVIDER_HINTS = {
+    "aws": "eks",
+    "gcp": "gke",
+    "azure": "aks",
+    "onprem": "onprem",
+}
 TARGET_PROVIDER_INVALID = "target install provider selection is invalid"
 # evidence job 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_EVIDENCE_JOB_POLL_SECONDS_ENV = (
@@ -793,6 +802,10 @@ def resolved_cluster_provider(
     detected = str(snapshot_summary.get("detected_provider") or "").strip().lower()
     if detected in DETECTED_CLUSTER_PROVIDERS:
         return detected
+    provider_config = settings.get("provider_config") or {}
+    hinted = str(provider_config.get("provider_hint") or "").strip().lower()
+    if hinted in CONCRETE_CLUSTER_PROVIDERS:
+        return hinted
     if selected in GENERIC_ONPREM_PROVIDERS:
         return "onprem"
     return "unknown"
@@ -1122,6 +1135,37 @@ async def register_target(
     )
 
 
+@router.post(
+    gateway_routes.CLUSTERS_CONNECT_PATH,
+    response_model=ClusterConnectResponse,
+)
+async def connect_cluster(
+    payload: ClusterConnectRequest,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> ClusterConnectResponse:
+    receipt = await register_target(
+        TargetRegisterRequest(
+            name=payload.name.strip(),
+            environment="development",
+            cloud_provider="existing-k8s",
+            deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
+            provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},
+        ),
+        current=current,
+        db=db,
+        events=events,
+    )
+    if not receipt.install_command or not receipt.connect_expires_at:
+        raise HTTPException(status_code=503, detail="cluster install command is unavailable")
+    return ClusterConnectResponse(
+        cluster_id=receipt.cluster_id,
+        install_command=receipt.install_command,
+        expires_at=receipt.connect_expires_at,
+    )
+
+
 @router.get(gateway_routes.INSTALL_MANIFEST_PATH, include_in_schema=True)
 async def install_manifest_by_token(
     agent_token: str,
@@ -1276,6 +1320,41 @@ async def get_cluster_connection_status(
         agents=agents,
         connect_timeout_seconds=registration_connect_timeout(registration),
         connect_expires_at=registration_connect_expires_at(registration),
+    )
+
+
+@router.get(
+    gateway_routes.CLUSTER_CONNECTION_PATH,
+    response_model=ClusterConnectStatusResponse,
+)
+async def get_cluster_connection(
+    cluster_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ClusterConnectStatusResponse:
+    connection = await get_cluster_connection_status(
+        cluster_id,
+        current=current,
+        db=db,
+    )
+    if connection.connection_status == AGENT_STATUS_ONLINE:
+        status = "connected"
+    elif connection.connection_status == AGENT_STATUS_INSTALL_EXPIRED:
+        status = "expired"
+    else:
+        status = "waiting"
+    agent_version = next(
+        (
+            str(agent.details["version"])
+            for agent in connection.agents
+            if agent.details.get("version")
+        ),
+        None,
+    )
+    return ClusterConnectStatusResponse(
+        status=status,
+        agent_version=agent_version,
+        connected_at=None,
     )
 
 

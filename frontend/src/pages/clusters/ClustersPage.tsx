@@ -1,6 +1,8 @@
-import { CircleAlert, RefreshCw, Search } from "lucide-react";
+import { CircleAlert, Plus, RefreshCw, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import type { ClustersPort } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -9,13 +11,17 @@ import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
 import { ClusterCard } from "./ClusterCard";
+import { ClusterConnectDialog } from "./ClusterConnectDialog";
 import { clusterResourcesHref } from "./clusterNavigation";
 
-export function ClustersPage() {
+export function ClustersPage({ port }: { port: ClustersPort }) {
   const { formatNumber, t } = useI18n();
   const filter = useUnifiedFilter();
   const scope = useClusterScope();
+  const session = useOptionalProductSession();
   const [query, setQuery] = useState("");
+  const [connectOpen, setConnectOpen] = useState(false);
+  const canManageClusters = session?.roles.includes("service_admin") ?? false;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const clusters = useMemo(() => scope.collection.phase === "ready"
     ? scope.collection.data.clusters.filter((cluster) => normalizedQuery.length === 0 || [
@@ -75,6 +81,12 @@ export function ClustersPage() {
               value={query}
             />
           </label>
+          {canManageClusters ? (
+            <Button onClick={() => setConnectOpen(true)} type="button">
+              <Plus aria-hidden="true" />
+              <span className="hidden sm:inline">{t("clusters.action.add")}</span>
+            </Button>
+          ) : null}
           <Button
             aria-label={t("common.action.refresh")}
             disabled={scope.collection.refreshing}
@@ -120,6 +132,15 @@ export function ClustersPage() {
           ))}
         </section>
       )}
+
+      {canManageClusters ? (
+        <ClusterConnectDialog
+          onConnected={scope.refresh}
+          onOpenChange={setConnectOpen}
+          open={connectOpen}
+          port={port}
+        />
+      ) : null}
     </ProductPageFrame>
   );
 }

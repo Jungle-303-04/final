@@ -26,6 +26,8 @@ from domains.target.router import (
     cluster_connection_stage,
     cluster_connection_status,
     cluster_summary,
+    connect_cluster,
+    get_cluster_connection,
     get_cluster_connection_status,
     get_cluster_scheduling_profiles,
     install_manifest_by_token,
@@ -45,6 +47,7 @@ from domains.target.router import (
 from packages.contracts.gateway.requests import (
     AgentPolicy,
     BootstrapPolicy,
+    ClusterConnectRequest,
     DesiredResource,
     EvidenceJobScheduleRequest,
     EvidenceProviderPolicy,
@@ -1105,6 +1108,51 @@ def test_cluster_list_uses_access_filter_and_agent_status() -> None:
     assert response.clusters[0].open_incidents == 3
     assert response.clusters[0].app_count is None
     assert response.clusters[0].last_seen_at == db.agent["last_seen_at"]
+
+
+def test_cluster_connect_returns_only_server_generated_one_line_command(monkeypatch) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com/api")
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+    db = StubDb()
+
+    async def run():
+        return await connect_cluster(
+            ClusterConnectRequest(name="new production", provider="aws"),
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=db,
+            events=StubEvents(),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.cluster_id.startswith("new-production-")
+    assert "\n" not in response.install_command
+    assert response.install_command.startswith("curl -fsSL ")
+    assert response.install_command.endswith(" | kubectl apply -f -")
+    assert response.expires_at
+    assert db.registered[0]["settings"]["provider_config"] == {"provider_hint": "eks"}
+
+
+def test_cluster_connect_request_rejects_whitespace_only_name() -> None:
+    with pytest.raises(ValueError):
+        ClusterConnectRequest(name="   ", provider="onprem")
+
+
+def test_cluster_connect_status_maps_online_agent_without_inventing_metadata() -> None:
+    db = StubClusterDb()
+
+    async def run():
+        return await get_cluster_connection(
+            "cluster-1",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=db,
+        )
+
+    response = asyncio.run(run())
+
+    assert response.status == "connected"
+    assert response.agent_version is None
+    assert response.connected_at is None
 
 
 def test_cluster_connection_status_route_returns_agent_details() -> None:

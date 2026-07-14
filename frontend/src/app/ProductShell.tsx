@@ -35,6 +35,7 @@ import {
 import { TooltipProvider } from "../shared/ui/primitives/tooltip";
 import { useProductTheme } from "../shared/ui/useProductTheme";
 import { AuthSessionControl } from "../features/auth/AuthSessionControl";
+import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopePicker } from "../features/cluster-scope/ClusterScopePicker";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
@@ -82,11 +83,13 @@ export function ProductShell({
   defaultSidebarCollapsed,
 }: ProductShellProps) {
   return (
-    <TooltipProvider>
-      <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-        <ProductShellFrame auth={auth} releasedSurfaceIds={releasedSurfaceIds} />
-      </SidebarProvider>
-    </TooltipProvider>
+    <ProductSessionProvider session={auth.session}>
+      <TooltipProvider>
+        <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
+          <ProductShellFrame auth={auth} releasedSurfaceIds={releasedSurfaceIds} />
+        </SidebarProvider>
+      </TooltipProvider>
+    </ProductSessionProvider>
   );
 }
 

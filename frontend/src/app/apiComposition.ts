@@ -8,12 +8,14 @@ import {
   getIncidentRecentChanges,
   getInventorySummary,
   getNodePodsSummary,
+  getClusterConnectStatus,
   getSession,
   listEvidence,
   listInventoryResourcesByType,
   listRcaReports,
   listRcaTimeline,
   listClusters,
+  connectCluster,
   listApplicationDeployments,
   listApplicationRuns,
   listApplications,
@@ -26,6 +28,7 @@ import { createAuthAdapter } from "../features/auth/createAuthAdapter";
 import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
 import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
+import { createClustersAdapter } from "../features/clusters/createClustersAdapter";
 import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
 import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
@@ -43,6 +46,7 @@ export function createApiComposition() {
     getNodePodsSummary,
     listClusters,
   });
+  const clustersPort = createClustersAdapter({ connectCluster, getClusterConnectStatus });
   const resourcesPort = createResourcesAdapter({
     getInventoryResourceDetail,
     getInventorySummary,
@@ -67,7 +71,7 @@ export function createApiComposition() {
   return createProductComposition([
     {
       id: "clusters",
-      Component: createClustersSurface(),
+      Component: createClustersSurface(clustersPort),
     },
     {
       id: "home",
