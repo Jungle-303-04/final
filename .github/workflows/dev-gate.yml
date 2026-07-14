@@ -46,6 +46,21 @@ jobs:
       - name: Enforce commit message convention
         run: scripts/commit-msg-gate.sh --range origin/dev..HEAD
 
+      - name: Classify automatic deployment scope
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/dev-deploy-scope"
+          scripts/classify-deploy-scope.sh origin/dev HEAD \
+            >"${RUNNER_TEMP}/dev-deploy-scope/scope"
+
+      - name: Upload automatic deployment scope
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-deploy-scope
+          path: ${{ runner.temp }}/dev-deploy-scope/scope
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
