@@ -1,47 +1,39 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
-import { CatalogFreshness } from "./ResourcesPageFeedback";
+import { ResourcesClusterBoundary, UnknownSelection } from "./ResourcesPageFeedback";
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-07-13T01:00:00.000Z"));
-});
+afterEach(cleanup);
 
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-});
+describe("resources page feedback", () => {
+  it("explains a missing cluster with a user action and no implementation language", () => {
+    renderFeedback(<UnknownSelection value="missing-cluster" variant="cluster" />);
 
-describe("CatalogFreshness text density", () => {
-  it("does not render a badge for a fresh normal snapshot", () => {
-    const { container } = render(
-      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-        <CatalogFreshness observedAt="2026-07-13T00:59:30.000Z" />
-      </I18nProvider>,
-    );
-
-    expect(container.childElementCount).toBe(0);
-    expect(screen.queryByText("스냅샷 최신")).toBeNull();
+    expect(screen.getByRole("heading").textContent).toBe("클러스터를 찾을 수 없습니다");
+    expect(screen.getByRole("link", { name: /클러스터 보기/u }).getAttribute("href"))
+      .toBe("/clusters");
+    expect(document.body.textContent).not.toMatch(/API|URL|계약|snapshot/iu);
   });
 
-  it("renders freshness only when the snapshot is stale or unavailable", () => {
-    const { rerender } = render(
-      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-        <CatalogFreshness observedAt="2026-07-13T00:55:00.000Z" />
-      </I18nProvider>,
-    );
+  it("tells users how to recover from a multiple-cluster selection", () => {
+    renderFeedback(<ResourcesClusterBoundary variant="multiple" />);
 
-    expect(screen.getByRole("status").textContent).toContain("스냅샷 지연");
-    expect(screen.getByRole("status").textContent).toContain("5분 전 관측");
-
-    rerender(
-      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-        <CatalogFreshness observedAt={null} />
-      </I18nProvider>,
-    );
-    expect(screen.getByText("관측 시각 미제공")).toBeTruthy();
+    expect(screen.getByRole("heading").textContent).toBe("클러스터를 하나만 선택해 주세요");
+    expect(document.body.textContent).toContain("선택한 클러스터 하나만 남겨 주세요");
   });
 });
+
+function renderFeedback(content: React.ReactNode) {
+  return render(
+    <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+      <MemoryRouter initialEntries={["/resources"]}>
+        <UnifiedFilterProvider>{content}</UnifiedFilterProvider>
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+}

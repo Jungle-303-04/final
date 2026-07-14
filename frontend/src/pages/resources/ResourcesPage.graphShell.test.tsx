@@ -201,7 +201,7 @@ describe("ResourcesPage S4 physical topology", () => {
     );
 
     expect(await screen.findByRole("heading", {
-      name: "Multi-Cluster results need server support",
+      name: "Select one cluster",
     })).toBeTruthy();
     expect(physicalPort.loadPhysicalTopology).not.toHaveBeenCalled();
     expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
