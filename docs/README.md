@@ -209,6 +209,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
 - [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
+- [auto/codex-directive-20260714-final](auto/codex-directive-20260714-final.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
 - [auto/deploy-drift-audit](auto/deploy-drift-audit.md)
 - [auto/deploy-setup](auto/deploy-setup.md)
@@ -410,6 +411,8 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-015-global-shell](spec/frontend/vp-015-global-shell.md)
 - [spec/frontend/vp-016-delivery-plan](spec/frontend/vp-016-delivery-plan.md)
 - [spec/frontend/vp-017-motion-spec](spec/frontend/vp-017-motion-spec.md)
+- [spec/frontend/vp-018-shell-corrections](spec/frontend/vp-018-shell-corrections.md)
+- [spec/frontend/vp-019-radar-full-port](spec/frontend/vp-019-radar-full-port.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)
