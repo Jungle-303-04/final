@@ -216,7 +216,10 @@ export function AiAssistantPanel({
 
             <div aria-live="polite" className="mt-5 grid gap-4">
               {visibleEntries.map((entry) => (
-                <article className="grid gap-2" key={entry.id}>
+                <article
+                  className="grid gap-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+                  key={entry.id}
+                >
                   <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
                     {entry.question}
                   </p>
@@ -233,7 +236,10 @@ export function AiAssistantPanel({
                 </article>
               ))}
               {pendingQuestion?.contextKey === contextKey ? (
-                <article className="grid gap-2" data-slot="ai-pending-turn">
+                <article
+                  className="grid gap-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+                  data-slot="ai-pending-turn"
+                >
                   <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
                     {pendingQuestion.question}
                   </p>
