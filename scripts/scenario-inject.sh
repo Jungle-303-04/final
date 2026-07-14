@@ -17,6 +17,9 @@
 #   TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh cleanup crashloop
 #   TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh cleanup faults   # baseline은 남긴다
 #   TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh cleanup all     # baseline까지 제거
+#   TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh load start 8    # worker 8개로 데모 부하 켜기
+#   TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh load stop       # 데모 부하 끄기
+#   TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh load status
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -81,6 +84,38 @@ show_status() {
     --sort-by=.lastTimestamp 2>/dev/null | tail -15 || true
 }
 
+control_load() {
+  local action="$1"
+  local factor="${2:-8}"
+  case "${action}" in
+    start)
+      [[ "${factor}" =~ ^[1-9][0-9]*$ ]] || {
+        echo "부하 worker 수는 1 이상의 정수여야 합니다: ${factor}" >&2
+        exit 1
+      }
+      log "데모 부하 시작: shop-loadgen ${factor} workers"
+      # EKS 단일 노드의 Pod 상한을 넘기지 않도록 Pod는 하나만 두고 내부 worker를 조절한다.
+      k scale deployment/shop-loadgen --replicas=0
+      k wait --for=delete pod -l app=shop-loadgen --timeout=120s 2>/dev/null || true
+      k set env deployment/shop-loadgen LOAD_FACTOR="${factor}"
+      k scale deployment/shop-loadgen --replicas=1
+      k rollout status deployment/shop-loadgen --timeout=120s
+      ;;
+    stop)
+      log "데모 부하 중지: shop-loadgen 0 replicas"
+      k scale deployment/shop-loadgen --replicas=0
+      k wait --for=delete pod -l app=shop-loadgen --timeout=120s 2>/dev/null || true
+      ;;
+    status)
+      k get deployment/shop-loadgen -o custom-columns='NAME:.metadata.name,DESIRED:.spec.replicas,READY:.status.readyReplicas,WORKERS:.spec.template.spec.containers[0].env[?(@.name=="LOAD_FACTOR")].value'
+      ;;
+    *)
+      echo "알 수 없는 load 명령: ${action} (가능: start [workers], stop, status)" >&2
+      exit 1
+      ;;
+  esac
+}
+
 cleanup_scenario() {
   local name="$1"
   log "cleanup: scenario=${name}"
@@ -99,6 +134,7 @@ usage() {
 
 COMMAND="${1:-}"
 ARG="${2:-}"
+VALUE="${3:-}"
 
 case "${COMMAND}" in
   baseline)
@@ -115,6 +151,10 @@ case "${COMMAND}" in
     ;;
   status)
     show_status "${ARG}"
+    ;;
+  load)
+    [ -n "${ARG}" ] || usage
+    control_load "${ARG}" "${VALUE:-8}"
     ;;
   cleanup)
     [ -n "${ARG}" ] || usage

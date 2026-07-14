@@ -23,6 +23,11 @@ TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh cleanup crashloop
 
 # 모든 fault 정리(baseline은 유지)
 TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh cleanup faults
+
+# 리허설/폴백 부하 스위치(기본 8 workers)
+TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh load start 8
+TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh load status
+TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh load stop
 ```
 
 `kubectl apply` 기반이라 몇 번을 다시 실행해도 결과가 같다(idempotent).
@@ -37,6 +42,11 @@ TARGET_CONTEXT=target1 bash scripts/scenario-inject.sh cleanup faults
 - `shop-redis` — 주문 큐/캐시. `redis-cli ping` probe.
 - `shop-worker` — redis `orders` 리스트에 job을 넣고 꺼내며 구조화 로그를 남기고, 20건마다 CPU burst를 만든다.
 - `shop-loadgen` — 분(minute)에 따라 burst 크기(1~10 req/s)를 바꿔 요청률이 물결치게 하고, 주기적으로 404·오류 경로를 호출해 현실적인 error rate를 만든다.
+
+리허설에서는 `load start N`으로 `shop-loadgen` 한 파드 안의 요청 worker를 `N`개로
+늘리고, `load stop`으로 Deployment를 0개까지 내린다. 단일 노드 EKS의 Pod 상한을
+넘기지 않으면서 부하를 켜고 끌 수 있다. 두 명령은 `sandbox`의 이 Deployment 하나만
+변경한다. 평상시 기준 상태로 돌아갈 때는 `load start 1`을 실행한다.
 
 DevOps 엔지니어가 보게 되는 것: 클러스터 usage(`/clusters/{id}/usage`)의 CPU 시계열이
 분 단위로 오르내리고, Loki에는 nginx access log + worker 처리 로그가 계속 쌓이고,
