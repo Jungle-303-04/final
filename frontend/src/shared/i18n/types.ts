@@ -5,6 +5,7 @@ import type { ResourcesMessageKey } from "./keys/resources";
 import type { WorkflowsMessageKey } from "./keys/workflows";
 import type { DockMessageKey } from "./keys/dock";
 import type { ShellMessageKey } from "./keys/shell";
+import type { AlertsMessageKey } from "./keys/alerts";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -226,6 +227,7 @@ type CoreMessageKey =
 
 export type MessageKey =
   | CoreMessageKey
+  | AlertsMessageKey
   | DockMessageKey
   | ShellMessageKey
   | ClustersMessageKey

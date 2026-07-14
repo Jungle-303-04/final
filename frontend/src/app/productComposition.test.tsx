@@ -5,6 +5,7 @@ import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
 import type { AiAssistantPort } from "../features/ai-assistant/aiAssistantContract";
 import type { LogStreamPort } from "../features/log-stream/logStreamContract";
+import type { AlertEventsPort } from "../features/alerts/alertEventsContract";
 
 const EmptySurface: ComponentType = () => null;
 const testAuthPort: AuthPort = {
@@ -20,6 +21,11 @@ const testAiAssistantPort: AiAssistantPort = {
   loadSuggestions: async () => [],
 };
 const testLogStreamPort: LogStreamPort = { open: () => () => undefined };
+const testAlertEventsPort: AlertEventsPort = {
+  list: async () => [],
+  acknowledge: async () => { throw new Error("not used"); },
+  promote: async () => { throw new Error("not used"); },
+};
 
 describe("product composition", () => {
   it("keeps the production release closed when no approved surface is registered", () => {
@@ -68,6 +74,20 @@ describe("product composition", () => {
     );
 
     expect(composition.logStream).toBe(testLogStreamPort);
+  });
+
+  it("carries the global alert occurrence transport through the production composition", () => {
+    const composition = createProductComposition(
+      [],
+      testAuthPort,
+      testClusterScopePort,
+      undefined,
+      undefined,
+      undefined,
+      testAlertEventsPort,
+    );
+
+    expect(composition.alertEvents).toBe(testAlertEventsPort);
   });
 
   it("rejects duplicate registrations instead of choosing one implicitly", () => {

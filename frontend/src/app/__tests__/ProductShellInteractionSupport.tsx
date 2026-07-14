@@ -12,6 +12,8 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import { I18nProvider } from "../../shared/i18n";
 import type { AiAssistantPort } from "../../features/ai-assistant/aiAssistantContract";
 import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
+import type { AlertEventsPort } from "../../features/alerts/alertEventsContract";
+import type { ProductSurfaceId } from "../productRoutes";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import {
   PRODUCT_SHORTCUT_EVENT,
@@ -59,15 +61,17 @@ export function installMatchMedia(matches: boolean) {
 }
 
 export function renderShell({
+  alertEventsPort,
   aiAssistantPort,
   initialEntry = "/home?clusters=cluster-1",
   logStreamPort,
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
+  alertEventsPort?: AlertEventsPort;
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
   initialEntry?: string;
-  releasedSurfaceIds?: ReadonlySet<"home" | "resources" | "issues">;
+  releasedSurfaceIds?: ReadonlySet<ProductSurfaceId>;
 } = {}) {
   return render(
     <StrictMode>
@@ -85,6 +89,7 @@ export function renderShell({
                   <Routes>
                     <Route element={(
                       <ProductShell
+                        alertEventsPort={alertEventsPort}
                         aiAssistantPort={aiAssistantPort}
                         auth={testAuth}
                         logStreamPort={logStreamPort}
@@ -94,6 +99,7 @@ export function renderShell({
                       <Route path="/home" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
                       <Route path="/resources" element={<ResourcesShortcutProbe />} />
                       <Route path="/issues" element={<p>Issue content</p>} />
+                      <Route path="/alerts" element={<p>Alert content</p>} />
                     </Route>
                   </Routes>
                 </ClusterScopeProvider>

@@ -44,6 +44,7 @@ export function ProductRouter({
               globalFilterPort={composition.globalFilter}
               aiAssistantPort={composition.aiAssistant}
               logStreamPort={composition.logStream}
+              alertEventsPort={composition.alertEvents}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>

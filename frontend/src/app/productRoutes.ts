@@ -3,6 +3,7 @@ export type ProductSurfaceId =
   | "clusters"
   | "resources"
   | "issues"
+  | "alerts"
   | "applications"
   | "gitops"
   | "settings";
@@ -12,6 +13,7 @@ export type ProductRouteIcon =
   | "clusters"
   | "resources"
   | "issues"
+  | "alerts"
   | "applications"
   | "gitops"
   | "settings";
@@ -30,6 +32,7 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("clusters", "Clusters", "/clusters", "g k"),
   route("resources", "Resources", "/resources", "g r"),
   route("issues", "Incidents", "/issues", "g i"),
+  route("alerts", "Alerts", "/alerts", "g l"),
   route("applications", "Applications", "/applications", "g a"),
   route("gitops", "GitOps", "/gitops", "g o"),
   route("settings", "Settings", "/settings", "g s"),

@@ -15,6 +15,27 @@ export {
   type AlertChannelTestResponse,
 } from "../alert-channels-schemas";
 export {
+  ALERT_EVENTS_PATH,
+  acknowledgeAlertEvent,
+  listAlertEvents,
+  promoteAlertEvent,
+  type AlertEventListOptions,
+} from "../alert-events";
+export {
+  alertEventListSchema,
+  alertEventSchema,
+  alertEventSeveritySchema,
+  alertEventSourceSchema,
+  alertEventStatusSchema,
+  alertEventSubjectSchema,
+  alertEvidenceItemSchema,
+  alertIncidentPromotionSchema,
+  type AlertEvent,
+  type AlertEventSeverity,
+  type AlertEventStatus,
+  type AlertIncidentPromotion,
+} from "../alert-events-schemas";
+export {
   ALERT_RULES_PATH,
   createAlertRule,
   deleteAlertRule,

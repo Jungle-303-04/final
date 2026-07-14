@@ -52,6 +52,11 @@ import { BottomDock } from "./BottomDock";
 import { SidebarProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
 import { SidebarWorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
 import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
+import { AlertEventsProvider, useAlertEvents } from "../features/alerts/AlertEventsProvider";
+import {
+  EMPTY_ALERT_EVENTS_PORT,
+  type AlertEventsPort,
+} from "../features/alerts/alertEventsContract";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -60,6 +65,7 @@ interface ProductShellProps {
   globalFilterPort?: GlobalFilterPort;
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
+  alertEventsPort?: AlertEventsPort;
 }
 
 export function ProductShell({
@@ -69,18 +75,21 @@ export function ProductShell({
   globalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
+  alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
           <BottomDockProvider port={logStreamPort}>
-            <ProductShellFrame
-              auth={auth}
-              aiAssistantPort={aiAssistantPort}
-              globalFilterPort={globalFilterPort}
-              releasedSurfaceIds={releasedSurfaceIds}
-            />
+            <AlertEventsProvider port={alertEventsPort}>
+              <ProductShellFrame
+                auth={auth}
+                aiAssistantPort={aiAssistantPort}
+                globalFilterPort={globalFilterPort}
+                releasedSurfaceIds={releasedSurfaceIds}
+              />
+            </AlertEventsProvider>
           </BottomDockProvider>
         </SidebarProvider>
       </TooltipProvider>
@@ -102,6 +111,7 @@ function ProductShellFrame({
   const { isMobile } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
+  const alertEvents = useAlertEvents();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
   const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
@@ -193,6 +203,14 @@ function ProductShellFrame({
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
                       <SidebarText>{label}</SidebarText>
+                      {routeDefinition.id === "alerts" && alertEvents.unreadCount > 0 ? (
+                        <span
+                          aria-label={t("alerts.sidebar.unread", { count: alertEvents.unreadCount })}
+                          className="ml-auto min-w-5 rounded-full bg-destructive/15 px-1.5 text-center text-xs font-semibold text-destructive"
+                        >
+                          {alertEvents.unreadCount > 99 ? "99+" : alertEvents.unreadCount}
+                        </span>
+                      ) : null}
                     </SidebarMenuLink>
                   </SidebarMenuItem>
                 );
@@ -277,7 +295,6 @@ function ProductShellFrame({
     </>
   );
 }
-
 function isNarrowAiViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 895px)").matches;
 }
