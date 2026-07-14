@@ -26,6 +26,7 @@ export default defineConfig({
     hookTimeout: 15_000,
     testTimeout: 15_000,
     maxWorkers: 4,
+    setupFiles: ["./src/test/setup.ts"],
   },
   build: {
     chunkSizeWarningLimit: 900,
