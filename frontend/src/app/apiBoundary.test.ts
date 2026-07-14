@@ -1,6 +1,5 @@
-import { execFileSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve } from "node:path";
+import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -10,12 +9,8 @@ const appRoot = dirname(fileURLToPath(import.meta.url));
 const productRoot = resolve(appRoot, "..");
 const sourceRoot = productRoot;
 const frontendRoot = resolve(sourceRoot, "..");
-const repositoryRoot = resolve(frontendRoot, "..");
 const apiRoot = resolve(productRoot, "api");
-const apiIndexFromRepository = "references/ui-layer-lab/src/product/api/index.ts";
-const apiBarrelsFromRepository = "references/ui-layer-lab/src/product/api/barrels";
 const compositionRoot = resolve(appRoot, "apiComposition.ts");
-const progressPath = resolve(repositoryRoot, "docs/spec/frontend/codex-progress-20260711.md");
 const scriptExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 
 interface ApiReference {
@@ -23,19 +18,12 @@ interface ApiReference {
   specifier: string;
 }
 
-interface ApprovalRecord {
-  name: string;
-  hash: string;
-}
-
-interface ApprovalCommitEvidence {
-  changedFiles: string[];
-  contractTestSources: string[];
-  publicBarrelSources: string[];
+interface ApiSource {
+  filePath: string;
+  source: string;
 }
 
 const API_BOUNDARY_TIMEOUT_MS = 30_000;
-const approvalEvidenceByHash = new Map<string, ApprovalCommitEvidence | null>();
 
 describe("product API consumption boundary", () => {
   it("allows product/api references only from the composition root", async () => {
@@ -55,12 +43,11 @@ describe("product API consumption boundary", () => {
     expect(violations, "API references must be isolated behind app/apiComposition.ts").toEqual([]);
   }, API_BOUNDARY_TIMEOUT_MS);
 
-  it("allows only approved named endpoint imports in the composition root", async () => {
-    const [progress, compositionSource] = await Promise.all([
-      readFile(progressPath, "utf8"),
+  it("requires current contract tests, public exports, and Zod schemas for composed endpoints", async () => {
+    const [compositionSource, apiSources] = await Promise.all([
       readFile(compositionRoot, "utf8").catch(() => ""),
+      collectApiSources(),
     ]);
-    const approvals = latestApprovalRecords(progress);
     const audit = compositionImports(compositionRoot, compositionSource);
     audit.issues.push(...internalImportEscapes(compositionRoot, compositionSource).map((specifier) => (
       `outside-product:${specifier}`
@@ -68,12 +55,8 @@ describe("product API consumption boundary", () => {
 
     expect(audit.issues, "apiComposition.ts must use named value imports from the API barrel").toEqual([]);
     expect(
-      audit.names.filter((name) => !approvals.has(name)),
-      "apiComposition.ts imported an endpoint without an anchored API 완성 record",
-    ).toEqual([]);
-    expect(
-      audit.names.flatMap((name) => approvalEvidenceIssues(approvals.get(name))),
-      "API 완성 records must identify an ancestor commit with API contract tests and the export",
+      audit.names.flatMap((name) => endpointContractIssues(name, apiSources)),
+      "composed endpoints must have a local contract test, public barrel export, and imported Zod schema",
     ).toEqual([]);
   }, API_BOUNDARY_TIMEOUT_MS);
 
@@ -92,6 +75,18 @@ describe("product API consumption boundary", () => {
     ]);
     expect(internalImportEscapes(fixturePath, 'import "@/../bridge/api";')).toEqual([
       "@/../bridge/api",
+    ]);
+  });
+
+  it("reports each missing piece of current-tree endpoint evidence", () => {
+    const endpointPath = resolve(apiRoot, "fixture-endpoint.ts");
+    expect(endpointContractIssues("fixtureEndpoint", [{
+      filePath: endpointPath,
+      source: "export function fixtureEndpoint() { return null; }",
+    }])).toEqual([
+      "fixtureEndpoint: contract test missing endpoint identifier",
+      "fixtureEndpoint: named export missing from public barrel",
+      "fixtureEndpoint: implementation does not import a Zod schema",
     ]);
   });
 });
@@ -193,73 +188,94 @@ function compositionImports(filePath: string, source: string): { names: string[]
   return { names: [...new Set(names)].sort(), issues: issues.sort() };
 }
 
-function latestApprovalRecords(progress: string): Map<string, ApprovalRecord> {
-  const records = new Map<string, ApprovalRecord>();
-  for (const match of progress.matchAll(/^API 완성: ([A-Za-z_$][\w$]*) \(([0-9a-f]{7,40})\)$/gmu)) {
-    records.set(match[1], { name: match[1], hash: match[2] });
-  }
-  return records;
-}
-
-function approvalEvidenceIssues(record: ApprovalRecord | undefined): string[] {
-  if (!record) return ["missing approval record"];
+function endpointContractIssues(name: string, sources: ApiSource[]): string[] {
   const issues: string[] = [];
-  const evidence = approvalCommitEvidence(record.hash);
-  if (!evidence) {
-    issues.push("invalid or non-ancestor completion commit");
-    return issues.map((issue) => `${record.name}@${record.hash}: ${issue}`);
+  const contractTests = sources.filter(({ filePath }) => /\.test\.[cm]?[jt]sx?$/u.test(filePath));
+  const publicBarrels = sources.filter(({ filePath }) => isPublicBarrel(filePath));
+  const implementations = sources.filter(({ filePath, source }) => (
+    !isPublicBarrel(filePath) &&
+    !/\.test\.[cm]?[jt]sx?$/u.test(filePath) &&
+    hasNamedExport(source, name)
+  ));
+
+  if (!contractTests.some(({ source }) => containsIdentifier(source, name))) {
+    issues.push("contract test missing endpoint identifier");
   }
-  const apiPrefix = "references/ui-layer-lab/src/product/api/";
-  if (!evidence.changedFiles.some((file) => file.startsWith(apiPrefix))) {
-    issues.push("no API change");
+  if (!publicBarrels.some(({ source }) => hasNamedExport(source, name))) {
+    issues.push("named export missing from public barrel");
   }
-  if (evidence.contractTestSources.length === 0) {
-    issues.push("no API contract test changed");
-  } else if (!evidence.contractTestSources.some((source) => (
-    containsIdentifier(source, record.name)
-  ))) {
-    issues.push("completion function absent from changed contract tests");
+  if (implementations.length !== 1) {
+    issues.push(`expected one implementation module, found ${implementations.length}`);
+  } else if (importedZodSchemaModules(implementations[0], sources).length === 0) {
+    issues.push("implementation does not import a Zod schema");
   }
-  if (!evidence.publicBarrelSources.some((source) => hasNamedExport(source, record.name))) {
-    issues.push("named export absent at completion commit");
-  }
-  return issues.map((issue) => `${record.name}@${record.hash}: ${issue}`);
+  return issues.map((issue) => `${name}: ${issue}`);
 }
 
-function approvalCommitEvidence(hash: string): ApprovalCommitEvidence | null {
-  const cached = approvalEvidenceByHash.get(hash);
-  if (cached !== undefined) return cached;
-  try {
-    git(["cat-file", "-e", `${hash}^{commit}`]);
-    git(["merge-base", "--is-ancestor", hash, "HEAD"]);
-    const changedFiles = git(["diff-tree", "--no-commit-id", "--name-only", "-r", hash])
-      .split("\n").filter(Boolean);
-    const apiPrefix = "references/ui-layer-lab/src/product/api/";
-    const contractTests = changedFiles.filter((file) => (
-      file.startsWith(apiPrefix) && /\.test\.[cm]?[jt]sx?$/u.test(file)
+function isPublicBarrel(filePath: string): boolean {
+  const apiPath = relative(apiRoot, filePath);
+  return apiPath === "index.ts" || apiPath.startsWith(`barrels${sep}`);
+}
+
+function importedZodSchemaModules(implementation: ApiSource, sources: ApiSource[]): string[] {
+  const sourcesByPath = new Map(sources.map((item) => [item.filePath, item.source]));
+  const sourceFile = ts.createSourceFile(
+    implementation.filePath,
+    implementation.source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const schemaModules: string[] = [];
+
+  sourceFile.forEachChild((node) => {
+    if (!ts.isImportDeclaration(node) || !ts.isStringLiteralLike(node.moduleSpecifier)) return;
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) return;
+    const importsSchema = bindings.elements.some((element) => (
+      !element.isTypeOnly && /Schema$/u.test(element.propertyName?.text ?? element.name.text)
     ));
-    const domainBarrels = git([
-      "ls-tree",
-      "-r",
-      "--name-only",
-      hash,
-      "--",
-      apiBarrelsFromRepository,
-    ]).split("\n").filter(Boolean);
-    const evidence = {
-      changedFiles,
-      contractTestSources: contractTests.map((file) => git(["show", `${hash}:${file}`])),
-      publicBarrelSources: [
-        git(["show", `${hash}:${apiIndexFromRepository}`]),
-        ...domainBarrels.map((file) => git(["show", `${hash}:${file}`])),
-      ],
-    };
-    approvalEvidenceByHash.set(hash, evidence);
-    return evidence;
-  } catch {
-    approvalEvidenceByHash.set(hash, null);
-    return null;
-  }
+    if (!importsSchema) return;
+    const resolved = resolveModuleReference(implementation.filePath, node.moduleSpecifier.text);
+    if (!resolved || !isWithin(resolved, apiRoot)) return;
+    const schemaPath = [resolved, `${resolved}.ts`, `${resolved}.tsx`]
+      .find((candidate) => sourcesByPath.has(candidate));
+    if (!schemaPath) return;
+    if (moduleProvidesZodSchema(schemaPath, sourcesByPath, new Set())) {
+      schemaModules.push(relative(apiRoot, schemaPath));
+    }
+  });
+  return [...new Set(schemaModules)].sort();
+}
+
+function moduleProvidesZodSchema(
+  filePath: string,
+  sourcesByPath: Map<string, string>,
+  visited: Set<string>,
+): boolean {
+  if (visited.has(filePath)) return false;
+  visited.add(filePath);
+  const source = sourcesByPath.get(filePath) ?? "";
+  if (/from\s+["']zod["']/u.test(source) && /\bz\./u.test(source)) return true;
+
+  const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+  let hasTransitiveZodSchema = false;
+  sourceFile.forEachChild((node) => {
+    if (hasTransitiveZodSchema) return;
+    if (!ts.isImportDeclaration(node) || !ts.isStringLiteralLike(node.moduleSpecifier)) return;
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) return;
+    if (!bindings.elements.some((element) => (
+      !element.isTypeOnly && /Schema$/u.test(element.propertyName?.text ?? element.name.text)
+    ))) return;
+    const resolved = resolveModuleReference(filePath, node.moduleSpecifier.text);
+    if (!resolved || !isWithin(resolved, apiRoot)) return;
+    const importedPath = [resolved, `${resolved}.ts`, `${resolved}.tsx`]
+      .find((candidate) => sourcesByPath.has(candidate));
+    if (importedPath) {
+      hasTransitiveZodSchema = moduleProvidesZodSchema(importedPath, sourcesByPath, visited);
+    }
+  });
+  return hasTransitiveZodSchema;
 }
 
 function resolveModuleReference(filePath: string, specifier: string): string | null {
@@ -281,6 +297,9 @@ async function collectScripts(directory: string): Promise<string[]> {
   return files.sort();
 }
 
-function git(args: string[]): string {
-  return execFileSync("git", ["-C", repositoryRoot, ...args], { encoding: "utf8" }).trim();
+async function collectApiSources(): Promise<ApiSource[]> {
+  return Promise.all((await collectScripts(apiRoot)).map(async (filePath) => ({
+    filePath,
+    source: await readFile(filePath, "utf8"),
+  })));
 }

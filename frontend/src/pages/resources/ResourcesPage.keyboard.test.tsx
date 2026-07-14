@@ -99,22 +99,23 @@ describe("ResourcesPage keyboard navigation", () => {
   }, 15_000);
 
   it("keeps global g chords available while reserving gg for the first resource row", async () => {
+    const user = userEvent.setup();
     renderResources(resourcesPort(), "/resources?clusters=cluster-1&resources.types=pod");
-    const checkout = await screen.findByRole(
+    await screen.findByRole(
       "button",
       { name: /checkout-api-0/u },
       { timeout: 5_000 },
     );
 
-    fireEvent.keyDown(window, { key: "g" });
-    fireEvent.keyDown(window, { key: "h" });
+    await user.keyboard("gh");
     expect(matchedRoutes).toHaveBeenCalledExactlyOnceWith("route:home");
 
     document.body.tabIndex = -1;
     document.body.focus();
-    fireEvent.keyDown(window, { key: "g" });
-    fireEvent.keyDown(window, { key: "g" });
-    expect(document.activeElement).toBe(checkout);
+    await user.keyboard("gg");
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /checkout-api-0/u }),
+    ));
     expect(matchedRoutes).toHaveBeenCalledTimes(1);
   }, 15_000);
 });
