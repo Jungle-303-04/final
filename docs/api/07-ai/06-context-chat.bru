@@ -1,0 +1,56 @@
+meta {
+  name: 06 근거 기반 AI 채팅
+  type: http
+  seq: 6
+  tags: [ai, read]
+}
+
+post {
+  url: {{base_url}}ai/chat
+  body: json
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "context": {
+      "screen": "resources",
+      "filters": {
+        "clusters": ["{{cluster_id}}"],
+        "namespaces": [],
+        "applications": [],
+        "labels": [],
+        "resource_types": ["pod"],
+        "health": [],
+        "query": ""
+      },
+      "selection": null,
+      "time": null
+    },
+    "message": "현재 리소스 상태를 근거와 함께 요약해 줘."
+  }
+}
+
+tests {
+  test("context chat is authenticated and strict", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("every successful claim has evidence or canonical no-data", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    expect(body.answer).to.be.a("string");
+    expect(body.evidence).to.be.an("array");
+    if (body.evidence.length === 0) {
+      expect(body.answer).to.equal("그 데이터가 없습니다.");
+      return;
+    }
+    body.evidence.forEach((item) => {
+      expect(item.link).to.match(/^\/(?!\/)/);
+      expect(item).to.have.all.keys("type", "id", "label", "link");
+    });
+  });
+}

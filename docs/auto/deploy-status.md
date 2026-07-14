@@ -11,15 +11,15 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S4 포함 `03030867` public · S5 포함 후속 배포 진행 중
+배포 SHA : console S5 포함 `7354ee91` public · S6 `fba675e2` rollout 진행 중
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 16:33 KST  S4 public topology 결함 확인 · S5 pushed · S6 local green
+갱신     : 2026-07-14 17:01 KST  topology 200 복구 · S5 public · S6 rollout · S7 local green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-DspdZoqF.js`
-- backend digest: `sha256:602b41368daf5488127b1538d1778c08cb89ce1bf94b6789d4855bff27eb39e3`
-- console digest: `sha256:d330fe6e15838828fd6bf556f5aeb51d75e1d1fa49045e77af3a7aa04088b1a9`
+- console bundle: `assets/index-DDzxYCh0.js`
+- backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
+- console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
 - 로그인·클러스터·리소스 read smoke: 통과
 
 ---
@@ -40,8 +40,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
 - [x] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
 - [x] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
-- [ ] **S4**  물리 뷰 그래프 (2층) ★  ← public route 활성, cluster identity 누락 500 수정 배포 대기
-- [ ] **S5**  표 + 스파크라인 (3층)    ← 구현·gate·dev push 완료, 자동 배포 진행 중
+- [x] **S4**  물리 뷰 그래프 (2층) ★  ← public strict topology 200 실측
+- [x] **S5**  표 + 스파크라인 (3층)    ← `7354ee91` 자동 배포·public bundle 확인
 - [ ] **S6**  상세 = 전체화면 덮기
 - [ ] **S7**  AI 패널
 - [ ] **S8**  하단 독 + 로그 스트림
@@ -90,9 +90,8 @@ URL      : https://k8s.woonyong.org
 - [x] S4 local 검증 — backend 56 tests, frontend 161 files / 1028 tests,
   typecheck·lint·500-file design guard·production build PASS
 - [x] S4 gate-fast·dev push — `78b8ce0e2`, Dev Gate `29311971097` SUCCESS
-- [ ] S4 자동 배포/public 확인 — S4 포함 `03030867` run `29313095446` SUCCESS,
-  public route는 활성화됐으나 `resolve_filter_clusters()`의 `cluster_id` 누락으로 500;
-  repository identity 보정·직접 회귀 테스트는 local green, 다음 배포에서 재검증
+- [x] S4 자동 배포/public 확인 — S4 포함 `03030867` run `29313095446` SUCCESS 뒤
+  발견한 `cluster_id` 누락을 `fba675e2` backend rollout으로 보정; public strict topology 200
 - [x] S5 BQ-030 batch metrics history — 최대 100 pod stable ID를 권한·필터·snapshot과
   다시 교차 검증하고 null/빈 points·completeness를 그대로 반환, per-row fan-out 금지
 - [x] S5 kind별 smart table — canonical facts만 소비, 정렬·snapshot-safe Load more 연결,
@@ -101,7 +100,8 @@ URL      : https://k8s.woonyong.org
   typecheck·lint·516-file design guard·production build PASS
 - [x] S5 gate-fast·dev push — `7b18c49b4`, frontend 167 files / 1050 tests,
   Dev Gate `29313454756` SUCCESS
-- [ ] S5 자동 배포/public 확인 — 후속 dev 배포 진행 중
+- [x] S5 자동 배포/public 확인 — `7354ee91` run `29313980647` SUCCESS,
+  public bundle `index-DDzxYCh0.js`, health/root 200
 - [x] S6 BQ-061 exact resource capability — inventory.read 선확인, deploy.run·연결된
   `command_receiver`·target namespace를 모두 만족한 Deployment restart/scale만 반환
 - [x] S6 전체화면 상세 — `?detail=kind/ns/name`, 뒤로가기·Esc·행 포커스 복귀,
@@ -110,7 +110,15 @@ URL      : https://k8s.woonyong.org
   확인 dialog와 실제 restart/scale API에 연결; 실패·403·불일치에는 버튼 미렌더
 - [x] S6 local 검증 — backend capability 67 tests 및 topology 회귀 11 tests,
   `make gate-fast` PASS, frontend 171 files / 1062 tests, design guard 534 files, production build PASS
-- [ ] S6 dev push·Dev Gate·자동 배포/public 체크리스트 확인
+- [x] S6 dev push·Dev Gate — `fba675e2`, Dev Gate `29315633512` SUCCESS
+- [ ] S6 자동 배포/public 체크리스트 — run `29315860051` service rollout 진행 중;
+  중간 실측 health/root/topology 200, console은 선행 S5 bundle
+- [x] S7 BQ-052/053/066 evidence-bound AI facade — strict context, `inventory.read`
+  concrete cluster scope, 내부 링크 allowlist, raw metadata 차단, 근거 없으면 정본 no-data
+- [x] S7 오른쪽 AI 패널 — 고정 ✦, 420px/300ms 1단계, 내부 고정폭,
+  360~640px resize, 정확한 화면·필터·선택 칩, 좁은 상세 자동 닫힘+toast
+- [x] S7 회귀 검증 — 오른쪽 sibling·고정 trigger·단일 transition·근거 없는 답변 차단,
+  strict API/Zod/adapter·production build·`make gate-fast` 175 files/1072 tests PASS; dev push 대기
 
 ---
 

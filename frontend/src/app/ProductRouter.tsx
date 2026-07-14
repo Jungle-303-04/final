@@ -37,6 +37,7 @@ export function ProductRouter({
             <ProductShell
               auth={auth}
               globalFilterPort={composition.globalFilter}
+              aiAssistantPort={composition.aiAssistant}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>

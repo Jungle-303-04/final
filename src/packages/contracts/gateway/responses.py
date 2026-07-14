@@ -1754,6 +1754,78 @@ class AiConversationListResponse(StrictModel):
     conversations: list[JsonMap]
 
 
+AI_NO_DATA_ANSWER = "그 데이터가 없습니다."
+
+
+class AiEvidenceLink(StrictModel):
+    type: Literal["inventory-resource"]
+    id: str = Field(min_length=1, max_length=255)
+    label: str = Field(min_length=1, max_length=512)
+    link: str = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_internal_link(self) -> Self:
+        # Product-internal absolute paths only. Protocol-relative links, URL
+        # schemes, fragments and control characters must never reach an anchor.
+        if (
+            not self.link.startswith("/")
+            or self.link.startswith("//")
+            or "#" in self.link
+            or any(character.isspace() or ord(character) < 32 for character in self.link)
+        ):
+            raise ValueError("AI evidence link must be a safe product-internal path")
+        return self
+
+
+class AiChatResponse(StrictModel):
+    answer: str = Field(min_length=1, max_length=4000)
+    evidence: list[AiEvidenceLink] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def require_evidence_or_canonical_no_data(self) -> Self:
+        if not self.evidence and self.answer != AI_NO_DATA_ANSWER:
+            raise ValueError("AI answer without evidence must use the canonical no-data answer")
+        identities = [(item.type, item.id) for item in self.evidence]
+        if len(set(identities)) != len(identities):
+            raise ValueError("AI evidence entries must be unique")
+        return self
+
+
+class AiSuggestion(StrictModel):
+    id: str = Field(min_length=1, max_length=120)
+    label: str = Field(min_length=1, max_length=240)
+    prompt: str = Field(min_length=1, max_length=1000)
+
+
+class AiSuggestionsResponse(StrictModel):
+    suggestions: list[AiSuggestion] = Field(default_factory=list, max_length=12)
+
+
+class AiResourceSummary(StrictModel):
+    """Token-bounded inventory evidence; raw Kubernetes metadata is excluded."""
+
+    id: str = Field(min_length=1, max_length=255)
+    cluster_id: str = Field(min_length=1, max_length=512)
+    resource_type: str = Field(min_length=1, max_length=80)
+    kind: str = Field(min_length=1, max_length=120)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+    status: str = Field(min_length=1, max_length=80)
+    health: str = Field(min_length=1, max_length=80)
+    observed_at: str | None = None
+    link: str = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_internal_link(self) -> Self:
+        AiEvidenceLink(
+            type="inventory-resource",
+            id=self.id,
+            label=self.name,
+            link=self.link,
+        )
+        return self
+
+
 class ApplicationResponse(StrictModel):
     application: JsonMap
 

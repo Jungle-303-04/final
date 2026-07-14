@@ -9,6 +9,10 @@ import {
   EMPTY_GLOBAL_FILTER_PORT,
   type GlobalFilterPort,
 } from "../features/global-filter/globalFilterContract";
+import {
+  EMPTY_AI_ASSISTANT_PORT,
+  type AiAssistantPort,
+} from "../features/ai-assistant/aiAssistantContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -19,6 +23,7 @@ export interface ProductComposition {
   auth: AuthPort;
   clusterScope: ClusterScopePort;
   globalFilter: GlobalFilterPort;
+  aiAssistant: AiAssistantPort;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
@@ -28,6 +33,7 @@ export function createProductComposition(
   auth: AuthPort,
   clusterScope: ClusterScopePort,
   globalFilter: GlobalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
+  aiAssistant: AiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -53,6 +59,7 @@ export function createProductComposition(
     auth,
     clusterScope,
     globalFilter,
+    aiAssistant,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };

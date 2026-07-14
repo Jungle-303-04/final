@@ -2,6 +2,7 @@
   --motion-instant: 120ms;
   --motion-quick: 180ms;
   --motion-pop: 340ms;
+  --motion-ai: 300ms;
   --motion-layout: 320ms;
   --motion-camera: 420ms;
   --motion-value: 500ms;
@@ -98,6 +99,36 @@
 
 .motion-detail-workspace[data-closing="true"] {
   animation: motion-detail-exit var(--motion-layout) var(--ease-spring) forwards;
+}
+
+.motion-ai-panel {
+  --ai-width: 420px;
+  width: 0;
+  transition: width var(--motion-ai) var(--ease-spring);
+}
+
+.motion-ai-panel[data-width="360"] { --ai-width: 360px; }
+.motion-ai-panel[data-width="380"] { --ai-width: 380px; }
+.motion-ai-panel[data-width="400"] { --ai-width: 400px; }
+.motion-ai-panel[data-width="420"] { --ai-width: 420px; }
+.motion-ai-panel[data-width="440"] { --ai-width: 440px; }
+.motion-ai-panel[data-width="460"] { --ai-width: 460px; }
+.motion-ai-panel[data-width="480"] { --ai-width: 480px; }
+.motion-ai-panel[data-width="500"] { --ai-width: 500px; }
+.motion-ai-panel[data-width="520"] { --ai-width: 520px; }
+.motion-ai-panel[data-width="540"] { --ai-width: 540px; }
+.motion-ai-panel[data-width="560"] { --ai-width: 560px; }
+.motion-ai-panel[data-width="580"] { --ai-width: 580px; }
+.motion-ai-panel[data-width="600"] { --ai-width: 600px; }
+.motion-ai-panel[data-width="620"] { --ai-width: 620px; }
+.motion-ai-panel[data-width="640"] { --ai-width: 640px; }
+
+.motion-ai-panel[data-open="true"] {
+  width: var(--ai-width, 420px);
+}
+
+.motion-ai-panel > [data-slot="ai-assistant-inner"] {
+  width: var(--ai-width, 420px);
 }
 
 @media (prefers-reduced-motion: reduce) {

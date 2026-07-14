@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createProductComposition } from "./productComposition";
 import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
+import type { AiAssistantPort } from "../features/ai-assistant/aiAssistantContract";
 
 const EmptySurface: ComponentType = () => null;
 const testAuthPort: AuthPort = {
@@ -12,6 +13,10 @@ const testAuthPort: AuthPort = {
 };
 const testClusterScopePort: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
+};
+const testAiAssistantPort: AiAssistantPort = {
+  ask: async () => ({ answer: "no data", evidence: [] }),
+  loadSuggestions: async () => [],
 };
 
 describe("product composition", () => {
@@ -36,6 +41,18 @@ describe("product composition", () => {
       "issues",
       "catalog",
     ]);
+  });
+
+  it("carries the context-bound AI port through the production composition", () => {
+    const composition = createProductComposition(
+      [],
+      testAuthPort,
+      testClusterScopePort,
+      undefined,
+      testAiAssistantPort,
+    );
+
+    expect(composition.aiAssistant).toBe(testAiAssistantPort);
   });
 
   it("rejects duplicate registrations instead of choosing one implicitly", () => {

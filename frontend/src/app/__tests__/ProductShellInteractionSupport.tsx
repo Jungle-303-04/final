@@ -10,6 +10,7 @@ import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeP
 import type { ClusterScopePort } from "../../features/cluster-scope/clusterScopeContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
+import type { AiAssistantPort } from "../../features/ai-assistant/aiAssistantContract";
 import {
   PRODUCT_SHORTCUT_EVENT,
   type ProductShortcutEventDetail,
@@ -56,9 +57,11 @@ export function installMatchMedia(matches: boolean) {
 }
 
 export function renderShell({
+  aiAssistantPort,
   initialEntry = "/?clusters=cluster-1",
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
+  aiAssistantPort?: AiAssistantPort;
   initialEntry?: string;
   releasedSurfaceIds?: ReadonlySet<"home" | "resources" | "issues">;
 } = {}) {
@@ -77,7 +80,11 @@ export function renderShell({
                 <ClusterScopeProvider authorityKey="test-workspace:test-user" port={testClusterScope}>
                   <Routes>
                     <Route element={(
-                      <ProductShell auth={testAuth} releasedSurfaceIds={releasedSurfaceIds} />
+                      <ProductShell
+                        aiAssistantPort={aiAssistantPort}
+                        auth={testAuth}
+                        releasedSurfaceIds={releasedSurfaceIds}
+                      />
                     )}>
                       <Route path="/" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
                       <Route path="/resources" element={<ResourcesShortcutProbe />} />
