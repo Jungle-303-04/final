@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Send,
   Sparkles,
+  Square,
   X,
 } from "lucide-react";
 import {
@@ -9,6 +10,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 
 import { useAuthSessionGate } from "../features/auth/AuthSessionGate";
@@ -51,13 +53,19 @@ export function AiAssistantPanel({
   open: boolean;
   port: AiAssistantPort;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pendingController = useRef<AbortController | null>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState<{
+    contextKey: string;
+    question: string;
+  } | null>(null);
   const [failureContextKey, setFailureContextKey] = useState<string | null>(null);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [suggestions, setSuggestions] = useState<ContextSuggestions>({
@@ -68,6 +76,7 @@ export function AiAssistantPanel({
   const visibleEntries = entries.filter((entry) => entry.contextKey === contextKey);
   const visibleSuggestions = suggestions.contextKey === contextKey ? suggestions.items : [];
   const chips = aiAssistantContextChips(context);
+  const stopLabel = locale === "ko" ? "중단" : "Stop";
 
   useEffect(() => {
     if (!open) return undefined;
@@ -89,29 +98,45 @@ export function AiAssistantPanel({
     return () => controller.abort();
   }, [contextKey, open, port, reportUnauthorized]);
 
+  useEffect(() => {
+    if (!open) return;
+    threadEndRef.current?.scrollIntoView?.({ block: "end" });
+  }, [contextKey, open, pending, visibleEntries.length]);
+
+  useEffect(() => () => pendingController.current?.abort(), [contextKey, open]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const question = message.trim();
     if (!question || pending) return;
+    const controller = new AbortController();
+    pendingController.current = controller;
     setPending(true);
+    setPendingQuestion({ contextKey, question });
+    setMessage("");
     setFailureContextKey(null);
     try {
-      const response = await port.ask(context, question);
+      const response = await port.ask(context, question, controller.signal);
+      if (controller.signal.aborted) return;
       setEntries((current) => [...current.slice(-19), {
         id: ++sequence.current,
         contextKey,
         question,
         response,
       }]);
-      setMessage("");
     } catch (error) {
+      if (isAbortError(error) || controller.signal.aborted) return;
       if (error instanceof AiAssistantPortFailure && error.code === "unauthorized") {
         reportUnauthorized();
       }
       setFailureContextKey(contextKey);
     } finally {
-      setPending(false);
-      inputRef.current?.focus();
+      if (pendingController.current === controller) {
+        pendingController.current = null;
+        setPending(false);
+        setPendingQuestion(null);
+        inputRef.current?.focus();
+      }
     }
   };
 
@@ -119,7 +144,7 @@ export function AiAssistantPanel({
     <>
       <aside
         aria-label={t("shell.ai.title")}
-        className="motion-ai-panel relative min-h-0 shrink-0 overflow-hidden border-l bg-background"
+        className="motion-ai-panel relative min-h-0 max-w-dvw shrink-0 overflow-hidden border-l bg-background"
         data-open={open || undefined}
         data-side="right"
         data-slot="ai-assistant-panel"
@@ -128,7 +153,7 @@ export function AiAssistantPanel({
       >
         <AiAssistantResizeHandle onWidthChange={setWidth} width={width} />
         <div
-          className="flex h-full min-h-0 flex-col"
+          className="flex h-full min-h-0 max-w-dvw flex-col"
           data-inner-width={width}
           data-slot="ai-assistant-inner"
         >
@@ -151,7 +176,12 @@ export function AiAssistantPanel({
             </Button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div
+            aria-label={locale === "ko" ? "AI 대화" : "AI conversation"}
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+            data-slot="ai-conversation"
+            role="log"
+          >
             <section aria-labelledby="ai-context-title" className="grid gap-2">
               <h3 className="text-xs font-medium text-muted-foreground" id="ai-context-title">
                 {t("shell.ai.context")}
@@ -177,7 +207,7 @@ export function AiAssistantPanel({
                       type="button"
                       variant="outline"
                     >
-                      {suggestion.label}
+                      {suggestion.prompt}
                     </Button>
                   ))}
                 </div>
@@ -198,44 +228,73 @@ export function AiAssistantPanel({
                   )}
                 </article>
               ))}
-              {pending ? <p className="text-sm text-muted-foreground">{t("shell.ai.pending")}</p> : null}
+              {pendingQuestion?.contextKey === contextKey ? (
+                <article className="grid gap-2" data-slot="ai-pending-turn">
+                  <p className="ml-8 rounded-lg bg-muted px-3 py-2 text-sm">
+                    {pendingQuestion.question}
+                  </p>
+                  <p className="mr-8 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+                    {t("shell.ai.pending")}
+                  </p>
+                </article>
+              ) : null}
               {failureContextKey === contextKey ? (
                 <Alert variant="destructive">
                   <AlertDescription>{t("shell.ai.failed")}</AlertDescription>
                 </Alert>
               ) : null}
+              <div aria-hidden="true" ref={threadEndRef} />
             </div>
           </div>
 
-          <form className="grid gap-2 border-t p-4 pb-24" onSubmit={submit}>
-            <textarea
-              aria-label={t("shell.ai.placeholder")}
-              className="min-h-20 w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              maxLength={16_000}
-              onChange={(event) => setMessage(event.currentTarget.value)}
-              placeholder={t("shell.ai.placeholder")}
-              ref={inputRef}
-              value={message}
-            />
-            {!pending ? (
-              <Button className="justify-self-end" type="submit">
-                <Send aria-hidden="true" />
-                {t("shell.ai.send")}
-              </Button>
-            ) : null}
+          <form className="border-t p-4" onSubmit={submit}>
+            <div className="relative">
+              <textarea
+                aria-label={t("shell.ai.placeholder")}
+                className="min-h-20 w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 pb-11 pr-12 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                maxLength={16_000}
+                onChange={(event) => setMessage(event.currentTarget.value)}
+                onKeyDown={submitFromKeyboard}
+                placeholder={t("shell.ai.placeholder")}
+                ref={inputRef}
+                value={message}
+              />
+              {!pending ? (
+                <Button
+                  aria-label={t("shell.ai.send")}
+                  className="absolute bottom-2 right-2"
+                  disabled={message.trim().length === 0}
+                  size="icon-sm"
+                  type="submit"
+                >
+                  <Send aria-hidden="true" />
+                </Button>
+              ) : (
+                <Button
+                  className="absolute bottom-2 right-2"
+                  onClick={stopPendingRequest}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  <Square aria-hidden="true" />
+                  {stopLabel}
+                </Button>
+              )}
+            </div>
           </form>
         </div>
       </aside>
-      <Button
+      {!open ? <Button
         aria-expanded={open}
-        aria-label={open ? t("shell.ai.close") : t("shell.ai.open")}
+        aria-label={t("shell.ai.open")}
         className="fixed right-6 bottom-6 z-50 size-14 rounded-full shadow-lg"
         data-slot="ai-assistant-trigger"
         onClick={() => onOpenChange(!open)}
         type="button"
       >
         <Sparkles aria-hidden="true" className="size-5" />
-      </Button>
+      </Button> : null}
     </>
   );
 
@@ -243,6 +302,25 @@ export function AiAssistantPanel({
     setMessage(suggestion.prompt);
     inputRef.current?.focus();
   }
+
+  function submitFromKeyboard(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  function stopPendingRequest() {
+    pendingController.current?.abort();
+    pendingController.current = null;
+    setPending(false);
+    setPendingQuestion(null);
+    inputRef.current?.focus();
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error &&
+    error.name === "AbortError";
 }
 
 function EvidenceLinks({ evidence }: { evidence: AiAssistantAnswer["evidence"] }) {
