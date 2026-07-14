@@ -27,6 +27,16 @@ fail() {
   return 1
 }
 
+contains_hangul_syllable() {
+  SUBJECT="$1" python3 - <<'PY'
+import os
+import sys
+
+subject = os.environ["SUBJECT"]
+sys.exit(0 if any("\uac00" <= char <= "\ud7a3" for char in subject) else 1)
+PY
+}
+
 check_subject() {
   local subject="$1"
   local rc=0
@@ -42,7 +52,9 @@ check_subject() {
     fail "'<type>: <한국어 제목>' 형식이어야 한다 (허용 타입: $TYPES)" "$subject" || rc=1
   fi
 
-  if [[ ! "$subject" =~ [가-힣] ]]; then
+  # Bash의 다국어 범위식은 러너의 locale/regex 구현에 따라 결과가 달라진다.
+  # Unicode 한글 음절 코드포인트를 직접 검사해 로컬 훅과 CI가 같은 판정을 내리게 한다.
+  if ! contains_hangul_syllable "$subject"; then
     fail "제목은 한국어로 쓴다" "$subject" || rc=1
   fi
 
