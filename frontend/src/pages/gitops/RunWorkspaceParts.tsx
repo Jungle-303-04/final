@@ -58,12 +58,10 @@ export function RunActions({
 
 export function RunFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="flex min-w-0 items-start gap-2 bg-card p-3">
-      <span className="mt-0.5 shrink-0 text-muted-foreground [&_svg]:size-3.5">{icon}</span>
-      <div className="grid min-w-0 gap-0.5">
-        <dt className="text-[0.6875rem] text-muted-foreground">{label}</dt>
-        <dd className="m-0 text-xs font-medium [overflow-wrap:anywhere]">{value}</dd>
-      </div>
+    <div className="flex min-w-0 items-center gap-2 overflow-hidden bg-card p-3">
+      <span className="shrink-0 text-muted-foreground [&_svg]:size-3.5">{icon}</span>
+      <dt className="shrink-0 text-[0.6875rem] text-muted-foreground">{label}</dt>
+      <dd className="m-0 min-w-0 flex-1 truncate border-l pl-2 text-xs font-medium" title={value}>{value}</dd>
     </div>
   );
 }

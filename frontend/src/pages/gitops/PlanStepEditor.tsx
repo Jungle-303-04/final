@@ -35,21 +35,23 @@ export function PlanStepEditor({
   const { t } = useI18n();
   const step = plan.steps[index];
   const application = applications.find((item) => item.id === step.application_id);
+  const stepName = step.name || step.application_id;
+  const repository = application?.repository || step.application_id;
   const changeConfig = (key: string, value: string) => onChange(updateStep(plan, index, (current) => ({
     ...current,
     config: { ...current.config, [key]: value },
   })));
   return (
     <article className="grid min-w-0 gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3 overflow-hidden">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
             {index + 1}
           </span>
-          <div className="grid min-w-0 gap-0.5">
-            <strong className="text-sm [overflow-wrap:anywhere]">{step.name || step.application_id}</strong>
-            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {application?.repository || step.application_id}
+          <div className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+            <strong className="max-w-[58%] shrink-0 truncate text-sm" title={stepName}>{stepName}</strong>
+            <span className="min-w-0 flex-1 truncate border-l pl-2 text-xs text-muted-foreground" title={repository}>
+              {repository}
             </span>
           </div>
         </div>
