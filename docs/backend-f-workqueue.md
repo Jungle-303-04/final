@@ -68,7 +68,7 @@ R-트랙([D-011])은 dev merge `257f91846`으로 landed/closed 되었고, 전용
 | BQ-027 | requested | GAP-009 | 저장소 recognition, access, credential challenge, branch/default, manifest/remediation path cursor, operation status | 저장소 위자드 |
 | BQ-028 | requested | GAP-001 | workspace catalog/current/switch receipt/session refresh/forbidden·deleted | workspace selector(최후순위) |
 | BQ-029 | requested | GAP-011 | 필터 범위와 시간 범위·해상도를 받는 리소스 시계열 스냅샷. 없는 구간은 `gap`으로 반환하고 보간하지 않으며 opaque cursor를 사용 | 시간 슬라이더·그래프 재생 |
-| BQ-030 | requested | GAP-012 | 필터된 워크로드 CPU·메모리 시계열 서버 집계. 데이터 없음은 `null`, completeness 3값, client fan-out 금지 | 표 스파크라인·상세 차트 |
+| BQ-030 | landed | GAP-012 | `GET /metrics/history` batch: `/resources` pod stable ID 최대 100개, pinned snapshot·workspace/grant·공통 필터 재검증, 이후 revision sample 제외, CPU·메모리 null/빈 points·completeness/reason 보존. 누락·타입 불일치·필터 밖·권한 밖은 동일 404, client fan-out/0 합성 금지. Bruno·OpenAPI·repository/router 계약 테스트 포함 | 표 스파크라인·상세 차트 |
 | BQ-031 | requested | GAP-013 | 특정 시각의 node↔pod 배치와 노드 이름·용량·상태. 단일 cluster scope와 시각 종속을 강제 | 물리 뷰 그래프 |
 | BQ-032 | requested | GAP-014 | 특정 workload·시각 ±N분의 bounded log window 조회. tail/stream 계약과 분리 | 우측 패널 로그 |
 | BQ-033 | requested | GAP-015 | 시간 범위 안의 incident marker 목록. 기존 RCA projection 재사용 가능성을 먼저 검증 | 시간 슬라이더 marker |

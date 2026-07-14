@@ -48,6 +48,7 @@ URL      : https://k8s.woonyong.org
 - [x] S2  클러스터 연결 위자드    ← ＋ 버튼 → 한 줄 명령 복사
 - [x] S3  태그형 검색            ← 검색창에 타이핑 → 타입별 제안
 - [x] S4  물리 뷰 그래프          ← BQ-074 + ELK/@xyflow + FLIP, public 배포 추적 중
+- [x] S5  표 + 스파크라인          ← BQ-030 batch + canonical smart columns, public 배포 추적 중
 
 ### 이번 슬라이스에서 확인할 것
 1. https://k8s.woonyong.org/clusters 접속
@@ -302,17 +303,20 @@ GET /topology?view=physical&clusters=<id>&<filters>
 
 ### S5 · 표 + 스파크라인 (3층)
 
-**백엔드 (BQ-055, BQ-065)**
+**백엔드 (BQ-055, BQ-030)**
 ```
 GET /resources?<filters>          → 목록 + kind별 필드
 GET /metrics/history?ids=...      → 스파크라인 시계열
 ```
-- 데이터 없으면 `null`. **0으로 그리지 않는다** (`hasSparklinePoints` 보존).
+- BQ-055 count는 `GET /resources`의 `counts`가 정본이다.
+- BQ-030 history는 stable pod ID 최대 100개를 한 요청으로 받고 같은 권한·필터·snapshot에
+  다시 교차 검증한다. 데이터 없으면 빈 points/null. **0으로 그리지 않는다.**
 
 **프론트**
-- Radar `resources/renderers/` 108개 이식 (kind별 스마트 컬럼)
-- 정렬 · 페이지네이션 · 행 선택
-- 추세 스파크라인 (recharts)
+- Radar의 `KNOWN_COLUMNS`/`CellContent` 패턴을 참고하되 raw Kubernetes detail renderer를
+  목록에 섞지 않는다. Opsia canonical facts가 있는 pod/node/workload/service/event만 smart column.
+- canonical fact 정렬 · snapshot-safe cursor 페이지네이션 · 행/스파크라인 상세 선택
+- 단일 batch 추세 스파크라인 (Recharts). 실측 CPU가 2점 미만이면 빈칸.
 - **2층 그래프와 같은 결과** — 필터가 둘 다에 적용
 
 **확인 체크리스트**

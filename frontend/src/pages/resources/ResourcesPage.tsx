@@ -1,11 +1,12 @@
 import { RefreshCw } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -30,14 +31,17 @@ import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
 import { ResourcesListSurface } from "./ResourcesListSurface";
+import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
 
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
+  resourceMetricsHistoryPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
+  resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -45,6 +49,9 @@ export function ResourcesPage({
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
   const state = useResourcesPageState(port);
+  const authorityKey = session
+    ? `${session.workspaceId}:${session.userId}`
+    : "anonymous";
   const physicalTopology = usePhysicalTopologyDataFrame({
     active:
       state.selectedClusterExists &&
@@ -59,9 +66,7 @@ export function ResourcesPage({
       state.selectedClusterExists &&
       state.selectedResourceType !== null &&
       !state.resourceTypeInvalid,
-    authorityKey: session
-      ? `${session.workspaceId}:${session.userId}`
-      : "anonymous",
+    authorityKey,
     facetAxis: null,
     facetQuery: "",
     filterState: filter.state,
@@ -70,6 +75,26 @@ export function ResourcesPage({
     port: filterPort,
     reportUnauthorized,
     revision: state.revision,
+  });
+  const filteredPage = filtered.list.phase === "ready"
+    ? filtered.list.data
+    : null;
+  const metricResourceIds = useMemo(
+    () => (filteredPage?.items ?? [])
+      .map((item) => item.resource)
+      .filter((resource) => resource.resourceType === "pod")
+      .slice(0, 100)
+      .map((resource) => resource.inventoryKey),
+    [filteredPage],
+  );
+  const metricHistory = useResourceMetricsHistoryDataFrame({
+    active: metricResourceIds.length > 0,
+    authorityKey,
+    filterState: filter.state,
+    port: resourceMetricsHistoryPort,
+    reportUnauthorized,
+    resourceIds: metricResourceIds,
+    snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
   });
   const resourcesView = state.view;
   const setResourcesView = state.setView;
@@ -163,6 +188,8 @@ export function ResourcesPage({
             />
             <ResourcesListSurface
               filterList={filtered.list}
+              metricHistory={metricHistory}
+              onLoadMore={filtered.loadMoreList}
               listFallback={
                 state.resourceTypeInvalid ||
                 !state.selectedResourceType ||

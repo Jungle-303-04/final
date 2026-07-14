@@ -10,6 +10,7 @@ import {
   getNodePodsSummary,
   getClusterConnectStatus,
   getPhysicalTopology,
+  getResourceMetricsHistory,
   getSession,
   listEvidence,
   listInventoryResourcesByType,
@@ -40,6 +41,7 @@ import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
 import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
 import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
+import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -67,6 +69,9 @@ export function createApiComposition() {
     listResourceLabelFacets,
   });
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
+  const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
+    getResourceMetricsHistory,
+  });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
     getIncidentRecentChanges,
@@ -98,6 +103,7 @@ export function createApiComposition() {
         resourcesPort,
         resourcesFilterPort,
         physicalTopologyPort,
+        resourceMetricsHistoryPort,
       ),
     },
     {

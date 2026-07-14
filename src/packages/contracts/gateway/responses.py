@@ -744,6 +744,60 @@ class FilteredInventoryResourceListResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
+class ResourceMetricHistoryPoint(StrictModel):
+    observed_at: str = Field(min_length=1)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+
+
+class ResourceMetricHistorySeries(StrictModel):
+    resource_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: Literal["pod"] = "pod"
+    namespace: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
+    has_sparkline_points: bool
+    completeness: FilterCountCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_metric_history(self) -> Self:
+        observed_at = [point.observed_at for point in self.points]
+        if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
+            raise ValueError("resource metric history points must be unique and ordered")
+        has_cpu = any(point.cpu_mcores is not None for point in self.points)
+        if self.has_sparkline_points != has_cpu:
+            raise ValueError("sparkline availability must reflect measured CPU points")
+        if self.completeness == "unavailable" and has_cpu:
+            raise ValueError("unavailable metric history cannot carry measured CPU points")
+        if self.completeness == "exact" and (
+            not self.points or any(point.cpu_mcores is None for point in self.points)
+        ):
+            raise ValueError("exact metric history requires CPU data at every returned point")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact metric history cannot carry partial reasons")
+        return self
+
+
+class ResourceMetricsHistoryResponse(StrictModel):
+    series: list[ResourceMetricHistorySeries] = Field(default_factory=list)
+    completeness: FilterCountCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+    snapshot: FilterSnapshotMeta
+
+    @model_validator(mode="after")
+    def validate_metric_series(self) -> Self:
+        resource_ids = [item.resource_id for item in self.series]
+        if len(set(resource_ids)) != len(resource_ids):
+            raise ValueError("resource metric history identities must be unique")
+        if self.completeness == "exact" and (
+            any(item.completeness != "exact" for item in self.series) or self.partial_reason_codes
+        ):
+            raise ValueError("exact metric history response cannot contain incomplete series")
+        return self
+
+
 GraphRelationKind = Literal["owns", "runs_on", "selects", "routes_to"]
 GraphRelationPlane = Literal[
     "ownership",

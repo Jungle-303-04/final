@@ -15,6 +15,7 @@ from domains.inventory_filter.repository import (
     _apply_resource_filters,
     _current_versions,
     _physical_topology_statements,
+    _resource_metric_history_statements,
 )
 
 
@@ -160,6 +161,39 @@ def test_physical_topology_sql_is_scoped_ranked_and_server_evaluates_filter_matc
     assert "application_id in ('app-a', 'app-b')" in pod_sql
     assert "filtered_count" in count_sql
     assert "unfiltered_count" in count_sql
+
+
+def test_metric_history_sql_rechecks_filter_and_pins_samples_to_revision() -> None:
+    resource_statement, history_statement = _resource_metric_history_statements(
+        workspace_id="workspace-a",
+        cluster_ids=("cluster-a",),
+        allowed_application_ids=("app-a",),
+        filters=_filters(clusters="cluster-a", namespaces="cluster-a/shop"),
+        snapshot_revision=42,
+        resource_ids=("pod-a", "pod-b"),
+        window_seconds=3600,
+        limit=60,
+    )
+    resource_sql = _sql(resource_statement)
+    history_sql = _sql(history_statement)
+
+    assert "workspace_id = 'workspace-a'" in resource_sql
+    assert "cluster_id in ('cluster-a')" in resource_sql
+    assert "valid_from_revision <= 42" in resource_sql
+    assert "valid_to_revision > 42" in resource_sql
+    assert "resource_type = 'pod'" in resource_sql
+    assert "inventory_key in ('pod-a', 'pod-b')" in resource_sql
+    assert "selected_label_0.key = 'team'" in resource_sql
+    assert "application_id in ('app-a')" in resource_sql
+
+    assert "cluster_usage_samples" in history_sql
+    assert "inventory_filter_revisions" in history_sql
+    assert (
+        "inventory_filter_revisions.snapshot_id = cluster_usage_samples.snapshot_id" in history_sql
+    )
+    assert "inventory_filter_revisions.revision_id <= 42" in history_sql
+    assert "row_number() over (partition by cluster_usage_samples.cluster_id" in history_sql
+    assert "recency_rank <= 60" in history_sql
 
 
 def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(

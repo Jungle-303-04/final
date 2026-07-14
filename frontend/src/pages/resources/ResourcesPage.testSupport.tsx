@@ -11,6 +11,7 @@ import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type {
   ResourcesFilterPort,
@@ -46,6 +47,7 @@ export function renderResources(
   locale: SupportedLocale = "ko",
   filterPort: ResourcesFilterPort = resourcesFilterPort(),
   physicalTopologyPort: PhysicalTopologyPort = resourcesPhysicalTopologyPort(),
+  resourceMetricsHistoryPort: ResourceMetricsHistoryPort = resourcesMetricHistoryPort(),
 ) {
   const router = createMemoryRouter(
     [
@@ -65,6 +67,7 @@ export function renderResources(
                   <ResourcesPage
                     filterPort={filterPort}
                     physicalTopologyPort={physicalTopologyPort}
+                    resourceMetricsHistoryPort={resourceMetricsHistoryPort}
                     port={port}
                   />
                   <LocationProbe />
@@ -186,6 +189,27 @@ export function resourcesPhysicalTopologyPort(
 ): PhysicalTopologyPort {
   return {
     loadPhysicalTopology: vi.fn().mockResolvedValue(PHYSICAL_TOPOLOGY),
+    ...overrides,
+  };
+}
+
+export function resourcesMetricHistoryPort(
+  overrides: Partial<ResourceMetricsHistoryPort> = {},
+): ResourceMetricsHistoryPort {
+  return {
+    loadResourceMetricsHistory: vi.fn().mockResolvedValue({
+      series: [],
+      completeness: "unavailable",
+      partialReasonCodes: ["metrics_history_unavailable"],
+      snapshot: {
+        snapshotRevision: 42,
+        authorizationRevision: "auth-1",
+        filterFingerprint: "filter-1",
+        observedAt: "2026-07-12T10:00:00.000Z",
+        stale: false,
+        partialReasonCodes: [],
+      },
+    }),
     ...overrides,
   };
 }
