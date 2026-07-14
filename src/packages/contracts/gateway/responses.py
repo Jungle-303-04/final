@@ -1897,9 +1897,18 @@ class AiEvidenceLink(StrictModel):
         return self
 
 
+class AiChatAction(StrictModel):
+    """Human-confirmed action proposal; this response never executes it."""
+
+    type: Literal["create_alert_rule"]
+    payload: JsonMap
+    rationale: str = Field(min_length=1, max_length=1000)
+
+
 class AiChatResponse(StrictModel):
     answer: str = Field(min_length=1, max_length=4000)
     evidence: list[AiEvidenceLink] = Field(default_factory=list, max_length=20)
+    action: AiChatAction | None = None
 
     @model_validator(mode="after")
     def require_evidence_or_canonical_no_data(self) -> Self:

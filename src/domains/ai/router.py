@@ -96,7 +96,11 @@ def parse_assistant_context(raw: str) -> AiAssistantContext:
         raise HTTPException(status_code=422, detail="invalid AI assistant context") from exc
 
 
-@router.post(gateway_routes.AI_CHAT_PATH, response_model=AiChatResponse)
+@router.post(
+    gateway_routes.AI_CHAT_PATH,
+    response_model=AiChatResponse,
+    response_model_exclude_none=True,
+)
 async def chat_with_context(
     payload: AiChatRequest,
     current: Any = Depends(require_session),
@@ -109,6 +113,7 @@ async def chat_with_context(
         current=current,
         workspace_id=workspace_id,
         context=payload.context,
+        message=payload.message,
     )
 
 

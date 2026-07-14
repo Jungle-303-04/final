@@ -6,11 +6,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from domains.ai.alert_actions import DEFAULT_ALERT_RULE_FOR_SECONDS
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from domains.ai.alert_actions import DEFAULT_ALERT_RULE_FOR_SECONDS
 from domains.ai.router import router as ai_router
 from domains.identity.dependencies import require_session
 from packages.contracts.gateway.responses import (
@@ -137,6 +137,17 @@ def test_context_chat_returns_only_authorized_sanitized_evidence() -> None:
     assert "must-not-leak" not in response.text
     assert db.access_calls == [("user-1", "ws-1", "cluster", "inventory.read")]
     assert db.alert_rule_create_calls == []
+
+
+def test_context_chat_does_not_treat_general_korean_question_as_alert_intent() -> None:
+    response = TestClient(ai_app(StubAiDb())).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "선택한 파드 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "현재 관측된 근거" in response.json()["answer"]
+    assert "action" not in response.json()
 
 
 @pytest.mark.parametrize(
