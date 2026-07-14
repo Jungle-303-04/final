@@ -107,6 +107,51 @@ def test_summarize_hot_pods_stay_bounded() -> None:
     assert summary.pods_total == MAX_HOT_PODS * 3
 
 
+def test_summarize_emits_measured_resource_delta_and_aggregate_metric_metadata() -> None:
+    module = load_live_summary_module()
+    collector = module.KubernetesPodSummaryCollector(CLUSTER, window_ms=1000)
+    measured = {
+        "sandbox/checkout-abc": {
+            "cpu_mcores": 240.0,
+            "mem_bytes": 134_217_728,
+            "mem_mib": 128.0,
+            "cpu_request_pct": 80.0,
+            "cpu_limit_pct": 40.0,
+            "mem_request_pct": 50.0,
+            "mem_limit_pct": 25.0,
+            "observed_at": "2026-07-15T03:00:00Z",
+            "metrics_metadata": {
+                "source": "kubelet_stats_summary",
+                "actual_interval_seconds": 1.1,
+                "degraded_reason": None,
+            },
+        }
+    }
+
+    summary = collector.summarize([pod()], measured)
+    delta = collector.drain_deltas()[0]
+
+    assert summary.metrics_metadata.model_dump() == {
+        "source": "kubelet_stats_summary",
+        "actual_interval_seconds": 1.1,
+        "degraded_reason": None,
+    }
+    assert delta.value["cpu_mcores"] == 240.0
+    assert delta.value["mem_bytes"] == 134_217_728
+    assert delta.value["cpu_request_pct"] == 80.0
+    assert delta.value["metrics_metadata"] == summary.metrics_metadata.model_dump()
+
+
+def test_summarize_exposes_adaptive_interval_for_publisher_sleep() -> None:
+    module = load_live_summary_module()
+    collector = module.KubernetesPodSummaryCollector(CLUSTER, window_ms=1000)
+
+    summary = collector.summarize([pod(name=f"pod-{index}") for index in range(200)])
+
+    assert summary.window_ms == 2000
+    assert collector.next_interval_seconds() == 2.0
+
+
 def test_publisher_streams_bounded_live_summary_payloads() -> None:
     module = load_live_summary_module()
     connector = StubConnector()
@@ -194,13 +239,27 @@ def test_publisher_without_gateway_url_is_noop() -> None:
 def test_derive_gateway_url_from_management_base_url() -> None:
     module = load_live_summary_module()
     assert module.derive_gateway_url("http://192.168.0.10:30080") == "ws://192.168.0.10:30080"
-    assert module.derive_gateway_url("https://mgmt.example.com/api") == (
-        "wss://mgmt.example.com/api"
-    )
+    assert module.derive_gateway_url("https://mgmt.example.com/api") == "wss://mgmt.example.com"
     assert module.derive_gateway_url("https://mgmt.example.com:8443/api") == (
-        "wss://mgmt.example.com:8443/api"
+        "wss://mgmt.example.com:8443"
     )
     assert module.derive_gateway_url("") == ""
+
+
+def test_from_env_uses_enabled_default_and_agent_proxy_root(monkeypatch: Any) -> None:
+    module = load_live_summary_module()
+    monkeypatch.delenv(module.agent_config.REALTIME_GATEWAY_URL_ENV, raising=False)
+    monkeypatch.delenv(module.agent_config.LIVE_SUMMARY_ENABLED_ENV, raising=False)
+    monkeypatch.setenv(module.agent_config.AGENT_TOKEN_ENV, "agent-secret")
+
+    publisher = module.LiveSummaryPublisher.from_env(
+        CLUSTER,
+        "https://agent-api.woonyong.org/api",
+    )
+
+    assert publisher.enabled is True
+    assert publisher.gateway_url == "wss://agent-api.woonyong.org"
+    assert publisher.endpoint == (f"wss://agent-api.woonyong.org/live/agent?cluster_id={CLUSTER}")
 
 
 def test_management_gateway_is_internal_and_kind_opens_expected_realtime_nodeport() -> None:
