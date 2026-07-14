@@ -86,6 +86,15 @@ make smoke
 자세한 기준은 [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)를 본다.
 API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/README.md)를 열고 Bruno collection을 사용한다.
 
+## 로컬 캐시 정리
+
+```bash
+make clean
+```
+
+`make clean`은 Python/Playwright 캐시와 프론트 빌드 산출물만 삭제한다. `.env*`,
+`outputs/`, `node_modules/`, `.venv/`, Terraform state는 보존한다.
+
 ## Radar Kubernetes UI
 
 [Radar](https://github.com/skyhook-io/radar)를 사용해 프로젝트 클러스터의 토폴로지, 리소스, 이벤트 타임라인, Helm 상태를 브라우저에서 확인할 수 있다.

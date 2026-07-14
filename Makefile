@@ -164,7 +164,9 @@ aws-up: ## AWS EKS management + target 2개 테스트 환경 생성
 aws-down: ## AWS EKS 테스트 환경 삭제
 	bash scripts/aws-down.sh
 
-clean: ## Python 캐시 삭제
-	rm -rf .pytest_cache .ruff_cache
-	find src tests scripts -type d -name __pycache__ -prune -exec rm -rf {} +
-	find . -name .DS_Store -delete
+clean: ## 재생성 가능한 캐시와 빌드 산출물 삭제
+	# 안전 경계: .env*, outputs/, node_modules/, .venv/, tfstate, .git/은 절대 삭제하지 않는다.
+	rm -rf -- .pytest_cache .ruff_cache .import_linter_cache .playwright-cli
+	rm -rf -- frontend/.playwright-cli references/ui-layer-lab/.playwright-cli
+	rm -rf -- frontend/dist references/ui-layer-lab/dist
+	find alembic src tests scripts -type d -name __pycache__ -prune -exec rm -rf -- {} +
