@@ -1,0 +1,1814 @@
+{
+  "generatedBy": "scripts/absorb.mjs",
+  "sourceRevision": "10461f40bcfaf6dd578b24262c8f8fb84ae20766",
+  "sourceFiles": 492,
+  "textFiles": 488,
+  "binaryFiles": 4,
+  "changedFiles": 282,
+  "replacements": {
+    "brandPaletteUtilities": 112,
+    "brandVariableReferences": 29,
+    "classNameHelperCalls": 718,
+    "classNameHelperImports": 145,
+    "destructivePaletteUtilities": 473,
+    "referenceNames": 256,
+    "referencePaths": 6,
+    "removedBrandVariableDefinitions": 14,
+    "removedThemeCssVariableDefinitions": 13,
+    "successPaletteUtilities": 368,
+    "themeCssVariableReferences": 1,
+    "themeUtilitiesVisited": 4163,
+    "warningPaletteUtilities": 473
+  },
+  "manualReviewCount": 298,
+  "manualReview": [
+    {
+      "path": "components/dock/LocalTerminalTab.tsx",
+      "line": 256,
+      "token": "bg-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/dock/TerminalTab.tsx",
+      "line": 303,
+      "token": "bg-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsActions.tsx",
+      "line": 60,
+      "token": "bg-sky-500/30",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsActions.tsx",
+      "line": 151,
+      "token": "bg-sky-500/30",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 275,
+      "token": "text-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 275,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 285,
+      "token": "text-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 285,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 324,
+      "token": "border-sky-500/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 324,
+      "token": "bg-sky-500/10",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsDetailLayout.tsx",
+      "line": 324,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 732,
+      "token": "border-sky-500/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 732,
+      "token": "bg-sky-500/10",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 732,
+      "token": "text-sky-600",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 732,
+      "token": "text-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1199,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1627,
+      "token": "bg-sky-500/20",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1627,
+      "token": "text-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1629,
+      "token": "border-sky-500/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1629,
+      "token": "bg-sky-500/15",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1629,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1630,
+      "token": "border-sky-500/25",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1630,
+      "token": "bg-sky-500/5",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1630,
+      "token": "text-sky-600",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1643,
+      "token": "ring-sky-500/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/GitOpsTableView.tsx",
+      "line": 1778,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/ManagedResourcesList.tsx",
+      "line": 183,
+      "token": "bg-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/RollbackDialog.tsx",
+      "line": 74,
+      "token": "accent-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/RollbackDialog.tsx",
+      "line": 87,
+      "token": "accent-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/SyncOptionsDialog.tsx",
+      "line": 134,
+      "token": "border-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/gitops/SyncOptionsDialog.tsx",
+      "line": 282,
+      "token": "accent-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 84,
+      "token": "bg-slate-950",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 85,
+      "token": "bg-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 86,
+      "token": "bg-slate-900/60",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 87,
+      "token": "bg-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 88,
+      "token": "bg-slate-800",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 90,
+      "token": "border-slate-800",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 91,
+      "token": "border-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 93,
+      "token": "text-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 94,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 95,
+      "token": "text-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 96,
+      "token": "text-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 100,
+      "token": "placeholder-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 102,
+      "token": "bg-slate-800",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 103,
+      "token": "bg-slate-800/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 104,
+      "token": "text-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 105,
+      "token": "bg-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 105,
+      "token": "text-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 105,
+      "token": "bg-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 112,
+      "token": "bg-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 112,
+      "token": "text-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 112,
+      "token": "border-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 117,
+      "token": "bg-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 117,
+      "token": "text-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 117,
+      "token": "border-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 118,
+      "token": "bg-slate-800",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 118,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 118,
+      "token": "border-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 131,
+      "token": "bg-slate-950",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 140,
+      "token": "bg-slate-50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 141,
+      "token": "bg-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 142,
+      "token": "bg-slate-100/60",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 146,
+      "token": "border-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 147,
+      "token": "border-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 149,
+      "token": "text-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 150,
+      "token": "text-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 151,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 152,
+      "token": "text-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 156,
+      "token": "placeholder-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 158,
+      "token": "bg-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 159,
+      "token": "bg-slate-200/60",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 160,
+      "token": "text-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 161,
+      "token": "bg-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 161,
+      "token": "text-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 161,
+      "token": "bg-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 168,
+      "token": "bg-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 168,
+      "token": "text-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 168,
+      "token": "border-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 173,
+      "token": "bg-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 173,
+      "token": "text-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 173,
+      "token": "border-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 174,
+      "token": "bg-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 174,
+      "token": "text-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 174,
+      "token": "border-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 187,
+      "token": "bg-slate-50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 211,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 212,
+      "token": "text-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 219,
+      "token": "text-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/log-palette.ts",
+      "line": 220,
+      "token": "text-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 425,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 425,
+      "token": "text-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 425,
+      "token": "bg-slate-800",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 426,
+      "token": "text-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 426,
+      "token": "text-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 426,
+      "token": "bg-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 428,
+      "token": "text-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 428,
+      "token": "text-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 428,
+      "token": "bg-slate-800",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 429,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 429,
+      "token": "text-slate-900",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 429,
+      "token": "bg-slate-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 432,
+      "token": "text-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 432,
+      "token": "text-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 433,
+      "token": "text-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogCore.tsx",
+      "line": 433,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogsViewer.tsx",
+      "line": 185,
+      "token": "border-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/logs/LogsViewer.tsx",
+      "line": 185,
+      "token": "border-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 83,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 83,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 83,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 83,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 83,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 83,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 84,
+      "token": "bg-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 84,
+      "token": "text-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 84,
+      "token": "border-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 84,
+      "token": "bg-slate-900/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 84,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/AWSManagedControlPlaneRenderer.tsx",
+      "line": 84,
+      "token": "border-slate-700/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/capi-cells.tsx",
+      "line": 60,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/capi-cells.tsx",
+      "line": 60,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/capi-cells.tsx",
+      "line": 60,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/capi-cells.tsx",
+      "line": 60,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/capi-cells.tsx",
+      "line": 60,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/capi-cells.tsx",
+      "line": 60,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 39,
+      "token": "bg-slate-500/10",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 39,
+      "token": "border-slate-500/30",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 44,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 51,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 64,
+      "token": "bg-slate-500/10",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 64,
+      "token": "border-slate-500/20",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 66,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/GenericRenderer.tsx",
+      "line": 415,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/NetworkPolicyDiagram.tsx",
+      "line": 161,
+      "token": "border-sky-500/30",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/NetworkPolicyDiagram.tsx",
+      "line": 161,
+      "token": "bg-sky-500/8",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/NetworkPolicyDiagram.tsx",
+      "line": 170,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 481,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 481,
+      "token": "bg-slate-600/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 574,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 574,
+      "token": "bg-slate-600/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 584,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 584,
+      "token": "bg-slate-600/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 594,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 594,
+      "token": "bg-slate-600/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 643,
+      "token": "text-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/resources/renderers/PodRenderer.tsx",
+      "line": 643,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 1873,
+      "token": "bg-gray-400/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 2115,
+      "token": "bg-gray-400/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 2118,
+      "token": "bg-gray-400/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 2119,
+      "token": "bg-gray-400/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 2123,
+      "token": "bg-gray-400/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 2510,
+      "token": "bg-gray-400/25",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/timeline/TimelineSwimlanes.tsx",
+      "line": 2576,
+      "token": "bg-gray-400/25",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/topology/TopologyFilterSidebar.tsx",
+      "line": 25,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/topology/TopologyFilterSidebar.tsx",
+      "line": 26,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/topology/TopologyFilterSidebar.tsx",
+      "line": 56,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/topology/TopologyFilterSidebar.tsx",
+      "line": 57,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/topology/TopologyFilterSidebar.tsx",
+      "line": 170,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 58,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 58,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 58,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 58,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 58,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 58,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 77,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 77,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 77,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 77,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 77,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 77,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 78,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 78,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 78,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 78,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 78,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 78,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 110,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 110,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 110,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 110,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 110,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 110,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 111,
+      "token": "bg-gray-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 111,
+      "token": "text-gray-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 111,
+      "token": "border-gray-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 111,
+      "token": "bg-gray-950/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 111,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 111,
+      "token": "border-gray-700/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 158,
+      "token": "bg-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 158,
+      "token": "text-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 158,
+      "token": "border-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 158,
+      "token": "bg-slate-950/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 158,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 158,
+      "token": "border-slate-700/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 179,
+      "token": "bg-slate-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 179,
+      "token": "text-slate-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 179,
+      "token": "border-slate-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 179,
+      "token": "bg-slate-950/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 179,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Badge.tsx",
+      "line": 179,
+      "token": "border-slate-700/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 342,
+      "token": "bg-gray-400/20",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 342,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 342,
+      "token": "bg-gray-400/30",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "bg-sky-50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "bg-sky-950/30",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "border-sky-200",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "border-sky-800/30",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-600/80",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-300/70",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-600",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-400/60",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/drawer-components.tsx",
+      "line": 381,
+      "token": "text-sky-400/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/Facet.tsx",
+      "line": 18,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 20,
+      "token": "text-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 20,
+      "token": "text-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 29,
+      "token": "bg-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 51,
+      "token": "bg-slate-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 51,
+      "token": "bg-slate-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 62,
+      "token": "bg-slate-50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/severity-tone.ts",
+      "line": 62,
+      "token": "bg-slate-900/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/status-tone.tsx",
+      "line": 47,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/status-tone.tsx",
+      "line": 48,
+      "token": "bg-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "components/ui/SummaryTile.tsx",
+      "line": 31,
+      "token": "text-sky-600",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/SummaryTile.tsx",
+      "line": 31,
+      "token": "text-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "components/ui/SummaryTile.tsx",
+      "line": 38,
+      "token": "border-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1031,
+      "token": "bg-sky-50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1031,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1031,
+      "token": "ring-sky-200",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1031,
+      "token": "bg-sky-950/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1031,
+      "token": "text-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1031,
+      "token": "ring-sky-900",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1061,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1062,
+      "token": "text-sky-600",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1062,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/applications.ts",
+      "line": 1067,
+      "token": "bg-slate-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 24,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 24,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 64,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 64,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 64,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 64,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 64,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 64,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 65,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 65,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 65,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 65,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 65,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 65,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 66,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 66,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 66,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 66,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 66,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 66,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 72,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 72,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 72,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 72,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 72,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 72,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 77,
+      "token": "bg-gray-500/20",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 77,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 82,
+      "token": "bg-sky-50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 82,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 82,
+      "token": "border-sky-200",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 82,
+      "token": "bg-sky-950/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 82,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 82,
+      "token": "border-sky-800/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 102,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 102,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 112,
+      "token": "bg-sky-500",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 122,
+      "token": "border-sky-200",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 122,
+      "token": "border-sky-800/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 129,
+      "token": "bg-gray-50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 129,
+      "token": "text-gray-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 129,
+      "token": "border-gray-200",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 129,
+      "token": "bg-gray-900/30",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 129,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 129,
+      "token": "border-gray-700/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 329,
+      "token": "bg-sky-100",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 329,
+      "token": "text-sky-700",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 329,
+      "token": "border-sky-300",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 329,
+      "token": "bg-sky-950/50",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 329,
+      "token": "text-sky-400",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 329,
+      "token": "border-sky-700/40",
+      "reason": "sky-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 330,
+      "token": "bg-gray-100",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 330,
+      "token": "text-gray-700",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 330,
+      "token": "border-gray-300",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 330,
+      "token": "bg-gray-950/50",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 330,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 330,
+      "token": "border-gray-700/40",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 338,
+      "token": "bg-gray-500",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 346,
+      "token": "text-gray-600",
+      "reason": "neutral-palette-needs-context"
+    },
+    {
+      "path": "utils/badge-colors.ts",
+      "line": 346,
+      "token": "text-gray-400",
+      "reason": "neutral-palette-needs-context"
+    }
+  ]
+}
