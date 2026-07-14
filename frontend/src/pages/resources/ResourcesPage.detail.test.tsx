@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("ResourcesPage URL-backed detail", () => {
-  it("keeps detail loading inside the full workspace without nesting a page frame", async () => {
+  it("keeps detail loading inside the side panel without nesting a page frame", async () => {
     const detail = deferred<typeof POD_DETAIL>();
     const port = resourcesPort({
       loadResourceDetail: vi.fn().mockReturnValue(detail.promise),
@@ -70,7 +70,8 @@ describe("ResourcesPage URL-backed detail", () => {
       .toContain("detail=Pod%2Fshop%2Fcheckout-api-0");
   });
 
-  it("shows the two-state workspace tabs and read-only context without a log tab", async () => {
+  it("opens as a 480px side panel and expands to a full detail workspace", async () => {
+    const user = userEvent.setup();
     renderResources(
       resourcesPort(),
       "/resources?clusters=cluster-1&resources.types=pod" +
@@ -78,7 +79,11 @@ describe("ResourcesPage URL-backed detail", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
-    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
+    const layout = document.querySelector('[data-detail-layout="peek"]');
+    const detailColumn = document.querySelector('[data-slot="resources-detail-column"]');
+    expect(layout).toBeTruthy();
+    expect(detailColumn?.className).toContain("lg:w-[30rem]");
+    expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
     expect(within(dialog).getByRole("tab", { name: "개요" })).toBeTruthy();
     expect(within(dialog).getByRole("tab", { name: "YAML" })).toBeTruthy();
     expect(within(dialog).getByRole("tab", { name: "메트릭" })).toBeTruthy();
@@ -89,6 +94,16 @@ describe("ResourcesPage URL-backed detail", () => {
     const close = within(dialog).getByRole("button", { name: "상세 닫기" });
     expect(close.className).toContain("relative");
     expect(close.className).not.toContain("fixed");
+
+    await user.click(within(dialog).getByRole("button", { name: "상세 전체 화면으로 보기" }));
+    expect(document.querySelector('[data-detail-layout="full"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="resources-list-column"]')?.className)
+      .toContain("hidden");
+    expect(within(dialog).getByRole("button", { name: "목록과 상세 함께 보기" })).toBeTruthy();
+
+    await user.click(within(dialog).getByRole("button", { name: "목록과 상세 함께 보기" }));
+    expect(document.querySelector('[data-detail-layout="peek"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
   });
 
   it("keeps initial focus without trapping sibling surfaces and closes with Escape", async () => {
@@ -126,7 +141,7 @@ describe("ResourcesPage URL-backed detail", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "restricted-agent 상세" });
-    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
+    expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
     expect(within(dialog).getByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeTruthy();
     expect(port.loadResourceDetail).toHaveBeenCalledWith(
@@ -138,7 +153,7 @@ describe("ResourcesPage URL-backed detail", () => {
       .toContain("clusters=kubernetes-ops&resources.types=pod&detail=Pod%2Fops%2Frestricted-agent");
   });
 
-  it("replaces the list with a scoped not-found detail state", async () => {
+  it("keeps the list beside a scoped not-found detail state", async () => {
     const port = resourcesPort({
       loadResourceDetail: vi.fn().mockRejectedValue(new ResourcesPortFailure("not-found")),
     });
@@ -149,7 +164,7 @@ describe("ResourcesPage URL-backed detail", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "missing 상세" });
-    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
+    expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
     expect(dialog.textContent).toContain("리소스를 찾을 수 없습니다");
     expect(screen.getByRole("button", { name: "상세 닫기" })).toBeTruthy();
   }, 15_000);

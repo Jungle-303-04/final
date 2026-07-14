@@ -1,4 +1,4 @@
-import { Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
@@ -24,7 +24,9 @@ export function ResourceDetailWorkspace({
   actionsPort,
   capabilities,
   onClose,
+  onFullChange,
   onTabChange,
+  full,
   tab,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
@@ -32,7 +34,9 @@ export function ResourceDetailWorkspace({
   actionsPort: ResourceActionsPort;
   capabilities: ResourceCapabilitiesFrame;
   onClose: () => void;
+  onFullChange: (full: boolean) => void;
   onTabChange: (tab: string) => void;
+  full: boolean;
   tab: string;
 }) {
   const { t } = useI18n();
@@ -69,8 +73,9 @@ export function ResourceDetailWorkspace({
   return (
     <section
       aria-labelledby="resource-detail-workspace-title"
-      className="motion-detail-workspace grid min-h-[calc(100svh-3.5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background"
+      className="motion-detail-workspace grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background"
       data-closing={closing || undefined}
+      data-detail-size={full ? "full" : "peek"}
       data-slot="resource-detail-workspace"
       onKeyDown={(event) => {
         if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {
@@ -97,7 +102,7 @@ export function ResourceDetailWorkspace({
             type="button"
             variant="outline"
           >
-            <Minimize2 aria-hidden="true" />
+            <X aria-hidden="true" />
           </Button>
           <div className="min-w-0">
             <h2
@@ -112,6 +117,16 @@ export function ResourceDetailWorkspace({
                 : t("resources.detail.identityDescription")}
             </p>
           </div>
+          <Button
+            aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
+            className="ml-auto hidden shrink-0 lg:inline-flex"
+            onClick={() => onFullChange(!full)}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+          </Button>
         </div>
         <div
           aria-label={t("resources.detail.context")}

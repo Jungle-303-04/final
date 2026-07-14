@@ -180,6 +180,7 @@ export function useResourcesPageState(port: ResourcesPort) {
         legacyTypeResolution.kind === "invalid",
       detailIdentity,
       detailRequested,
+      detailFull: filter.detail.full,
       filterProjectionUnsupported:
         !listFiltersSupported,
       view,
@@ -277,6 +278,12 @@ export function useResourcesPageState(port: ResourcesPort) {
         filter.updateDetail(
           (current) => ({ ...current, tab: value }),
           "detail-tab",
+        );
+      },
+      setDetailFull(value: boolean) {
+        filter.updateDetail(
+          (current) => ({ ...current, full: value }),
+          "detail-expand",
         );
       },
       openDetail,

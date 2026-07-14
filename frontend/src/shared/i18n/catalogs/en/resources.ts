@@ -176,6 +176,8 @@ export const resourcesEn = {
   "resources.detail.title": "{name} details",
   "resources.detail.errorTitle": "Resource detail error",
   "resources.detail.close": "Close details",
+  "resources.detail.expand": "Open details full screen",
+  "resources.detail.collapse": "Show list and details",
   "resources.detail.clusterScope": "Cluster scope",
   "resources.detail.identityDescription": "The resource identity in the URL could not be parsed.",
   "resources.detail.invalid.title": "Invalid detail address",

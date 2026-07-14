@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -76,7 +76,10 @@ describe("resource detail capabilities", () => {
 
     const restart = await screen.findByRole("button", { name: "재시작" });
     expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();
-    expect(screen.queryAllByRole("button").some((button) => button.hasAttribute("disabled")))
+    const actionBar = document.querySelector('[data-slot="resource-detail-actions"]');
+    expect(actionBar).toBeTruthy();
+    expect(within(actionBar as HTMLElement).queryAllByRole("button")
+      .some((button) => button.hasAttribute("disabled")))
       .toBe(false);
 
     await user.click(restart);
