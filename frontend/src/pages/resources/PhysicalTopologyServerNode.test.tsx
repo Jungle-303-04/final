@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe("PhysicalTopologyServerCard usage color", () => {
-  it("updates the measured number and bar immediately but smooths and freezes its color", () => {
+  it("updates measured values, smooths color, and removes bars without usage evidence", () => {
     installMatchMedia();
     const frames = installAnimationFrames();
     const initial = physicalServerPlacements(PHYSICAL_TOPOLOGY)[0]!;
@@ -30,7 +30,7 @@ describe("PhysicalTopologyServerCard usage color", () => {
 
     expect(screen.getByText("90%")).toBeTruthy();
     expect(cpu.dataset.usageValue).toBe("68.000");
-    expect(withinMetric(cpu).style.width).toBe("90%");
+    expect(withinMetric(cpu)?.style.width).toBe("90%");
 
     act(() => frames.advance(0));
     act(() => frames.advance(250));
@@ -43,11 +43,8 @@ describe("PhysicalTopologyServerCard usage color", () => {
     }));
     act(() => frames.advance(1_000));
     expect(cpu.textContent).toContain("—");
-    expect(Number.parseFloat(withinMetric(cpu).style.width)).toBeCloseTo(
-      stoppedColorValue,
-      3,
-    );
-    expect(Number(cpu.dataset.usageValue)).toBeCloseTo(stoppedColorValue, 3);
+    expect(withinMetric(cpu)).toBeNull();
+    expect(cpu.dataset.usageValue).toBe("unknown");
   });
 });
 
@@ -69,8 +66,8 @@ function cardTree(placement: ReturnType<typeof physicalServerPlacements>[number]
   );
 }
 
-function withinMetric(metric: HTMLElement): HTMLElement {
-  return metric.querySelector<HTMLElement>('[role="progressbar"]')!;
+function withinMetric(metric: HTMLElement): HTMLElement | null {
+  return metric.querySelector<HTMLElement>('[role="progressbar"]');
 }
 
 function installMatchMedia() {
