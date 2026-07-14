@@ -30,6 +30,7 @@ SERVICE_LOCAL_MODULES = (
     "tools",
     "hub",
     "kubernetes_api",
+    "live_resource_metrics",
     "live_summary",
     "metric_collectors",
     "prometheus_metrics",

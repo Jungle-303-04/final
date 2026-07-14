@@ -159,6 +159,9 @@ rules:
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -196,6 +199,8 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: http://kubeheal-controller.kubeheal-system.svc
+            - name: REALTIME_GATEWAY_URL
+              value: ws://kubeheal-controller.kubeheal-system.svc:8001
             - name: AGENT_TOKEN
               valueFrom:
                 secretKeyRef:

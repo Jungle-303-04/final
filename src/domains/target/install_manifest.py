@@ -118,6 +118,9 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -418,6 +421,8 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: {yaml_string(payload.management_base_url)}
+            - name: REALTIME_GATEWAY_URL
+              value: {yaml_string(derive_realtime_gateway_url(payload.management_base_url, management_cluster=payload.cluster_role == MANAGEMENT_CLUSTER_ROLE))}
           volumeMounts:
             - name: target-agent-runtime
               mountPath: /var/lib/target-agent

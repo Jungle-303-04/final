@@ -11,7 +11,9 @@ MANAGEMENT_OBJECTS="${TMP_DIR}/management.objects"
 TARGET_OBJECTS="${TMP_DIR}/target.objects"
 
 kubectl kustomize "${ROOT_DIR}/deploy/management" > "${MANAGEMENT_MANIFEST}"
-sed 's#__MANAGEMENT_BASE_URL__#http://api-gateway.management:8000#g' \
+sed \
+  -e 's#__MANAGEMENT_BASE_URL__#http://api-gateway.management:8000#g' \
+  -e 's#__REALTIME_GATEWAY_URL__#ws://realtime-gateway.management:8000#g' \
   "${ROOT_DIR}/deploy/target/target.yaml" > "${TARGET_MANIFEST}"
 printf '\n---\n' >> "${TARGET_MANIFEST}"
 cat "${ROOT_DIR}/deploy/target/minio.yaml" >> "${TARGET_MANIFEST}"
