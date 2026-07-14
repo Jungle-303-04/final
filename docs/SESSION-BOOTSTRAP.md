@@ -50,7 +50,7 @@ origin/codex/picture, origin/codex/firework
 **CI/CD:**
 ```
 .github/workflows/dev-gate.yml    ← 전체 게이트. dev push 시 자동. ~2분.
-.github/workflows/dev-deploy.yml  ← 배포. 일반 경로 / 일회성 first-deploy 경로 분리됨.
+.github/workflows/dev-deploy.yml  ← 배포. FULL / CONSOLE 범위만 존재; first-deploy/cutover 폐기.
 AWS_DEV_DEPLOY_ENABLED = **아직 안 켬** (자동 배포 스위치)
 ```
 
@@ -144,8 +144,8 @@ product 가 frontend 가 된다.
 | 인라인 SVG 제거 | `git grep '<svg' -- frontend/src` = 0 |
 | 레거시 화면 삭제 | HomePage, metrics, workflow, release |
 | release-flow 워크플로 5개 | 삭제 |
-| **첫 배포(FIRST_DEPLOY)** | **미완료이며 폐기.** 격리 DB 리허설의 Complete를 live cutover로 오인했다. live DB에는 `alembic_version`이 없고 좀비 데몬의 `create_all` 스키마가 그대로다. 임의 stamp 금지. dev 데이터는 새 스냅샷 뒤 정본 schema로 재생성한다. |
-| 배포 파이프라인 | digest 주입 수정, console/console-dev 단일화, 일반배포/cutover 경로 분리, in-cluster smoke |
+| **live DB 재생성** | **완료.** 새 PostgreSQL/NATS EBS snapshot 뒤 `public` schema와 JetStream을 비우고 immutable baseline + `alembic upgrade head`를 실행했다. live `alembic_version=20260714_0200`; `admin` 관리자는 Secret 비밀번호로 bootstrap됐다. FIRST_DEPLOY/cutover는 폐기했다. |
+| 배포 파이프라인 | digest 주입, FULL/CONSOLE 범위 분리, migration-first, 고정 `admin` bootstrap, in-cluster smoke. 보존 cutover 경로 없음. |
 | 좀비 데몬 | 제거 (§5 참조) |
 | 브랜치 정리 | 죽은 브랜치 6개 삭제, archive ref 백업 |
 | VP-011/VP-013 기획 정본 | dev에 착륙 |
@@ -179,24 +179,32 @@ product 가 frontend 가 된다.
 ## 5-3. console nginx의 stale upstream → 502
 `api-gateway` 파드 IP가 바뀌면 console의 nginx가 옛 IP를 붙들어 **502**를 낸다.
 이번 세션에서 **두 번** 터졌다.
-**근본 해법 (아직 안 됨)**: `frontend/nginx.conf`에 resolver + 변수 proxy_pass
+**근본 해법 (완료)**: `frontend/nginx.conf`와 live `console-dev` nginx 설정에 resolver + 변수 proxy_pass
 ```
 resolver kube-dns.kube-system.svc.cluster.local valid=10s;
 set $api_upstream http://api-gateway.management.svc.cluster.local:<port>;
 proxy_pass $api_upstream;
 ```
-변수를 쓰면 요청마다 DNS를 다시 푼다. **이걸 반드시 고쳐라.**
+변수를 쓰면 요청마다 DNS를 다시 푼다. **이 계약을 회귀시키지 마라.**
 
-## 5-4. 삭제된 파일은 병합에서 충돌을 일으키지 않는다
+## 5-4. DB reset 뒤 agent token은 자동 복구되지 않았다
+2026-07-14 live DB 재생성으로 `cluster_registrations`의 agent token hash도 삭제됐다.
+cluster-1 agent는 기존 Kubernetes Secret token을 계속 보내며 401을 반복했고 자동 재등록하지
+못했다. cluster-2에는 cluster-agent Deployment 자체가 없었다. management agent도 gateway
+재연결을 기다렸다. **현재 agent는 DB 권한이 사라졌을 때 self-heal하지 않는다.** FULL backend
+배포 후 target registration을 명시적으로 다시 수행하고, 장기적으로 401 시 안전한 재등록
+handshake 또는 운영 runbook을 제품 계약으로 만들어야 한다. synthetic cluster 데이터로 숨기지 마라.
+
+## 5-5. 삭제된 파일은 병합에서 충돌을 일으키지 않는다
 `features/release/**`를 지웠는데 팀원 브랜치 병합으로 **9파일로 부활**했다.
 **삭제만으로는 부족하다. 회귀 가드 테스트로 금지 목록을 박아야 한다.**
 
-## 5-5. dev가 계속 움직여 배포가 TOCTOU에 걸린다
+## 5-6. dev가 계속 움직여 배포가 TOCTOU에 걸린다
 `source_sha == dev HEAD` 검증은 여러 세션이 push하는 환경에서 **구조적으로 성립 불가**.
 **해법**: `source_sha`가 **dev의 조상 + 그 SHA의 Dev Gate SUCCESS**면 진행.
 배포 대상은 "최신"이 아니라 **"검증된 것"**이면 된다. (단일 세션이 되면 완화됨.)
 
-## 5-6. 리소스 단일화 전에 참조 그래프를 확인한다
+## 5-7. 리소스 단일화 전에 참조 그래프를 확인한다
 `console` LoadBalancer를 지웠지만 Cloudflare DNS는 삭제된 ELB를 계속 참조해 사이트 전체가
 1016으로 중단됐다. DNS를 터널로 돌린 뒤에는 원격 tunnel ingress도 존재하지 않는
 `console.management.svc.cluster.local`을 가리켜 502가 이어졌다. 현재 클러스터 정본은
