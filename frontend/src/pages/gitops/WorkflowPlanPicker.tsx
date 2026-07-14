@@ -1,4 +1,4 @@
-import { ArrowRight, CirclePlay, Layers3, ShieldCheck } from "lucide-react";
+import { ArrowRight, CirclePlay, Layers3, Plus, ShieldCheck } from "lucide-react";
 import type { ReleasePlan } from "../../features/gitops/gitOpsContract";
 import { settingString } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
@@ -6,9 +6,11 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { policyLabel } from "./WorkflowFormControls";
 
 export function WorkflowPlanPicker({
+  onCreate,
   onSelect,
   plans,
 }: {
+  onCreate: () => void;
   onSelect: (planId: string) => void;
   plans: ReleasePlan[];
 }) {
@@ -21,10 +23,20 @@ export function WorkflowPlanPicker({
           {t("workflows.plan.select")}
         </h2>
       </header>
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid min-w-0 auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {plans.map((plan) => (
           <PlanButton key={plan.plan_id || plan.name} onSelect={onSelect} plan={plan} />
         ))}
+        <button
+          className="group flex min-h-44 min-w-0 items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 p-4 text-center transition-colors hover:border-primary/60 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          onClick={onCreate}
+          type="button"
+        >
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-primary shadow-sm transition-colors group-hover:border-primary/40">
+            <Plus aria-hidden="true" className="size-4" />
+          </span>
+          <strong className="text-sm font-semibold">{t("workflows.plan.new")}</strong>
+        </button>
       </div>
     </section>
   );
