@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import type {
-  ResourceIdentity,
-  ResourcesPort,
-} from "../../features/resources/resourcesContract";
+import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
 import {
   blockForFailure,
@@ -19,13 +16,9 @@ import {
   type ResourcesRequestTarget,
   type ResourcesRetryBlocks,
 } from "./resourcesPageStateModel";
-import {
-  decodeResourceTarget,
-  encodeResourceTarget,
-  isCanonicalResourceTarget,
-  resolveResourceType,
-} from "./resourcesUrlState";
+import { resolveResourceType } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
+import { useResourcesDetailState } from "./useResourcesDetailState";
 
 const RESOURCES_POLL_INTERVAL_MS = 30_000;
 export function useResourcesPageState(port: ResourcesPort) {
@@ -63,28 +56,20 @@ export function useResourcesPageState(port: ResourcesPort) {
   const view = filter.state.resources.view;
   const listQuerySupported = listFiltersSupported;
   const includeDeleted = filter.state.resources.includeDeleted;
-  const detailRequested =
-    filter.detail.resource !== null || filter.detail.resourceKind !== null;
-  const detailTarget = useMemo(
-    () =>
-      decodeResourceTarget(
-        selectedClusterId,
-        selectedResourceType,
-        filter.detail.resourceKind,
-        filter.detail.resource,
-      ),
-    [
-      filter.detail.resource,
-      filter.detail.resourceKind,
-      selectedClusterId,
-      selectedResourceType,
-    ],
-  );
-  const detailIdentity = detailTarget?.identity ?? null;
   const choices = clusterScope.collection;
   const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
-  const rowButtons = useRef(new Map<string, HTMLButtonElement>());
-  const restoreRowKey = useRef<string | null>(null);
+  const {
+    closeDetail,
+    detailIdentity,
+    detailRequested,
+    detailTarget,
+    openDetail,
+    registerRowButton,
+  } = useResourcesDetailState(
+    selectedClusterId,
+    selectedResourceType,
+    setRetryBlocks,
+  );
   const automaticRefreshPaused = hasRetryBlocks(retryBlocks);
   const { refresh: advanceRevision, revision } = useVisibleRefreshClock(
     !automaticRefreshPaused,
@@ -155,44 +140,6 @@ export function useResourcesPageState(port: ResourcesPort) {
     },
     [filter],
   );
-
-  useEffect(() => {
-    if (
-      detailTarget === null ||
-      isCanonicalResourceTarget(filter.detail.resource)
-    )
-      return;
-    const selection = encodeResourceTarget(
-      detailTarget.clusterId,
-      detailTarget.identity,
-    );
-    filter.updateDetail(
-      (current) => ({
-        ...current,
-        resource: selection.resource,
-        resourceKind: selection.kind,
-      }),
-      "detail-expand",
-    );
-  }, [detailTarget, filter]);
-  const closeDetail = useCallback(() => {
-    setRetryBlocks((current) => withoutRetryBlock(current, "detail"));
-    const key = restoreRowKey.current;
-    restoreRowKey.current = null;
-    filter.updateDetail(
-      (current) => ({
-        ...current,
-        full: false,
-        resource: null,
-        resourceKind: null,
-        tab: null,
-      }),
-      "detail-close",
-    );
-    requestAnimationFrame(() => {
-      if (key) rowButtons.current.get(key)?.focus();
-    });
-  }, [filter]);
 
   return useMemo(
     () => ({
@@ -307,30 +254,9 @@ export function useResourcesPageState(port: ResourcesPort) {
           "detail-tab",
         );
       },
-      openDetail(identity: ResourceIdentity) {
-        if (selectedClusterId === null) return;
-        const selection = encodeResourceTarget(selectedClusterId, identity);
-        restoreRowKey.current = identityKey(identity);
-        filter.updateDetail(
-          (current) => ({
-            ...current,
-            full: false,
-            resource: selection.resource,
-            resourceKind: selection.kind,
-            tab: null,
-          }),
-          "detail-open",
-        );
-      },
+      openDetail,
       closeDetail,
-      registerRowButton(
-        identity: ResourceIdentity,
-        element: HTMLButtonElement | null,
-      ) {
-        const key = identityKey(identity);
-        if (element) rowButtons.current.set(key, element);
-        else rowButtons.current.delete(key);
-      },
+      registerRowButton,
     }),
     [
       automaticRefreshPaused,
@@ -341,10 +267,12 @@ export function useResourcesPageState(port: ResourcesPort) {
       frame,
       includeDeleted,
       namespace,
+      openDetail,
       refresh,
       filter,
       recordFailure,
       recordSuccess,
+      registerRowButton,
       selectedClusterExists,
       selectedClusterId,
       retryBlocks,
@@ -358,13 +286,4 @@ export function useResourcesPageState(port: ResourcesPort) {
       legacyTypeResolution.kind,
     ],
   );
-}
-
-function identityKey(identity: ResourceIdentity): string {
-  return [
-    identity.resourceType,
-    identity.kind,
-    identity.namespace ?? "",
-    identity.name,
-  ].join(":");
 }

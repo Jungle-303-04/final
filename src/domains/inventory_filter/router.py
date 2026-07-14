@@ -20,6 +20,7 @@ from domains.inventory_filter.cursor import (
     authorization_revision,
 )
 from domains.inventory_filter.graph import build_resource_graph
+from domains.inventory_filter.physical_topology import build_physical_topology
 from domains.inventory_filter.query import (
     ResourceFilters,
     filter_fingerprint,
@@ -34,6 +35,7 @@ from packages.contracts.gateway.responses import (
     FilterSnapshotMeta,
     GlobalFilterFacetsResponse,
     LabelFacetPageResponse,
+    PhysicalTopologyResponse,
     ResourceFilterFacetPageResponse,
     ResourceGraphSnapshotResponse,
 )
@@ -116,6 +118,136 @@ async def list_global_filter_facets(
     )
     return GlobalFilterFacetsResponse.model_validate(
         _global_facets_with_completeness(result, context)
+    )
+
+
+@router.get(
+    gateway_routes.TOPOLOGY_PATH,
+    response_model=PhysicalTopologyResponse,
+)
+async def get_physical_topology(
+    view: Literal["physical"] = Query(default="physical"),
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    applications: str | None = Query(default=None),
+    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resource_types: str | None = Query(default=None, include_in_schema=False),
+    resources_health: str | None = Query(default=None, alias="resources.health"),
+    health: str | None = Query(default=None, include_in_schema=False),
+    labels: str | None = Query(default=None),
+    resources_q: str | None = Query(default=None, alias="resources.q"),
+    q: str | None = Query(default=None, include_in_schema=False),
+    resources_include_deleted: bool | None = Query(
+        default=None,
+        alias="resources.includeDeleted",
+    ),
+    include_deleted: bool | None = Query(default=None, include_in_schema=False),
+    snapshot_revision: int | None = Query(default=None, ge=1),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> PhysicalTopologyResponse:
+    del view  # Literal validation rejects unsupported topology projections.
+    filters = _parse_filters(
+        clusters=clusters,
+        namespaces=namespaces,
+        applications=applications,
+        resource_types=_coalesce_text(resources_types, resource_types),
+        health=_coalesce_text(resources_health, health),
+        labels=labels,
+        query=_coalesce_text(resources_q, q),
+        include_deleted=_coalesce_bool(resources_include_deleted, include_deleted),
+    )
+    cluster_id = _single_graph_cluster(filters)
+    authorized = await _authorized_scope(db, current)
+    _require_requested_scope(authorized, filters)
+
+    latest_global = await _snapshot_context(db, authorized)
+    latest_revision = int(latest_global.get("snapshot_revision") or 0)
+    target_revision = snapshot_revision if snapshot_revision is not None else latest_revision
+    if target_revision > latest_revision:
+        raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+    if snapshot_revision is not None:
+        pinned_global = await _snapshot_context(db, authorized, at_revision=target_revision)
+        if int(pinned_global.get("snapshot_revision") or 0) != target_revision:
+            raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+
+    cluster_context = await asyncio.to_thread(
+        db.filter_snapshot_context,
+        authorized.workspace_id,
+        {cluster_id},
+        at_revision=target_revision,
+    )
+    topology_result, usage_by_cluster, cluster_identities = await asyncio.gather(
+        asyncio.to_thread(
+            db.list_physical_topology_resources,
+            workspace_id=authorized.workspace_id,
+            allowed_cluster_ids={cluster_id},
+            allowed_application_ids=set(authorized.application_ids),
+            filters=filters,
+            snapshot_revision=target_revision,
+        ),
+        asyncio.to_thread(
+            db.latest_cluster_usage_rollups,
+            authorized.workspace_id,
+            {cluster_id},
+            samples_per_cluster=1,
+        ),
+        asyncio.to_thread(
+            db.resolve_filter_clusters,
+            authorized.workspace_id,
+            {cluster_id},
+        ),
+    )
+    matched_count_completeness = _filtered_completeness(
+        cluster_context,
+        filters=filters,
+        require_labels=bool(filters.labels),
+    )
+    total_count_completeness = _unfiltered_completeness(cluster_context)
+    usage_samples = usage_by_cluster.get(cluster_id, [])
+    # A latest usage sample cannot be attached to a historical inventory revision without
+    # a revision/time join. Keep the historical frame honest by returning metric nulls.
+    latest_usage_sample = (
+        usage_samples[-1] if usage_samples and target_revision == latest_revision else None
+    )
+    physical = build_physical_topology(
+        topology_result,
+        latest_usage_sample=latest_usage_sample,
+        matched_count_completeness=matched_count_completeness,
+        total_count_completeness=total_count_completeness,
+    )
+    reasons = {
+        *(str(reason) for reason in cluster_context.get("partial_reason_codes") or []),
+        *(str(reason) for reason in physical.pop("partial_reason_codes", [])),
+    }
+    projection_completeness = matched_count_completeness
+    if projection_completeness == "exact" and reasons:
+        projection_completeness = "partial"
+    fingerprint = filter_fingerprint(filters)
+    cluster_identity = cluster_identities.get(
+        cluster_id,
+        {"cluster_id": cluster_id, "name": None, "provider": None},
+    )
+    return PhysicalTopologyResponse(
+        **physical,
+        cluster_projection_revision=int(cluster_context.get("snapshot_revision") or 0),
+        cluster=cluster_identity,
+        counts=_counts(
+            topology_result,
+            context=cluster_context,
+            filters=filters,
+            require_labels=bool(filters.labels),
+        ),
+        projection_completeness=projection_completeness,
+        partial_reason_codes=sorted(reasons),
+        snapshot=FilterSnapshotMeta(
+            snapshot_revision=target_revision,
+            authorization_revision=authorized.authorization_revision,
+            filter_fingerprint=fingerprint,
+            observed_at=cluster_context.get("observed_at"),
+            stale=target_revision < latest_revision,
+            partial_reason_codes=sorted(reasons),
+        ),
     )
 
 

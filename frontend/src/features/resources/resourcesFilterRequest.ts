@@ -19,6 +19,8 @@ import type {
   ResourcesFilterEndpointLabelRequest,
   ResourcesFilterEndpointQuery,
 } from "./resourcesFilterEndpointContract";
+import type { PhysicalTopologyOptions } from "./physicalTopologyContract";
+import type { PhysicalTopologyEndpointQuery } from "./physicalTopologyEndpointContract";
 
 export function createResourceFacetRequest(
   state: UnifiedFilterState,
@@ -54,6 +56,21 @@ export function createResourceLabelFacetRequest(
     ...(facetQuery === undefined || facetQuery === "" ? {} : { facetQuery }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.limit === undefined ? {} : { limit: options.limit }),
+  };
+}
+
+export function createPhysicalTopologyRequest(
+  state: UnifiedFilterState,
+  options: PhysicalTopologyOptions = {},
+): PhysicalTopologyEndpointQuery {
+  if (state.common.clusters.length !== 1) {
+    throw new TypeError("physical topology requires exactly one cluster");
+  }
+  return {
+    ...baseFilterQuery(state),
+    ...(options.snapshotRevision === undefined
+      ? {}
+      : { snapshotRevision: options.snapshotRevision }),
   };
 }
 

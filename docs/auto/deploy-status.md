@@ -11,15 +11,15 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : ffd92adf28eb9f4c6f1023da4d64fd0f94090980 (FULL, run 29307309415)
+배포 SHA : 혼합 전환 중 — 기록 SHA ef8a7103f, S3 backend rollout 6464e01a3
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 14:43 KST  S1 public 확인 · S2 배포 중 · S3 local green
+갱신     : 2026-07-14 15:34 KST  S2 public · S3 API public/console rollout · S4 local green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-D7YfREbT.js`
-- backend digest: `sha256:1d37b4f44a28cd16c713393e5875968991bd6130b3e71ab9fc010be14d706ad9`
-- console digest: `sha256:0581c1ae9bcab6d8146973623809cc7b7d029eccb32fa7113479a136c83bb9f4`
+- console bundle: `assets/index-BKqqyzX4.js`
+- backend digest: `sha256:a55d80c0c11bc99cccae24bdd010bb420b091f2534583ad626a0369ec882561f`
+- console digest: `sha256:7fead00dc27ccbf0a193f8e05533a43c2158d7ba3ebdefa099758c852e5db901`
 - 로그인·클러스터·리소스 read smoke: 통과
 
 ---
@@ -38,7 +38,7 @@ URL      : https://k8s.woonyong.org
 
 - [x] **S0**  모션 기반 (VP-017)      ← 정확한 토큰·FLIP·스태거·reduced-motion·가드
 - [x] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
-- [ ] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
+- [x] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
 - [ ] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
 - [ ] **S4**  물리 뷰 그래프 (2층) ★  ← 클러스터 클릭 → 카메라가 서버로 내려간다
 - [ ] **S5**  표 + 스파크라인 (3층)
@@ -73,13 +73,22 @@ URL      : https://k8s.woonyong.org
 - [x] `POST /clusters/connect`가 기존 안전한 target 등록 경계(UoW·hashed token·TTL)를 재사용
 - [x] `GET /clusters/{id}/connection`이 `waiting|connected|expired`만 반환하고 미확인 시각을 합성하지 않음
 - [x] S2 전체 gate·dev push — `4a3975b2b`, Dev Gate `29308053053` SUCCESS
-- [ ] S2 자동 배포/public 확인 — Dev Deploy `29308195905` 진행 중
+- [x] S2 자동 배포/public 확인 — Dev Deploy `29308195905` SUCCESS
 - [x] S3 BQ-073 `GET /filter-facets` 구조축/검색축·권한/snapshot/count 완전성 계약
 - [x] S3 shell 단일 command popover·타입 칩·canonical URL·abort/stale 응답 차단
 - [x] S3 Resources 표를 서버 필터 결과로 전환 — app/label/health/query/multi-namespace 실제 축소
 - [x] S3 local 검증 — frontend 155 files / 1015 tests, typecheck·lint PASS; backend targeted 20 tests PASS
 - [x] S3 `make gate-fast` — Ruff/import/compile/Dev Gate 계약 + frontend 155 files / 1015 tests
-- [ ] S3 dev push·자동 배포/public 확인
+- [x] S3 dev push·Dev Gate — `6464e01a3`, Dev Gate `29309632515` SUCCESS
+- [x] S3 backend public — `/api/filter-facets?q=check` HTTP 200
+- [ ] S3 console/public SHA 기록 완료 — Dev Deploy `29309787652` rollout 진행 중
+- [x] S4 BQ-074 물리 topology 계약 — 단일 권한 클러스터·snapshot·서버 판정
+  `matches_filter`·matched/total 완전성·서버별 문제 우선 12개 제한·미확인 metric null
+- [x] S4 물리 그래프 — ELK/@xyflow 서버 카드·고정 파드·사용률 채움·비정상 배지·
+  비매칭 opacity 20%·+N 표 이동·cluster↔server FLIP·골격/스태거/reduced-motion
+- [x] S4 local 검증 — backend 56 tests, frontend 161 files / 1028 tests,
+  typecheck·lint·500-file design guard·production build PASS
+- [ ] S4 gate-fast·dev push·자동 배포/public 확인
 
 ---
 

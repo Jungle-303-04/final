@@ -123,6 +123,7 @@ FILTERED_RESOURCES_PATH = "/resources"
 RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 FILTER_FACETS_PATH = "/filter-facets"
 RESOURCES_GRAPH_PATH = "/resources/graph"
+TOPOLOGY_PATH = "/topology"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"
 ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"

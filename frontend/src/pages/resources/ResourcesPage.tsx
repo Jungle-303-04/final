@@ -4,22 +4,17 @@ import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
-import type {
-  ResourcesFilterPort,
-  ResourcesFilterResourcePage,
-} from "../../features/resources/resourcesFilterContract";
+import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
+import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
-import { Surface } from "../../shared/ui/Surface";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourceDetailSheet } from "./ResourceDetailSheet";
 import { ResourcesCatalog } from "./ResourcesCatalog";
-import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import {
   ResourcesCatalogLoadingPreview,
-  ResourcesListLoadingPreview,
 } from "./ResourcesLoadingPreview";
 import {
   CatalogFreshness,
@@ -30,17 +25,19 @@ import {
   UnknownCompletenessEmpty,
   UnknownSelection,
 } from "./ResourcesPageFeedback";
-import { ResourcesTable } from "./ResourcesTable";
-import { ResourcesToolbar } from "./ResourcesToolbar";
 import { useResourcesFilterDataFrame } from "./useResourcesFilterDataFrame";
-import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
+import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
+import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
+import { ResourcesListSurface } from "./ResourcesListSurface";
 
 export function ResourcesPage({
   filterPort,
+  physicalTopologyPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
+  physicalTopologyPort: PhysicalTopologyPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -48,6 +45,15 @@ export function ResourcesPage({
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
   const state = useResourcesPageState(port);
+  const physicalTopology = usePhysicalTopologyDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    filterState: filter.state,
+    port: physicalTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
   const filtered = useResourcesFilterDataFrame({
     active:
       state.selectedClusterExists &&
@@ -117,7 +123,7 @@ export function ResourcesPage({
         state.clusterSelection.kind === "unknown" ? (
           <UnknownSelection value={state.selectedClusterId} variant="cluster" />
         ) : state.clusterSelection.kind === "unfiltered" ? (
-          <ResourcesClusterBoundary variant="required" />
+          <ResourcesFleetZoom clusters={state.choices.data.clusters} />
         ) : state.clusterSelection.kind === "multiple" ? (
           <ResourcesClusterBoundary variant="multiple" />
         ) : (
@@ -155,21 +161,25 @@ export function ResourcesPage({
               onSelect={state.selectResourceType}
               selectedResourceType={state.selectedResourceType}
             />
-            {state.resourceTypeInvalid || !state.selectedResourceType ? (
-              <UnknownSelection
-                value={state.selectedResourceType}
-                variant="resource"
-              />
-            ) : !state.catalog.data.items.some(
-                (item) => item.resourceType === state.selectedResourceType,
-              ) ? (
-              <UnknownSelection
-                value={state.selectedResourceType}
-                variant="resource"
-              />
-            ) : (
-              <ResourcesListSurface filterList={filtered.list} state={state} />
-            )}
+            <ResourcesListSurface
+              filterList={filtered.list}
+              listFallback={
+                state.resourceTypeInvalid ||
+                !state.selectedResourceType ||
+                !state.catalog.data.items.some(
+                  (item) => item.resourceType === state.selectedResourceType,
+                )
+                  ? (
+                    <UnknownSelection
+                      value={state.selectedResourceType}
+                      variant="resource"
+                    />
+                  )
+                  : null
+              }
+              physicalTopology={physicalTopology}
+              state={state}
+            />
           </div>
         </>
       )}
@@ -184,126 +194,6 @@ export function ResourcesPage({
         tab={state.detailTab}
       />
     </ProductPageFrame>
-  );
-}
-
-function ResourcesListSurface({
-  filterList,
-  state,
-}: {
-  filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
-  state: ReturnType<typeof useResourcesPageState>;
-}) {
-  const { t } = useI18n();
-  return (
-    <div
-      className="grid min-w-0 gap-4"
-      data-slot="resources-four-layer-surface"
-    >
-      <Surface
-        aria-label={t("resources.layer.filters")}
-        className="min-w-0 overflow-hidden"
-      >
-        <ResourcesToolbar
-          includeDeleted={state.includeDeleted}
-          onIncludeDeletedChange={state.setIncludeDeleted}
-        />
-      </Surface>
-
-      <Surface
-        aria-labelledby="resources-graph-unavailable-title"
-        className="min-w-0 overflow-hidden"
-      >
-        <ResourcesGraphShell />
-      </Surface>
-
-      <Surface
-        aria-labelledby="resources-list-title"
-        className="min-w-0 overflow-hidden"
-      >
-        <div className="border-b px-4 py-3">
-          <h3 className="font-medium" id="resources-list-title">
-            {state.selectedResourceType}
-          </h3>
-        </div>
-        <ResourcesListBody filterList={filterList} state={state} />
-      </Surface>
-    </div>
-  );
-}
-
-function ResourcesListBody({
-  filterList,
-  state,
-}: {
-  filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
-  state: ReturnType<typeof useResourcesPageState>;
-}) {
-  if (filterList.phase === "idle" || filterList.phase === "loading") {
-    return (
-      <ProductStateScreen
-        kind="loading"
-        loadingPreview={<ResourcesListLoadingPreview />}
-        placement="content"
-      />
-    );
-  }
-  if (filterList.phase === "failed" && filterList.failure) {
-    return (
-      <ResourcesFailure
-        failure={filterList.failure}
-        onRetry={state.refresh}
-        retryWaitSeconds={state.retryWaitSeconds}
-      />
-    );
-  }
-  if (
-    filterList.phase !== "ready" ||
-    filterList.data === null ||
-    filterList.data.items.length === 0
-  ) {
-    return <UnknownCompletenessEmpty variant="list" />;
-  }
-  const items = filterList.data.items.map((item) => item.resource);
-  return (
-    <div className="min-w-0">
-      <ListScopeStatus page={filterList.data} />
-      <ResourcesTable
-        items={items}
-        onOpen={state.openDetail}
-        registerRowButton={state.registerRowButton}
-      />
-    </div>
-  );
-}
-
-function ListScopeStatus({ page }: { page: ResourcesFilterResourcePage }) {
-  const { formatNumber, t } = useI18n();
-  const total = page.counts.filteredCount;
-  const shown = page.items.length;
-  const filteredText =
-    total === null
-      ? ` · ${t("resources.list.unknownTotal")}`
-      : ` · ${t("resources.list.scope.filtered", { count: formatNumber(total) })}`;
-  const excludedText =
-    page.excludedCount > 0
-      ? ` · ${t("resources.list.scope.excluded", {
-          count: formatNumber(page.excludedCount),
-        })}`
-      : "";
-  return (
-    <div
-      aria-label={t("resources.list.scope.aria")}
-      className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-      role="status"
-    >
-      {t("resources.list.scope.shown", { count: formatNumber(shown) })}
-      {filteredText}
-      {excludedText}
-      {page.counts.filteredCountCompleteness === "partial"
-        ? ` · ${t("common.state.partial")}`
-        : ""}
-    </div>
   );
 }
 

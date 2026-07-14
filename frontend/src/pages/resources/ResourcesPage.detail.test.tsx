@@ -120,7 +120,8 @@ describe("ResourcesPage URL-backed detail", () => {
     const port = resourcesPort({ loadResourceDetail: vi.fn().mockResolvedValue(POD_DETAIL) });
     renderResources(port, "/resources?clusters=cluster-1&resources.types=pod");
 
-    const row = await screen.findByRole("button", { name: /checkout-api-0/u }, { timeout: 5_000 });
+    const table = await screen.findByRole("table", { name: "리소스 목록" });
+    const row = within(table).getByRole("button", { name: /checkout-api-0/u });
     await user.click(row);
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 상세" }, { timeout: 5_000 }))
       .toBeTruthy();

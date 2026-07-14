@@ -876,6 +876,78 @@ class ResourceGraphSnapshotResponse(StrictModel):
         return self
 
 
+class PhysicalTopologyServer(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    cpu_pct: float | None = Field(default=None, ge=0)
+    mem_pct: float | None = Field(default=None, ge=0)
+    status: str
+    matched_pod_count: int | None = Field(default=None, ge=0)
+    total_pod_count: int | None = Field(default=None, ge=0)
+    matched_pod_count_completeness: FilterCountCompleteness
+    total_pod_count_completeness: FilterCountCompleteness
+
+    @model_validator(mode="after")
+    def validate_pod_counts(self) -> Self:
+        pairs = (
+            (self.matched_pod_count, self.matched_pod_count_completeness),
+            (self.total_pod_count, self.total_pod_count_completeness),
+        )
+        if any((value is None) != (completeness == "unavailable") for value, completeness in pairs):
+            raise ValueError("physical topology pod counts must match completeness")
+        return self
+
+
+class PhysicalTopologyPod(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    server_id: str | None = None
+    # requests 대비 사용률이다. requests 근거가 projection에 없으면 0이 아니라 null이다.
+    usage_pct: float | None = Field(default=None, ge=0)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+    phase: str
+    health: str
+    restarts: int = Field(ge=0)
+    matches_filter: bool
+
+
+class PhysicalTopologyResponse(StrictModel):
+    view: Literal["physical"] = "physical"
+    cluster_projection_revision: int = Field(ge=0)
+    cluster: InventoryResourceClusterIdentity
+    servers: list[PhysicalTopologyServer] = Field(default_factory=list)
+    pods: list[PhysicalTopologyPod] = Field(default_factory=list)
+    truncated: dict[str, int] = Field(default_factory=dict)
+    unassigned_truncated_count: int = Field(ge=0)
+    counts: FilterResultCounts
+    projection_completeness: GraphRelationCompleteness
+    metrics_completeness: GraphRelationCompleteness
+    metrics_observed_at: str | None = None
+    partial_reason_codes: list[str] = Field(default_factory=list)
+    snapshot: FilterSnapshotMeta
+
+    @model_validator(mode="after")
+    def validate_physical_topology(self) -> Self:
+        server_ids = [server.id for server in self.servers]
+        pod_ids = [pod.id for pod in self.pods]
+        known_servers = set(server_ids)
+        if len(known_servers) != len(server_ids) or len(set(pod_ids)) != len(pod_ids):
+            raise ValueError("physical topology identities must be unique")
+        if any(
+            pod.server_id is not None and pod.server_id not in known_servers for pod in self.pods
+        ):
+            raise ValueError("physical topology pods must reference returned servers")
+        if not set(self.truncated).issubset(known_servers):
+            raise ValueError("physical topology truncation must reference returned servers")
+        if any(count <= 0 for count in self.truncated.values()):
+            raise ValueError("physical topology truncation counts must be positive")
+        if self.projection_completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact physical topology cannot carry partial reasons")
+        return self
+
+
 class LabelSelector(StrictModel):
     key: str = Field(min_length=1)
     value: str

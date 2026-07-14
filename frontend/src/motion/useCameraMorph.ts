@@ -19,6 +19,18 @@ export interface CameraMorphController {
   play: () => Animation[];
 }
 
+let pendingRouteMorphRects: Map<string, DOMRect> | null = null;
+
+export function captureRouteMorph(root: ParentNode = document): void {
+  pendingRouteMorphRects = collectMorphRects(root);
+}
+
+function takeRouteMorphRects(): Map<string, DOMRect> {
+  const captured = pendingRouteMorphRects ?? new Map<string, DOMRect>();
+  pendingRouteMorphRects = null;
+  return captured;
+}
+
 export function collectMorphRects(root: ParentNode): Map<string, DOMRect> {
   const rects = new Map<string, DOMRect>();
   root.querySelectorAll<HTMLElement>("[data-morph-id]").forEach((element) => {
@@ -61,7 +73,7 @@ export function morph(
     ) return;
 
     const transform = morphTransform(from, element.getBoundingClientRect());
-    if (!transform) return;
+    if (!transform || typeof element.animate !== "function") return;
 
     matchedIds.add(morphId);
     animations.push(element.animate(
@@ -82,7 +94,7 @@ export function morph(
 export function useCameraMorph(
   rootRef: RefObject<HTMLElement | null>,
 ): CameraMorphController {
-  const fromRects = useRef<Map<string, DOMRect>>(new Map());
+  const fromRects = useRef<Map<string, DOMRect>>(takeRouteMorphRects());
   const reducedMotion = usePrefersReducedMotion();
 
   const capture = useCallback(() => {
