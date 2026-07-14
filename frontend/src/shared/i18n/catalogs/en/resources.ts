@@ -102,6 +102,8 @@ export const resourcesEn = {
   "resources.graph.server.more": "+{count} pods",
   "resources.graph.metric.memory.short": "MEM",
   "resources.graph.pod.aria": "Pod {name}, {phase}, usage {usage}",
+  "resources.graph.pod.request.cpu": "{usage} of request ({actual} / {request} cores)",
+  "resources.graph.pod.request.memory": "{usage} of request ({actual} / {request} MiB)",
   "resources.graph.pod.badge.crash-loop": "CrashLoop",
   "resources.graph.pod.badge.pending": "Pending",
   "resources.graph.pod.badge.restarting": "Repeated restarts",

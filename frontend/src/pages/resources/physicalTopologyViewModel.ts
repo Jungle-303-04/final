@@ -10,6 +10,9 @@ export const MAX_VISIBLE_PODS_PER_SERVER = 12;
 
 export type PodUsageTone = "neutral" | "amber" | "red" | "unknown";
 export type PodAbnormalBadge = "crash-loop" | "pending" | "restarting" | null;
+export type PodUsageEvidence =
+  | { kind: "cpu"; actual: number; request: number }
+  | { kind: "memory"; actual: number; request: number };
 
 export interface PhysicalServerPlacement {
   unassigned: boolean;
@@ -118,5 +121,46 @@ export function podAbnormalBadge(pod: PhysicalTopologyPod): PodAbnormalBadge {
 }
 
 export function podUsageLabel(usagePercent: number | null): string {
-  return usagePercent === null ? "—" : `${Math.round(usagePercent)}%`;
+  if (usagePercent === null) return "—";
+  const measured = Math.round(usagePercent * 10) / 10;
+  return `${measured}%`;
+}
+
+export function podUsageEvidence(pod: PhysicalTopologyPod): PodUsageEvidence | null {
+  const {
+    cpuMillicores,
+    cpuRequestMillicores,
+    memoryMebibytes,
+    memoryRequestMebibytes,
+  } = pod;
+  const cpuRatio = requestRatio(cpuMillicores, cpuRequestMillicores);
+  const memoryRatio = requestRatio(
+    memoryMebibytes,
+    memoryRequestMebibytes,
+  );
+  if (
+    pod.usagePercent === null ||
+    cpuRequestMillicores === null ||
+    memoryRequestMebibytes === null ||
+    (cpuRatio === null && memoryRatio === null)
+  ) return null;
+  if (memoryRatio === null || (cpuRatio !== null && cpuRatio >= memoryRatio)) {
+    if (cpuMillicores === null) return null;
+    return {
+      kind: "cpu",
+      actual: cpuMillicores,
+      request: cpuRequestMillicores,
+    };
+  }
+  if (memoryMebibytes === null) return null;
+  return {
+    kind: "memory",
+    actual: memoryMebibytes,
+    request: memoryRequestMebibytes,
+  };
+}
+
+function requestRatio(actual: number | null, request: number | null): number | null {
+  if (actual === null || request === null || request <= 0) return null;
+  return actual / request;
 }

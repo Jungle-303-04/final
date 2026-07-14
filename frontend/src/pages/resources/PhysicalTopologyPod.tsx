@@ -7,6 +7,7 @@ import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 import {
   podAbnormalBadge,
+  podUsageEvidence,
   podUsageLabel,
   podUsageTone,
 } from "./physicalTopologyViewModel";
@@ -31,6 +32,21 @@ export function PhysicalTopologyPod({
   const disabled = !pod.matchesFilter;
   const delay = podWaveDelay(nodeIndex, podIndex);
   const color = smoothedUsage === null ? null : usageColor(smoothedUsage);
+  const usageLabel = podUsageLabel(pod.usagePercent);
+  const evidence = podUsageEvidence(pod);
+  const usageDescription = evidence === null
+    ? usageLabel
+    : evidence.kind === "cpu"
+      ? t("resources.graph.pod.request.cpu", {
+          actual: formatMetric(evidence.actual / 1_000),
+          request: formatMetric(evidence.request / 1_000),
+          usage: usageLabel,
+        })
+      : t("resources.graph.pod.request.memory", {
+          actual: formatMetric(evidence.actual),
+          request: formatMetric(evidence.request),
+          usage: usageLabel,
+        });
   useEffect(() => {
     const button = buttonRef.current;
     if (!button) return;
@@ -44,7 +60,7 @@ export function PhysicalTopologyPod({
       aria-label={t("resources.graph.pod.aria", {
         name: pod.name,
         phase: pod.phase,
-        usage: podUsageLabel(pod.usagePercent),
+        usage: usageLabel,
       })}
       className={cn(
         "motion-pod-pop relative grid size-9 place-items-center rounded-md border text-[0.625rem] font-semibold shadow-xs transition-[opacity,transform,box-shadow] duration-(--motion-instant) motion-reduce:transition-none",
@@ -66,7 +82,7 @@ export function PhysicalTopologyPod({
         backgroundColor: "color-mix(in oklch, var(--usage-color) 34%, var(--card))",
         borderColor: "color-mix(in oklch, var(--usage-color) 62%, var(--border))",
       } as CSSProperties}
-      title={`${pod.namespace ?? "—"} · ${pod.name} · ${podUsageLabel(pod.usagePercent)}`}
+      title={`${pod.namespace ?? "—"} · ${pod.name} · ${usageDescription}`}
       type="button"
     >
       {badge === null ? null : (
@@ -83,4 +99,8 @@ export function PhysicalTopologyPod({
       )}
     </button>
   );
+}
+
+function formatMetric(value: number): string {
+  return Number(value.toFixed(3)).toString();
 }

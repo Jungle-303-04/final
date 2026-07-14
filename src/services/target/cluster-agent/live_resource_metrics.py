@@ -352,8 +352,10 @@ class PodResourceMetricsCollector:
             degraded_reason = _joined_reason(degraded_reason, "metrics_server_measurement_partial")
         return {
             "cpu_mcores": cpu_mcores,
+            "cpu_request_mcores": cpu_request,
             "mem_bytes": mem_bytes,
             "mem_mib": mem_mib,
+            "mem_request_mib": mem_request,
             **ratios,
             "observed_at": raw.get("observed_at"),
             "metrics_metadata": {

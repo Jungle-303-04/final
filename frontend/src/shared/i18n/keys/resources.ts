@@ -100,6 +100,8 @@ export type ResourcesMessageKey =
   | "resources.graph.server.more"
   | "resources.graph.metric.memory.short"
   | "resources.graph.pod.aria"
+  | "resources.graph.pod.request.cpu"
+  | "resources.graph.pod.request.memory"
   | "resources.graph.pod.badge.crash-loop"
   | "resources.graph.pod.badge.pending"
   | "resources.graph.pod.badge.restarting"

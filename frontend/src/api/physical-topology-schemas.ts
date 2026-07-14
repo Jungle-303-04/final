@@ -9,6 +9,7 @@ import {
 } from "./resource-filter-schemas";
 
 const nullableMetricSchema = z.number().finite().nonnegative().nullable();
+const nullableRequestMetricSchema = z.number().finite().positive().nullable();
 
 export const physicalTopologyServerSchema = z.strictObject({
   id: z.string().min(1),
@@ -53,11 +54,25 @@ export const physicalTopologyPodSchema = z.strictObject({
   server_id: z.string().min(1).nullable(),
   usage_pct: nullableMetricSchema,
   cpu_mcores: nullableMetricSchema,
+  cpu_request_mcores: nullableRequestMetricSchema,
   mem_mib: nullableMetricSchema,
+  mem_request_mib: nullableRequestMetricSchema,
   phase: z.string().min(1),
   health: z.string().min(1),
   restarts: z.number().int().nonnegative(),
   matches_filter: z.boolean(),
+}).superRefine((pod, context) => {
+  if (pod.usage_pct === null) return;
+  if (
+    pod.cpu_request_mcores !== null &&
+    pod.mem_request_mib !== null &&
+    (pod.cpu_mcores !== null || pod.mem_mib !== null)
+  ) return;
+  context.addIssue({
+    code: "custom",
+    message: "pod usage requires complete request evidence",
+    path: ["usage_pct"],
+  });
 });
 
 export const physicalTopologySchema = z.strictObject({

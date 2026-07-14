@@ -1110,11 +1110,21 @@ class PhysicalTopologyPod(StrictModel):
     # requests 대비 사용률이다. requests 근거가 projection에 없으면 0이 아니라 null이다.
     usage_pct: float | None = Field(default=None, ge=0)
     cpu_mcores: float | None = Field(default=None, ge=0)
+    cpu_request_mcores: float | None = Field(default=None, gt=0)
     mem_mib: float | None = Field(default=None, ge=0)
+    mem_request_mib: float | None = Field(default=None, gt=0)
     phase: str
     health: str
     restarts: int = Field(ge=0)
     matches_filter: bool
+
+    @model_validator(mode="after")
+    def validate_request_relative_usage(self) -> Self:
+        requests_missing = self.cpu_request_mcores is None or self.mem_request_mib is None
+        measurements_missing = self.cpu_mcores is None and self.mem_mib is None
+        if self.usage_pct is not None and (requests_missing or measurements_missing):
+            raise ValueError("physical topology usage requires complete request evidence")
+        return self
 
 
 class PhysicalTopologyResponse(StrictModel):
