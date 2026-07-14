@@ -6,6 +6,7 @@ export const resourcesEn = {
   "resources.empty": "No matching resources",
   "resources.list.count": "{returned} shown · limit {limit}",
   "resources.list.unknownTotal": "Total unknown",
+  "resources.list.allTitle": "All resources",
   "resources.noPermission": "You do not have permission to view these resources.",
   "resources.partial": "Some resources could not be loaded.",
   "resources.search.placeholder": "Search resources",

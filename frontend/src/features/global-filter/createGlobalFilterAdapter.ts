@@ -22,6 +22,7 @@ interface GlobalFilterFacetsPayload {
   clusters: CountedFacetPayload[];
   namespaces: (CountedFacetPayload & { cluster_id: string })[];
   applications: CountedFacetPayload[];
+  resource_types: CountedFacetPayload[];
   labels: {
     key: string;
     value: string;
@@ -60,6 +61,10 @@ function flattenFacets(
     })),
     ...facets.applications.map((item) => ({
       type: "application" as const,
+      ...item,
+    })),
+    ...facets.resource_types.map((item) => ({
+      type: "resourceType" as const,
       ...item,
     })),
     ...facets.labels.map((item) => ({

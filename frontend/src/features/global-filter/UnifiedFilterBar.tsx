@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
-import type { NamespaceFilterRef } from "../filters/filterContract";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import {
   Command,
@@ -25,6 +24,12 @@ import type {
   GlobalFilterPort,
   GlobalFilterSuggestion,
 } from "./globalFilterContract";
+import {
+  addSuggestion,
+  namespaceId,
+  removeChip,
+  selectedChips,
+} from "./globalFilterSelection";
 
 type SearchPhase = "idle" | "loading" | "ready" | "failed";
 type SuggestionType = GlobalFilterSuggestion["type"];
@@ -33,6 +38,7 @@ const groupOrder: readonly SuggestionType[] = [
   "cluster",
   "namespace",
   "application",
+  "resourceType",
   "label",
   "resource",
 ];
@@ -41,6 +47,7 @@ const groupKeys: Record<SuggestionType, MessageKey> = {
   cluster: "shell.filter.group.cluster",
   namespace: "shell.filter.group.namespace",
   application: "shell.filter.group.application",
+  resourceType: "shell.filter.group.resourceType",
   label: "shell.filter.group.label",
   resource: "shell.filter.group.resource",
 };
@@ -49,6 +56,7 @@ const groupIcons = {
   cluster: Server,
   namespace: Braces,
   application: AppWindow,
+  resourceType: Boxes,
   label: Tags,
   resource: Boxes,
 } satisfies Record<SuggestionType, typeof Server>;
@@ -62,10 +70,13 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   const [suggestions, setSuggestions] = useState<readonly GlobalFilterSuggestion[]>([]);
   const selection = useMemo(() => ({
     clusters: filter.state.common.clusters,
-    namespaces: filter.state.common.namespaces.map(namespaceId),
+    namespaces: filter.state.common.namespaces.map(
+      (item) => namespaceId(item.clusterId, item.namespace),
+    ),
     applications: filter.state.common.applications,
+    resourceTypes: filter.state.resources.types,
     labels: filter.state.common.labels.map((label) => `${label.key}=${label.value}`),
-  }), [filter.state.common]);
+  }), [filter.state.common, filter.state.resources.types]);
 
   useEffect(() => {
     if (!open) return;
@@ -190,10 +201,6 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   );
 }
 
-function namespaceId(value: NamespaceFilterRef): string {
-  return `${value.clusterId}/${value.namespace}`;
-}
-
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error &&
     error.name === "AbortError";
@@ -211,85 +218,4 @@ function formatCount(
   return item.count_completeness === "partial"
     ? t("shell.filter.count.partial", { count })
     : count;
-}
-
-type FilterState = ReturnType<typeof useUnifiedFilter>["state"];
-type SelectedChip = { type: SuggestionType; id: string; label: string };
-
-function selectedChips(state: FilterState): SelectedChip[] {
-  return [
-    ...state.common.clusters.map((id) => ({ type: "cluster" as const, id, label: id })),
-    ...state.common.namespaces.map((item) => ({
-      type: "namespace" as const,
-      id: namespaceId(item),
-      label: item.namespace,
-    })),
-    ...state.common.applications.map((id) => ({ type: "application" as const, id, label: id })),
-    ...state.common.labels.map((item) => ({
-      type: "label" as const,
-      id: `${item.key}=${item.value}`,
-      label: `${item.key}=${item.value}`,
-    })),
-    ...(state.resources.query ? [{
-      type: "resource" as const,
-      id: state.resources.query,
-      label: state.resources.query,
-    }] : []),
-  ];
-}
-
-function addSuggestion(state: FilterState, item: GlobalFilterSuggestion): FilterState {
-  if (item.type === "cluster") {
-    return { ...state, common: { ...state.common, clusters: addUnique(state.common.clusters, item.id) } };
-  }
-  if (item.type === "namespace") {
-    const namespace = item.id.startsWith(`${item.clusterId}/`)
-      ? item.id.slice(item.clusterId.length + 1)
-      : item.label;
-    const next = { clusterId: item.clusterId, namespace };
-    return {
-      ...state,
-      common: {
-        ...state.common,
-        namespaces: state.common.namespaces.some((value) => namespaceId(value) === item.id)
-          ? state.common.namespaces
-          : [...state.common.namespaces, next],
-      },
-    };
-  }
-  if (item.type === "application") {
-    return { ...state, common: { ...state.common, applications: addUnique(state.common.applications, item.id) } };
-  }
-  if (item.type === "label") {
-    return {
-      ...state,
-      common: {
-        ...state.common,
-        labels: state.common.labels.some((value) => value.key === item.key && value.value === item.value)
-          ? state.common.labels
-          : [...state.common.labels, { key: item.key, value: item.value }],
-      },
-    };
-  }
-  return { ...state, resources: { ...state.resources, query: item.label } };
-}
-
-function removeChip(state: FilterState, chip: SelectedChip): FilterState {
-  if (chip.type === "cluster") {
-    return { ...state, common: { ...state.common, clusters: state.common.clusters.filter((id) => id !== chip.id) } };
-  }
-  if (chip.type === "namespace") {
-    return { ...state, common: { ...state.common, namespaces: state.common.namespaces.filter((item) => namespaceId(item) !== chip.id) } };
-  }
-  if (chip.type === "application") {
-    return { ...state, common: { ...state.common, applications: state.common.applications.filter((id) => id !== chip.id) } };
-  }
-  if (chip.type === "label") {
-    return { ...state, common: { ...state.common, labels: state.common.labels.filter((item) => `${item.key}=${item.value}` !== chip.id) } };
-  }
-  return { ...state, resources: { ...state.resources, query: "" } };
-}
-
-function addUnique(values: readonly string[], value: string): readonly string[] {
-  return values.includes(value) ? values : [...values, value];
 }

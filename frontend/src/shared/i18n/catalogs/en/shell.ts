@@ -29,6 +29,7 @@ export const shellEn = {
   "shell.filter.group.cluster": "Clusters",
   "shell.filter.group.namespace": "Namespaces",
   "shell.filter.group.application": "Applications",
+  "shell.filter.group.resourceType": "Types",
   "shell.filter.group.label": "Labels",
   "shell.filter.group.resource": "Resources",
   "shell.filter.count.partial": "at least {count}",

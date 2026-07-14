@@ -7,6 +7,7 @@ import {
   boundedQuery,
   canonicalFacetSelections,
   canonicalLabelSelections,
+  canonicalResourceTypeSelections,
 } from "./resource-filter-query";
 import { withQuery } from "./url";
 
@@ -17,6 +18,7 @@ export interface GlobalFilterFacetQuery {
   clusters?: readonly string[];
   namespaces?: readonly string[];
   applications?: readonly string[];
+  resourceTypes?: readonly string[];
   labels?: readonly string[];
 }
 
@@ -29,6 +31,7 @@ export function listGlobalFilterFacets(
     ["clusters", join(canonicalFacetSelections("clusters", query.clusters))],
     ["namespaces", join(canonicalFacetSelections("namespaces", query.namespaces))],
     ["applications", join(canonicalFacetSelections("applications", query.applications))],
+    ["resources.types", join(canonicalResourceTypeSelections(query.resourceTypes))],
     ["labels", join(canonicalLabelSelections(query.labels))],
   ]);
   return apiRequest(path, globalFilterFacetsSchema, { signal });

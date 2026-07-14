@@ -19,10 +19,7 @@ import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourceDetailWorkspace } from "./ResourceDetailWorkspace";
-import { ResourcesCatalog } from "./ResourcesCatalog";
-import {
-  ResourcesCatalogLoadingPreview,
-} from "./ResourcesLoadingPreview";
+import { ResourcesSurfaceLoadingPreview } from "./ResourcesLoadingPreview";
 import {
   CatalogFreshness,
   ResourcesDenied,
@@ -42,7 +39,6 @@ import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
 import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
 import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
 import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
-import { useResourceTypeShortcuts } from "./useResourceTypeShortcuts";
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 
 export function ResourcesPage({
@@ -105,7 +101,6 @@ export function ResourcesPage({
   const filtered = useResourcesFilterDataFrame({
     active:
       state.selectedClusterExists &&
-      state.selectedResourceType !== null &&
       !state.resourceTypeInvalid,
     authorityKey,
     facetAxis: null,
@@ -159,7 +154,6 @@ export function ResourcesPage({
   });
   const resourcesView = state.view;
   const setResourcesView = state.setView;
-  useResourceTypeShortcuts(state.cycleResourceType);
   useEffect(() => {
     if (resourcesView === "graph") setResourcesView("table");
   }, [resourcesView, setResourcesView]);
@@ -234,7 +228,7 @@ export function ResourcesPage({
         state.catalog.phase === "idle" ? (
         <ProductStateScreen
           kind="loading"
-          loadingPreview={<ResourcesCatalogLoadingPreview />}
+          loadingPreview={<ResourcesSurfaceLoadingPreview />}
           placement="content"
         />
       ) : state.catalog.phase === "failed" ? (
@@ -254,39 +248,24 @@ export function ResourcesPage({
             filterList={filtered.list}
           />
           <CatalogFreshness observedAt={state.catalog.data.observedAt} />
-          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <ResourcesCatalog
-              items={state.catalog.data.items}
-              onSelect={state.selectResourceType}
-              selectedResourceType={state.selectedResourceType}
-            />
-            <ResourcesListSurface
-              filterList={filtered.list}
-              metricHistory={metricHistory}
-              onLoadMore={filtered.loadMoreList}
-              listFallback={
-                state.resourceTypeInvalid ||
-                !state.selectedResourceType ||
-                !state.catalog.data.items.some(
-                  (item) => item.resourceType === state.selectedResourceType,
-                )
-                  ? (
-                    <UnknownSelection
-                      value={state.selectedResourceType}
-                      variant="resource"
-                    />
-                  )
-                  : null
-              }
-              physicalTopology={physicalTopology}
-              relationTopology={relationTopology}
-              timelineFrame={changeTimeline}
-              topologyPinned={topology.pinned}
-              topologyView={topology.view}
-              onTopologyViewChange={topology.pin}
-              state={state}
-            />
-          </div>
+          <ResourcesListSurface
+            filterList={filtered.list}
+            metricHistory={metricHistory}
+            onLoadMore={filtered.loadMoreList}
+            listFallback={state.resourceTypeInvalid ? (
+              <UnknownSelection
+                value={state.selectedResourceType}
+                variant="resource"
+              />
+            ) : null}
+            physicalTopology={physicalTopology}
+            relationTopology={relationTopology}
+            timelineFrame={changeTimeline}
+            topologyPinned={topology.pinned}
+            topologyView={topology.view}
+            onTopologyViewChange={topology.pin}
+            state={state}
+          />
         </>
       )}
     </ProductPageFrame>

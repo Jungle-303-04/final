@@ -2,6 +2,7 @@ export type GlobalFilterSuggestion =
   | ({ type: "cluster" } & CountedSuggestion)
   | ({ type: "namespace"; clusterId: string } & CountedSuggestion)
   | ({ type: "application" } & CountedSuggestion)
+  | ({ type: "resourceType" } & CountedSuggestion)
   | ({ type: "label"; key: string; value: string } & CountedSuggestion)
   | ({ type: "resource"; kind: string } & CountedSuggestion);
 
@@ -16,6 +17,7 @@ export interface GlobalFilterSelection {
   clusters: readonly string[];
   namespaces: readonly string[];
   applications: readonly string[];
+  resourceTypes: readonly string[];
   labels: readonly string[];
 }
 

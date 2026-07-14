@@ -6,6 +6,7 @@ export const resourcesKo = {
   "resources.empty": "조건에 맞는 리소스 없음",
   "resources.list.count": "{returned} 표시 · 최대 {limit}",
   "resources.list.unknownTotal": "전체 수 미확인",
+  "resources.list.allTitle": "전체 리소스",
   "resources.noPermission": "이 리소스를 볼 권한이 없습니다.",
   "resources.partial": "일부 리소스를 불러오지 못했습니다.",
   "resources.search.placeholder": "리소스 검색",

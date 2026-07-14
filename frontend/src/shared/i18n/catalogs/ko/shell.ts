@@ -29,6 +29,7 @@ export const shellKo = {
   "shell.filter.group.cluster": "클러스터",
   "shell.filter.group.namespace": "네임스페이스",
   "shell.filter.group.application": "애플리케이션",
+  "shell.filter.group.resourceType": "종류",
   "shell.filter.group.label": "라벨",
   "shell.filter.group.resource": "리소스",
   "shell.filter.count.partial": "최소 {count}",

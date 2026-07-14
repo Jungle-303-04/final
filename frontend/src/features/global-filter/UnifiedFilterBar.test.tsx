@@ -51,6 +51,7 @@ describe("UnifiedFilterBar", () => {
     expect(screen.getByText("Clusters")).toBeTruthy();
     expect(screen.getByText("Namespaces")).toBeTruthy();
     expect(screen.getByText("Applications")).toBeTruthy();
+    expect(screen.getByText("Types")).toBeTruthy();
     expect(screen.queryByText("Labels")).toBeNull();
     expect(screen.getByText("at least 4")).toBeTruthy();
     expect(screen.getByText("unknown")).toBeTruthy();
@@ -113,6 +114,24 @@ describe("UnifiedFilterBar", () => {
     );
   });
 
+  it("turns a server-provided resource type into a removable type chip", async () => {
+    const user = userEvent.setup();
+    renderFilter({ search: vi.fn(async () => structuralSuggestions) });
+
+    await user.click(screen.getByRole("button", { name: filterPlaceholder }));
+    await user.click(await screen.findByText("Pod"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("filter-location").textContent).toBe(
+        "/resources?resources.types=pod",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Remove Types filter Pod" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("filter-location").textContent).toBe("/resources"),
+    );
+  });
+
   it("aborts superseded requests and never paints a stale response", async () => {
     const user = userEvent.setup();
     const first = deferred<readonly GlobalFilterSuggestion[]>();
@@ -157,6 +176,7 @@ const emptySelection = {
   clusters: [],
   namespaces: [],
   applications: [],
+  resourceTypes: [],
   labels: [],
 };
 const structuralSuggestions = [
@@ -176,6 +196,7 @@ const structuralSuggestions = [
     count: null,
     count_completeness: "unavailable",
   }),
+  counted({ type: "resourceType", id: "pod", label: "Pod", count: 12 }),
 ] satisfies GlobalFilterSuggestion[];
 const searchableSuggestions = [
   counted({ type: "application", id: "checkout", label: "Checkout", count: 3 }),

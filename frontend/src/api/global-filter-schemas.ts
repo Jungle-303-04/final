@@ -11,6 +11,7 @@ export const globalFilterFacetsSchema = z.strictObject({
   clusters: z.array(countedFacetSchema),
   namespaces: z.array(countedFacetSchema.extend({ cluster_id: z.string().min(1) })),
   applications: z.array(countedFacetSchema),
+  resource_types: z.array(countedFacetSchema),
   labels: z.array(z.strictObject({
     key: z.string().min(1),
     value: z.string(),
