@@ -59,6 +59,8 @@ export type IssuesMessageKey =
   | "issues.time.unknown"
   | "issues.detail.open"
   | "issues.detail.close"
+  | "issues.detail.expand"
+  | "issues.detail.collapse"
   | "issues.detail.title"
   | "issues.detail.description"
   | "issues.detail.loading"

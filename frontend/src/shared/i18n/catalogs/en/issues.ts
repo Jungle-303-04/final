@@ -61,6 +61,8 @@ export const issuesEn = {
   "issues.time.unknown": "Time unknown",
   "issues.detail.open": "Open details for {name}",
   "issues.detail.close": "Close issue details",
+  "issues.detail.expand": "Open issue details full screen",
+  "issues.detail.collapse": "Show issue list and details",
   "issues.detail.title": "Issue details",
   "issues.detail.description": "Details for the selected issue",
   "issues.detail.loading": "Loading issue details",

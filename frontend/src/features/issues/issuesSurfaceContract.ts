@@ -19,6 +19,9 @@ export interface IssuesSurfaceCopy {
   detailLabel: string;
   detailEmpty: string;
   detailLoading: string;
+  detailClose: string;
+  detailExpand: string;
+  detailCollapse: string;
   auditLabel: string;
   auditUnavailable: string;
   auditRoot: string;
@@ -84,6 +87,9 @@ export interface IssuesPanelsProps {
   copy: IssuesSurfaceCopy;
   detailRegionId: string;
   detailRegionRef: Ref<HTMLDivElement>;
+  full: boolean;
+  onClose: () => void;
+  onFullChange: (full: boolean) => void;
   onSelectRecovery: (actionId: string) => void;
   onLoadMoreAudit: () => void;
   selected: IssueSummary;
