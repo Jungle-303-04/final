@@ -27,7 +27,7 @@ describe("product route release registry", () => {
       "Issues",
       "Metrics",
       "Applications",
-      "GitOps",
+      "Workflows",
       "Catalog",
     ]);
   });

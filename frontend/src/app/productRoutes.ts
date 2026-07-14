@@ -36,7 +36,7 @@ export const PRODUCT_ROUTE_CATALOG = [
   route("issues", "Issues", "/issues", "g i"),
   route("metrics", "Metrics", "/metrics", "g m"),
   route("applications", "Applications", "/applications", "g a"),
-  route("gitops", "GitOps", "/gitops", "g o"),
+  route("gitops", "Workflows", "/gitops", "g o"),
   route("catalog", "Catalog", "/catalog", "g c"),
 ] as const satisfies readonly ProductRouteDefinition[];
 
