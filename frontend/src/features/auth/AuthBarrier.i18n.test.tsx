@@ -52,7 +52,7 @@ describe("localized authentication boundary", () => {
     expect(screen.getByRole("textbox", { name: "ID or email" })).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Choose theme" })).toBeTruthy();
     const publicHeader = screen.getByRole("banner");
     const loginCard = screen.getByRole("heading", { name: "Sign in to Opsia" })
       .closest('[data-slot="card"]');

@@ -74,7 +74,8 @@ describe("ProductShell keyboard and help interaction", () => {
     await waitFor(() => expect(document.activeElement?.id).toBe("product-main"));
 
     await user.keyboard("t");
-    expect(screen.getByRole("button", { name: "라이트 모드로 전환" })).toBeTruthy();
+    expect(window.localStorage.getItem("theme")).toBe("system");
+    expect(screen.getByRole("button", { name: "테마 선택" })).toBeTruthy();
   });
 
   it("dispatches Resources actions and route chords from one shortcut authority", async () => {
@@ -185,7 +186,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Choose theme" })).toBeTruthy();
     expect(window.localStorage.getItem("opsia.locale")).toBe("en");
   });
 
