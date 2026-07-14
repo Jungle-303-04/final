@@ -500,11 +500,32 @@ GET /topology?view=relations&<filters>
 ### S11 · 시간 스크럽 (TimelineStrip)
 
 **백엔드 (BQ-057)**
+```http
+GET /changes?from=<epoch-ms>&to=<epoch-ms>&bucket=<ms>
+  &clusters=&namespaces=<cluster-id/namespace>&applications=
+  &resources.types=&resources.health=&labels=<key=value>&resources.q=
 ```
-GET /changes?from=&to=&bucket=
-→ { buckets: [{ startMs, endMs, total, warnings }],
-    events: [...], gaps: [{from, to}] }     ← 결측은 명시적 gap
+```json
+{
+  "buckets": [{ "startMs": 0, "endMs": 60000, "total": 2, "warnings": 1 }],
+  "events": [{
+    "id": "incident:incident-a",
+    "kind": "inventory_event|incident|deployment|gitops_change",
+    "occurredMs": 42000,
+    "title": "checkout unavailable",
+    "severity": "info|warning|critical|unknown"
+  }],
+  "gaps": [{ "from": 60000, "to": 120000 }]
+}
 ```
+- 범위는 `[from,to)`, 최대 24시간. `bucket`은 1초~1시간이며 최대 1,440개다.
+- bucket/event/gap은 시간 오름차순, event 동률은 `(occurredMs, kind, id)` 순이다.
+- `total`은 해당 bucket의 실증 이벤트 수, `warnings`는 warning/critical 수다.
+- 이벤트는 immutable inventory version, RCA incident projection, workflow run의
+  allowlist 컬럼만 합친다. raw/payload/metadata는 응답에 포함하지 않는다.
+- gap은 필수 클러스터 중 하나라도 해당 bucket에 저장된 inventory observation이 없을 때만
+  표시한다. 이벤트가 0건이라는 이유만으로 gap을 만들지 않으며 보간·synthetic은 금지한다.
+- 이벤트 1,000건 또는 관측 200,000건 상한을 넘으면 부분 응답 대신 422 fail-closed한다.
 
 **프론트** — Radar `TimelineStrip` + `scrubber-math.ts` 이식
 - QUERY(조회 범위) vs WINDOW(보기 범위) 분리

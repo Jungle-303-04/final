@@ -47,9 +47,9 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
 
     const timeline = screen.getByRole("slider", { name: "Time" });
-    expect(timeline.getAttribute("disabled")).not.toBeNull();
+    expect(timeline.getAttribute("disabled")).toBeNull();
     expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("unavailable");
+      ?.getAttribute("data-state")).toBe("live");
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ clusters: ["cluster-1"] }),

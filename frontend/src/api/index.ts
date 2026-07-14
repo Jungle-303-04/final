@@ -71,6 +71,18 @@ export {
   type RelationTopologyEndpoint,
 } from "./relation-topology-schemas";
 export {
+  CHANGE_TIMELINE_PATH,
+  getChangeTimeline,
+  type ChangeTimelineQuery,
+} from "./change-timeline";
+export {
+  changeTimelineBucketSchema,
+  changeTimelineEventSchema,
+  changeTimelineGapSchema,
+  changeTimelineSchema,
+  type ChangeTimelineEndpoint,
+} from "./change-timeline-schemas";
+export {
   getResourceMetricsHistory,
   RESOURCE_METRICS_HISTORY_PATH,
   type ResourceMetricsHistoryQuery,
