@@ -1,4 +1,4 @@
-import { Pause, Play } from "lucide-react";
+import { ChevronDown, ChevronUp, Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { TimelineRange } from "../../features/filters/filterContract";
@@ -66,25 +66,12 @@ export function UnavailableTimeline({ loading = false }: { loading?: boolean }) 
   return (
     <div
       aria-describedby="resources-timeline-unavailable"
-      className="flex min-h-14 shrink-0 items-center gap-3 border-t bg-background/40 px-3 py-2"
+      className="flex min-h-10 shrink-0 items-center border-t bg-background/30 px-3 py-1.5"
+      data-expanded="false"
       data-slot="resources-time-scrubber"
       data-state={loading ? "loading" : "unavailable"}
     >
-      <Button aria-label={t("resources.timeline.play")} disabled size="icon-sm" type="button" variant="ghost">
-        <Play aria-hidden="true" />
-        <Pause aria-hidden="true" className="hidden" />
-      </Button>
-      <input
-        aria-label={t("resources.timeline.aria")}
-        className="h-2 min-w-0 flex-1 cursor-not-allowed accent-primary opacity-45"
-        disabled
-        max={100}
-        min={0}
-        readOnly
-        type="range"
-        value={100}
-      />
-      <span className="sr-only" id="resources-timeline-unavailable">
+      <span className="text-xs text-muted-foreground" id="resources-timeline-unavailable" role="status">
         {t(loading ? "resources.timeline.loading" : "resources.timeline.unavailable")}
       </span>
     </div>
@@ -102,6 +89,7 @@ export function TimelineStrip({
 }) {
   const { formatDate, t } = useI18n();
   const [dragging, setDragging] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const timeline = frame.phase === "ready" ? frame.data : null;
   const live = atMs === undefined;
@@ -138,36 +126,61 @@ export function TimelineStrip({
 
   return (
     <div
-      className="flex min-h-14 shrink-0 items-center gap-3 border-t bg-background/40 px-3 py-2"
+      className="shrink-0 border-t bg-background/30"
+      data-expanded={expanded ? "true" : "false"}
       data-slot="resources-time-scrubber"
       data-state={playing ? "playing" : live ? "live" : "past"}
     >
-      {!live ? (
-        <span className="shrink-0 rounded-full border bg-background/40 px-2.5 py-1 text-xs font-medium" role="status">
-          {t("resources.timeline.past", { time: formatTime(selectedMs) })}
+      <div className="flex min-h-10 items-center gap-2 px-3 py-1.5">
+        <span className="shrink-0 text-xs font-medium" role="status">
+          {live
+            ? t("resources.timeline.live")
+            : t("resources.timeline.past", { time: formatTime(selectedMs) })}
         </span>
-      ) : null}
-      {selectedInGap ? (
-        <span className="shrink-0 rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground" role="status">
-          {t("resources.timeline.noSnapshot")}
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {t("resources.timeline.recorded", {
+            interval: timelineIntervalLabel(timeline.bucketMs, t),
+          })}
         </span>
-      ) : null}
         <Button
-          aria-label={t(playing ? "resources.timeline.pause" : "resources.timeline.play")}
+          aria-expanded={expanded}
+          aria-label={t(expanded ? "resources.timeline.collapse" : "resources.timeline.expand")}
           onClick={() => {
-            if (playing) {
-              setPlaying(false);
-              return;
-            }
-            if (live) onAtChange(timelinePlaybackStart(timeline));
-            setPlaying(true);
+            setExpanded((current) => !current);
+            if (expanded) setPlaying(false);
           }}
-          size="icon-sm"
+          size="sm"
           type="button"
           variant="ghost"
         >
-          {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+          {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+          {t(expanded ? "resources.timeline.collapse" : "resources.timeline.expand")}
         </Button>
+      </div>
+      {expanded ? (
+        <div className="flex min-h-12 items-center gap-2 border-t bg-background/20 px-3 py-1.5">
+          {selectedInGap ? (
+            <span className="shrink-0 rounded-full border bg-muted px-2 py-1 text-xs text-muted-foreground" role="status">
+              {t("resources.timeline.noSnapshot")}
+            </span>
+          ) : null}
+          {!live ? (
+            <Button
+              aria-label={t(playing ? "resources.timeline.pause" : "resources.timeline.play")}
+              onClick={() => {
+                if (playing) {
+                  setPlaying(false);
+                  return;
+                }
+                setPlaying(true);
+              }}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            </Button>
+          ) : null}
         <div className="relative h-8 min-w-0 flex-1">
           <svg aria-hidden="true" className="absolute inset-0 size-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 32">
             {timeline.buckets.map((bucket) => {
@@ -239,8 +252,23 @@ export function TimelineStrip({
             value={selectedMs}
           />
         </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function timelineIntervalLabel(
+  bucketMs: number,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const seconds = Math.max(1, Math.round(bucketMs / 1_000));
+  if (seconds < 60) {
+    return t("resources.timeline.interval.seconds", { count: seconds });
+  }
+  return t("resources.timeline.interval.minutes", {
+    count: Math.max(1, Math.round(seconds / 60)),
+  });
 }
 
 const TIMELINE_RANGES: readonly TimelineRange[] = ["15m", "1h", "6h", "24h"];
