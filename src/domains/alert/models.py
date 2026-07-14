@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, Float, Index, Integer, Text, text
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,5 +68,66 @@ class AlertRule(Base):
         nullable=False,
         server_default=text("0"),
     )
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class AlertRuleTargetState(Base):
+    """규칙·대상별 지속 조건과 활성 사건 상태."""
+
+    __tablename__ = "alert_rule_target_states"
+    __table_args__ = (
+        Index("ix_alert_rule_target_states_workspace_rule", "workspace_id", "rule_id"),
+    )
+
+    rule_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("alert_rules.rule_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    subject_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
+    subject: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    condition_since: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    active_event_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_observed_value: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    last_evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    last_evaluated_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class AlertEvent(Base):
+    """울린 뒤 해소돼도 남는 알림 사건 원장."""
+
+    __tablename__ = "alert_events"
+    __table_args__ = (
+        Index("ix_alert_events_workspace_fired", "workspace_id", "fired_at"),
+        Index("ix_alert_events_workspace_status", "workspace_id", "status"),
+        Index(
+            "uq_alert_events_active_subject",
+            "rule_id",
+            "subject_key",
+            unique=True,
+            postgresql_where=text("status in ('firing', 'acked')"),
+        ),
+    )
+
+    event_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
+    # 규칙이 삭제돼도 이미 발생한 사건은 감사/알림 이력으로 남긴다.
+    rule_id: Mapped[str] = text_column()
+    rule_name: Mapped[str] = text_column()
+    source: Mapped[str] = text_column()
+    severity: Mapped[str] = text_column()
+    subject_key: Mapped[str] = text_column()
+    subject: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    fired_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    resolved_at: Mapped[Any | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    status: Mapped[str] = text_column()
+    observed_value: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    threshold: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    incident_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
