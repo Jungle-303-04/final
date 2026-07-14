@@ -42,6 +42,45 @@ describe("physical topology API", () => {
     await expect(getPhysicalTopology({ clusters: ["cluster-a"] }))
       .rejects.toMatchObject({ kind: "invalid-payload" });
   });
+
+  it("backfills new capacity fields when an older backend response omits them", async () => {
+    const legacyServer: Record<string, unknown> = { ...PHYSICAL_TOPOLOGY_ENDPOINT.servers[0] };
+    const legacyPod: Record<string, unknown> = { ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0] };
+    [
+      "cpu_mcores",
+      "mem_mib",
+      "allocatable_cpu_mcores",
+      "allocatable_mem_mib",
+      "pod_capacity",
+    ].forEach((key) => delete legacyServer[key]);
+    [
+      "cpu_request_mcores",
+      "mem_request_mib",
+      "cpu_limit_mcores",
+      "mem_limit_mib",
+    ].forEach((key) => delete legacyPod[key]);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      ...PHYSICAL_TOPOLOGY_ENDPOINT,
+      servers: [legacyServer],
+      pods: [legacyPod],
+    }));
+
+    await expect(getPhysicalTopology({ clusters: ["cluster-a"] })).resolves.toMatchObject({
+      servers: [{
+        cpu_mcores: null,
+        mem_mib: null,
+        allocatable_cpu_mcores: null,
+        allocatable_mem_mib: null,
+        pod_capacity: null,
+      }],
+      pods: [{
+        cpu_request_mcores: null,
+        mem_request_mib: null,
+        cpu_limit_mcores: null,
+        mem_limit_mib: null,
+      }],
+    });
+  });
 });
 
 function jsonResponse(payload: unknown): Response {
