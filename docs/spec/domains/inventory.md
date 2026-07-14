@@ -37,6 +37,13 @@ status: synced
 결합한다. requests 근거가 없으면 `usage_pct=null`, metric이 없으면 CPU/MEM도 `null`이다.
 응답 DTO는 allowlist만 직렬화하여 inventory `summary/raw/annotations`와 secret을 노출하지 않는다.
 
+BQ-075 `GET /topology?view=relations&clusters=<single>`은 같은 workspace·구체 cluster/application
+권한·canonical filter·global/pinned snapshot cut을 재사용한다. 기존 evidence-backed graph의
+owner UID reference, node assignment, structured selector match, Endpoint의 service-name label만
+`{nodes:[{id,kind,name,status}],edges:[{from,to,type}]}`로 좁힌다. 이름이 비슷하다는 이유로 edge를
+합성하지 않으며 raw/summary/annotation은 반환하지 않는다. 요청한 snapshot cut이 없거나 아직
+snapshot이 하나도 없으면 관계와 빈 상태를 혼동하지 않도록 fail-closed한다.
+
 GAP-012/BQ-030 `GET /metrics/history?ids=...`는 `/resources`가 반환한 pod
 `inventory_key`를 최대 100개까지 서버에서 한 번에 처리한다. 같은 common filter와 session의
 cluster/application 권한, 같은 `snapshot_revision`의 교집합에서 모든 ID를 다시 확인하며 하나라도
@@ -46,6 +53,12 @@ cluster/application 권한, 같은 `snapshot_revision`의 교집합에서 모든
 `points=[]`/`has_sparkline_points=false`/`completeness=unavailable`이다. 단건 API를 브라우저에서
 fan-out하거나 0을 합성하지 않는다. BQ-055의 filtered/unfiltered count는 기존 `GET /resources`의
 `counts`가 snapshot/completeness와 함께 제공하므로 중복 count route를 만들지 않는다.
+
+BQ-061 `GET /capabilities?resource=<inventory_key>`는 세션 workspace 안에서 서버 발급 key를
+다시 조회한 뒤 `inventory.read`를 먼저 검증한다. Deployment action은 실제 gateway route와
+동일하게 `deploy.run`, target agent의 명시적 `command_receiver`, command catalog와 control
+namespace allowlist, management read-only 보호를 모두 통과할 때만 반환한다. 거부·미지원·대상에
+무의미한 action은 disabled decision으로 합성하지 않고 `capabilities`에서 제외한다.
 
 ## 의존성 (Dependencies)
 
@@ -155,6 +168,12 @@ fan-out하거나 0을 합성하지 않는다. BQ-055의 filtered/unfiltered coun
     def get_inventory_resource(self, *, workspace_id: str, cluster_id: str, resource_type: str, kind: str, name: str, namespace: str | None = None) -> JsonObject | None
     ```
     삭제되지 않은 단일 Kubernetes resource identity를 최신 `last_seen_at` 기준으로 조회한다. 드릴다운은 list 결과 추론 대신 이 row를 기준으로 이벤트/관계를 계산한다.
+  - `src/domains/inventory/repository.py :: InventoryRepository.get_inventory_resource_by_key`
+    ```python
+    def get_inventory_resource_by_key(self, *, workspace_id: str, inventory_key: str) -> JsonObject | None
+    ```
+    BQ-061 capability subject를 서버 발급 key로 다시 조회한다. `workspace_id`와
+    `deleted_at IS NULL`을 항상 함께 적용해 다른 workspace 또는 삭제된 row는 반환하지 않는다.
   - `src/domains/inventory/repository.py :: InventoryRepository.list_related_inventory_resources`
     ```python
     def list_related_inventory_resources(self, *, workspace_id: str, cluster_id: str, resource: JsonObject, limit: int = 100) -> dict[str, list[JsonObject]]
@@ -232,6 +251,7 @@ fan-out하거나 0을 합성하지 않는다. BQ-055의 filtered/unfiltered coun
 | POST `/agent/inventory/snapshots` (`AGENT_INVENTORY_SNAPSHOTS_PATH`) | `src/domains/inventory/router.py :: record_inventory_snapshot` | body: `InventorySnapshotRequest` | `InventorySnapshotResponse` | `require_cluster_agent` (x-agent-token, 401 fail-closed) + `get_db` + `get_events` |
 | GET `/clusters/{cluster_id}/inventory/resources` (`CLUSTER_INVENTORY_RESOURCES_PATH`) | `src/domains/inventory/router.py :: list_inventory_resources` | query: `resource_type: str \| None`, `namespace: str \| None`, `include_deleted: bool = False`, `limit: int = Query(200, ge=1, le=1000)` | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/resource-detail` (`CLUSTER_INVENTORY_RESOURCE_DETAIL_PATH`) | `src/domains/inventory/router.py :: get_inventory_resource_detail` | query: `resource_type`, `kind`, `name`, `namespace?`, `related_limit: 1..1000`, `event_limit: 1..200` | `InventoryResourceDetailResponse(resource, related, events)`; 없으면 404 | `require_session` + `Permission.INVENTORY_READ` |
+| GET `/capabilities` (`RESOURCE_CAPABILITIES_PATH`) | `src/domains/inventory/router.py :: get_resource_capabilities` | query: `resource` = 서버 발급 `inventory_key` | exact subject, opaque revision, 실행 가능한 `deployment.restart`/`deployment.scale`만 담은 `ResourceCapabilitiesResponse`; 없으면 404 | `require_session` + `Permission.INVENTORY_READ`; action별 `Permission.DEPLOY_RUN`·agent support·safety policy fail-closed |
 | GET `/clusters/{cluster_id}/inventory/workloads` (`CLUSTER_INVENTORY_WORKLOADS_PATH`) | `src/domains/inventory/router.py :: list_inventory_workloads` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/services` (`CLUSTER_INVENTORY_SERVICES_PATH`) | `src/domains/inventory/router.py :: list_inventory_services` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
 | GET `/clusters/{cluster_id}/inventory/events` (`CLUSTER_INVENTORY_EVENTS_PATH`) | `src/domains/inventory/router.py :: list_inventory_events` | query: `namespace`, `limit` (동일 제약) | `InventoryResourceListResponse` | `require_session` + `Permission.INVENTORY_READ` |
@@ -358,6 +378,8 @@ fan-out하거나 0을 합성하지 않는다. BQ-055의 filtered/unfiltered coun
 1. `require_session`으로 세션 확인(401), `workspace_id`는 세션 객체에서 획득.
 2. `require_inventory_access` → `require_cluster_access(..., Permission.INVENTORY_READ.value)` (거부 시 403).
 3. repository 조회 → 타임스탬프를 ISO 문자열로 직렬화해 응답 모델로 반환.
+4. capability 조회는 workspace-scoped key lookup 뒤 동일 read guard를 적용하며, 실제 action
+   endpoint의 인가·agent support·네임스페이스·management 조건의 교집합만 반환한다.
 
 ## 불변식·오류 (Invariants & Errors)
 
@@ -367,6 +389,8 @@ fan-out하거나 0을 합성하지 않는다. BQ-055의 filtered/unfiltered coun
 - **replace 범위 한정**: soft delete는 이번 스냅샷에 등장한 `resource_type` 집합 안에서만 수행된다 — 부분 스냅샷이 다른 타입의 리소스를 삭제 처리하지 못한다.
 - **`first_seen_at` 불변**: upsert 갱신 컬럼에 포함되지 않아 최초 관측 시각이 보존된다.
 - **usage는 append-only**: `cluster_usage_samples`는 갱신 없이 INSERT만 한다(시계열).
+- **capability fail-closed**: 권한·에이전트 지원·정책 중 하나라도 확인되지 않으면 action을
+  반환하지 않는다. provider/role 이름이나 UI 추측으로 action을 추가하지 않는다.
 - **limit clamp**: repository는 `max(1, min(limit, 1000))`, 라우터는 `Query(ge=1, le=1000)`로 이중 방어.
 - **원자성**: 스냅샷 INSERT + 리소스 upsert + usage INSERT + soft delete + 이벤트 발행이 `unit_of_work_or_null` 단위로 묶인다(영속 실패 시 이벤트 미발행).
 - 오류:

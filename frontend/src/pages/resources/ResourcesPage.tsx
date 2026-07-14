@@ -6,13 +6,19 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
+import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceActionsPort,
+  ResourceCapabilitiesPort,
+} from "../../features/resources/resourceCapabilitiesContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { ResourceDetailSheet } from "./ResourceDetailSheet";
+import { ResourceDetailWorkspace } from "./ResourceDetailWorkspace";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 import {
   ResourcesCatalogLoadingPreview,
@@ -32,16 +38,30 @@ import { useResourcesPageState } from "./useResourcesPageState";
 import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
 import { ResourcesListSurface } from "./ResourcesListSurface";
 import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
+import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
+import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
+import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
+import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
+import { useResourceTypeShortcuts } from "./useResourceTypeShortcuts";
+import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
+  relationTopologyPort,
+  changeTimelinePort,
   resourceMetricsHistoryPort,
+  resourceCapabilitiesPort,
+  resourceActionsPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
+  relationTopologyPort: RelationTopologyPort;
+  changeTimelinePort: ChangeTimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
+  resourceCapabilitiesPort: ResourceCapabilitiesPort;
+  resourceActionsPort: ResourceActionsPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -49,6 +69,7 @@ export function ResourcesPage({
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
   const state = useResourcesPageState(port);
+  const topology = useResourceTopologyViewController();
   const authorityKey = session
     ? `${session.workspaceId}:${session.userId}`
     : "anonymous";
@@ -58,6 +79,26 @@ export function ResourcesPage({
       filter.state.common.clusters.length === 1,
     filterState: filter.state,
     port: physicalTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const relationTopology = useRelationTopologyDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    filterState: filter.state,
+    port: relationTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const changeTimeline = useChangeTimelineDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    authorityKey,
+    filterState: filter.state,
+    port: changeTimelinePort,
+    range: filter.detail.timeRange ?? "1h",
     reportUnauthorized,
     revision: state.revision,
   });
@@ -96,6 +137,26 @@ export function ResourcesPage({
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
   });
+  const detailResourceId = state.detail.phase === "ready"
+    ? state.detail.data.resource.inventoryKey
+    : null;
+  const resourceCapabilities = useResourceCapabilitiesDataFrame({
+    active: state.detailRequested && detailResourceId !== null,
+    authorityKey,
+    port: resourceCapabilitiesPort,
+    reportUnauthorized,
+    resourceId: detailResourceId,
+  });
+  const detailNavigationItems = useMemo(
+    () => (filteredPage?.items ?? []).map((item) => item.resource),
+    [filteredPage],
+  );
+  useResourceDetailNavigation({
+    active: state.detailRequested,
+    current: state.detailIdentity,
+    items: detailNavigationItems,
+    onNavigate: state.navigateDetail,
+  });
   const resourcesView = state.view;
   const setResourcesView = state.setView;
   useResourceTypeShortcuts(state.cycleResourceType);
@@ -111,6 +172,19 @@ export function ResourcesPage({
         failure={state.choices.failure}
         onRetry={state.refresh}
         retryWaitSeconds={state.retryWaitSeconds}
+      />
+    );
+  }
+  if (state.detailRequested) {
+    return (
+      <ResourceDetailWorkspace
+        detail={state.detail}
+        identity={state.detailIdentity}
+        actionsPort={resourceActionsPort}
+        capabilities={resourceCapabilities}
+        onClose={state.closeDetail}
+        onTabChange={state.setDetailTab}
+        tab={state.detailTab}
       />
     );
   }
@@ -205,49 +279,16 @@ export function ResourcesPage({
                   : null
               }
               physicalTopology={physicalTopology}
+              relationTopology={relationTopology}
+              timelineFrame={changeTimeline}
+              topologyPinned={topology.pinned}
+              topologyView={topology.view}
+              onTopologyViewChange={topology.pin}
               state={state}
             />
           </div>
         </>
       )}
-
-      <ResourceDetailSheet
-        detail={state.detail}
-        full={state.fullDetail}
-        identity={state.detailIdentity}
-        onClose={state.closeDetail}
-        onTabChange={state.setDetailTab}
-        open={state.detailRequested}
-        tab={state.detailTab}
-      />
     </ProductPageFrame>
-  );
-}
-
-function useResourceTypeShortcuts(cycle: (direction: -1 | 1) => void) {
-  useEffect(() => {
-    const keydown = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        isEditingTarget(event.target) ||
-        document.querySelector('[role="dialog"]')
-      )
-        return;
-      if (event.key !== "[" && event.key !== "]") return;
-      event.preventDefault();
-      cycle(event.key === "]" ? 1 : -1);
-    };
-    document.addEventListener("keydown", keydown);
-    return () => document.removeEventListener("keydown", keydown);
-  }, [cycle]);
-}
-
-function isEditingTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    target.matches("input, textarea, select, [contenteditable=true]")
   );
 }

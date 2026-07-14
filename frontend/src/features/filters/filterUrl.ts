@@ -65,6 +65,12 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "detail-close":
     case "detail-expand":
     case "detail-tab":
+    case "topology-view-reset":
+      return "replace";
+    case "topology-view":
+    case "time-range":
+      return "push";
+    case "time-at":
       return "replace";
   }
 }

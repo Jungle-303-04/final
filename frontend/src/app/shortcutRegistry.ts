@@ -3,6 +3,7 @@ import {
   type ProductSurfaceId,
 } from "./productRoutes";
 import type { MessageKey, TranslationParameters } from "../shared/i18n";
+import { resourcesShortcutDefinitions } from "./resourcesShortcutDefinitions";
 
 export type ShortcutGroup = "navigation" | "global" | "context";
 
@@ -13,7 +14,8 @@ export type ProductContextShortcutId =
   | "resources:previous-row"
   | "resources:first-row"
   | "resources:last-row"
-  | "resources:open-row";
+  | "resources:open-row"
+  | "resources:open-logs";
 
 export interface ProductShortcutEventDetail {
   id: ProductContextShortcutId;
@@ -95,39 +97,6 @@ export function shellShortcutDefinitions(
     },
   ];
 }
-
-const resourcesShortcutDefinitions: readonly ShortcutDefinition[] = [
-  {
-    id: "resources:next-row",
-    labelKey: "shell.shortcut.resources.nextRow",
-    group: "context",
-    sequence: ["j"],
-  },
-  {
-    id: "resources:previous-row",
-    labelKey: "shell.shortcut.resources.previousRow",
-    group: "context",
-    sequence: ["k"],
-  },
-  {
-    id: "resources:first-row",
-    labelKey: "shell.shortcut.resources.firstRow",
-    group: "context",
-    sequence: ["g", "g"],
-  },
-  {
-    id: "resources:last-row",
-    labelKey: "shell.shortcut.resources.lastRow",
-    group: "context",
-    sequence: ["shift+g"],
-  },
-  {
-    id: "resources:open-row",
-    labelKey: "shell.shortcut.resources.openRow",
-    group: "context",
-    sequence: ["d"],
-  },
-];
 
 const productContextShortcutIds = new Set<ProductContextShortcutId>(
   resourcesShortcutDefinitions.map(({ id }) => id as ProductContextShortcutId),

@@ -29,7 +29,6 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarText,
-  SidebarTrigger,
   useSidebar,
 } from "../shared/ui/primitives/sidebar";
 import { TooltipProvider } from "../shared/ui/primitives/tooltip";
@@ -52,12 +51,25 @@ import {
 } from "./productRoutes";
 import { shellShortcutDefinitions } from "./shortcutRegistry";
 import { useProductShortcuts } from "./useProductShortcuts";
+import {
+  EMPTY_AI_ASSISTANT_PORT,
+  type AiAssistantPort,
+} from "../features/ai-assistant/aiAssistantContract";
+import { Toaster, toast } from "../shared/ui/primitives/sonner";
+import { AiAssistantPanel } from "./AiAssistantPanel";
+import { createAiAssistantContext } from "./aiAssistantContext";
+import { ProductSidebarTrigger, useDetailSidebarRail } from "./ProductShellSidebar";
+import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
+import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
+import { BottomDock } from "./BottomDock";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
   defaultSidebarCollapsed?: boolean;
   globalFilterPort?: GlobalFilterPort;
+  aiAssistantPort?: AiAssistantPort;
+  logStreamPort?: LogStreamPort;
 }
 
 const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
@@ -87,16 +99,21 @@ export function ProductShell({
   releasedSurfaceIds,
   defaultSidebarCollapsed,
   globalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
+  aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
+  logStreamPort = EMPTY_LOG_STREAM_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-          <ProductShellFrame
-            auth={auth}
-            globalFilterPort={globalFilterPort}
-            releasedSurfaceIds={releasedSurfaceIds}
-          />
+          <BottomDockProvider port={logStreamPort}>
+            <ProductShellFrame
+              auth={auth}
+              aiAssistantPort={aiAssistantPort}
+              globalFilterPort={globalFilterPort}
+              releasedSurfaceIds={releasedSurfaceIds}
+            />
+          </BottomDockProvider>
         </SidebarProvider>
       </TooltipProvider>
     </ProductSessionProvider>
@@ -104,14 +121,17 @@ export function ProductShell({
 }
 
 function ProductShellFrame({
+  aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   auth,
   releasedSurfaceIds,
   globalFilterPort,
-}: Pick<ProductShellProps, "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
+}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [isAiOpen, setAiOpen] = useState(false);
   const location = useLocation();
   const filter = useUnifiedFilter();
-  const { isMobile } = useSidebar();
+  const dock = useBottomDock();
+  const { isMobile, open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
@@ -120,6 +140,23 @@ function ProductShellFrame({
     ? matchedRoute
     : navigationRoutes[0];
   const activeSurfaceId = currentRoute?.id;
+  const detailWorkspaceOpen = activeSurfaceId === "resources" && (
+    filter.detail.detail !== null ||
+    filter.detail.resource !== null ||
+    filter.detail.resourceKind !== null
+  );
+  const aiContext = createAiAssistantContext(
+    activeSurfaceId ?? "home",
+    filter.state,
+    filter.detail,
+    dock.activeStreamId,
+  );
+  useDetailSidebarRail(
+    detailWorkspaceOpen,
+    isMobile,
+    sidebarOpen,
+    setSidebarOpen,
+  );
   const shortcutDefinitions = shellShortcutDefinitions(releasedSurfaceIds, activeSurfaceId);
   const toggleShortcutHelp = useCallback(() => {
     setShortcutHelpOpen((value) => !value);
@@ -134,6 +171,20 @@ function ProductShellFrame({
     throw new Error("ProductShell requires at least one released surface");
   }
   const currentRouteLabel = t(navLabelKeys[currentRoute.id]);
+  const changeAiOpen = (next: boolean) => {
+    if (next && detailWorkspaceOpen && isNarrowAiViewport()) {
+      filter.updateDetail(() => ({
+        detail: null,
+        resource: null,
+        resourceKind: null,
+        tab: null,
+        full: false,
+        node: null,
+      }), "detail-close");
+      toast.info(t("shell.ai.narrowDetailClosed"));
+    }
+    setAiOpen(next);
+  };
 
   return (
     <>
@@ -195,7 +246,9 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
+            {detailWorkspaceOpen
+              ? null
+              : <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />}
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <AuthSessionControl auth={auth} mode="toolbar" />
@@ -209,34 +262,30 @@ function ProductShellFrame({
           </div>
         </header>
 
-        <main
-          className="min-h-0 min-w-0 flex-1"
-          id="product-main"
-          tabIndex={-1}
-        >
-          <Outlet />
-        </main>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <main
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+              id="product-main"
+              tabIndex={-1}
+            >
+              <Outlet />
+            </main>
+            <AiAssistantPanel
+              context={aiContext}
+              onOpenChange={changeAiOpen}
+              open={isAiOpen}
+              port={aiAssistantPort}
+            />
+          </div>
+          <BottomDock onAskAi={() => changeAiOpen(true)} />
+        </div>
       </SidebarInset>
+      <Toaster />
     </>
   );
 }
 
-function ProductSidebarTrigger({
-  labelMode = "responsive",
-}: {
-  labelMode?: "responsive" | "sr-only";
-}) {
-  const { t } = useI18n();
-  return (
-    <SidebarTrigger
-      collapseLabel={t("shell.sidebar.collapse")}
-      controls="product-primary-navigation"
-      expandLabel={t("shell.sidebar.expand")}
-      labelMode={labelMode}
-      mobileCloseLabel={t("shell.menu.mobileClose")}
-      mobileOpenLabel={t("shell.menu.mobileOpen")}
-      size={labelMode === "sr-only" ? "icon-sm" : "default"}
-      variant="ghost"
-    />
-  );
+function isNarrowAiViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 895px)").matches;
 }

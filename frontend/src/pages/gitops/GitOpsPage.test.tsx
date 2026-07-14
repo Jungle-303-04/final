@@ -1,20 +1,16 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
-import type {
-  GeneratedManifest,
-  GitOpsPort,
-  ReleaseApplication,
-  ReleasePlan,
-  ReleaseReadiness,
-} from "../../features/gitops/gitOpsContract";
-import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
-import { I18nProvider } from "../../shared/i18n";
-import { GitOpsPage } from "./GitOpsPage";
-import { installWorkflowGraphDomStubs } from "./GitOpsPage.testSupport";
+import {
+  blockedManifest,
+  blockedReadiness,
+  gitOpsPort,
+  installWorkflowGraphDomStubs,
+  plan,
+  renderGitOps,
+} from "./GitOpsPage.testSupport";
 
 beforeEach(() => {
   installWorkflowGraphDomStubs();
@@ -34,6 +30,43 @@ afterEach(() => {
 });
 
 describe("GitOpsPage workspace navigation", () => {
+  it("starts with plan blocks and opens the selected plan overview", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops");
+
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Alpha release" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Bravo release" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New plan" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Workflow workspace" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Open Bravo release" }));
+
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-b&view=overview"));
+    expect(await screen.findByRole("navigation", { name: "Workflow workspace" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Plan list" }));
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent).toBe("/gitops"));
+    expect(await screen.findByRole("button", { name: "Open Alpha release" })).toBeTruthy();
+  });
+
+  it("keeps the new-plan block as the empty list entry point", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    vi.mocked(port.listPlans).mockResolvedValue([]);
+    renderGitOps("/gitops", port);
+
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New plan" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Open / })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "New plan" }));
+
+    expect(await screen.findByRole("heading", { name: "Create release plan" })).toBeTruthy();
+  });
+
   it("keeps one canonical tab row and changes the selected plan in place", async () => {
     const user = userEvent.setup();
     renderGitOps("/gitops?plan=plan-a&view=edit");
@@ -65,6 +98,7 @@ describe("GitOpsPage workspace navigation", () => {
     const user = userEvent.setup();
     renderGitOps("/gitops?plan=plan-a&view=edit");
     await screen.findByRole("navigation", { name: "Workflow workspace" });
+    expect(screen.queryByRole("button", { name: "New plan" })).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "YAML / PR" }));
     await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
@@ -73,6 +107,7 @@ describe("GitOpsPage workspace navigation", () => {
     expect(within(workspaceHeader).getByRole("heading", { name: "YAML / PR" })).toBeTruthy();
     expect(within(workspaceHeader).getByRole("button", { name: "Generate YAML" })).toBeTruthy();
 
+    await user.click(screen.getByRole("button", { name: "Plan list" }));
     await user.click(screen.getByRole("button", { name: "New plan" }));
 
     expect(await screen.findByRole("heading", { name: "Create release plan" })).toBeTruthy();
@@ -90,6 +125,8 @@ describe("GitOpsPage workspace navigation", () => {
 
     const workspaceHeader = await screen.findByTestId("workflow-workspace-header");
     expect(within(workspaceHeader).getByRole("heading", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByLabelText("Release workflow graph").classList.contains("hidden")).toBe(false);
+    expect(screen.queryByRole("heading", { name: "Release order" })).toBeNull();
     const requiredFields = within(workspaceHeader).getByRole("button", { name: "2 required fields" });
 
     await user.click(requiredFields);
@@ -148,149 +185,3 @@ describe("GitOpsPage workspace navigation", () => {
     expect(screen.queryByText(/apiVersion: apps\/v1/)).toBeNull();
   });
 });
-
-function renderGitOps(initialEntry: string, port: GitOpsPort = gitOpsPort()) {
-  const router = createMemoryRouter([{
-    path: "/gitops/*",
-    element: (
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <UnifiedFilterProvider>
-          <GitOpsPage port={port} />
-          <LocationProbe />
-        </UnifiedFilterProvider>
-      </I18nProvider>
-    ),
-  }], { initialEntries: [initialEntry] });
-  return { ...render(<RouterProvider router={router} />), port, router };
-}
-
-function LocationProbe() {
-  const location = useLocation();
-  return <span data-testid="gitops-location">{location.pathname}{location.search}</span>;
-}
-
-function gitOpsPort(): GitOpsPort {
-  return {
-    listApplications: vi.fn().mockResolvedValue(applications),
-    listPlans: vi.fn().mockResolvedValue([
-      plan("plan-a", "Alpha release", "checkout-api"),
-      plan("plan-b", "Bravo release", "payments-worker"),
-    ]),
-    listRuns: vi.fn().mockResolvedValue([]),
-    savePlan: vi.fn(async (value) => value),
-    previewPlan: vi.fn().mockRejectedValue(new Error("not used")),
-    checkReadiness: vi.fn().mockRejectedValue(new Error("not used")),
-    startPlan: vi.fn().mockRejectedValue(new Error("not used")),
-    renderManifest: vi.fn().mockRejectedValue(new Error("not used")),
-    submitSafePr: vi.fn().mockRejectedValue(new Error("not used")),
-    runAction: vi.fn().mockRejectedValue(new Error("not used")),
-  };
-}
-
-function blockedReadiness(): ReleaseReadiness {
-  const blockers = [
-    "checkout-api is missing commit_sha",
-    "checkout-api is missing image",
-  ];
-  return {
-    ready: false,
-    mode: "review",
-    summary: "2 blockers must be resolved",
-    checks: [{
-      check_id: "plan.required_inputs",
-      name: "Required release inputs",
-      status: "blocked",
-      message: "Release input validation failed",
-      blockers,
-    }],
-    impact: {
-      summary: "1 step in 1 wave",
-      runtime_mode: "review",
-      live_side_effects: false,
-      total_steps: 1,
-      total_waves: 1,
-      first_wave: 1,
-      applications: ["checkout-api"],
-      environments: ["production"],
-      production_targets: ["checkout-api"],
-      production_target_count: 1,
-      first_wave_steps: [],
-    },
-    next_actions: [],
-    blockers,
-    warnings: [],
-  };
-}
-
-function blockedManifest(): GeneratedManifest {
-  return {
-    manifest: "apiVersion: apps/v1\nkind: Deployment\n",
-    files: [{
-      path: "deploy/checkout.yaml",
-      content: "apiVersion: apps/v1",
-      action: "upsert",
-      description: "Generated manifest",
-    }],
-    resources: [{
-      api_version: "apps/v1",
-      kind: "Deployment",
-      namespace: "default",
-      name: "checkout-api",
-    }],
-    resource_count: 1,
-    diagnostics: [{
-      source: "manifest",
-      severity: "error",
-      message: "image is required",
-      code: "manifest.image_required",
-      line: 1,
-      column: 1,
-      end_line: 1,
-      end_column: 1,
-      path: "config.image",
-    }],
-    warnings: [],
-    summary: "Manifest generated with one blocker",
-  };
-}
-
-const applications: ReleaseApplication[] = [{
-  id: "checkout-api",
-  name: "Checkout API",
-  repository: "team/checkout-api",
-  branch: "main",
-  clusterId: "production-with-a-long-cluster-name",
-  manifestPath: "deploy/checkout/production/deployment.yaml",
-}, {
-  id: "payments-worker",
-  name: "Payments Worker",
-  repository: "team/payments-worker",
-  branch: "release/2026-07",
-  clusterId: "staging-east",
-  manifestPath: "deploy/payments/worker.yaml",
-}];
-
-function plan(planId: string, name: string, applicationId: string): ReleasePlan {
-  const application = applications.find((item) => item.id === applicationId)!;
-  return {
-    plan_id: planId,
-    name,
-    description: `${name} description`,
-    status: "draft",
-    settings: { approval_policy: "manual_each_step", runtime_mode: "review" },
-    steps: [{
-      step_id: `${planId}-step-1`,
-      application_id: applicationId,
-      name: application.name,
-      position: 0,
-      depends_on: [],
-      config: {
-        environment: "production",
-        strategy: "rolling",
-        cluster_id: application.clusterId,
-        namespace: "default",
-        approval_gate: "inherit",
-      },
-    }],
-  };
-}

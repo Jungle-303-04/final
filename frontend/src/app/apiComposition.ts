@@ -10,6 +10,9 @@ import {
   getNodePodsSummary,
   getClusterConnectStatus,
   getPhysicalTopology,
+  getRelationTopology,
+  getChangeTimeline,
+  getResourceCapabilities,
   getResourceMetricsHistory,
   getSession,
   listEvidence,
@@ -22,17 +25,26 @@ import {
   listResourceFilterFacets,
   listResourceLabelFacets,
   connectCluster,
-  listApplicationDeployments,
-  listApplicationRuns,
-  listApplications,
+  getApplicationDrift,
+  getApplicationOverview,
+  listApplicationCatalog,
+  listApplicationDeploymentHistory,
   login,
   logout,
+  restartDeployment,
+  scaleDeployment,
   selectRecoveryAction,
   createReleaseFlowClient,
+  getAiSuggestions,
+  postAiChat,
+  openPodLogStream,
+  openWorkloadLogStream,
 } from "../api";
+import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
+import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
-import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
-import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
+import { createApplicationsAdapter } from "../features/applications/createApplicationsAdapter";
+import { createApplicationsSurface } from "../features/applications/createApplicationsSurface";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createClustersAdapter } from "../features/clusters/createClustersAdapter";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
@@ -41,7 +53,11 @@ import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
 import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
 import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
+import { createRelationTopologyAdapter } from "../features/resources/createRelationTopologyAdapter";
+import { createChangeTimelineAdapter } from "../features/resources/createChangeTimelineAdapter";
 import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
+import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
+import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -69,8 +85,17 @@ export function createApiComposition() {
     listResourceLabelFacets,
   });
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
+  const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
+  const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
     getResourceMetricsHistory,
+  });
+  const resourceCapabilitiesPort = createResourceCapabilitiesAdapter({
+    getResourceCapabilities,
+  });
+  const resourceActionsPort = createResourceActionsAdapter({
+    restartDeployment,
+    scaleDeployment,
   });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
@@ -82,12 +107,15 @@ export function createApiComposition() {
     listRcaTimeline,
     selectRecoveryAction,
   });
-  const applicationsGitOpsPort = createApplicationsGitOpsAdapter({
-    listApplicationDeployments,
-    listApplicationRuns,
-    listApplications,
+  const applicationsPort = createApplicationsAdapter({
+    getApplicationDrift,
+    getApplicationOverview,
+    listApplicationCatalog,
+    listApplicationDeploymentHistory,
   });
   const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
+  const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
+  const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   return createProductComposition([
     {
       id: "clusters",
@@ -103,7 +131,11 @@ export function createApiComposition() {
         resourcesPort,
         resourcesFilterPort,
         physicalTopologyPort,
+        relationTopologyPort,
+        changeTimelinePort,
         resourceMetricsHistoryPort,
+        resourceCapabilitiesPort,
+        resourceActionsPort,
       ),
     },
     {
@@ -112,7 +144,7 @@ export function createApiComposition() {
     },
     {
       id: "applications",
-      Component: createApplicationsSurface(applicationsGitOpsPort),
+      Component: createApplicationsSurface(applicationsPort),
     },
     {
       id: "gitops",
@@ -122,5 +154,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort, globalFilterPort);
+  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort);
 }

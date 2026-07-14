@@ -5,13 +5,14 @@ status: synced
 
 # ai — AI 대화 도메인 (대화/메시지 read model, 대화 이벤트 계약, LLM 도구·프롬프트)
 
-> 소스: `src/domains/ai/` · 테스트: `tests/test_ai_conversation.py`, `tests/test_ai_platform_tools.py`, `tests/test_ai_chat_hardening.py`
+> 소스: `src/domains/ai/` · 테스트: `tests/test_ai_conversation.py`, `tests/test_ai_platform_tools.py`, `tests/test_ai_chat_hardening.py`, `tests/test_ai_context_facade.py`
 
 ## 책임 (Responsibility)
 
 - AI 대화(`ai_conversations`)와 대화 메시지(`ai_conversation_messages`) read model 테이블 및 리포지토리를 소유한다.
 - 대화 이벤트 계약(`ai.message.received / responded / failed`)을 정의한다.
 - 대화 생성·메시지 추가·조회·삭제 HTTP API를 제공한다 (실제 LLM 응답 생성은 chat-worker 서비스 담당 — 이 도메인은 이벤트를 발행할 뿐 소비하지 않음).
+- 제품 셸에는 현재 화면 맥락에 묶인 동기 AI facade를 제공한다. 이 경로는 사용자가 읽을 수 있는 inventory 근거만 문장화하고, 근거가 없으면 정본 문구 `그 데이터가 없습니다.`로 닫는다.
 - LLM이 대화 중 호출 가능한 읽기 전용 플랫폼 조회 도구(`@ai.tool`)와, 로케일별 노출 텍스트 카탈로그, 시스템 프롬프트 빌더를 제공한다.
 - 하지 않는 것: LLM 호출 자체(엔진은 `packages/ai`), 이벤트 소비(워커 프로세스 담당).
 
@@ -23,7 +24,7 @@ status: synced
 | import | `packages.contracts` | [../packages/contracts.md](../packages/contracts.md) | 이벤트 body 베이스·`@event` 레지스트리·`EventSubject`, gateway routes/요청·응답 모델, `Actor`, `DEFAULT_WORKSPACE_ID` |
 | import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | FastAPI 의존성 `get_db`, `get_events` |
 | import | `packages.ai` | [../packages/ai.md](../packages/ai.md) | `ToolContext`, `ai`(ToolRegistry 데코레이터) |
-| import | `domains.identity` | [./identity.md](./identity.md) | `require_session` 세션 인증 |
+| import | `domains.identity` | [./identity.md](./identity.md) | `require_session` 세션 인증, `inventory.read` cluster 범위 물질화 |
 | import | `domains.command` | [./command.md](./command.md) | `registered_command_actions` (list_command_actions 도구) |
 | 발행 | `ai.message.received` | 아래 [이벤트](#이벤트-events) | 라우터에서 LLM 응답 요청 |
 | 정의 | `ai.message.responded`, `ai.message.failed` | 아래 [이벤트](#이벤트-events) | chat-worker가 발행하는 응답/실패 계약 |
@@ -198,10 +199,46 @@ status: synced
 | `GET /ai/conversations` (`AI_CONVERSATIONS_PATH`) | `list_conversations` — `src/domains/ai/router.py :: list_conversations` | — | `AiConversationListResponse` | `require_session` |
 | `GET /ai/conversations/{conversation_id}` (`AI_CONVERSATION_PATH`) | `get_conversation` — `src/domains/ai/router.py :: get_conversation` | — | `AiConversationResponse` | `require_session` |
 | `DELETE /ai/conversations/{conversation_id}` (`AI_CONVERSATION_PATH`) | `delete_conversation` — `src/domains/ai/router.py :: delete_conversation` | — | `204 Response` | `require_session` |
+| `POST /ai/chat` (`AI_CHAT_PATH`) | `chat_with_context` | `AiChatRequest` | `AiChatResponse` | `require_session` + `inventory.read` 범위 |
+| `GET /ai/suggestions?context=<JSON>` (`AI_SUGGESTIONS_PATH`) | `list_context_suggestions` | strict `AiAssistantContext` JSON | `AiSuggestionsResponse` | `require_session` |
+| `GET /ai/resources/{kind}` (`AI_RESOURCES_PATH`) | `list_context_resources` | allowlist kind + `cluster_id?`, `namespace?`, `limit<=100` | `list[AiResourceSummary]` | `require_session` + `inventory.read` 범위 |
+| `GET /ai/resources/{kind}/{namespace}/{name}` (`AI_RESOURCE_PATH`) | `get_context_resource` | allowlist kind + 필수 `cluster_id`; cluster-scoped namespace는 `_` | `AiResourceSummary` | `require_session` + `inventory.read` 범위 |
 
 요청·응답 모델은 `src/packages/contracts/gateway/requests.py` / `responses.py` 정의를 사용한다 ([contracts](../packages/contracts.md)).
 
 HTTP 라우터의 목록/조회/메시지 추가/삭제 경로는 repository 호출에 `user_id=current.user_id`를 넘긴다. 같은 workspace 안에서도 다른 사용자의 대화는 404 또는 목록 제외로 처리한다.
+
+#### 제품 AI facade 계약 (BQ-052/BQ-053/BQ-066)
+
+`AiAssistantContext`는 `extra="forbid"`이며 다음 정본 shape만 받는다.
+
+```json
+{
+  "screen": "resources",
+  "filters": {
+    "clusters": ["cluster-1"],
+    "namespaces": ["cluster-1/shop"],
+    "applications": [],
+    "labels": [],
+    "resource_types": ["pod"],
+    "health": [],
+    "query": "checkout"
+  },
+  "selection": {"type": "resource", "identity": "Pod/shop/checkout-api-0"},
+  "time": null,
+  "log_stream_id": null
+}
+```
+
+- `POST /ai/chat`은 위 context와 `message`를 받는다. 응답은 항상 `{answer, evidence:[{type,id,label,link}]}`이다. evidence가 비면 `answer`는 반드시 `그 데이터가 없습니다.`이다.
+- 동기 facade는 LLM의 추론 결과를 기다리거나 기존 비동기 conversation 응답을 근거 없이 재포장하지 않는다. 현재 권한 범위 inventory의 `status`와 `health`만 문장화한다.
+- `time`이 있으면 현재 projection으로 과거를 가장하지 않고 no-data로 닫는다. 선택 리소스가 없는데 application/label 필터가 있으면 그 축을 inventory 공개 필드로 검증할 수 없으므로 역시 닫는다.
+- AI resource kind allowlist는 `pods`, `deployments`, `statefulsets`, `daemonsets`, `workloads`, `services`, `nodes`, `namespaces`, `events`다. 임의 kind/CRD 조회는 422다.
+- `AiResourceSummary`는 `id`, `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `status`, `health`, `observed_at`, `link`만 노출한다. `raw`, labels, annotations, summary, uid/resourceVersion은 AI 경계에서 제외한다.
+- evidence/resource `link`는 제품 내부 `/...`만 허용한다. Resources 상세은 정본 `?detail=Kind/ns/name`을 사용하고 cluster-scoped namespace는 `~`로 직렬화한다. `//`, scheme, fragment, 공백·제어문자는 모델 검증에서 거부한다.
+- 명시한 `cluster_id`가 `inventory.read` 범위 밖이면 403이다. 목록/채팅의 묵시적 범위는 허용된 concrete cluster ID 집합으로만 조회하며 wildcard로 열지 않는다.
+- 선택적 `log_stream_id`는 raw line 대신 전달하는 opaque persisted command ID다. `/ai/chat`은 command의 workspace, 요청 사용자, protocol, cluster, exact target을 다시 검증하고 `inventory.read`와 `evidence.read`를 모두 확인한다. 권한/소유권/완료된 근거가 없으면 canonical no-data로 닫는다.
+- 로그 AI 근거는 첫 command의 workspace+correlation으로 최신 persisted batch를 최대 20개 조회하고, 동일 사용자·동일 논리 target인 completed Loki result에서 최신 evidence 최대 20개만 읽어 서버가 다시 redact/truncate한다. correlation 안에 다른 사용자/target/위조 correlation row가 섞이면 전체를 no-data로 닫는다. process-local stream cache나 브라우저가 보낸 raw line은 AI context로 사용하지 않는다. 응답 evidence type은 `log-stream`이고 내부 Resources 링크만 허용한다.
 
 ## 데이터 모델 (Data Model)
 

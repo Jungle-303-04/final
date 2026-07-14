@@ -12,7 +12,7 @@ get {
 script:post-response {
   const b = res.getBody();
   if (res.status === 200 && b && Array.isArray(b.applications) && b.applications.length) {
-    bru.setVar("application_id", b.applications[0].application_id);
+    bru.setVar("application_id", b.applications[0].id);
   }
 }
 
@@ -20,4 +20,36 @@ tests {
   test("200 or auth failure", function () {
     expect([200, 401, 403]).to.include(res.status);
   });
+
+  if (res.status === 200) {
+    test("strict application card contract", function () {
+      const body = res.getBody();
+      expect(body).to.have.all.keys("applications");
+      expect(body.applications).to.be.an("array");
+      body.applications.forEach((application) => {
+        expect(application).to.have.all.keys(
+          "id",
+          "name",
+          "environments",
+          "lifecycle_status",
+          "repository_ref",
+          "default_branch",
+          "manifest_path",
+          "health",
+          "current_deployment",
+          "has_drift",
+          "drift_summary",
+          "resource_counts",
+          "resource_counts_completeness",
+          "open_incidents"
+        );
+        expect(application.health).to.have.all.keys(
+          "status",
+          "ready_pods",
+          "total_pods",
+          "restarts"
+        );
+      });
+    });
+  }
 }

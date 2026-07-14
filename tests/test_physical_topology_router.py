@@ -169,7 +169,7 @@ def _client(db: PhysicalTopologyDb) -> TestClient:
     return TestClient(app)
 
 
-def test_physical_topology_requires_one_authorized_cluster_and_physical_view() -> None:
+def test_physical_topology_requires_one_authorized_cluster_and_known_view() -> None:
     db = PhysicalTopologyDb(clusters={"cluster-a", "cluster-b"})
     client = _client(db)
 
@@ -184,7 +184,7 @@ def test_physical_topology_requires_one_authorized_cluster_and_physical_view() -
     assert (
         client.get(
             "/topology",
-            params={"view": "relations", "clusters": "cluster-a"},
+            params={"view": "logical", "clusters": "cluster-a"},
         ).status_code
         == 422
     )

@@ -3,6 +3,7 @@ import type { IssuesMessageKey } from "./keys/issues";
 import type { MetricsMessageKey } from "./keys/metrics";
 import type { ResourcesMessageKey } from "./keys/resources";
 import type { WorkflowsMessageKey } from "./keys/workflows";
+import type { DockMessageKey } from "./keys/dock";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -101,6 +102,20 @@ type CoreMessageKey =
   | "shell.filter.group.resource"
   | "shell.filter.count.partial"
   | "shell.filter.count.unknown"
+  | "shell.ai.open"
+  | "shell.ai.close"
+  | "shell.ai.title"
+  | "shell.ai.description"
+  | "shell.ai.context"
+  | "shell.ai.placeholder"
+  | "shell.ai.send"
+  | "shell.ai.suggestions"
+  | "shell.ai.pending"
+  | "shell.ai.failed"
+  | "shell.ai.noEvidence"
+  | "shell.ai.evidence"
+  | "shell.ai.resize"
+  | "shell.ai.narrowDetailClosed"
   | "shell.shortcut.actionColumn"
   | "shell.shortcut.caption"
   | "shell.shortcut.dialogClose"
@@ -112,6 +127,7 @@ type CoreMessageKey =
   | "shell.shortcut.resources.lastRow"
   | "shell.shortcut.resources.nextRow"
   | "shell.shortcut.resources.openRow"
+  | "shell.shortcut.resources.openLogs"
   | "shell.shortcut.resources.previousRow"
   | "shell.shortcut.route.applications"
   | "shell.shortcut.route.clusters"
@@ -261,6 +277,7 @@ type CoreMessageKey =
 
 export type MessageKey =
   | CoreMessageKey
+  | DockMessageKey
   | ClustersMessageKey
   | IssuesMessageKey
   | MetricsMessageKey

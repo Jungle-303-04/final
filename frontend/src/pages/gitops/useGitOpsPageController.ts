@@ -30,7 +30,7 @@ export function useGitOpsPageController(port: GitOpsPort) {
   const view: WorkflowView = isWorkflowView(requestedView) ? requestedView : "overview";
   const creating = detail.workflowMode === "new";
   const data = useWorkflowData(port, requestedPlanId || undefined);
-  const selectedPlan = data.plans.find((plan) => plan.plan_id === requestedPlanId) || data.plans[0];
+  const selectedPlan = data.plans.find((plan) => plan.plan_id === requestedPlanId);
   const [draft, setDraft] = useState<ReleasePlan>();
   const [newPlan, setNewPlan] = useState(createEmptyPlan);
   const [selectedStepId, setSelectedStepId] = useState("");
@@ -46,14 +46,6 @@ export function useGitOpsPageController(port: GitOpsPort) {
     () => [...data.runs].sort((left, right) => String(right.created_at || "").localeCompare(String(left.created_at || "")))[0],
     [data.runs],
   );
-
-  useEffect(() => {
-    if (creating || data.loading || !selectedPlan?.plan_id || selectedPlan.plan_id === requestedPlanId) return;
-    updateDetail((current) => ({
-      ...current,
-      workflowPlan: selectedPlan.plan_id!,
-    }), "detail-tab");
-  }, [creating, data.loading, requestedPlanId, selectedPlan?.plan_id, updateDetail]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -99,6 +91,25 @@ export function useGitOpsPageController(port: GitOpsPort) {
       workflowPlan: planId,
       workflowView: view,
     }), "detail-open");
+  };
+
+  const openPlan = (planId: string) => {
+    if (!data.plans.some((plan) => plan.plan_id === planId)) return;
+    updateDetail((current) => ({
+      ...current,
+      workflowMode: null,
+      workflowPlan: planId,
+      workflowView: "overview",
+    }), "detail-open");
+  };
+
+  const showPlanList = () => {
+    updateDetail((current) => ({
+      ...current,
+      workflowMode: null,
+      workflowPlan: null,
+      workflowView: null,
+    }), "detail-close");
   };
 
   const beginCreate = () => {
@@ -199,7 +210,7 @@ export function useGitOpsPageController(port: GitOpsPort) {
     data, view, creating, selectedPlan, draft, setDraft, newPlan, setNewPlan,
     selectedStepId, setSelectedStepId, readiness, manifest, manifestStepIndex,
     safePr, safePrStepIndex, editorTarget, operation,
-    feedback, setFeedback, latestRun, setView, selectPlan, beginCreate, cancelCreate,
+    feedback, setFeedback, latestRun, setView, selectPlan, openPlan, showPlanList, beginCreate, cancelCreate,
     openEditor, saveDraft, createPlan, checkReadiness, startPlan, runAction,
     generateManifest, submitSafePr,
   };

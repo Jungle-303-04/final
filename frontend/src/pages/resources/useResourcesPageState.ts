@@ -63,6 +63,7 @@ export function useResourcesPageState(port: ResourcesPort) {
     detailIdentity,
     detailRequested,
     detailTarget,
+    navigateDetail,
     openDetail,
     registerRowButton,
   } = useResourcesDetailState(
@@ -162,7 +163,6 @@ export function useResourcesPageState(port: ResourcesPort) {
       namespace,
       includeDeleted,
       detailTab: filter.detail.tab ?? "overview",
-      fullDetail: filter.detail.full,
       automaticRefreshPaused,
       retryWaitSeconds: retryWaitSeconds(retryBlocks),
       recordListFailure(failure: ReturnType<typeof toResourcesFailure>) {
@@ -255,6 +255,7 @@ export function useResourcesPageState(port: ResourcesPort) {
         );
       },
       openDetail,
+      navigateDetail,
       closeDetail,
       registerRowButton,
     }),
@@ -267,6 +268,7 @@ export function useResourcesPageState(port: ResourcesPort) {
       frame,
       includeDeleted,
       namespace,
+      navigateDetail,
       openDetail,
       refresh,
       filter,

@@ -47,9 +47,9 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
 
     const timeline = screen.getByRole("slider", { name: "Time" });
-    expect(timeline.getAttribute("disabled")).not.toBeNull();
+    expect(timeline.getAttribute("disabled")).toBeNull();
     expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("unavailable");
+      ?.getAttribute("data-state")).toBe("live");
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ clusters: ["cluster-1"] }),
@@ -193,7 +193,7 @@ describe("ResourcesPage S4 physical topology", () => {
     }));
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
     expect(await within(dialog).findByText("Point-in-time evidence")).toBeTruthy();
-    expect(within(dialog).getAllByText("Unavailable")).toHaveLength(3);
+    expect(within(dialog).getAllByText("Unavailable")).toHaveLength(2);
   }, 15_000);
 });
 

@@ -9,6 +9,7 @@ export {
   ApiError,
   apiRequest,
   apiRequestNoContent,
+  apiStreamResponse,
   isApiError,
   type ApiErrorKind,
   type ApiPath,
@@ -59,6 +60,29 @@ export {
   type PhysicalTopologyEndpointServer,
 } from "./physical-topology-schemas";
 export {
+  getRelationTopology,
+  RELATION_TOPOLOGY_PATH,
+  type RelationTopologyQuery,
+} from "./relation-topology";
+export {
+  relationTopologyEdgeSchema,
+  relationTopologyNodeSchema,
+  relationTopologySchema,
+  type RelationTopologyEndpoint,
+} from "./relation-topology-schemas";
+export {
+  CHANGE_TIMELINE_PATH,
+  getChangeTimeline,
+  type ChangeTimelineQuery,
+} from "./change-timeline";
+export {
+  changeTimelineBucketSchema,
+  changeTimelineEventSchema,
+  changeTimelineGapSchema,
+  changeTimelineSchema,
+  type ChangeTimelineEndpoint,
+} from "./change-timeline-schemas";
+export {
   getResourceMetricsHistory,
   RESOURCE_METRICS_HISTORY_PATH,
   type ResourceMetricsHistoryQuery,
@@ -70,6 +94,18 @@ export {
   resourceMetricsHistorySchema,
   type ResourceMetricsHistoryEndpoint,
 } from "./resource-metrics-history-schemas";
+export {
+  getResourceCapabilities,
+  RESOURCE_CAPABILITIES_PATH,
+} from "./resource-capabilities";
+export {
+  resourceActionCapabilityIdSchema,
+  resourceActionCapabilitySchema,
+  resourceCapabilitiesSchema,
+  resourceCapabilitySubjectSchema,
+  type ResourceActionCapabilityId,
+  type ResourceCapabilitiesEndpoint,
+} from "./resource-capabilities-schemas";
 export {
   clusterImportCandidateSchema,
   clusterRegistrationFlowSchema,

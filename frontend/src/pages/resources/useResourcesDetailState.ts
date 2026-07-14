@@ -6,6 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourceIdentity } from "../../features/resources/resourcesContract";
 import {
@@ -13,9 +14,9 @@ import {
   type ResourcesRetryBlocks,
 } from "./resourcesPageStateModel";
 import {
+  decodeResourceDetail,
   decodeResourceTarget,
-  encodeResourceTarget,
-  isCanonicalResourceTarget,
+  encodeResourceDetail,
 } from "./resourcesUrlState";
 
 export function useResourcesDetailState(
@@ -24,19 +25,34 @@ export function useResourcesDetailState(
   setRetryBlocks: Dispatch<SetStateAction<ResourcesRetryBlocks>>,
 ) {
   const filter = useUnifiedFilter();
+  const navigate = useNavigate();
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const restoreRowKey = useRef<string | null>(null);
+  const openedFromList = useRef(false);
   const detailRequested =
-    filter.detail.resource !== null || filter.detail.resourceKind !== null;
+    filter.detail.detail !== null ||
+    filter.detail.resource !== null ||
+    filter.detail.resourceKind !== null;
   const detailTarget = useMemo(
-    () =>
-      decodeResourceTarget(
+    () => {
+      if (filter.detail.detail !== null) {
+        const identity = decodeResourceDetail(
+          selectedResourceType,
+          filter.detail.detail,
+        );
+        return selectedClusterId !== null && identity !== null
+          ? { clusterId: selectedClusterId, identity }
+          : null;
+      }
+      return decodeResourceTarget(
         selectedClusterId,
         selectedResourceType,
         filter.detail.resourceKind,
         filter.detail.resource,
-      ),
+      );
+    },
     [
+      filter.detail.detail,
       filter.detail.resource,
       filter.detail.resourceKind,
       selectedClusterId,
@@ -46,31 +62,53 @@ export function useResourcesDetailState(
 
   useEffect(() => {
     if (
-      detailTarget === null ||
-      isCanonicalResourceTarget(filter.detail.resource)
+      detailTarget === null || filter.detail.detail !== null
     )
       return;
-    const selection = encodeResourceTarget(
-      detailTarget.clusterId,
-      detailTarget.identity,
+    filter.updateFilters(
+      (current) => ({
+        ...current,
+        common: { ...current.common, clusters: [detailTarget.clusterId] },
+        resources: {
+          ...current.resources,
+          types: [detailTarget.identity.resourceType],
+        },
+      }),
+      "legacy-migration",
     );
     filter.updateDetail(
       (current) => ({
         ...current,
-        resource: selection.resource,
-        resourceKind: selection.kind,
+        detail: encodeResourceDetail(detailTarget.identity),
+        full: false,
+        resource: null,
+        resourceKind: null,
       }),
       "detail-expand",
     );
   }, [detailTarget, filter]);
 
-  const closeDetail = useCallback(() => {
-    setRetryBlocks((current) => withoutRetryBlock(current, "detail"));
+  useEffect(() => {
+    if (detailRequested) return;
+    openedFromList.current = false;
     const key = restoreRowKey.current;
     restoreRowKey.current = null;
+    requestAnimationFrame(() => {
+      if (key) rowButtons.current.get(key)?.focus();
+    });
+  }, [detailRequested]);
+
+  const closeDetail = useCallback(() => {
+    setRetryBlocks((current) => withoutRetryBlock(current, "detail"));
+    if (openedFromList.current) {
+      openedFromList.current = false;
+      navigate(-1);
+      return;
+    }
     filter.updateDetail(
       (current) => ({
         ...current,
+        detail: null,
         full: false,
         resource: null,
         resourceKind: null,
@@ -78,22 +116,20 @@ export function useResourcesDetailState(
       }),
       "detail-close",
     );
-    requestAnimationFrame(() => {
-      if (key) rowButtons.current.get(key)?.focus();
-    });
-  }, [filter, setRetryBlocks]);
+  }, [filter, navigate, setRetryBlocks]);
 
   const openDetail = useCallback(
     (identity: ResourceIdentity) => {
       if (selectedClusterId === null) return;
-      const selection = encodeResourceTarget(selectedClusterId, identity);
+      openedFromList.current = true;
       restoreRowKey.current = identityKey(identity);
       filter.updateDetail(
         (current) => ({
           ...current,
+          detail: encodeResourceDetail(identity),
           full: false,
-          resource: selection.resource,
-          resourceKind: selection.kind,
+          resource: null,
+          resourceKind: null,
           tab: null,
         }),
         "detail-open",
@@ -101,6 +137,21 @@ export function useResourcesDetailState(
     },
     [filter, selectedClusterId],
   );
+
+  const navigateDetail = useCallback((identity: ResourceIdentity) => {
+    restoreRowKey.current = identityKey(identity);
+    filter.updateDetail(
+      (current) => ({
+        ...current,
+        detail: encodeResourceDetail(identity),
+        full: false,
+        resource: null,
+        resourceKind: null,
+        tab: null,
+      }),
+      "detail-tab",
+    );
+  }, [filter]);
 
   const registerRowButton = useCallback(
     (identity: ResourceIdentity, element: HTMLButtonElement | null) => {
@@ -117,6 +168,7 @@ export function useResourcesDetailState(
     detailRequested,
     detailTarget,
     openDetail,
+    navigateDetail,
     registerRowButton,
   };
 }

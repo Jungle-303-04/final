@@ -1,31 +1,28 @@
 import { render } from "@testing-library/react";
-import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { vi } from "vitest";
 
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
-import {
-  ClusterScopeProvider,
-  useClusterScope,
-} from "../../features/cluster-scope/ClusterScopeProvider";
+import { ClusterScopeProvider } from "../../features/cluster-scope/ClusterScopeProvider";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
+import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type { ResourceActionsPort, ResourceCapabilitiesPort } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
-import type {
-  ResourcesFilterPort,
-  ResourcesFilterResourcePage,
-} from "../../features/resources/resourcesFilterContract";
+import type { ResourcesFilterPort, ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
 import { ResourcesPage } from "./ResourcesPage";
-import {
-  CATALOG,
-  CLUSTERS,
-  POD_DETAIL,
-  POD_LIST,
-} from "./ResourcesPage.testFixtures";
+import { CATALOG, CLUSTERS, POD_DETAIL, POD_LIST } from "./ResourcesPage.testFixtures";
 import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
+import { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage.testRuntime";
+import { BottomDockProvider } from "../../features/bottom-dock/BottomDockProvider";
+import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../../features/log-stream/logStreamContract";
+import { ClusterScopeProbe, LocationProbe } from "./ResourcesPage.testProbes.testSupport";
+import { resourcesChangeTimelinePort } from "./ResourcesPage.timelineTestSupport";
 
 export {
   CATALOG,
@@ -36,6 +33,8 @@ export {
   POD_LIST,
 } from "./ResourcesPage.testFixtures";
 export { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
+export { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage.testRuntime";
+export { resourcesChangeTimelinePort } from "./ResourcesPage.timelineTestSupport";
 
 type ClusterPort = Pick<HomePort, "listClusterChoices">;
 
@@ -48,6 +47,11 @@ export function renderResources(
   filterPort: ResourcesFilterPort = resourcesFilterPort(),
   physicalTopologyPort: PhysicalTopologyPort = resourcesPhysicalTopologyPort(),
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort = resourcesMetricHistoryPort(),
+  resourceCapabilitiesPort: ResourceCapabilitiesPort = resourcesCapabilitiesPort(),
+  resourceActionsPort: ResourceActionsPort = resourcesActionsPort(),
+  logStreamPort: LogStreamPort = EMPTY_LOG_STREAM_PORT,
+  relationTopologyPort: RelationTopologyPort = resourcesRelationTopologyPort(),
+  changeTimelinePort: ChangeTimelinePort = resourcesChangeTimelinePort(),
 ) {
   const router = createMemoryRouter(
     [
@@ -64,12 +68,18 @@ export function renderResources(
                   authorityKey="test-workspace:test-user"
                   port={clusterPort}
                 >
-                  <ResourcesPage
-                    filterPort={filterPort}
-                    physicalTopologyPort={physicalTopologyPort}
-                    resourceMetricsHistoryPort={resourceMetricsHistoryPort}
-                    port={port}
-                  />
+                  <BottomDockProvider port={logStreamPort}>
+                    <ResourcesPage
+                      filterPort={filterPort}
+                      physicalTopologyPort={physicalTopologyPort}
+                      relationTopologyPort={relationTopologyPort}
+                      changeTimelinePort={changeTimelinePort}
+                      resourceMetricsHistoryPort={resourceMetricsHistoryPort}
+                      resourceCapabilitiesPort={resourceCapabilitiesPort}
+                      resourceActionsPort={resourceActionsPort}
+                      port={port}
+                    />
+                  </BottomDockProvider>
                   <LocationProbe />
                   <ClusterScopeProbe />
                 </ClusterScopeProvider>
@@ -193,6 +203,25 @@ export function resourcesPhysicalTopologyPort(
   };
 }
 
+export function resourcesRelationTopologyPort(
+  overrides: Partial<RelationTopologyPort> = {},
+): RelationTopologyPort {
+  return {
+    loadRelationTopology: vi.fn().mockResolvedValue({
+      nodes: [
+        { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
+        { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
+        { id: "service:shop/checkout-api", kind: "Service", name: "checkout-api", status: "Ready" },
+      ],
+      edges: [
+        { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },
+        { from: "service:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "selects" },
+      ],
+    }),
+    ...overrides,
+  };
+}
+
 export function resourcesMetricHistoryPort(
   overrides: Partial<ResourceMetricsHistoryPort> = {},
 ): ResourceMetricsHistoryPort {
@@ -268,23 +297,4 @@ export function setVisibility(value: DocumentVisibilityState) {
     configurable: true,
     value,
   });
-}
-
-function LocationProbe() {
-  const location = useLocation();
-  return (
-    <output data-testid="resources-location">
-      {location.pathname}
-      {location.search}
-    </output>
-  );
-}
-
-function ClusterScopeProbe() {
-  const scope = useClusterScope();
-  return (
-    <output data-testid="resources-cluster-scope">
-      {scope.collection.phase}:{scope.requestedClusterId ?? "-"}
-    </output>
-  );
 }

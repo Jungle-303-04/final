@@ -1,6 +1,8 @@
 export const workflowsEn = {
   "workflows.title": "Release workflows",
   "workflows.plan.select": "Select plan",
+  "workflows.plan.list": "Plan list",
+  "workflows.plan.open": "Open {name}",
   "workflows.plan.new": "New plan",
   "workflows.plan.none": "No release plan",
   "workflows.view.aria": "Workflow workspace",

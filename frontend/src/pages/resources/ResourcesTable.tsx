@@ -24,6 +24,8 @@ import {
 } from "../../shared/ui/primitives/table";
 import { ResourceTableSmartCell } from "./ResourceTableSmartCell";
 import { ResourceSparkline } from "./ResourceSparkline";
+import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
+import { logStreamTargetFromResource } from "../../features/log-stream/logStreamTarget";
 import {
   resourceTableColumns,
   resourceTableSortValue,
@@ -42,6 +44,7 @@ export function ResourcesTable({
   registerRowButton: (identity: ResourceIdentity, element: HTMLButtonElement | null) => void;
 }) {
   const { t } = useI18n();
+  const dock = useBottomDock();
   const columns = useMemo(() => resourceTableColumns(items), [items]);
   const metricSeries = useMemo(() => new Map(
     metricHistory.phase === "ready"
@@ -61,7 +64,7 @@ export function ResourcesTable({
     return sort.direction === "asc" ? order : -order;
   }), [items, sort]);
 
-  useRowShortcuts(sorted, rowButtons);
+  useRowShortcuts(sorted, rowButtons, dock.openLogs);
 
   function updateSort(key: ResourceTableColumnKey) {
     setSort((current) => current.key === key
@@ -137,6 +140,7 @@ export function filterResourceRows(items: ResourceSummary[], search: string): Re
 function useRowShortcuts(
   sorted: ResourceSummary[],
   rowButtons: RefObject<Map<string, HTMLButtonElement>>,
+  openLogs: ReturnType<typeof useBottomDock>["openLogs"],
 ) {
   useEffect(() => {
     const handleShortcut = (event: Event) => {
@@ -157,11 +161,15 @@ function useRowShortcuts(
         buttons[buttons.length - 1]?.focus();
       } else if (detail.id === "resources:open-row") {
         (current >= 0 ? buttons[current] : buttons[0])?.click();
+      } else if (detail.id === "resources:open-logs") {
+        const selected = current >= 0 ? sorted[current] : undefined;
+        const target = selected ? logStreamTargetFromResource(selected) : null;
+        if (target) openLogs(target);
       }
     };
     window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
     return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
-  }, [rowButtons, sorted]);
+  }, [openLogs, rowButtons, sorted]);
 }
 
 function SortableHead({

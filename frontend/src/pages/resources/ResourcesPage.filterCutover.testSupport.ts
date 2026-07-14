@@ -67,10 +67,10 @@ export function lastFilterState(
 }
 
 export function canonicalDetailEntry(): string {
-  return "/resources/pod?cluster=cluster-1&clusters=cluster-1" +
-    "&namespaces=cluster-1%2Fshop&namespace=shop" +
+  return "/resources/pod?clusters=cluster-1" +
+    "&namespaces=cluster-1%2Fshop" +
     "&resources.types=pod" +
-    "&resource=shop%2Fcheckout-api-0&resourceKind=Pod&kind=Pod&full=true";
+    "&detail=Pod%2Fshop%2Fcheckout-api-0";
 }
 
 export function readResourcesQuery(): URLSearchParams {
@@ -79,7 +79,8 @@ export function readResourcesQuery(): URLSearchParams {
 }
 
 export function expectDetailQueryPreserved(query: URLSearchParams) {
-  expect(query.get("resource")).toMatch(/^v1\//u);
-  expect(query.get("resourceKind")).toBe("Pod");
-  expect(query.get("full")).toBe("true");
+  expect(query.get("detail")).toBe("Pod/shop/checkout-api-0");
+  expect(query.get("resource")).toBeNull();
+  expect(query.get("resourceKind")).toBeNull();
+  expect(query.get("full")).toBeNull();
 }

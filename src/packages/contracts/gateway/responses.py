@@ -188,6 +188,72 @@ class RcaTimelineResponse(StrictModel):
     items: list[RcaTimelineItem]
 
 
+ChangeTimelineEventKind = Literal[
+    "inventory_event",
+    "incident",
+    "deployment",
+    "gitops_change",
+]
+ChangeTimelineSeverity = Literal["info", "warning", "critical", "unknown"]
+
+
+class ChangeTimelineBucket(StrictModel):
+    startMs: int = Field(ge=0)
+    endMs: int = Field(gt=0)
+    total: int = Field(ge=0)
+    warnings: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.startMs >= self.endMs or self.warnings > self.total:
+            raise ValueError("change timeline bucket is invalid")
+        return self
+
+
+class ChangeTimelineEvent(StrictModel):
+    id: str = Field(min_length=1, max_length=512)
+    kind: ChangeTimelineEventKind
+    occurredMs: int = Field(ge=0)
+    title: str = Field(min_length=1, max_length=240)
+    severity: ChangeTimelineSeverity
+
+
+class ChangeTimelineGap(StrictModel):
+    from_: int = Field(alias="from", serialization_alias="from", ge=0)
+    to: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.from_ >= self.to:
+            raise ValueError("change timeline gap is invalid")
+        return self
+
+
+class ChangeTimelineResponse(StrictModel):
+    buckets: list[ChangeTimelineBucket] = Field(default_factory=list)
+    events: list[ChangeTimelineEvent] = Field(default_factory=list)
+    gaps: list[ChangeTimelineGap] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> Self:
+        bucket_ranges = [(item.startMs, item.endMs) for item in self.buckets]
+        gap_ranges = [(item.from_, item.to) for item in self.gaps]
+        if any(
+            current[0] < previous[1]
+            for previous, current in zip(bucket_ranges, bucket_ranges[1:], strict=False)
+        ):
+            raise ValueError("change timeline buckets are not ordered")
+        if any(
+            current[0] < previous[1]
+            for previous, current in zip(gap_ranges, gap_ranges[1:], strict=False)
+        ):
+            raise ValueError("change timeline gaps are not ordered")
+        event_keys = [(item.occurredMs, item.kind, item.id) for item in self.events]
+        if event_keys != sorted(event_keys):
+            raise ValueError("change timeline events are not ordered")
+        return self
+
+
 class AuditTimelineItem(StrictModel):
     event_id: str = Field(min_length=1)
     subject: str
@@ -623,6 +689,46 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
+ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale"]
+
+
+class ResourceCapabilitySubject(StrictModel):
+    """Capability 판정이 묶인 exact inventory resource identity."""
+
+    resource_id: str = Field(min_length=1)
+    snapshot_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+
+
+class ResourceActionCapability(StrictModel):
+    """현재 actor가 바로 진입할 수 있는 실제 gateway action."""
+
+    capability_id: ResourceActionCapabilityId
+    method: Literal["POST"] = "POST"
+    path: str = Field(min_length=1, pattern=r"^/")
+
+
+class ResourceCapabilitiesResponse(StrictModel):
+    """권한 없는 버튼을 그리지 않도록 enabled action만 담는 응답."""
+
+    subject: ResourceCapabilitySubject
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    capabilities: list[ResourceActionCapability] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_capabilities(self) -> Self:
+        capability_ids = [item.capability_id for item in self.capabilities]
+        if capability_ids != sorted(capability_ids):
+            raise ValueError("resource capabilities must be sorted")
+        if len(capability_ids) != len(set(capability_ids)):
+            raise ValueError("resource capabilities must be unique")
+        return self
+
+
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
 FilterFacetAvailability = Literal["available", "restricted", "unresolved"]
 FilterFacetAxis = Literal["clusters", "namespaces", "applications"]
@@ -927,6 +1033,43 @@ class ResourceGraphSnapshotResponse(StrictModel):
             raise ValueError("truncated graph relations cannot be exact")
         if self.relation_completeness == "exact" and self.partial_reason_codes:
             raise ValueError("exact graph relations cannot carry partial reasons")
+        return self
+
+
+RelationsTopologyEdgeType = Literal["owns", "runs_on", "selects", "routes_to"]
+
+
+class RelationsTopologyNode(StrictModel):
+    id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    status: str
+
+
+class RelationsTopologyEdge(StrictModel):
+    from_node_id: str = Field(alias="from", min_length=1)
+    to_node_id: str = Field(alias="to", min_length=1)
+    type: RelationsTopologyEdgeType
+
+
+class RelationsTopologyResponse(StrictModel):
+    nodes: list[RelationsTopologyNode] = Field(default_factory=list)
+    edges: list[RelationsTopologyEdge] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_graph_integrity(self) -> Self:
+        node_ids = [node.id for node in self.nodes]
+        known_nodes = set(node_ids)
+        if len(known_nodes) != len(node_ids):
+            raise ValueError("relations topology node identities must be unique")
+        edge_keys = [(edge.from_node_id, edge.to_node_id, edge.type) for edge in self.edges]
+        if len(set(edge_keys)) != len(edge_keys):
+            raise ValueError("relations topology edges must be unique")
+        if any(
+            edge.from_node_id not in known_nodes or edge.to_node_id not in known_nodes
+            for edge in self.edges
+        ):
+            raise ValueError("relations topology edges must reference returned nodes")
         return self
 
 
@@ -1721,6 +1864,240 @@ class AiConversationResponse(StrictModel):
 
 class AiConversationListResponse(StrictModel):
     conversations: list[JsonMap]
+
+
+AI_NO_DATA_ANSWER = "그 데이터가 없습니다."
+
+
+class AiEvidenceLink(StrictModel):
+    type: Literal["inventory-resource", "log-stream"]
+    id: str = Field(min_length=1, max_length=255)
+    label: str = Field(min_length=1, max_length=512)
+    link: str = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_internal_link(self) -> Self:
+        # Product-internal absolute paths only. Protocol-relative links, URL
+        # schemes, fragments and control characters must never reach an anchor.
+        if (
+            not self.link.startswith("/")
+            or self.link.startswith("//")
+            or "#" in self.link
+            or any(character.isspace() or ord(character) < 32 for character in self.link)
+        ):
+            raise ValueError("AI evidence link must be a safe product-internal path")
+        return self
+
+
+class AiChatResponse(StrictModel):
+    answer: str = Field(min_length=1, max_length=4000)
+    evidence: list[AiEvidenceLink] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def require_evidence_or_canonical_no_data(self) -> Self:
+        if not self.evidence and self.answer != AI_NO_DATA_ANSWER:
+            raise ValueError("AI answer without evidence must use the canonical no-data answer")
+        identities = [(item.type, item.id) for item in self.evidence]
+        if len(set(identities)) != len(identities):
+            raise ValueError("AI evidence entries must be unique")
+        return self
+
+
+class AiSuggestion(StrictModel):
+    id: str = Field(min_length=1, max_length=120)
+    label: str = Field(min_length=1, max_length=240)
+    prompt: str = Field(min_length=1, max_length=1000)
+
+
+class AiSuggestionsResponse(StrictModel):
+    suggestions: list[AiSuggestion] = Field(default_factory=list, max_length=12)
+
+
+class AiResourceSummary(StrictModel):
+    """Token-bounded inventory evidence; raw Kubernetes metadata is excluded."""
+
+    id: str = Field(min_length=1, max_length=255)
+    cluster_id: str = Field(min_length=1, max_length=512)
+    resource_type: str = Field(min_length=1, max_length=80)
+    kind: str = Field(min_length=1, max_length=120)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+    status: str = Field(min_length=1, max_length=80)
+    health: str = Field(min_length=1, max_length=80)
+    observed_at: str | None = None
+    link: str = Field(min_length=1, max_length=2048)
+
+    @model_validator(mode="after")
+    def validate_internal_link(self) -> Self:
+        AiEvidenceLink(
+            type="inventory-resource",
+            id=self.id,
+            label=self.name,
+            link=self.link,
+        )
+        return self
+
+
+ApplicationProjectionCompleteness = Literal["exact", "partial", "unavailable"]
+ApplicationHealthStatus = Literal["healthy", "degraded", "unknown"]
+ApplicationDeploymentStatus = Literal["succeeded", "failed", "running", "pending", "unknown"]
+ApplicationDriftStatus = Literal["in_sync", "drifted", "unknown"]
+ApplicationActivityType = Literal["deployment", "incident", "change"]
+ApplicationDriftScalar = str | int | float | bool | None
+
+
+class ApplicationHealthSummary(StrictModel):
+    status: ApplicationHealthStatus
+    ready_pods: int | None = Field(default=None, ge=0)
+    total_pods: int | None = Field(default=None, ge=0)
+    restarts: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_pod_counts(self) -> Self:
+        if (
+            self.ready_pods is not None
+            and self.total_pods is not None
+            and self.ready_pods > self.total_pods
+        ):
+            raise ValueError("ready pod count cannot exceed total pod count")
+        return self
+
+
+class ApplicationCurrentDeployment(StrictModel):
+    version: str | None = None
+    image: str | None = None
+    image_digest: str | None = None
+    git_sha: str | None = None
+    deployed_at: str | None = None
+    deployed_by: str | None = None
+
+
+class ApplicationResourceKindCount(StrictModel):
+    kind: str = Field(min_length=1)
+    count: int = Field(ge=0)
+
+
+class ApplicationProductCard(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    environments: list[str] = Field(default_factory=list)
+    lifecycle_status: str = Field(min_length=1)
+    repository_ref: str | None = None
+    default_branch: str | None = None
+    manifest_path: str | None = None
+    health: ApplicationHealthSummary
+    current_deployment: ApplicationCurrentDeployment | None = None
+    has_drift: bool | None = None
+    drift_summary: str | None = None
+    resource_counts: list[ApplicationResourceKindCount] | None = None
+    resource_counts_completeness: ApplicationProjectionCompleteness
+    open_incidents: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_card_semantics(self) -> Self:
+        if self.has_drift is not True and self.drift_summary is not None:
+            raise ValueError("drift summary requires confirmed drift")
+        if self.has_drift is True and not self.drift_summary:
+            raise ValueError("confirmed drift requires a summary")
+        if self.resource_counts_completeness == "unavailable" and self.resource_counts is not None:
+            raise ValueError("unavailable resource counts must be null")
+        if self.resource_counts_completeness != "unavailable" and self.resource_counts is None:
+            raise ValueError("available resource counts must be an array")
+        if self.resource_counts is not None:
+            kinds = [item.kind for item in self.resource_counts]
+            if kinds != sorted(set(kinds)):
+                raise ValueError("resource count kinds must be unique and sorted")
+        return self
+
+
+class ApplicationEndpointSummary(StrictModel):
+    id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+
+
+class ApplicationRecentIncident(StrictModel):
+    id: str = Field(min_length=1)
+    title: str | None = None
+    status: str = Field(min_length=1)
+    started_at: str | None = None
+
+
+class ApplicationRecentActivity(StrictModel):
+    id: str = Field(min_length=1)
+    type: ApplicationActivityType
+    summary: str | None = None
+    occurred_at: str | None = None
+
+
+class ApplicationProductDetail(ApplicationProductCard):
+    endpoints: list[ApplicationEndpointSummary] | None = None
+    endpoints_completeness: ApplicationProjectionCompleteness
+    recent_incidents: list[ApplicationRecentIncident] = Field(default_factory=list, max_length=3)
+    recent_activity: list[ApplicationRecentActivity] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def validate_detail_semantics(self) -> Self:
+        if self.endpoints_completeness == "unavailable" and self.endpoints is not None:
+            raise ValueError("unavailable endpoints must be null")
+        if self.endpoints_completeness != "unavailable" and self.endpoints is None:
+            raise ValueError("available endpoints must be an array")
+        return self
+
+
+class ApplicationProductListResponse(StrictModel):
+    applications: list[ApplicationProductCard] = Field(default_factory=list)
+
+
+class ApplicationProductDetailResponse(StrictModel):
+    application: ApplicationProductDetail
+
+
+class ApplicationDeploymentHistoryItem(StrictModel):
+    id: str = Field(min_length=1)
+    environment: str | None = None
+    cluster_id: str = Field(min_length=1)
+    git_sha: str | None = None
+    version: str | None = None
+    deployed_at: str | None = None
+    deployed_by: str | None = None
+    status: ApplicationDeploymentStatus
+    gitops_change_id: str | None = None
+
+
+class ApplicationDeploymentHistoryResponse(StrictModel):
+    deployments: list[ApplicationDeploymentHistoryItem] = Field(default_factory=list)
+
+
+class ApplicationDriftDifference(StrictModel):
+    resource: str = Field(min_length=1)
+    field_path: str = Field(min_length=1)
+    old_value: ApplicationDriftScalar = None
+    new_value: ApplicationDriftScalar = None
+    value_redacted: bool
+    changed_by: str | None = None
+    changed_at: str | None = None
+
+
+class ApplicationDriftResponse(StrictModel):
+    status: ApplicationDriftStatus
+    summary: str | None = None
+    differences: list[ApplicationDriftDifference] = Field(default_factory=list)
+    observed_at: str | None = None
+
+    @model_validator(mode="after")
+    def validate_drift_semantics(self) -> Self:
+        if self.status == "drifted" and (not self.differences or not self.summary):
+            raise ValueError("drifted response requires differences and a summary")
+        if self.status != "drifted" and (self.differences or self.summary is not None):
+            raise ValueError("non-drift response cannot carry differences or summary")
+        if any(
+            item.value_redacted is False and item.old_value is None and item.new_value is None
+            for item in self.differences
+        ):
+            raise ValueError("empty drift values must be marked redacted")
+        return self
 
 
 class ApplicationResponse(StrictModel):

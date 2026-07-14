@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CheckCircle2, Settings2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
   ReleaseApplication,
@@ -25,7 +25,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../../shared/ui/primitives/sheet";
-import { Surface } from "../../shared/ui/Surface";
 import { environmentLabel, strategyLabel } from "./WorkflowFormControls";
 import { WorkflowGraph } from "./WorkflowGraph";
 import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
@@ -74,45 +73,11 @@ export function WorkflowOverview({
 
       <WorkflowGraph
         applications={applications}
-        className="hidden xl:block"
         onSelectStep={onSelectStep}
         plan={plan}
         run={run}
         selectedStepId={selectedStepId}
       />
-
-      <Surface aria-label={t("workflows.overview.order")} className="grid min-w-0 content-start gap-3 p-4">
-          <h3 className="m-0 text-sm font-semibold">{t("workflows.overview.order")}</h3>
-          <div className="grid min-w-0 divide-y">
-            {plan.steps.map((step, index) => {
-              const key = stepKey(step, index);
-              const application = applicationForStep(step, applications);
-              return (
-                <button
-                  className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-2 px-1 py-2.5 text-left hover:bg-muted/40"
-                  key={key}
-                  onClick={() => onSelectStep(key)}
-                  type="button"
-                >
-                  <span className="grid size-6 place-items-center rounded-md bg-muted text-[0.6875rem] font-semibold">
-                    {waves.get(key) ?? index + 1}
-                  </span>
-                  <span className="grid min-w-0 gap-0.5">
-                    <strong className="min-w-0 text-xs [overflow-wrap:anywhere]">
-                      {step.name || application?.name || step.application_id}
-                    </strong>
-                    <small
-                      className="min-w-0 text-[0.6875rem] text-muted-foreground [overflow-wrap:anywhere]"
-                    >
-                      {configString(step, "environment", t("workflows.value.notSet"))} / {application?.repository || step.application_id}
-                    </small>
-                  </span>
-                  <ArrowRight aria-hidden="true" className="mt-1 size-3.5 text-muted-foreground" />
-                </button>
-              );
-            })}
-          </div>
-      </Surface>
 
       <StepDetailSheet
         application={selectedApplication}

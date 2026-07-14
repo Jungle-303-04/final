@@ -131,6 +131,27 @@ describe("ProductShell keyboard and help interaction", () => {
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
   });
 
+  it("uses the 56px navigation rail for a resource detail and restores the prior shell", async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell({
+      initialEntry: "/resources?clusters=cluster-1&resources.types=pod" +
+        "&detail=Pod%2Fshop%2Fcheckout-api-0",
+      releasedSurfaceIds: new Set(["home", "resources"]),
+    });
+    const sidebar = screen.getByRole("complementary", { name: "제품 메뉴" });
+
+    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("collapsed"));
+    expect(screen.getByRole("link", { name: "리소스" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "홈" })).toBeTruthy();
+    expect(container.querySelector("[data-slot='unified-filter-bar']")).toBeNull();
+    expect(sidebar.className).toContain("--motion-layout");
+    expect(screen.getByText("Opsia").className).toContain("w-0");
+
+    await user.click(screen.getByRole("link", { name: "홈" }));
+    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("expanded"));
+    expect(screen.getByText("Home content")).toBeTruthy();
+  });
+
   it("uses a modal mobile drawer with Escape focus return and closes it after navigation", async () => {
     installMatchMedia(true);
     const user = userEvent.setup();

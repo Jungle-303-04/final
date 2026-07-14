@@ -1,0 +1,30 @@
+meta {
+  name: 08 AI 리소스 목록
+  type: http
+  seq: 8
+  tags: [ai, resources, read]
+}
+
+get {
+  url: {{base_url}}ai/resources/pods?cluster_id={{cluster_id}}&limit=20
+}
+
+tests {
+  test("token-bounded resources are returned or access fails explicitly", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("successful resources exclude raw Kubernetes metadata", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    expect(body).to.be.an("array");
+    body.forEach((item) => {
+      expect(item).to.have.all.keys(
+        "id", "cluster_id", "resource_type", "kind", "namespace", "name",
+        "status", "health", "observed_at", "link"
+      );
+      expect(item).not.to.have.property("raw");
+      expect(item).not.to.have.property("annotations");
+    });
+  });
+}

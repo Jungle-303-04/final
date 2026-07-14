@@ -28,6 +28,17 @@ DEAD_LETTER_REPLAY_PATH = "/dead-letters/{dead_letter_id}/replay"
 AI_CONVERSATIONS_PATH = "/ai/conversations"
 AI_CONVERSATION_PATH = "/ai/conversations/{conversation_id}"
 AI_CONVERSATION_MESSAGES_PATH = "/ai/conversations/{conversation_id}/messages"
+# Context-bound AI facade. These routes are intentionally separate from the
+# asynchronous conversation workflow: every synchronous answer must carry
+# materialized, user-authorized evidence.
+AI_CHAT_PATH = "/ai/chat"
+AI_SUGGESTIONS_PATH = "/ai/suggestions"
+AI_RESOURCES_PATH = "/ai/resources/{kind}"
+AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
+# Browser log SSE. Multi-cluster identity is a required query parameter; these
+# path constants own only the target identity portion.
+POD_LOG_STREAM_PATH = "/pods/{namespace}/{name}/logs/stream"
+WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
 # 관리 콘솔 — 조직/그룹/멤버/권한 (프론트 콘솔 전용, admin 세션)
 ORGS_PATH = "/orgs"
 ORG_PATH = "/orgs/{org_id}"
@@ -46,6 +57,7 @@ APPLICATIONS_PATH = "/applications"
 APPLICATION_CONNECT_PATH = "/applications/connect"
 APPLICATION_PATH = "/applications/{application_id}"
 APPLICATION_DEPLOYMENTS_PATH = "/applications/{application_id}/deployments"
+APPLICATION_DRIFT_PATH = "/applications/{application_id}/drift"
 APPLICATION_RUNS_PATH = "/applications/{application_id}/runs"
 APPLICATION_FILTER_RESULTS_PATH = "/applications/filter-results"
 APPLICATION_FILTER_FACETS_PATH = "/applications/filter-facets"
@@ -124,9 +136,14 @@ RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 FILTER_FACETS_PATH = "/filter-facets"
 RESOURCES_GRAPH_PATH = "/resources/graph"
 TOPOLOGY_PATH = "/topology"
+# Resources time scrubber: actual observed changes plus explicit collection gaps.
+CHANGES_PATH = "/changes"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서
 # fan-out하지 않도록 서버 batch 경계를 별도로 둔다.
 RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"
+# 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
+# disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
+RESOURCE_CAPABILITIES_PATH = "/capabilities"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"
 ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"

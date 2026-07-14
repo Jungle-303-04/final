@@ -28,6 +28,7 @@ from domains.inventory_filter.query import (
     parse_facet_values,
     parse_resource_filters,
 )
+from domains.inventory_filter.relations_topology import build_relations_topology
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -37,6 +38,7 @@ from packages.contracts.gateway.responses import (
     GlobalFilterFacetsResponse,
     LabelFacetPageResponse,
     PhysicalTopologyResponse,
+    RelationsTopologyResponse,
     ResourceFilterFacetPageResponse,
     ResourceGraphSnapshotResponse,
     ResourceMetricsHistoryResponse,
@@ -63,6 +65,7 @@ FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "resource filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "resource filter scope not found"
 CURSOR_UNAVAILABLE_DETAIL = "resource filter cursor is unavailable"
+TOPOLOGY_UNAVAILABLE_DETAIL = "resource topology snapshot is unavailable"
 
 FacetAxis = Literal["clusters", "namespaces", "applications"]
 
@@ -133,10 +136,10 @@ async def list_global_filter_facets(
 
 @router.get(
     gateway_routes.TOPOLOGY_PATH,
-    response_model=PhysicalTopologyResponse,
+    response_model=PhysicalTopologyResponse | RelationsTopologyResponse,
 )
-async def get_physical_topology(
-    view: Literal["physical"] = Query(default="physical"),
+async def get_topology(
+    view: Literal["physical", "relations"] = Query(default="physical"),
     clusters: str | None = Query(default=None),
     namespaces: str | None = Query(default=None),
     applications: str | None = Query(default=None),
@@ -155,8 +158,7 @@ async def get_physical_topology(
     snapshot_revision: int | None = Query(default=None, ge=1),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> PhysicalTopologyResponse:
-    del view  # Literal validation rejects unsupported topology projections.
+) -> PhysicalTopologyResponse | RelationsTopologyResponse:
     filters = _parse_filters(
         clusters=clusters,
         namespaces=namespaces,
@@ -187,6 +189,44 @@ async def get_physical_topology(
         {cluster_id},
         at_revision=target_revision,
     )
+    if view == "relations":
+        if (
+            target_revision <= 0
+            or int(cluster_context.get("snapshot_revision") or 0) != target_revision
+        ):
+            raise HTTPException(status_code=503, detail=TOPOLOGY_UNAVAILABLE_DETAIL)
+        result = await asyncio.to_thread(
+            db.list_filtered_resources,
+            workspace_id=authorized.workspace_id,
+            allowed_cluster_ids={cluster_id},
+            allowed_application_ids=set(authorized.application_ids),
+            filters=filters,
+            snapshot_revision=target_revision,
+            position=None,
+            limit=DEFAULT_GRAPH_NODE_LIMIT,
+            graph_priority=True,
+        )
+        items = list(result.get("items") or [])
+        filtered_count = int(result.get("filtered_count") or 0)
+        reasons = list(cluster_context.get("partial_reason_codes") or [])
+        if any(item.get("application_binding_completeness") != "exact" for item in items):
+            reasons.append("restricted_application_bindings")
+        graph = build_resource_graph(
+            items,
+            snapshot_revision=target_revision,
+            filter_fingerprint=filter_fingerprint(filters),
+            source_complete=bool(cluster_context.get("resources_complete")),
+            labels_complete=bool(cluster_context.get("labels_complete")),
+            truncated=bool(result.get("has_more")),
+            node_limit=DEFAULT_GRAPH_NODE_LIMIT,
+            edge_limit=DEFAULT_GRAPH_EDGE_LIMIT,
+            omitted_node_count=max(0, filtered_count - len(items)),
+            partial_reason_codes=reasons,
+            cluster={"cluster_id": cluster_id, "name": None, "provider": None},
+            authorization_revision=authorized.authorization_revision,
+        )
+        return RelationsTopologyResponse.model_validate(build_relations_topology(graph))
+
     topology_result, usage_by_cluster, cluster_identities = await asyncio.gather(
         asyncio.to_thread(
             db.list_physical_topology_resources,

@@ -1,4 +1,12 @@
-import { Activity, CircleAlert, FileClock, Link2, ListTree, TriangleAlert } from "lucide-react";
+import {
+  Activity,
+  ChartNoAxesCombined,
+  CircleAlert,
+  FileCode2,
+  Link2,
+  ListTree,
+  TriangleAlert,
+} from "lucide-react";
 import type {
   ResourceDetail,
   ResourceIdentity,
@@ -13,13 +21,6 @@ import { StatusMark } from "../../shared/ui/StatusMark";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "../../shared/ui/primitives/sheet";
-import {
   Tabs,
   TabsContent,
   TabsList,
@@ -29,53 +30,7 @@ import { DefinitionGrid, ResourceFactsPanel } from "./ResourceFactsPanel";
 import { ResourceDetailLoadingPreview } from "./ResourcesLoadingPreview";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 
-export function ResourceDetailSheet({
-  detail,
-  full,
-  identity,
-  onClose,
-  onTabChange,
-  open,
-  tab,
-}: {
-  detail: ResourcesResourceState<ResourceDetail>;
-  full: boolean;
-  identity: ResourceIdentity | null;
-  onClose: () => void;
-  onTabChange: (tab: string) => void;
-  open: boolean;
-  tab: string;
-}) {
-  const { t } = useI18n();
-  const title = identity
-    ? t("resources.detail.title", { name: identity.name })
-    : t("resources.detail.errorTitle");
-  return (
-    <Sheet onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} open={open}>
-      <SheetContent
-        className={full
-          ? "min-w-0 w-full max-w-none sm:max-w-none"
-          : "min-w-0 w-full sm:max-w-2xl"}
-        closeLabel={t("resources.detail.close")}
-        side="right"
-      >
-        <SheetHeader className="min-w-0 border-b pr-12">
-          <SheetTitle className="min-w-0 [overflow-wrap:anywhere]">{title}</SheetTitle>
-          <SheetDescription className="min-w-0 [overflow-wrap:anywhere]">
-            {identity
-              ? `${identity.kind} · ${identity.namespace ?? t("resources.detail.clusterScope")}`
-              : t("resources.detail.identityDescription")}
-          </SheetDescription>
-        </SheetHeader>
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pb-6">
-          <DetailBody detail={detail} identity={identity} onTabChange={onTabChange} tab={tab} />
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function DetailBody({
+export function ResourceDetailBody({
   detail,
   identity,
   onTabChange,
@@ -121,7 +76,9 @@ function DetailBody({
     );
   }
   const resource = detail.data.resource;
-  const selectedTab = ["overview", "relations", "events"].includes(tab) ? tab : "overview";
+  const selectedTab = ["overview", "yaml", "relations", "metrics", "events"].includes(tab)
+    ? tab
+    : "overview";
   return (
     <Tabs
       className="min-w-0 pt-4"
@@ -130,9 +87,11 @@ function DetailBody({
     >
       <TabsList aria-label={t("resources.detail.tabs.aria")} className="w-full" variant="line">
         <TabsTrigger value="overview">{t("resources.detail.overview")}</TabsTrigger>
+        <TabsTrigger value="yaml">{t("resources.detail.yaml")}</TabsTrigger>
         <TabsTrigger value="relations">
           {t("resources.detail.relatedCount", { count: detail.data.related.length })}
         </TabsTrigger>
+        <TabsTrigger value="metrics">{t("resources.detail.metrics")}</TabsTrigger>
         <TabsTrigger value="events">
           {t("resources.detail.eventsCount", { count: detail.data.events.length })}
         </TabsTrigger>
@@ -166,6 +125,9 @@ function DetailBody({
         <ResourceFactsPanel facts={resource.facts} />
         <PointInTimeEvidenceUnavailable />
       </TabsContent>
+      <TabsContent className="grid gap-3 py-4" value="yaml">
+        <EmptySection icon={FileCode2} text={t("resources.detail.yamlUnavailable")} />
+      </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
           <EmptySection icon={Link2} text={t("resources.detail.relatedEmpty")} />
@@ -191,6 +153,12 @@ function DetailBody({
           </section>
         ))}
         <CompletenessNote />
+      </TabsContent>
+      <TabsContent className="grid gap-3 py-4" value="metrics">
+        <EmptySection
+          icon={ChartNoAxesCombined}
+          text={t("resources.detail.metricsUnavailable")}
+        />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="events">
         {detail.data.events.length === 0 ? (
@@ -231,7 +199,6 @@ function PointInTimeEvidenceUnavailable() {
   const { t } = useI18n();
   const rows = [
     { icon: Activity, label: t("resources.detail.history.metrics") },
-    { icon: FileClock, label: t("resources.detail.history.logs") },
     { icon: TriangleAlert, label: t("resources.detail.history.incident") },
   ];
   return (

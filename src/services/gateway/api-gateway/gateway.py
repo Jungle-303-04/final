@@ -22,6 +22,7 @@ from domains.application_filter.router import router as application_filter_route
 from domains.applications.router import router as applications_router
 from domains.audit.router import router as audit_router
 from domains.catalog.router import router as catalog_router
+from domains.changes.router import router as changes_router
 from domains.command.router import router as command_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
@@ -40,6 +41,7 @@ from domains.identity.router import router as identity_router
 from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
+from domains.log_stream.router import router as log_stream_router
 from domains.providers.router import router as providers_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
@@ -303,7 +305,9 @@ class ApiGateway:
             inventory_router
         )  # agent inventory snapshot -> multi-cluster read model 투영
         app.include_router(inventory_filter_router)  # workspace Resources 필터·facet 서버 집계
+        app.include_router(changes_router)  # Resources 시간 스크럽용 실측 변경·수집 gap
         app.include_router(issue_filter_router)  # workspace Issues 필터·facet 서버 집계
+        app.include_router(log_stream_router)  # bounded, redacted pod/workload log SSE
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(
             rca_query_router

@@ -2,6 +2,8 @@ import { useMemo, type ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
+import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
+import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
@@ -21,6 +23,8 @@ import { buildInfraMapModel } from "./resourcesInfraMapModel";
 import { ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
+import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
+import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 export function ResourcesListSurface({
@@ -29,14 +33,24 @@ export function ResourcesListSurface({
   metricHistory,
   onLoadMore,
   physicalTopology,
+  relationTopology,
   state,
+  topologyPinned,
+  topologyView,
+  onTopologyViewChange,
+  timelineFrame,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
   metricHistory: ResourceMetricsHistoryFrame;
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
+  relationTopology: RelationTopologyFrame;
   state: ReturnType<typeof useResourcesPageState>;
+  topologyPinned: boolean;
+  topologyView: ResourceTopologyView;
+  onTopologyViewChange: (view: ResourceTopologyView) => void;
+  timelineFrame: ChangeTimelineFrame;
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
@@ -129,6 +143,19 @@ export function ResourcesListSurface({
       : null,
     [physicalTopology, state.selectedResourceType],
   );
+  const timelineRange = filter.detail.timeRange ?? "1h";
+  const changeTimelineRange = (range: TimelineRange) => filter.updateDetail(
+    (current) => ({
+      ...current,
+      timeRange: range === "1h" ? undefined : range,
+      timeAt: undefined,
+    }),
+    "time-range",
+  );
+  const changeTimelineAt = (timeAt: number | undefined) => filter.updateDetail(
+    (current) => ({ ...current, timeAt }),
+    "time-at",
+  );
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
       <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
@@ -151,10 +178,19 @@ export function ResourcesListSurface({
           breadcrumbs={breadcrumbs}
           clusterId={state.selectedClusterId ?? "unknown"}
           frame={physicalTopology}
+          relationFrame={relationTopology}
           onOpenPod={openPod}
           onRevealServer={revealServer}
           onSelectAll={rewindToAll}
           skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
+          topologyPinned={topologyPinned}
+          topologyView={topologyView}
+          onTopologyViewChange={onTopologyViewChange}
+          timelineAtMs={filter.detail.timeAt}
+          timelineFrame={timelineFrame}
+          timelineRange={timelineRange}
+          onTimelineAtChange={changeTimelineAt}
+          onTimelineRangeChange={changeTimelineRange}
         />
       </Surface>
 

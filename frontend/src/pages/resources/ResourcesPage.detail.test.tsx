@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ResourcesPortFailure,
-  type ResourceDetail,
 } from "../../features/resources/resourcesContract";
 import {
   deferred,
@@ -23,7 +22,7 @@ afterEach(() => {
 });
 
 describe("ResourcesPage URL-backed detail", () => {
-  it("keeps detail loading inside the sheet without nesting a page frame", async () => {
+  it("keeps detail loading inside the full workspace without nesting a page frame", async () => {
     const detail = deferred<typeof POD_DETAIL>();
     const port = resourcesPort({
       loadResourceDetail: vi.fn().mockReturnValue(detail.promise),
@@ -69,10 +68,49 @@ describe("ResourcesPage URL-backed detail", () => {
       expect.any(AbortSignal),
     );
     expect(screen.getByTestId("resources-location").textContent)
-      .toContain("resource=v1%2Fcluster-1%2Fpod%2Fshop%2Fcheckout-api-0");
+      .toContain("detail=Pod%2Fshop%2Fcheckout-api-0");
   });
 
-  it("isolates a cross-Cluster forbidden detail without blanking the selected list", async () => {
+  it("shows the two-state workspace tabs and read-only context without a log tab", async () => {
+    renderResources(
+      resourcesPort(),
+      "/resources?clusters=cluster-1&resources.types=pod" +
+        "&labels=team%3Dcheckout&detail=Pod%2Fshop%2Fcheckout-api-0",
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
+    expect(within(dialog).getByRole("tab", { name: "개요" })).toBeTruthy();
+    expect(within(dialog).getByRole("tab", { name: "YAML" })).toBeTruthy();
+    expect(within(dialog).getByRole("tab", { name: "메트릭" })).toBeTruthy();
+    expect(within(dialog).queryByRole("tab", { name: /로그/u })).toBeNull();
+    const context = within(dialog).getByLabelText("읽기 전용 필터 맥락");
+    expect(context.textContent).toContain("team=checkout");
+    expect(within(context).queryByRole("button")).toBeNull();
+    const close = within(dialog).getByRole("button", { name: "상세 닫기" });
+    expect(close.className).toContain("relative");
+    expect(close.className).not.toContain("fixed");
+  });
+
+  it("keeps initial focus without trapping sibling surfaces and closes with Escape", async () => {
+    const user = userEvent.setup();
+    renderResources(
+      resourcesPort(),
+      "/resources?clusters=cluster-1&resources.types=pod&detail=Pod%2Fshop%2Fcheckout-api-0",
+    );
+    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    expect(dialog.hasAttribute("aria-modal")).toBe(false);
+    const close = within(dialog).getByRole("button", { name: "상세 닫기" });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(dialog.contains(document.activeElement)).toBe(false);
+    close.focus();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByTestId("resources-location").textContent).not.toContain("detail=");
+  });
+
+  it("migrates a cross-Cluster legacy target before showing its isolated failure", async () => {
     const target = encodeResourceTarget("kubernetes-ops", {
       resourceType: "pod",
       kind: "Pod",
@@ -88,9 +126,8 @@ describe("ResourcesPage URL-backed detail", () => {
       `&resource=${encodeURIComponent(target.resource)}&resourceKind=Pod`,
     );
 
-    expect(await screen.findByRole("table", { hidden: true, name: "리소스 목록" }))
-      .toBeTruthy();
     const dialog = await screen.findByRole("dialog", { name: "restricted-agent 상세" });
+    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
     expect(within(dialog).getByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeTruthy();
     expect(port.loadResourceDetail).toHaveBeenCalledWith(
@@ -98,9 +135,11 @@ describe("ResourcesPage URL-backed detail", () => {
       expect.objectContaining({ name: "restricted-agent", resourceType: "pod" }),
       expect.any(AbortSignal),
     );
+    expect(screen.getByTestId("resources-location").textContent)
+      .toContain("clusters=kubernetes-ops&resources.types=pod&detail=Pod%2Fops%2Frestricted-agent");
   });
 
-  it("keeps the list and renders a scoped not-found detail state", async () => {
+  it("replaces the list with a scoped not-found detail state", async () => {
     const port = resourcesPort({
       loadResourceDetail: vi.fn().mockRejectedValue(new ResourcesPortFailure("not-found")),
     });
@@ -110,8 +149,8 @@ describe("ResourcesPage URL-backed detail", () => {
       "&resource=shop%2Fmissing&resourceKind=Pod",
     );
 
-    expect(await findTableText("checkout-api-0")).toBeTruthy();
     const dialog = await screen.findByRole("dialog", { name: "missing 상세" });
+    expect(screen.queryByRole("table", { name: "리소스 목록" })).toBeNull();
     expect(dialog.textContent).toContain("리소스를 찾을 수 없습니다");
     expect(screen.getByRole("button", { name: "상세 닫기" })).toBeTruthy();
   }, 15_000);
@@ -126,149 +165,21 @@ describe("ResourcesPage URL-backed detail", () => {
     await user.click(row);
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 상세" }, { timeout: 5_000 }))
       .toBeTruthy();
-    expect(screen.getByTestId("resources-location").textContent).toContain("resource=");
+    expect(screen.getByTestId("resources-location").textContent).toContain("detail=");
 
     await user.click(screen.getByRole("button", { name: "상세 닫기" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByTestId("resources-location").textContent).not.toContain("resource=");
-    await waitFor(() => expect(document.activeElement).toBe(row));
+    expect(screen.getByTestId("resources-location").textContent).not.toContain("detail=");
+    const restoredTable = await screen.findByRole("table", { name: "리소스 목록" });
+    const restoredRow = within(restoredTable).getByRole("button", {
+      name: "checkout-api-0 상세 열기",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(restoredRow));
   }, 15_000);
 
-  it("renders long identity, UID, and owner values as complete wrap-safe text", async () => {
-    const port = resourcesPort({ loadResourceDetail: vi.fn().mockResolvedValue(LONG_DETAIL) });
-    renderResources(port, longDetailUrl());
-
-    const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
-    const title = within(dialog).getByRole("heading", { name: `${LONG_NAME} 상세` });
-    const uid = await within(dialog).findByText(LONG_UID);
-    const owner = within(dialog).getByText(`Deployment/${LONG_OWNER}`);
-
-    expect(title.className).toContain("[overflow-wrap:anywhere]");
-    expect(uid.closest("dd")?.className).toContain("[overflow-wrap:anywhere]");
-    expect(owner.closest("dd")?.className).toContain("[overflow-wrap:anywhere]");
-    expect(owner.closest("dd")?.className).not.toContain("truncate");
-  });
-
-  it("keeps long related identities complete and wrap-safe", async () => {
-    const user = userEvent.setup();
-    const port = resourcesPort({ loadResourceDetail: vi.fn().mockResolvedValue(LONG_DETAIL) });
-    renderResources(port, longDetailUrl());
-
-    const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
-    await user.click(await within(dialog).findByRole("tab", { name: "관계 1" }));
-    const related = await within(dialog).findByText(
-      `Service · ${LONG_NAMESPACE}/${LONG_RELATED_NAME}`,
-    );
-
-    expect(related.className).toContain("[overflow-wrap:anywhere]");
-    expect(related.className).not.toContain("truncate");
-  });
-
-  it("keeps long event reasons and messages complete and wrap-safe", async () => {
-    const user = userEvent.setup();
-    const port = resourcesPort({ loadResourceDetail: vi.fn().mockResolvedValue(LONG_DETAIL) });
-    renderResources(port, longDetailUrl());
-
-    const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
-    await user.click(await within(dialog).findByRole("tab", { name: "이벤트 1" }));
-    const reason = await within(dialog).findByText(LONG_EVENT_REASON);
-    const message = within(dialog).getByText(LONG_EVENT_MESSAGE);
-
-    expect(reason.className).toContain("[overflow-wrap:anywhere]");
-    expect(message.className).toContain("[overflow-wrap:anywhere]");
-  });
 });
-
-const LONG_NAME = `checkout-${"n".repeat(240)}`;
-const LONG_NAMESPACE = `team-${"s".repeat(58)}`;
-const LONG_UID = `uid-${"u".repeat(240)}`;
-const LONG_OWNER = `owner-${"o".repeat(240)}`;
-const LONG_RELATED_NAME = `service-${"r".repeat(240)}`;
-const LONG_EVENT_REASON = `BackOff${"R".repeat(240)}`;
-const LONG_EVENT_MESSAGE = `ContainerRestart${"M".repeat(480)}`;
-
-const LONG_DETAIL: ResourceDetail = {
-  ...POD_DETAIL,
-  identity: {
-    ...POD_DETAIL.identity,
-    namespace: LONG_NAMESPACE,
-    name: LONG_NAME,
-  },
-  resource: {
-    ...POD_DETAIL.resource,
-    id: "pod:cluster-1/long/identity",
-    inventoryKey: "pod:long/identity",
-    namespace: LONG_NAMESPACE,
-    name: LONG_NAME,
-    uid: LONG_UID,
-    facts: {
-      type: "pod",
-      phase: "Running",
-      nodeName: `node-${"d".repeat(240)}`,
-      owner: { kind: "Deployment", name: LONG_OWNER },
-      readiness: { ready: 1, total: 1 },
-      restartCount: 2,
-      cpuMillicores: 250,
-      memoryMebibytes: 384,
-      podIp: null,
-      hostIp: null,
-      waitingReasons: [],
-      terminatedReasons: [],
-    },
-  },
-  related: [{
-    name: "Selected by",
-    items: [{
-      ...POD_DETAIL.resource,
-      id: "service:cluster-1/long/identity",
-      inventoryKey: "service:long/identity",
-      uid: `uid-${"v".repeat(240)}`,
-      resourceType: "service",
-      kind: "Service",
-      namespace: LONG_NAMESPACE,
-      name: LONG_RELATED_NAME,
-      facts: {
-        type: "service",
-        serviceType: "ClusterIP",
-        clusterIp: "10.96.0.10",
-        externalUrl: null,
-        externalHosts: [],
-        selector: [],
-        ports: [],
-      },
-    }],
-  }],
-  events: [{
-    ...POD_DETAIL.events[0]!,
-    id: "event:cluster-1/long/identity",
-    inventoryKey: "event:long/identity",
-    name: LONG_EVENT_REASON,
-    facts: {
-      type: "event",
-      eventType: "Warning",
-      reason: LONG_EVENT_REASON,
-      message: LONG_EVENT_MESSAGE,
-      occurrenceCount: 2,
-      firstSeenAt: "2026-07-12T09:58:00.000Z",
-      lastSeenAt: "2026-07-12T09:59:00.000Z",
-      reportingComponent: "kubelet",
-      involvedResource: { kind: "Pod", name: LONG_NAME, uid: LONG_UID },
-    },
-  }],
-};
-
-function longDetailUrl(): string {
-  const resource = encodeURIComponent(`${LONG_NAMESPACE}/${LONG_NAME}`);
-  return "/resources?clusters=cluster-1&resources.types=pod" +
-    `&resource=${resource}&resourceKind=Pod`;
-}
 
 function resetDocumentTestClock() {
   vi.useRealTimers();
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
-}
-
-async function findTableText(text: string) {
-  const table = await screen.findByRole("table", { hidden: true }, { timeout: 5_000 });
-  return within(table).findByText(text, {}, { timeout: 5_000 });
 }

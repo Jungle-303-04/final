@@ -4,6 +4,27 @@ import type { GitOpsEndpointDependencies } from "./gitOpsEndpointContract";
 import { createGitOpsAdapter } from "./createGitOpsAdapter";
 
 describe("createGitOpsAdapter", () => {
+  it("keeps release planning compatible with the strict BQ-039 catalog identity", async () => {
+    const endpoints = endpointFixture({
+      listApplications: vi.fn().mockResolvedValue({ applications: [{
+        id: "app-checkout",
+        name: "checkout-api",
+        repository_ref: "opsia/checkout",
+        default_branch: "main",
+        manifest_path: "deploy/prod",
+      }] }),
+    });
+
+    await expect(createGitOpsAdapter(endpoints).listApplications()).resolves.toEqual([{
+      id: "app-checkout",
+      name: "checkout-api",
+      repository: "opsia/checkout",
+      branch: "main",
+      clusterId: "",
+      manifestPath: "deploy/prod",
+    }]);
+  });
+
   it("normalizes application records and drops entries without an id", async () => {
     const endpoints = endpointFixture({
       listApplications: vi.fn().mockResolvedValue({ applications: [{

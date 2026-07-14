@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from domains.application_filter.query import ApplicationFilters, parse_application_filters
+from domains.applications.product_projection import (
+    application_card,
+    application_detail,
+    deployment_history_projection,
+    drift_projection,
+)
 from domains.gitops.repository import (
     derive_application_id,
     derive_repository_id,
@@ -23,6 +32,8 @@ from domains.identity.dependencies import (
     require_cluster_access,
     require_resource_access,
     require_session,
+    resolve_allowed_application_ids,
+    resolve_allowed_cluster_ids,
 )
 from domains.target.management_guard import (
     is_management_registration,
@@ -37,9 +48,11 @@ from packages.contracts.gateway.requests import (
     RepositoryManifestValidationRequest,
 )
 from packages.contracts.gateway.responses import (
-    ApplicationListResponse,
+    ApplicationDeploymentHistoryResponse,
+    ApplicationDriftResponse,
+    ApplicationProductDetailResponse,
+    ApplicationProductListResponse,
     ApplicationResponse,
-    DeploymentBindingListResponse,
     DeploymentBindingResponse,
     WorkflowRunListResponse,
 )
@@ -79,6 +92,8 @@ MANIFEST_VALIDATION_FAILED = "manifest validation failed"
 CLUSTER_NOT_CONNECTED_CODE = "cluster_not_connected"
 CLUSTER_NOT_CONNECTED_DETAIL = "에이전트가 연결되지 않은 클러스터입니다"
 REPOSITORY_CREDENTIAL_UNAVAILABLE = "repository credential is unavailable"
+APPLICATION_FILTER_INVALID = "application filter request is invalid"
+APPLICATION_LABEL_PROJECTION_UNAVAILABLE = "application label projection is unavailable"
 
 
 def repository_discovery_service() -> RepositoryDiscoveryService:
@@ -372,27 +387,256 @@ def authorized_stored_repo_credential_ref(
     return stored_ref
 
 
-@router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationListResponse)
-async def list_applications(
-    limit: int = Query(default=100, ge=1, le=500),
-    current: Any = Depends(require_session),
-    db: Any = Depends(get_db),
-) -> ApplicationListResponse:
-    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    accessible_ids = await to_thread_db_retry(
-        db.accessible_resource_ids,
-        current.user_id,
+def _parse_product_filters(
+    *,
+    clusters: str | None,
+    namespaces: str | None,
+    applications: str | None,
+    labels: str | None,
+    environments: str | None,
+    statuses: str | None,
+    pending_promotion: str | None,
+    query: str | None,
+) -> ApplicationFilters:
+    try:
+        return parse_application_filters(
+            clusters=clusters,
+            namespaces=namespaces,
+            applications=applications,
+            environments=environments,
+            statuses=statuses,
+            pending_promotion=pending_promotion,
+            labels=labels,
+            query=query,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=APPLICATION_FILTER_INVALID) from exc
+
+
+async def _product_scope(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+) -> tuple[set[str], set[str]]:
+    cluster_task = asyncio.to_thread(
+        resolve_allowed_cluster_ids,
+        db,
+        current,
         workspace_id,
-        AccessResourceType.APPLICATION.value,
+        Permission.INVENTORY_READ.value,
+    )
+    application_task = asyncio.to_thread(
+        resolve_allowed_application_ids,
+        db,
+        current,
+        workspace_id,
         Permission.APPLICATION_READ.value,
     )
-    applications = await to_thread_db_retry(
-        db.list_applications,
+    clusters, applications = await asyncio.gather(cluster_task, application_task)
+    return set(clusters), set(applications)
+
+
+async def _allowed_product_cluster_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+) -> set[str]:
+    return set(
+        await asyncio.to_thread(
+            resolve_allowed_cluster_ids,
+            db,
+            current,
+            workspace_id,
+            Permission.INVENTORY_READ.value,
+        )
+    )
+
+
+def _require_product_filter_scope(
+    filters: ApplicationFilters,
+    *,
+    allowed_cluster_ids: set[str],
+    allowed_application_ids: set[str],
+) -> None:
+    requested_clusters = set(filters.clusters) | {
+        cluster_id for cluster_id, _namespace in filters.namespaces
+    }
+    if not requested_clusters.issubset(allowed_cluster_ids):
+        raise HTTPException(status_code=404, detail=APPLICATION_NOT_FOUND)
+    if not set(filters.applications).issubset(allowed_application_ids):
+        raise HTTPException(status_code=404, detail=APPLICATION_NOT_FOUND)
+
+
+async def _visible_application_runs(
+    db: Any,
+    *,
+    workspace_id: str,
+    application_id: str,
+    allowed_cluster_ids: set[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    if not allowed_cluster_ids:
+        return []
+    rows = await asyncio.to_thread(
+        db.list_application_workflow_runs,
         workspace_id,
-        application_ids=accessible_ids,
+        application_id,
         limit=limit,
     )
-    return ApplicationListResponse(applications=applications)
+    return [dict(row) for row in rows if str(row.get("cluster_id") or "") in allowed_cluster_ids]
+
+
+async def _product_state(
+    db: Any,
+    *,
+    workspace_id: str,
+    application: Mapping[str, Any],
+    allowed_cluster_ids: set[str],
+) -> dict[str, Any]:
+    application_id = str(application.get("application_id") or "")
+    raw_bindings = await asyncio.to_thread(
+        db.list_application_deployment_bindings,
+        workspace_id,
+        application_id,
+        limit=500,
+    )
+    bindings = [
+        dict(binding)
+        for binding in raw_bindings
+        if str(binding.get("cluster_id") or "") in allowed_cluster_ids
+    ]
+    runs = await _visible_application_runs(
+        db,
+        workspace_id=workspace_id,
+        application_id=application_id,
+        allowed_cluster_ids=allowed_cluster_ids,
+        limit=100,
+    )
+    bound_cluster_ids = {
+        str(binding.get("cluster_id") or "")
+        for binding in bindings
+        if str(binding.get("cluster_id") or "")
+    }
+    evidence_cluster_ids = bound_cluster_ids or allowed_cluster_ids
+    inventory_rows, inventory_context, incident_evidence = await asyncio.gather(
+        asyncio.to_thread(
+            db.get_application_inventory_evidence,
+            workspace_id=workspace_id,
+            application_id=application_id,
+            allowed_cluster_ids=evidence_cluster_ids,
+        ),
+        asyncio.to_thread(
+            db.filter_snapshot_context,
+            workspace_id,
+            evidence_cluster_ids,
+        ),
+        asyncio.to_thread(
+            db.get_application_incident_evidence,
+            workspace_id=workspace_id,
+            application_id=application_id,
+            allowed_cluster_ids=evidence_cluster_ids,
+            limit=3,
+        ),
+    )
+    return {
+        "bindings": bindings,
+        "runs": runs,
+        "inventory_rows": inventory_rows,
+        "inventory_context": inventory_context,
+        "incident_evidence": incident_evidence,
+    }
+
+
+def _application_problem_sort(card: Mapping[str, Any]) -> tuple[int, int, int, str, str]:
+    incidents = card.get("open_incidents")
+    health = str(_mapping(card.get("health")).get("status") or "unknown")
+    return (
+        0 if isinstance(incidents, int) and incidents > 0 else 1,
+        0 if card.get("has_drift") is True else 1,
+        0 if health == "degraded" else 1 if health == "unknown" else 2,
+        str(card.get("name") or "").casefold(),
+        str(card.get("id") or ""),
+    )
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+@router.get(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationProductListResponse)
+async def list_applications(
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    applications: str | None = Query(default=None),
+    labels: str | None = Query(default=None),
+    applications_environment: str | None = Query(
+        default=None,
+        alias="applications.environment",
+    ),
+    applications_status: str | None = Query(default=None, alias="applications.status"),
+    applications_pending_promotion: str | None = Query(
+        default=None,
+        alias="applications.pendingPromotion",
+    ),
+    applications_q: str | None = Query(default=None, alias="applications.q"),
+    limit: int = Query(default=100, ge=1, le=200),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ApplicationProductListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    filters = _parse_product_filters(
+        clusters=clusters,
+        namespaces=namespaces,
+        applications=applications,
+        labels=labels,
+        environments=applications_environment,
+        statuses=applications_status,
+        pending_promotion=applications_pending_promotion,
+        query=applications_q,
+    )
+    allowed_cluster_ids, allowed_application_ids = await _product_scope(
+        db,
+        current,
+        workspace_id,
+    )
+    _require_product_filter_scope(
+        filters,
+        allowed_cluster_ids=allowed_cluster_ids,
+        allowed_application_ids=allowed_application_ids,
+    )
+    if filters.labels:
+        raise HTTPException(status_code=503, detail=APPLICATION_LABEL_PROJECTION_UNAVAILABLE)
+    filtered = await asyncio.to_thread(
+        db.list_filtered_applications,
+        workspace_id=workspace_id,
+        allowed_cluster_ids=allowed_cluster_ids,
+        allowed_application_ids=allowed_application_ids,
+        filters=filters,
+        position=None,
+        limit=limit,
+    )
+    filtered_ids = [str(item.get("application_id") or "") for item in filtered.get("items", [])]
+    raw_applications = await to_thread_db_retry(
+        db.list_applications,
+        workspace_id,
+        application_ids=set(filtered_ids),
+        limit=limit,
+    )
+    by_id = {str(item.get("application_id") or ""): item for item in raw_applications}
+    cards = []
+    for application_id in filtered_ids:
+        application = by_id.get(application_id)
+        if application is None:
+            continue
+        state = await _product_state(
+            db,
+            workspace_id=workspace_id,
+            application=application,
+            allowed_cluster_ids=allowed_cluster_ids,
+        )
+        cards.append(application_card(application, **state))
+    cards.sort(key=_application_problem_sort)
+    return ApplicationProductListResponse(applications=cards)
 
 
 @router.post(gateway_routes.APPLICATIONS_PATH, response_model=ApplicationResponse)
@@ -623,12 +867,12 @@ async def connect_application(
     return ApplicationResponse(application=application)
 
 
-@router.get(gateway_routes.APPLICATION_PATH, response_model=ApplicationResponse)
+@router.get(gateway_routes.APPLICATION_PATH, response_model=ApplicationProductDetailResponse)
 async def get_application(
     application_id: str,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> ApplicationResponse:
+) -> ApplicationProductDetailResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_application_access(
         db,
@@ -637,19 +881,56 @@ async def get_application(
         application_id,
         Permission.APPLICATION_READ.value,
     )
-    return ApplicationResponse(application=get_application_or_404(db, workspace_id, application_id))
+    application = get_application_or_404(db, workspace_id, application_id)
+    allowed_cluster_ids = await _allowed_product_cluster_ids(db, current, workspace_id)
+    state = await _product_state(
+        db,
+        workspace_id=workspace_id,
+        application=application,
+        allowed_cluster_ids=allowed_cluster_ids,
+    )
+    return ApplicationProductDetailResponse(application=application_detail(application, **state))
+
+
+@router.get(
+    gateway_routes.APPLICATION_DRIFT_PATH,
+    response_model=ApplicationDriftResponse,
+)
+async def get_application_drift(
+    application_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ApplicationDriftResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_application_access(
+        db,
+        current,
+        workspace_id,
+        application_id,
+        Permission.APPLICATION_READ.value,
+    )
+    get_application_or_404(db, workspace_id, application_id)
+    allowed_cluster_ids = await _allowed_product_cluster_ids(db, current, workspace_id)
+    runs = await _visible_application_runs(
+        db,
+        workspace_id=workspace_id,
+        application_id=application_id,
+        allowed_cluster_ids=allowed_cluster_ids,
+        limit=100,
+    )
+    return ApplicationDriftResponse.model_validate(drift_projection(runs))
 
 
 @router.get(
     gateway_routes.APPLICATION_DEPLOYMENTS_PATH,
-    response_model=DeploymentBindingListResponse,
+    response_model=ApplicationDeploymentHistoryResponse,
 )
 async def list_application_deployments(
     application_id: str,
     limit: int = Query(default=100, ge=1, le=500),
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
-) -> DeploymentBindingListResponse:
+) -> ApplicationDeploymentHistoryResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_application_access(
         db,
@@ -658,12 +939,16 @@ async def list_application_deployments(
         application_id,
         Permission.DEPLOYMENT_READ.value,
     )
-    deployments = db.list_application_deployment_bindings(
-        workspace_id,
-        application_id,
+    get_application_or_404(db, workspace_id, application_id)
+    allowed_cluster_ids = await _allowed_product_cluster_ids(db, current, workspace_id)
+    runs = await _visible_application_runs(
+        db,
+        workspace_id=workspace_id,
+        application_id=application_id,
+        allowed_cluster_ids=allowed_cluster_ids,
         limit=limit,
     )
-    return DeploymentBindingListResponse(deployments=deployments)
+    return ApplicationDeploymentHistoryResponse(deployments=deployment_history_projection(runs))
 
 
 @router.post(

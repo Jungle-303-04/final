@@ -1,6 +1,6 @@
 import { Popover } from "@base-ui/react/popover";
 import { Columns3, Rows3, Settings2 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
 import type { FlowDirection } from "./workflowGraphTypes";
@@ -26,17 +26,6 @@ export function WorkflowViewSettings({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return undefined;
-    const graphVisible = window.matchMedia("(min-width: 1280px)");
-    const closeWhenHidden = () => {
-      if (!graphVisible.matches) setOpen(false);
-    };
-    closeWhenHidden();
-    graphVisible.addEventListener("change", closeWhenHidden);
-    return () => graphVisible.removeEventListener("change", closeWhenHidden);
-  }, []);
 
   return (
     <Popover.Root onOpenChange={setOpen} open={open}>

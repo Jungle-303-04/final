@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from datetime import datetime
+from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -373,6 +374,47 @@ class AiMessageCreateRequest(StrictModel):
     message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
     agent: str | None = Field(default=None, min_length=1, max_length=80)
     context: dict[str, Any] = Field(default_factory=dict)
+
+
+AiAssistantFilterValue = Annotated[str, Field(min_length=1, max_length=512)]
+
+
+class AiAssistantFilters(StrictModel):
+    """Canonical product filters that are safe to bind to AI evidence queries."""
+
+    clusters: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=50)
+    namespaces: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=100)
+    applications: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=100)
+    labels: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=100)
+    resource_types: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=50)
+    health: list[AiAssistantFilterValue] = Field(default_factory=list, max_length=50)
+    query: str = Field(default="", max_length=253)
+
+
+class AiAssistantSelection(StrictModel):
+    type: Literal["resource"]
+    identity: str = Field(min_length=1, max_length=1024)
+
+
+class AiAssistantContext(StrictModel):
+    screen: str = Field(min_length=1, max_length=80)
+    filters: AiAssistantFilters
+    selection: AiAssistantSelection | None = None
+    time: datetime | None = None
+    # Opaque handle for a persisted, server-authorized browser log query. Raw
+    # log text is never accepted in assistant context.
+    log_stream_id: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def require_offset_time(self) -> AiAssistantContext:
+        if self.time is not None and self.time.utcoffset() is None:
+            raise ValueError("AI context time must include a UTC offset")
+        return self
+
+
+class AiChatRequest(StrictModel):
+    context: AiAssistantContext
+    message: str = Field(min_length=1, max_length=MAX_AI_MESSAGE_LENGTH)
 
 
 class ApplicationUpsertRequest(StrictModel):

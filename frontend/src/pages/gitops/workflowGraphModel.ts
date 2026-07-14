@@ -34,8 +34,33 @@ export function buildWorkflowGraph(
   const waveByKey = releaseWaves(plan.steps);
   const nodes: WorkflowNode[] = [];
   const edges: WorkflowEdge[] = [];
+  const edgeIds = new Set<string>();
   const roots = new Set<string>();
   const dependedOn = new Set<string>();
+  const gateByKey = new Map<string, string>();
+  const entryByKey = new Map<string, string>();
+  const approvalKeysById = new Map<string, string[]>();
+  const createdApprovalIds = new Set<string>();
+
+  plan.steps.forEach((step, index) => {
+    const key = keys[index];
+    const gate = resolvedGate(plan, step);
+    gateByKey.set(key, gate);
+    if (gate === "auto") {
+      entryByKey.set(key, key);
+      return;
+    }
+    const wave = waveByKey.get(key) ?? index + 1;
+    const entryId = productionWaveApprovalId(plan, step, wave) || `approval::${key}`;
+    entryByKey.set(key, entryId);
+    approvalKeysById.set(entryId, [...(approvalKeysById.get(entryId) || []), key]);
+  });
+
+  const connect = (id: string, source: string, target: string, status: string) => {
+    if (edgeIds.has(id)) return;
+    edgeIds.add(id);
+    edges.push(flowEdge(id, source, target, status));
+  };
 
   if (options.showCheckpoints && plan.steps.length) {
     nodes.push(checkpointNode(
@@ -55,11 +80,19 @@ export function buildWorkflowGraph(
     if (!dependencies.length) roots.add(key);
     dependencies.forEach((dependency) => dependedOn.add(dependency));
     const status = runStepStatus(run?.steps, step.application_id);
-    const gate = resolvedGate(plan, step);
+    const gate = gateByKey.get(key) || "auto";
     const needsGate = options.showCheckpoints && gate !== "auto";
-    const entryId = needsGate ? `approval::${key}` : key;
+    const entryId = needsGate ? (entryByKey.get(key) || `approval::${key}`) : key;
 
-    if (needsGate) {
+    if (needsGate && !createdApprovalIds.has(entryId)) {
+      createdApprovalIds.add(entryId);
+      const approvalKeys = approvalKeysById.get(entryId) || [key];
+      const selectedApprovalKey = approvalKeys.find((approvalKey) => approvalKey === selectedStepId);
+      const waiting = approvalKeys.some((approvalKey) => {
+        const approvalStep = plan.steps[keys.indexOf(approvalKey)];
+        return runStepStatus(run?.steps, approvalStep.application_id) === "waiting_for_approval";
+      });
+      const wave = waveByKey.get(key) ?? index + 1;
       nodes.push({
         id: entryId,
         type: "workflow",
@@ -69,13 +102,14 @@ export function buildWorkflowGraph(
         data: nodeData({
           kind: "approval",
           title: gate === "safe_pr" ? t("workflows.graph.safePrApproval") : t("workflows.graph.manualApproval"),
-          eyebrow: "APPROVAL",
-          status: status === "waiting_for_approval" ? status : run ? "succeeded" : "pending",
-          selected: selectedStepId === key,
+          eyebrow: approvalKeys.length > 1 ? `APPROVAL · WAVE ${wave}` : "APPROVAL",
+          status: waiting ? "waiting_for_approval" : run ? "succeeded" : "pending",
+          ownerStepId: selectedApprovalKey || approvalKeys[0],
+          selected: Boolean(selectedApprovalKey),
         }, options, t),
       });
-      edges.push(flowEdge(`edge-${entryId}-${key}`, entryId, key, status));
     }
+    if (needsGate) connect(`edge-${entryId}-${key}`, entryId, key, status);
 
     nodes.push({
       id: key,
@@ -91,22 +125,22 @@ export function buildWorkflowGraph(
         environment: configString(step, "environment", t("workflows.value.notSet")),
         cluster: configString(step, "cluster_id", application?.clusterId || t("workflows.value.notSet")),
         strategy: strategyLabel(configString(step, "strategy", settingString(plan, "default_strategy", "rolling")), t),
+        ownerStepId: key,
         selected: selectedStepId === key,
       }, options, t),
     });
-    dependencies.forEach((dependency) => edges.push(flowEdge(
+    dependencies.forEach((dependency) => connect(
       `edge-${dependency}-${entryId}`,
       dependency,
       entryId,
       status,
-    )));
+    ));
   });
 
   if (options.showCheckpoints && plan.steps.length) {
     roots.forEach((root) => {
-      const step = plan.steps[keys.indexOf(root)];
-      const target = resolvedGate(plan, step) !== "auto" ? `approval::${root}` : root;
-      edges.push(flowEdge(`edge-preflight-${target}`, "preflight", target, run ? "succeeded" : "pending"));
+      const target = entryByKey.get(root) || root;
+      connect(`edge-preflight-${target}`, "preflight", target, run ? "succeeded" : "pending");
     });
     nodes.push(checkpointNode(
       "verification",
@@ -117,7 +151,7 @@ export function buildWorkflowGraph(
       t,
     ));
     keys.filter((key) => !dependedOn.has(key)).forEach((leaf) => {
-      edges.push(flowEdge(`edge-${leaf}-verification`, leaf, "verification", run?.status || "pending"));
+      connect(`edge-${leaf}-verification`, leaf, "verification", run?.status || "pending");
     });
   }
   return { nodes, edges };
@@ -186,6 +220,20 @@ function resolvedGate(plan: ReleasePlan, step: ReleasePlan["steps"][number]): st
     return configString(step, "environment", "staging") === "production" ? "manual" : "auto";
   }
   return "manual";
+}
+
+function productionWaveApprovalId(
+  plan: ReleasePlan,
+  step: ReleasePlan["steps"][number],
+  wave: number,
+): string | undefined {
+  const configuredGate = configString(step, "approval_gate", "inherit");
+  const policy = settingString(plan, "approval_policy", "manual_each_step");
+  const environment = configString(step, "environment", "staging");
+  if (configuredGate !== "inherit" || policy !== "production_only" || environment !== "production") {
+    return undefined;
+  }
+  return `approval-wave::${wave}`;
 }
 
 function statusTone(status: string): WorkflowTone {

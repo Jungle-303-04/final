@@ -63,10 +63,20 @@ class StubApplicationsDb:
         self,
         _user_id: str,
         _workspace_id: str,
-        _resource_type: str,
+        resource_type: str,
         _permission: str,
     ) -> set[str]:
-        return {"app-1"}
+        if resource_type == "cluster":
+            return {"cluster-1"}
+        if resource_type == "application":
+            return {"app-1"}
+        return set()
+
+    def list_filtered_applications(self, **kwargs: object) -> dict[str, object]:
+        assert kwargs["workspace_id"] == "ws-1"
+        assert kwargs["allowed_cluster_ids"] == {"cluster-1"}
+        assert kwargs["allowed_application_ids"] == {"app-1"}
+        return {"items": [{"application_id": "app-1"}], "has_more": False}
 
     def list_applications(
         self,
@@ -159,7 +169,7 @@ class StubApplicationsDb:
     ) -> list[dict[str, object]]:
         assert workspace_id == "ws-1"
         assert application_id == "app-1"
-        assert limit == 25
+        assert limit == 500
         return [
             {
                 "binding_id": "binding-1",
@@ -181,6 +191,74 @@ class StubApplicationsDb:
                 },
             }
         ]
+
+    def list_application_workflow_runs(
+        self,
+        workspace_id: str,
+        application_id: str,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "ws-1"
+        assert application_id == "app-1"
+        assert limit in {25, 100}
+        return [
+            {
+                "workflow_run_id": "run-1",
+                "cluster_id": "cluster-1",
+                "environment": "prod",
+                "commit_sha": "sha-1",
+                "status": "succeeded",
+                "summary": "deployed checkout",
+                "metadata": {"version": "v1", "deployed_by": "user-1"},
+                "updated_at": "2026-07-10T10:00:00+00:00",
+                "steps": [
+                    {
+                        "name": "diff",
+                        "updated_at": "2026-07-10T09:59:00+00:00",
+                        "details": {"status": "no_change", "has_changes": False, "changes": []},
+                    }
+                ],
+            }
+        ]
+
+    def filter_snapshot_context(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, object]:
+        assert workspace_id == "ws-1"
+        assert cluster_ids == {"cluster-1"}
+        return {
+            "snapshot_revision": 42,
+            "resources_complete": True,
+            "application_bindings_complete": True,
+        }
+
+    def get_application_inventory_evidence(self, **kwargs: object) -> list[dict[str, object]]:
+        assert kwargs["workspace_id"] == "ws-1"
+        assert kwargs["application_id"] == "app-1"
+        return [
+            {
+                "id": "pod-1",
+                "resource_type": "pod",
+                "kind": "Pod",
+                "name": "checkout-1",
+                "status": "Running",
+                "health": "healthy",
+                "binding_complete": True,
+                "summary": {
+                    "restart_total": 1,
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                    "image": "ghcr.io/example/checkout:v1@sha256:abc",
+                },
+            }
+        ]
+
+    def get_application_incident_evidence(self, **kwargs: object) -> dict[str, object]:
+        assert kwargs["workspace_id"] == "ws-1"
+        assert kwargs["application_id"] == "app-1"
+        return {"complete": True, "open_count": 0, "items": []}
 
     def register_watch_target(self, payload: dict[str, object]) -> dict[str, object]:
         self.registration_calls.append("watch")
@@ -218,11 +296,25 @@ class StubRepositoryDiscovery:
 
 def test_list_applications_uses_accessible_application_ids() -> None:
     async def run():
-        return await list_applications(limit=50, current=current_session(), db=StubApplicationsDb())
+        return await list_applications(
+            clusters=None,
+            namespaces=None,
+            applications=None,
+            labels=None,
+            applications_environment=None,
+            applications_status=None,
+            applications_pending_promotion=None,
+            applications_q=None,
+            limit=50,
+            current=current_session(),
+            db=StubApplicationsDb(),
+        )
 
     response = asyncio.run(run())
 
-    assert response.applications[0]["application_id"] == "app-1"
+    assert response.applications[0].id == "app-1"
+    assert response.applications[0].repository_ref is None
+    assert response.applications[0].resource_counts[0].kind == "Pod"
 
 
 def test_upsert_application_registers_repository_when_repo_ref_is_present() -> None:
@@ -425,7 +517,7 @@ def test_upsert_application_deployment_requires_app_and_cluster_access() -> None
     ]
 
 
-def test_list_application_deployments_includes_gitops_poll_status() -> None:
+def test_list_application_deployments_returns_strict_workflow_history() -> None:
     db = StubApplicationsDb()
 
     async def run():
@@ -438,15 +530,10 @@ def test_list_application_deployments_includes_gitops_poll_status() -> None:
 
     response = asyncio.run(run())
 
-    assert response.deployments[0]["binding_id"] == "binding-1"
-    assert response.deployments[0]["gitops_poll"] == {
-        "status": "failed",
-        "status_code": 403,
-        "error_kind": "access_denied",
-        "error": "GitHub token cannot read repository",
-        "last_seen_commit_sha": "sha-1",
-        "last_polled_at": "2026-07-10T10:00:00+00:00",
-    }
+    assert response.deployments[0].id == "run-1"
+    assert response.deployments[0].git_sha == "sha-1"
+    assert response.deployments[0].version == "v1"
+    assert response.deployments[0].status == "succeeded"
     assert db.access_checks == [
         ("user-1", "ws-1", "application", "app-1", "deployment.read"),
     ]

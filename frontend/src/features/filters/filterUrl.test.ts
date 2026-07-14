@@ -12,7 +12,6 @@ import {
   productFilterNavigationHref,
   serializeProductFilterUrl,
 } from "./filterUrl";
-
 describe("VP-010 unified filter URL", () => {
   it("round-trips every common and surface axis in canonical order", () => {
     const state: UnifiedFilterState = {
@@ -152,6 +151,7 @@ describe("VP-010 unified filter URL", () => {
     expect(legacy.needsCanonicalWrite).toBe(true);
     expect(legacy.state.common.clusters).toEqual(["unknown/cluster"]);
     expect(legacy.detail).toEqual({
+      detail: null,
       resource: "shop/api",
       resourceKind: "Pod",
       tab: "events",
@@ -187,6 +187,7 @@ describe("VP-010 unified filter URL", () => {
     );
 
     expect(result.detail).toEqual({
+      detail: null,
       resource: "shop/api",
       resourceKind: null,
       tab: null,
@@ -279,7 +280,6 @@ describe("VP-010 unified filter URL", () => {
       "&resources.types=Pod&issues.status=open",
     );
   });
-
   it("uses push for explicit filter changes and replace for typing or migration", () => {
     expect(filterHistoryMode("chip-add")).toBe("push");
     expect(filterHistoryMode("chip-remove")).toBe("push");

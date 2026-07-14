@@ -34,16 +34,24 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
 }
 
 function toApplication(value: Record<string, unknown>): ReleaseApplication | null {
-  const id = stringValue(value.application_id);
+  const id = firstStringValue(value, ["id", "application_id"]);
   if (!id) return null;
   return {
     id,
-    name: stringValue(value.name) || id,
-    repository: stringValue(value.repo_ref),
-    branch: stringValue(value.branch),
+    name: firstStringValue(value, ["name", "display_name"]) || id,
+    repository: firstStringValue(value, ["repository_ref", "repo_ref"]),
+    branch: firstStringValue(value, ["default_branch", "branch"]),
     clusterId: stringValue(value.cluster_id),
     manifestPath: stringValue(value.manifest_path),
   };
+}
+
+function firstStringValue(value: Record<string, unknown>, keys: readonly string[]): string {
+  for (const key of keys) {
+    const current = stringValue(value[key]);
+    if (current !== "") return current;
+  }
+  return "";
 }
 
 function stringValue(value: unknown): string {
