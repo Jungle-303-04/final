@@ -203,6 +203,7 @@ status: synced
 | body | str | (필수) | PR 본문 |
 | provider | str | (필수) | SCM 공급자 식별자 (예: github) |
 | patches | list[SafePrFilePatch] | `[]` | 커밋할 파일 변경 목록 |
+| pr_kind | str | `safe_pr_patch` | `safe_pr_patch`는 실제 설정 변경 PR, `safe_pr_review_doc`은 RCA 검토 문서 PR |
 | workspace_id | str | `DEFAULT_WORKSPACE_ID` (`"default"`) | 워크스페이스 |
 | repository_id | str | `DEFAULT_REPOSITORY_ID` (`""`) | 저장소 id (빈 값이면 파생) |
 | binding_id | str | `DEFAULT_DEPLOYMENT_BINDING_ID` (`""`) | 배포 바인딩 id |

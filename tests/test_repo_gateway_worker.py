@@ -371,6 +371,7 @@ def _change_document_text(request: SafePrRequestedBody) -> str:
     return (
         f"# {request.title}\n\n{request.body}\n\n"
         f"- manifest_path: `{request.manifest_path}`\n"
+        f"- pr_kind: `{request.pr_kind}`\n"
         f"- workflow_run_id: `{request.workflow_run_id}`\n"
         f"- environment: `{request.environment}`\n\n"
         "## Evidence\n\n"
@@ -475,6 +476,7 @@ def test_repo_gateway_creates_pr_from_requested_event(monkeypatch) -> None:
     assert "approval_ref: `approval-1`" in change_doc
     assert "policy_decision_ref: `policy-decision-1`" in change_doc
     assert "commit_sha: `abc123`" in change_doc
+    assert "pr_kind: `safe_pr_patch`" in change_doc
     assert f"patch_sha256: `{outs[0].patch_sha256}`" in change_doc
     assert "## Evidence" in change_doc
     assert "## Approval" in change_doc

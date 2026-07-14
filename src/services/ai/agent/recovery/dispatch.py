@@ -22,7 +22,12 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
-from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from domains.scm.events import (
+    SAFE_PR_KIND_PATCH,
+    SAFE_PR_KIND_REVIEW_DOC,
+    SafePrFilePatch,
+    SafePrRequestedBody,
+)
 from packages.config.constants import Command, GitHub, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.gitops_authority import (
@@ -38,6 +43,10 @@ MISSING_SAFE_PR_PATCH_REASON = "Safe PR에 적용할 구체적인 파일 패치�
 SAFE_PR_FALLBACK_PATCH_DIR = ".gitops/recovery"
 SAFE_PR_STRUCTURED_PATCH_DIR = ".gitops/safe-pr/patches"
 GITOPS_REVIEW_ACTION = "gitops_recovery_review"
+RESOURCE_REQUEST_TUNING_ACTION = "resource_request_tuning"
+REVIEW_DOC_ACTIONS = frozenset({GITOPS_REVIEW_ACTION, RESOURCE_REQUEST_TUNING_ACTION})
+RESOURCE_REQUEST_MIN_CPU = "100m"
+RESOURCE_REQUEST_MIN_MEMORY = "256Mi"
 AUTHORITY_PATCH_ACTIONS = frozenset(
     {
         "oom_memory",
@@ -48,6 +57,92 @@ AUTHORITY_PATCH_ACTIONS = frozenset(
         "selector_fix",
     }
 )
+APPROVAL_REQUIRED_CONTEXTS: dict[str, JsonObject] = {
+    "image_pull_secret_fix": {
+        "reason_code": "security_boundary",
+        "label": "보안 경계 확인",
+        "reason": "registry 인증 정보나 Secret 참조 변경은 자동으로 결정하지 않고 운영자 확인이 필요합니다.",
+        "next_action": "verify_image_pull_secret",
+    },
+    "registry_recovery": {
+        "reason_code": "external_dependency",
+        "label": "외부 의존성 확인",
+        "reason": "외부 registry 장애 또는 mirror 전환은 플랫폼 밖 상태와 운영 정책 확인이 필요합니다.",
+        "next_action": "verify_registry_status",
+    },
+    "container_port_review": {
+        "reason_code": "configuration_boundary",
+        "label": "포트 설정 확인",
+        "reason": "컨테이너 포트 충돌은 manifest, service, probe 설정을 함께 확인한 뒤 수정해야 합니다.",
+        "next_action": "verify_container_port_config",
+    },
+    "startup_security_context_review": {
+        "reason_code": "security_boundary",
+        "label": "보안 컨텍스트 확인",
+        "reason": "권한 오류 복구는 securityContext, volume 권한, 실행 사용자 정책 확인이 필요합니다.",
+        "next_action": "verify_startup_security_context",
+    },
+    "config_key_review": {
+        "reason_code": "configuration_boundary",
+        "label": "설정 key 확인",
+        "reason": "누락된 ConfigMap key는 기대 값과 배포 정책을 운영자가 확인해야 합니다.",
+        "next_action": "verify_config_key_reference",
+    },
+    "secret_reference_fix": {
+        "reason_code": "security_boundary",
+        "label": "Secret 참조 확인",
+        "reason": "Secret 참조 보정은 민감 정보 경계와 namespace 권한 확인이 필요합니다.",
+        "next_action": "verify_secret_reference",
+    },
+    "service_reference_review": {
+        "reason_code": "traffic_routing",
+        "label": "Service 참조 확인",
+        "reason": "Service 이름이나 namespace 보정은 트래픽 라우팅 대상 변경이므로 운영자 확인이 필요합니다.",
+        "next_action": "verify_service_reference",
+    },
+    "network_policy_review": {
+        "reason_code": "traffic_routing",
+        "label": "NetworkPolicy 확인",
+        "reason": "NetworkPolicy 변경은 namespace 간 통신 허용 범위를 바꿀 수 있어 운영자 판단이 필요합니다.",
+        "next_action": "verify_network_policy",
+    },
+    "autoscaling_metrics_recovery": {
+        "reason_code": "platform_dependency",
+        "label": "Autoscaling metrics 확인",
+        "reason": "metrics-server 또는 custom metrics adapter 상태는 플랫폼 의존성 확인이 필요합니다.",
+        "next_action": "verify_autoscaling_metrics",
+    },
+    "dependency_connection_review": {
+        "reason_code": "external_dependency",
+        "label": "외부 의존성 연결 확인",
+        "reason": "DB 연결 복구는 애플리케이션 밖의 endpoint, 네트워크, pool 상태 확인이 필요합니다.",
+        "next_action": "verify_dependency_connectivity",
+    },
+    "dependency_config_review": {
+        "reason_code": "external_dependency",
+        "label": "외부 의존성 설정 확인",
+        "reason": "DB 인증/설정 복구는 Secret/ConfigMap 참조와 외부 서비스 설정 확인이 필요합니다.",
+        "next_action": "verify_dependency_config",
+    },
+    "pvc_binding_fix": {
+        "reason_code": "data_safety",
+        "label": "데이터 안전성 확인",
+        "reason": "PVC와 StorageClass 변경은 데이터 보존과 바인딩 정책에 영향을 줄 수 있어 운영자 판단이 필요합니다.",
+        "next_action": "verify_storage_binding",
+    },
+    "manual_analysis": {
+        "reason_code": "manual_only",
+        "label": "수동 분석 필요",
+        "reason": "자동 복구 후보가 충분하지 않아 운영자 RCA 검토가 필요합니다.",
+        "next_action": "review_rca_findings",
+    },
+}
+DEFAULT_APPROVAL_REQUIRED_CONTEXT: JsonObject = {
+    "reason_code": "manual_review_required",
+    "label": "운영자 승인 필요",
+    "reason": "선택된 복구 조치는 자동 실행 조건을 충족하지 않아 운영자 확인이 필요합니다.",
+    "next_action": "review_recovery_action",
+}
 
 
 @dataclass(frozen=True)
@@ -79,11 +174,7 @@ class RecoveryDispatcher:
         if selected.route == self.routes.safe_pr:
             return await dispatch_safe_pr_body(evt, authority, correlation_id)
         if selected.route == self.routes.approval_required:
-            return RcaActionRequiredBody(
-                reason=f"승인 필요: {selected.title}",
-                evidence_ref=evt.plan.evidence_ref,
-                workspace_id=evt.workspace_id,
-            )
+            return approval_required_body(evt)
         if selected.route == self.routes.forbidden:
             return RcaActionRequiredBody(
                 reason=f"자동 조치 차단: {selected.title}",
@@ -95,6 +186,42 @@ class RecoveryDispatcher:
             evidence_ref=evt.plan.evidence_ref,
             workspace_id=evt.workspace_id,
         )
+
+
+def approval_required_body(evt: RecoveryActionSelectedBody) -> RcaActionRequiredBody:
+    selected = evt.selected
+    context = APPROVAL_REQUIRED_CONTEXTS.get(
+        selected.draft.action_type,
+        DEFAULT_APPROVAL_REQUIRED_CONTEXT,
+    )
+    reason_code = str(context["reason_code"])
+    label = str(context["label"])
+    reason = str(context["reason"])
+    next_action = str(context["next_action"])
+    return RcaActionRequiredBody(
+        reason=f"승인 필요({label}): {selected.title}. {reason}",
+        evidence_ref=evt.plan.evidence_ref,
+        workspace_id=evt.workspace_id,
+        reason_code=reason_code,
+        next_actions=[
+            {
+                "action_type": next_action,
+                "reason": reason,
+                "target": evt.plan.target,
+            }
+        ],
+        diagnostics={
+            "plan_id": evt.plan.plan_id,
+            "incident_id": evt.plan.incident_id,
+            "action_id": selected.action_id,
+            "action_type": selected.draft.action_type,
+            "route": selected.route,
+            "risk_level": selected.risk_level,
+            "blast_radius": selected.blast_radius,
+            "approval_reason": reason_code,
+            "approval_label": label,
+        },
+    )
 
 
 def build_safe_pr_request_body(
@@ -142,6 +269,7 @@ def build_safe_pr_request_body(
         body=body,
         provider=GitHub.PROVIDER,
         patches=patches,
+        pr_kind=safe_pr_kind(selected),
         workspace_id=workspace_id,
         repository_id=(
             authority.repository_id
@@ -181,13 +309,19 @@ def build_safe_pr_request_body(
     )
 
 
+def safe_pr_kind(selected: RecoveryActionCandidate) -> str:
+    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
+        return SAFE_PR_KIND_REVIEW_DOC
+    return SAFE_PR_KIND_PATCH
+
+
 async def dispatch_safe_pr_body(
     evt: RecoveryActionSelectedBody,
     authority_port: GitOpsAuthorityReadPort | None,
     correlation_id: str,
 ) -> EventBody:
     selected = evt.selected
-    if selected.draft.action_type == GITOPS_REVIEW_ACTION:
+    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
         return build_safe_pr_request_body(
             evt.plan,
             selected,
@@ -714,6 +848,16 @@ def fallback_recovery_patch(selected: RecoveryActionCandidate) -> SafePrFilePatc
         "## 롤백\n\n"
         f"{selected.rollback_plan}\n"
     )
+    if draft.action_type == RESOURCE_REQUEST_TUNING_ACTION:
+        content = (
+            f"{content}\n\n"
+            "## 참고 제안값\n\n"
+            f"- CPU request: `{RESOURCE_REQUEST_MIN_CPU}`\n"
+            f"- Memory request: `{RESOURCE_REQUEST_MIN_MEMORY}`\n\n"
+            "이 값은 Opsia Safe PR v1의 최소 참고값이며 자동 적용값이 아닙니다. "
+            "운영자는 실제 workload 부하, namespace quota, node capacity를 확인한 뒤 "
+            "manifest에 적절한 값을 직접 반영해야 합니다.\n"
+        )
     return SafePrFilePatch(
         path=path,
         content=content,

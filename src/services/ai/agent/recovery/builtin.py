@@ -434,6 +434,259 @@ class SelectorRecoveryActions:
     pass
 
 
+@rca.recovery(
+    root_causes=("app_port_bind_failed",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="container_port_review",
+            title="컨테이너 포트 충돌 검토",
+            description="프로세스가 바인딩하려는 포트와 manifest/service/probe 포트 설정을 함께 확인합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("startup log의 port bind 실패 근거", "컨테이너 port와 service targetPort 확인"),
+            validation_checks=("pod 재시작 루프 중단", "프로세스 listen 성공", "Ready 상태 회복"),
+            rollback_plan="포트 설정 변경이 있었다면 manifest 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "container_port"},
+        ),
+    ),
+)
+class StartupPortRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("permission_denied_startup",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="startup_security_context_review",
+            title="Startup 권한/보안 컨텍스트 확인",
+            description="permission denied 로그와 securityContext, volume mount 권한, 실행 사용자 설정을 확인합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("startup log의 permission denied 근거", "securityContext와 mount permission 확인"),
+            validation_checks=("permission denied 로그 소멸", "pod Ready 회복", "보안 정책 위반 없음"),
+            rollback_plan="securityContext 또는 mount 권한 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "startup_permission"},
+        ),
+    ),
+)
+class StartupPermissionRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("config_key_missing",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="config_key_review",
+            title="ConfigMap key 누락 확인",
+            description="참조한 ConfigMap key가 실제 객체에 존재하는지 확인하고 필요한 보정 값을 운영자가 결정합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.64,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("누락 key 이름 확인", "ConfigMap 참조 namespace 확인"),
+            validation_checks=("config load error 소멸", "pod Ready 회복", "잘못된 기본값 주입 없음"),
+            rollback_plan="ConfigMap key 보정 또는 참조 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "config_key"},
+        ),
+    ),
+)
+class ConfigKeyRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("missing_secret_reference",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="secret_reference_fix",
+            title="Secret 참조 누락 확인",
+            description="Pod가 참조하는 Secret 이름과 key를 확인하고 민감값 없이 참조 수준에서 보정합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.64,
+            blast_radius="target_namespace",
+            approval_required=True,
+            prerequisites=("Secret 이름과 key reference 확인", "대상 namespace 확인"),
+            validation_checks=("secret not found 이벤트 소멸", "pod Ready 회복", "민감값 노출 없음"),
+            rollback_plan="Secret 참조 변경 commit을 revert하거나 이전 참조로 되돌립니다.",
+            params={"manual": True, "fix": "secret_reference"},
+        ),
+    ),
+)
+class SecretReferenceRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("service_name_or_namespace_mismatch",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="service_reference_review",
+            title="Service 이름/namespace 참조 확인",
+            description="애플리케이션이 호출하는 service DNS 이름과 실제 Service namespace/name을 비교합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("오류 로그의 service host 확인", "실제 Service name/namespace 확인"),
+            validation_checks=("DNS lookup 실패 소멸", "대상 service 연결 성공", "5xx/timeout 감소"),
+            rollback_plan="service 참조 설정 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "service_reference"},
+        ),
+    ),
+)
+class ServiceReferenceRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("network_policy_denied",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="network_policy_review",
+            title="NetworkPolicy 차단 확인",
+            description="대상 namespace의 ingress/egress NetworkPolicy가 필요한 service 통신을 차단하는지 확인합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_namespace",
+            approval_required=True,
+            prerequisites=("차단된 source/destination 확인", "적용 중인 NetworkPolicy 확인"),
+            validation_checks=("허용 후 연결 성공", "불필요한 namespace 노출 없음", "5xx/timeout 감소"),
+            rollback_plan="NetworkPolicy 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "network_policy"},
+        ),
+    ),
+)
+class NetworkPolicyRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("metrics_server_unavailable",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="autoscaling_metrics_recovery",
+            title="Autoscaling metrics 경로 복구",
+            description="metrics-server 또는 custom metrics adapter 상태를 확인해 HPA replica 계산 경로를 복구합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_namespace",
+            approval_required=True,
+            prerequisites=("HPA FailedGetResourceMetric 근거", "metrics API 또는 adapter 상태 확인"),
+            validation_checks=("HPA metric 조회 성공", "ScalingActive 회복", "replica 계산 재개"),
+            rollback_plan="metrics adapter 또는 HPA 설정 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "autoscaling_metrics"},
+        ),
+    ),
+)
+class AutoscalingMetricsRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("missing_resource_requests",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="resource_request_tuning",
+            title="HPA resource request 보정 PR",
+            description="HPA 계산에 필요한 CPU/memory request를 정책 범위 안에서 보정하는 PR을 제안합니다.",
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.64,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("누락된 resource request 확인", "GitOps 승인 snapshot"),
+            validation_checks=("HPA metric 계산 성공", "Pod Ready 유지", "리소스 사용률 안정"),
+            rollback_plan="resource request 보정 commit을 revert합니다.",
+            params={"strategy": "hpa_required_requests"},
+        ),
+    ),
+)
+class AutoscalingResourceRequestRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("max_replica_limit_reached",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="replica_scale",
+            title="HPA maxReplicas 상한 검토 PR",
+            description="트래픽 증가로 maxReplicas 상한에 도달한 경우 제한된 replica 상향 PR을 제안합니다.",
+            route=routes.safe_pr,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("ScalingLimited=True 근거", "GitOps 승인 snapshot", "리소스 여유 확인"),
+            validation_checks=("Ready replica 증가", "ScalingLimited 완화", "5xx/latency 감소"),
+            rollback_plan="동반된 inverse patch로 replica 상한 또는 replica 수를 이전 값으로 되돌립니다.",
+            params={"strategy": "hpa_max_replicas_review", "max_replicas": 10},
+        ),
+    ),
+)
+class AutoscalingMaxReplicaRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("database_connectivity_failure", "database_connection_pool_exhausted"),
+    actions=(
+        RecoveryActionSpec(
+            action_type="dependency_connection_review",
+            title="DB 연결 경로 복구 검토",
+            description="DB endpoint, 네트워크 경로, connection pool 상태를 확인해 외부 의존성 복구 조치를 결정합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("DB connection error 로그 또는 trace 근거", "DB endpoint와 pool 설정 확인"),
+            validation_checks=("DB 연결 성공", "pool exhausted 로그 감소", "요청 성공률 회복"),
+            rollback_plan="DB connection 설정 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "db_connectivity"},
+        ),
+    ),
+)
+class DatabaseConnectivityRecoveryActions:
+    pass
+
+
+@rca.recovery(
+    root_causes=("database_credential_or_config_error",),
+    actions=(
+        RecoveryActionSpec(
+            action_type="dependency_config_review",
+            title="DB 인증/설정 참조 확인",
+            description="DB host, database name, credential Secret/ConfigMap 참조를 민감값 없이 확인합니다.",
+            route=routes.approval_required,
+            risk_level="medium",
+            score=0.62,
+            blast_radius="target_workload",
+            approval_required=True,
+            prerequisites=("DB credential/config error 근거", "Secret/ConfigMap reference 확인"),
+            validation_checks=("DB 인증 성공", "설정 오류 로그 소멸", "민감값 노출 없음"),
+            rollback_plan="DB 설정 참조 변경 commit을 revert합니다.",
+            params={"manual": True, "fix": "db_config"},
+        ),
+    ),
+)
+class DatabaseConfigRecoveryActions:
+    pass
+
+
 @rca.fallback(
     actions=(
         RecoveryActionSpec(

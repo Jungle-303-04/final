@@ -7,7 +7,7 @@
     "src/services/ai/agent/causes/catalog/readiness.yaml": "e09f2afd27bcbab5a88a7908067d245a469a2ec9b4167aa0450cd18bf1742cf3",
     "src/services/ai/agent/causes/catalog/scheduling.yaml": "8f9b6bfd18ebc1b9d5b3cc14eb90a1146563ce1ae65a885f5666981623f24d28",
     "src/services/ai/agent/causes/catalog/storage_volume.yaml": "312d3de23652bf2f73008482f8947512df026bfb92e7c47f3cf408b8ba5f2334",
-    "src/services/ai/agent/recovery/builtin.py": "b6ad835f87e602995ec3a8656d41484303c0c57eb0ca1046d1bd407216a05c56"
+    "src/services/ai/agent/recovery/builtin.py": "538939891bf764200e6a00274f47266df3d7c32d3974d89a375bfbe62310eadf"
   },
   "fallback_actions": [
     "manual_analysis"
@@ -245,28 +245,39 @@
     }
   },
   "recovery_actions": {
-    "oom_killed": [
-      "rollout_restart",
-      "oom_memory",
-      "replica_scale"
-    ],
-    "bad_image_rollout": [
-      "image_rollback"
+    "app_port_bind_failed": [
+      "container_port_review"
     ],
     "app_startup_failure": [
+      "image_rollback"
+    ],
+    "application_5xx_spike": [
+      "replica_scale",
+      "gitops_recovery_review",
+      "deployment_scale",
+      "rollout_restart"
+    ],
+    "backend_readiness_failure": [
+      "rollout_restart",
+      "deployment_scale"
+    ],
+    "bad_image_rollout": [
       "image_rollback"
     ],
     "config_env_error": [
       "config_fix"
     ],
-    "wrong_image_tag": [
-      "image_tag_fix"
+    "config_key_missing": [
+      "config_key_review"
     ],
-    "missing_image_pull_secret": [
-      "image_pull_secret_fix"
+    "database_connection_pool_exhausted": [
+      "dependency_connection_review"
     ],
-    "registry_unavailable": [
-      "registry_recovery"
+    "database_connectivity_failure": [
+      "dependency_connection_review"
+    ],
+    "database_credential_or_config_error": [
+      "dependency_config_review"
     ],
     "insufficient_cpu": [
       "resource_request_tuning"
@@ -274,11 +285,34 @@
     "insufficient_memory": [
       "resource_request_tuning"
     ],
+    "max_replica_limit_reached": [
+      "replica_scale"
+    ],
+    "metrics_server_unavailable": [
+      "autoscaling_metrics_recovery"
+    ],
+    "missing_image_pull_secret": [
+      "image_pull_secret_fix"
+    ],
+    "missing_resource_requests": [
+      "resource_request_tuning"
+    ],
+    "missing_secret_reference": [
+      "secret_reference_fix"
+    ],
+    "network_policy_denied": [
+      "network_policy_review"
+    ],
     "node_affinity_or_taint_mismatch": [
       "scheduling_constraint_fix"
     ],
-    "pvc_pending": [
-      "pvc_binding_fix"
+    "oom_killed": [
+      "rollout_restart",
+      "oom_memory",
+      "replica_scale"
+    ],
+    "permission_denied_startup": [
+      "startup_security_context_review"
     ],
     "probe_path_wrong": [
       "probe_fix"
@@ -286,14 +320,30 @@
     "probe_port_wrong": [
       "probe_fix"
     ],
-    "timeout_too_short": [
-      "probe_fix"
+    "pvc_pending": [
+      "pvc_binding_fix"
+    ],
+    "registry_unavailable": [
+      "registry_recovery"
+    ],
+    "selector_label_mismatch": [
+      "selector_fix"
+    ],
+    "service_name_or_namespace_mismatch": [
+      "service_reference_review"
     ],
     "startup_window_too_short": [
       "probe_fix"
     ],
-    "selector_label_mismatch": [
-      "selector_fix"
+    "timeout_too_short": [
+      "probe_fix"
+    ],
+    "upstream_unavailable": [
+      "rollout_restart",
+      "deployment_scale"
+    ],
+    "wrong_image_tag": [
+      "image_tag_fix"
     ]
   }
 }
