@@ -98,6 +98,7 @@ export function ResourcesTable({
           <SortableHead label={t("resources.table.kind")} onSort={() => updateSort("kind")} sort={sort} sortKey="kind" />
           <SortableHead label={t("resources.table.status")} onSort={() => updateSort("status")} sort={sort} sortKey="status" />
           <SortableHead label={t("resources.table.health")} onSort={() => updateSort("health")} sort={sort} sortKey="health" />
+          <TableHead>{t("resources.table.trend")}</TableHead>
           <SortableHead label={t("resources.table.observedAt")} onSort={() => updateSort("observed")} sort={sort} sortKey="observed" />
         </TableRow>
       </TableHeader>
@@ -128,6 +129,14 @@ export function ResourcesTable({
               <TableCell>{item.status || t("common.state.unknown")}</TableCell>
               <TableCell>
                 <StatusMark label={item.healthStatus || undefined} tone={item.health} />
+              </TableCell>
+              <TableCell>
+                <span
+                  aria-label={t("resources.table.trendUnavailable")}
+                  className="block h-6 w-24"
+                  data-slot="resource-trend-unavailable"
+                  role="img"
+                />
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {formatTimestamp(item.observedAt, formatDate, t("resources.table.unobserved"))}

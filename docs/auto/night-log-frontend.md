@@ -18,3 +18,5 @@
 [사이클] 2026-07-14 06:18 KST / 알림 채널 화면을 shadcn 폼·표·AlertDialog와 Sonner로 전면 이관하고 disabled draft → 실제 Webhook 검증 → signature 일치 저장 게이트, 성공 시에만 삭제 다이얼로그 닫힘을 보존; `@/ui` 사용 파일 상한 31 → 30 / `1ff0855d5` (`make gate-fast`: frontend 37 PASS, T1=T2; 직접 run `29285805388`은 후속 push로 취소됐으나 `3c907192d`를 포함한 최종 run `29286225820` SUCCESS, 2분 12초) / 다음 한 걸음: 운영 DLQ 사후 감사에서 발견된 heading·넓은 표 스크롤·Alert 액션 접근성 보정
 
 [사이클] 2026-07-14 06:24 KST / 운영 DLQ 카드의 실제 h2/h3 계층, 명명된 focusable 가로 스크롤 region과 table caption, 오류 AlertAction 배치를 보정 / `3c907192d` (`make gate-fast`: frontend 37 PASS, T1=T2; 직접 run `29286090143`은 후속 push로 취소됐으나 ancestor를 포함한 run `29286225820` SUCCESS, 실패 0) / 다음 한 걸음: 인시던트 상세의 전체 shadcn 이관과 가짜 대상 fallback·복구 선택 의미 보정
+
+[사이클] 2026-07-14 11:40 KST / VP-012 Resources에서 물리 뷰·시간 scrub·표·우측 상세를 한 화면에 배치하고 BQ-029~033 미배포 데이터는 unavailable로 격리; Applications/GitOps 실제 API adapter와 두 route를 제품 셸에 연결, 404/503은 synthetic fallback 없이 unavailable 처리 / 검증 진행: targeted typecheck PASS, 프론트 28 targeted tests PASS / 다음 한 걸음: 전체 gate 후 FULL backend 배포와 target agent 재등록

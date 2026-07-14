@@ -58,7 +58,7 @@ function AuthLoginScreen({
     event.preventDefault();
     if (pending) return;
     const normalizedEmail = email.trim();
-    const invalidEmail = normalizedEmail === "" || emailRef.current?.validity.valid === false;
+    const invalidEmail = normalizedEmail === "";
     const invalidPassword = password === "";
     setValidation({ email: invalidEmail, password: invalidPassword });
     if (invalidEmail) {
@@ -111,7 +111,7 @@ function AuthLoginScreen({
                     autoComplete="username"
                     disabled={pending}
                     id="product-auth-email"
-                    inputMode="email"
+                    inputMode="text"
                     name="email"
                     onChange={(event) => {
                       setEmail(event.target.value);
@@ -120,7 +120,7 @@ function AuthLoginScreen({
                     ref={emailRef}
                     required
                     spellCheck={false}
-                    type="email"
+                    type="text"
                     value={email}
                   />
                   <FieldError id={emailErrorId}>

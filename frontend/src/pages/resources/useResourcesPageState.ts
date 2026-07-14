@@ -55,7 +55,7 @@ export function useResourcesPageState(port: ResourcesPort) {
     filter.state.resources.query.length === 0
   );
   const view = filter.state.resources.view;
-  const listQuerySupported = listFiltersSupported && view === "table";
+  const listQuerySupported = listFiltersSupported;
   const includeDeleted = filter.state.resources.includeDeleted;
   const detailRequested = filter.detail.resource !== null || filter.detail.resourceKind !== null;
   const detailTarget = useMemo(() => decodeResourceTarget(
@@ -105,7 +105,7 @@ export function useResourcesPageState(port: ResourcesPort) {
 
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
-    catalogQuerySupported: view === "table",
+    catalogQuerySupported: true,
     detailClusterId: detailTarget?.clusterId ?? null,
     detailIdentity,
     includeDeleted,

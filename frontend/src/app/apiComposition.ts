@@ -14,11 +14,19 @@ import {
   listRcaReports,
   listRcaTimeline,
   listClusters,
+  listApplicationDeployments,
+  listApplicationRuns,
+  listApplications,
   login,
   logout,
   selectRecoveryAction,
 } from "../api";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
+import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
+import {
+  createApplicationsSurface,
+  createGitOpsSurface,
+} from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
@@ -49,6 +57,11 @@ export function createApiComposition() {
     listRcaTimeline,
     selectRecoveryAction,
   });
+  const applicationsGitOpsPort = createApplicationsGitOpsAdapter({
+    listApplicationDeployments,
+    listApplicationRuns,
+    listApplications,
+  });
   return createProductComposition([
     {
       id: "home",
@@ -61,6 +74,14 @@ export function createApiComposition() {
     {
       id: "issues",
       Component: createIssuesSurface(issuesPort),
+    },
+    {
+      id: "applications",
+      Component: createApplicationsSurface(applicationsGitOpsPort),
+    },
+    {
+      id: "gitops",
+      Component: createGitOpsSurface(applicationsGitOpsPort),
     },
   ], createAuthAdapter({
     getSession,

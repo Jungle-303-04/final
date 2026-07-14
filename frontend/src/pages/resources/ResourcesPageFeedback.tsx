@@ -124,29 +124,6 @@ export function ResourcesClusterBoundary({
   );
 }
 
-export function ResourcesGraphClusterBoundary() {
-  const { t } = useI18n();
-  return (
-    <Surface
-      aria-labelledby="resources-graph-cluster-boundary-title"
-      className="grid min-h-72 place-items-center p-6"
-    >
-      <div className="grid max-w-md justify-items-center gap-3 text-center">
-        <CircleAlert aria-hidden="true" className="size-8 text-muted-foreground" />
-        <h2
-          className="text-lg font-semibold"
-          id="resources-graph-cluster-boundary-title"
-        >
-          {t("resources.graph.cluster.title")}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {t("resources.graph.cluster.description")}
-        </p>
-      </div>
-    </Surface>
-  );
-}
-
 export function ResourcesDenied({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
