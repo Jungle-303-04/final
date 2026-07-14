@@ -68,9 +68,9 @@ describe("AuthBarrier", () => {
     renderBarrier(port);
 
     expect(await screen.findByRole("heading", { name: "Opsia에 로그인" })).toBeTruthy();
-    const email = screen.getByRole("textbox", { name: "이메일" });
+    const email = screen.getByRole("textbox", { name: "아이디 또는 이메일" });
     const password = screen.getByLabelText("비밀번호");
-    expect(email.getAttribute("type")).toBe("email");
+    expect(email.getAttribute("type")).toBe("text");
     expect(email.getAttribute("autocomplete")).toBe("username");
     expect(email.hasAttribute("required")).toBe(true);
     expect(password.getAttribute("type")).toBe("password");
@@ -88,7 +88,7 @@ describe("AuthBarrier", () => {
     });
     const user = userEvent.setup();
     renderBarrier(port);
-    const email = await screen.findByRole("textbox", { name: "이메일" });
+    const email = await screen.findByRole("textbox", { name: "아이디 또는 이메일" });
     const password = screen.getByLabelText("비밀번호");
     await user.type(email, "operator@example.com");
     await user.type(password, "  unchanged secret  ");
@@ -115,7 +115,7 @@ describe("AuthBarrier", () => {
     });
     const user = userEvent.setup();
     renderBarrier(port);
-    const email = await screen.findByRole("textbox", { name: "이메일" });
+    const email = await screen.findByRole("textbox", { name: "아이디 또는 이메일" });
     const password = screen.getByLabelText("비밀번호");
     await user.type(email, "operator@example.com");
     await user.type(password, "private-password");
@@ -141,7 +141,10 @@ describe("AuthBarrier", () => {
     });
     const user = userEvent.setup();
     renderBarrier(port);
-    await user.type(await screen.findByRole("textbox", { name: "이메일" }), "operator@example.com");
+    await user.type(
+      await screen.findByRole("textbox", { name: "아이디 또는 이메일" }),
+      "operator@example.com",
+    );
     await user.type(screen.getByLabelText("비밀번호"), "secret");
     await user.click(screen.getByRole("button", { name: "로그인" }));
 

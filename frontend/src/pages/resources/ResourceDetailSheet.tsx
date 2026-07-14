@@ -1,4 +1,4 @@
-import { CircleAlert, Link2, ListTree } from "lucide-react";
+import { Activity, CircleAlert, FileClock, Link2, ListTree, TriangleAlert } from "lucide-react";
 import type {
   ResourceDetail,
   ResourceIdentity,
@@ -10,6 +10,7 @@ import {
 } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { StatusMark } from "../../shared/ui/StatusMark";
+import { Badge } from "../../shared/ui/primitives/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import {
   Sheet,
@@ -163,6 +164,7 @@ function DetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
+        <PointInTimeEvidenceUnavailable />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
@@ -222,6 +224,42 @@ function DetailBody({
         <CompletenessNote />
       </TabsContent>
     </Tabs>
+  );
+}
+
+function PointInTimeEvidenceUnavailable() {
+  const { t } = useI18n();
+  const rows = [
+    { icon: Activity, label: t("resources.detail.history.metrics") },
+    { icon: FileClock, label: t("resources.detail.history.logs") },
+    { icon: TriangleAlert, label: t("resources.detail.history.incident") },
+  ];
+  return (
+    <section
+      aria-labelledby="resource-history-title"
+      className="grid gap-3 rounded-lg border p-4"
+      data-slot="resource-history-unavailable"
+    >
+      <div className="grid gap-1">
+        <h3 className="font-medium" id="resource-history-title">
+          {t("resources.detail.history.title")}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {t("resources.detail.history.description")}
+        </p>
+      </div>
+      <ul className="grid gap-2">
+        {rows.map(({ icon: Icon, label }) => (
+          <li className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-3 py-2" key={label}>
+            <span className="flex min-w-0 items-center gap-2 text-sm">
+              <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{label}</span>
+            </span>
+            <Badge variant="outline">{t("common.state.unavailable")}</Badge>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

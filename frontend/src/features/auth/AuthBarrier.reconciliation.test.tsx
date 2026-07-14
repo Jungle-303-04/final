@@ -70,7 +70,10 @@ describe("AuthBarrier mutation reconciliation", () => {
     });
     const user = userEvent.setup();
     renderBarrier(port);
-    await user.type(await screen.findByRole("textbox", { name: "이메일" }), "operator@example.com");
+    await user.type(
+      await screen.findByRole("textbox", { name: "아이디 또는 이메일" }),
+      "operator@example.com",
+    );
     await user.type(screen.getByLabelText("비밀번호"), "secret");
     await user.click(screen.getByRole("button", { name: "로그인" }));
 

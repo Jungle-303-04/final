@@ -49,7 +49,7 @@ describe("localized authentication boundary", () => {
     renderBarrier(unauthenticatedPort(), "en");
 
     expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "ID or email" })).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Switch to dark mode" })).toBeTruthy();
@@ -116,7 +116,12 @@ describe("localized authentication boundary", () => {
     const user = userEvent.setup();
     renderBarrier(port, locale);
 
-    await user.type(await screen.findByRole("textbox", { name: locale === "ko" ? "이메일" : "Email" }), "operator@example.com");
+    await user.type(
+      await screen.findByRole("textbox", {
+        name: locale === "ko" ? "아이디 또는 이메일" : "ID or email",
+      }),
+      "operator@example.com",
+    );
     await user.type(screen.getByLabelText(locale === "ko" ? "비밀번호" : "Password"), "secret");
     await user.click(screen.getByRole("button", { name: locale === "ko" ? "로그인" : "Sign in" }));
 

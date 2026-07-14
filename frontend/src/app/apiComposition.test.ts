@@ -11,11 +11,15 @@ describe("API composition root", () => {
       "home",
       "resources",
       "issues",
+      "applications",
+      "gitops",
     ]);
     expect([...composition.releasedSurfaceIds]).toEqual([
       "home",
       "resources",
       "issues",
+      "applications",
+      "gitops",
     ]);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();

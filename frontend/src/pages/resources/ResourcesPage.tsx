@@ -23,14 +23,12 @@ import {
   ResourcesFailure,
   ResourcesRefreshFeedback,
   ResourcesClusterBoundary,
-  ResourcesGraphClusterBoundary,
   UnknownCompletenessEmpty,
   UnknownSelection,
   UnsupportedFilterProjection,
 } from "./ResourcesPageFeedback";
 import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
-import { ResourcesViewToggle } from "./ResourcesViewToggle";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 export function ResourcesPage({
@@ -40,7 +38,12 @@ export function ResourcesPage({
 }) {
   const { t } = useI18n();
   const state = useResourcesPageState(port);
+  const resourcesView = state.view;
+  const setResourcesView = state.setView;
   useResourceTypeShortcuts(state.cycleResourceType);
+  useEffect(() => {
+    if (resourcesView === "graph") setResourcesView("table");
+  }, [resourcesView, setResourcesView]);
   if (state.choices.phase === "idle" || state.choices.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }
@@ -63,7 +66,6 @@ export function ResourcesPage({
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
         <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
-          <ResourcesViewToggle onViewChange={state.setView} view={state.view} />
           {state.automaticRefreshPaused ? (
             <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
           ) : null}
@@ -86,8 +88,6 @@ export function ResourcesPage({
       {!state.selectedClusterExists ? (
         state.clusterSelection.kind === "unknown" ? (
           <UnknownSelection value={state.selectedClusterId} variant="cluster" />
-        ) : state.view === "graph" ? (
-          <ResourcesGraphClusterBoundary />
         ) : state.clusterSelection.kind === "unfiltered" ? (
           <ResourcesClusterBoundary variant="required" />
         ) : state.clusterSelection.kind === "multiple" ? (
@@ -95,13 +95,6 @@ export function ResourcesPage({
         ) : (
           <UnknownSelection value={state.selectedClusterId} variant="cluster" />
         )
-      ) : state.view === "graph" ? (
-        <Surface
-          aria-labelledby="resources-graph-unavailable-title"
-          className="min-w-0 overflow-hidden"
-        >
-          <ResourcesGraphShell />
-        </Surface>
       ) : state.denied ? (
         <ResourcesDenied onRetry={state.refresh} />
       ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
@@ -159,25 +152,38 @@ export function ResourcesPage({
 }
 
 function ResourcesListSurface({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
+  const { t } = useI18n();
   return (
-    <Surface aria-labelledby="resources-list-title" className="min-w-0 overflow-hidden">
-      <div className="border-b px-4 py-3">
-        <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
-      </div>
-      <ResourcesToolbar
-        includeDeleted={state.includeDeleted}
-        namespace={state.namespace}
-        onIncludeDeletedChange={state.setIncludeDeleted}
-        onNamespaceChange={state.setNamespace}
-        onSearchChange={state.setSearch}
-        search={state.search}
-      />
-      {state.filterProjectionUnsupported ? (
-        <UnsupportedFilterProjection embedded />
-      ) : (
-        <ResourcesListBody state={state} />
-      )}
-    </Surface>
+    <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
+      <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
+        <ResourcesToolbar
+          includeDeleted={state.includeDeleted}
+          namespace={state.namespace}
+          onIncludeDeletedChange={state.setIncludeDeleted}
+          onNamespaceChange={state.setNamespace}
+          onSearchChange={state.setSearch}
+          search={state.search}
+        />
+      </Surface>
+
+      <Surface
+        aria-labelledby="resources-graph-unavailable-title"
+        className="min-w-0 overflow-hidden"
+      >
+        <ResourcesGraphShell />
+      </Surface>
+
+      <Surface aria-labelledby="resources-list-title" className="min-w-0 overflow-hidden">
+        <div className="border-b px-4 py-3">
+          <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
+        </div>
+        {state.filterProjectionUnsupported ? (
+          <UnsupportedFilterProjection embedded />
+        ) : (
+          <ResourcesListBody state={state} />
+        )}
+      </Surface>
+    </div>
   );
 }
 
