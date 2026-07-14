@@ -60,6 +60,17 @@ export {
   type PhysicalTopologyEndpointServer,
 } from "./physical-topology-schemas";
 export {
+  getRelationTopology,
+  RELATION_TOPOLOGY_PATH,
+  type RelationTopologyQuery,
+} from "./relation-topology";
+export {
+  relationTopologyEdgeSchema,
+  relationTopologyNodeSchema,
+  relationTopologySchema,
+  type RelationTopologyEndpoint,
+} from "./relation-topology-schemas";
+export {
   getResourceMetricsHistory,
   RESOURCE_METRICS_HISTORY_PATH,
   type ResourceMetricsHistoryQuery,

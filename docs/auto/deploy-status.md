@@ -11,13 +11,13 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S7 `86e5b2248` public · S8 local gate 대기
+배포 SHA : S8 `1d430ba76` public · S9 local gate 완료
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 17:55 KST  S6·S7 public · S8 targeted green
+갱신     : 2026-07-14 18:49 KST  S8 public · S9 gate green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-Daugb6IC.js`
+- console bundle: `assets/index-DjRxj1b1.js`
 - backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
 - console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
 - 로그인·클러스터·리소스 read smoke: 통과
@@ -44,8 +44,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S5**  표 + 스파크라인 (3층)    ← `7354ee91` 자동 배포·public bundle 확인
 - [x] **S6**  상세 = 전체화면 덮기
 - [x] **S7**  AI 패널
-- [ ] **S8**  하단 독 + 로그 스트림
-- [ ] S9   관계 뷰 토글
+- [x] **S8**  하단 독 + 로그 스트림
+- [x] S9   관계 뷰 토글
 - [ ] S10  Applications
 - [ ] S11  시간 스크럽 (TimelineStrip)
 - [ ] S12  Issues + RCA + 증거
@@ -132,6 +132,20 @@ URL      : https://k8s.woonyong.org
   REST nginx buffering off를 image/live ConfigMap exact location에 고정
 - [x] S8 검증 — backend targeted 71 tests, frontend 전체 181 files/1,095 tests,
   typecheck·lint·567-file design guard·production build·rebase 후 `make gate-fast` PASS
+- [x] S8 dev push·Dev Gate — `1d430ba76`, gate `29320899688` SUCCESS;
+  public OpenAPI와 실재 Pod SSE에서 `connected→pod_added→log` event를 확인하고 raw line은 출력하지 않음
+- [x] S8 자동 배포/public 확인 — deploy `29321131846` SUCCESS, service/console immutable rollout과
+  post-deploy smoke 통과, rollback skipped; health/root 200, bundle `index-DjRxj1b1.js`
+- [x] S9 BQ-075 관계 topology — 동일 workspace·단일 cluster/application 권한·canonical filter·
+  pinned snapshot을 재검증하고 evidence-backed `owns|runs_on|selects|routes_to`만 exact shape로 반환
+- [x] S9 필터 파생 뷰 — Application/복수 non-Pod는 relations, app+Pod-only와 물리 scope는 physical;
+  자동 전환은 URL을 쓰지 않고 수동 선택은 `view=physical|relations`로 핀, 전체 필터 삭제 시 핀 해제
+- [x] S9 연속 장면 — target ready/failed 전까지 같은 cluster의 직전 scene을 유지하고
+  동일 Pod `data-morph-id`를 local capture/play로 FLIP; filter-derived pending 전환의 실제 `animate` 호출 회귀 고정
+- [x] S9 관계 그래프 — ReactFlow+ELK, 서버 응답 kind 칩, endpoint 양쪽 kind AND edge 투영,
+  6초 힌트·즉시 되돌리기·수동 pin 시 힌트 종료, mobile 2행 header 공간 확보
+- [x] S9 검증 — backend Ruff + topology/resource graph 회귀 56 tests,
+  frontend 185 files/1,107 tests·typecheck·lint·589-file design guard·production build PASS
 
 ---
 

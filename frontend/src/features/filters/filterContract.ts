@@ -65,6 +65,7 @@ export interface ProductDetailQuery {
   tab: string | null;
   full: boolean;
   node: string | null;
+  resourceTopologyView?: "physical" | "relations" | null;
   workflowPlan?: string | null;
   workflowView?: "overview" | "edit" | "runs" | "yaml" | null;
   workflowMode?: "new" | null;
@@ -117,6 +118,8 @@ export type DetailMutationIntent =
   | "detail-close"
   | "detail-tab"
   | "detail-expand"
+  | "topology-view"
+  | "topology-view-reset"
   | "drill-in";
 
 export type UnifiedFilterUpdater =

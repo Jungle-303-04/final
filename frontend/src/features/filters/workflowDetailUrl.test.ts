@@ -23,4 +23,13 @@ describe("workflow detail URL state", () => {
     expect(parsed.needsCanonicalWrite).toBe(true);
     expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe("?plan=plan-a");
   });
+
+  it("round-trips an explicit Resources topology pin through the shared view key", () => {
+    const parsed = parseProductFilterUrl("?clusters=cluster-1&view=relations");
+
+    expect(parsed.detail.resourceTopologyView).toBe("relations");
+    expect(parsed.detail.workflowView).toBeUndefined();
+    expect(serializeProductFilterUrl(parsed.state, parsed.detail))
+      .toBe("?clusters=cluster-1&view=relations");
+  });
 });

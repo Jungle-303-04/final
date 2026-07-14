@@ -37,6 +37,13 @@ status: synced
 결합한다. requests 근거가 없으면 `usage_pct=null`, metric이 없으면 CPU/MEM도 `null`이다.
 응답 DTO는 allowlist만 직렬화하여 inventory `summary/raw/annotations`와 secret을 노출하지 않는다.
 
+BQ-075 `GET /topology?view=relations&clusters=<single>`은 같은 workspace·구체 cluster/application
+권한·canonical filter·global/pinned snapshot cut을 재사용한다. 기존 evidence-backed graph의
+owner UID reference, node assignment, structured selector match, Endpoint의 service-name label만
+`{nodes:[{id,kind,name,status}],edges:[{from,to,type}]}`로 좁힌다. 이름이 비슷하다는 이유로 edge를
+합성하지 않으며 raw/summary/annotation은 반환하지 않는다. 요청한 snapshot cut이 없거나 아직
+snapshot이 하나도 없으면 관계와 빈 상태를 혼동하지 않도록 fail-closed한다.
+
 GAP-012/BQ-030 `GET /metrics/history?ids=...`는 `/resources`가 반환한 pod
 `inventory_key`를 최대 100개까지 서버에서 한 번에 처리한다. 같은 common filter와 session의
 cluster/application 권한, 같은 `snapshot_revision`의 교집합에서 모든 ID를 다시 확인하며 하나라도

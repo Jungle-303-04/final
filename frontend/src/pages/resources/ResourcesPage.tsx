@@ -6,6 +6,7 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
@@ -38,10 +39,14 @@ import { ResourcesListSurface } from "./ResourcesListSurface";
 import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
 import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
 import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
+import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
+import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
+import { useResourceTypeShortcuts } from "./useResourceTypeShortcuts";
 
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
+  relationTopologyPort,
   resourceMetricsHistoryPort,
   resourceCapabilitiesPort,
   resourceActionsPort,
@@ -49,6 +54,7 @@ export function ResourcesPage({
 }: {
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
+  relationTopologyPort: RelationTopologyPort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
@@ -59,6 +65,7 @@ export function ResourcesPage({
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
   const state = useResourcesPageState(port);
+  const topology = useResourceTopologyViewController();
   const authorityKey = session
     ? `${session.workspaceId}:${session.userId}`
     : "anonymous";
@@ -68,6 +75,15 @@ export function ResourcesPage({
       filter.state.common.clusters.length === 1,
     filterState: filter.state,
     port: physicalTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const relationTopology = useRelationTopologyDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    filterState: filter.state,
+    port: relationTopologyPort,
     reportUnauthorized,
     revision: state.revision,
   });
@@ -248,39 +264,15 @@ export function ResourcesPage({
                   : null
               }
               physicalTopology={physicalTopology}
+              relationTopology={relationTopology}
+              topologyPinned={topology.pinned}
+              topologyView={topology.view}
+              onTopologyViewChange={topology.pin}
               state={state}
             />
           </div>
         </>
       )}
     </ProductPageFrame>
-  );
-}
-
-function useResourceTypeShortcuts(cycle: (direction: -1 | 1) => void) {
-  useEffect(() => {
-    const keydown = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        isEditingTarget(event.target) ||
-        document.querySelector('[role="dialog"]')
-      )
-        return;
-      if (event.key !== "[" && event.key !== "]") return;
-      event.preventDefault();
-      cycle(event.key === "]" ? 1 : -1);
-    };
-    document.addEventListener("keydown", keydown);
-    return () => document.removeEventListener("keydown", keydown);
-  }, [cycle]);
-}
-
-function isEditingTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    target.matches("input, textarea, select, [contenteditable=true]")
   );
 }

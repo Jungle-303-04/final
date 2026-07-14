@@ -504,6 +504,7 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `InventoryResourceListResponse` | `cluster_id: str`, `resource_type: str \| None = None`, `resources: list[InventoryResourceResponse]` |
 | `InventoryResourceDetailResponse` | `cluster_id: str`, `identity: JsonMap`, `resource: InventoryResourceResponse`, `related: dict[str, list[InventoryResourceResponse]] = {}`, `events: list[InventoryResourceResponse] = []` — 단일 리소스 드릴다운용 실제 read model 관계 |
 | `PhysicalTopologyServer` / `PhysicalTopologyPod` / `PhysicalTopologyResponse` | `GET /topology?view=physical` 전용 strict 응답. server는 실측 `cpu_pct/mem_pct`와 서버 계산 `matched_pod_count/total_pod_count` 및 각 count completeness를, pod는 stable inventory id·`server_id` 참조·실측 `cpu_mcores/mem_mib`·requests 근거가 있을 때만 계산한 `usage_pct`·`phase/health/restarts/matches_filter`를 가진다. 응답은 global cut과 구분한 `cluster_projection_revision`, 서버별 12개 초과 `truncated`, projection/metrics completeness, 공통 `counts/snapshot`을 함께 주며 raw/annotation/secret은 노출하지 않는다. 과거 snapshot에는 최신 usage를 섞지 않는다. |
+| `RelationsTopologyNode` / `RelationsTopologyEdge` / `RelationsTopologyResponse` | BQ-075 `GET /topology?view=relations` 전용 exact strict 응답. wire shape은 `{nodes:[{id,kind,name,status}],edges:[{from,to,type}]}`뿐이며 edge type은 증명 가능한 `owns\|runs_on\|selects\|routes_to`로 닫는다. edge는 반환 node만 참조하고 중복 identity/edge, raw/summary/annotation, 추측 relation을 거부한다. |
 | `ResourceMetricHistoryPoint` / `ResourceMetricHistorySeries` / `ResourceMetricsHistoryResponse` | `GET /metrics/history` 전용 strict batch 응답. point는 `observed_at`과 실측 `cpu_mcores/mem_mib` nullable 값, series는 stable `resource_id`·pod identity·`has_sparkline_points`·completeness 3값·reason을 가진다. 응답은 고유 series ID, 공통 completeness/reason, pinned `FilterSnapshotMeta`를 검증한다. `exact` series는 모든 반환 point에 CPU가 있어야 하고 데이터 부재는 0이 아니라 null/빈 points다. |
 | `ResourceCapabilitySubject` / `ResourceActionCapability` / `ResourceCapabilitiesResponse` | BQ-061 `GET /capabilities?resource=<inventory_key>` strict 응답. exact inventory subject와 64자리 opaque revision, 현재 actor가 실제 실행할 수 있는 `deployment.restart`/`deployment.scale` POST route만 담는다. capability는 정렬·고유하며 거부된 action은 응답에 없다. |
 | `ClusterUsageSample` / `ClusterUsageResponse` | `sampled_at: str \| None`, `usage: JsonMap` / `cluster_id: str`, `samples: list[ClusterUsageSample]` |
@@ -559,8 +560,11 @@ HTTP 경로 상수(모두 `src/packages/contracts/gateway/routes.py` 앵커). �
 
 제품 연결 위자드가 추가로 사용하는 경로는 `CLUSTERS_CONNECT_PATH="/clusters/connect"`, `CLUSTER_CONNECTION_PATH="/clusters/{cluster_id}/connection"`이다.
 
-Resources 물리 뷰의 additive 경로는 `TOPOLOGY_PATH="/topology"`다. `view=physical`과 정확히 한
-개의 `clusters`가 필요하며, 다른 view는 후속 계약(BQ-075) 전까지 422로 닫는다.
+Resources topology의 additive 경로는 `TOPOLOGY_PATH="/topology"`다. `view=physical|relations`와
+정확히 한 개의 `clusters`가 필요하다. BQ-075 `relations`도 physical과 동일한 session workspace,
+구체 cluster/application 권한, canonical filter, global+pinned snapshot cut을 먼저 검증한다. 응답은
+evidence-backed inventory owner/placement/selector/endpoint 관계만 exact allowlist shape으로 좁히며
+이름 유사성이나 raw metadata에서 관계를 합성하지 않는다. snapshot cut이 없으면 503으로 닫는다.
 
 Resources 스파크라인 batch 경로는 `RESOURCE_METRICS_HISTORY_PATH="/metrics/history"`다.
 `ids`는 `/resources`의 pod `inventory_key` 목록이며 common filter와 pinned snapshot cut에서
