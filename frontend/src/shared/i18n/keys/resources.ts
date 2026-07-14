@@ -123,6 +123,7 @@ export type ResourcesMessageKey =
   | "resources.selection.resource.title"
   | "resources.selection.urlScope"
   | "resources.selection.description"
+  | "resources.selection.clustersAction"
   | "resources.selection.required.title"
   | "resources.selection.required.description"
   | "resources.selection.multiple.title"
