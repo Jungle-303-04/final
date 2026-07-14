@@ -1,0 +1,1051 @@
+package topology
+
+import (
+	"fmt"
+	"slices"
+	"testing"
+
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	k8score "github.com/skyhook-io/radar/pkg/k8score"
+)
+
+// mockProvider implements ResourceProvider with configurable slices.
+type mockProvider struct {
+	pods            []*corev1.Pod
+	deployments     []*appsv1.Deployment
+	services        []*corev1.Service
+	daemonSets      []*appsv1.DaemonSet
+	statefulSets    []*appsv1.StatefulSet
+	replicaSets     []*appsv1.ReplicaSet
+	jobs            []*batchv1.Job
+	cronJobs        []*batchv1.CronJob
+	ingresses       []*networkingv1.Ingress
+	configMaps      []*corev1.ConfigMap
+	secrets         []*corev1.Secret
+	serviceAccounts []*corev1.ServiceAccount
+	pvcs            []*corev1.PersistentVolumeClaim
+	pvs             []*corev1.PersistentVolume
+	hpas            []*autoscalingv2.HorizontalPodAutoscaler
+	pdbs            []*policyv1.PodDisruptionBudget
+	networkPolicies []*networkingv1.NetworkPolicy
+	nodes           []*corev1.Node
+}
+
+func (m *mockProvider) Pods() ([]*corev1.Pod, error)                 { return m.pods, nil }
+func (m *mockProvider) Services() ([]*corev1.Service, error)         { return m.services, nil }
+func (m *mockProvider) Deployments() ([]*appsv1.Deployment, error)   { return m.deployments, nil }
+func (m *mockProvider) DaemonSets() ([]*appsv1.DaemonSet, error)     { return m.daemonSets, nil }
+func (m *mockProvider) StatefulSets() ([]*appsv1.StatefulSet, error) { return m.statefulSets, nil }
+func (m *mockProvider) ReplicaSets() ([]*appsv1.ReplicaSet, error)   { return m.replicaSets, nil }
+func (m *mockProvider) Jobs() ([]*batchv1.Job, error)                { return m.jobs, nil }
+func (m *mockProvider) CronJobs() ([]*batchv1.CronJob, error)        { return m.cronJobs, nil }
+func (m *mockProvider) Ingresses() ([]*networkingv1.Ingress, error)  { return m.ingresses, nil }
+func (m *mockProvider) ConfigMaps() ([]*corev1.ConfigMap, error)     { return m.configMaps, nil }
+func (m *mockProvider) Secrets() ([]*corev1.Secret, error)           { return m.secrets, nil }
+func (m *mockProvider) ServiceAccounts() ([]*corev1.ServiceAccount, error) {
+	return m.serviceAccounts, nil
+}
+func (m *mockProvider) PersistentVolumeClaims() ([]*corev1.PersistentVolumeClaim, error) {
+	return m.pvcs, nil
+}
+func (m *mockProvider) PersistentVolumes() ([]*corev1.PersistentVolume, error) { return m.pvs, nil }
+func (m *mockProvider) HorizontalPodAutoscalers() ([]*autoscalingv2.HorizontalPodAutoscaler, error) {
+	return m.hpas, nil
+}
+func (m *mockProvider) PodDisruptionBudgets() ([]*policyv1.PodDisruptionBudget, error) {
+	return m.pdbs, nil
+}
+func (m *mockProvider) NetworkPolicies() ([]*networkingv1.NetworkPolicy, error) {
+	return m.networkPolicies, nil
+}
+func (m *mockProvider) Nodes() ([]*corev1.Node, error) { return m.nodes, nil }
+func (m *mockProvider) GetResourceStatus(kind, namespace, name string) *ResourceStatus {
+	return nil
+}
+
+type rolloutDynamicProvider struct {
+	gvr                 schema.GroupVersionResource
+	rollouts            []*unstructured.Unstructured
+	listCalls           int
+	listNamespacesCalls int
+}
+
+type monitorDynamicProvider struct {
+	gvrs      map[string]schema.GroupVersionResource
+	resources map[schema.GroupVersionResource][]*unstructured.Unstructured
+}
+
+func (m *monitorDynamicProvider) List(gvr schema.GroupVersionResource, _ string) ([]*unstructured.Unstructured, error) {
+	return m.resources[gvr], nil
+}
+
+func (m *monitorDynamicProvider) ListNamespaces(gvr schema.GroupVersionResource, _ []string) ([]*unstructured.Unstructured, error) {
+	return m.resources[gvr], nil
+}
+
+func (m *monitorDynamicProvider) Get(schema.GroupVersionResource, string, string) (*unstructured.Unstructured, error) {
+	return nil, nil
+}
+
+func (m *monitorDynamicProvider) GetWatchedResources() []schema.GroupVersionResource { return nil }
+func (m *monitorDynamicProvider) GetDiscoveryStatus() k8score.CRDDiscoveryStatus {
+	return k8score.CRDDiscoveryComplete
+}
+func (m *monitorDynamicProvider) GetGVR(kindOrName string) (schema.GroupVersionResource, bool) {
+	gvr, ok := m.gvrs[kindOrName]
+	return gvr, ok
+}
+func (m *monitorDynamicProvider) GetGVRWithGroup(kindOrName, group string) (schema.GroupVersionResource, bool) {
+	gvr, ok := m.GetGVR(kindOrName)
+	return gvr, ok && gvr.Group == group
+}
+func (m *monitorDynamicProvider) GetKindForGVR(gvr schema.GroupVersionResource) string {
+	for kind, candidate := range m.gvrs {
+		if candidate == gvr {
+			return kind
+		}
+	}
+	return ""
+}
+func (m *monitorDynamicProvider) IsCRD(kind string) bool {
+	_, ok := m.gvrs[kind]
+	return ok
+}
+
+func (m *rolloutDynamicProvider) List(_ schema.GroupVersionResource, _ string) ([]*unstructured.Unstructured, error) {
+	m.listCalls++
+	return nil, nil
+}
+
+func (m *rolloutDynamicProvider) ListNamespaces(_ schema.GroupVersionResource, _ []string) ([]*unstructured.Unstructured, error) {
+	m.listNamespacesCalls++
+	return m.rollouts, nil
+}
+
+func (m *rolloutDynamicProvider) Get(_ schema.GroupVersionResource, _, _ string) (*unstructured.Unstructured, error) {
+	return nil, nil
+}
+
+func (m *rolloutDynamicProvider) GetWatchedResources() []schema.GroupVersionResource {
+	return nil
+}
+
+func (m *rolloutDynamicProvider) GetDiscoveryStatus() k8score.CRDDiscoveryStatus {
+	return k8score.CRDDiscoveryComplete
+}
+
+func (m *rolloutDynamicProvider) GetGVR(kindOrName string) (schema.GroupVersionResource, bool) {
+	if kindOrName == "Rollout" {
+		return m.gvr, true
+	}
+	return schema.GroupVersionResource{}, false
+}
+
+func (m *rolloutDynamicProvider) GetGVRWithGroup(kindOrName, _ string) (schema.GroupVersionResource, bool) {
+	return m.GetGVR(kindOrName)
+}
+
+func (m *rolloutDynamicProvider) GetKindForGVR(gvr schema.GroupVersionResource) string {
+	if gvr == m.gvr {
+		return "Rollout"
+	}
+	return ""
+}
+
+func (m *rolloutDynamicProvider) IsCRD(kind string) bool {
+	return kind == "Rollout"
+}
+
+func TestArgoWorkflowTemplateRefsFromWorkflowSpec(t *testing.T) {
+	obj := map[string]any{
+		"spec": map[string]any{
+			"workflowTemplateRef": map[string]any{"name": "main"},
+			"templates": []any{
+				map[string]any{
+					"name": "dag",
+					"dag": map[string]any{
+						"tasks": []any{
+							map[string]any{"name": "build", "templateRef": map[string]any{"name": "shared", "clusterScope": true}},
+							map[string]any{"name": "test", "templateRef": map[string]any{"name": "shared", "clusterScope": true}},
+						},
+					},
+				},
+				map[string]any{
+					"name": "steps",
+					"steps": []any{
+						[]any{map[string]any{"name": "cleanup", "templateRef": map[string]any{"name": "cleanup"}}},
+					},
+				},
+			},
+		},
+	}
+
+	refs := argoWorkflowTemplateRefsFromWorkflowSpec(obj, "spec")
+	if len(refs) != 3 {
+		t.Fatalf("expected 3 deduped refs, got %#v", refs)
+	}
+	want := []argoWorkflowTemplateRef{
+		{name: "main"},
+		{name: "shared", clusterScope: true},
+		{name: "cleanup"},
+	}
+	for i := range want {
+		if refs[i] != want[i] {
+			t.Fatalf("ref %d = %#v, want %#v", i, refs[i], want[i])
+		}
+	}
+}
+
+func TestAddArgoWorkflowTemplateEdges(t *testing.T) {
+	edges := addArgoWorkflowTemplateEdges(nil, "workflow/demo/run", "demo", []argoWorkflowTemplateRef{
+		{name: "local"},
+		{name: "global", clusterScope: true},
+		{name: "missing"},
+	}, map[string]string{
+		"demo/local": "workflowtemplate/demo/local",
+	}, map[string]string{
+		"global": "clusterworkflowtemplate//global",
+	})
+
+	if len(edges) != 2 {
+		t.Fatalf("expected 2 edges, got %#v", edges)
+	}
+	if edges[0].Source != "workflowtemplate/demo/local" || edges[0].Target != "workflow/demo/run" || edges[0].Type != EdgeConfigures {
+		t.Fatalf("local edge = %#v", edges[0])
+	}
+	if edges[1].Source != "clusterworkflowtemplate//global" || edges[1].Target != "workflow/demo/run" || edges[1].Type != EdgeConfigures {
+		t.Fatalf("cluster edge = %#v", edges[1])
+	}
+}
+
+func TestArgoWorkflowCronOwnerNamePrefersControllerOwnerReference(t *testing.T) {
+	controller := true
+	wf := &unstructured.Unstructured{}
+	wf.SetLabels(map[string]string{"workflows.argoproj.io/cron-workflow": "label-owner"})
+	wf.SetOwnerReferences([]metav1.OwnerReference{{
+		Kind:       "CronWorkflow",
+		Name:       "owner-ref",
+		Controller: &controller,
+	}})
+
+	if got := argoWorkflowCronOwnerName(wf); got != "owner-ref" {
+		t.Fatalf("argoWorkflowCronOwnerName = %q, want owner-ref", got)
+	}
+}
+
+func TestCreatePodOwnerEdgesAddsScaledJobShortcut(t *testing.T) {
+	controller := true
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "demo",
+			Name:      "run-pod",
+			OwnerReferences: []metav1.OwnerReference{{
+				Kind:       "Job",
+				Name:       "scaled-run",
+				Controller: &controller,
+			}},
+		},
+	}
+	builder := &Builder{}
+	edges := builder.createPodOwnerEdges(
+		pod,
+		"pod/demo/run-pod",
+		BuildOptions{},
+		nil,
+		nil,
+		nil,
+		map[string]string{"demo/scaled-run": "job/demo/scaled-run"},
+		nil,
+		map[string]string{"demo/scaled-run": "scaledjob/demo/importer"},
+		nil,
+		nil,
+	)
+
+	if len(edges) != 2 {
+		t.Fatalf("expected Job edge plus ScaledJob shortcut, got %#v", edges)
+	}
+	if edges[0].Source != "job/demo/scaled-run" || edges[0].Target != "pod/demo/run-pod" || edges[0].Type != EdgeManages {
+		t.Fatalf("job edge = %#v", edges[0])
+	}
+	if edges[1].Source != "scaledjob/demo/importer" || edges[1].Target != "pod/demo/run-pod" || edges[1].SkipIfKindVisible != string(KindJob) {
+		t.Fatalf("scaledjob shortcut edge = %#v", edges[1])
+	}
+}
+
+// --- Generators ---
+
+func makePods(n int, ns string) []*corev1.Pod {
+	pods := make([]*corev1.Pod, n)
+	for i := range n {
+		pods[i] = &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("pod-%d", i), Namespace: ns},
+		}
+	}
+	return pods
+}
+
+func makeDeployments(n int, ns string) []*appsv1.Deployment {
+	deps := make([]*appsv1.Deployment, n)
+	for i := range n {
+		deps[i] = &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("deploy-%d", i), Namespace: ns},
+		}
+	}
+	return deps
+}
+
+func makeServices(n int, ns string) []*corev1.Service {
+	svcs := make([]*corev1.Service, n)
+	for i := range n {
+		svcs[i] = &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("svc-%d", i), Namespace: ns},
+		}
+	}
+	return svcs
+}
+
+// largeProvider returns a mockProvider that exceeds the large cluster threshold.
+// 500 deployments + 500 services + 500 pods(÷5=100) = 1100 estimated nodes.
+func largeProvider() *mockProvider {
+	return &mockProvider{
+		deployments: makeDeployments(500, "default"),
+		services:    makeServices(500, "default"),
+		pods:        makePods(500, "default"),
+	}
+}
+
+// smallProvider returns a mockProvider well under the threshold.
+func smallProvider() *mockProvider {
+	return &mockProvider{
+		deployments: makeDeployments(5, "default"),
+		services:    makeServices(5, "default"),
+		pods:        makePods(10, "default"),
+	}
+}
+
+// --- Tests ---
+
+func TestBuildResourcesTopology_ReusesListedRolloutsForServiceEdges(t *testing.T) {
+	rolloutGVR := schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "rollouts"}
+	rollout := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "argoproj.io/v1alpha1",
+		"kind":       "Rollout",
+		"metadata": map[string]any{
+			"name":      "web",
+			"namespace": "prod",
+		},
+		"spec": map[string]any{
+			"replicas": int64(1),
+			"template": map[string]any{
+				"metadata": map[string]any{
+					"labels": map[string]any{"app": "web"},
+				},
+			},
+		},
+	}}
+	dynamic := &rolloutDynamicProvider{
+		gvr:      rolloutGVR,
+		rollouts: []*unstructured.Unstructured{rollout},
+	}
+	provider := &mockProvider{
+		services: []*corev1.Service{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "prod"},
+				Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "web"}},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "web-canary", Namespace: "prod"},
+				Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "web"}},
+			},
+		},
+	}
+
+	topo, err := NewBuilder(provider).WithDynamic(dynamic).Build(DefaultBuildOptions())
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if dynamic.listNamespacesCalls != 1 {
+		t.Fatalf("expected one Rollout ListNamespaces call, got %d", dynamic.listNamespacesCalls)
+	}
+	if dynamic.listCalls != 0 {
+		t.Fatalf("expected Service matching to reuse listed Rollouts without List calls, got %d", dynamic.listCalls)
+	}
+
+	wantTargets := map[string]bool{
+		"service/prod/web":        false,
+		"service/prod/web-canary": false,
+	}
+	for _, edge := range topo.Edges {
+		if edge.Type == EdgeExposes && edge.Target == "rollout/prod/web" {
+			if _, ok := wantTargets[edge.Source]; ok {
+				wantTargets[edge.Source] = true
+			}
+		}
+	}
+	for serviceID, found := range wantTargets {
+		if !found {
+			t.Fatalf("expected %s to expose rollout/prod/web; edges=%+v", serviceID, topo.Edges)
+		}
+	}
+}
+
+func TestBuildResourcesTopology_ServiceOnlyExposesActiveJobs(t *testing.T) {
+	selector := map[string]string{"app": "api"}
+	provider := &mockProvider{
+		services: []*corev1.Service{{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "prod"},
+			Spec:       corev1.ServiceSpec{Selector: selector},
+		}},
+		jobs: []*batchv1.Job{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "active", Namespace: "prod"},
+				Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: selector},
+				}},
+				Status: batchv1.JobStatus{Active: 1},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "completed", Namespace: "prod"},
+				Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: selector},
+				}},
+				Status: batchv1.JobStatus{Succeeded: 1},
+			},
+		},
+		cronJobs: []*batchv1.CronJob{{
+			ObjectMeta: metav1.ObjectMeta{Name: "scheduled", Namespace: "prod"},
+			Spec: batchv1.CronJobSpec{JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: selector},
+				}},
+			}},
+		}},
+	}
+
+	topo, err := NewBuilder(provider).Build(DefaultBuildOptions())
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	targets := make(map[string]bool)
+	for _, edge := range topo.Edges {
+		if edge.Source == "service/prod/api" && edge.Type == EdgeExposes {
+			targets[edge.Target] = true
+		}
+	}
+	if !targets["job/prod/active"] {
+		t.Fatalf("expected Service to expose active Job; targets=%v", targets)
+	}
+	if targets["job/prod/completed"] {
+		t.Fatalf("completed Job must not appear as a Service backend; targets=%v", targets)
+	}
+	if targets["cronjob/prod/scheduled"] {
+		t.Fatalf("CronJob template must not appear as a current Service backend; targets=%v", targets)
+	}
+}
+
+func TestBuildResourcesTopology_PrometheusMonitors(t *testing.T) {
+	serviceMonitorGVR := schema.GroupVersionResource{Group: "monitoring.coreos.com", Version: "v1", Resource: "servicemonitors"}
+	podMonitorGVR := schema.GroupVersionResource{Group: "monitoring.coreos.com", Version: "v1", Resource: "podmonitors"}
+	serviceMonitor := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "monitoring.coreos.com/v1",
+		"kind":       "ServiceMonitor",
+		"metadata":   map[string]any{"name": "api", "namespace": "monitoring"},
+		"spec": map[string]any{
+			"namespaceSelector": map[string]any{"matchNames": []any{"prod"}},
+			"selector": map[string]any{"matchExpressions": []any{map[string]any{
+				"key": "monitoring", "operator": "In", "values": []any{"enabled"},
+			}}},
+			"endpoints": []any{map[string]any{"port": "metrics"}},
+		},
+	}}
+	podMonitor := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "monitoring.coreos.com/v1",
+		"kind":       "PodMonitor",
+		"metadata":   map[string]any{"name": "workers", "namespace": "monitoring"},
+		"spec": map[string]any{
+			"namespaceSelector": map[string]any{"any": true},
+			"selector":          map[string]any{"matchLabels": map[string]any{"role": "worker"}},
+			"podMetricsEndpoints": []any{
+				map[string]any{"port": "metrics"},
+				map[string]any{"port": "admin"},
+			},
+		},
+	}}
+	emptyMonitor := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "monitoring.coreos.com/v1",
+		"kind":       "ServiceMonitor",
+		"metadata":   map[string]any{"name": "empty", "namespace": "prod"},
+		"spec":       map[string]any{"selector": map[string]any{}},
+	}}
+	sameNamespaceMonitor := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "monitoring.coreos.com/v1",
+		"kind":       "ServiceMonitor",
+		"metadata":   map[string]any{"name": "local", "namespace": "prod"},
+		"spec":       map[string]any{"selector": map[string]any{"matchLabels": map[string]any{"scope": "local"}}},
+	}}
+	dynamic := &monitorDynamicProvider{
+		gvrs: map[string]schema.GroupVersionResource{
+			"ServiceMonitor": serviceMonitorGVR,
+			"PodMonitor":     podMonitorGVR,
+		},
+		resources: map[schema.GroupVersionResource][]*unstructured.Unstructured{
+			serviceMonitorGVR: {serviceMonitor, emptyMonitor, sameNamespaceMonitor},
+			podMonitorGVR:     {podMonitor},
+		},
+	}
+	provider := &mockProvider{
+		services: []*corev1.Service{
+			{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "prod", Labels: map[string]string{"monitoring": "enabled", "scope": "local"}}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "monitoring", Labels: map[string]string{"monitoring": "enabled", "scope": "local"}}},
+		},
+		deployments: []*appsv1.Deployment{{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: "prod"},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"role": "worker"}},
+			}},
+		}},
+		daemonSets: []*appsv1.DaemonSet{{
+			ObjectMeta: metav1.ObjectMeta{Name: "excluded", Namespace: "kube-system"},
+			Spec: appsv1.DaemonSetSpec{Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"role": "worker"}},
+			}},
+		}},
+	}
+
+	opts := DefaultBuildOptions()
+	opts.Namespaces = []string{"monitoring", "prod"}
+	topo, err := NewBuilder(provider).WithDynamic(dynamic).Build(opts)
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	wantEdges := map[string]bool{
+		"servicemonitor/monitoring/api-to-service/prod/api":       false,
+		"servicemonitor/prod/local-to-service/prod/api":           false,
+		"podmonitor/monitoring/workers-to-deployment/prod/worker": false,
+	}
+	for _, edge := range topo.Edges {
+		if _, ok := wantEdges[edge.ID]; ok && edge.Type == EdgeConfigures {
+			wantEdges[edge.ID] = true
+		}
+		if edge.Source == "servicemonitor/prod/empty" {
+			t.Fatalf("empty ServiceMonitor selector must not fan out; edge=%+v", edge)
+		}
+		if edge.Source == "servicemonitor/monitoring/api" && edge.Target == "service/monitoring/other" {
+			t.Fatalf("ServiceMonitor ignored namespaceSelector.matchNames; edge=%+v", edge)
+		}
+		if edge.Source == "servicemonitor/prod/local" && edge.Target == "service/monitoring/other" {
+			t.Fatalf("ServiceMonitor without namespaceSelector matched another namespace; edge=%+v", edge)
+		}
+		if edge.Target == "daemonset/kube-system/excluded" {
+			t.Fatalf("PodMonitor emitted an edge to a namespace-filtered DaemonSet; edge=%+v", edge)
+		}
+	}
+	for edgeID, found := range wantEdges {
+		if !found {
+			t.Fatalf("expected monitor edge %s; edges=%+v", edgeID, topo.Edges)
+		}
+	}
+
+	nodes := make(map[string]Node)
+	for _, node := range topo.Nodes {
+		nodes[node.ID] = node
+	}
+	if got := nodes["podmonitor/monitoring/workers"].Data["endpointCount"]; got != 2 {
+		t.Fatalf("PodMonitor endpointCount = %v, want 2", got)
+	}
+	if got := nodes["servicemonitor/prod/empty"].Data["matchesAllTargets"]; got != true {
+		t.Fatalf("empty ServiceMonitor matchesAllTargets = %v, want true", got)
+	}
+}
+
+func TestLargeClusterDetection(t *testing.T) {
+	tests := []struct {
+		name        string
+		provider    *mockProvider
+		wantLarge   bool
+		description string
+	}{
+		{
+			name:        "small cluster",
+			provider:    &mockProvider{deployments: makeDeployments(10, "default"), services: makeServices(10, "default"), pods: makePods(50, "default")},
+			wantLarge:   false,
+			description: "10+10+10(pods/5) = 30, well under 1000",
+		},
+		{
+			name: "just under threshold",
+			provider: &mockProvider{
+				deployments: makeDeployments(400, "default"),
+				services:    makeServices(400, "default"),
+				pods:        makePods(500, "default"), // (500+4)/5 = 100
+			},
+			wantLarge:   false,
+			description: "400+400+100 = 900 < 1000",
+		},
+		{
+			name: "at threshold",
+			provider: &mockProvider{
+				deployments: makeDeployments(400, "default"),
+				services:    makeServices(400, "default"),
+				pods:        makePods(1000, "default"), // (1000+4)/5 = 200
+			},
+			wantLarge:   true,
+			description: "400+400+200 = 1000 >= 1000",
+		},
+		{
+			name:        "pods-heavy cluster",
+			provider:    &mockProvider{pods: makePods(5000, "default")},
+			wantLarge:   true,
+			description: "(5000+4)/5 = 1000 pod groups",
+		},
+		{
+			name:        "many workloads no pods",
+			provider:    &mockProvider{deployments: makeDeployments(600, "default"), services: makeServices(600, "default")},
+			wantLarge:   true,
+			description: "600+600 = 1200 > 1000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := NewBuilder(tt.provider)
+			opts := DefaultBuildOptions()
+			gotLarge, _, _ := b.detectLargeClusterAndOptimize(&opts)
+			if gotLarge != tt.wantLarge {
+				t.Errorf("detectLargeClusterAndOptimize() = %v, want %v (%s)", gotLarge, tt.wantLarge, tt.description)
+			}
+		})
+	}
+}
+
+func TestLargeClusterOptimizations(t *testing.T) {
+	b := NewBuilder(largeProvider())
+	opts := DefaultBuildOptions()
+
+	if !opts.IncludeConfigMaps {
+		t.Fatal("precondition: IncludeConfigMaps should default to true")
+	}
+	if !opts.IncludePVCs {
+		t.Fatal("precondition: IncludePVCs should default to true")
+	}
+
+	isLarge, hiddenKinds, _ := b.detectLargeClusterAndOptimize(&opts)
+	if !isLarge {
+		t.Fatal("expected large cluster detection")
+	}
+
+	// MaxIndividualPods reduced from 5 to 2
+	if opts.MaxIndividualPods != 2 {
+		t.Errorf("MaxIndividualPods = %d, want 2", opts.MaxIndividualPods)
+	}
+
+	// ConfigMaps and PVCs auto-hidden
+	if opts.IncludeConfigMaps {
+		t.Error("IncludeConfigMaps should be false after optimization")
+	}
+	if opts.IncludePVCs {
+		t.Error("IncludePVCs should be false after optimization")
+	}
+	if !slices.Contains(hiddenKinds, "ConfigMap") {
+		t.Errorf("hiddenKinds %v should contain ConfigMap", hiddenKinds)
+	}
+	if !slices.Contains(hiddenKinds, "PersistentVolumeClaim") {
+		t.Errorf("hiddenKinds %v should contain PersistentVolumeClaim", hiddenKinds)
+	}
+}
+
+func TestSmallClusterUnaffected(t *testing.T) {
+	b := NewBuilder(smallProvider())
+	opts := DefaultBuildOptions()
+
+	isLarge, hiddenKinds, _ := b.detectLargeClusterAndOptimize(&opts)
+	if isLarge {
+		t.Error("small cluster should not be detected as large")
+	}
+	if hiddenKinds != nil {
+		t.Errorf("hiddenKinds should be nil for small cluster, got %v", hiddenKinds)
+	}
+	if opts.MaxIndividualPods != 5 {
+		t.Errorf("MaxIndividualPods = %d, want 5 (default)", opts.MaxIndividualPods)
+	}
+	if !opts.IncludeConfigMaps {
+		t.Error("IncludeConfigMaps should remain true")
+	}
+	if !opts.IncludePVCs {
+		t.Error("IncludePVCs should remain true")
+	}
+}
+
+func TestLargeClusterRequiresNamespaceFilter(t *testing.T) {
+	b := NewBuilder(largeProvider())
+	opts := DefaultBuildOptions()
+	// No namespace filter → should get requiresNamespaceFilter response
+
+	topo, err := b.Build(opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	if !topo.RequiresNamespaceFilter {
+		t.Error("RequiresNamespaceFilter should be true")
+	}
+	if !topo.LargeCluster {
+		t.Error("LargeCluster should be true")
+	}
+	if len(topo.Nodes) != 0 {
+		t.Errorf("Nodes should be empty, got %d", len(topo.Nodes))
+	}
+	if len(topo.Edges) != 0 {
+		t.Errorf("Edges should be empty, got %d", len(topo.Edges))
+	}
+	if topo.Nodes == nil {
+		t.Error("Nodes should be empty slice, not nil (Go nil → JSON null)")
+	}
+	if topo.Edges == nil {
+		t.Error("Edges should be empty slice, not nil (Go nil → JSON null)")
+	}
+	if len(topo.Warnings) == 0 {
+		t.Error("Warnings should contain guidance for MCP consumers")
+	}
+}
+
+func TestLargeClusterForRelationshipCache(t *testing.T) {
+	b := NewBuilder(largeProvider())
+	opts := DefaultBuildOptions()
+	opts.ForRelationshipCache = true
+	// No namespace filter, but ForRelationshipCache bypasses the guard
+
+	topo, err := b.Build(opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	if topo.RequiresNamespaceFilter {
+		t.Error("RequiresNamespaceFilter should be false when ForRelationshipCache is set")
+	}
+	// Should have actual nodes from the build (deployments + services + pod groups)
+	if len(topo.Nodes) == 0 {
+		t.Error("ForRelationshipCache should bypass large cluster guard and produce nodes")
+	}
+	// LargeCluster flag should still be set (for informational purposes)
+	if !topo.LargeCluster {
+		t.Error("LargeCluster should be true even with ForRelationshipCache")
+	}
+}
+
+func TestLargeClusterWithNamespaceFilter(t *testing.T) {
+	// Create resources across two namespaces — large in total, but filtered to one
+	provider := &mockProvider{
+		deployments: append(makeDeployments(500, "ns-a"), makeDeployments(500, "ns-b")...),
+		services:    append(makeServices(500, "ns-a"), makeServices(500, "ns-b")...),
+		pods:        append(makePods(500, "ns-a"), makePods(500, "ns-b")...),
+	}
+
+	b := NewBuilder(provider)
+	opts := DefaultBuildOptions()
+	opts.Namespaces = []string{"ns-a"}
+
+	topo, err := b.Build(opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	if topo.RequiresNamespaceFilter {
+		t.Error("RequiresNamespaceFilter should be false when namespace is specified")
+	}
+	if len(topo.Nodes) == 0 {
+		t.Error("Should produce nodes for the filtered namespace")
+	}
+
+	// All nodes should be from ns-a
+	for _, n := range topo.Nodes {
+		ns, _ := n.Data["namespace"].(string)
+		if ns != "" && ns != "ns-a" {
+			t.Errorf("Node %s has namespace %s, expected ns-a", n.ID, ns)
+		}
+	}
+}
+
+func TestNamespaceFilterReducesEstimate(t *testing.T) {
+	// 2000 deployments spread across 20 namespaces (100 per ns)
+	// All-namespace: 2000 estimated nodes → large
+	// Single namespace: 100 estimated nodes → small
+	var allDeploys []*appsv1.Deployment
+	for i := range 20 {
+		ns := fmt.Sprintf("ns-%d", i)
+		allDeploys = append(allDeploys, makeDeployments(100, ns)...)
+	}
+
+	provider := &mockProvider{deployments: allDeploys}
+	b := NewBuilder(provider)
+
+	// All namespaces → large
+	allOpts := DefaultBuildOptions()
+	isLarge, _, _ := b.detectLargeClusterAndOptimize(&allOpts)
+	if !isLarge {
+		t.Error("all-namespace should be detected as large (2000 deployments)")
+	}
+
+	// Single namespace → small
+	filteredOpts := DefaultBuildOptions()
+	filteredOpts.Namespaces = []string{"ns-0"}
+	isLarge, _, _ = b.detectLargeClusterAndOptimize(&filteredOpts)
+	if isLarge {
+		t.Error("single namespace (100 deployments) should NOT be detected as large")
+	}
+}
+
+func TestNetworkPolicyTopologyNodes(t *testing.T) {
+	provider := &mockProvider{
+		deployments: []*appsv1.Deployment{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "frontend", Namespace: "demo"},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "frontend"}},
+					},
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "backend", Namespace: "demo"},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "backend"}},
+					},
+				},
+			},
+		},
+		networkPolicies: []*networkingv1.NetworkPolicy{
+			{
+				// Specific selector — should create edge to frontend deployment
+				ObjectMeta: metav1.ObjectMeta{Name: "allow-frontend", Namespace: "demo"},
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "frontend"},
+					},
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				},
+			},
+			{
+				// Empty selector — should NOT create edges (matchesAllPods)
+				ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: "demo"},
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{},
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				},
+			},
+			{
+				// Different namespace — should not match demo deployments
+				ObjectMeta: metav1.ObjectMeta{Name: "other-ns-policy", Namespace: "other"},
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "frontend"},
+					},
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				},
+			},
+		},
+	}
+
+	b := NewBuilder(provider)
+	opts := DefaultBuildOptions()
+	topo, err := b.Build(opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// Check NetworkPolicy nodes exist
+	npNodes := make(map[string]Node)
+	for _, n := range topo.Nodes {
+		if n.Kind == KindNetworkPolicy {
+			npNodes[n.Name] = n
+		}
+	}
+
+	if len(npNodes) != 3 {
+		t.Errorf("expected 3 NetworkPolicy nodes, got %d", len(npNodes))
+	}
+
+	// Check allow-frontend node exists and is healthy
+	if n, ok := npNodes["allow-frontend"]; !ok {
+		t.Error("missing allow-frontend NetworkPolicy node")
+	} else if n.Status != StatusHealthy {
+		t.Errorf("allow-frontend status = %s, want healthy", n.Status)
+	}
+
+	// Check default-deny has matchesAllPods flag
+	if n, ok := npNodes["default-deny"]; !ok {
+		t.Error("missing default-deny NetworkPolicy node")
+	} else if n.Data["matchesAllPods"] != true {
+		t.Error("default-deny should have matchesAllPods=true")
+	}
+
+	// Check edges: allow-frontend should have edge to frontend deployment
+	var npEdges []Edge
+	for _, e := range topo.Edges {
+		if e.Type == EdgeProtects {
+			for _, n := range npNodes {
+				if e.Source == n.ID {
+					npEdges = append(npEdges, e)
+				}
+			}
+		}
+	}
+
+	// Only allow-frontend should create edges (default-deny has empty selector, other-ns is different namespace)
+	if len(npEdges) != 1 {
+		t.Errorf("expected 1 NetworkPolicy edge, got %d", len(npEdges))
+		for _, e := range npEdges {
+			t.Logf("  edge: %s → %s", e.Source, e.Target)
+		}
+	}
+
+	if len(npEdges) == 1 {
+		if npEdges[0].Source != "networkpolicy/demo/allow-frontend" {
+			t.Errorf("edge source = %s, want networkpolicy/demo/allow-frontend", npEdges[0].Source)
+		}
+		if npEdges[0].Target != "deployment/demo/frontend" {
+			t.Errorf("edge target = %s, want deployment/demo/frontend", npEdges[0].Target)
+		}
+	}
+}
+
+func TestNetworkPolicyNamespaceIsolation(t *testing.T) {
+	// Policy in ns-a should NOT create edges to deployments in ns-b
+	provider := &mockProvider{
+		deployments: []*appsv1.Deployment{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "ns-b"},
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}},
+					},
+				},
+			},
+		},
+		networkPolicies: []*networkingv1.NetworkPolicy{
+			{
+				ObjectMeta: metav1.ObjectMeta{Name: "web-policy", Namespace: "ns-a"},
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{"app": "web"},
+					},
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				},
+			},
+		},
+	}
+
+	b := NewBuilder(provider)
+	opts := DefaultBuildOptions()
+	topo, err := b.Build(opts)
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+
+	// Should have the NetworkPolicy node but NO edges (different namespace)
+	var npEdges int
+	for _, e := range topo.Edges {
+		if e.Source == "networkpolicy/ns-a/web-policy" {
+			npEdges++
+		}
+	}
+	if npEdges != 0 {
+		t.Errorf("expected 0 cross-namespace edges, got %d", npEdges)
+	}
+}
+
+func TestMatchesStringMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		labels   map[string]string
+		selector map[string]any
+		want     bool
+	}{
+		{"exact match", map[string]string{"app": "web"}, map[string]any{"app": "web"}, true},
+		{"subset match", map[string]string{"app": "web", "tier": "frontend"}, map[string]any{"app": "web"}, true},
+		{"mismatch value", map[string]string{"app": "web"}, map[string]any{"app": "api"}, false},
+		{"missing key", map[string]string{"app": "web"}, map[string]any{"tier": "frontend"}, false},
+		{"empty selector", map[string]string{"app": "web"}, map[string]any{}, true},
+		{"empty labels", map[string]string{}, map[string]any{"app": "web"}, false},
+		{"non-string value rejects", map[string]string{"app": "web"}, map[string]any{"app": 123}, false},
+		{"nil labels", nil, map[string]any{"app": "web"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchesStringMap(tt.labels, tt.selector); got != tt.want {
+				t.Errorf("matchesStringMap() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAnnotateNodePolicyCoverage(t *testing.T) {
+	deployments := []*appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "demo"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web"}},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "demo"},
+			Spec: appsv1.DeploymentSpec{
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api"}},
+				},
+			},
+		},
+	}
+
+	netpols := []*networkingv1.NetworkPolicy{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "web-policy", Namespace: "demo"},
+			Spec: networkingv1.NetworkPolicySpec{
+				PodSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "web"},
+				},
+			},
+		},
+	}
+
+	nodes := []Node{
+		{ID: "deployment/demo/web", Kind: KindDeployment, Name: "web", Data: map[string]any{"namespace": "demo"}},
+		{ID: "deployment/demo/api", Kind: KindDeployment, Name: "api", Data: map[string]any{"namespace": "demo"}},
+		{ID: "service/demo/web", Kind: KindService, Name: "web", Data: map[string]any{"namespace": "demo"}},
+	}
+
+	// EdgeProtects from web-policy to web deployment (created by topology builder)
+	edges := []Edge{
+		{ID: "np-to-web", Source: "networkpolicy/demo/web-policy", Target: "deployment/demo/web", Type: EdgeProtects},
+	}
+
+	annotateNodePolicyCoverage(nodes, edges, netpols, deployments, nil, nil)
+
+	// web deployment should be protected
+	if nodes[0].Data["policyStatus"] != "protected" {
+		t.Errorf("web deployment: got policyStatus=%v, want protected", nodes[0].Data["policyStatus"])
+	}
+
+	// api deployment should be unprotected (no matching policy)
+	if nodes[1].Data["policyStatus"] != "unprotected" {
+		t.Errorf("api deployment: got policyStatus=%v, want unprotected", nodes[1].Data["policyStatus"])
+	}
+
+	// service should have no policyStatus (not a workload)
+	if _, ok := nodes[2].Data["policyStatus"]; ok {
+		t.Errorf("service should not have policyStatus, got %v", nodes[2].Data["policyStatus"])
+	}
+}

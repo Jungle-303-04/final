@@ -835,9 +835,9 @@ disabled로 보여주고 누르면 403이 나는 것은 **거짓말이다.** BE-
 
 Radar는 **Apache-2.0**. 반드시:
 1. 루트 `NOTICE` — 원저작자(Skyhook) · 라이선스 · 출처 URL
-2. 이식 파일 상단에 **원본 헤더 보존 + 수정 사실 표기**
+2. 파일별 헤더는 추가하지 않고 루트 `NOTICE`에 상당한 수정·재작성 사실 표기
 3. `README.md`에 명시
-4. `references/radar-upstream/` 고정 커밋 서브트리
+4. `references/upstream/` 고정 커밋 서브트리
 
 **안 하면 오픈소스 공개 시 라이선스 위반이다.**
 

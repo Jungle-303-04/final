@@ -3,7 +3,7 @@ title: VP-019 — Radar 전면 이식 + 우리 기획 덧입히기 (정본)
 status: spec-approved
 date: 2026-07-14
 owner: 우녕 (확정) / 조율 세션 (실측·기록)
-reference: skyhook-io/radar v1.5.7 (Apache-2.0) — `references/radar-upstream/`
+reference: skyhook-io/radar `10461f40bcfaf6dd578b24262c8f8fb84ae20766` (Apache-2.0) — `references/upstream/`
 governing: 이식 범위·방법의 정본. VP-010~018은 이 위에 얹히는 **차별화 레이어**다.
 ---
 
@@ -18,7 +18,7 @@ governing: 이식 범위·방법의 정본. VP-010~018은 이 위에 얹히는 *
 
 | 층 | 정본 | 무엇을 결정하나 |
 |---|---|---|
-| **기능·구조·라벨** | **Radar** (`references/radar-upstream/`) | 어떤 화면·컴포넌트·컬럼·kind 렌더러·감사 체크·라벨 텍스트가 있는가. **가져올 수 있는 건 전부 가져온다.** |
+| **기능·구조·라벨** | **Radar** (`references/upstream/`) | 어떤 화면·컴포넌트·컬럼·kind 렌더러·감사 체크·라벨 텍스트가 있는가. **가져올 수 있는 건 전부 가져온다.** |
 | **디자인** | **shadcn/ui** (`ui.shadcn.com`) | 색·간격·타이포·radius·primitive·문법(`cn`/`cva`/`data-slot`). **Radar의 시각 언어는 버린다.** |
 | **차별화** | **VP-010~018** (우리 기획) | 필터=줌 · 3층 골격 · 파드 3채널 인코딩 · 상세 3상태 · SLG 모션 · 3-way diff · RCA · 고스트 파드 · 두 모드 쓰기 |
 
@@ -34,8 +34,9 @@ governing: 이식 범위·방법의 정본. VP-010~018은 이 위에 얹히는 *
 
 ## 1. Radar 실측 인벤토리
 
-**원본(v1.5.7): Go 628파일 + web 342파일 + `packages/k8s-ui` 492파일.**
-현재 `references/radar-upstream/` 에는 **k8s-ui 492 중 268만** 있다. **224개가 없다** (VP-018 §11).
+**고정 원본 `10461f40…`: `packages/k8s-ui/src` 492파일.**
+현재 `references/upstream/` 에 492파일 전체를 보존한다. v1.5.7 `88bd1e97…`은 실제
+268파일이므로 492파일 원본이라는 과거 기록을 폐기한다.
 
 ### 1.1 Radar 메뉴 (`web/src/components/nav`, 실측)
 
@@ -159,7 +160,7 @@ Radar의 `theme-*` 는 **19개짜리 얇은 별칭 레이어**다 (`theme/tailwi
 
 ```
 R0  어댑터 + codemod
-    radar-theme.css · 팔레트/clsx/브랜드색 치환 · 서브트리 완결(224파일) · NOTICE 갱신
+    토큰·팔레트·clsx·브랜드색 치환 · 492파일 스냅샷 흡수 · NOTICE 갱신
     ※ VP-018 §6(테마 :root/.dark 짝 맞추기)을 여기서 먼저 끝낸다
 
 R1  ui/ 나머지 24  ★
@@ -323,8 +324,8 @@ GET /api/events/stream   (SSE)
 ## 9. 라이선스 (필수)
 
 Radar = **Apache-2.0**. 우리 저장소는 **public**이다.
-1. `references/radar-upstream/` 고정 커밋 서브트리 — **완결시킨다** (지금 224파일 누락)
+1. `references/upstream/` 고정 커밋 스냅샷 — **492파일 완결**
 2. 루트 `NOTICE` — 원저작자(Skyhook) · Apache-2.0 · 출처 URL · 수정 사실
-3. 이식 파일 상단에 **원본 헤더 보존 + Opsia 수정 표기**
+3. 파일별 라이선스 헤더는 추가하지 않는다. 귀속과 수정 고지는 루트 `NOTICE`가 담당한다
 4. **`provider-logos` 는 상표다.** nominative use임을 `NOTICE` 에 별도 명시
 5. shadcn/ui = **MIT**. 별도 NOTICE 의무 없음 (그래도 README에 출처를 적는다)

@@ -215,6 +215,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [auto/deploy-setup](auto/deploy-setup.md)
 - [auto/deploy-status](auto/deploy-status.md)
 - [auto/frontend-pipeline](auto/frontend-pipeline.md)
+- [auto/inflight](auto/inflight.md)
 - [auto/night-directives](auto/night-directives.md)
 - [auto/night-log](auto/night-log.md)
 - [auto/night-log-backend](auto/night-log-backend.md)

@@ -3,8 +3,8 @@ title: Radar 패리티 맵 — 소스 레벨 대조 (레퍼런스 = skyhook-io/r
 status: authoritative
 date: 2026-07-14
 owner: 우녕 (확정) / 조율 세션 (분석)
-license: Radar는 Apache-2.0. 이식 시 NOTICE·라이선스 헤더 보존 필수.
-source: https://github.com/skyhook-io/radar (main, 643 commits, v1.5.7)
+license: Radar는 Apache-2.0. 귀속과 수정 고지는 루트 NOTICE가 담당.
+source: https://github.com/skyhook-io/radar (`10461f40bcfaf6dd578b24262c8f8fb84ae20766`)
 ---
 
 # Radar 패리티 맵
@@ -295,9 +295,9 @@ GitHub star, desktop bridge.
 
 Radar는 **Apache-2.0**. 우리도 오픈소스이므로 사용 가능하나:
 1. 저장소 루트에 `NOTICE` 생성 — 원저작자(Skyhook), 라이선스, 출처 URL.
-2. 이식한 파일 상단에 **원본 라이선스 헤더 보존 + 수정 사실 표기**.
+2. 파일별 헤더는 추가하지 않고 루트 `NOTICE`에 상당한 수정·재작성 사실을 표기.
 3. `README.md`에 "Radar(Apache-2.0)의 UI 컴포넌트를 일부 이식·개작" 명시.
-4. `references/radar-upstream/` 에 **고정 커밋으로 서브트리** (추적 가능하게).
+4. `references/upstream/` 에 **고정 커밋으로 서브트리** (추적 가능하게).
 
 **이걸 안 하면 오픈소스 공개 시 라이선스 위반이다.**
 
@@ -318,7 +318,7 @@ Radar는 **Apache-2.0**. 우리도 오픈소스이므로 사용 가능하나:
 ### 7-3. 순서
 
 ```
-P0-A. references/radar-upstream/ 서브트리 + NOTICE + 라이선스 헤더 규율
+P0-A. references/upstream/ 완결 스냅샷 + NOTICE + Apache-2.0 전문
 P0-B. packages/k8s-ui/ui/ 48개 → 우리 shadcn primitive 매핑표 작성
 P0-C. TimelineStrip + scrubber-math  → VP-012 2층 (기획 교체)
 P0-D. TopologyGraph + layout(ELK)    → VP-012 3층 (빈 슬롯 채움)
