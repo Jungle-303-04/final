@@ -6,7 +6,6 @@ import {
 import {
   toResourceCatalog,
   toResourceDetail,
-  toResourceInfraMap,
   toResourceList,
 } from "./resourcesCanonical";
 import {
@@ -63,49 +62,6 @@ export function createResourcesAdapter(
             },
             signal,
           ),
-        );
-      });
-    },
-
-    async loadInfraMap(clusterId, query = {}, signal) {
-      return withCanonicalFailure(async () => {
-        const nodeRequest = canonicalListRequest(clusterId, {
-          includeDeleted: query.includeDeleted,
-          limit: query.limit,
-          resourceType: "node",
-        });
-        const podRequest = canonicalListRequest(clusterId, {
-          includeDeleted: query.includeDeleted,
-          limit: query.limit,
-          resourceType: "pod",
-        });
-        const [nodeWire, podWire] = await Promise.all([
-          endpoints.listInventoryResourcesByType(
-            nodeRequest.clusterId,
-            {
-              resourceType: nodeRequest.resourceType,
-              namespace: nodeRequest.namespace,
-              includeDeleted: nodeRequest.includeDeleted,
-              limit: nodeRequest.limit,
-            },
-            signal,
-          ),
-          endpoints.listInventoryResourcesByType(
-            podRequest.clusterId,
-            {
-              resourceType: podRequest.resourceType,
-              namespace: podRequest.namespace,
-              includeDeleted: podRequest.includeDeleted,
-              limit: podRequest.limit,
-            },
-            signal,
-          ),
-        ]);
-        return toResourceInfraMap(
-          nodeRequest.clusterId,
-          Math.max(nodeRequest.limit, podRequest.limit),
-          toResourceList(nodeRequest, nodeWire),
-          toResourceList(podRequest, podWire),
         );
       });
     },

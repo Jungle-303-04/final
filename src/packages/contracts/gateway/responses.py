@@ -689,6 +689,40 @@ class ResourceFilterFacetPageResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
+class GlobalClusterFacetItem(StrictModel):
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+
+
+class GlobalNamespaceFacetItem(GlobalClusterFacetItem):
+    cluster_id: str = Field(min_length=1)
+
+
+class GlobalApplicationFacetItem(GlobalClusterFacetItem):
+    pass
+
+
+class GlobalLabelFacetItem(StrictModel):
+    key: str = Field(min_length=1)
+    value: str
+    count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+
+
+class GlobalResourceFacetItem(GlobalClusterFacetItem):
+    kind: str = Field(min_length=1)
+
+
+class GlobalFilterFacetsResponse(StrictModel):
+    clusters: list[GlobalClusterFacetItem] = Field(default_factory=list)
+    namespaces: list[GlobalNamespaceFacetItem] = Field(default_factory=list)
+    applications: list[GlobalApplicationFacetItem] = Field(default_factory=list)
+    labels: list[GlobalLabelFacetItem] = Field(default_factory=list)
+    resources: list[GlobalResourceFacetItem] = Field(default_factory=list)
+
+
 class InventoryResourceClusterIdentity(StrictModel):
     cluster_id: str = Field(min_length=1)
     name: str | None = None
@@ -708,6 +742,60 @@ class FilteredInventoryResourceListResponse(StrictModel):
     has_more: bool
     counts: FilterResultCounts
     snapshot: FilterSnapshotMeta
+
+
+class ResourceMetricHistoryPoint(StrictModel):
+    observed_at: str = Field(min_length=1)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+
+
+class ResourceMetricHistorySeries(StrictModel):
+    resource_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: Literal["pod"] = "pod"
+    namespace: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
+    has_sparkline_points: bool
+    completeness: FilterCountCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_metric_history(self) -> Self:
+        observed_at = [point.observed_at for point in self.points]
+        if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
+            raise ValueError("resource metric history points must be unique and ordered")
+        has_cpu = any(point.cpu_mcores is not None for point in self.points)
+        if self.has_sparkline_points != has_cpu:
+            raise ValueError("sparkline availability must reflect measured CPU points")
+        if self.completeness == "unavailable" and has_cpu:
+            raise ValueError("unavailable metric history cannot carry measured CPU points")
+        if self.completeness == "exact" and (
+            not self.points or any(point.cpu_mcores is None for point in self.points)
+        ):
+            raise ValueError("exact metric history requires CPU data at every returned point")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact metric history cannot carry partial reasons")
+        return self
+
+
+class ResourceMetricsHistoryResponse(StrictModel):
+    series: list[ResourceMetricHistorySeries] = Field(default_factory=list)
+    completeness: FilterCountCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+    snapshot: FilterSnapshotMeta
+
+    @model_validator(mode="after")
+    def validate_metric_series(self) -> Self:
+        resource_ids = [item.resource_id for item in self.series]
+        if len(set(resource_ids)) != len(resource_ids):
+            raise ValueError("resource metric history identities must be unique")
+        if self.completeness == "exact" and (
+            any(item.completeness != "exact" for item in self.series) or self.partial_reason_codes
+        ):
+            raise ValueError("exact metric history response cannot contain incomplete series")
+        return self
 
 
 GraphRelationKind = Literal["owns", "runs_on", "selects", "routes_to"]
@@ -839,6 +927,78 @@ class ResourceGraphSnapshotResponse(StrictModel):
             raise ValueError("truncated graph relations cannot be exact")
         if self.relation_completeness == "exact" and self.partial_reason_codes:
             raise ValueError("exact graph relations cannot carry partial reasons")
+        return self
+
+
+class PhysicalTopologyServer(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    cpu_pct: float | None = Field(default=None, ge=0)
+    mem_pct: float | None = Field(default=None, ge=0)
+    status: str
+    matched_pod_count: int | None = Field(default=None, ge=0)
+    total_pod_count: int | None = Field(default=None, ge=0)
+    matched_pod_count_completeness: FilterCountCompleteness
+    total_pod_count_completeness: FilterCountCompleteness
+
+    @model_validator(mode="after")
+    def validate_pod_counts(self) -> Self:
+        pairs = (
+            (self.matched_pod_count, self.matched_pod_count_completeness),
+            (self.total_pod_count, self.total_pod_count_completeness),
+        )
+        if any((value is None) != (completeness == "unavailable") for value, completeness in pairs):
+            raise ValueError("physical topology pod counts must match completeness")
+        return self
+
+
+class PhysicalTopologyPod(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    server_id: str | None = None
+    # requests 대비 사용률이다. requests 근거가 projection에 없으면 0이 아니라 null이다.
+    usage_pct: float | None = Field(default=None, ge=0)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+    phase: str
+    health: str
+    restarts: int = Field(ge=0)
+    matches_filter: bool
+
+
+class PhysicalTopologyResponse(StrictModel):
+    view: Literal["physical"] = "physical"
+    cluster_projection_revision: int = Field(ge=0)
+    cluster: InventoryResourceClusterIdentity
+    servers: list[PhysicalTopologyServer] = Field(default_factory=list)
+    pods: list[PhysicalTopologyPod] = Field(default_factory=list)
+    truncated: dict[str, int] = Field(default_factory=dict)
+    unassigned_truncated_count: int = Field(ge=0)
+    counts: FilterResultCounts
+    projection_completeness: GraphRelationCompleteness
+    metrics_completeness: GraphRelationCompleteness
+    metrics_observed_at: str | None = None
+    partial_reason_codes: list[str] = Field(default_factory=list)
+    snapshot: FilterSnapshotMeta
+
+    @model_validator(mode="after")
+    def validate_physical_topology(self) -> Self:
+        server_ids = [server.id for server in self.servers]
+        pod_ids = [pod.id for pod in self.pods]
+        known_servers = set(server_ids)
+        if len(known_servers) != len(server_ids) or len(set(pod_ids)) != len(pod_ids):
+            raise ValueError("physical topology identities must be unique")
+        if any(
+            pod.server_id is not None and pod.server_id not in known_servers for pod in self.pods
+        ):
+            raise ValueError("physical topology pods must reference returned servers")
+        if not set(self.truncated).issubset(known_servers):
+            raise ValueError("physical topology truncation must reference returned servers")
+        if any(count <= 0 for count in self.truncated.values()):
+            raise ValueError("physical topology truncation counts must be positive")
+        if self.projection_completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact physical topology cannot carry partial reasons")
         return self
 
 

@@ -13,7 +13,6 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   environment?: string;
   strategy?: string;
   cluster?: string;
-  note?: string;
   selected: boolean;
   compact: boolean;
   showMetadata: boolean;
@@ -29,7 +28,6 @@ export interface WorkflowNodeInput {
   environment?: string;
   strategy?: string;
   cluster?: string;
-  note?: string;
   selected: boolean;
 }
 

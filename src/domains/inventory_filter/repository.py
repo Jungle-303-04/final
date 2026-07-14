@@ -7,15 +7,15 @@ import json
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, case, func, literal, or_, select, tuple_, update
+from sqlalchemy import Integer, Select, and_, case, cast, func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
 from domains.identity.models import ClusterRegistration
-from domains.inventory.models import ClusterInventoryResourceRecord
+from domains.inventory.models import ClusterInventoryResourceRecord, ClusterUsageSampleRecord
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
     InventoryResourceApplicationVersion,
@@ -34,6 +34,7 @@ from packages.storage.engine import DatabaseConnection, iso_or_none
 PROJECTION_WRITE_CHUNK = 500
 UNKNOWN_PROVIDER = "unknown"
 KNOWN_PROVIDERS = frozenset({"eks", "gke", "aks", "onprem", "kind", UNKNOWN_PROVIDER})
+PHYSICAL_TOPOLOGY_PODS_PER_SERVER = 12
 
 
 def inventory_snapshot_lock_key(workspace_id: str, cluster_id: str) -> int:
@@ -697,6 +698,224 @@ class InventoryFilterRepository(DatabaseConnection):
             ),
         }
 
+    def list_global_filter_facets(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+        query: str | None,
+        limit: int,
+    ) -> JsonObject:
+        """Return bounded, server-counted suggestions for the product-wide filter bar."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        if not workspace_id or not cluster_ids:
+            return _empty_global_filter_facets()
+        effective_limit = max(1, min(limit, 20))
+        normalized_query = (query or "").strip().casefold()
+        pattern = f"%{_escape_like(normalized_query)}%"
+        current = _current_versions(
+            workspace_id,
+            cluster_ids,
+            snapshot_revision,
+            include_deleted=False,
+        )
+        base = select(current).where(current.c.rank == 1).cte("global_filter_base")
+
+        def filtered(name: str, selected: ResourceFilters) -> Any:
+            return _apply_resource_filters(
+                base,
+                filters=replace(selected, query=None, include_deleted=False),
+                allowed_application_ids=application_ids,
+            ).cte(name)
+
+        cluster_matches = filtered(
+            "global_cluster_matches",
+            replace(filters, clusters=()),
+        )
+        namespace_matches = filtered(
+            "global_namespace_matches",
+            replace(filters, namespaces=()),
+        )
+        application_matches = filtered(
+            "global_application_matches",
+            replace(filters, applications=()),
+        )
+        selected_matches = filtered("global_selected_matches", filters)
+
+        cluster = ClusterRegistration.__table__
+        cluster_statement = (
+            select(
+                cluster.c.cluster_id.label("id"),
+                cluster.c.name.label("label"),
+                func.count(func.distinct(cluster_matches.c.version_id)).label("count"),
+            )
+            .select_from(
+                cluster.outerjoin(
+                    cluster_matches,
+                    cluster_matches.c.cluster_id == cluster.c.cluster_id,
+                )
+            )
+            .where(
+                cluster.c.workspace_id == workspace_id,
+                cluster.c.cluster_id.in_(cluster_ids),
+            )
+            .group_by(cluster.c.cluster_id, cluster.c.name)
+        )
+        if normalized_query:
+            cluster_statement = cluster_statement.where(
+                or_(
+                    func.lower(cluster.c.cluster_id).like(pattern, escape="\\"),
+                    func.lower(cluster.c.name).like(pattern, escape="\\"),
+                )
+            )
+        cluster_statement = cluster_statement.order_by(
+            func.count(func.distinct(cluster_matches.c.version_id)).desc(),
+            cluster.c.name,
+            cluster.c.cluster_id,
+        ).limit(effective_limit)
+
+        namespace_statement = (
+            select(
+                (
+                    namespace_matches.c.cluster_id + literal("/") + namespace_matches.c.namespace
+                ).label("id"),
+                namespace_matches.c.namespace.label("label"),
+                namespace_matches.c.cluster_id,
+                func.count(func.distinct(namespace_matches.c.version_id)).label("count"),
+            )
+            .where(namespace_matches.c.namespace.is_not(None))
+            .group_by(namespace_matches.c.cluster_id, namespace_matches.c.namespace)
+        )
+        if normalized_query:
+            namespace_statement = namespace_statement.where(
+                func.lower(namespace_matches.c.namespace).like(pattern, escape="\\")
+            )
+        namespace_statement = namespace_statement.order_by(
+            func.count(func.distinct(namespace_matches.c.version_id)).desc(),
+            namespace_matches.c.namespace,
+            namespace_matches.c.cluster_id,
+        ).limit(effective_limit)
+
+        application = Application.__table__
+        application_link = InventoryResourceApplicationVersion.__table__
+        application_counts = (
+            select(
+                application_link.c.application_id,
+                func.count(func.distinct(application_matches.c.version_id)).label("count"),
+            )
+            .select_from(
+                application_link.join(
+                    application_matches,
+                    and_(
+                        application_link.c.workspace_id == application_matches.c.workspace_id,
+                        application_link.c.version_id == application_matches.c.version_id,
+                    ),
+                )
+            )
+            .where(application_link.c.application_id.in_(application_ids))
+            .group_by(application_link.c.application_id)
+            .cte("global_application_counts")
+        )
+        application_statement = (
+            select(
+                application.c.application_id.label("id"),
+                application.c.name.label("label"),
+                func.coalesce(application_counts.c.count, 0).label("count"),
+            )
+            .select_from(
+                application.outerjoin(
+                    application_counts,
+                    application_counts.c.application_id == application.c.application_id,
+                )
+            )
+            .where(
+                application.c.workspace_id == workspace_id,
+                application.c.application_id.in_(application_ids),
+            )
+        )
+        if normalized_query:
+            application_statement = application_statement.where(
+                or_(
+                    func.lower(application.c.application_id).like(pattern, escape="\\"),
+                    func.lower(application.c.name).like(pattern, escape="\\"),
+                )
+            )
+        application_statement = application_statement.order_by(
+            func.coalesce(application_counts.c.count, 0).desc(),
+            application.c.name,
+            application.c.application_id,
+        ).limit(effective_limit)
+
+        label = InventoryResourceLabelVersion.__table__
+        label_statement = (
+            select(
+                label.c.key,
+                label.c.value,
+                func.count(func.distinct(selected_matches.c.version_id)).label("count"),
+            )
+            .select_from(
+                selected_matches.join(
+                    label,
+                    and_(
+                        label.c.workspace_id == selected_matches.c.workspace_id,
+                        label.c.version_id == selected_matches.c.version_id,
+                    ),
+                )
+            )
+            .where(label.c.selector.like(pattern, escape="\\"))
+            .group_by(label.c.key, label.c.value)
+            .order_by(
+                func.count(func.distinct(selected_matches.c.version_id)).desc(),
+                label.c.key,
+                label.c.value,
+            )
+            .limit(effective_limit)
+        )
+        resource_statement = (
+            select(
+                selected_matches.c.inventory_key.label("id"),
+                selected_matches.c.name.label("label"),
+                selected_matches.c.kind,
+                literal(1).label("count"),
+            )
+            .where(selected_matches.c.search_text.like(pattern, escape="\\"))
+            .order_by(
+                selected_matches.c.name,
+                selected_matches.c.kind,
+                selected_matches.c.inventory_key,
+            )
+            .limit(effective_limit)
+        )
+
+        with self.connection() as conn:
+            clusters = [dict(row) for row in conn.execute(cluster_statement).mappings()]
+            namespaces = [dict(row) for row in conn.execute(namespace_statement).mappings()]
+            applications = [dict(row) for row in conn.execute(application_statement).mappings()]
+            labels = (
+                [dict(row) for row in conn.execute(label_statement).mappings()]
+                if normalized_query
+                else []
+            )
+            resources = (
+                [dict(row) for row in conn.execute(resource_statement).mappings()]
+                if normalized_query
+                else []
+            )
+        return {
+            "clusters": _serialize_global_facets(clusters),
+            "namespaces": _serialize_global_facets(namespaces),
+            "applications": _serialize_global_facets(applications),
+            "labels": [
+                {"key": str(row["key"]), "value": str(row["value"]), "count": int(row["count"])}
+                for row in labels
+            ],
+            "resources": _serialize_global_facets(resources),
+        }
+
     def list_filtered_resources(
         self,
         *,
@@ -791,6 +1010,126 @@ class InventoryFilterRepository(DatabaseConnection):
             "unfiltered_count": unfiltered_total,
             "has_more": has_more,
             "next_position": next_position,
+        }
+
+    def list_resource_metric_history(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+        resource_ids: Collection[str],
+        window_seconds: int,
+        limit: int,
+    ) -> JsonObject:
+        """Resolve requested pods inside the filtered cut, then read bounded real samples."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        requested = _ids(resource_ids)
+        if not workspace_id or not cluster_ids or not requested or snapshot_revision <= 0:
+            return {"resources": [], "samples_by_cluster": {}}
+        resource_statement, _unused_sample_statement = _resource_metric_history_statements(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
+            allowed_application_ids=application_ids,
+            filters=filters,
+            snapshot_revision=snapshot_revision,
+            resource_ids=requested,
+            window_seconds=window_seconds,
+            limit=limit,
+        )
+        with self.connection() as conn:
+            resources = [dict(row) for row in conn.execute(resource_statement).mappings().all()]
+            # Fail closed before touching time-series rows when any supplied id is not in
+            # the exact authorized + filtered + pinned resource cut.
+            if {str(row["resource_id"]) for row in resources} != set(requested):
+                return {"resources": resources, "samples_by_cluster": {}}
+            metric_cluster_ids = _ids({str(row["cluster_id"]) for row in resources})
+            _unused_resource_statement, sample_statement = _resource_metric_history_statements(
+                workspace_id=workspace_id,
+                cluster_ids=metric_cluster_ids,
+                allowed_application_ids=application_ids,
+                filters=filters,
+                snapshot_revision=snapshot_revision,
+                resource_ids=requested,
+                window_seconds=window_seconds,
+                limit=limit,
+            )
+            rows = [dict(row) for row in conn.execute(sample_statement).mappings().all()]
+        samples_by_cluster: dict[str, list[JsonObject]] = defaultdict(list)
+        for row in rows:
+            samples_by_cluster[str(row["cluster_id"])].append(
+                {
+                    "sampled_at": iso_or_none(row.get("sampled_at")),
+                    "usage": dict(row.get("usage") or {}),
+                }
+            )
+        return {
+            "resources": resources,
+            "samples_by_cluster": dict(samples_by_cluster),
+        }
+
+    def list_physical_topology_resources(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+    ) -> JsonObject:
+        """Return bounded node/pod placement plus server-evaluated filter membership."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        if not workspace_id or len(cluster_ids) != 1 or snapshot_revision <= 0:
+            return {
+                "servers": [],
+                "pods": [],
+                "pod_counts_by_node_name": {},
+                "truncated_by_node_name": {},
+                "unassigned_truncated_count": 0,
+                "filtered_count": 0,
+                "unfiltered_count": 0,
+            }
+        server_statement, pod_statement, count_statement = _physical_topology_statements(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
+            allowed_application_ids=application_ids,
+            filters=filters,
+            snapshot_revision=snapshot_revision,
+        )
+        with self.connection() as conn:
+            servers = [dict(row) for row in conn.execute(server_statement).mappings().all()]
+            pods = [dict(row) for row in conn.execute(pod_statement).mappings().all()]
+            counts = dict(conn.execute(count_statement).mappings().one())
+
+        truncated_by_node_name: dict[str, int] = {}
+        pod_counts_by_node_name: dict[str, JsonObject] = {}
+        unassigned_truncated_count = 0
+        for row in pods:
+            total = int(row.get("placement_pod_count") or 0)
+            node_name = str(row.get("placement_node_name") or "")
+            pod_counts_by_node_name[node_name] = {
+                "matched": int(row.get("matched_pod_count") or 0),
+                "total": total,
+            }
+            omitted = max(0, total - PHYSICAL_TOPOLOGY_PODS_PER_SERVER)
+            if omitted <= 0:
+                continue
+            if node_name:
+                truncated_by_node_name[node_name] = omitted
+            else:
+                unassigned_truncated_count = omitted
+        return {
+            "servers": servers,
+            "pods": pods,
+            "pod_counts_by_node_name": pod_counts_by_node_name,
+            "truncated_by_node_name": truncated_by_node_name,
+            "unassigned_truncated_count": unassigned_truncated_count,
+            "filtered_count": int(counts.get("filtered_count") or 0),
+            "unfiltered_count": int(counts.get("unfiltered_count") or 0),
         }
 
     def list_label_facets(
@@ -1078,6 +1417,187 @@ def _apply_resource_filters(
     return statement
 
 
+def _physical_topology_statements(
+    *,
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    allowed_application_ids: tuple[str, ...],
+    filters: ResourceFilters,
+    snapshot_revision: int,
+) -> tuple[Select[Any], Select[Any], Select[Any]]:
+    """Build PostgreSQL statements for a bounded, snapshot-consistent physical view."""
+    current = _current_versions(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=filters.include_deleted,
+    )
+    base = select(current).where(current.c.rank == 1).cte("physical_topology_inventory")
+    filtered = _apply_resource_filters(
+        base,
+        filters=filters,
+        allowed_application_ids=allowed_application_ids,
+    ).cte("physical_topology_filter_matches")
+
+    server_statement = (
+        select(base)
+        .where(base.c.resource_type == "node")
+        .order_by(base.c.name, base.c.inventory_key)
+    )
+
+    matches_filter = (
+        select(literal(1))
+        .select_from(filtered)
+        .where(filtered.c.version_id == base.c.version_id)
+        .exists()
+    )
+    pods = (
+        select(base, matches_filter.label("matches_filter"))
+        .where(base.c.resource_type == "pod")
+        .cte("physical_topology_pods")
+    )
+    pod_node_name = func.coalesce(pods.c.summary["node_name"].astext, "")
+    known_server_names = select(base.c.name).where(base.c.resource_type == "node")
+    placement_node_name = case(
+        (pod_node_name.in_(known_server_names), pod_node_name),
+        else_="",
+    )
+    restart_text = func.coalesce(pods.c.summary["restart_total"].astext, "0")
+    restart_count = case(
+        (restart_text.op("~")(r"^[0-9]+$"), cast(restart_text, Integer)),
+        else_=0,
+    )
+    healthy_last = case(
+        (
+            and_(
+                func.lower(pods.c.status) == "running",
+                func.lower(pods.c.health) == "healthy",
+                restart_count == 0,
+            ),
+            1,
+        ),
+        else_=0,
+    )
+    ranked_pods = select(
+        pods,
+        placement_node_name.label("placement_node_name"),
+        func.row_number()
+        .over(
+            partition_by=placement_node_name,
+            order_by=(
+                healthy_last,
+                restart_count.desc(),
+                pods.c.namespace,
+                pods.c.name,
+                pods.c.inventory_key,
+            ),
+        )
+        .label("placement_rank"),
+        func.count().over(partition_by=placement_node_name).label("placement_pod_count"),
+        func.sum(case((pods.c.matches_filter.is_(True), 1), else_=0))
+        .over(partition_by=placement_node_name)
+        .label("matched_pod_count"),
+    ).cte("ranked_physical_topology_pods")
+    pod_statement = (
+        select(ranked_pods)
+        .where(ranked_pods.c.placement_rank <= PHYSICAL_TOPOLOGY_PODS_PER_SERVER)
+        .order_by(
+            ranked_pods.c.placement_node_name,
+            ranked_pods.c.placement_rank,
+            ranked_pods.c.inventory_key,
+        )
+    )
+
+    count_statement = select(
+        select(func.count()).select_from(filtered).scalar_subquery().label("filtered_count"),
+        select(func.count()).select_from(base).scalar_subquery().label("unfiltered_count"),
+    )
+    return server_statement, pod_statement, count_statement
+
+
+def _resource_metric_history_statements(
+    *,
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    allowed_application_ids: tuple[str, ...],
+    filters: ResourceFilters,
+    snapshot_revision: int,
+    resource_ids: tuple[str, ...],
+    window_seconds: int,
+    limit: int,
+) -> tuple[Select[Any], Select[Any]]:
+    """Build pinned resource-resolution and revision-joined usage history statements."""
+    current = _current_versions(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=filters.include_deleted,
+    )
+    base = select(current).where(current.c.rank == 1).cte("metric_history_inventory")
+    filtered = _apply_resource_filters(
+        base,
+        filters=filters,
+        allowed_application_ids=allowed_application_ids,
+    ).cte("metric_history_filter_matches")
+    resources = (
+        select(
+            filtered.c.inventory_key.label("resource_id"),
+            filtered.c.cluster_id,
+            filtered.c.namespace,
+            filtered.c.name,
+        )
+        .where(
+            filtered.c.inventory_key.in_(resource_ids),
+            filtered.c.resource_type == "pod",
+            filtered.c.namespace.is_not(None),
+        )
+        .order_by(filtered.c.inventory_key)
+    )
+
+    usage = ClusterUsageSampleRecord.__table__
+    revision = InventoryFilterRevision.__table__
+    eligible = (
+        select(
+            usage.c.cluster_id,
+            usage.c.sampled_at,
+            usage.c.usage,
+            func.max(usage.c.sampled_at)
+            .over(partition_by=usage.c.cluster_id)
+            .label("cluster_latest_sampled_at"),
+            func.row_number()
+            .over(partition_by=usage.c.cluster_id, order_by=usage.c.sampled_at.desc())
+            .label("recency_rank"),
+        )
+        .select_from(
+            usage.join(
+                revision,
+                and_(
+                    revision.c.workspace_id == usage.c.workspace_id,
+                    revision.c.cluster_id == usage.c.cluster_id,
+                    revision.c.snapshot_id == usage.c.snapshot_id,
+                ),
+            )
+        )
+        .where(
+            usage.c.workspace_id == workspace_id,
+            usage.c.cluster_id.in_(cluster_ids),
+            revision.c.revision_id <= snapshot_revision,
+        )
+        .cte("metric_history_eligible_samples")
+    )
+    history = (
+        select(eligible.c.cluster_id, eligible.c.sampled_at, eligible.c.usage)
+        .where(
+            eligible.c.sampled_at
+            >= eligible.c.cluster_latest_sampled_at
+            - timedelta(seconds=max(60, min(window_seconds, 24 * 60 * 60))),
+            eligible.c.recency_rank <= max(1, min(limit, 288)),
+        )
+        .order_by(eligible.c.cluster_id, eligible.c.sampled_at)
+    )
+    return resources, history
+
+
 def _sort_columns(table: Any) -> tuple[Any, ...]:
     return (
         table.c.cluster_id,
@@ -1250,6 +1770,32 @@ def _provider(settings: object) -> str:
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _serialize_global_facets(rows: Sequence[Mapping[str, Any]]) -> list[JsonObject]:
+    items: list[JsonObject] = []
+    for row in rows:
+        item: JsonObject = {
+            "id": str(row["id"]),
+            "label": str(row.get("label") or row["id"]),
+            "count": int(row["count"]),
+        }
+        if row.get("cluster_id") is not None:
+            item["cluster_id"] = str(row["cluster_id"])
+        if row.get("kind") is not None:
+            item["kind"] = str(row["kind"])
+        items.append(item)
+    return items
+
+
+def _empty_global_filter_facets() -> JsonObject:
+    return {
+        "clusters": [],
+        "namespaces": [],
+        "applications": [],
+        "labels": [],
+        "resources": [],
+    }
 
 
 def _empty_page() -> JsonObject:

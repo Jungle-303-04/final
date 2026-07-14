@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from domains.inventory_filter.cursor import CursorScope, FilterCursorCodec
 from packages.contracts.gateway.responses import (
     FilteredInventoryResourceListResponse,
+    GlobalFilterFacetsResponse,
     LabelFacetPageResponse,
     ResourceFilterFacetPageResponse,
 )
@@ -115,6 +116,7 @@ class InventoryFilterApiDb:
             "observed_at": "2026-07-13T20:20:00Z",
             "labels_complete": True,
             "resources_complete": True,
+            "application_bindings_complete": True,
             "partial_reason_codes": [],
         }
 
@@ -147,6 +149,35 @@ class InventoryFilterApiDb:
                 }
                 if self.paginated
                 else None
+            ),
+        }
+
+    def list_global_filter_facets(self, **kwargs: Any) -> dict[str, Any]:
+        self.data_calls.append(("global-facets", dict(kwargs)))
+        searched = bool(str(kwargs.get("query") or "").strip())
+        return {
+            "clusters": [{"id": CLUSTER_ID, "label": "prod-eks", "count": 7}],
+            "namespaces": [
+                {
+                    "id": f"{CLUSTER_ID}/shop",
+                    "label": "shop",
+                    "cluster_id": CLUSTER_ID,
+                    "count": 4,
+                }
+            ],
+            "applications": [{"id": APPLICATION_ID, "label": "checkout", "count": 3}],
+            "labels": ([{"key": "team", "value": "checkout", "count": 2}] if searched else []),
+            "resources": (
+                [
+                    {
+                        "id": _resource()["inventory_key"],
+                        "label": "checkout",
+                        "kind": "Deployment",
+                        "count": 1,
+                    }
+                ]
+                if searched
+                else []
             ),
         }
 
@@ -322,6 +353,70 @@ def test_resources_empty_cluster_grant_returns_empty_without_data_lookup() -> No
     assert body.counts.filtered_count_completeness == "exact"
     assert body.counts.unfiltered_count_completeness == "exact"
     assert db.data_calls == []
+
+
+def test_global_filter_facets_return_structural_axes_and_search_only_dynamic_axes() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    client, _auth = _make_client(db)
+
+    initial = client.get("/filter-facets", params={"clusters": CLUSTER_ID})
+    searched = client.get(
+        "/filter-facets",
+        params={
+            "q": "check",
+            "clusters": CLUSTER_ID,
+            "namespaces": f"{CLUSTER_ID}/shop",
+            "applications": APPLICATION_ID,
+            "labels": "team=checkout",
+        },
+    )
+
+    assert initial.status_code == 200
+    initial_body = GlobalFilterFacetsResponse.model_validate(initial.json())
+    assert initial_body.clusters[0].count == 7
+    assert initial_body.clusters[0].count_completeness == "exact"
+    assert initial_body.labels == []
+    assert initial_body.resources == []
+    assert searched.status_code == 200
+    searched_body = GlobalFilterFacetsResponse.model_validate(searched.json())
+    assert searched_body.applications[0].label == "checkout"
+    assert searched_body.labels[0].key == "team"
+    assert searched_body.resources[0].kind == "Deployment"
+    assert searched_body.resources[0].count_completeness == "exact"
+    call = [item for item in db.data_calls if item[0] == "global-facets"][-1][1]
+    assert call["query"] == "check"
+    assert call["filters"].clusters == (CLUSTER_ID,)
+    assert call["filters"].namespaces == ((CLUSTER_ID, "shop"),)
+    assert call["filters"].applications == (APPLICATION_ID,)
+    assert call["filters"].labels == (("team", "checkout"),)
+
+
+def test_global_filter_facets_do_not_turn_missing_projection_into_exact_zero() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    db.filter_snapshot_context = lambda *_args, **_kwargs: {
+        "snapshot_revision": 0,
+        "observed_at": None,
+        "labels_complete": False,
+        "resources_complete": False,
+        "application_bindings_complete": False,
+        "partial_reason_codes": ["missing_inventory_projection"],
+    }
+    client, _auth = _make_client(db)
+
+    response = client.get("/filter-facets")
+
+    assert response.status_code == 200
+    body = GlobalFilterFacetsResponse.model_validate(response.json())
+    assert body.clusters[0].count is None
+    assert body.clusters[0].count_completeness == "unavailable"
+    assert body.applications[0].count is None
+    assert body.applications[0].count_completeness == "unavailable"
 
 
 @pytest.mark.parametrize(

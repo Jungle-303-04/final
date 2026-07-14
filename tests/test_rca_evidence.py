@@ -395,6 +395,10 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert auto_selected.auto_selected is True
     assert auto_selected.selected_by == "agent-select"
     assert auto_selected.selected.draft.params.get("command") == "rollout_restart"
+    assert "자동 선택 조건을 충족했습니다" in auto_selected.reason
+    assert "route=auto" in auto_selected.reason
+    assert "approval_required=false" in auto_selected.reason
+    assert f"후보={auto_selected.selected.action_id}" in auto_selected.reason
 
     dispatch_outs = run_handler(
         dispatch_worker.on_recovery_action_selected,
@@ -445,6 +449,9 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
 
     select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
     assert subjects_of(select_outs) == ["recovery.selection_requested"]
+    assert "사용자 선택이 필요합니다" in select_outs[0].reason
+    assert f"후보={plan.candidates[0].action_id}" in select_outs[0].reason
+    assert f"route={plan.candidates[0].route}" in select_outs[0].reason
 
     scale_candidate = plan.candidates[2]
     dispatch_outs = run_handler(
@@ -1530,6 +1537,14 @@ def test_user_selected_safe_pr_flow_requires_authority_instead_of_document_fallb
     )
     plan = recovery_outs[0].plan
     selected = plan.candidates[0]
+    approval_summary = approval_outs[0].details["approval_summary"]
+    assert approval_summary["kind"] == "recovery_selection"
+    assert approval_summary["plan_id"] == plan.plan_id
+    assert approval_summary["recommended_action_id"] == plan.recommended_action_id
+    assert approval_summary["candidate_count"] == len(plan.candidates)
+    assert approval_summary["recommended_candidate"]["route"] == selected.route
+    assert approval_outs[0].details["candidates"][0]["action_id"] == selected.action_id
+
     action_selected = RecoveryActionSelectedBody(
         plan=plan,
         selected=selected,
@@ -1634,3 +1649,11 @@ def test_rollout_completion_flows_to_approval_recommendation() -> None:
     ]
     assert approval_outs[0].recommendation == "manual_review"
     assert rollout_outs[0].diagnosis == "kubernetes api not configured; dry-run only"
+    assert approval_outs[0].details["approval_summary"] == {
+        "kind": "rollout_diagnosis",
+        "recommendation": "manual_review",
+        "diagnosis": "kubernetes api not configured; dry-run only",
+        "command_id": "cmd-1",
+        "status": "completed",
+        "resource": None,
+    }

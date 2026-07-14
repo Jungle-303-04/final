@@ -47,7 +47,8 @@ URL      : https://k8s.woonyong.org
 - [x] S1  Clusters 목록          ← 클러스터 카드가 보입니다
 - [x] S2  클러스터 연결 위자드    ← ＋ 버튼 → 한 줄 명령 복사
 - [x] S3  태그형 검색            ← 검색창에 타이핑 → 타입별 제안
-- [ ] S4  물리 뷰 그래프          ← 다음
+- [x] S4  물리 뷰 그래프          ← BQ-074 + ELK/@xyflow + FLIP, public 배포 추적 중
+- [x] S5  표 + 스파크라인          ← BQ-030 batch + canonical smart columns, public 배포 추적 중
 
 ### 이번 슬라이스에서 확인할 것
 1. https://k8s.woonyong.org/clusters 접속
@@ -207,22 +208,26 @@ GET /clusters/{id}/connection
 ```
 GET /filter-facets?q=check&clusters=...&namespaces=...
 → {
-    clusters:     [{ id, label, count }],
-    namespaces:   [{ id, label, count }],
-    applications: [{ id, label, count }],
-    labels:       [{ key, value, count }],
-    resources:    [{ id, label, kind, count }]
+    clusters:     [{ id, label, count, count_completeness }],
+    namespaces:   [{ id, label, cluster_id, count, count_completeness }],
+    applications: [{ id, label, count, count_completeness }],
+    labels:       [{ key, value, count, count_completeness }],
+    resources:    [{ id, label, kind, count, count_completeness }]
   }
 ```
 - `q`가 비면 **구조적 축(클러스터/네임스페이스/앱)만** 반환 (유한하니까).
 - `q`가 있으면 라벨·리소스도 검색해서 반환.
 - `count`는 **이미 걸린 다른 필터를 적용한 뒤**의 결과 수.
+- projection이 없거나 불완전하면 `count_completeness=unavailable|partial`로 내리고,
+  미확인 수를 `0`으로 합성하지 않는다.
 
 **프론트**
 - 1층 검색창 (shadcn `command` popover)
 - 타입별 그룹핑 제안 → 선택 → **타입이 붙은 칩**
 - 칩 결합: 같은 타입 OR / 다른 타입 AND / **라벨끼리 AND** (popover에 고지)
 - URL 동기화 (VP-010 canonical serializer)
+- 현재 canonical URL에는 resource-id 집합 축이 없으므로 resource 제안은
+  `resources.q=<server label>`로 좁힌다. 단일 리소스 identity는 상세 query에서만 사용한다.
 - **모든 목록 화면에서 같은 컴포넌트, 같은 위치**
 
 **회귀 가드**
@@ -298,17 +303,20 @@ GET /topology?view=physical&clusters=<id>&<filters>
 
 ### S5 · 표 + 스파크라인 (3층)
 
-**백엔드 (BQ-055, BQ-065)**
+**백엔드 (BQ-055, BQ-030)**
 ```
 GET /resources?<filters>          → 목록 + kind별 필드
 GET /metrics/history?ids=...      → 스파크라인 시계열
 ```
-- 데이터 없으면 `null`. **0으로 그리지 않는다** (`hasSparklinePoints` 보존).
+- BQ-055 count는 `GET /resources`의 `counts`가 정본이다.
+- BQ-030 history는 stable pod ID 최대 100개를 한 요청으로 받고 같은 권한·필터·snapshot에
+  다시 교차 검증한다. 데이터 없으면 빈 points/null. **0으로 그리지 않는다.**
 
 **프론트**
-- Radar `resources/renderers/` 108개 이식 (kind별 스마트 컬럼)
-- 정렬 · 페이지네이션 · 행 선택
-- 추세 스파크라인 (recharts)
+- Radar의 `KNOWN_COLUMNS`/`CellContent` 패턴을 참고하되 raw Kubernetes detail renderer를
+  목록에 섞지 않는다. Opsia canonical facts가 있는 pod/node/workload/service/event만 smart column.
+- canonical fact 정렬 · snapshot-safe cursor 페이지네이션 · 행/스파크라인 상세 선택
+- 단일 batch 추세 스파크라인 (Recharts). 실측 CPU가 2점 미만이면 빈칸.
 - **2층 그래프와 같은 결과** — 필터가 둘 다에 적용
 
 **확인 체크리스트**

@@ -34,6 +34,8 @@ interface FilterPageChannelInput<T extends PageableData> {
   load: (cursor: string | undefined, signal: AbortSignal) => Promise<T>;
   merge: (accepted: T, incoming: T) => T;
   owner: object;
+  onFailure?: (failure: ReturnType<typeof toResourcesFailure>) => void;
+  onSuccess?: () => void;
   reportUnauthorized: () => void;
   revision: number;
   scope: string | null;
@@ -59,6 +61,8 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
     load,
     merge,
     owner,
+    onFailure,
+    onSuccess,
     reportUnauthorized,
     revision,
     scope,
@@ -67,16 +71,19 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
     scope: null,
     state: FILTER_PAGE_IDLE,
   });
-  const [appendRequest, setAppendRequest] = useState<AppendRequest | null>(null);
+  const [appendRequest, setAppendRequest] = useState<AppendRequest | null>(
+    null,
+  );
   const lifetime = useMemo(
     () => ({ active, owner, revision, scope }),
     [active, owner, revision, scope],
   );
-  const append = appendRequest?.lifetime === lifetime
-    ? appendRequest
-    : null;
+  const append = appendRequest?.lifetime === lifetime ? appendRequest : null;
   const reportUnauthorizedEvent = useEffectEvent(reportUnauthorized);
-  const mode: ResourcesFilterRequestMode = append === null ? "replace" : "append";
+  const onFailureEvent = useEffectEvent(onFailure ?? (() => undefined));
+  const onSuccessEvent = useEffectEvent(onSuccess ?? (() => undefined));
+  const mode: ResourcesFilterRequestMode =
+    append === null ? "replace" : "append";
   const cursor = append?.cursor;
   const nonce = append?.nonce ?? 0;
 
@@ -92,13 +99,15 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
     void request.promise.then(
       (page) => {
         if (!requestActive) return;
+        onSuccessEvent();
         setRecord((current) => {
           if (current.scope !== scope) return current;
           return {
             scope,
-            state: mode === "append"
-              ? appendFilterPage(current.state, page, merge)
-              : replaceFilterPage(page),
+            state:
+              mode === "append"
+                ? appendFilterPage(current.state, page, merge)
+                : replaceFilterPage(page),
           };
         });
       },
@@ -109,9 +118,15 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
           reportUnauthorizedEvent();
           return;
         }
-        setRecord((current) => current.scope === scope
-          ? { scope, state: failFilterPageRequest(current.state, mode, failure) }
-          : current);
+        onFailureEvent(failure);
+        setRecord((current) =>
+          current.scope === scope
+            ? {
+                scope,
+                state: failFilterPageRequest(current.state, mode, failure),
+              }
+            : current,
+        );
       },
     );
     return () => {
@@ -119,16 +134,35 @@ export function useResourcesFilterPageChannel<T extends PageableData>(
       request.release();
     };
   }, [
-    active, channel, cursor, load, merge, mode, nonce, owner, revision, scope,
+    active,
+    channel,
+    cursor,
+    load,
+    merge,
+    mode,
+    nonce,
+    owner,
+    revision,
+    scope,
   ]);
 
-  const state = !active || scope === null
-    ? filterPageIdle<T>()
-    : record.scope === scope ? record.state : filterPageLoading<T>();
+  const state =
+    !active || scope === null
+      ? filterPageIdle<T>()
+      : record.scope === scope
+        ? record.state
+        : filterPageLoading<T>();
   const loadMore = useCallback(() => {
-    if (scope === null || state.phase !== "ready" || state.data === null ||
-      state.refreshing || state.appending || !state.data.hasMore ||
-      state.data.nextCursor === null) return;
+    if (
+      scope === null ||
+      state.phase !== "ready" ||
+      state.data === null ||
+      state.refreshing ||
+      state.appending ||
+      !state.data.hasMore ||
+      state.data.nextCursor === null
+    )
+      return;
     setAppendRequest((current) => ({
       cursor: state.data!.nextCursor!,
       lifetime,
@@ -148,9 +182,10 @@ function queueRequestStart<T>(
     if (!active()) return;
     setRecord((current) => ({
       scope,
-      state: current.scope === scope
-        ? startFilterPageRequest(current.state, mode)
-        : filterPageLoading<T>(),
+      state:
+        current.scope === scope
+          ? startFilterPageRequest(current.state, mode)
+          : filterPageLoading<T>(),
     }));
   });
 }

@@ -1,56 +1,66 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import {
   CLUSTERS,
-  CATALOG,
+  POD_LIST,
   deferred,
-  renderResources,
   resourcesClusterPort,
+  resourcesFilterPort,
   resourcesPort,
 } from "./ResourcesPage.testSupport";
-import { encodeResourceTarget } from "./resourcesUrlState";
+import {
+  lastFilterState,
+  renderEnglishResources,
+  resourcePage,
+} from "./ResourcesPage.filterCutover.testSupport";
 
 afterEach(cleanup);
 
 describe("ResourcesPage unified-filter cutover", () => {
-  it("hydrates the supported single-value projection from canonical URL state", async () => {
+  it("forwards canonical URL state to the server filter contract", async () => {
     const port = resourcesPort();
+    const listResourcePage = vi.fn().mockResolvedValue(resourcePage());
+    const filterPort = resourcesFilterPort({ listResourcePage });
     renderEnglishResources(
       port,
       "/resources?clusters=cluster-1" +
       "&namespaces=cluster-1%2Fshop" +
+      "&applications=checkout" +
+      "&labels=team%3Dcheckout" +
       "&resources.types=pod" +
+      "&resources.health=warning" +
+      "&resources.q=checkout" +
       "&resources.includeDeleted=true" +
       "&resource=shop%2Fcheckout-api-0" +
       "&resourceKind=Pod" +
       "&full=true",
+      resourcesClusterPort(),
+      filterPort,
     );
 
-    await waitFor(() => expect(port.listResources).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({
-        includeDeleted: true,
-        namespace: "shop",
-        resourceType: "pod",
-      }),
-      expect.any(AbortSignal),
-    ), { timeout: 1_000 });
-    expect((screen.getByRole("searchbox", {
-      hidden: true,
-      name: "Search displayed results",
-    }) as HTMLInputElement).value).toBe("");
-    expect((screen.getByRole("textbox", {
-      hidden: true,
-      name: "Namespace filter",
-    }) as HTMLInputElement).value)
-      .toBe("shop");
+    await waitFor(() => expect(listResourcePage).toHaveBeenCalled());
+    const forwarded = lastFilterState(listResourcePage);
+    expect(forwarded.common).toEqual({
+      applications: ["checkout"],
+      clusters: ["cluster-1"],
+      labels: [{ key: "team", value: "checkout" }],
+      namespaces: [{ clusterId: "cluster-1", namespace: "shop" }],
+    });
+    expect(forwarded.resources).toEqual({
+      health: ["warning"],
+      includeDeleted: true,
+      query: "checkout",
+      types: ["pod"],
+      view: "table",
+    });
+    expect(port.listResources).not.toHaveBeenCalled();
     expect(screen.getByRole("button", {
       hidden: true,
       name: "Include inactive resources",
-    })
-      .getAttribute("aria-pressed")).toBe("true");
+    }).getAttribute("aria-pressed")).toBe("true");
 
     const dialog = await screen.findByRole("dialog", {
       name: "checkout-api-0 details",
@@ -74,13 +84,14 @@ describe("ResourcesPage unified-filter cutover", () => {
       "multiple Cluster filters",
       "/resources?clusters=cluster-1,kubernetes-ops&resources.types=pod",
     ],
-  ])("does not issue a single-cluster list request for %s", async (_case, entry) => {
+  ])("does not issue a list request for %s", async (_case, entry) => {
     const clusters = deferred<typeof CLUSTERS>();
     const port = resourcesPort();
+    const filterPort = resourcesFilterPort();
     const clusterPort = resourcesClusterPort({
       listClusterChoices: vi.fn().mockReturnValue(clusters.promise),
     });
-    renderEnglishResources(port, entry, clusterPort);
+    renderEnglishResources(port, entry, clusterPort, filterPort);
 
     await act(async () => {
       clusters.resolve(CLUSTERS);
@@ -90,52 +101,93 @@ describe("ResourcesPage unified-filter cutover", () => {
       .toMatch(/^ready:/u));
     await act(async () => { await Promise.resolve(); });
 
+    expect(filterPort.listResourcePage).not.toHaveBeenCalled();
     expect(port.listResources).not.toHaveBeenCalled();
     expect(port.loadCatalog).not.toHaveBeenCalled();
   });
 
   it.each([
-    ["Application filter", "&applications=checkout"],
-    ["label filter", "&labels=team%3Dcheckout"],
-    ["health filter", "&resources.health=warning"],
-    ["server search", "&resources.q=checkout"],
-    [
-      "multiple Namespace filters",
-      "&namespaces=cluster-1%2Fshop,cluster-1%2Fops",
-    ],
-    [
-      "a Namespace outside the selected Cluster",
-      "&namespaces=kubernetes-ops%2Fkube-system",
-    ],
-  ])("fails the list projection closed for an unsupported %s", async (_case, suffix) => {
+    {
+      assertState: (state: UnifiedFilterState) => {
+        expect(state.common.applications).toEqual(["checkout"]);
+      },
+      name: "Application filter",
+      suffix: "&applications=checkout",
+    },
+    {
+      assertState: (state: UnifiedFilterState) => {
+        expect(state.common.labels).toEqual([{ key: "team", value: "checkout" }]);
+      },
+      name: "label filter",
+      suffix: "&labels=team%3Dcheckout",
+    },
+    {
+      assertState: (state: UnifiedFilterState) => {
+        expect(state.resources.health).toEqual(["warning"]);
+      },
+      name: "health filter",
+      suffix: "&resources.health=warning",
+    },
+    {
+      assertState: (state: UnifiedFilterState) => {
+        expect(state.resources.query).toBe("checkout");
+      },
+      name: "server search",
+      suffix: "&resources.q=checkout",
+    },
+    {
+      assertState: (state: UnifiedFilterState) => {
+        expect(state.common.namespaces).toEqual([
+          { clusterId: "cluster-1", namespace: "ops" },
+          { clusterId: "cluster-1", namespace: "shop" },
+        ]);
+      },
+      name: "multiple Namespace filters",
+      suffix: "&namespaces=cluster-1%2Fshop,cluster-1%2Fops",
+    },
+  ])("supports $name through the server contract and narrows the table", async ({
+    assertState,
+    suffix,
+  }) => {
     const port = resourcesPort();
+    const listResourcePage = vi.fn().mockResolvedValue(resourcePage([POD_LIST.items[0]]));
+    const filterPort = resourcesFilterPort({ listResourcePage });
     renderEnglishResources(
       port,
       `/resources?clusters=cluster-1&resources.types=pod${suffix}`,
+      resourcesClusterPort(),
+      filterPort,
     );
 
-    expect(await screen.findByRole("heading", {
-      hidden: true,
-      name: "This filter needs server support",
-    })).toBeTruthy();
-    expect(port.loadCatalog).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
+    const checkout = await screen.findByRole(
+      "button",
+      { name: "Open details for checkout-api-0" },
+      { timeout: 5_000 },
+    );
+    expect(checkout).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open details for orders-api-0" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open details for telemetry-0" })).toBeNull();
+    assertState(lastFilterState(listResourcePage));
     expect(port.listResources).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
-  it("keeps explicit detail retrieval independent from an unsupported list projection", async () => {
+  it("keeps explicit detail retrieval independent from the filtered list", async () => {
     const port = resourcesPort();
+    const listResourcePage = vi.fn().mockResolvedValue(resourcePage([]));
+    const filterPort = resourcesFilterPort({ listResourcePage });
     renderEnglishResources(
       port,
       "/resources?clusters=cluster-1&resources.types=pod" +
       "&labels=team%3Dcheckout" +
       "&resource=shop%2Fcheckout-api-0&resourceKind=Pod",
+      resourcesClusterPort(),
+      filterPort,
     );
 
-    expect(await screen.findByRole("heading", {
-      hidden: true,
-      name: "This filter needs server support",
-    })).toBeTruthy();
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
+    await waitFor(() => expect(listResourcePage).toHaveBeenCalled());
+    expect(lastFilterState(listResourcePage).common.labels)
+      .toEqual([{ key: "team", value: "checkout" }]);
     expect(port.listResources).not.toHaveBeenCalled();
     expect(port.loadResourceDetail).toHaveBeenCalledWith(
       "cluster-1",
@@ -149,147 +201,4 @@ describe("ResourcesPage unified-filter cutover", () => {
     );
   }, 15_000);
 
-  it("does not retarget an open detail when Cluster and resource-type filters change", async () => {
-    const port = resourcesPort();
-    const view = renderEnglishResources(
-      port,
-      "/resources?clusters=cluster-1&resources.types=pod",
-    );
-    const row = await screen.findByRole("button", { name: "Open details for checkout-api-0" });
-    fireEvent.click(row);
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    const target = readResourcesQuery().get("resource");
-    expect(target).toMatch(/^v1\//u);
-
-    await act(async () => {
-      await view.router.navigate(
-        "/resources?clusters=kubernetes-ops&resources.types=node" +
-        `&resource=${encodeURIComponent(target ?? "")}&resourceKind=Pod`,
-      );
-    });
-
-    await waitFor(() => expect(readResourcesQuery().get("clusters")).toBe("kubernetes-ops"));
-    expect(port.loadResourceDetail).toHaveBeenCalledTimes(1);
-    expect(port.loadResourceDetail).toHaveBeenLastCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod", name: "checkout-api-0" }),
-      expect.any(AbortSignal),
-    );
-  }, 15_000);
-
-  it("loads a self-contained detail even when the partial catalog omits its type", async () => {
-    const port = resourcesPort({
-      loadCatalog: vi.fn().mockResolvedValue({
-        ...CATALOG,
-        items: CATALOG.items.filter((item) => item.resourceType !== "pod"),
-      }),
-    });
-    const target = encodeResourceTarget("cluster-1", {
-      kind: "Pod",
-      name: "checkout-api-0",
-      namespace: "shop",
-      resourceType: "pod",
-    });
-    renderEnglishResources(
-      port,
-      "/resources?clusters=cluster-1&resources.types=node" +
-      `&resource=${encodeURIComponent(target.resource)}&resourceKind=Pod`,
-    );
-
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    await waitFor(() => expect(port.loadResourceDetail).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod", name: "checkout-api-0" }),
-      expect.any(AbortSignal),
-    ));
-  }, 15_000);
-
-  it.each([
-    {
-      change: async () => {
-        const search = await screen.findByRole(
-          "searchbox",
-          { hidden: true, name: "Search displayed results" },
-        );
-        fireEvent.change(search, { target: { value: "payments" } });
-      },
-      expected: { key: "resources.q", value: "payments" },
-      name: "search query",
-    },
-    {
-      change: async () => {
-        const namespace = await screen.findByRole(
-          "textbox",
-          { hidden: true, name: "Namespace filter" },
-        );
-        fireEvent.change(namespace, { target: { value: "ops" } });
-        fireEvent.click(screen.getByRole("button", { hidden: true, name: "Apply" }));
-      },
-      expected: { key: "namespaces", value: "cluster-1/ops" },
-      name: "Namespace filter",
-    },
-    {
-      change: async () => {
-        fireEvent.click(await screen.findByRole(
-          "button",
-          { hidden: true, name: "Include inactive resources" },
-        ));
-      },
-      expected: { key: "resources.includeDeleted", value: "true" },
-      name: "inactive-resource filter",
-    },
-  ])("retains detail identity while changing the $name", async ({ change, expected }) => {
-    renderEnglishResources(resourcesPort(), canonicalDetailEntry());
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-
-    await change();
-
-    await waitFor(() => {
-      const query = readResourcesQuery();
-      expect(query.get(expected.key)).toBe(expected.value);
-    });
-    expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    expectDetailQueryPreserved(readResourcesQuery());
-  }, 15_000);
-
-  it("uses resources.types as authority when a legacy path disagrees", async () => {
-    const port = resourcesPort();
-    renderEnglishResources(
-      port,
-      "/resources/node?cluster=cluster-1&clusters=cluster-1&resources.types=pod",
-    );
-
-    await waitFor(() => expect(port.listResources).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod" }),
-      expect.any(AbortSignal),
-    ), { timeout: 1_000 });
-    expect(screen.getByRole("heading", { name: "pod" })).toBeTruthy();
-  }, 15_000);
 });
-
-function renderEnglishResources(
-  port: ReturnType<typeof resourcesPort>,
-  entry: string,
-  clusterPort = resourcesClusterPort(),
-) {
-  return renderResources(port, entry, clusterPort, vi.fn(), "en");
-}
-
-function canonicalDetailEntry(): string {
-  return "/resources/pod?cluster=cluster-1&clusters=cluster-1" +
-    "&namespaces=cluster-1%2Fshop&namespace=shop" +
-    "&resources.types=pod" +
-    "&resource=shop%2Fcheckout-api-0&resourceKind=Pod&kind=Pod&full=true";
-}
-
-function readResourcesQuery(): URLSearchParams {
-  const location = screen.getByTestId("resources-location").textContent ?? "";
-  return new URL(location, "https://product.test").searchParams;
-}
-
-function expectDetailQueryPreserved(query: URLSearchParams) {
-  expect(query.get("resource")).toMatch(/^v1\//u);
-  expect(query.get("resourceKind")).toBe("Pod");
-  expect(query.get("full")).toBe("true");
-}

@@ -34,7 +34,11 @@ export function ProductRouter({
       >
         <Routes>
           <Route element={(
-            <ProductShell auth={auth} releasedSurfaceIds={composition.releasedSurfaceIds} />
+            <ProductShell
+              auth={auth}
+              globalFilterPort={composition.globalFilter}
+              releasedSurfaceIds={composition.releasedSurfaceIds}
+            />
           )}>
             {composition.surfaces.map(({ id, Component }) => {
               const routeDefinition = routeDefinitionForSurface(id);
@@ -43,6 +47,9 @@ export function ProductRouter({
                 : routeDefinition.path;
               return <Route key={id} path={routePath} element={<Component />} />;
             })}
+            {composition.releasedSurfaceIds.has("gitops") ? (
+              <Route path="/workflows/*" element={<ProductFallbackRedirect path="/gitops" />} />
+            ) : null}
             <Route path="*" element={<ProductFallbackRedirect path={fallbackRoute.path} />} />
           </Route>
         </Routes>

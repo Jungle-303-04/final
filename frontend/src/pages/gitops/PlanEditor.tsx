@@ -9,7 +9,9 @@ import {
   APPROVAL_POLICIES,
   planValidationCodes,
   settingString,
+  stepKey,
   syncSelectedApplications,
+  type StepSetupField,
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -17,6 +19,7 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Surface } from "../../shared/ui/Surface";
 import { PlanStepEditor } from "./PlanStepEditor";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 import {
   FormField,
   NativeSelect,
@@ -27,22 +30,36 @@ export function PlanEditor({
   plan,
   applications,
   pending,
+  focusedStepId,
+  focusedField,
   onChange,
   onSave,
 }: {
   plan: ReleasePlan;
   applications: ReleaseApplication[];
   pending: boolean;
+  focusedStepId?: string;
+  focusedField?: StepSetupField;
   onChange: (plan: ReleasePlan) => void;
   onSave: () => void;
 }) {
   const { t } = useI18n();
   const [targetToAdd, setTargetToAdd] = useState("");
+  const [expandedStepId, setExpandedStepId] = useState(
+    focusedStepId || (plan.steps[0] ? stepKey(plan.steps[0], 0) : ""),
+  );
   const validationCodes = planValidationCodes(plan);
   const availableTargets = useMemo(() => {
     const selected = new Set(plan.steps.map((step) => step.application_id));
     return applications.filter((application) => !selected.has(application.id));
   }, [applications, plan.steps]);
+  const effectiveExpandedStepId = plan.steps.some(
+    (step, index) => stepKey(step, index) === expandedStepId,
+  )
+    ? expandedStepId
+    : plan.steps[0]
+      ? stepKey(plan.steps[0], 0)
+      : "";
   const addTarget = () => {
     const applicationId = targetToAdd || availableTargets[0]?.id;
     if (!applicationId) return;
@@ -51,22 +68,20 @@ export function PlanEditor({
       [...plan.steps.map((step) => step.application_id), applicationId],
       applications,
     ));
+    setExpandedStepId(applicationId);
     setTargetToAdd("");
   };
 
   return (
     <div className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-col items-stretch gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <WorkflowInlineHeading
-          className="flex-1"
-          description={t("workflows.editor.description")}
-          title={t("workflows.editor.title")}
-        />
-        <Button disabled={pending || validationCodes.length > 0} onClick={onSave}>
+      <WorkflowWorkspaceHeader
+        actions={<Button disabled={pending || validationCodes.length > 0} onClick={onSave}>
           <Save aria-hidden="true" />
           {pending ? t("workflows.editor.saving") : t("workflows.editor.save")}
-        </Button>
-      </div>
+        </Button>}
+        sticky
+        title={t("workflows.editor.title")}
+      />
 
       {validationCodes.length ? (
         <div className="grid min-w-0 gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-foreground">
@@ -118,34 +133,37 @@ export function PlanEditor({
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <WorkflowInlineHeading
             className="flex-1"
-            description={t("workflows.editor.stepsDescription")}
             title={t("workflows.editor.steps")}
             titleId="workflow-editor-steps"
             variant="compact"
           />
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-            <NativeSelect
-              ariaLabel={t("workflows.editor.application")}
-              className="w-full min-w-0 sm:w-64"
-              disabled={!availableTargets.length}
-              onChange={setTargetToAdd}
-              value={targetToAdd || availableTargets[0]?.id || ""}
-            >
-              {availableTargets.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
-            </NativeSelect>
-            <Button disabled={!availableTargets.length} onClick={addTarget} variant="outline">
-              <Plus aria-hidden="true" />{t("workflows.editor.addTarget")}
-            </Button>
-          </div>
+          {availableTargets.length ? (
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+              <NativeSelect
+                ariaLabel={t("workflows.editor.application")}
+                className="w-full min-w-0 sm:w-64"
+                onChange={setTargetToAdd}
+                value={targetToAdd || availableTargets[0]?.id || ""}
+              >
+                {availableTargets.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
+              </NativeSelect>
+              <Button onClick={addTarget} variant="outline">
+                <Plus aria-hidden="true" />{t("workflows.editor.addTarget")}
+              </Button>
+            </div>
+          ) : null}
         </div>
         {plan.steps.length ? (
           <div className="grid min-w-0 gap-2">
             {plan.steps.map((step, index) => (
               <PlanStepEditor
                 applications={applications}
+                expanded={effectiveExpandedStepId === stepKey(step, index)}
+                focusField={focusedStepId === stepKey(step, index) ? focusedField : undefined}
                 index={index}
                 key={step.step_id || step.application_id}
                 onChange={onChange}
+                onToggle={() => setExpandedStepId((current) => current === stepKey(step, index) ? "" : stepKey(step, index))}
                 plan={plan}
               />
             ))}

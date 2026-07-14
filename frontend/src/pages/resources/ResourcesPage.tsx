@@ -1,21 +1,21 @@
 import { RefreshCw } from "lucide-react";
-import { useEffect } from "react";
-import type {
-  ResourceList,
-  ResourcesPort,
-} from "../../features/resources/resourcesContract";
+import { useEffect, useMemo } from "react";
+import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
+import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import type { ResourcesPort } from "../../features/resources/resourcesContract";
+import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
+import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
-import { Surface } from "../../shared/ui/Surface";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourceDetailSheet } from "./ResourceDetailSheet";
 import { ResourcesCatalog } from "./ResourcesCatalog";
-import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import {
   ResourcesCatalogLoadingPreview,
-  ResourcesListLoadingPreview,
 } from "./ResourcesLoadingPreview";
 import {
   CatalogFreshness,
@@ -25,19 +25,77 @@ import {
   ResourcesClusterBoundary,
   UnknownCompletenessEmpty,
   UnknownSelection,
-  UnsupportedFilterProjection,
 } from "./ResourcesPageFeedback";
-import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
-import { ResourcesToolbar } from "./ResourcesToolbar";
+import { useResourcesFilterDataFrame } from "./useResourcesFilterDataFrame";
+import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
+import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
+import { ResourcesListSurface } from "./ResourcesListSurface";
+import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
 
 export function ResourcesPage({
+  filterPort,
+  physicalTopologyPort,
+  resourceMetricsHistoryPort,
   port,
 }: {
+  filterPort: ResourcesFilterPort;
+  physicalTopologyPort: PhysicalTopologyPort;
+  resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
+  const { reportUnauthorized } = useAuthSessionGate();
+  const session = useOptionalProductSession();
+  const filter = useUnifiedFilter();
   const state = useResourcesPageState(port);
+  const authorityKey = session
+    ? `${session.workspaceId}:${session.userId}`
+    : "anonymous";
+  const physicalTopology = usePhysicalTopologyDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    filterState: filter.state,
+    port: physicalTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const filtered = useResourcesFilterDataFrame({
+    active:
+      state.selectedClusterExists &&
+      state.selectedResourceType !== null &&
+      !state.resourceTypeInvalid,
+    authorityKey,
+    facetAxis: null,
+    facetQuery: "",
+    filterState: filter.state,
+    onListFailure: state.recordListFailure,
+    onListSuccess: state.recordListSuccess,
+    port: filterPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const filteredPage = filtered.list.phase === "ready"
+    ? filtered.list.data
+    : null;
+  const metricResourceIds = useMemo(
+    () => (filteredPage?.items ?? [])
+      .map((item) => item.resource)
+      .filter((resource) => resource.resourceType === "pod")
+      .slice(0, 100)
+      .map((resource) => resource.inventoryKey),
+    [filteredPage],
+  );
+  const metricHistory = useResourceMetricsHistoryDataFrame({
+    active: metricResourceIds.length > 0,
+    authorityKey,
+    filterState: filter.state,
+    port: resourceMetricsHistoryPort,
+    reportUnauthorized,
+    resourceIds: metricResourceIds,
+    snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
+  });
   const resourcesView = state.view;
   const setResourcesView = state.setView;
   useResourceTypeShortcuts(state.cycleResourceType);
@@ -59,9 +117,10 @@ export function ResourcesPage({
   if (state.choices.data.clusters.length === 0) {
     return <ResourcesClusterBoundary variant="catalog-unconfirmed" />;
   }
-  const refreshing = [state.choices, state.catalog, state.list, state.detail].some(
-    (resource) => resource.phase === "ready" && resource.refreshing,
-  );
+  const refreshing =
+    [state.choices, state.catalog, state.list, state.detail].some(
+      (resource) => resource.phase === "ready" && resource.refreshing,
+    ) || filtered.list.refreshing;
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
@@ -89,7 +148,7 @@ export function ResourcesPage({
         state.clusterSelection.kind === "unknown" ? (
           <UnknownSelection value={state.selectedClusterId} variant="cluster" />
         ) : state.clusterSelection.kind === "unfiltered" ? (
-          <ResourcesClusterBoundary variant="required" />
+          <ResourcesFleetZoom clusters={state.choices.data.clusters} />
         ) : state.clusterSelection.kind === "multiple" ? (
           <ResourcesClusterBoundary variant="multiple" />
         ) : (
@@ -97,7 +156,8 @@ export function ResourcesPage({
         )
       ) : state.denied ? (
         <ResourcesDenied onRetry={state.refresh} />
-      ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
+      ) : state.catalog.phase === "loading" ||
+        state.catalog.phase === "idle" ? (
         <ProductStateScreen
           kind="loading"
           loadingPreview={<ResourcesCatalogLoadingPreview />}
@@ -117,6 +177,7 @@ export function ResourcesPage({
             catalog={state.catalog}
             choices={state.choices}
             list={state.list}
+            filterList={filtered.list}
           />
           <CatalogFreshness observedAt={state.catalog.data.observedAt} />
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -125,15 +186,27 @@ export function ResourcesPage({
               onSelect={state.selectResourceType}
               selectedResourceType={state.selectedResourceType}
             />
-            {state.resourceTypeInvalid || !state.selectedResourceType ? (
-              <UnknownSelection value={state.selectedResourceType} variant="resource" />
-            ) : !state.catalog.data.items.some(
-              (item) => item.resourceType === state.selectedResourceType,
-            ) ? (
-              <UnknownSelection value={state.selectedResourceType} variant="resource" />
-            ) : (
-              <ResourcesListSurface port={port} state={state} />
-            )}
+            <ResourcesListSurface
+              filterList={filtered.list}
+              metricHistory={metricHistory}
+              onLoadMore={filtered.loadMoreList}
+              listFallback={
+                state.resourceTypeInvalid ||
+                !state.selectedResourceType ||
+                !state.catalog.data.items.some(
+                  (item) => item.resourceType === state.selectedResourceType,
+                )
+                  ? (
+                    <UnknownSelection
+                      value={state.selectedResourceType}
+                      variant="resource"
+                    />
+                  )
+                  : null
+              }
+              physicalTopology={physicalTopology}
+              state={state}
+            />
           </div>
         </>
       )}
@@ -151,127 +224,18 @@ export function ResourcesPage({
   );
 }
 
-function ResourcesListSurface({
-  port,
-  state,
-}: {
-  port: ResourcesPort;
-  state: ReturnType<typeof useResourcesPageState>;
-}) {
-  const { t } = useI18n();
-  return (
-    <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
-      <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
-        <ResourcesToolbar
-          includeDeleted={state.includeDeleted}
-          namespace={state.namespace}
-          onIncludeDeletedChange={state.setIncludeDeleted}
-          onNamespaceChange={state.setNamespace}
-          onSearchChange={state.setSearch}
-          search={state.search}
-        />
-      </Surface>
-
-      <Surface
-        aria-labelledby="resources-infra-map-title"
-        className="min-w-0 overflow-hidden"
-      >
-        <ResourcesGraphShell
-          clusterId={state.selectedClusterId}
-          detail={state.detail}
-          detailRequested={state.detailRequested}
-          includeDeleted={state.includeDeleted}
-          port={port}
-        />
-      </Surface>
-
-      <Surface aria-labelledby="resources-list-title" className="min-w-0 overflow-hidden">
-        <div className="border-b px-4 py-3">
-          <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
-        </div>
-        {state.filterProjectionUnsupported ? (
-          <UnsupportedFilterProjection embedded />
-        ) : (
-          <ResourcesListBody state={state} />
-        )}
-      </Surface>
-    </div>
-  );
-}
-
-function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
-  const { t } = useI18n();
-  if (state.list.phase === "idle" || state.list.phase === "loading") {
-    return (
-      <ProductStateScreen
-        kind="loading"
-        loadingPreview={<ResourcesListLoadingPreview />}
-        placement="content"
-      />
-    );
-  }
-  if (state.list.phase === "failed") {
-    return (
-      <ResourcesFailure
-        failure={state.list.failure}
-        onRetry={state.refresh}
-        retryWaitSeconds={state.retryWaitSeconds}
-      />
-    );
-  }
-  if (state.list.data.items.length === 0) {
-    return <UnknownCompletenessEmpty variant="list" />;
-  }
-  const filtered = filterResourceRows(state.list.data.items, state.search);
-  return (
-    <div className="min-w-0">
-      <ListScopeStatus filtered={filtered.length} list={state.list.data} />
-      {filtered.length === 0 ? (
-        <div className="grid min-h-48 place-items-center p-6 text-sm text-muted-foreground">
-          {t("resources.list.emptySearch")}
-        </div>
-      ) : (
-        <ResourcesTable
-          items={filtered}
-          onOpen={state.openDetail}
-          registerRowButton={state.registerRowButton}
-        />
-      )}
-    </div>
-  );
-}
-
-function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceList }) {
-  const { formatNumber, t } = useI18n();
-  const filteredText = filtered === list.returned
-    ? ""
-    : ` · ${t("resources.list.scope.filtered", { count: formatNumber(filtered) })}`;
-  const excludedText = (list.excludedCount ?? 0) > 0
-    ? ` · ${t("resources.list.scope.excluded", {
-      count: formatNumber(list.excludedCount ?? 0),
-    })}`
-    : "";
-  return (
-    <div
-      aria-label={t("resources.list.scope.aria")}
-      className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-      role="status"
-    >
-      {t("resources.list.scope.shown", { count: formatNumber(list.returned) })}
-      {filteredText}{excludedText} · {t("resources.list.unknownTotal")} · {t(
-        "resources.list.scope.limit",
-        { count: formatNumber(list.limit) },
-      )}
-      {list.limitReached ? ` · ${t("resources.list.scope.limitReached")}` : ""}
-    </div>
-  );
-}
-
 function useResourceTypeShortcuts(cycle: (direction: -1 | 1) => void) {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey ||
-        isEditingTarget(event.target) || document.querySelector('[role="dialog"]')) return;
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        isEditingTarget(event.target) ||
+        document.querySelector('[role="dialog"]')
+      )
+        return;
       if (event.key !== "[" && event.key !== "]") return;
       event.preventDefault();
       cycle(event.key === "]" ? 1 : -1);
@@ -282,6 +246,8 @@ function useResourceTypeShortcuts(cycle: (direction: -1 | 1) => void) {
 }
 
 function isEditingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement &&
-    target.matches("input, textarea, select, [contenteditable=true]");
+  return (
+    target instanceof HTMLElement &&
+    target.matches("input, textarea, select, [contenteditable=true]")
+  );
 }

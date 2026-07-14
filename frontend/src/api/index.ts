@@ -24,6 +24,15 @@ export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
 export {
+  GLOBAL_FILTER_FACETS_PATH,
+  listGlobalFilterFacets,
+  type GlobalFilterFacetQuery,
+} from "./global-filter";
+export {
+  globalFilterFacetsSchema,
+  type GlobalFilterFacets,
+} from "./global-filter-schemas";
+export {
   getProviderCatalog,
   getProviderClusterDiscovery,
   preflightTargetRegistration,
@@ -36,6 +45,31 @@ export {
   type TargetProviderSelectionInput,
   type TargetRegisterInput,
 } from "./cluster-registration";
+export {
+  getPhysicalTopology,
+  PHYSICAL_TOPOLOGY_PATH,
+  type PhysicalTopologyQuery,
+} from "./physical-topology";
+export {
+  physicalTopologyPodSchema,
+  physicalTopologySchema,
+  physicalTopologyServerSchema,
+  type PhysicalTopologyEndpoint,
+  type PhysicalTopologyEndpointPod,
+  type PhysicalTopologyEndpointServer,
+} from "./physical-topology-schemas";
+export {
+  getResourceMetricsHistory,
+  RESOURCE_METRICS_HISTORY_PATH,
+  type ResourceMetricsHistoryQuery,
+  type ResourceMetricTimeRange,
+} from "./resource-metrics-history";
+export {
+  resourceMetricHistoryPointSchema,
+  resourceMetricHistorySeriesSchema,
+  resourceMetricsHistorySchema,
+  type ResourceMetricsHistoryEndpoint,
+} from "./resource-metrics-history-schemas";
 export {
   clusterImportCandidateSchema,
   clusterRegistrationFlowSchema,

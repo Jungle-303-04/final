@@ -2,185 +2,217 @@
 
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  INFRA_MAP,
+  deferred,
+  PHYSICAL_TOPOLOGY,
   renderResources,
   resourcesClusterPort,
+  resourcesFilterPort,
+  resourcesPhysicalTopologyPort,
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 
 afterEach(cleanup);
 
-describe("ResourcesPage VP-012 four-layer surface", () => {
-  it("shows filters, Infra Map slot, and verified table together", async () => {
-    const port = resourcesPort();
+describe("ResourcesPage S4 physical topology", () => {
+  it("renders verified servers and pods without re-filtering the response", async () => {
+    const physicalPort = resourcesPhysicalTopologyPort();
     renderEnglishResources(
-      port,
       "/resources?clusters=cluster-1&resources.types=pod",
+      physicalPort,
     );
 
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Resource filters" })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: "Infra Map" })).toBeTruthy();
-    expect(screen.getByText("Cluster overview")).toBeTruthy();
-    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
-    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
-    const nodeGrid = document.querySelector('[data-slot="infra-map-node-grid"]');
-    if (!(nodeGrid instanceof HTMLElement)) throw new Error("Infra Map node grid not found");
-    expect(nodeGrid.dataset.layout).toBe("pair");
-    expect(await within(infraMap).findByText("Node: worker-a")).toBeTruthy();
-    expect(within(infraMap).getByText("checkout-api-0")).toBeTruthy();
-    expect(within(infraMap).getByText("orders-api-0")).toBeTruthy();
-    expect(within(infraMap).getByText("52% 2,100m")).toBeTruthy();
-    expect(within(infraMap).getAllByText("2% 2/110").length).toBeGreaterThan(0);
+    expect(screen.getByText("Physical placement")).toBeTruthy();
+    expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
+    expect(screen.getByText("2 / 18 pods")).toBeTruthy();
 
-    expect(screen.getAllByRole("img", { name: "CPU trend unavailable" })).toHaveLength(3);
-    expect(document.querySelector('[data-slot="resource-trend-sparkline"]')).toBeNull();
-    expect(screen.queryByRole("button", { name: "Graph" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Table" })).toBeNull();
-    expect(port.loadCatalog).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
-    expect(port.listResources).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod" }),
-      expect.any(AbortSignal),
-    );
-    expect(port.loadInfraMap).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({ includeDeleted: false, limit: 200 }),
+    const crashLoop = screen.getByRole("button", {
+      name: "Pod checkout-api-0, CrashLoopBackOff, usage 12%",
+    });
+    const highLoadNonMatch = screen.getByRole("button", {
+      name: "Pod orders-api-0, Running, usage 91%",
+    });
+    expect(crashLoop.getAttribute("data-usage-tone")).toBe("neutral");
+    expect(within(crashLoop).getByRole("img", { name: "CrashLoop" })).toBeTruthy();
+    expect(highLoadNonMatch.getAttribute("data-usage-tone")).toBe("red");
+    expect(highLoadNonMatch.getAttribute("data-matches-filter")).toBe("false");
+    expect(highLoadNonMatch.getAttribute("disabled")).not.toBeNull();
+    expect(document.querySelectorAll('[data-slot="physical-topology-pod"]')).toHaveLength(3);
+    expect(document.querySelectorAll('[data-pod-badge="crash-loop"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-pod-badge="pending"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
+
+    const timeline = screen.getByRole("slider", { name: "Time" });
+    expect(timeline.getAttribute("disabled")).not.toBeNull();
+    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
+      ?.getAttribute("data-state")).toBe("unavailable");
+    expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledWith(
+      expect.objectContaining({
+        common: expect.objectContaining({ clusters: ["cluster-1"] }),
+        resources: expect.objectContaining({ types: ["pod"] }),
+      }),
+      {},
       expect.any(AbortSignal),
     );
   }, 15_000);
 
-  it("centers the Infra Map node when a cluster has a single observed node", async () => {
-    const port = resourcesPort({
-      loadInfraMap: async (clusterId) => ({
-        ...INFRA_MAP,
-        clusterId,
-        nodes: INFRA_MAP.nodes.slice(0, 1),
-        pods: INFRA_MAP.pods.filter((pod) =>
-          pod.facts.type === "pod" && pod.facts.nodeName === "worker-a"),
-      }),
+  it("lands the server skeleton before topology data arrives", async () => {
+    const pending = deferred<typeof PHYSICAL_TOPOLOGY>();
+    const physicalPort = resourcesPhysicalTopologyPort({
+      loadPhysicalTopology: vi.fn(() => pending.promise),
     });
     renderEnglishResources(
-      port,
       "/resources?clusters=cluster-1&resources.types=pod",
+      physicalPort,
     );
 
-    expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
-    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
-    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
-    expect(await within(infraMap).findByText("Node: worker-a")).toBeTruthy();
-    const nodeGrid = document.querySelector('[data-slot="infra-map-node-grid"]');
-    if (!(nodeGrid instanceof HTMLElement)) throw new Error("Infra Map node grid not found");
-    expect(nodeGrid.dataset.layout).toBe("single");
-    expect(nodeGrid.className).toContain("max-w-xl");
-    expect(within(infraMap).queryByText("Node: worker-b")).toBeNull();
-  }, 15_000);
+    expect(await screen.findByRole("status", {
+      name: "Loading the server placement skeleton",
+    })).toBeTruthy();
+    expect(document.querySelectorAll('[data-slot="physical-server-skeleton"]'))
+      .toHaveLength(2);
+    expect(document.querySelector('[data-slot="resources-graph-shell"]')
+      ?.getAttribute("data-phase")).toBe("loading");
+    pending.resolve(PHYSICAL_TOPOLOGY);
+    expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
+    expect(document.querySelector('[data-slot="resources-graph-shell"]')
+      ?.getAttribute("data-phase")).toBe("ready");
+  });
 
-  it("switches the Infra Map Pod slot fill metric from the header tabs", async () => {
-    const user = userEvent.setup();
-    const port = resourcesPort();
-    renderEnglishResources(
-      port,
+  it("aborts the old topology request and ignores its late response", async () => {
+    const first = deferred<typeof PHYSICAL_TOPOLOGY>();
+    const freshTopology = {
+      ...PHYSICAL_TOPOLOGY,
+      servers: [{
+        ...PHYSICAL_TOPOLOGY.servers[0],
+        id: "node:fresh",
+        name: "fresh-worker",
+        matchedPodCount: 0,
+        totalPodCount: 0,
+      }],
+      pods: [],
+      truncatedByServer: {},
+    };
+    const loadPhysicalTopology = vi.fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValueOnce(freshTopology);
+    const physicalPort = resourcesPhysicalTopologyPort({ loadPhysicalTopology });
+    const rendered = renderEnglishResources(
       "/resources?clusters=cluster-1&resources.types=pod",
+      physicalPort,
     );
+    await waitFor(() => expect(loadPhysicalTopology).toHaveBeenCalledTimes(1));
+    const firstSignal = loadPhysicalTopology.mock.calls[0]?.[2] as AbortSignal;
 
-    expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
-    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
-    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
-    expect(await within(infraMap).findByText("Node: worker-a")).toBeTruthy();
-    const firstPod = podSlotByName(infraMap, "checkout-api-0");
-    expect(firstPod.dataset.metric).toBe("cpu");
-    expect(firstPod.dataset.metricAvailable).toBe("true");
-    const cpuFill = firstPod.querySelector('[data-slot="infra-map-pod-fill"]');
-    if (!(cpuFill instanceof HTMLElement)) throw new Error("Infra Map Pod fill not found");
-    expect(Number(cpuFill.getAttribute("value"))).toBeGreaterThan(0);
-
-    await user.click(within(infraMap).getByRole("button", { name: "Memory" }));
-
-    const updatedPod = podSlotByName(infraMap, "checkout-api-0");
-    expect(updatedPod.dataset.metric).toBe("memory");
-    expect(updatedPod.dataset.metricAvailable).toBe("true");
-    const memoryFill = updatedPod.querySelector('[data-slot="infra-map-pod-fill"]');
-    if (!(memoryFill instanceof HTMLElement)) throw new Error("Infra Map Pod fill not found");
-    expect(Number(memoryFill.getAttribute("value"))).toBeGreaterThan(0);
-  }, 15_000);
-
-  it("canonicalizes the retired graph mode without hiding either Infra Map or table", async () => {
-    const port = resourcesPort();
-    renderEnglishResources(
-      port,
-      "/resources?clusters=cluster-1&resources.types=pod&resources.view=graph",
+    await rendered.router.navigate(
+      "/resources?clusters=cluster-1&resources.types=pod&resources.q=fresh",
     );
+    await waitFor(() => expect(loadPhysicalTopology).toHaveBeenCalledTimes(2));
+    expect(firstSignal.aborted).toBe(true);
+    expect(await screen.findByRole("article", { name: "Server fresh-worker" })).toBeTruthy();
 
-    expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Infra Map" }))
+    first.resolve(PHYSICAL_TOPOLOGY);
+    await Promise.resolve();
+    expect(screen.queryByRole("article", { name: "Server worker-a" })).toBeNull();
+  });
+
+  it("loads physical placement for a Cluster-only zoom before a resource type is chosen", async () => {
+    const physicalPort = resourcesPhysicalTopologyPort();
+    renderEnglishResources("/resources?clusters=cluster-1", physicalPort);
+
+    expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Not an observed resource type" }))
       .toBeTruthy();
-    await waitFor(() => expect(readResourcesQuery().has("resources.view")).toBe(false));
-    expect(port.listResources).toHaveBeenCalledOnce();
-    expect(port.loadInfraMap).toHaveBeenCalledOnce();
-  }, 15_000);
+    expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledOnce();
+  });
 
-  it("keeps multi-Cluster scope unavailable instead of issuing a single-Cluster request", async () => {
-    const port = resourcesPort();
+  it("zooms from the unfiltered cluster grid into servers and rewinds to All", async () => {
+    const user = userEvent.setup();
+    const physicalPort = resourcesPhysicalTopologyPort();
+    renderEnglishResources("/resources?resources.types=pod", physicalPort);
+
+    expect(await screen.findByRole("region", { name: "Cluster zoom overview" }))
+      .toBeTruthy();
+    expect(document.querySelectorAll('[data-slot="cluster-server-preview"]'))
+      .toHaveLength(2);
+    expect(physicalPort.loadPhysicalTopology).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("link", { name: "Open resources for cluster-1" }));
+    expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "All" }));
+    expect(await screen.findByRole("region", { name: "Cluster zoom overview" }))
+      .toBeTruthy();
+    expect(readResourcesQuery().has("clusters")).toBe(false);
+  });
+
+  it("writes node focus and scrolls the existing table for an omitted-pod drill-in", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
     renderEnglishResources(
-      port,
+      "/resources?clusters=cluster-1&resources.types=pod",
+      resourcesPhysicalTopologyPort(),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "+16 pods" }));
+    await waitFor(() => expect(readResourcesQuery().get("node")).toBe("node:worker-a"));
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    expect(screen.getByRole("table", { name: "Resource list" })).toBeTruthy();
+  });
+
+  it("keeps multi-Cluster scope honest and skips the physical request", async () => {
+    const physicalPort = resourcesPhysicalTopologyPort();
+    renderEnglishResources(
       "/resources?clusters=cluster-1,kubernetes-ops&resources.types=pod",
+      physicalPort,
     );
 
     expect(await screen.findByRole("heading", {
       name: "Multi-Cluster results need server support",
     })).toBeTruthy();
-    expect(port.loadCatalog).not.toHaveBeenCalled();
-    expect(port.listResources).not.toHaveBeenCalled();
+    expect(physicalPort.loadPhysicalTopology).not.toHaveBeenCalled();
     expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
   });
 
-  it("opens the real resource detail and isolates unsupported historical evidence", async () => {
+  it("opens the real resource detail from a matching physical pod", async () => {
     const user = userEvent.setup();
-    const port = resourcesPort();
     renderEnglishResources(
-      port,
       "/resources?clusters=cluster-1&resources.types=pod",
+      resourcesPhysicalTopologyPort(),
     );
 
     await user.click(await screen.findByRole("button", {
-      name: "Open details for checkout-api-0",
+      name: "Pod checkout-api-0, CrashLoopBackOff, usage 12%",
     }));
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
-    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
-    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
-    await waitFor(() => expect(within(infraMap).getByText("Selection")).toBeTruthy());
-    expect(within(infraMap).getByText("checkout-api-0")).toBeTruthy();
-    expect(within(infraMap).queryByText("orders-api-0")).toBeNull();
-
     expect(await within(dialog).findByText("Point-in-time evidence")).toBeTruthy();
-    expect(within(dialog).getByText("CPU and memory history")).toBeTruthy();
-    expect(within(dialog).getByText("Logs at the selected time")).toBeTruthy();
-    expect(within(dialog).getByText("Related incident")).toBeTruthy();
     expect(within(dialog).getAllByText("Unavailable")).toHaveLength(3);
-    expect(within(dialog).getAllByText("Running").length).toBeGreaterThan(0);
-    expect(port.loadResourceDetail).toHaveBeenCalledWith(
-      "cluster-1",
-      expect.objectContaining({ name: "checkout-api-0" }),
-      expect.any(AbortSignal),
-    );
   }, 15_000);
 });
 
-function renderEnglishResources(port: ReturnType<typeof resourcesPort>, entry: string) {
-  return renderResources(port, entry, resourcesClusterPort(), undefined, "en");
+function renderEnglishResources(
+  entry: string,
+  physicalPort: ReturnType<typeof resourcesPhysicalTopologyPort>,
+) {
+  return renderResources(
+    resourcesPort(),
+    entry,
+    resourcesClusterPort(),
+    undefined,
+    "en",
+    resourcesFilterPort(),
+    physicalPort,
+  );
 }
 
 function readResourcesQuery(): URLSearchParams {
   const location = screen.getByTestId("resources-location").textContent ?? "";
   return new URL(location, "https://product.test").searchParams;
-}
-
-function podSlotByName(container: HTMLElement, name: string): HTMLElement {
-  const heading = within(container).getByText(name);
-  const pod = heading.closest('[data-slot="infra-map-pod"]');
-  if (!(pod instanceof HTMLElement)) throw new Error(`${name} Pod slot not found`);
-  return pod;
 }

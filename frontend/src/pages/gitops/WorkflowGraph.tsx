@@ -14,6 +14,7 @@ import type {
   ReleasePlan,
   ReleaseRun,
 } from "../../features/gitops/gitOpsContract";
+import { releaseWaves } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/ui/primitives/cn";
 import { buildWorkflowGraph, ownerStepId } from "./workflowGraphModel";
@@ -42,8 +43,11 @@ export function WorkflowGraph({
   className?: string;
 }) {
   const { t } = useI18n();
+  const verticalByShape = hasWideParallelWave(plan);
   const [narrowViewport, setNarrowViewport] = useState(isNarrowGraphViewport);
-  const [direction, setDirection] = useState<FlowDirection>(() => isNarrowGraphViewport() ? "TB" : "LR");
+  const [direction, setDirection] = useState<FlowDirection>(
+    () => isNarrowGraphViewport() || verticalByShape ? "TB" : "LR",
+  );
   const [showCheckpoints, setShowCheckpoints] = useState(true);
   const [showMetadata, setShowMetadata] = useState(true);
   const [compact, setCompact] = useState(false);
@@ -64,15 +68,16 @@ export function WorkflowGraph({
   const heightClass = graphHeightClass(layout.nodes.length, direction, narrowViewport);
 
   useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
     const media = window.matchMedia("(max-width: 900px)");
     const update = () => {
       setNarrowViewport(media.matches);
-      setDirection(media.matches ? "TB" : "LR");
+      setDirection(media.matches || verticalByShape ? "TB" : "LR");
     };
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
-  }, []);
+  }, [verticalByShape]);
 
   useEffect(() => {
     if (!flowInstance || !layout.nodes.length) return undefined;
@@ -161,8 +166,13 @@ export function WorkflowGraph({
             {!narrowViewport ? <MiniMap pannable zoomable /> : null}
           </ReactFlow>
         ) : (
-          <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
-            {t("workflows.graph.empty")}
+          <div className="grid h-full place-items-center px-6 text-center">
+            <div className="grid justify-items-center gap-3">
+              <span className="grid size-12 place-items-center rounded-lg border bg-card text-primary shadow-sm">
+                <GitBranch aria-hidden="true" className="size-5" />
+              </span>
+              <strong className="text-sm">{t("workflows.graph.empty")}</strong>
+            </div>
           </div>
         )}
       </div>
@@ -180,9 +190,20 @@ function LegendDot({ className, label }: { className: string; label: string }) {
 }
 
 function graphHeightClass(nodeCount: number, direction: FlowDirection, narrow: boolean): string {
-  if (!narrow || direction === "LR") return "h-[35rem]";
-  if (nodeCount <= 5) return "h-[34rem]";
-  if (nodeCount <= 8) return "h-[50rem]";
-  if (nodeCount <= 12) return "h-[75rem]";
-  return "h-[100rem]";
+  if (!narrow) return direction === "TB" ? "h-[44rem]" : "h-[35rem]";
+  if (direction === "LR") return "h-[35rem]";
+  if (nodeCount <= 5) return "h-[32rem]";
+  if (nodeCount <= 8) return "h-[44rem]";
+  if (nodeCount <= 12) return "h-[64rem]";
+  return "h-[84rem]";
+}
+
+function hasWideParallelWave(plan: ReleasePlan): boolean {
+  const waves = releaseWaves(plan.steps);
+  const counts = new Map<number, number>();
+  plan.steps.forEach((step, index) => {
+    const wave = waves.get(step.step_id || step.application_id || `step-${index}`) ?? index + 1;
+    counts.set(wave, (counts.get(wave) || 0) + 1);
+  });
+  return [...counts.values()].some((count) => count >= 3);
 }

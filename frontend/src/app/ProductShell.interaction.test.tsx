@@ -50,9 +50,15 @@ describe("ProductShell keyboard and help interaction", () => {
 
   it("navigates with released route chords and toggles help with question mark", async () => {
     const user = userEvent.setup();
-    renderShell();
+    const { container } = renderShell();
 
-    await screen.findByRole("combobox", { name: /Cluster cluster-1/u });
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
+    expect(screen.getByRole("button", {
+      name: "클러스터, 앱, 라벨, 리소스 필터",
+    })).toBeTruthy();
+    expect(screen.getByRole("button", {
+      name: "클러스터 필터 cluster-1 제거",
+    })).toBeTruthy();
 
     await user.keyboard("g");
     await user.keyboard("i");

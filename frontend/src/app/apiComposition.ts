@@ -9,12 +9,18 @@ import {
   getInventorySummary,
   getNodePodsSummary,
   getClusterConnectStatus,
+  getPhysicalTopology,
+  getResourceMetricsHistory,
   getSession,
   listEvidence,
   listInventoryResourcesByType,
   listRcaReports,
   listRcaTimeline,
   listClusters,
+  listGlobalFilterFacets,
+  listFilteredResources,
+  listResourceFilterFacets,
+  listResourceLabelFacets,
   connectCluster,
   listApplicationDeployments,
   listApplicationRuns,
@@ -29,9 +35,13 @@ import { createApplicationsGitOpsAdapter } from "../features/applications-gitops
 import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createClustersAdapter } from "../features/clusters/createClustersAdapter";
+import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
 import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
 import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
+import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
+import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
+import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -47,10 +57,20 @@ export function createApiComposition() {
     listClusters,
   });
   const clustersPort = createClustersAdapter({ connectCluster, getClusterConnectStatus });
+  const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
   const resourcesPort = createResourcesAdapter({
     getInventoryResourceDetail,
     getInventorySummary,
     listInventoryResourcesByType,
+  });
+  const resourcesFilterPort = createResourcesFilterAdapter({
+    listFilteredResources,
+    listResourceFilterFacets,
+    listResourceLabelFacets,
+  });
+  const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
+  const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
+    getResourceMetricsHistory,
   });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
@@ -79,7 +99,12 @@ export function createApiComposition() {
     },
     {
       id: "resources",
-      Component: createResourcesSurface(resourcesPort),
+      Component: createResourcesSurface(
+        resourcesPort,
+        resourcesFilterPort,
+        physicalTopologyPort,
+        resourceMetricsHistoryPort,
+      ),
     },
     {
       id: "issues",
@@ -97,5 +122,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort);
+  }), homePort, globalFilterPort);
 }

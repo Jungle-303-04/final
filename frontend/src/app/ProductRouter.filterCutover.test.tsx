@@ -99,23 +99,26 @@ afterEach(() => {
 });
 
 describe("ProductRouter unified filter cutover", () => {
-  it("does not rewrite canonical filters or detail while mounting and resolving the cluster catalog", async () => {
-    const catalog = deferred<Awaited<ReturnType<ClusterScopePort["listClusterChoices"]>>>();
-    const clusterScope: ClusterScopePort = {
-      listClusterChoices: vi.fn(() => catalog.promise),
-    };
-    const { router } = renderProductRouter(
+  it("mounts one unified filter with URL-backed chips without rewriting filters or detail", async () => {
+    const { container, router } = renderProductRouter(
       `/resources${FILTER_SEARCH}#detail`,
-      clusterScope,
+      emptyClusterScope,
     );
 
     expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
-
-    catalog.resolve({
-      completeness: "unknown",
-      clusters: [clusterChoice("cluster-a"), clusterChoice("cluster-b")],
-    });
-    await screen.findByRole("combobox", { name: "2 clusters selected" });
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
+    expect(screen.getByRole("button", {
+      name: "Filter clusters, apps, labels, and resources",
+    })).toBeTruthy();
+    expect(screen.getByRole("button", {
+      name: "Remove Clusters filter cluster-a",
+    })).toBeTruthy();
+    expect(screen.getByRole("button", {
+      name: "Remove Clusters filter cluster-b",
+    })).toBeTruthy();
+    expect(screen.getByRole("button", {
+      name: "Remove Resources filter edge api",
+    })).toBeTruthy();
 
     await waitFor(() => {
       expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
@@ -177,17 +180,35 @@ describe("ProductRouter unified filter cutover", () => {
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
+
+  it("redirects the previous workflow path to the current workflow surface", async () => {
+    const { router } = renderProductRouter(
+      `/workflows${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+      true,
+    );
+
+    await waitFor(() => {
+      expect(currentLocation(router)).toBe(`/gitops${FILTER_ONLY_SEARCH}`);
+    });
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
 });
 
 const emptyClusterScope: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
 };
 
-function renderProductRouter(initialEntry: string, clusterScope: ClusterScopePort) {
+function renderProductRouter(
+  initialEntry: string,
+  clusterScope: ClusterScopePort,
+  includeWorkflows = false,
+) {
   const composition = createProductComposition([
     { id: "home", Component: HomeSurface },
     { id: "resources", Component: ResourcesSurface },
     { id: "issues", Component: IssuesSurface },
+    ...(includeWorkflows ? [{ id: "gitops" as const, Component: WorkflowsSurface }] : []),
   ], authPort, clusterScope);
   const router = createMemoryRouter([{
     path: "*",
@@ -221,6 +242,10 @@ function IssuesSurface() {
   return <p>Issues surface</p>;
 }
 
+function WorkflowsSurface() {
+  return <p>Workflows surface</p>;
+}
+
 function LocationProbe() {
   const location = useLocation();
   const navigationType = useNavigationType();
@@ -234,29 +259,4 @@ function LocationProbe() {
 function currentLocation(router: ReturnType<typeof createMemoryRouter>): string {
   const { hash, pathname, search } = router.state.location;
   return `${pathname}${search}${hash}`;
-}
-
-function clusterChoice(id: string) {
-  return {
-    id,
-    workspaceId: "test-workspace",
-    name: id,
-    environment: "production",
-    provider: "unknown" as const,
-    connectionStage: null,
-    registrationState: "active" as const,
-    connectionState: "online" as const,
-    lastObservedAt: "2026-07-13T00:00:00.000Z",
-    nodeCount: 1,
-    podCount: 1,
-    incidentCount: 0,
-  };
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((onResolve) => {
-    resolve = onResolve;
-  });
-  return { promise, resolve };
 }

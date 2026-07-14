@@ -1,0 +1,34 @@
+export type GlobalFilterSuggestion =
+  | ({ type: "cluster" } & CountedSuggestion)
+  | ({ type: "namespace"; clusterId: string } & CountedSuggestion)
+  | ({ type: "application" } & CountedSuggestion)
+  | ({ type: "label"; key: string; value: string } & CountedSuggestion)
+  | ({ type: "resource"; kind: string } & CountedSuggestion);
+
+interface CountedSuggestion {
+  id: string;
+  label: string;
+  count: number | null;
+  count_completeness: "exact" | "partial" | "unavailable";
+}
+
+export interface GlobalFilterSelection {
+  clusters: readonly string[];
+  namespaces: readonly string[];
+  applications: readonly string[];
+  labels: readonly string[];
+}
+
+export interface GlobalFilterPort {
+  search(
+    query: string,
+    selection: GlobalFilterSelection,
+    signal?: AbortSignal,
+  ): Promise<readonly GlobalFilterSuggestion[]>;
+}
+
+export const EMPTY_GLOBAL_FILTER_PORT: GlobalFilterPort = {
+  async search() {
+    return [];
+  },
+};
