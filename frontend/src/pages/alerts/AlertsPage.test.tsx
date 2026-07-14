@@ -5,9 +5,11 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AlertEvent } from "../../api";
 import { AlertEventsProvider } from "../../features/alerts/AlertEventsProvider";
-import type { AlertEventsPort } from "../../features/alerts/alertEventsContract";
+import type {
+  AlertEvent,
+  AlertEventsPort,
+} from "../../features/alerts/alertEventsContract";
 import { I18nProvider } from "../../shared/i18n";
 import { AlertsPage } from "./AlertsPage";
 

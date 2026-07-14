@@ -10,10 +10,9 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { AlertEvent } from "../../api";
 import { toast } from "../../shared/ui/primitives/sonner";
 import { useI18n } from "../../shared/i18n";
-import type { AlertEventsPort } from "./alertEventsContract";
+import type { AlertEvent, AlertEventsPort } from "./alertEventsContract";
 
 const POLL_INTERVAL_MS = 10_000;
 
