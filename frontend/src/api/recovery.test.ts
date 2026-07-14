@@ -43,6 +43,7 @@ const ACCEPTED = {
   accepted: true,
   event_id: "evt-789",
   correlation_id: "corr-123",
+  command_id: null,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
