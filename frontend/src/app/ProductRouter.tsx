@@ -47,6 +47,9 @@ export function ProductRouter({
                 : routeDefinition.path;
               return <Route key={id} path={routePath} element={<Component />} />;
             })}
+            {composition.releasedSurfaceIds.has("gitops") ? (
+              <Route path="/workflows/*" element={<ProductFallbackRedirect path="/gitops" />} />
+            ) : null}
             <Route path="*" element={<ProductFallbackRedirect path={fallbackRoute.path} />} />
           </Route>
         </Routes>

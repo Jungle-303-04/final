@@ -180,17 +180,35 @@ describe("ProductRouter unified filter cutover", () => {
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
+
+  it("redirects the previous workflow path to the current workflow surface", async () => {
+    const { router } = renderProductRouter(
+      `/workflows${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+      true,
+    );
+
+    await waitFor(() => {
+      expect(currentLocation(router)).toBe(`/gitops${FILTER_ONLY_SEARCH}`);
+    });
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
 });
 
 const emptyClusterScope: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
 };
 
-function renderProductRouter(initialEntry: string, clusterScope: ClusterScopePort) {
+function renderProductRouter(
+  initialEntry: string,
+  clusterScope: ClusterScopePort,
+  includeWorkflows = false,
+) {
   const composition = createProductComposition([
     { id: "home", Component: HomeSurface },
     { id: "resources", Component: ResourcesSurface },
     { id: "issues", Component: IssuesSurface },
+    ...(includeWorkflows ? [{ id: "gitops" as const, Component: WorkflowsSurface }] : []),
   ], authPort, clusterScope);
   const router = createMemoryRouter([{
     path: "*",
@@ -222,6 +240,10 @@ function ResourcesSurface() {
 
 function IssuesSurface() {
   return <p>Issues surface</p>;
+}
+
+function WorkflowsSurface() {
+  return <p>Workflows surface</p>;
 }
 
 function LocationProbe() {
