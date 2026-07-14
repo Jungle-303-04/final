@@ -39,6 +39,7 @@ def test_workflow_requires_five_csr_batch_and_defaults_to_dry_run() -> None:
     assert inputs["origin_service"]["default"] == (
         "http://console-dev.management.svc.cluster.local:80"
     )
+    assert "coordinated rename" in inputs["origin_service"]["description"]
 
 
 def test_workflow_masks_secrets_and_only_uploads_apply_certificate_directory() -> None:

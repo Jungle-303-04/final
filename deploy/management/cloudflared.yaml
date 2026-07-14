@@ -1,4 +1,6 @@
 # Cloudflare Tunnel connector — 원격 ingress 설정은 Cloudflare API 자동화가 관리한다.
+# 현재 console 정본 이름은 console-dev다. 이름 변경 전 DNS -> Tunnel -> ingress -> Service
+# 참조 그래프를 함께 바꾸고 외부 health를 검증한다.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +9,8 @@ metadata:
   annotations:
     opsia.io/cloudflare-hostname: k8s.woonyong.org
     opsia.io/cloudflare-origin-service: http://console-dev.management.svc.cluster.local:80
+    opsia.io/cloudflare-mtls-hostname: dev-k8s.woonyong.org
+    opsia.io/canonical-console-service: console-dev.management.svc.cluster.local
 spec:
   replicas: 2
   strategy:
