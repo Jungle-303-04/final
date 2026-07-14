@@ -90,6 +90,11 @@ API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/RE
 
 [Radar](https://github.com/skyhook-io/radar)를 사용해 프로젝트 클러스터의 토폴로지, 리소스, 이벤트 타임라인, Helm 상태를 브라우저에서 확인할 수 있다.
 
+Opsia의 일부 UI는 Radar의 컴포넌트와 상호작용을 이식·개작한다. 원본은 Apache-2.0으로
+배포되는 Skyhook의 Radar이며, 대조 가능한 v1.5.7 고정 소스
+`88bd1e97fa5c10be8735154ae379d50c1ba1df2b`를 `references/radar-upstream/`에 보존한다.
+귀속과 수정 표기 규율은 루트 `NOTICE`를 따른다.
+
 ```bash
 # 프로젝트의 target(cluster-1) + management(mgmt) 클러스터 열기
 make radar

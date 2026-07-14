@@ -3640,3 +3640,7 @@ gone branch 0, `(prunable)` worktree 0이다.
 [VP-015 P1/P2] 2026-07-14 13:03 KST / `a4ae8a04b` dev 착륙·로컬 gate-fast 981개 통과, GitHub 환경 `AWS_DEV_DEPLOY_ENABLED=1` 활성화 / 첫 Dev Gate `29304915902`는 신규 문서 7개가 `docs/README.md` 색인에 없어 실패했으며 제품·배포 오류가 아님 / 색인 계약과 단일 배포 상태판을 교정해 자동 FULL 재증명
 
 [VP-015 P2] 2026-07-14 13:14 KST / 색인 교정 SHA `f2253ecd2`의 Dev Gate `29305313639` 성공, 후속 Dev Deploy `29305453752`는 job-level `if`가 environment variable 로드보다 먼저 평가돼 skipped / 환경 변수와 별도로 repository variable `AWS_DEV_DEPLOY_ENABLED=1` 활성화 / 다음 한 걸음: 세 번째 push로 자동 FULL 생성 증명
+
+[VP-015 P2~P4] 2026-07-14 13:22 KST / Dev Gate `29305649957` 성공 뒤 자동 FULL Dev Deploy `29305760596` in_progress로 P2 증명; 기존 FULL `29302233623`의 backend·console digest, public health 200, 고정 관리자 로그인, cluster-1/2 ready·agent 1/1·resource read 재확인 / 레거시 DB 재생성 경로도 `AWS_BOOTSTRAP_ADMIN=1`로 정렬(비밀번호는 secret에만 보존)
+
+[VP-015 P5] 2026-07-14 13:22 KST / Skyhook Radar v1.5.7 고정 커밋 `88bd1e97fa5c10be8735154ae379d50c1ba1df2b` 889파일을 `references/radar-upstream/`에 보존, Apache-2.0 원문·root NOTICE·README 귀속 반영 / 이식 파일은 원본 헤더와 Opsia 수정 사실을 함께 남기는 규율 확정 / 다음 한 걸음: S0 모션 기반
