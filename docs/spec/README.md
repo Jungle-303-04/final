@@ -93,6 +93,7 @@
 - [frontend/api-integration-workorder-20260711](frontend/api-integration-workorder-20260711.md)
 - [frontend/api-needs](frontend/api-needs.md)
 - [frontend/codex-directive-goalmode-20260711](frontend/codex-directive-goalmode-20260711.md)
+- [frontend/codex-directive-hotfix-20260714](frontend/codex-directive-hotfix-20260714.md)
 - [frontend/codex-progress-20260711](frontend/codex-progress-20260711.md)
 - [frontend/final-questions](frontend/final-questions.md)
 - [frontend/product-data-contract](frontend/product-data-contract.md)
