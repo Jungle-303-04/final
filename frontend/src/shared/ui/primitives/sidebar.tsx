@@ -171,7 +171,7 @@ export function SidebarHeader({ className, ...props }: PartProps<"div">) {
   return <div {...sanitizeNeutral(props, "SidebarHeader")} className={cn("flex shrink-0 flex-col border-b border-sidebar-border p-2", className)} data-slot="sidebar-header" />;
 }
 export function SidebarContent({ className, ...props }: PartProps<"div">) {
-  return <div {...sanitizeNeutral(props, "SidebarContent")} className={cn("flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto", className)} data-slot="sidebar-content" />;
+  return <div {...sanitizeNeutral(props, "SidebarContent")} className={cn("flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto", className)} data-slot="sidebar-content" />;
 }
 export function SidebarFooter({ className, ...props }: PartProps<"div">) {
   return <div {...sanitizeNeutral(props, "SidebarFooter")} className={cn("flex shrink-0 flex-col border-t border-sidebar-border p-2", className)} data-slot="sidebar-footer" />;
