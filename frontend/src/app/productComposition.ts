@@ -17,6 +17,10 @@ import {
   EMPTY_LOG_STREAM_PORT,
   type LogStreamPort,
 } from "../features/log-stream/logStreamContract";
+import {
+  EMPTY_ALERT_EVENTS_PORT,
+  type AlertEventsPort,
+} from "../features/alerts/alertEventsContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -29,6 +33,7 @@ export interface ProductComposition {
   globalFilter: GlobalFilterPort;
   aiAssistant: AiAssistantPort;
   logStream: LogStreamPort;
+  alertEvents: AlertEventsPort;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
@@ -40,6 +45,7 @@ export function createProductComposition(
   globalFilter: GlobalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
   aiAssistant: AiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStream: LogStreamPort = EMPTY_LOG_STREAM_PORT,
+  alertEvents: AlertEventsPort = EMPTY_ALERT_EVENTS_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -67,6 +73,7 @@ export function createProductComposition(
     globalFilter,
     aiAssistant,
     logStream,
+    alertEvents,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };

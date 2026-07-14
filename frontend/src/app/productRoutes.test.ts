@@ -14,6 +14,7 @@ describe("product route release registry", () => {
       "clusters",
       "resources",
       "issues",
+      "alerts",
       "applications",
       "gitops",
       "settings",
@@ -23,6 +24,7 @@ describe("product route release registry", () => {
       "Clusters",
       "Resources",
       "Incidents",
+      "Alerts",
       "Applications",
       "GitOps",
       "Settings",
@@ -47,6 +49,7 @@ describe("product route release registry", () => {
     ["/home", "home"],
     ["/clusters", "clusters"],
     ["/resources/pods", "resources"],
+    ["/alerts", "alerts"],
     ["/gitops/detail/application/default/storefront", "gitops"],
     ["/settings", "settings"],
   ] as const)("maps %s to its owning screen", (pathname, routeId) => {

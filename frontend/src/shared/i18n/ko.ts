@@ -5,6 +5,7 @@ import { metricsKo } from "./catalogs/ko/metrics";
 import { resourcesKo } from "./catalogs/ko/resources";
 import { workflowsKo } from "./catalogs/ko/workflows";
 import { shellKo } from "./catalogs/ko/shell";
+import { alertsKo } from "./catalogs/ko/alerts";
 
 export const ko = {
   "product.name": "Opsia",
@@ -237,6 +238,7 @@ export const ko = {
   "home.section.statusChecking": "상태 확인 중",
   "home.status.connected": "연결됨",
   ...shellKo,
+  ...alertsKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,

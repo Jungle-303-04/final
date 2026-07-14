@@ -5,6 +5,7 @@ import { metricsEn } from "./catalogs/en/metrics";
 import { resourcesEn } from "./catalogs/en/resources";
 import { workflowsEn } from "./catalogs/en/workflows";
 import { shellEn } from "./catalogs/en/shell";
+import { alertsEn } from "./catalogs/en/alerts";
 
 export const en = {
   "product.name": "Opsia",
@@ -237,6 +238,7 @@ export const en = {
   "home.section.statusChecking": "Checking status",
   "home.status.connected": "Connected",
   ...shellEn,
+  ...alertsEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

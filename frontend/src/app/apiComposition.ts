@@ -40,6 +40,9 @@ import {
   openPodLogStream,
   openWorkloadLogStream,
   createRealtimeClient,
+  acknowledgeAlertEvent,
+  listAlertEvents,
+  promoteAlertEvent,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -67,6 +70,8 @@ import { createClustersSurface } from "../pages/clusters/createClustersSurface";
 import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
 import { createSettingsSurface } from "../pages/settings/createSettingsSurface";
 import { createProductComposition } from "./productComposition";
+import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
+import { createAlertsSurface } from "../pages/alerts/createAlertsSurface";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -131,6 +136,11 @@ export function createApiComposition() {
   const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
   const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
   const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
+  const alertEventsPort = createAlertEventsAdapter({
+    acknowledgeAlertEvent,
+    listAlertEvents,
+    promoteAlertEvent,
+  });
   return createProductComposition([
     {
       id: "clusters",
@@ -159,6 +169,10 @@ export function createApiComposition() {
       Component: createIssuesSurface(issuesPort),
     },
     {
+      id: "alerts",
+      Component: createAlertsSurface(),
+    },
+    {
       id: "applications",
       Component: createApplicationsSurface(applicationsPort),
     },
@@ -174,5 +188,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort);
+  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort);
 }
