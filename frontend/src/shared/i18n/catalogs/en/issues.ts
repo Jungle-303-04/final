@@ -1,7 +1,7 @@
 import type { IssuesMessageKey } from "../../keys/issues";
 
 export const issuesEn = {
-  "issues.surface.list": "Issues",
+  "issues.surface.list": "Incidents",
   "issues.surface.listEmpty": "No issues are shown in the current response.",
   "issues.surface.listLoading": "Loading issues",
   "issues.surface.detail": "Issue details",

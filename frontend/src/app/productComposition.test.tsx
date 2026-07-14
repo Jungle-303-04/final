@@ -33,7 +33,7 @@ describe("product composition", () => {
 
   it("sorts registered surfaces by the canonical navigation order", () => {
     const composition = createProductComposition([
-      { id: "catalog", Component: EmptySurface },
+      { id: "settings", Component: EmptySurface },
       { id: "home", Component: EmptySurface },
       { id: "issues", Component: EmptySurface },
     ], testAuthPort, testClusterScopePort);
@@ -41,7 +41,7 @@ describe("product composition", () => {
     expect(composition.surfaces.map((surface) => surface.id)).toEqual([
       "home",
       "issues",
-      "catalog",
+      "settings",
     ]);
   });
 

@@ -63,6 +63,7 @@ import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
 import { createClustersSurface } from "../pages/clusters/createClustersSurface";
 import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
+import { createSettingsSurface } from "../pages/settings/createSettingsSurface";
 import { createProductComposition } from "./productComposition";
 
 export function createApiComposition() {
@@ -149,6 +150,10 @@ export function createApiComposition() {
     {
       id: "gitops",
       Component: createGitOpsSurface(gitOpsPort),
+    },
+    {
+      id: "settings",
+      Component: createSettingsSurface(),
     },
   ], createAuthAdapter({
     getSession,

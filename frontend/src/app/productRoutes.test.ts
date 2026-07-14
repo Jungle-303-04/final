@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   PRODUCT_ROUTE_CATALOG,
-  PRODUCT_LANE_ROUTE_STUBS,
   productNavigationForReleasedSurfaces,
   productRouteForPath,
   resolveProductRoute,
@@ -11,44 +10,36 @@ import {
 describe("product route release registry", () => {
   it("defines the provider-neutral backend-backed primary route order", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).toEqual([
-      "clusters",
       "home",
+      "clusters",
       "resources",
       "issues",
-      "metrics",
       "applications",
       "gitops",
-      "catalog",
+      "settings",
     ]);
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.label)).toEqual([
-      "Clusters",
       "Home",
+      "Clusters",
       "Resources",
-      "Issues",
-      "Metrics",
+      "Incidents",
       "Applications",
-      "Workflows",
-      "Catalog",
+      "GitOps",
+      "Settings",
     ]);
   });
 
-  it("registers every sprint lane path without releasing an empty surface", () => {
-    expect(PRODUCT_LANE_ROUTE_STUBS).toEqual({
-      rca: ["issues"],
-      metrics: ["metrics"],
-      "workloads-gitops": ["applications", "gitops"],
-      "ai-catalog": ["catalog"],
-    });
+  it("does not release a navigation entry without a registered surface", () => {
     expect(productNavigationForReleasedSurfaces(new Set())).toEqual([]);
   });
 
   it("shows only surfaces released by the composition root", () => {
-    const released = new Set<ProductSurfaceId>(["home", "issues", "catalog"]);
+    const released = new Set<ProductSurfaceId>(["home", "issues", "settings"]);
 
     expect(productNavigationForReleasedSurfaces(released).map((route) => route.id)).toEqual([
       "home",
       "issues",
-      "catalog",
+      "settings",
     ]);
   });
 
@@ -56,22 +47,21 @@ describe("product route release registry", () => {
     ["/", "home"],
     ["/clusters", "clusters"],
     ["/resources/pods", "resources"],
-    ["/metrics", "metrics"],
     ["/gitops/detail/application/default/storefront", "gitops"],
-    ["/catalog/items/prometheus", "catalog"],
+    ["/settings", "settings"],
   ] as const)("maps %s to its owning screen", (pathname, routeId) => {
     expect(productRouteForPath(pathname)?.id).toBe(routeId);
   });
 
-  it("falls unknown and retired demo routes back to the Clusters entry point", () => {
-    expect(resolveProductRoute("/not-a-route").id).toBe("clusters");
-    expect(resolveProductRoute("/topology").id).toBe("clusters");
-    expect(resolveProductRoute("/timeline").id).toBe("clusters");
-    expect(resolveProductRoute("/traffic").id).toBe("clusters");
-    expect(resolveProductRoute("/legacy-metrics").id).toBe("clusters");
+  it("falls unknown and retired demo routes back to Home", () => {
+    expect(resolveProductRoute("/not-a-route").id).toBe("home");
+    expect(resolveProductRoute("/topology").id).toBe("home");
+    expect(resolveProductRoute("/timeline").id).toBe("home");
+    expect(resolveProductRoute("/traffic").id).toBe("home");
+    expect(resolveProductRoute("/legacy-metrics").id).toBe("home");
   });
 
-  it("keeps backend-gap screens and Settings out of the primary route catalog", () => {
+  it("keeps retired and backend-gap screens out of the route catalog", () => {
     expect(PRODUCT_ROUTE_CATALOG.map((route) => route.id)).not.toEqual(
       expect.arrayContaining([
         "topology",
@@ -80,7 +70,8 @@ describe("product route release registry", () => {
         "helm",
         "checks",
         "cost",
-        "settings",
+        "metrics",
+        "catalog",
       ]),
     );
   });

@@ -76,7 +76,7 @@ describe("ProductShell AI panel", () => {
       .toBe("/issues/event-1");
   });
 
-  it("keeps an open detail and rail in one flex transition on wide screens", async () => {
+  it("keeps an open detail and the user-selected sidebar state on wide screens", async () => {
     const user = userEvent.setup();
     renderShell({
       aiAssistantPort: assistantPort(),
@@ -85,12 +85,12 @@ describe("ProductShell AI panel", () => {
       releasedSurfaceIds: new Set(["home", "resources"]),
     });
     const sidebar = screen.getByRole("complementary", { name: "제품 메뉴" });
-    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("collapsed"));
+    expect(sidebar.getAttribute("data-state")).toBe("expanded");
 
     await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
     const panel = screen.getByRole("complementary", { name: "Opsia AI" });
     expect(panel.previousElementSibling?.id).toBe("product-main");
-    expect(sidebar.getAttribute("data-state")).toBe("collapsed");
+    expect(sidebar.getAttribute("data-state")).toBe("expanded");
     expect(screen.getByTestId("resources-shortcut")).toBeTruthy();
   });
 

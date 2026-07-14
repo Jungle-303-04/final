@@ -1,24 +1,20 @@
 export type ProductSurfaceId =
-  | "clusters"
   | "home"
+  | "clusters"
   | "resources"
   | "issues"
-  | "metrics"
   | "applications"
   | "gitops"
-  | "catalog";
+  | "settings";
 
 export type ProductRouteIcon =
-  | "clusters"
   | "home"
+  | "clusters"
   | "resources"
   | "issues"
-  | "metrics"
   | "applications"
   | "gitops"
-  | "catalog";
-
-export type ProductLaneId = "rca" | "metrics" | "workloads-gitops" | "ai-catalog";
+  | "settings";
 
 export interface ProductRouteDefinition {
   id: ProductSurfaceId;
@@ -30,22 +26,14 @@ export interface ProductRouteDefinition {
 }
 
 export const PRODUCT_ROUTE_CATALOG = [
-  route("clusters", "Clusters", "/clusters", "g k"),
   route("home", "Home", "/", "g h", "exact"),
+  route("clusters", "Clusters", "/clusters", "g k"),
   route("resources", "Resources", "/resources", "g r"),
-  route("issues", "Issues", "/issues", "g i"),
-  route("metrics", "Metrics", "/metrics", "g m"),
+  route("issues", "Incidents", "/issues", "g i"),
   route("applications", "Applications", "/applications", "g a"),
-  route("gitops", "Workflows", "/gitops", "g o"),
-  route("catalog", "Catalog", "/catalog", "g c"),
+  route("gitops", "GitOps", "/gitops", "g o"),
+  route("settings", "Settings", "/settings", "g s"),
 ] as const satisfies readonly ProductRouteDefinition[];
-
-export const PRODUCT_LANE_ROUTE_STUBS = {
-  rca: ["issues"],
-  metrics: ["metrics"],
-  "workloads-gitops": ["applications", "gitops"],
-  "ai-catalog": ["catalog"],
-} as const satisfies Record<ProductLaneId, readonly ProductSurfaceId[]>;
 
 export function productNavigationForReleasedSurfaces(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
