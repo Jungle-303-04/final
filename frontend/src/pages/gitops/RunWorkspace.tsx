@@ -23,6 +23,7 @@ import {
   formatRunTime,
   shortRunId,
 } from "./RunWorkspaceParts";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function RunWorkspace({
   plan,
@@ -55,26 +56,21 @@ export function RunWorkspace({
 
   return (
     <div className="grid min-w-0 gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h2 className="m-0 text-base font-semibold">{t("workflows.runs.title")}</h2>
-        <p className="m-0 text-xs leading-5 text-muted-foreground">
-          {t("workflows.runs.description")}
-        </p>
-      </header>
+      <WorkflowInlineHeading
+        description={t("workflows.runs.description")}
+        title={t("workflows.runs.title")}
+      />
 
       <Surface aria-label={t("workflows.runs.precheckTitle")} className="grid min-w-0 gap-4 p-4">
-        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-              <CheckCircle2 aria-hidden="true" className="size-4" />
-            </span>
-            <div className="grid min-w-0 gap-0.5">
-              <strong className="text-sm">{t("workflows.runs.precheckTitle")}</strong>
-              <span className="text-xs leading-5 text-muted-foreground">
-                {t("workflows.runs.precheckDescription")}
-              </span>
-            </div>
-          </div>
+        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <WorkflowInlineHeading
+            as="h3"
+            className="flex-1"
+            description={t("workflows.runs.precheckDescription")}
+            icon={<CheckCircle2 aria-hidden="true" />}
+            title={t("workflows.runs.precheckTitle")}
+            variant="compact"
+          />
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
             <Button disabled={pending} onClick={onCheckReadiness} variant="outline">
               <CheckCircle2 aria-hidden="true" />
@@ -89,18 +85,16 @@ export function RunWorkspace({
 
         {readiness ? (
           <div className={`grid min-w-0 gap-2 rounded-lg border px-3 py-2.5 ${readiness.ready ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
-            <div className="flex min-w-0 items-start gap-2">
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
               {readiness.ready
-                ? <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-                : <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-600" />}
-              <div className="grid min-w-0 gap-0.5">
-                <strong className="text-xs">
-                  {readiness.ready ? t("workflows.runs.ready") : t("workflows.runs.blocked")}
-                </strong>
-                <span className="text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                  {readiness.summary}
-                </span>
-              </div>
+                ? <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-emerald-600" />
+                : <AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-amber-600" />}
+              <strong className="shrink-0 text-xs">
+                {readiness.ready ? t("workflows.runs.ready") : t("workflows.runs.blocked")}
+              </strong>
+              <span className="min-w-0 flex-1 truncate border-l pl-2 text-xs text-muted-foreground" title={readiness.summary}>
+                {readiness.summary}
+              </span>
             </div>
             {readiness.blockers.length ? (
               <ul className="m-0 grid gap-1 pl-6 text-xs text-muted-foreground">

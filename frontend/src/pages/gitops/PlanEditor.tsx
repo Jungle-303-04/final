@@ -16,6 +16,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
 import { Surface } from "../../shared/ui/Surface";
 import { PlanStepEditor } from "./PlanStepEditor";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import {
   FormField,
   NativeSelect,
@@ -56,10 +57,11 @@ export function PlanEditor({
   return (
     <div className="grid min-w-0 gap-4">
       <div className="flex min-w-0 flex-col items-stretch gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid min-w-0 gap-0.5">
-          <h2 className="m-0 text-base font-semibold [overflow-wrap:anywhere]">{t("workflows.editor.title")}</h2>
-          <p className="m-0 text-xs leading-5 text-muted-foreground">{t("workflows.editor.description")}</p>
-        </div>
+        <WorkflowInlineHeading
+          className="flex-1"
+          description={t("workflows.editor.description")}
+          title={t("workflows.editor.title")}
+        />
         <Button disabled={pending || validationCodes.length > 0} onClick={onSave}>
           <Save aria-hidden="true" />
           {pending ? t("workflows.editor.saving") : t("workflows.editor.save")}
@@ -114,10 +116,13 @@ export function PlanEditor({
 
       <section aria-labelledby="workflow-editor-steps" className="grid min-w-0 gap-3">
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="grid min-w-0 gap-0.5">
-            <h2 className="m-0 text-sm font-semibold" id="workflow-editor-steps">{t("workflows.editor.steps")}</h2>
-            <p className="m-0 text-xs leading-5 text-muted-foreground">{t("workflows.editor.stepsDescription")}</p>
-          </div>
+          <WorkflowInlineHeading
+            className="flex-1"
+            description={t("workflows.editor.stepsDescription")}
+            title={t("workflows.editor.steps")}
+            titleId="workflow-editor-steps"
+            variant="compact"
+          />
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
             <NativeSelect
               ariaLabel={t("workflows.editor.application")}
@@ -156,12 +161,7 @@ export function PlanEditor({
 }
 
 function SectionHeading({ icon, title }: { icon: ReactNode; title: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">{icon}</span>
-      <h2 className="m-0 text-sm font-semibold">{title}</h2>
-    </div>
-  );
+  return <WorkflowInlineHeading icon={icon} title={title} variant="compact" />;
 }
 
 type T = ReturnType<typeof useI18n>["t"];

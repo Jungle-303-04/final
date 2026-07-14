@@ -13,6 +13,7 @@ import { RunWorkspace } from "./RunWorkspace";
 import { useGitOpsPageController, type WorkflowFeedback } from "./useGitOpsPageController";
 import { NativeSelect, policyLabel } from "./WorkflowFormControls";
 import { WorkflowOverview } from "./WorkflowOverview";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function GitOpsPage({ port }: { port: GitOpsPort }) {
   const { t } = useI18n();
@@ -40,15 +41,14 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
   return (
     <ProductPageFrame className="gap-4">
       <header className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl border bg-card text-primary shadow-sm">
-            <GitBranch aria-hidden="true" className="size-5" />
-          </span>
-          <div className="grid min-w-0 gap-1">
-            <h1 className="m-0 text-xl font-semibold [overflow-wrap:anywhere]">{t("workflows.title")}</h1>
-            <p className="m-0 max-w-2xl text-sm leading-5 text-muted-foreground">{t("workflows.description")}</p>
-          </div>
-        </div>
+        <WorkflowInlineHeading
+          as="h1"
+          className="flex-1"
+          description={t("workflows.description")}
+          icon={<GitBranch aria-hidden="true" />}
+          title={t("workflows.title")}
+          variant="page"
+        />
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:max-w-xl">
           <label className="grid min-w-0 flex-1 gap-1">
             <span className="text-[0.6875rem] font-medium text-muted-foreground">{t("workflows.plan.select")}</span>
@@ -159,10 +159,14 @@ function EmptyWorkflow({ onCreate }: { onCreate: () => void }) {
   const { t } = useI18n();
   return (
     <div className="grid min-h-[28rem] place-items-center border-y px-6 text-center">
-      <div className="grid max-w-md justify-items-center gap-3">
-        <GitBranch aria-hidden="true" className="size-8 text-muted-foreground" />
-        <h2 className="m-0 text-base font-semibold">{t("workflows.plan.none")}</h2>
-        <p className="m-0 text-sm leading-6 text-muted-foreground">{t("workflows.plan.noneDescription")}</p>
+      <div className="grid w-full max-w-xl justify-items-center gap-3">
+        <WorkflowInlineHeading
+          className="w-full"
+          description={t("workflows.plan.noneDescription")}
+          icon={<GitBranch aria-hidden="true" />}
+          title={t("workflows.plan.none")}
+          variant="section"
+        />
         <Button onClick={onCreate}><Plus aria-hidden="true" />{t("workflows.plan.new")}</Button>
       </div>
     </div>

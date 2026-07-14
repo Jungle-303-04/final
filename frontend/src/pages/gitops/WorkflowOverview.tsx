@@ -27,6 +27,7 @@ import {
 import { Surface } from "../../shared/ui/Surface";
 import { environmentLabel, policyLabel, strategyLabel } from "./WorkflowFormControls";
 import { WorkflowGraph } from "./WorkflowGraph";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function WorkflowOverview({
   plan,
@@ -54,12 +55,13 @@ export function WorkflowOverview({
   return (
     <div className="grid min-w-0 gap-4">
       <div className="flex min-w-0 flex-col gap-4 border-l-2 border-primary bg-card px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid min-w-0 gap-0.5">
-          <strong className="text-sm [overflow-wrap:anywhere]">{t("workflows.overview.actionTitle")}</strong>
-          <span className="text-xs leading-5 text-muted-foreground">
-            {t("workflows.overview.actionDescription")}
-          </span>
-        </div>
+        <WorkflowInlineHeading
+          as="h2"
+          className="flex-1"
+          description={t("workflows.overview.actionDescription")}
+          title={t("workflows.overview.actionTitle")}
+          variant="compact"
+        />
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
           <Button onClick={onEdit} variant="outline">
             <Settings2 aria-hidden="true" />
@@ -115,10 +117,15 @@ export function WorkflowOverview({
                   <span className="grid size-6 place-items-center rounded-md bg-muted text-[0.6875rem] font-semibold">
                     {waves.get(key) ?? index + 1}
                   </span>
-                  <span className="grid min-w-0 gap-0.5">
-                    <strong className="text-xs [overflow-wrap:anywhere]">{step.name || application?.name || step.application_id}</strong>
-                    <small className="text-[0.6875rem] text-muted-foreground [overflow-wrap:anywhere]">
-                      {configString(step, "environment", t("workflows.value.notSet"))} · {application?.repository || step.application_id}
+                  <span className="flex min-w-0 items-baseline gap-2 overflow-hidden">
+                    <strong className="max-w-[58%] shrink-0 truncate text-xs" title={step.name || application?.name || step.application_id}>
+                      {step.name || application?.name || step.application_id}
+                    </strong>
+                    <small
+                      className="min-w-0 flex-1 truncate border-l pl-2 text-[0.6875rem] text-muted-foreground"
+                      title={`${configString(step, "environment", t("workflows.value.notSet"))} / ${application?.repository || step.application_id}`}
+                    >
+                      {configString(step, "environment", t("workflows.value.notSet"))} / {application?.repository || step.application_id}
                     </small>
                   </span>
                   <ArrowRight aria-hidden="true" className="mt-1 size-3.5 text-muted-foreground" />

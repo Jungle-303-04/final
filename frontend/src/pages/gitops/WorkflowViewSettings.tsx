@@ -41,9 +41,9 @@ export function WorkflowViewSettings({
           sideOffset={8}
         >
           <Popover.Popup className="grid w-[min(20rem,calc(100vw-5.5rem))] min-w-0 gap-4 rounded-xl bg-popover p-4 text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none">
-            <div className="grid min-w-0 gap-0.5">
-              <Popover.Title className="text-sm font-semibold">{t("workflows.graph.settings")}</Popover.Title>
-              <Popover.Description className="text-xs leading-5 text-muted-foreground">
+            <div className="flex min-w-0 items-baseline gap-2 overflow-hidden">
+              <Popover.Title className="shrink-0 text-sm font-semibold whitespace-nowrap">{t("workflows.graph.settings")}</Popover.Title>
+              <Popover.Description className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={t("workflows.graph.settingsDescription")}>
                 {t("workflows.graph.settingsDescription")}
               </Popover.Description>
             </div>
@@ -74,12 +74,12 @@ function DirectionButton({ active, icon, label, onClick }: { active: boolean; ic
 
 function ViewToggle({ checked, label, description, onChange }: { checked: boolean; label: string; description: string; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex min-w-0 cursor-pointer items-start justify-between gap-4">
-      <span className="grid min-w-0 gap-0.5">
-        <strong className="text-xs font-medium text-foreground">{label}</strong>
-        <small className="text-[0.6875rem] leading-4 text-muted-foreground">{description}</small>
+    <label className="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+      <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+        <strong className="shrink-0 text-xs font-medium text-foreground whitespace-nowrap">{label}</strong>
+        <small className="min-w-0 flex-1 truncate border-l pl-2 text-[0.6875rem] text-muted-foreground" title={description}>{description}</small>
       </span>
-      <input checked={checked} className="mt-0.5 size-4 shrink-0 accent-primary" onChange={(event) => onChange(event.target.checked)} type="checkbox" />
+      <input checked={checked} className="size-4 shrink-0 accent-primary" onChange={(event) => onChange(event.target.checked)} type="checkbox" />
     </label>
   );
 }

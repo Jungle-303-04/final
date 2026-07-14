@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ReleasePlan } from "../../features/gitops/gitOpsContract";
 import type { TranslationFunction } from "../../shared/i18n/types";
 import { Surface } from "../../shared/ui/Surface";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function WizardSection({
   icon,
@@ -16,13 +17,7 @@ export function WizardSection({
 }) {
   return (
     <Surface aria-label={title} className="grid min-w-0 gap-5 p-4 sm:p-5">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">{icon}</span>
-        <div className="grid min-w-0 gap-1">
-          <h2 className="m-0 text-base font-semibold [overflow-wrap:anywhere]">{title}</h2>
-          <p className="m-0 text-xs leading-5 text-muted-foreground">{description}</p>
-        </div>
-      </div>
+      <WorkflowInlineHeading description={description} icon={icon} title={title} />
       {children}
     </Surface>
   );

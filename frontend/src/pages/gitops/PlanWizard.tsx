@@ -18,6 +18,7 @@ import {
   strategyLabel,
 } from "./WorkflowFormControls";
 import { WorkflowGraph } from "./WorkflowGraph";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import {
   ReviewFact,
   WizardSection,
@@ -72,14 +73,14 @@ export function PlanWizard({
   return (
     <section aria-labelledby="workflow-wizard-title" className="grid min-w-0 gap-4">
       <header className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="grid min-w-0 gap-1">
-          <h1 className="m-0 text-xl font-semibold [overflow-wrap:anywhere]" id="workflow-wizard-title">
-            {t("workflows.wizard.title")}
-          </h1>
-          <p className="m-0 max-w-2xl text-sm leading-5 text-muted-foreground">
-            {t("workflows.wizard.description")}
-          </p>
-        </div>
+        <WorkflowInlineHeading
+          as="h1"
+          className="flex-1"
+          description={t("workflows.wizard.description")}
+          title={t("workflows.wizard.title")}
+          titleId="workflow-wizard-title"
+          variant="page"
+        />
         <Button onClick={onCancel} variant="outline">
           {t("common.action.cancel")}
         </Button>
@@ -93,23 +94,21 @@ export function PlanWizard({
           const active = index === stageIndex;
           const complete = index < stageIndex;
           const enabled = index <= furthestStage;
+          const label = stageLabel(item, t);
           return (
-            <li className="relative min-w-0 px-1" key={item}>
-              {index < WIZARD_STAGES.length - 1 ? (
-                <span aria-hidden="true" className="absolute top-3.5 left-[calc(50%+1rem)] h-px w-[calc(100%-2rem)] bg-border" />
-              ) : null}
+            <li className="min-w-0 px-0.5" key={item}>
               <button
                 aria-current={active ? "step" : undefined}
-                className="relative z-10 grid w-full min-w-0 justify-items-center gap-1 bg-background text-center disabled:cursor-default"
+                className="flex h-10 w-full min-w-0 items-center justify-center gap-1.5 rounded-md px-1 text-center hover:bg-muted/50 disabled:cursor-default aria-[current=step]:bg-muted"
                 disabled={!enabled}
                 onClick={() => enabled && setStageIndex(index)}
                 type="button"
               >
-                <span className={`grid size-7 place-items-center rounded-full border text-xs font-semibold ${active ? "border-primary bg-primary text-primary-foreground" : complete ? "border-primary bg-background text-primary" : "bg-background text-muted-foreground"}`}>
+                <span className={`grid size-6 shrink-0 place-items-center rounded-full border text-[0.6875rem] font-semibold ${active ? "border-primary bg-primary text-primary-foreground" : complete ? "border-primary bg-background text-primary" : "bg-background text-muted-foreground"}`}>
                   {complete ? <Check aria-hidden="true" className="size-3.5" /> : index + 1}
                 </span>
-                <strong className="min-w-0 text-[0.6875rem] leading-4 font-medium [overflow-wrap:anywhere]">
-                  {stageLabel(item, t)}
+                <strong className="min-w-0 truncate text-[0.6875rem] leading-4 font-medium whitespace-nowrap" title={label}>
+                  {label}
                 </strong>
               </button>
             </li>
@@ -158,14 +157,16 @@ export function PlanWizard({
             <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {applications.map((application) => {
                 const checked = plan.steps.some((step) => step.application_id === application.id);
+                const repository = application.repository || application.id;
+                const branch = application.branch || t("workflows.value.notSet");
                 return (
                   <label
-                    className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/40 has-checked:border-primary has-checked:bg-primary/5"
+                    className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/40 has-checked:border-primary has-checked:bg-primary/5"
                     key={application.id}
                   >
                     <input
                       checked={checked}
-                      className="mt-0.5 size-4 shrink-0 accent-primary"
+                      className="size-4 shrink-0 accent-primary"
                       onChange={(event) => {
                         const ids = plan.steps.map((step) => step.application_id);
                         onChange(syncSelectedApplications(
@@ -176,13 +177,13 @@ export function PlanWizard({
                       }}
                       type="checkbox"
                     />
-                    <span className="grid min-w-0 gap-1">
-                      <strong className="text-sm [overflow-wrap:anywhere]">{application.name}</strong>
-                      <small className="text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]">
-                        {application.repository || application.id}
+                    <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+                      <strong className="max-w-[52%] shrink-0 truncate text-sm" title={application.name}>{application.name}</strong>
+                      <small className="min-w-0 flex-1 truncate border-l pl-2 text-xs text-muted-foreground" title={repository}>
+                        {repository}
                       </small>
-                      <small className="text-[0.6875rem] text-muted-foreground [overflow-wrap:anywhere]">
-                        {application.branch || t("workflows.value.notSet")}
+                      <small className="shrink-0 truncate text-[0.6875rem] text-muted-foreground" title={branch}>
+                        {branch}
                       </small>
                     </span>
                   </label>

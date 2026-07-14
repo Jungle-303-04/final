@@ -17,6 +17,7 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Surface } from "../../shared/ui/Surface";
 import { NativeSelect } from "./PlanEditor";
+import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function ManifestWorkspace({
   plan,
@@ -36,15 +37,16 @@ export function ManifestWorkspace({
   const { t } = useI18n();
   const [stepIndex, setStepIndex] = useState(0);
   const selectedStepIndex = Math.min(stepIndex, Math.max(0, plan.steps.length - 1));
+  const safePrSummary = safePr
+    ? `${t("workflows.yaml.workflowRun")}: ${safePr.workflow_run_id} / ${safePr.repo_ref} / ${safePr.base_branch} / ${safePr.manifest_path}`
+    : "";
 
   return (
     <div className="grid min-w-0 gap-4">
-      <header className="grid min-w-0 gap-1">
-        <h2 className="m-0 text-base font-semibold">{t("workflows.yaml.title")}</h2>
-        <p className="m-0 text-xs leading-5 text-muted-foreground">
-          {t("workflows.yaml.description")}
-        </p>
-      </header>
+      <WorkflowInlineHeading
+        description={t("workflows.yaml.description")}
+        title={t("workflows.yaml.title")}
+      />
 
       <Surface aria-label={t("workflows.yaml.title")} className="flex min-w-0 flex-col items-stretch gap-3 p-3 xl:flex-row xl:items-end xl:justify-between">
         <label className="grid w-full min-w-0 gap-1.5 xl:max-w-xl">
@@ -81,17 +83,12 @@ export function ManifestWorkspace({
       </Surface>
 
       {safePr ? (
-        <div className="flex min-w-0 items-start gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3">
-          <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-          <div className="grid min-w-0 gap-1">
-            <strong className="text-xs">{t("workflows.yaml.safePrAccepted")}</strong>
-            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {t("workflows.yaml.workflowRun")}: {safePr.workflow_run_id}
-            </span>
-            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {safePr.repo_ref} · {safePr.base_branch} · {safePr.manifest_path}
-            </span>
-          </div>
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3">
+          <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-emerald-600" />
+          <strong className="shrink-0 text-xs">{t("workflows.yaml.safePrAccepted")}</strong>
+          <span className="min-w-0 flex-1 truncate border-l pl-2 text-xs text-muted-foreground" title={safePrSummary}>
+            {safePrSummary}
+          </span>
         </div>
       ) : null}
 
