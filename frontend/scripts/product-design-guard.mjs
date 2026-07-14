@@ -19,6 +19,8 @@ const productRoot = process.env.PRODUCT_DESIGN_GUARD_ROOT
   : sourceRoot
 const apiRoot = resolve(productRoot, 'api')
 const tokenFile = resolve(productRoot, 'styles', 'tokens.css')
+const motionRoot = resolve(productRoot, 'motion')
+const motionTokenFile = resolve(motionRoot, 'tokens.css')
 
 export const I18N_LITERAL_ENFORCEMENT_ENV = 'PRODUCT_I18N_LITERAL_ENFORCEMENT'
 
@@ -852,6 +854,23 @@ function inspectScript(filePath, source, extension) {
       if (specifier && (isDynamicImport || isRequire)) {
         checkImportSpecifier(filePath, sourceFile, node, specifier)
       }
+
+      const expression = unwrapExpression(node.expression)
+      const callsAnimate = (
+        ts.isIdentifier(expression) && expression.text === 'animate'
+      ) || (
+        (ts.isPropertyAccessExpression(expression) || ts.isPropertyAccessChain(expression)) &&
+        expression.name.text === 'animate'
+      )
+      if (callsAnimate && !isWithin(filePath, motionRoot)) {
+        addViolation(
+          filePath,
+          sourceFile,
+          node.getStart(sourceFile),
+          'motion-ownership',
+          'Animation calls are allowed only under src/motion.',
+        )
+      }
     }
 
     const networkApi = enforceApiBoundary
@@ -940,6 +959,10 @@ function inspectRawColors(filePath, source) {
 }
 
 function inspectImportant(filePath, source) {
+  if (filePath === motionTokenFile) {
+    return
+  }
+
   for (const match of source.matchAll(/!important\b/giu)) {
     addTextViolation(
       filePath,
@@ -948,6 +971,22 @@ function inspectImportant(filePath, source) {
       'no-important',
       '!important is forbidden in product styles.',
     )
+  }
+}
+
+function inspectMotionCss(filePath, source) {
+  if (isWithin(filePath, motionRoot)) {
+    return
+  }
+
+  const patterns = [
+    { pattern: /@keyframes\b/giu, message: '@keyframes must live under src/motion.' },
+    { pattern: /\banimation(?:-name)?\s*:/giu, message: 'Animation declarations must live under src/motion.' },
+  ]
+  for (const { pattern, message } of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      addTextViolation(filePath, source, match.index, 'motion-ownership', message)
+    }
   }
 }
 
@@ -1019,6 +1058,7 @@ async function run() {
       inspectScript(filePath, source, extension)
     } else if (['.css', '.less', '.sass', '.scss'].includes(extension)) {
       inspectCssImports(filePath, source)
+      inspectMotionCss(filePath, source)
     }
   }
 
