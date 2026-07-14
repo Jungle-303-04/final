@@ -3,6 +3,8 @@ import type { WorkflowsMessageKey } from "../../keys/workflows";
 export const workflowsKo = {
   "workflows.title": "배포 워크플로우",
   "workflows.plan.select": "플랜 선택",
+  "workflows.plan.list": "플랜 목록",
+  "workflows.plan.open": "{name} 열기",
   "workflows.plan.new": "새 플랜",
   "workflows.plan.none": "배포 플랜 없음",
   "workflows.view.aria": "워크플로우 작업 공간",
