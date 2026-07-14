@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
+import { physicalTopologySchema } from "../../api/physical-topology-schemas";
+import { PHYSICAL_TOPOLOGY_ENDPOINT } from "../../api/physical-topology.testSupport";
+import { toPhysicalTopology } from "../../features/resources/physicalTopologyCanonical";
 import { I18nProvider } from "../../shared/i18n";
 import { PhysicalTopologyPod } from "./PhysicalTopologyPod";
 import {
@@ -19,6 +22,81 @@ afterEach(() => {
 });
 
 describe("PhysicalTopologyPod", () => {
+  it("uses only API usage_pct for fill while keeping restart state in a badge", () => {
+    const apiPods = [
+      {
+        ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+        id: "pod:sandbox/low-restarting",
+        name: "low-restarting",
+        usage_pct: 15,
+        cpu_mcores: 15,
+        cpu_request_mcores: 100,
+        mem_mib: 32,
+        mem_request_mib: 64,
+        phase: "OOMKilled",
+        health: "critical",
+        restarts: 3,
+      },
+      {
+        ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+        id: "pod:sandbox/high-running",
+        name: "high-running",
+        usage_pct: 85,
+        cpu_mcores: 85,
+        cpu_request_mcores: 100,
+        mem_mib: 32,
+        mem_request_mib: 64,
+        phase: "Running",
+        health: "healthy",
+        restarts: 0,
+      },
+      {
+        ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+        id: "pod:sandbox/no-requests",
+        name: "no-requests",
+        usage_pct: null,
+        cpu_mcores: 15,
+        cpu_request_mcores: null,
+        mem_mib: 32,
+        mem_request_mib: null,
+        phase: "Running",
+        health: "healthy",
+        restarts: 0,
+      },
+    ];
+    const endpoint = physicalTopologySchema.parse({
+      ...PHYSICAL_TOPOLOGY_ENDPOINT,
+      pods: apiPods,
+    });
+    const [low, high, unknown] = toPhysicalTopology("cluster-a", endpoint).pods;
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        {([low, high, unknown] as const).map((value, index) => (
+          <PhysicalTopologyPod
+            key={value.id}
+            nodeIndex={0}
+            onOpen={vi.fn()}
+            pod={value}
+            podIndex={index}
+          />
+        ))}
+      </I18nProvider>,
+    );
+
+    const lowButton = screen.getByRole("button", { name: /low-restarting/u });
+    const highButton = screen.getByRole("button", { name: /high-running/u });
+    const unknownButton = screen.getByRole("button", { name: /no-requests/u });
+    expect(lowButton.dataset.usageTone).toBe("neutral");
+    expect(lowButton.style.getPropertyValue("--usage-color")).toContain("var(--muted-foreground)");
+    expect(within(lowButton).getByRole("img", { name: /재시작/u })).toBeTruthy();
+    expect(highButton.dataset.usageTone).toBe("red");
+    expect(highButton.style.getPropertyValue("--usage-color")).toContain("var(--destructive)");
+    expect(highButton.querySelector("[data-pod-badge]")).toBeNull();
+    expect(unknownButton.dataset.usageTone).toBe("unknown");
+    expect(unknownButton.className).toContain("border-dashed");
+    expect(unknownButton.style.getPropertyValue("--usage-color")).toBe("");
+  });
+
   it("uses a fixed iconless square whose fill only follows usage", () => {
     const { container } = renderPod(pod({ usagePercent: 72 }));
     const button = screen.getByRole("button");
@@ -53,11 +131,11 @@ describe("PhysicalTopologyPod", () => {
       "color-mix(in oklch",
     );
 
-    const stopped = Number(button.dataset.usageValue);
     rendered.rerender(podTree(pod({ usagePercent: null })));
     act(() => frames.advance(1_000));
     expect(button.getAttribute("aria-label")).toContain("사용률 —");
-    expect(Number(button.dataset.usageValue)).toBeCloseTo(stopped, 3);
+    expect(button.dataset.usageValue).toBe("unknown");
+    expect(button.className).toContain("border-dashed");
   });
 
   it("replaces color immediately when reduced motion is requested", () => {

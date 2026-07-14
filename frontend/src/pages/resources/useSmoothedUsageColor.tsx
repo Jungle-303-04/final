@@ -60,7 +60,10 @@ export function useSmoothedUsageColor(
   useEffect(() => {
     targetRef.current = target;
     cancelFrame();
-    if (target === null) return undefined;
+    if (target === null) {
+      commit(null);
+      return undefined;
+    }
     if (
       reducedMotion ||
       currentRef.current === null ||
@@ -95,7 +98,7 @@ export function useSmoothedUsageColor(
   useEffect(() => cancelFrame, []);
   return current;
 
-  function commit(value: number) {
+  function commit(value: number | null) {
     currentRef.current = value;
     setCurrent(value);
   }
