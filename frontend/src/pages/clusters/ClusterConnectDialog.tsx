@@ -16,7 +16,6 @@ import {
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { ProviderLogo, type ProviderLogoKind } from "../../shared/brand/ProviderLogo";
-import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { cn } from "@/shared/lib/cn";
 import {
@@ -28,7 +27,7 @@ import {
   DialogTitle,
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
-import { ConnectionCommandStep, ConnectionModeButton } from "./ClusterConnectDialogParts";
+import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
 import { clusterResourcesHref } from "./clusterNavigation";
 
 const POLL_INTERVAL_MS = 2_000;
@@ -43,7 +42,7 @@ const providers: readonly {
   { id: "onprem", logo: ServerCog, labelKey: "clusters.connect.provider.onprem" },
 ];
 
-type WizardStep = 1 | 2 | 3 | 4;
+type WizardStep = 1 | 2 | 3;
 export type ConnectPhase = "idle" | "submitting" | "waiting" | "expired" | "failed";
 
 export function ClusterConnectDialog({
@@ -61,7 +60,6 @@ export function ClusterConnectDialog({
   const filter = useUnifiedFilter();
   const { formatDate, t } = useI18n();
   const [step, setStep] = useState<WizardStep>(1);
-  const [createMode, setCreateMode] = useState(false);
   const [name, setName] = useState("");
   const [provider, setProvider] = useState<ClusterConnectProvider>("onprem");
   const [phase, setPhase] = useState<ConnectPhase>("idle");
@@ -70,7 +68,7 @@ export function ClusterConnectDialog({
   const connectAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!open || step !== 3 || !receipt || phase !== "waiting") return;
+    if (!open || step !== 2 || !receipt || phase !== "waiting") return;
     const controller = new AbortController();
     let active = true;
     const poll = async () => {
@@ -78,7 +76,7 @@ export function ClusterConnectDialog({
         const connection = await port.loadConnection(receipt.clusterId, controller.signal);
         if (!active) return;
         if (connection.status === "connected") {
-          setStep(4);
+          setStep(3);
           onConnected();
         } else if (connection.status === "expired") {
           setPhase("expired");
@@ -110,7 +108,6 @@ export function ClusterConnectDialog({
   };
   const reset = () => {
     setStep(1);
-    setCreateMode(false);
     setName("");
     setProvider("onprem");
     setPhase("idle");
@@ -126,7 +123,7 @@ export function ClusterConnectDialog({
       const nextReceipt = await port.connect({ name: name.trim(), provider }, controller.signal);
       setReceipt(nextReceipt);
       setPhase("waiting");
-      setStep(3);
+      setStep(2);
     } catch (error) {
       if (isAbortError(error)) return;
       if (error instanceof ClustersPortFailure && error.code === "unauthorized") {
@@ -134,7 +131,7 @@ export function ClusterConnectDialog({
         return;
       }
       setPhase("failed");
-      setStep(3);
+      setStep(2);
     } finally {
       if (connectAbort.current === controller) connectAbort.current = null;
     }
@@ -154,38 +151,14 @@ export function ClusterConnectDialog({
       <DialogContent className="sm:max-w-2xl" closeLabel={t("common.action.close")}>
         <DialogHeader>
           <p className="text-xs font-medium text-muted-foreground">
-            {t("clusters.connect.step", { current: step, total: 4 })}
+            {t("clusters.connect.step", { current: step, total: 3 })}
           </p>
           <DialogTitle>{t("clusters.connect.title")}</DialogTitle>
           <DialogDescription>{t("clusters.connect.description")}</DialogDescription>
         </DialogHeader>
 
         {step === 1 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ConnectionModeButton
-              description={t("clusters.connect.existing.description")}
-              onClick={() => {
-                setCreateMode(false);
-                setStep(2);
-              }}
-              title={t("clusters.connect.existing.title")}
-            />
-            <ConnectionModeButton
-              description={t("clusters.connect.create.description")}
-              onClick={() => {
-                setCreateMode(true);
-                setStep(2);
-              }}
-              title={t("clusters.connect.create.title")}
-            />
-          </div>
-        ) : null}
-
-        {step === 2 ? (
           <div className="grid gap-5">
-            {createMode ? (
-              <Alert><AlertDescription>{t("clusters.connect.create.note")}</AlertDescription></Alert>
-            ) : null}
             <label className="grid gap-2 text-sm font-medium">
               {t("clusters.connect.name.label")}
               <Input
@@ -220,12 +193,11 @@ export function ClusterConnectDialog({
                 {phase === "submitting" ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null}
                 {t("clusters.connect.action.register")}
               </Button>
-              <Button onClick={() => setStep(1)} variant="outline">{t("common.action.back")}</Button>
             </DialogFooter>
           </div>
         ) : null}
 
-        {step === 3 ? (
+        {step === 2 ? (
           <ConnectionCommandStep
             copyState={copyState}
             expiresAt={receipt?.expiresAt ?? null}
@@ -237,7 +209,7 @@ export function ClusterConnectDialog({
           />
         ) : null}
 
-        {step === 4 && receipt ? (
+        {step === 3 && receipt ? (
           <div className="grid justify-items-center gap-4 py-6 text-center">
             <span className="grid size-12 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
               <Check aria-hidden="true" className="size-6" />

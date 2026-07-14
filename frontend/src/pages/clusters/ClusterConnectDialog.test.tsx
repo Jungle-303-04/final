@@ -23,7 +23,6 @@ describe("ClusterConnectDialog", () => {
     });
     renderDialog(port);
 
-    await user.click(screen.getByRole("button", { name: /^Connect an existing cluster/ }));
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     await user.click(screen.getByRole("button", { name: "AWS EKS" }));
     await user.click(screen.getByRole("button", { name: "Generate install command" }));
@@ -50,7 +49,6 @@ describe("ClusterConnectDialog", () => {
     });
     renderDialog(port, onConnected);
 
-    await user.click(screen.getByRole("button", { name: /^Connect an existing cluster/ }));
     await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
     await user.click(screen.getByRole("button", { name: "Generate install command" }));
 
