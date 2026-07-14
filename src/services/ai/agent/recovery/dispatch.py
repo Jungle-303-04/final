@@ -43,6 +43,10 @@ MISSING_SAFE_PR_PATCH_REASON = "Safe PR에 적용할 구체적인 파일 패치�
 SAFE_PR_FALLBACK_PATCH_DIR = ".gitops/recovery"
 SAFE_PR_STRUCTURED_PATCH_DIR = ".gitops/safe-pr/patches"
 GITOPS_REVIEW_ACTION = "gitops_recovery_review"
+RESOURCE_REQUEST_TUNING_ACTION = "resource_request_tuning"
+REVIEW_DOC_ACTIONS = frozenset({GITOPS_REVIEW_ACTION, RESOURCE_REQUEST_TUNING_ACTION})
+RESOURCE_REQUEST_MIN_CPU = "100m"
+RESOURCE_REQUEST_MIN_MEMORY = "256Mi"
 AUTHORITY_PATCH_ACTIONS = frozenset(
     {
         "oom_memory",
@@ -306,7 +310,7 @@ def build_safe_pr_request_body(
 
 
 def safe_pr_kind(selected: RecoveryActionCandidate) -> str:
-    if selected.draft.action_type == GITOPS_REVIEW_ACTION:
+    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
         return SAFE_PR_KIND_REVIEW_DOC
     return SAFE_PR_KIND_PATCH
 
@@ -317,7 +321,7 @@ async def dispatch_safe_pr_body(
     correlation_id: str,
 ) -> EventBody:
     selected = evt.selected
-    if selected.draft.action_type == GITOPS_REVIEW_ACTION:
+    if selected.draft.action_type in REVIEW_DOC_ACTIONS:
         return build_safe_pr_request_body(
             evt.plan,
             selected,
@@ -844,6 +848,16 @@ def fallback_recovery_patch(selected: RecoveryActionCandidate) -> SafePrFilePatc
         "## 롤백\n\n"
         f"{selected.rollback_plan}\n"
     )
+    if draft.action_type == RESOURCE_REQUEST_TUNING_ACTION:
+        content = (
+            f"{content}\n\n"
+            "## 참고 제안값\n\n"
+            f"- CPU request: `{RESOURCE_REQUEST_MIN_CPU}`\n"
+            f"- Memory request: `{RESOURCE_REQUEST_MIN_MEMORY}`\n\n"
+            "이 값은 Opsia Safe PR v1의 최소 참고값이며 자동 적용값이 아닙니다. "
+            "운영자는 실제 workload 부하, namespace quota, node capacity를 확인한 뒤 "
+            "manifest에 적절한 값을 직접 반영해야 합니다.\n"
+        )
     return SafePrFilePatch(
         path=path,
         content=content,
