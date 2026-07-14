@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { LoaderCircle, Maximize2, Minimize2, X } from "lucide-react";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -232,9 +232,12 @@ function RecoveryPanel({
                         onClick={() => onSelect(candidate.id)}
                         type="button"
                       >
-                        {selectionPendingId === candidate.id
-                          ? copy.selectionPending
-                          : candidate.title}
+                        {selectionPendingId === candidate.id ? (
+                          <>
+                            <LoaderCircle aria-hidden="true" className="animate-spin" />
+                            {copy.selectionPending}
+                          </>
+                        ) : candidate.title}
                       </Button>
                     )}
                     {capability.state === "disabled" ? (
