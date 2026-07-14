@@ -54,6 +54,8 @@ def serialize_alert_event(row: JsonObject) -> JsonObject:
     item = dict(row)
     item["fired_at"] = iso_or_none(item.get("fired_at"))
     item["resolved_at"] = iso_or_none(item.get("resolved_at"))
+    item["acknowledged_at"] = iso_or_none(item.get("acknowledged_at"))
+    item["promoted_at"] = iso_or_none(item.get("promoted_at"))
     item["created_at"] = iso_or_none(item.get("created_at"))
     item["updated_at"] = iso_or_none(item.get("updated_at"))
     return item
@@ -247,6 +249,128 @@ class AlertRuleRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).first()
         return row is not None
+
+    def list_alert_events(
+        self,
+        workspace_id: str,
+        *,
+        from_time: object | None = None,
+        to_time: object | None = None,
+        rule_id: str | None = None,
+        severity: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[JsonObject]:
+        """해소 이력을 삭제하지 않고 현재 워크스페이스의 발생 원장을 조회한다."""
+        table = AlertEvent.__table__
+        statement = select(table).where(table.c.workspace_id == workspace_id)
+        if from_time is not None:
+            statement = statement.where(table.c.fired_at >= from_time)
+        if to_time is not None:
+            statement = statement.where(table.c.fired_at <= to_time)
+        if rule_id is not None:
+            statement = statement.where(table.c.rule_id == rule_id)
+        if severity is not None:
+            statement = statement.where(table.c.severity == severity)
+        if status is not None:
+            statement = statement.where(table.c.status == status)
+        statement = statement.order_by(table.c.fired_at.desc(), table.c.event_id).limit(limit)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [serialize_alert_event(dict(row)) for row in rows]
+
+    def acknowledge_alert_event(
+        self,
+        workspace_id: str,
+        event_id: str,
+        actor_id: str,
+    ) -> JsonObject | None:
+        """활성 발생을 확인하고 최초 확인 주체를 원장에 남긴다."""
+        table = AlertEvent.__table__
+        with self.unit_of_work() as conn:
+            current = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.event_id == event_id,
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if current is None:
+                return None
+            if current["status"] == "resolved":
+                raise ValueError("resolved alert event cannot be acknowledged")
+            if current["status"] == "acked":
+                return serialize_alert_event(dict(current))
+            row = (
+                conn.execute(
+                    table.update()
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.event_id == event_id,
+                    )
+                    .values(
+                        status="acked",
+                        acknowledged_at=func.now(),
+                        acknowledged_by=actor_id,
+                        updated_at=func.now(),
+                    )
+                    .returning(table)
+                )
+                .mappings()
+                .one()
+            )
+        return serialize_alert_event(dict(row))
+
+    def promote_alert_event(
+        self,
+        workspace_id: str,
+        event_id: str,
+        incident_id: str,
+        actor_id: str,
+    ) -> tuple[JsonObject, bool] | None:
+        """발생을 한 번만 인시던트에 연결하고 승격 주체를 기록한다."""
+        table = AlertEvent.__table__
+        with self.unit_of_work() as conn:
+            current = (
+                conn.execute(
+                    select(table)
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.event_id == event_id,
+                    )
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if current is None:
+                return None
+            if current["incident_id"]:
+                return serialize_alert_event(dict(current)), False
+            row = (
+                conn.execute(
+                    table.update()
+                    .where(
+                        table.c.workspace_id == workspace_id,
+                        table.c.event_id == event_id,
+                    )
+                    .values(
+                        incident_id=incident_id,
+                        promoted_at=func.now(),
+                        promoted_by=actor_id,
+                        updated_at=func.now(),
+                    )
+                    .returning(table)
+                )
+                .mappings()
+                .one()
+            )
+        return serialize_alert_event(dict(row)), True
 
     def get_alert_rule_target_state(
         self,
