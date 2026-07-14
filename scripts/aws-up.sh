@@ -115,7 +115,7 @@ GOOGLE_API_KEY="${GOOGLE_API_KEY:-}"
 GEMINI_BASE_URL="${GEMINI_BASE_URL:-}"
 GEMINI_MODEL="${GEMINI_MODEL:-}"
 
-AUTH_EMAIL="${AUTH_EMAIL:-}"
+AUTH_EMAIL="${AUTH_EMAIL:-admin}"
 AUTH_PASSWORD="${AUTH_PASSWORD:-}"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-}"
 PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-}"
@@ -1272,35 +1272,12 @@ bootstrap_admin() {
   PORT_FORWARD_PID="$!"
   sleep 5
 
-  BOOTSTRAP_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:15432/${POSTGRES_DB}" \
+  DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:15432/${POSTGRES_DB}" \
+  MIGRATION_EXPECTED_HEAD="$(PYTHONPATH="${ROOT_DIR}/src" uv run alembic heads | awk '{print $1}')" \
   PYTHONPATH="${ROOT_DIR}/src:${ROOT_DIR}/src/services/gateway/api-gateway" \
-  AUTH_EMAIL="${AUTH_EMAIL}" \
   AUTH_PASSWORD="${AUTH_PASSWORD}" \
   PROJECT_SLUG="${PROJECT_SLUG}" \
-  uv run python - <<'PY'
-from __future__ import annotations
-
-import os
-import uuid
-
-from packages.storage.database import Database
-from passwords import default_display_name, hash_password, normalize_email
-
-
-os.environ["DATABASE_URL"] = os.environ["BOOTSTRAP_DATABASE_URL"]
-email = normalize_email(os.environ["AUTH_EMAIL"])
-project_slug = os.environ["PROJECT_SLUG"]
-user_id = "user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{email}"))
-
-db = Database()
-db.init()
-db.upsert_admin_account(
-    user_id=user_id,
-    email=email,
-    password_hash=hash_password(os.environ["AUTH_PASSWORD"]),
-    display_name=default_display_name(email),
-)
-PY
+  uv run python -m controller.bootstrap_admin
 
   kill "${PORT_FORWARD_PID}" >/dev/null 2>&1 || true
   PORT_FORWARD_PID=""

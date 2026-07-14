@@ -4,9 +4,9 @@ Revision ID: 20260714_0200
 Revises: 20260713_2350
 Create Date: 2026-07-14 02:00:00
 
-Both tables already exist in legacy ``Database.init()`` databases.  This
-additive revision makes a fresh Alembic target a superset before data-only
-copy; it never runs against the unversioned source.
+Both tables already exist in legacy ``Database.init()`` databases. This
+additive revision extends the versioned schema; the production migration
+runner separately rejects unversioned databases.
 """
 
 from __future__ import annotations

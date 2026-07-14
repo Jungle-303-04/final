@@ -10,30 +10,14 @@ name: Dev Deploy
         description: Full dev SHA with a successful Dev Gate run
         required: true
         type: string
-      deployment_mode:
-        description: DEPLOY is the normal path; FIRST_DEPLOY is the retired one-time cutover path
-        required: true
-        default: DEPLOY
-        type: choice
-        options:
-          - DEPLOY
-          - FIRST_DEPLOY
       deployment_scope:
-        description: FULL deploys services and console; CONSOLE leaves the unversioned legacy database and services untouched
+        description: FULL deploys services and console; CONSOLE deploys only the console
         required: true
         default: FULL
         type: choice
         options:
           - FULL
           - CONSOLE
-      postgres_snapshot_id:
-        description: Completed recent PostgreSQL EBS snapshot with restore rehearsal tags
-        required: false
-        type: string
-      nats_snapshot_id:
-        description: Completed recent NATS EBS snapshot with restore rehearsal tags
-        required: false
-        type: string
       previous_release_sha:
         description: Full SHA of the currently running release
         required: true
@@ -58,9 +42,7 @@ jobs:
        github.event.workflow_run.head_branch == 'dev' &&
        vars.AWS_DEV_DEPLOY_ENABLED == '1') ||
       (github.event_name == 'workflow_dispatch' &&
-       github.ref == 'refs/heads/dev' &&
-       (inputs.deployment_mode == 'DEPLOY' ||
-        inputs.deployment_mode == 'FIRST_DEPLOY'))
+       github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: dev-deploy
@@ -73,12 +55,9 @@ jobs:
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
       SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
-      DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_mode || 'DEPLOY' }}
       DEPLOYMENT_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_scope || 'FULL' }}
-      FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID: ${{ inputs.postgres_snapshot_id }}
-      FIRST_DEPLOY_NATS_SNAPSHOT_ID: ${{ inputs.nats_snapshot_id }}
-      FIRST_DEPLOY_PREVIOUS_SHA: ${{ inputs.previous_release_sha }}
-      AUTH_EMAIL: ${{ secrets.AWS_DEV_AUTH_EMAIL }}
+      PREVIOUS_RELEASE_SHA: ${{ inputs.previous_release_sha }}
+      AUTH_EMAIL: admin
       AUTH_PASSWORD: ${{ secrets.AWS_DEV_AUTH_PASSWORD }}
       SMOKE_CLUSTER_ID: ${{ secrets.AWS_DEV_SMOKE_CLUSTER_ID }}
       SMOKE_RCA_CORRELATION_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_CORRELATION_ID }}
@@ -121,18 +100,11 @@ jobs:
           [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            [[ "${FIRST_DEPLOY_PREVIOUS_SHA}" =~ ^[0-9a-f]{40}$ ]]
+            [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
             case "${DEPLOYMENT_SCOPE}" in
               FULL|CONSOLE) ;;
               *) echo "invalid deployment scope" >&2; exit 1 ;;
             esac
-            if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" ]]; then
-              test "${DEPLOYMENT_SCOPE}" = "FULL"
-              [[ "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
-              [[ "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
-            else
-              test "${DEPLOYMENT_MODE}" = "DEPLOY"
-            fi
           fi
 
       - name: Verify manual gated SHA
@@ -218,37 +190,6 @@ jobs:
             --alias "${MGMT_CONTEXT}"
           test "$(kubectl config current-context)" = "${MGMT_CONTEXT}"
 
-      - name: Verify manual first-deploy backup
-        if: >-
-          github.event_name == 'workflow_dispatch' &&
-          inputs.deployment_mode == 'FIRST_DEPLOY'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}"
-          test -n "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}"
-          if kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            get configmap opsia-deploy-status >/dev/null 2>&1; then
-            echo "manual first deployment is forbidden after deploy status is seeded" >&2
-            exit 1
-          fi
-          uv run python scripts/verify_first_deploy_backup.py \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}" \
-            --region "${AWS_REGION}" \
-            --pvc-name "data-postgresql-0" \
-            --snapshot-id "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" \
-            --source-sha "${SOURCE_SHA}" \
-            --max-age-hours 24
-          uv run python scripts/verify_first_deploy_backup.py \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}" \
-            --region "${AWS_REGION}" \
-            --pvc-name "data-nats-0" \
-            --snapshot-id "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" \
-            --source-sha "${SOURCE_SHA}" \
-            --max-age-hours 24
-
       - name: Render and verify auth bypass policy
         shell: bash
         run: |
@@ -284,7 +225,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"
+            previous_sha="${PREVIOUS_RELEASE_SHA}"
           else
             previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
               get configmap opsia-deploy-status \
@@ -306,7 +247,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"
+            previous_sha="${PREVIOUS_RELEASE_SHA}"
           else
             previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
               get configmap opsia-deploy-status \
@@ -333,60 +274,6 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}"
 
-      - name: Freeze first-deploy database writers
-        if: >-
-          github.event_name == 'workflow_dispatch' &&
-          inputs.deployment_mode == 'FIRST_DEPLOY'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv run python scripts/database_writer_freeze.py capture \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}" \
-            --output "${RUNNER_TEMP}/database-writer-freeze-plan.json"
-          uv run python scripts/database_writer_freeze.py freeze \
-            --context "${MGMT_CONTEXT}" \
-            --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
-            --timeout 600s
-
-      - name: Bootstrap and copy first-deploy database
-        if: >-
-          github.event_name == 'workflow_dispatch' &&
-          inputs.deployment_mode == 'FIRST_DEPLOY'
-        shell: bash
-        env:
-          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          set -euo pipefail
-          uv run python scripts/database_cutover_config.py prepare \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}" \
-            --source-sha "${SOURCE_SHA}" \
-            --run-id "${GITHUB_RUN_ID}" \
-            --run-attempt "${GITHUB_RUN_ATTEMPT}"
-          kubectl set image \
-            --filename deploy/management/database-cutover-job.yaml \
-            cutover="${DEPLOY_IMAGE}" \
-            --local \
-            --output yaml >"${RUNNER_TEMP}/database-cutover-job.yaml"
-          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            delete job management-database-cutover --ignore-not-found --wait=true
-          kubectl --context "${MGMT_CONTEXT}" apply \
-            --filename "${RUNNER_TEMP}/database-cutover-job.yaml"
-          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            wait --for=condition=complete job/management-database-cutover --timeout=3600s
-
-      - name: Switch first-deploy database target
-        if: >-
-          github.event_name == 'workflow_dispatch' &&
-          inputs.deployment_mode == 'FIRST_DEPLOY'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv run python scripts/database_cutover_config.py switch --direction target \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}"
-
       - name: Run fail-closed database migration
         if: env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
@@ -405,6 +292,37 @@ jobs:
             --filename "${RUNNER_TEMP}/migration-job.yaml"
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             wait --for=condition=complete job/management-database-migration --timeout=900s
+
+      - name: Bootstrap fixed dev administrator
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        env:
+          DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          cleanup() {
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              delete job management-admin-bootstrap --ignore-not-found --wait=true >/dev/null 2>&1 || true
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              delete secret management-admin-bootstrap --ignore-not-found --wait=true >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          cleanup
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            create secret generic management-admin-bootstrap \
+            --from-literal="AUTH_PASSWORD=${AUTH_PASSWORD}" \
+            --dry-run=client \
+            --output yaml \
+            | kubectl --context "${MGMT_CONTEXT}" apply --filename -
+          kubectl set image \
+            --filename deploy/management/admin-bootstrap-job.yaml \
+            bootstrap="${DEPLOY_IMAGE}" \
+            --local \
+            --output yaml >"${RUNNER_TEMP}/admin-bootstrap-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" apply \
+            --filename "${RUNNER_TEMP}/admin-bootstrap-job.yaml"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            wait --for=condition=complete job/management-admin-bootstrap --timeout=300s
 
       - name: Roll out immutable service digest
         if: env.DEPLOYMENT_SCOPE == 'FULL'
@@ -429,18 +347,6 @@ jobs:
             --plan "${RUNNER_TEMP}/console-rollback-plan.json" \
             --context "${MGMT_CONTEXT}" \
             --image "${CONSOLE_DEPLOY_IMAGE}" \
-            --timeout 600s
-
-      - name: Restore first-deploy database writers
-        if: >-
-          github.event_name == 'workflow_dispatch' &&
-          inputs.deployment_mode == 'FIRST_DEPLOY'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv run python scripts/database_writer_freeze.py restore \
-            --context "${MGMT_CONTEXT}" \
-            --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
             --timeout 600s
 
       - name: Verify live auth bypass policy after rollout
@@ -507,29 +413,6 @@ jobs:
         run: |
           set -uo pipefail
           rollback_failed=0
-          routing_restored=0
-          if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" && \
-                -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
-            if uv run python scripts/database_writer_freeze.py freeze \
-              --context "${MGMT_CONTEXT}" \
-              --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
-              --timeout 600s; then
-              if kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-                get secret first-deploy-database-cutover >/dev/null 2>&1; then
-                if uv run python scripts/database_cutover_config.py switch --direction source \
-                  --context "${MGMT_CONTEXT}" \
-                  --namespace "${MGMT_NS}"; then
-                  routing_restored=1
-                else
-                  rollback_failed=1
-                fi
-              else
-                routing_restored=1
-              fi
-            else
-              rollback_failed=1
-            fi
-          fi
           uv run python scripts/revert_image_digests.py \
             --plan "${RUNNER_TEMP}/console-rollback-plan.json" \
             --context "${MGMT_CONTEXT}" \
@@ -542,29 +425,4 @@ jobs:
               --timeout 600s \
               --apply || rollback_failed=1
           fi
-          if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" && \
-                -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
-            uv run python scripts/database_writer_freeze.py restore \
-              --context "${MGMT_CONTEXT}" \
-              --plan "${RUNNER_TEMP}/database-writer-freeze-plan.json" \
-              --timeout 600s || rollback_failed=1
-            if [[ "${routing_restored}" == 1 ]]; then
-              uv run python scripts/database_cutover_config.py cleanup \
-                --context "${MGMT_CONTEXT}" \
-                --namespace "${MGMT_NS}" || rollback_failed=1
-            fi
-          fi
           exit "${rollback_failed}"
-
-      - name: Remove first-deploy cutover secret
-        if: >-
-          always() &&
-          github.event_name == 'workflow_dispatch' &&
-          inputs.deployment_mode == 'FIRST_DEPLOY' &&
-          steps.status.outcome == 'success'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv run python scripts/database_cutover_config.py cleanup \
-            --context "${MGMT_CONTEXT}" \
-            --namespace "${MGMT_NS}"

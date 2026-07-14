@@ -13,7 +13,9 @@ from typing import Any
 KUBERNETES_NAME = re.compile(r"^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$")
 RUNTIME_SECRET = "management-runtime-secret"
 EXPLICIT_FREEZE_TARGETS = frozenset({"cluster-agent", "pgbouncer"})
+EXPLICIT_NON_WRITERS = frozenset({"console-dev"})
 REQUIRED_FREEZE_TARGETS = frozenset({"api-gateway", "pgbouncer"})
+REQUIRED_RESTORE_TARGETS = frozenset({"api-gateway", "pgbouncer"})
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,8 @@ def build_plan(
         if name in observed:
             raise ValueError(f"duplicate live deployment: {name}")
         observed.add(name)
+        if name in EXPLICIT_NON_WRITERS:
+            continue
         if name not in EXPLICIT_FREEZE_TARGETS and not _deployment_uses_runtime_secret(item):
             continue
         spec = require_mapping(item.get("spec"), f"deployment/{name}.spec")
@@ -242,7 +246,7 @@ def restore(*, context: str, plan: FreezePlan, timeout: str) -> None:
     _validate_context(context)
     _scale(context, plan, {target.name: target.replicas for target in plan.targets})
     for target in plan.targets:
-        if target.replicas == 0:
+        if target.replicas == 0 or target.name not in REQUIRED_RESTORE_TARGETS:
             continue
         subprocess.run(
             (

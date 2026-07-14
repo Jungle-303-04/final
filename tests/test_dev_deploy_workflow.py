@@ -38,24 +38,11 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert triggers["workflow_run"] == {"workflows": ["Dev Gate"], "types": ["completed"]}
     assert set(triggers["workflow_dispatch"]["inputs"]) == {
         "source_sha",
-        "deployment_mode",
         "deployment_scope",
-        "postgres_snapshot_id",
-        "nats_snapshot_id",
         "previous_release_sha",
     }
-    assert triggers["workflow_dispatch"]["inputs"]["deployment_mode"] == {
-        "description": "DEPLOY is the normal path; FIRST_DEPLOY is the retired one-time cutover path",
-        "required": True,
-        "default": "DEPLOY",
-        "type": "choice",
-        "options": ["DEPLOY", "FIRST_DEPLOY"],
-    }
     assert triggers["workflow_dispatch"]["inputs"]["deployment_scope"] == {
-        "description": (
-            "FULL deploys services and console; CONSOLE leaves the unversioned legacy "
-            "database and services untouched"
-        ),
+        "description": "FULL deploys services and console; CONSOLE deploys only the console",
         "required": True,
         "default": "FULL",
         "type": "choice",
@@ -69,8 +56,7 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert "vars.AWS_DEV_DEPLOY_ENABLED == '1'" in condition
     assert "github.event_name == 'workflow_dispatch'" in condition
     assert "github.ref == 'refs/heads/dev'" in condition
-    assert "inputs.deployment_mode == 'DEPLOY'" in condition
-    assert "inputs.deployment_mode == 'FIRST_DEPLOY'" in condition
+    assert "deployment_mode" not in condition
     assert workflow()["concurrency"] == {
         "group": "dev-deploy",
         "cancel-in-progress": False,
@@ -94,7 +80,7 @@ def test_deploy_checks_out_the_exact_tree_that_passed_the_gate() -> None:
     assert steps_by_name()["Install deployment dependencies"]["run"] == "uv sync --frozen"
 
 
-def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_proofs() -> None:
+def test_manual_deploy_requires_exact_gate_and_previous_release_proofs() -> None:
     document = workflow()
     steps = steps_by_name()
     job = deploy_job()
@@ -106,27 +92,15 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     assert '"ahead"|"identical"' in gate_proof
     assert "/actions/workflows/dev-gate.yml/runs" in gate_proof
     assert "select(.head_sha == env.SOURCE_SHA)" in gate_proof
-    backup_proof = steps["Verify manual first-deploy backup"]["run"]
-    assert steps["Verify manual first-deploy backup"]["if"] == (
-        "github.event_name == 'workflow_dispatch' && inputs.deployment_mode == 'FIRST_DEPLOY'"
-    )
-    assert "verify_first_deploy_backup.py" in backup_proof
-    assert 'test -n "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}"' in backup_proof
-    assert 'test -n "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}"' in backup_proof
-    assert '--pvc-name "data-postgresql-0"' in backup_proof
-    assert '--pvc-name "data-nats-0"' in backup_proof
-    assert backup_proof.count("--max-age-hours 24") == 2
-    assert "get configmap opsia-deploy-status" in backup_proof
     service_capture = steps["Capture current service digest rollback plan"]["run"]
     console_capture = steps["Capture current console digest rollback plan"]["run"]
     for capture in (service_capture, console_capture):
-        assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
+        assert 'previous_sha="${PREVIOUS_RELEASE_SHA}"' in capture
         assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in capture
         assert capture.count("--managed-repository") == 1
         assert "--allow-missing-live" not in capture
-    assert job["env"]["FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID"] == ("${{ inputs.postgres_snapshot_id }}")
-    assert job["env"]["FIRST_DEPLOY_NATS_SNAPSHOT_ID"] == "${{ inputs.nats_snapshot_id }}"
-    assert job["env"]["FIRST_DEPLOY_PREVIOUS_SHA"] == "${{ inputs.previous_release_sha }}"
+    assert job["env"]["PREVIOUS_RELEASE_SHA"] == "${{ inputs.previous_release_sha }}"
+    assert "DEPLOYMENT_MODE" not in job["env"]
 
 
 def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> None:
@@ -145,18 +119,12 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Enforce live auth bypass zero"
     )
     assert names.index("Enforce live auth bypass zero") < names.index(
-        "Freeze first-deploy database writers"
-    )
-    assert names.index("Freeze first-deploy database writers") < names.index(
-        "Bootstrap and copy first-deploy database"
-    )
-    assert names.index("Bootstrap and copy first-deploy database") < names.index(
-        "Switch first-deploy database target"
-    )
-    assert names.index("Switch first-deploy database target") < names.index(
         "Run fail-closed database migration"
     )
     assert names.index("Run fail-closed database migration") < names.index(
+        "Bootstrap fixed dev administrator"
+    )
+    assert names.index("Bootstrap fixed dev administrator") < names.index(
         "Roll out immutable service digest"
     )
     assert names.index("Roll out immutable service digest") < names.index(
@@ -196,53 +164,30 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     assert "steps.pre_smoke.outputs.frontend_bundle" in post["env"]["PRE_DEPLOY_FRONTEND_BUNDLE"]
     assert rollback["if"] == "failure() && steps.console_capture.outcome == 'success'"
     assert rollback["run"].count("revert_image_digests.py") == 2
-    assert "database_cutover_config.py switch --direction source" in rollback["run"]
-    assert "database_writer_freeze.py restore" in rollback["run"]
+    assert "database_cutover_config.py" not in rollback["run"]
+    assert "database_writer_freeze.py" not in rollback["run"]
 
 
 def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgrade() -> None:
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
-    cutover_job = (ROOT / "deploy/management/database-cutover-job.yaml").read_text(encoding="utf-8")
     assert "imageDetails[0].imageDigest" in source
     assert "rollout_image_digest.py" in source
     assert "revert_image_digests.py" in source
     assert "steps.console_capture.outcome == 'success'" in source
     assert "kubectl rollout undo" not in source
     assert "alembic downgrade" not in source
-    assert "database-cutover-job.yaml" in source
-    assert "packages.storage.baseline bootstrap" in cutover_job
-    assert "packages.storage.data_cutover copy" in cutover_job
+    assert "database-cutover-job.yaml" not in source
+    assert "packages.storage.data_cutover" not in source
 
 
-def test_first_deploy_freezes_writers_before_copy_and_restores_exact_replicas() -> None:
-    steps = steps_by_name()
-    freeze = steps["Freeze first-deploy database writers"]
-    cutover = steps["Bootstrap and copy first-deploy database"]
-    switch = steps["Switch first-deploy database target"]
-    restore = steps["Restore first-deploy database writers"]
-
-    first_deploy_only = (
-        "github.event_name == 'workflow_dispatch' && inputs.deployment_mode == 'FIRST_DEPLOY'"
-    )
-    assert freeze["if"] == first_deploy_only
-    assert "database_writer_freeze.py capture" in freeze["run"]
-    assert "database_writer_freeze.py freeze" in freeze["run"]
-    assert "cluster-agent" in (ROOT / "scripts/database_writer_freeze.py").read_text()
-    assert cutover["if"] == first_deploy_only
-    assert "database-cutover-job.yaml" in cutover["run"]
-    assert '--run-id "${GITHUB_RUN_ID}"' in cutover["run"]
-    assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in cutover["run"]
-    assert "packages.storage.baseline" not in cutover["run"]
-    assert switch["if"] == first_deploy_only
-    assert "database_cutover_config.py switch --direction target" in switch["run"]
-    assert restore["if"] == first_deploy_only
-    assert "database_writer_freeze.py restore" in restore["run"]
-
-
-def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads() -> None:
+def test_deploy_has_no_preservation_cutover_or_partial_capture_escape_hatches() -> None:
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    assert "database_writer_freeze.py" in source
+    assert "FIRST_DEPLOY" not in source
+    assert "database_writer_freeze.py" not in source
+    assert "database_cutover_config.py" not in source
+    assert "verify_first_deploy_backup.py" not in source
+    assert "--allow-missing-live" not in source
     assert source.count("--managed-repository") == 2
     assert "kubectl apply --filename deploy/management" not in source
     assert "alembic stamp" not in source
@@ -250,34 +195,39 @@ def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads(
     assert "DROP DATABASE" not in source
 
 
-def test_full_manual_deploy_skips_cutover_but_keeps_migration_rollout_and_smoke() -> None:
+def test_full_deploy_keeps_migration_rollout_and_smoke() -> None:
     steps = steps_by_name()
-    first_deploy_steps = (
-        "Verify manual first-deploy backup",
-        "Freeze first-deploy database writers",
-        "Bootstrap and copy first-deploy database",
-        "Switch first-deploy database target",
-        "Restore first-deploy database writers",
-    )
-
-    for name in first_deploy_steps:
-        assert "inputs.deployment_mode == 'FIRST_DEPLOY'" in steps[name]["if"]
     for name in (
         "Build and push immutable service image",
         "Capture current service digest rollback plan",
         "Enforce live auth bypass zero",
         "Run fail-closed database migration",
+        "Bootstrap fixed dev administrator",
         "Roll out immutable service digest",
         "Run post-deploy smoke",
         "Record successful dev SHA in cluster",
     ):
         assert steps[name]["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
-    assert deploy_job()["env"]["DEPLOYMENT_MODE"] == (
-        "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_mode || 'DEPLOY' }}"
-    )
     assert deploy_job()["env"]["DEPLOYMENT_SCOPE"] == (
         "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_scope || 'FULL' }}"
     )
+
+
+def test_full_deploy_bootstraps_fixed_admin_without_persisting_plaintext_credentials() -> None:
+    job = deploy_job()
+    step = steps_by_name()["Bootstrap fixed dev administrator"]
+    manifest = (ROOT / "deploy/management/admin-bootstrap-job.yaml").read_text(encoding="utf-8")
+
+    assert job["env"]["AUTH_EMAIL"] == "admin"
+    assert job["env"]["AUTH_PASSWORD"] == "${{ secrets.AWS_DEV_AUTH_PASSWORD }}"
+    assert "AWS_DEV_AUTH_EMAIL" not in WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "create secret generic management-admin-bootstrap" in step["run"]
+    assert '--from-literal="AUTH_PASSWORD=${AUTH_PASSWORD}"' in step["run"]
+    assert "trap cleanup EXIT" in step["run"]
+    assert "delete secret management-admin-bootstrap" in step["run"]
+    assert "controller.bootstrap_admin" in manifest
+    assert "key: AUTH_PASSWORD" in manifest
+    assert "temp24qw" not in manifest
 
 
 def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety() -> None:
@@ -287,7 +237,6 @@ def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety
     rollback = steps["Restore previous release after failure"]["run"]
 
     assert "FULL|CONSOLE" in validation
-    assert 'test "${DEPLOYMENT_SCOPE}" = "FULL"' in validation
     assert steps["Run post-deploy console smoke"]["if"] == "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
     assert smoke["run"] == "bash scripts/post-deploy-console-smoke.sh"
     assert "steps.console_image.outputs.image" in smoke["env"]["EXPECTED_CONSOLE_IMAGE"]
@@ -307,23 +256,18 @@ def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety
     assert "alembic" not in console_smoke.lower()
 
 
-def test_failure_recovery_always_attempts_image_and_replica_restore() -> None:
+def test_failure_recovery_always_attempts_image_restore() -> None:
     steps = steps_by_name()
     rollback = steps["Restore previous release after failure"]["run"]
     names = [step["name"] for step in deploy_job()["steps"]]
 
     assert "set -uo pipefail" in rollback
     assert "set -euo pipefail" not in rollback
-    assert rollback.count("|| rollback_failed=1") >= 4
-    assert "routing_restored=0" in rollback
-    assert "database_writer_freeze.py restore" in rollback
+    assert rollback.count("|| rollback_failed=1") == 2
+    assert "routing_restored" not in rollback
+    assert "database_writer_freeze.py" not in rollback
     assert 'exit "${rollback_failed}"' in rollback
-    assert names.index("Restore previous release after failure") < names.index(
-        "Remove first-deploy cutover secret"
-    )
-    cleanup = steps["Remove first-deploy cutover secret"]
-    assert "always()" in cleanup["if"]
-    assert "steps.status.outcome == 'success'" in cleanup["if"]
+    assert names[-1] == "Restore previous release after failure"
     assert steps["Record successful dev SHA in cluster"]["id"] == "status"
 
 
