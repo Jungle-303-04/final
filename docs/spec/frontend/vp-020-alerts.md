@@ -51,7 +51,7 @@ trigger: 데모③(부하와 알람) 설계 중 발견 — "AI로 알람을 걸�
 
 | | 상태 |
 |---|---|
-| `/alert-channels` · `/alert-channels/test` · `/alert-channels/{id}` | **있다.** 어디로 보낼지(슬랙·이메일) |
+| `/alert-channels` · `/alert-channels/test` · `/alert-channels/{id}` | **있다.** 어디로 보낼지(외부 알림 채널·이메일) |
 | `/webhooks/alertmanager` | **있다.** 외부 알림 수신구 |
 | `/rca/rules` · `/rca/rules/validate` | **있다.** RCA **진단** 규칙. 알림 규칙이 아니다 |
 | **알림 규칙(임계값 조건) API** | **없다** ← BQ-083~087 신설 |
@@ -153,7 +153,7 @@ POST /alert-events/{id}/promote-incident   → { incident_id }
 ### [채널]
 
 - **기존 `/alert-channels` 를 그대로 붙인다. 새로 만들지 마라. 이미 있다**
-- 슬랙/이메일 등 · `[테스트 발송]`(`/alert-channels/test` 도 이미 있다)
+- 외부 알림 채널/이메일 등 · `[테스트 발송]`(`/alert-channels/test` 도 이미 있다)
 
 ### 전역
 
@@ -218,7 +218,7 @@ POST /alert-rules → 토스트 "알림 규칙을 만들었습니다  [규칙 �
 1. AI 채팅: "prod-eks에서 파드 CPU 80% 넘으면 알려줘" → 액션 카드 → [알림 만들기]
 2. 관객이 QR로 게임 접속 → 부하
 3. 물리 뷰에서 파드가 실시간으로 빨개진다 (SSE)
-4. 지속 조건 충족 → 알림이 울린다 → 토스트 + 사이드바 배지 + 슬랙
+4. 지속 조건 충족 → 알림이 울린다 → 토스트 + 사이드바 배지 + 외부 알림 채널
 5. 알림 클릭 → 그 파드 상세가 열린다
 6. [인시던트로 승격] → RCA로 이어진다
 ```

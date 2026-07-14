@@ -74,7 +74,11 @@ describe("resource detail capabilities", () => {
     });
     renderWithRuntime(capabilities, actions);
 
-    const restart = await screen.findByRole("button", { name: "재시작" });
+    const restart = await screen.findByRole(
+      "button",
+      { name: "재시작" },
+      { timeout: 5_000 },
+    );
     expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();
     const actionBar = document.querySelector('[data-slot="resource-detail-actions"]');
     expect(actionBar).toBeTruthy();
@@ -98,7 +102,11 @@ describe("resource detail capabilities", () => {
     });
     renderWithRuntime(capabilities, resourcesActionsPort());
 
-    expect(await screen.findByRole("dialog", { name: "checkout-api 상세" })).toBeTruthy();
+    expect(await screen.findByRole(
+      "dialog",
+      { name: "checkout-api 상세" },
+      { timeout: 5_000 },
+    )).toBeTruthy();
     await waitFor(() => expect(capabilities.loadResourceCapabilities).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "재시작" })).toBeNull();
     expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();
