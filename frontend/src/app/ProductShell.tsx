@@ -201,7 +201,7 @@ function ProductShellFrame({
           </SidebarNavigation>
           {settingsRoute ? (
             <>
-              <Separator className="mx-2 w-auto" />
+              <Separator className="mx-2 data-horizontal:w-auto" />
               <SidebarNavigation
                 aria-label={t("shell.nav.settings")}
                 className="flex-none"
