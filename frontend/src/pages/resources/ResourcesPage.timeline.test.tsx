@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_LOG_STREAM_PORT } from "../../features/log-stream/logStreamContract";
@@ -40,8 +40,10 @@ describe("ResourcesPage S11 timeline strip", () => {
 
     expect(await screen.findByRole("article", { name: "서버 worker-a" })).toBeTruthy();
     expect(timelinePort.loadChangeTimeline).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("unavailable");
+    const timeline = document.querySelector('[data-slot="resources-time-scrubber"]');
+    expect(timeline?.getAttribute("data-state")).toBe("unavailable");
+    expect(timeline?.getAttribute("data-expanded")).toBe("false");
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
   });
 
   it("jumps to evidence-backed incidents and persists the historical coordinate", async () => {
@@ -73,6 +75,7 @@ describe("ResourcesPage S11 timeline strip", () => {
     });
     renderTimelineResources(timelinePort);
 
+    await user.click(await screen.findByRole("button", { name: "Show recorded history" }));
     const marker = await screen.findByRole("button", { name: /Jump to incident/ });
     await user.click(marker);
 
@@ -87,12 +90,22 @@ describe("ResourcesPage S11 timeline strip", () => {
     );
   });
 
-  it("starts playback from history when invoked at the live edge", async () => {
+  it("keeps live history collapsed and only offers playback after selecting the past", async () => {
     const user = userEvent.setup();
     renderTimelineResources(resourcesChangeTimelinePort());
 
-    await user.click(await screen.findByRole("button", { name: "Play resource history" }));
+    const expand = await screen.findByRole("button", { name: "Show recorded history" });
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+
+    await user.click(expand);
+    expect(screen.getByText("Recorded changes · 2 min intervals")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
+    const slider = screen.getByRole("slider", { name: "Time" });
+    fireEvent.change(slider, { target: { value: slider.getAttribute("min") } });
     await waitFor(() => expect(readQuery().has("t.at")).toBe(true));
+    await user.click(screen.getByRole("button", { name: "Play resource history" }));
     expect(document.querySelector('[data-slot="resources-time-scrubber"]')
       ?.getAttribute("data-state")).toBe("playing");
   });
