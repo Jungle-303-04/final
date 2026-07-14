@@ -12,8 +12,8 @@ updated: 2026-07-14
 ```
 URL      : https://k8s.woonyong.org
 배포 SHA : 10f0fad17bcf2e22880e4adae1194fa103736a69 (FULL, run 29302233623)
-dev HEAD : a4ae8a04bca9e9f9ade4ff5f460227d2c8fb1981
-갱신     : 2026-07-14 13:03 KST  P1 착륙 · P2 자동 배포 증명 재시도 중
+dev HEAD : f2253ecd29961140c032acfc95f0dc6c44d4352a
+갱신     : 2026-07-14 13:14 KST  P1 착륙 · P2 repository switch 증명 중
 ```
 
 - public health: HTTP 200
@@ -27,7 +27,7 @@ dev HEAD : a4ae8a04bca9e9f9ade4ff5f460227d2c8fb1981
 ## 선행 조건 (이게 끝나야 S1을 시작한다)
 
 - [x] P1  기획 문서 dev 착륙 (VP-014~017, radar-parity-map) — `a4ae8a04b`
-- [ ] P2  `AWS_DEV_DEPLOY_ENABLED=1` — 변수는 활성화, 첫 증명 run의 문서 색인 실패 수정 중
+- [ ] P2  `AWS_DEV_DEPLOY_ENABLED=1` — repository variable 활성화, 세 번째 증명 push 대기
 - [x] P3  백엔드 FULL 배포 — run `29302233623`, 모든 서비스 동일 backend digest
 - [x] P4  에이전트 재등록 — cluster-1/2 `ready`, agent 1/1, 클러스터 2개·리소스 read 확인
 - [ ] P5  Radar 서브트리 + NOTICE (Apache-2.0. 이식 전 필수)
