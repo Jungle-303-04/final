@@ -27,17 +27,23 @@ export function getRecoveryPlanByCorrelation(
 
 /** Selects one recovery candidate without executing it directly. */
 export function selectRecoveryAction(
+  correlationId: string,
   planId: string,
   actionId: string,
   input: SelectRecoveryActionInput = {},
   options: RecoveryRequestOptions = {},
 ): Promise<RecoveryActionAccepted> {
   const path =
-    `/api/rca/recovery-plans/${encodePathSegment(planId)}/actions/${encodePathSegment(actionId)}/select` as ApiPath;
+    `/api/rca/recovery-plans/by-correlation/${encodePathSegment(correlationId)}/actions/select` as ApiPath;
+  const body = {
+    expected_plan_id: planId,
+    action_id: actionId,
+    ...(input.reason === undefined ? {} : { reason: input.reason }),
+  };
   return apiRequest(path, recoveryActionAcceptedSchema, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input.reason === undefined ? {} : { reason: input.reason }),
+    body: JSON.stringify(body),
     signal: options.signal,
   });
 }

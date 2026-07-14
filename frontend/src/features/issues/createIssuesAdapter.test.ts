@@ -205,6 +205,7 @@ describe("createIssuesAdapter", () => {
       },
     });
     expect(dependencies.selectRecoveryAction).toHaveBeenCalledWith(
+      "correlation-1",
       "plan-1",
       "increase-memory",
       { reason: null },

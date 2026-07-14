@@ -135,6 +135,7 @@ export function createIssuesAdapter(endpoints: IssuesEndpointDependencies): Issu
         const reason = selectionReason(selection.reason);
         try {
           const receipt = await endpoints.selectRecoveryAction(
+            correlationId,
             planId,
             actionId,
             reason === undefined ? {} : { reason },

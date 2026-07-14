@@ -250,6 +250,7 @@ export interface IssuesEndpointDependencies {
     options?: IssuesEndpointRequestOptions,
   ): Promise<IssuesEndpointRecoveryPlan>;
   selectRecoveryAction(
+    correlationId: string,
     planId: string,
     actionId: string,
     input?: IssuesEndpointRecoveryInput,
