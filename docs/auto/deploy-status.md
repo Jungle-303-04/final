@@ -11,13 +11,13 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S3 `6464e01a3` public · S4 포함 최신 dev `03030867` 배포 대기
+배포 SHA : S4 포함 `03030867` public · S5 포함 후속 배포 진행 중
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 15:58 KST  S3 public · S4 배포 queue · S5 local green
+갱신     : 2026-07-14 16:33 KST  S4 public topology 결함 확인 · S5 pushed · S6 local green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-B0PpHX5h.js`
+- console bundle: `assets/index-DspdZoqF.js`
 - backend digest: `sha256:602b41368daf5488127b1538d1778c08cb89ce1bf94b6789d4855bff27eb39e3`
 - console digest: `sha256:d330fe6e15838828fd6bf556f5aeb51d75e1d1fa49045e77af3a7aa04088b1a9`
 - 로그인·클러스터·리소스 read smoke: 통과
@@ -40,8 +40,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
 - [x] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
 - [x] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
-- [ ] **S4**  물리 뷰 그래프 (2층) ★  ← 구현·gate 완료, 최신 자동 배포 queue
-- [ ] **S5**  표 + 스파크라인 (3층)
+- [ ] **S4**  물리 뷰 그래프 (2층) ★  ← public route 활성, cluster identity 누락 500 수정 배포 대기
+- [ ] **S5**  표 + 스파크라인 (3층)    ← 구현·gate·dev push 완료, 자동 배포 진행 중
 - [ ] **S6**  상세 = 전체화면 덮기
 - [ ] **S7**  AI 패널
 - [ ] **S8**  하단 독 + 로그 스트림
@@ -90,16 +90,27 @@ URL      : https://k8s.woonyong.org
 - [x] S4 local 검증 — backend 56 tests, frontend 161 files / 1028 tests,
   typecheck·lint·500-file design guard·production build PASS
 - [x] S4 gate-fast·dev push — `78b8ce0e2`, Dev Gate `29311971097` SUCCESS
-- [ ] S4 자동 배포/public 확인 — 전용 run `29312148262`와 후속 `29312738387`은 최신
-  dev로 queue 교체되어 취소, S4 포함 `03030867` run `29313095446` pending;
-  public topology는 아직 404
+- [ ] S4 자동 배포/public 확인 — S4 포함 `03030867` run `29313095446` SUCCESS,
+  public route는 활성화됐으나 `resolve_filter_clusters()`의 `cluster_id` 누락으로 500;
+  repository identity 보정·직접 회귀 테스트는 local green, 다음 배포에서 재검증
 - [x] S5 BQ-030 batch metrics history — 최대 100 pod stable ID를 권한·필터·snapshot과
   다시 교차 검증하고 null/빈 points·completeness를 그대로 반환, per-row fan-out 금지
 - [x] S5 kind별 smart table — canonical facts만 소비, 정렬·snapshot-safe Load more 연결,
   Recharts CPU 스파크라인은 실측 2점 이상일 때만 표시하고 클릭 시 같은 상세 identity 사용
 - [x] S5 local 검증 — backend targeted 31 tests, frontend 167 files / 1049 tests,
   typecheck·lint·516-file design guard·production build PASS
-- [ ] S5 gate-fast·dev push·자동 배포/public 확인
+- [x] S5 gate-fast·dev push — `7b18c49b4`, frontend 167 files / 1050 tests,
+  Dev Gate `29313454756` SUCCESS
+- [ ] S5 자동 배포/public 확인 — 후속 dev 배포 진행 중
+- [x] S6 BQ-061 exact resource capability — inventory.read 선확인, deploy.run·연결된
+  `command_receiver`·target namespace를 모두 만족한 Deployment restart/scale만 반환
+- [x] S6 전체화면 상세 — `?detail=kind/ns/name`, 뒤로가기·Esc·행 포커스 복귀,
+  J/K 연속 탐색, 56px nav rail, 읽기 전용 필터 맥락, 5개 탭, 320ms 동시 모션
+- [x] S6 capability 소비 — 응답 subject를 상세 identity와 재검증하고 허용된 mutation만
+  확인 dialog와 실제 restart/scale API에 연결; 실패·403·불일치에는 버튼 미렌더
+- [x] S6 local 검증 — backend capability 67 tests 및 topology 회귀 11 tests,
+  `make gate-fast` PASS, frontend 171 files / 1062 tests, design guard 534 files, production build PASS
+- [ ] S6 dev push·Dev Gate·자동 배포/public 체크리스트 확인
 
 ---
 

@@ -12,6 +12,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type { HomePort } from "../../features/home/homeContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type { ResourceActionsPort, ResourceCapabilitiesPort } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type {
   ResourcesFilterPort,
@@ -26,6 +27,7 @@ import {
   POD_LIST,
 } from "./ResourcesPage.testFixtures";
 import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
+import { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage.testRuntime";
 
 export {
   CATALOG,
@@ -36,6 +38,7 @@ export {
   POD_LIST,
 } from "./ResourcesPage.testFixtures";
 export { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
+export { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage.testRuntime";
 
 type ClusterPort = Pick<HomePort, "listClusterChoices">;
 
@@ -48,6 +51,8 @@ export function renderResources(
   filterPort: ResourcesFilterPort = resourcesFilterPort(),
   physicalTopologyPort: PhysicalTopologyPort = resourcesPhysicalTopologyPort(),
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort = resourcesMetricHistoryPort(),
+  resourceCapabilitiesPort: ResourceCapabilitiesPort = resourcesCapabilitiesPort(),
+  resourceActionsPort: ResourceActionsPort = resourcesActionsPort(),
 ) {
   const router = createMemoryRouter(
     [
@@ -68,6 +73,8 @@ export function renderResources(
                     filterPort={filterPort}
                     physicalTopologyPort={physicalTopologyPort}
                     resourceMetricsHistoryPort={resourceMetricsHistoryPort}
+                    resourceCapabilitiesPort={resourceCapabilitiesPort}
+                    resourceActionsPort={resourceActionsPort}
                     port={port}
                   />
                   <LocationProbe />

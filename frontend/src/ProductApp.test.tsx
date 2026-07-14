@@ -201,9 +201,10 @@ describe("ProductApp root recovery", () => {
     );
     expect(dialog.textContent).toContain("Running");
     expect(window.location.pathname).toBe("/resources/pod");
-    expect(new URLSearchParams(window.location.search).get("resource")).toBe(
-      "v1/cluster-1/pod/shop/checkout-api-0",
+    expect(new URLSearchParams(window.location.search).get("detail")).toBe(
+      "Pod/shop/checkout-api-0",
     );
+    expect(new URLSearchParams(window.location.search).get("resource")).toBeNull();
     expect(
       requestCount(
         fetchMock,

@@ -505,6 +505,7 @@ def merge_provider_policy(base: EvidenceProviderPolicy, incoming: EvidenceProvid
 | `InventoryResourceDetailResponse` | `cluster_id: str`, `identity: JsonMap`, `resource: InventoryResourceResponse`, `related: dict[str, list[InventoryResourceResponse]] = {}`, `events: list[InventoryResourceResponse] = []` — 단일 리소스 드릴다운용 실제 read model 관계 |
 | `PhysicalTopologyServer` / `PhysicalTopologyPod` / `PhysicalTopologyResponse` | `GET /topology?view=physical` 전용 strict 응답. server는 실측 `cpu_pct/mem_pct`와 서버 계산 `matched_pod_count/total_pod_count` 및 각 count completeness를, pod는 stable inventory id·`server_id` 참조·실측 `cpu_mcores/mem_mib`·requests 근거가 있을 때만 계산한 `usage_pct`·`phase/health/restarts/matches_filter`를 가진다. 응답은 global cut과 구분한 `cluster_projection_revision`, 서버별 12개 초과 `truncated`, projection/metrics completeness, 공통 `counts/snapshot`을 함께 주며 raw/annotation/secret은 노출하지 않는다. 과거 snapshot에는 최신 usage를 섞지 않는다. |
 | `ResourceMetricHistoryPoint` / `ResourceMetricHistorySeries` / `ResourceMetricsHistoryResponse` | `GET /metrics/history` 전용 strict batch 응답. point는 `observed_at`과 실측 `cpu_mcores/mem_mib` nullable 값, series는 stable `resource_id`·pod identity·`has_sparkline_points`·completeness 3값·reason을 가진다. 응답은 고유 series ID, 공통 completeness/reason, pinned `FilterSnapshotMeta`를 검증한다. `exact` series는 모든 반환 point에 CPU가 있어야 하고 데이터 부재는 0이 아니라 null/빈 points다. |
+| `ResourceCapabilitySubject` / `ResourceActionCapability` / `ResourceCapabilitiesResponse` | BQ-061 `GET /capabilities?resource=<inventory_key>` strict 응답. exact inventory subject와 64자리 opaque revision, 현재 actor가 실제 실행할 수 있는 `deployment.restart`/`deployment.scale` POST route만 담는다. capability는 정렬·고유하며 거부된 action은 응답에 없다. |
 | `ClusterUsageSample` / `ClusterUsageResponse` | `sampled_at: str \| None`, `usage: JsonMap` / `cluster_id: str`, `samples: list[ClusterUsageSample]` |
 | `InventorySummaryResponse` | `cluster_id: str`, `latest_snapshot: JsonMap \| None = None`, `counts: list[JsonMap] = []` |
 | `FleetClusterSummaryItem` | `cluster_id/name/health: str`(health 는 healthy\|warning\|critical\|stale\|unknown), `pods_running/pods_total/nodes_ready/nodes_total/open_incidents/restarts_recent: int = 0`, `cpu_pct/mem_pct: float \| None = None`(실측 없으면 None), `last_seen_at: str \| None = None` |
@@ -564,6 +565,9 @@ Resources 물리 뷰의 additive 경로는 `TOPOLOGY_PATH="/topology"`다. `view
 Resources 스파크라인 batch 경로는 `RESOURCE_METRICS_HISTORY_PATH="/metrics/history"`다.
 `ids`는 `/resources`의 pod `inventory_key` 목록이며 common filter와 pinned snapshot cut에서
 서버가 권한 교집합을 재검증한다.
+
+Resource action 권한 경로는 `RESOURCE_CAPABILITIES_PATH="/capabilities"`다. `resource`는
+서버가 발급한 inventory key이며 응답은 enabled action만 반환한다.
 
 경로 포맷 헬퍼:
 ```python

@@ -151,7 +151,7 @@ export function Sidebar({
       {...safeProps}
       {...name}
       className={cn(
-        "group/sidebar sticky top-0 flex h-svh w-(--product-sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out data-[state=collapsed]:w-(--product-sidebar-width-collapsed) motion-reduce:transition-none forced-colors:border-[CanvasText]",
+        "group/sidebar sticky top-0 flex h-svh w-(--product-sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-[var(--motion-layout)] ease-[var(--ease-spring)] data-[state=collapsed]:w-(--product-sidebar-width-collapsed) motion-reduce:transition-none forced-colors:border-[CanvasText]",
         className,
       )}
       data-slot="sidebar"
@@ -181,7 +181,7 @@ export function SidebarInset({ className, ...props }: PartProps<"div">) {
 }
 export function SidebarText({ className, ...props }: PartProps<"span">) {
   const { isMobile, state } = useSidebar();
-  return <span {...sanitizeNeutral(props, "SidebarText")} className={cn("min-w-0 truncate", !isMobile && state === "collapsed" && "sr-only", className)} data-slot="sidebar-text" />;
+  return <span {...sanitizeNeutral(props, "SidebarText")} className={cn("min-w-0 truncate transition-[width] duration-[var(--motion-layout)] ease-[var(--ease-spring)] motion-reduce:transition-none", !isMobile && state === "collapsed" && "w-0 overflow-hidden", className)} data-slot="sidebar-text" />;
 }
 
 type ButtonProps = ComponentProps<typeof Button>;

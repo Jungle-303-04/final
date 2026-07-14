@@ -45,6 +45,35 @@ export function encodeResourceSelection(identity: ResourceIdentity): {
   };
 }
 
+export function encodeResourceDetail(identity: ResourceIdentity): string {
+  assertDetailPart(identity.kind, KIND_MAX_LENGTH, "kind");
+  assertCompositeDetailPart(identity.name, "name");
+  if (identity.namespace !== null) {
+    assertCompositeDetailPart(identity.namespace, "namespace");
+  }
+  return [
+    identity.kind,
+    identity.namespace ?? CLUSTER_SCOPED_NAMESPACE,
+    identity.name,
+  ].join("/");
+}
+
+export function decodeResourceDetail(
+  resourceType: string | null,
+  detail: string | null,
+): ResourceIdentity | null {
+  if (!resourceType || !detail || !isResourceType(resourceType)) return null;
+  const parts = detail.split("/");
+  if (parts.length !== 3) return null;
+  const [kind = "", namespaceToken = "", name = ""] = parts;
+  if (!isDetailPart(kind, KIND_MAX_LENGTH) || !isCompositeDetailPart(name)) return null;
+  const namespace = namespaceToken === CLUSTER_SCOPED_NAMESPACE
+    ? null
+    : namespaceToken;
+  if (namespace !== null && !isCompositeDetailPart(namespace)) return null;
+  return { resourceType, kind, namespace, name };
+}
+
 export function encodeResourceTarget(
   clusterId: string,
   identity: ResourceIdentity,

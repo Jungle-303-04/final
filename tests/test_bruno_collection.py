@@ -172,6 +172,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.RESOURCE_LABEL_FACETS_PATH,
         routes.RESOURCES_GRAPH_PATH,
         routes.TOPOLOGY_PATH,
+        routes.RESOURCE_CAPABILITIES_PATH,
         routes.ISSUES_FILTER_RESULTS_PATH,
         routes.ISSUES_FILTER_FACETS_PATH,
         routes.ISSUES_LABEL_FACETS_PATH,

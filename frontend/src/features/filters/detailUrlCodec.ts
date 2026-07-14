@@ -15,8 +15,11 @@ const LEGACY_RESOURCE_KIND_QUERY_KEY = "kind";
 const WORKFLOW_VIEWS = ["overview", "edit", "runs", "yaml"] as const;
 
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
-  appendNullableStableText(pairs, "resource", detail.resource);
-  appendNullableStableText(pairs, "resourceKind", detail.resourceKind);
+  appendNullableStableText(pairs, "detail", detail.detail);
+  if (detail.detail === null) {
+    appendNullableStableText(pairs, "resource", detail.resource);
+    appendNullableStableText(pairs, "resourceKind", detail.resourceKind);
+  }
   appendNullableStableText(pairs, "tab", detail.tab);
   appendBoolean(pairs, "full", detail.full);
   appendNullableStableText(pairs, "node", detail.node);
@@ -30,6 +33,7 @@ export function parseProductDetailQuery(
   invalidFull: string[],
 ): ProductDetailQuery {
   const detail = createEmptyProductDetailQuery();
+  detail.detail = readStableText(params, "detail");
   detail.resource = readStableText(params, "resource");
   detail.resourceKind = readStableText(params, "resourceKind");
   if (!hasQueryKey(params, "resourceKind") && detail.resource !== null) {

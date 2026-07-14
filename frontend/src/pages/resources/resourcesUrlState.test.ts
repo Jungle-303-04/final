@@ -1,12 +1,38 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeResourceTarget,
+  decodeResourceDetail,
   decodeResourceSelection,
   encodeResourceTarget,
+  encodeResourceDetail,
   encodeResourceSelection,
 } from "./resourcesUrlState";
 
 describe("Resources URL identity", () => {
+  it("round-trips the S6 detail path including cluster-scoped resources", () => {
+    const namespaced = {
+      resourceType: "pod",
+      kind: "Pod",
+      namespace: "shop",
+      name: "checkout-api-0",
+    } as const;
+    const clusterScoped = { ...namespaced, kind: "Node", namespace: null, name: "worker-a" };
+
+    expect(encodeResourceDetail(namespaced)).toBe("Pod/shop/checkout-api-0");
+    expect(decodeResourceDetail("pod", "Pod/shop/checkout-api-0")).toEqual(namespaced);
+    expect(encodeResourceDetail(clusterScoped)).toBe("Node/~/worker-a");
+    expect(decodeResourceDetail("node", "Node/~/worker-a")).toEqual({
+      ...clusterScoped,
+      resourceType: "node",
+    });
+  });
+
+  it("rejects ambiguous S6 detail paths", () => {
+    expect(decodeResourceDetail("pod", "Pod/shop/one/more")).toBeNull();
+    expect(decodeResourceDetail("pod", "Pod//api-0")).toBeNull();
+    expect(decodeResourceDetail(null, "Pod/shop/api-0")).toBeNull();
+  });
+
   it("round-trips backend-valid event names containing colons", () => {
     const identity = {
       resourceType: "event",

@@ -70,6 +70,17 @@ class _RecordingConnection:
         return _EmptyResult()
 
 
+class _MappedResult:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def mappings(self) -> _MappedResult:
+        return self
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        return iter(self.rows)
+
+
 def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> None:
     sql = _sql(
         _current_versions(
@@ -94,6 +105,35 @@ def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> N
     assert (
         "inventory_revisions_at_cursor.cluster_id = inventory_resource_versions.cluster_id" in sql
     )
+
+
+def test_resolve_filter_clusters_returns_complete_response_identity() -> None:
+    class Connection:
+        def execute(self, _statement: Any) -> _MappedResult:
+            return _MappedResult(
+                [
+                    {
+                        "cluster_id": "cluster-a",
+                        "name": "production",
+                        "settings": {"cloud_provider": "eks"},
+                    }
+                ]
+            )
+
+    @contextmanager
+    def connection() -> Iterator[Connection]:
+        yield Connection()
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+
+    assert repository.resolve_filter_clusters("workspace-a", {"cluster-a"}) == {
+        "cluster-a": {
+            "cluster_id": "cluster-a",
+            "name": "production",
+            "provider": "eks",
+        }
+    }
 
 
 def test_resource_filter_sql_uses_same_axis_or_cross_axis_and_and_label_and() -> None:

@@ -66,8 +66,18 @@ describe("ResourcesPage keyboard navigation", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 상세" }, { timeout: 5_000 }))
       .toBeTruthy();
+    await user.keyboard("j");
+    expect(await screen.findByRole("dialog", { name: "orders-api-0 상세" })).toBeTruthy();
+    expect(screen.getByTestId("resources-location").textContent)
+      .toContain("detail=Pod%2Fshop%2Forders-api-0");
+    await user.keyboard("k");
+    expect(await screen.findByRole("dialog", { name: "checkout-api-0 상세" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "상세 닫기" }));
-    await waitFor(() => expect(document.activeElement).toBe(checkout));
+    const restoredTable = await screen.findByRole("table", { name: "리소스 목록" });
+    const restoredCheckout = within(restoredTable).getByRole("button", {
+      name: "checkout-api-0 상세 열기",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(restoredCheckout));
     await user.keyboard("d");
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 상세" }, { timeout: 5_000 }))
       .toBeTruthy();
