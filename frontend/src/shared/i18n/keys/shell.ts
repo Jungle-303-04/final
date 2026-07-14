@@ -27,6 +27,7 @@ export type ShellMessageKey =
   | "shell.filter.group.cluster"
   | "shell.filter.group.namespace"
   | "shell.filter.group.application"
+  | "shell.filter.group.resourceType"
   | "shell.filter.group.label"
   | "shell.filter.group.resource"
   | "shell.filter.count.partial"

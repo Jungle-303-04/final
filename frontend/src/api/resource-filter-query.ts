@@ -50,6 +50,12 @@ export function canonicalLabelSelections(
   );
 }
 
+export function canonicalResourceTypeSelections(
+  values: readonly string[] | undefined,
+): readonly string[] {
+  return canonicalAxisValues("resourceTypes", values);
+}
+
 export function resourceFilterEntries(
   query: ResourceFilterQuery,
   selectedLabels = canonicalLabelSelections(query.labels),

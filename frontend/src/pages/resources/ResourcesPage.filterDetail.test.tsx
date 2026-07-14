@@ -130,6 +130,6 @@ describe("ResourcesPage unified-filter detail identity", () => {
     await waitFor(() => expect(filterPort.listResourcePage).toHaveBeenCalled());
     expect(lastFilterState(vi.mocked(filterPort.listResourcePage)).resources.types)
       .toEqual(["pod"]);
-    expect(screen.getByRole("heading", { name: "pod" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Pod" })).toBeTruthy();
   }, 15_000);
 });

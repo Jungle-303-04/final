@@ -123,6 +123,13 @@ export function useResourcesDetailState(
       if (selectedClusterId === null) return;
       openedFromList.current = true;
       restoreRowKey.current = identityKey(identity);
+      filter.updateFilters(
+        (current) => ({
+          ...current,
+          resources: { ...current.resources, types: [identity.resourceType] },
+        }),
+        "chip-add",
+      );
       filter.updateDetail(
         (current) => ({
           ...current,

@@ -151,13 +151,12 @@ export function useResourcesPageState(port: ResourcesPort) {
       selectedClusterExists,
       selectedResourceType,
       resourceTypeInvalid:
-        canonicalTypes.length > 1 ||
-        (canonicalTypes.length === 0 &&
-          legacyTypeResolution.kind === "invalid"),
+        canonicalTypes.length === 0 &&
+        legacyTypeResolution.kind === "invalid",
       detailIdentity,
       detailRequested,
       filterProjectionUnsupported:
-        !listFiltersSupported || canonicalTypes.length > 1,
+        !listFiltersSupported,
       view,
       search: filter.state.resources.query,
       namespace,

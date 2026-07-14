@@ -8,6 +8,7 @@ import type { ResourcesFilterResourcePage } from "../../features/resources/resou
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
+import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
@@ -183,7 +184,9 @@ export function ResourcesListSurface({
         >
           <div className="border-b px-4 py-3">
             <h3 className="font-medium" id="resources-list-title">
-              {state.selectedResourceType}
+              {filter.state.resources.types.length === 0
+                ? t("resources.list.allTitle")
+                : filter.state.resources.types.map(humanizeFilterValue).join(", ")}
             </h3>
           </div>
           <ResourcesListBody

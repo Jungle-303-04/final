@@ -125,8 +125,7 @@ describe("ResourcesPage S4 physical topology", () => {
     renderEnglishResources("/resources?clusters=cluster-1", physicalPort);
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Not an observed resource type" }))
-      .toBeTruthy();
+    expect(screen.getByRole("heading", { name: "All resources" })).toBeTruthy();
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledOnce();
   });
 

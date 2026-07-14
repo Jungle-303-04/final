@@ -7,6 +7,7 @@ describe("createGlobalFilterAdapter", () => {
       clusters: [{ id: "cluster-a", label: "Production", count: 8, count_completeness: "exact" as const }],
       namespaces: [{ id: "cluster-a/shop", label: "shop", cluster_id: "cluster-a", count: 4, count_completeness: "exact" as const }],
       applications: [{ id: "checkout", label: "Checkout", count: 3, count_completeness: "partial" as const }],
+      resource_types: [{ id: "pod", label: "Pod", count: 12, count_completeness: "exact" as const }],
       labels: [{ key: "team", value: "checkout", count: 2, count_completeness: "exact" as const }],
       resources: [{ id: "resource-a", label: "checkout-api", kind: "Deployment", count: 1, count_completeness: "exact" as const }],
     }));
@@ -15,6 +16,7 @@ describe("createGlobalFilterAdapter", () => {
       clusters: ["cluster-a"],
       namespaces: [],
       applications: [],
+      resourceTypes: ["pod"],
       labels: ["team=platform"],
     };
 
@@ -22,6 +24,7 @@ describe("createGlobalFilterAdapter", () => {
       { type: "cluster", id: "cluster-a", label: "Production", count: 8, count_completeness: "exact" },
       { type: "namespace", id: "cluster-a/shop", label: "shop", clusterId: "cluster-a", count: 4, count_completeness: "exact" },
       { type: "application", id: "checkout", label: "Checkout", count: 3, count_completeness: "partial" },
+      { type: "resourceType", id: "pod", label: "Pod", count: 12, count_completeness: "exact" },
       { type: "label", id: "team=checkout", label: "team=checkout", key: "team", value: "checkout", count: 2, count_completeness: "exact" },
       { type: "resource", id: "resource-a", label: "checkout-api", kind: "Deployment", count: 1, count_completeness: "exact" },
     ]);

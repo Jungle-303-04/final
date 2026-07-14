@@ -4,6 +4,7 @@ export type ResourcesMessageKey =
   | "resources.empty"
   | "resources.list.count"
   | "resources.list.unknownTotal"
+  | "resources.list.allTitle"
   | "resources.noPermission"
   | "resources.partial"
   | "resources.search.placeholder"

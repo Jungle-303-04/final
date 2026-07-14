@@ -73,7 +73,7 @@ describe("ResourcesPage scope and collection semantics", () => {
       document.querySelectorAll('[data-slot="product-page-frame"]'),
     ).toHaveLength(1);
     expect(
-      document.querySelector('[data-slot="resources-catalog-loading"]'),
+      document.querySelector('[data-slot="resources-surface-loading"]'),
     ).toBeTruthy();
     expect(port.listResources).not.toHaveBeenCalled();
     await act(async () => {
@@ -243,9 +243,7 @@ describe("ResourcesPage scope and collection semantics", () => {
       screen.getByRole("button", { name: "Include inactive resources" })
         .className,
     ).toContain("w-32");
-    expect(
-      screen.getByText("Types observed in the inventory snapshot"),
-    ).toBeTruthy();
+    expect(screen.queryByText("Types observed in the inventory snapshot")).toBeNull();
     expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
   });
