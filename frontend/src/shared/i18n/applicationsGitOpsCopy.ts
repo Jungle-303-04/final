@@ -1,5 +1,4 @@
-import type { SupportedLocale } from "../../shared/i18n";
-import type { ApplicationsGitOpsFailureCode } from "./applicationsGitOpsContract";
+import type { SupportedLocale } from "./types";
 
 const copy = {
   en: {
@@ -46,7 +45,7 @@ const copy = {
       offline: "Opsia could not reach the service.",
       unavailable: "This backend capability is not deployed yet. No substitute data is shown.",
       unknown: "The service could not load this surface.",
-    } satisfies Record<ApplicationsGitOpsFailureCode, string>,
+    },
   },
   ko: {
     applications: {
@@ -92,7 +91,7 @@ const copy = {
       offline: "Opsia가 서비스에 연결하지 못했습니다.",
       unavailable: "이 백엔드 기능은 아직 배포되지 않았습니다. 대체 데이터는 표시하지 않습니다.",
       unknown: "서비스가 이 화면을 불러오지 못했습니다.",
-    } satisfies Record<ApplicationsGitOpsFailureCode, string>,
+    },
   },
 } as const;
 

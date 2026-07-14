@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../shared/ui/primitives/table";
-import { applicationsGitOpsCopy } from "./applicationsGitOpsCopy";
+import { applicationsGitOpsCopy } from "../../shared/i18n/applicationsGitOpsCopy";
 import type {
   ApplicationSummary,
   ApplicationsGitOpsPort,
@@ -27,7 +27,7 @@ import { applicationStatusTone, SurfaceFailure } from "./ApplicationsSurface";
 import { useApplicationsCatalog, useGitOpsSnapshot } from "./useApplicationsGitOpsData";
 
 export function GitOpsSurface({ port }: { port: ApplicationsGitOpsPort }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const copy = applicationsGitOpsCopy(locale);
   const [catalog, refreshCatalog] = useApplicationsCatalog(port);
   const [requestedApplicationId, setRequestedApplicationId] = useState<string | null>(null);
@@ -85,7 +85,7 @@ export function GitOpsSurface({ port }: { port: ApplicationsGitOpsPort }) {
           />
           <div className="grid min-w-0 gap-4">
             {selected ? <SelectedApplicationHeader application={selected} /> : null}
-            {snapshot.phase === "loading" ? <GitOpsLoading /> : null}
+            {snapshot.phase === "loading" ? <GitOpsLoading label={t("common.state.loading")} /> : null}
             {snapshot.phase === "failed" ? (
               <SurfaceFailure failure={snapshot.failure} onRetry={refreshSnapshot} />
             ) : null}
@@ -149,10 +149,10 @@ function SelectedApplicationHeader({ application }: { application: ApplicationSu
   );
 }
 
-function GitOpsLoading() {
+function GitOpsLoading({ label }: { label: string }) {
   return (
     <div className="grid gap-4" role="status">
-      <span className="sr-only">Loading GitOps data</span>
+      <span className="sr-only">{label}</span>
       <Skeleton className="h-40" />
       <Skeleton className="h-56" />
     </div>

@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../shared/ui/primitives/card";
-import { applicationsGitOpsCopy } from "./applicationsGitOpsCopy";
+import { applicationsGitOpsCopy } from "../../shared/i18n/applicationsGitOpsCopy";
 import type {
   ApplicationSummary,
   ApplicationsGitOpsFailure,
