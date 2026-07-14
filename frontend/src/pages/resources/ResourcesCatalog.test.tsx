@@ -34,15 +34,15 @@ describe("ResourcesCatalog responsive disclosure", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("region", { name: "Resource types" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "리소스 종류" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "리소스 유형 목록" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Networking" }).getAttribute("aria-expanded"))
+    expect(screen.getByRole("button", { name: "네트워크" }).getAttribute("aria-expanded"))
       .toBe("true");
-    expect(screen.getByRole("button", { name: "Workloads" }).getAttribute("aria-expanded"))
+    expect(screen.getByRole("button", { name: "워크로드" }).getAttribute("aria-expanded"))
       .toBe("false");
-    expect(screen.getByRole("button", { name: "Cluster" }).getAttribute("aria-expanded"))
+    expect(screen.getByRole("button", { name: "클러스터" }).getAttribute("aria-expanded"))
       .toBe("false");
-    expect(screen.getByRole("button", { name: "Services, 3개" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "서비스, 3개" })).toBeTruthy();
 
     rerender(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
@@ -53,9 +53,9 @@ describe("ResourcesCatalog responsive disclosure", () => {
         />
       </I18nProvider>,
     );
-    expect(screen.getByRole("button", { name: "Workloads" }).getAttribute("aria-expanded"))
+    expect(screen.getByRole("button", { name: "워크로드" }).getAttribute("aria-expanded"))
       .toBe("true");
-    expect(screen.getByRole("button", { name: "Networking" }).getAttribute("aria-expanded"))
+    expect(screen.getByRole("button", { name: "네트워크" }).getAttribute("aria-expanded"))
       .toBe("false");
   });
 
