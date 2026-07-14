@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 
 from fastapi import HTTPException
 
+from domains.ai.alert_actions import AlertActionDecision, propose_alert_rule_action
 from domains.identity.dependencies import resolve_allowed_cluster_ids
 from domains.log_stream.service import read_log_stream_evidence
 from packages.contracts.gateway.requests import AiAssistantContext
@@ -83,7 +84,9 @@ async def answer_from_context(
     current: Any,
     workspace_id: str,
     context: AiAssistantContext,
+    message: str,
 ) -> AiChatResponse:
+    action_decision = propose_alert_rule_action(message, context)
     if context.log_stream_id is not None:
         evidence = await read_log_stream_evidence(
             db,
@@ -99,8 +102,9 @@ async def answer_from_context(
             for item in evidence
         ]
         answer = "현재 권한으로 확인한 로그 근거입니다: " + "; ".join(lines)
-        return AiChatResponse(
-            answer=answer[:4000],
+        return _chat_response(
+            default_answer=answer[:4000],
+            action_decision=action_decision,
             evidence=[
                 AiEvidenceLink(
                     type="log-stream",
@@ -130,8 +134,9 @@ async def answer_from_context(
         for item in resources
     )
     answer = f"현재 관측된 근거 {len(resources)}건입니다: {facts}."
-    return AiChatResponse(
-        answer=answer,
+    return _chat_response(
+        default_answer=answer,
+        action_decision=action_decision,
         evidence=[
             AiEvidenceLink(
                 type="inventory-resource",
@@ -142,6 +147,23 @@ async def answer_from_context(
             for item in resources
         ],
     )
+
+
+def _chat_response(
+    *,
+    default_answer: str,
+    action_decision: AlertActionDecision,
+    evidence: list[AiEvidenceLink],
+) -> AiChatResponse:
+    if action_decision.clarification is not None:
+        return AiChatResponse(answer=action_decision.clarification, evidence=evidence)
+    if action_decision.action is not None:
+        return AiChatResponse(
+            answer="현재 화면 범위로 알림 규칙 초안을 제안합니다. 내용을 확인해 주세요.",
+            evidence=evidence,
+            action=action_decision.action,
+        )
+    return AiChatResponse(answer=default_answer, evidence=evidence)
 
 
 def suggestions_for_context(context: AiAssistantContext) -> AiSuggestionsResponse:
