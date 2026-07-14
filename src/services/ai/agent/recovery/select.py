@@ -20,9 +20,7 @@ AUTO_ROUTE_APPROVAL_REQUIRED_REASON = (
     "선택 후보 route=auto는 command 실행 채널을 의미하지만 "
     "approval_required=true라 자동 실행하지 않습니다."
 )
-APPROVAL_REQUIRED_REASON = (
-    "선택 후보가 approval_required=true라 사용자 선택이 필요합니다."
-)
+APPROVAL_REQUIRED_REASON = "선택 후보가 approval_required=true라 사용자 선택이 필요합니다."
 NON_AUTO_ROUTE_REASON = (
     "선택 후보 route가 command 자동 실행 채널이 아니라 사용자 선택이 필요합니다."
 )
@@ -80,7 +78,10 @@ def requires_approval(candidate: object) -> bool:
 def selection_reason(candidate: object) -> str:
     if requires_approval(candidate):
         return f"{APPROVAL_REQUIRED_COMMAND_REASON} {candidate_reason_suffix(candidate)}"
-    if bool(getattr(candidate, "approval_required", False)) and getattr(candidate, "route", "") == "auto":
+    if (
+        bool(getattr(candidate, "approval_required", False))
+        and getattr(candidate, "route", "") == "auto"
+    ):
         return f"{AUTO_ROUTE_APPROVAL_REQUIRED_REASON} {candidate_reason_suffix(candidate)}"
     if bool(getattr(candidate, "approval_required", False)):
         return f"{APPROVAL_REQUIRED_REASON} {candidate_reason_suffix(candidate)}"
