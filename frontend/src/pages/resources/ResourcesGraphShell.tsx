@@ -153,10 +153,12 @@ export function ResourcesGraphShell({
         "group/resources-graph relative isolate flex overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40",
         collapsed
           ? "h-auto flex-row"
-          : "h-(--product-graph-height-mobile) flex-col sm:h-(--product-graph-user-height)",
+          : displayedView === "relations"
+            ? "h-(--product-graph-height-mobile) flex-col sm:h-(--product-graph-user-height)"
+            : "h-auto flex-col",
       )}
       data-collapsed={collapsed ? "true" : "false"}
-      data-height={collapsed ? undefined : height}
+      data-height={!collapsed && displayedView === "relations" ? height : undefined}
       data-phase={displayedFrame.phase}
       data-slot="resources-graph-shell"
       data-view={displayedView}
@@ -178,7 +180,13 @@ export function ResourcesGraphShell({
 
       {!collapsed ? (
         <>
-          <div className="relative min-h-0 flex-1" data-slot="topology-canvas">
+          <div
+            className={cn(
+              "relative min-h-0",
+              displayedView === "relations" ? "flex-1" : "shrink-0",
+            )}
+            data-slot="topology-canvas"
+          >
             {displayedView === "relations" ? (
               <RelationTopologyCanvas frame={relationSceneFrame} />
             ) : (
@@ -214,12 +222,14 @@ export function ResourcesGraphShell({
           </div>
 
           <TimelineStrip atMs={timelineAtMs} frame={timelineFrame} onAtChange={onTimelineAtChange} />
-          <ResourcesGraphResizeHandle
-            height={height}
-            onReset={reset}
-            onResizeBy={resizeBy}
-            onResizeStart={beginResize}
-          />
+          {displayedView === "relations" ? (
+            <ResourcesGraphResizeHandle
+              height={height}
+              onReset={reset}
+              onResizeBy={resizeBy}
+              onResizeStart={beginResize}
+            />
+          ) : null}
         </>
       ) : null}
     </div>
