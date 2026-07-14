@@ -5,14 +5,26 @@ image:
 
 controller:
   replicas: 1
-  resources: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 console:
   image:
     repository: ghcr.io/opsia/opsia-console
     tag: ""
     pullPolicy: IfNotPresent
-  resources: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 postgresql:
   image: postgres:17-alpine
@@ -24,12 +36,24 @@ postgresql:
     enabled: true
     size: 8Gi
     storageClass: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 agent:
   clusterId: opsia-self
   token: ""
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 initialAdmin:
   email: admin@opsia.local

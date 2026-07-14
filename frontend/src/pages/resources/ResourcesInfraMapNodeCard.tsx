@@ -21,19 +21,22 @@ export function InfraMapNodeCard({
   const { t } = useI18n();
   return (
     <section
-      className="min-w-0 overflow-hidden rounded-md border bg-linear-to-b from-muted/30 via-background/80 to-muted/20 p-2 shadow-sm"
+      className="grid h-72 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-linear-to-b from-muted/35 via-background/90 to-muted/25 shadow-sm"
       data-metric={metricMode}
       data-slot="infra-map-node"
     >
-      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-1 pb-2">
-        <span className="grid size-7 shrink-0 place-items-center rounded-sm border bg-background/75">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-3 py-2">
+        <span className="grid size-9 shrink-0 place-items-center rounded-md border bg-background/75 shadow-xs">
           <Server aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         </span>
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold leading-tight">
+          <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Node
+          </p>
+          <h3 className="truncate text-sm font-semibold leading-tight" title={node.name}>
             {node.unassigned
               ? t("resources.infraMap.nodeUnassigned")
-              : t("resources.infraMap.nodeLabel", { name: node.name })}
+              : node.name}
           </h3>
           <p className="text-[0.6875rem] leading-tight text-muted-foreground">
             {node.unassigned
@@ -44,30 +47,28 @@ export function InfraMapNodeCard({
         <HealthDot tone={node.health} />
       </div>
 
-      <div className="mt-2 grid gap-2 rounded-sm border bg-background/45 p-2 shadow-inner sm:grid-cols-[minmax(0,1fr)_13rem]">
-        <div className="min-w-0 rounded-sm border border-dashed bg-muted/15 p-2">
-          <InfraMapPodArea
-            metricMode={metricMode}
-            node={node}
-            selectionActive={selectionActive}
-          />
-        </div>
+      <div className="min-h-0 p-3">
+        <InfraMapPodArea
+          metricMode={metricMode}
+          node={node}
+          selectionActive={selectionActive}
+        />
+      </div>
 
-        <div className="grid content-center gap-2 border-t pt-2 sm:border-l sm:border-t-0 sm:pl-2 sm:pt-0">
-          <RatioMetric
-            label={t("resources.infraMap.metric.cpu")}
-            ratio={node.cpuRatio}
-          />
-          <RatioMetric
-            label={t("resources.infraMap.metric.memory")}
-            ratio={node.memoryRatio}
-          />
-          <CountMetric
-            label={t("resources.infraMap.metric.pods")}
-            total={node.podCapacity}
-            value={node.assignedPodCount}
-          />
-        </div>
+      <div className="grid gap-1.5 border-t bg-muted/15 px-3 py-2">
+        <RatioMetric
+          label={t("resources.infraMap.metric.cpu")}
+          ratio={node.cpuRatio}
+        />
+        <RatioMetric
+          label={t("resources.infraMap.metric.memory")}
+          ratio={node.memoryRatio}
+        />
+        <CountMetric
+          label={t("resources.infraMap.metric.pods")}
+          total={node.podCapacity}
+          value={node.assignedPodCount}
+        />
       </div>
     </section>
   );
@@ -85,7 +86,7 @@ function InfraMapPodArea({
   const { formatNumber, t } = useI18n();
   if (node.visiblePods.length === 0) {
     return (
-      <div className="grid min-h-16 place-items-center px-3 text-center text-xs text-muted-foreground">
+      <div className="grid h-full min-h-24 place-items-center rounded-md border border-dashed bg-muted/10 px-3 text-center text-xs text-muted-foreground">
         {selectionActive
           ? t("resources.infraMap.noSelectedPods")
           : t("resources.infraMap.noPods")}
@@ -93,12 +94,14 @@ function InfraMapPodArea({
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-6">
-      {node.visiblePods.map((pod) => (
-        <InfraMapPodSlot key={pod.id} metricMode={metricMode} pod={pod} />
-      ))}
+    <div className="grid h-full min-h-24 grid-rows-[minmax(0,1fr)_auto] rounded-md border border-dashed bg-muted/10 p-2 shadow-inner">
+      <div className="grid min-h-0 grid-cols-2 content-start gap-1.5">
+        {node.visiblePods.map((pod) => (
+          <InfraMapPodSlot key={pod.id} metricMode={metricMode} pod={pod} />
+        ))}
+      </div>
       {node.hiddenPodCount > 0 ? (
-        <div className="flex h-9 min-w-0 items-center justify-center rounded-sm border bg-background/70 px-2 text-[0.6875rem] font-medium text-muted-foreground">
+        <div className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/75 px-2 text-[0.6875rem] font-medium text-muted-foreground">
           {t("resources.infraMap.morePods", {
             count: formatNumber(node.hiddenPodCount),
           })}
@@ -123,7 +126,7 @@ function InfraMapPodSlot({
   return (
     <article
       aria-label={`${pod.name} ${pod.phase} ${selectedMetric.label} ${selectedMetric.displayText}`}
-      className="relative flex h-9 min-w-0 items-center gap-1.5 overflow-hidden rounded-sm border bg-background/80 px-2 shadow-xs data-[selected=true]:border-primary data-[selected=true]:bg-primary/10"
+      className="relative flex h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-sm border bg-background/80 px-2 shadow-xs data-[selected=true]:border-primary data-[selected=true]:bg-primary/10"
       data-metric={metricMode}
       data-metric-available={fillPercent === null ? "false" : "true"}
       data-selected={pod.selected || undefined}
@@ -140,10 +143,12 @@ function InfraMapPodSlot({
       )}
       <HealthDot tone={pod.health} />
       <div className="relative z-10 min-w-0 flex-1" title={pod.name}>
-        <h4 className="truncate text-[0.6875rem] font-semibold leading-none">{pod.name}</h4>
+        <h4 className="truncate text-[0.6875rem] font-semibold leading-none">
+          {shortPodName(pod.name)}
+        </h4>
       </div>
       <span
-        className="relative z-10 shrink-0 text-[0.625rem] tabular-nums text-muted-foreground"
+        className="relative z-10 hidden shrink-0 text-[0.625rem] tabular-nums text-muted-foreground sm:inline"
         title={`${selectedMetric.label} ${selectedMetric.displayText}`}
       >
         {selectedMetric.displayText}
@@ -207,4 +212,10 @@ function ratioDisplay(
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
+}
+
+function shortPodName(name: string): string {
+  const parts = name.split("-");
+  if (parts.length <= 2) return name;
+  return `${parts.slice(0, 2).join("-")}...`;
 }

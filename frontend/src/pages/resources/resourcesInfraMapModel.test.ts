@@ -45,6 +45,24 @@ describe("resources infra map model", () => {
       false,
     ]);
   });
+
+  it("summarizes pods after the first four by default", () => {
+    const model = buildInfraMapModel({
+      selectionActive: false,
+      topology: snapshot({
+        pods: [
+          pod({ id: "pod:one", name: "pod-one" }),
+          pod({ id: "pod:two", name: "pod-two" }),
+          pod({ id: "pod:three", name: "pod-three" }),
+          pod({ id: "pod:four", name: "pod-four" }),
+          pod({ id: "pod:five", name: "pod-five" }),
+        ],
+      }),
+    });
+
+    expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toHaveLength(4);
+    expect(model.nodes[0]?.hiddenPodCount).toBe(1);
+  });
 });
 
 function snapshot({

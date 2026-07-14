@@ -134,17 +134,21 @@ function InfraMapNodeGrid({
 
 function infraMapNodeGridLayout(nodeCount: number): {
   className: string;
-  name: "single" | "stack";
+  name: "single" | "grid";
 } {
   return {
-    className: "mt-4 grid w-full max-w-4xl grid-cols-1 items-start gap-2 justify-self-center",
-    name: nodeCount <= 1 ? "single" : "stack",
+    className: [
+      "mt-4 grid w-full justify-center gap-3",
+      "grid-cols-[repeat(auto-fit,minmax(17rem,18rem))]",
+      "items-start",
+    ].join(" "),
+    name: nodeCount <= 1 ? "single" : "grid",
   };
 }
 
 function InfraMapLoading() {
   return (
-    <div className="mt-5 grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
+    <div className="mt-5 grid justify-center gap-3 grid-cols-[repeat(auto-fit,minmax(17rem,18rem))]">
       {[0, 1].map((item) => (
         <div className="rounded-lg border bg-background/65 p-3" key={item}>
           <Skeleton className="h-28 rounded-lg" />

@@ -4,7 +4,7 @@ import type {
   PhysicalTopologySnapshot,
 } from "../../features/resources/physicalTopologyContract";
 
-const DEFAULT_MAX_PODS_PER_NODE = 5;
+const DEFAULT_MAX_PODS_PER_NODE = 4;
 const UNASSIGNED_NODE_ID = "__infra-map-unassigned__";
 
 export interface InfraMapPodMetric {
