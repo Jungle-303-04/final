@@ -395,6 +395,10 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert auto_selected.auto_selected is True
     assert auto_selected.selected_by == "agent-select"
     assert auto_selected.selected.draft.params.get("command") == "rollout_restart"
+    assert "자동 선택 조건을 충족했습니다" in auto_selected.reason
+    assert "route=auto" in auto_selected.reason
+    assert "approval_required=false" in auto_selected.reason
+    assert f"후보={auto_selected.selected.action_id}" in auto_selected.reason
 
     dispatch_outs = run_handler(
         dispatch_worker.on_recovery_action_selected,
@@ -445,6 +449,9 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
 
     select_outs = run_handler(select_worker.on_recovery_planned, recovery_outs[0])
     assert subjects_of(select_outs) == ["recovery.selection_requested"]
+    assert "사용자 선택이 필요합니다" in select_outs[0].reason
+    assert f"후보={plan.candidates[0].action_id}" in select_outs[0].reason
+    assert f"route={plan.candidates[0].route}" in select_outs[0].reason
 
     scale_candidate = plan.candidates[2]
     dispatch_outs = run_handler(
