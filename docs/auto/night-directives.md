@@ -719,3 +719,29 @@ S4(물리 뷰 ★) → S5(표) → S6(전체화면 상세) → S7(AI) → S8(하
 - C9 shadcn ChartContainer 정본 + **레이아웃 안정성(CLS<0.05) 가드**
 
 **우녕 승인 필요(건드리지 말 것):** 게이트 가드 테스트 반전 원복 / 라이브 PG 비밀번호 회전
+
+### [D-051] 2026-07-14 — Radar 전면 이식 + 실시간 + 셸 정정 (통합 지시)
+
+**통합 지시서: `docs/auto/codex-directive-20260714-final.md`** (이전 두 지시서를 대체한다)
+**이식 정본: `docs/spec/frontend/vp-019-radar-full-port.md`**
+
+**세 개의 정본 — 섞지 말 것:**
+- 기능/구조/라벨 = **Radar** (가져올 수 있는 건 전부)
+- 디자인 = **shadcn/ui** (Radar 시각 언어는 버린다)
+- 차별화 = **VP-010~019** (기존 기획을 엎지 않는다. 덧입힌다)
+
+**실측:** references/radar-upstream 은 k8s-ui 492 중 **268만 착륙. 224 누락.**
+filter-state/ charts/ applications/ checks/ issues/ compare/ 통째로 없음.
+timeline 20->4 (TimelineStrip/scrubber-math 없음), ui 48->24 (SearchPillInput/FreshnessControl 없음),
+gitops 23->5, shared 8->5 (DetailShell 없음), utils 30개 누락.
+provider-logos(aws/azure/gcp)는 **이미 있는데 안 쓰고 있다.**
+
+**방법: 토큰 어댑터 한 장.** Radar theme-* 는 19개짜리 별칭 레이어 -> shadcn 토큰으로 재지정.
+224파일 클래스를 손으로 안 고친다. codemod 3종(팔레트/브랜드색/clsx->cn)만.
+
+**실시간이 아예 없다.** Radar useEventSource 방식을 숫자까지 그대로:
+동적 스로틀(500ms/1s/2s/3s) / 지수백오프(3s->30s) / 링버퍼 100 / 백그라운드 탭 차단.
+BQ-080(AI 스트리밍) BQ-081(events SSE) BQ-082(resources SSE) 신설.
+
+**Radar 기능은 전부 지원한다.** 제외 사유는 셋뿐: 중복 / 흡수 / 논리적 모순.
+`docs/auto/radar-coverage.md` 전수 체크리스트를 만들고 `미착수`가 0이 될 때까지 끝난 게 아니다.

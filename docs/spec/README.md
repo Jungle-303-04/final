@@ -100,6 +100,8 @@
 - [frontend/reference-feature-inventory](frontend/reference-feature-inventory.md)
 - [frontend/reference-contract-map](frontend/reference-contract-map.md)
 - [frontend/reference-porting-contract](frontend/reference-porting-contract.md)
+- [frontend/vp-018-shell-corrections](frontend/vp-018-shell-corrections.md)
+- [frontend/vp-019-radar-full-port](frontend/vp-019-radar-full-port.md)
 
 위 목록만 현재 frontend 구현의 활성 문서다. 같은 디렉터리의 `status: archived` 문서는 현재 작업에
 참조하지 않는다.
