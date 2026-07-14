@@ -1,4 +1,5 @@
 export type ProductSurfaceId =
+  | "clusters"
   | "home"
   | "resources"
   | "issues"
@@ -8,6 +9,7 @@ export type ProductSurfaceId =
   | "catalog";
 
 export type ProductRouteIcon =
+  | "clusters"
   | "home"
   | "resources"
   | "issues"
@@ -28,6 +30,7 @@ export interface ProductRouteDefinition {
 }
 
 export const PRODUCT_ROUTE_CATALOG = [
+  route("clusters", "Clusters", "/clusters", "g k"),
   route("home", "Home", "/", "g h", "exact"),
   route("resources", "Resources", "/resources", "g r"),
   route("issues", "Issues", "/issues", "g i"),

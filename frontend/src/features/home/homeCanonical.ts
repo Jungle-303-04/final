@@ -55,9 +55,12 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
   canonicalTimestamp(wire.created_at);
   canonicalTimestamp(wire.updated_at);
   const id = canonicalIdentity(wire.cluster_id);
-  const nodeCount = nonNegativeInteger(wire.node_count);
-  const podCount = nonNegativeInteger(wire.pod_count);
-  const incidentCount = nonNegativeInteger(wire.incident_count);
+  const nodeCount = nullableNonNegativeInteger(wire.node_count);
+  const podCount = nullableNonNegativeInteger(wire.pod_count);
+  const incidentCount = nullableNonNegativeInteger(wire.incident_count);
+  const serverCount = nullableNonNegativeInteger(wire.server_count);
+  const appCount = nullableNonNegativeInteger(wire.app_count);
+  const openIncidentCount = nullableNonNegativeInteger(wire.open_incidents);
 
   return {
     id,
@@ -68,11 +71,18 @@ function toClusterChoice(wire: HomeEndpointClusterSummary): HomeClusterChoice {
     connectionStage: wire.connection_stage ?? null,
     registrationState: registrationState(canonicalIdentity(wire.status)),
     connectionState: connectionState(canonicalIdentity(wire.connection_status)),
-    lastObservedAt: canonicalTimestamp(wire.last_agent_seen_at),
+    lastObservedAt: canonicalTimestamp(wire.last_seen_at ?? wire.last_agent_seen_at),
     nodeCount,
     podCount,
     incidentCount,
+    serverCount,
+    appCount,
+    openIncidentCount,
   };
+}
+
+function nullableNonNegativeInteger(value: number | null | undefined): number | null {
+  return value === null || value === undefined ? null : nonNegativeInteger(value);
 }
 
 export function toClusterOverview(

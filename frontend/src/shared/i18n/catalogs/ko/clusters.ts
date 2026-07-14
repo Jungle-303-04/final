@@ -1,0 +1,27 @@
+import type { ClustersMessageKey } from "../../keys/clusters";
+
+export const clustersKo = {
+  "clusters.title": "클러스터",
+  "clusters.description": "컨트롤 플레인에서 확인한 연결 서버 묶음",
+  "clusters.search.aria": "표시된 클러스터 검색",
+  "clusters.search.placeholder": "클러스터 검색",
+  "clusters.list.aria": "클러스터 목록",
+  "clusters.list.shown": "{count}개 표시",
+  "clusters.list.totalUnknown": "전체 수 미확인",
+  "clusters.list.empty": "검색에 맞는 클러스터가 없습니다.",
+  "clusters.metric.servers": "서버 {count}",
+  "clusters.metric.pods": "파드 {count}",
+  "clusters.metric.apps": "앱 {count}",
+  "clusters.metric.incidents": "인시던트 {count}",
+  "clusters.metric.healthy": "정상",
+  "clusters.connection.online": "연결됨",
+  "clusters.connection.stale": "응답 지연",
+  "clusters.connection.pending": "연결 대기",
+  "clusters.connection.offline": "연결 끊김",
+  "clusters.connection.unknown": "연결 상태 미확인",
+  "clusters.lastResponse": "마지막 응답 {time}",
+  "clusters.preview.aria": "서버 미리보기",
+  "clusters.preview.more": "+{count}",
+  "clusters.card.openResources": "{name} 리소스 열기",
+  "clusters.refresh.failed": "새로 고치지 못했습니다. 마지막 검증 응답을 표시합니다.",
+} satisfies Record<ClustersMessageKey, string>;

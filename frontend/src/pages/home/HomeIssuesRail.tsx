@@ -39,7 +39,7 @@ export function HomeIssuesRail({
         {overview.phase === "ready" ? (
           <span className="line-clamp-2 text-right text-xs text-muted-foreground">
             {t("home.issue.counts", {
-              incidents: cluster === null
+              incidents: cluster?.incidentCount == null
                 ? t("common.value.unavailable")
                 : formatNumber(cluster.incidentCount),
               shown: formatNumber(overview.data.incidents.length),

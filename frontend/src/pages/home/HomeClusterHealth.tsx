@@ -104,7 +104,7 @@ function HealthContent({
               running: formatNumber(usage.podsRunning),
               total: formatNumber(usage.podsTotal),
             })
-            : cluster?.podCount === undefined
+            : cluster?.podCount == null
               ? null
               : formatNumber(cluster.podCount)}
         />
@@ -116,7 +116,7 @@ function HealthContent({
               ready: formatNumber(usage.nodesReady),
               total: formatNumber(usage.nodesTotal),
             })
-            : cluster?.nodeCount === undefined
+            : cluster?.nodeCount == null
               ? null
               : formatNumber(cluster.nodeCount)}
         />
@@ -132,7 +132,7 @@ function HealthContent({
           })}
           tone={(cluster?.incidentCount ?? 0) > 0 ? "critical" : "neutral"}
           unavailableLabel={t("common.value.unavailable")}
-          value={cluster?.incidentCount === undefined
+          value={cluster?.incidentCount == null
             ? null
             : formatNumber(cluster.incidentCount)}
         />

@@ -52,6 +52,7 @@ export interface ShortcutMatcher {
 }
 const CHORD_TIMEOUT_MS = 1_000;
 const shortcutRouteLabelKeys = {
+  clusters: "shell.shortcut.route.clusters",
   applications: "shell.shortcut.route.applications",
   gitops: "shell.shortcut.route.gitops",
   home: "shell.shortcut.route.home",

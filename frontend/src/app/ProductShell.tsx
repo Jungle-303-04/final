@@ -6,6 +6,7 @@ import {
   Home,
   Layers3,
   Library,
+  Server,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -54,6 +55,7 @@ interface ProductShellProps {
 }
 
 const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
+  clusters: Server,
   home: Home,
   resources: Boxes,
   issues: TriangleAlert,
@@ -64,6 +66,7 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
 };
 
 const navLabelKeys = {
+  clusters: "shell.nav.clusters",
   applications: "shell.nav.applications",
   gitops: "shell.nav.gitops",
   home: "shell.nav.home",

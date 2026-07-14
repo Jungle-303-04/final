@@ -29,9 +29,12 @@ export interface HomeClusterChoice {
   registrationState: HomeRegistrationState;
   connectionState: HomeConnectionState;
   lastObservedAt: string | null;
-  nodeCount: number;
-  podCount: number;
-  incidentCount: number;
+  nodeCount: number | null;
+  podCount: number | null;
+  incidentCount: number | null;
+  serverCount?: number | null;
+  appCount?: number | null;
+  openIncidentCount?: number | null;
 }
 
 export interface HomeClusterChoices {

@@ -1412,9 +1412,16 @@ class ClusterSummary(StrictModel):
     connection_stage: str | None = None
     last_agent_id: str | None = None
     last_agent_seen_at: str | None = None
-    node_count: int = 0
-    pod_count: int = 0
-    incident_count: int = 0
+    node_count: int | None = Field(default=None, ge=0)
+    pod_count: int | None = Field(default=None, ge=0)
+    incident_count: int | None = Field(default=None, ge=0)
+    # VP-015 / BQ-069 product fields. These stay nullable until the backing
+    # inventory or incident source proves a value; unknown is never reported
+    # as zero.
+    server_count: int | None = Field(default=None, ge=0)
+    app_count: int | None = Field(default=None, ge=0)
+    open_incidents: int | None = Field(default=None, ge=0)
+    last_seen_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

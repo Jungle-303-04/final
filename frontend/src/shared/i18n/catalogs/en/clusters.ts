@@ -1,0 +1,27 @@
+import type { ClustersMessageKey } from "../../keys/clusters";
+
+export const clustersEn = {
+  "clusters.title": "Clusters",
+  "clusters.description": "Connected server groups reported by the control plane",
+  "clusters.search.aria": "Search displayed clusters",
+  "clusters.search.placeholder": "Search clusters",
+  "clusters.list.aria": "Cluster list",
+  "clusters.list.shown": "{count} shown",
+  "clusters.list.totalUnknown": "Total unknown",
+  "clusters.list.empty": "No clusters match this search.",
+  "clusters.metric.servers": "Servers {count}",
+  "clusters.metric.pods": "Pods {count}",
+  "clusters.metric.apps": "Apps {count}",
+  "clusters.metric.incidents": "Incidents {count}",
+  "clusters.metric.healthy": "Healthy",
+  "clusters.connection.online": "Connected",
+  "clusters.connection.stale": "Response delayed",
+  "clusters.connection.pending": "Waiting for connection",
+  "clusters.connection.offline": "Disconnected",
+  "clusters.connection.unknown": "Connection unknown",
+  "clusters.lastResponse": "Last response {time}",
+  "clusters.preview.aria": "Server preview",
+  "clusters.preview.more": "+{count}",
+  "clusters.card.openResources": "Open resources for {name}",
+  "clusters.refresh.failed": "Refresh failed. Showing the last verified response.",
+} satisfies Record<ClustersMessageKey, string>;

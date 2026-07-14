@@ -898,6 +898,7 @@ def cluster_summary(
         connection_stage=cluster_connection_stage(cluster, latest_agent, latest_snapshot),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_agent_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
+        last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         created_at=cluster.get("created_at"),
         updated_at=cluster.get("updated_at"),
     )
@@ -1174,9 +1175,10 @@ async def list_clusters(
     latest_snapshots = (
         snapshot_getter(workspace_id, cluster_ids) if callable(snapshot_getter) else {}
     )
+    has_open_incident_counts = hasattr(db, "count_open_rca_incidents")
     open_incident_counts = (
         db.count_open_rca_incidents(workspace_id, {cluster["cluster_id"] for cluster in clusters})
-        if hasattr(db, "count_open_rca_incidents")
+        if has_open_incident_counts
         else {}
     )
     summaries = [
@@ -1192,13 +1194,16 @@ async def list_clusters(
         )
     ]
     for summary in summaries:
-        if hasattr(db, "inventory_resource_counts"):
+        if hasattr(db, "inventory_resource_counts") and latest_snapshots.get(summary.cluster_id):
             counts = inventory_counts(
                 db.inventory_resource_counts(workspace_id, summary.cluster_id)
             )
             summary.node_count = counts.get("node", 0)
+            summary.server_count = counts.get("node", 0)
             summary.pod_count = counts.get("pod", 0)
-        summary.incident_count = int(open_incident_counts.get(summary.cluster_id, 0))
+        if has_open_incident_counts:
+            summary.incident_count = int(open_incident_counts.get(summary.cluster_id, 0))
+            summary.open_incidents = summary.incident_count
     return ClusterListResponse(clusters=summaries)
 
 

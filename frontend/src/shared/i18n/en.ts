@@ -1,4 +1,5 @@
 import type { MessageKey } from "./types";
+import { clustersEn } from "./catalogs/en/clusters";
 import { issuesEn } from "./catalogs/en/issues";
 import { metricsEn } from "./catalogs/en/metrics";
 import { resourcesEn } from "./catalogs/en/resources";
@@ -71,6 +72,7 @@ export const en = {
   "shell.menu.mobileTitle": "Product navigation",
   "shell.menu.primary": "Primary navigation",
   "shell.nav.applications": "Applications",
+  "shell.nav.clusters": "Clusters",
   "shell.nav.catalog": "Catalog",
   "shell.nav.gitops": "GitOps",
   "shell.nav.home": "Home",
@@ -94,6 +96,7 @@ export const en = {
   "shell.shortcut.resources.openRow": "Open resource details",
   "shell.shortcut.resources.previousRow": "Previous resource",
   "shell.shortcut.route.applications": "Open Applications screen",
+  "shell.shortcut.route.clusters": "Open Clusters screen",
   "shell.shortcut.route.catalog": "Open Catalog screen",
   "shell.shortcut.route.gitops": "Open GitOps screen",
   "shell.shortcut.route.home": "Open Home screen",
@@ -237,6 +240,7 @@ export const en = {
   "home.section.nodeAndPod": "Node and Pod",
   "home.section.statusChecking": "Checking status",
   "home.status.connected": "Connected",
+  ...clustersEn,
   ...resourcesEn,
   ...issuesEn,
   ...metricsEn,
