@@ -60,7 +60,7 @@ export function installMatchMedia(matches: boolean) {
 
 export function renderShell({
   aiAssistantPort,
-  initialEntry = "/?clusters=cluster-1",
+  initialEntry = "/home?clusters=cluster-1",
   logStreamPort,
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
@@ -91,7 +91,7 @@ export function renderShell({
                         releasedSurfaceIds={releasedSurfaceIds}
                       />
                     )}>
-                      <Route path="/" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
+                      <Route path="/home" element={<><p>Home content</p><input aria-label="화면 입력" /></>} />
                       <Route path="/resources" element={<ResourcesShortcutProbe />} />
                       <Route path="/issues" element={<p>Issue content</p>} />
                     </Route>
