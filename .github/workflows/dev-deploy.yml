@@ -52,6 +52,7 @@ jobs:
       CONSOLE_ECR_REPOSITORY: ${{ vars.AWS_DEV_CONSOLE_ECR_REPOSITORY }}
       EKS_CLUSTER: ${{ vars.AWS_DEV_EKS_CLUSTER }}
       BASE_URL: ${{ vars.AWS_DEV_BASE_URL }}
+      AGENT_API_BASE_URL: ${{ vars.AGENT_API_BASE_URL }}
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
       SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
@@ -100,6 +101,9 @@ jobs:
           [[ "${CONSOLE_ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]
           [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
+          if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then
+            [[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]
+          fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
             case "${DEPLOYMENT_SCOPE}" in
@@ -360,6 +364,35 @@ jobs:
               >/dev/null
           fi
           unset admin_id cursor_encoded cursor_value
+
+      - name: Pin target agent image in runtime config
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        env:
+          TARGET_AGENT_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          [[ "${TARGET_AGENT_IMAGE}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]]
+          [[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]
+          gitops_image_before="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.GITOPS_WEBHOOK_IMAGE}')"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            patch configmap management-runtime-config --type merge \
+            --patch "{\"data\":{\"PUBLIC_MANAGEMENT_BASE_URL\":\"${AGENT_API_BASE_URL}\",\"TARGET_AGENT_IMAGE\":\"${TARGET_AGENT_IMAGE}\"}}"
+          installed_management_base_url="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.PUBLIC_MANAGEMENT_BASE_URL}')"
+          installed_target_image="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.TARGET_AGENT_IMAGE}')"
+          gitops_image_after="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.GITOPS_WEBHOOK_IMAGE}')"
+          test "${installed_management_base_url}" = "${AGENT_API_BASE_URL}"
+          test "${installed_target_image}" = "${TARGET_AGENT_IMAGE}"
+          test "${gitops_image_after}" = "${gitops_image_before}"
+          unset gitops_image_before gitops_image_after installed_management_base_url installed_target_image
 
       - name: Roll out immutable service digest
         if: env.DEPLOYMENT_SCOPE == 'FULL'

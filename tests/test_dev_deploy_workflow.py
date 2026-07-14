@@ -73,10 +73,13 @@ def test_deploy_checks_out_the_exact_tree_that_passed_the_gate() -> None:
     assert checkout["with"]["ref"] == source_sha
     assert checkout["with"]["persist-credentials"] is False
     assert deploy_job()["env"]["SOURCE_SHA"] == source_sha
+    assert deploy_job()["env"]["AGENT_API_BASE_URL"] == "${{ vars.AGENT_API_BASE_URL }}"
     validation = steps_by_name()["Validate non-secret deployment inputs"]["run"]
     assert 'test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"' in validation
     assert '[[ "${ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]' in validation
     assert '[[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]' in validation
+    assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then' in validation
+    assert '[[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]' in validation
     assert steps_by_name()["Install deployment dependencies"]["run"] == "uv sync --frozen"
 
 
@@ -128,6 +131,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Synchronize fixed dev runtime identity"
     )
     assert names.index("Synchronize fixed dev runtime identity") < names.index(
+        "Pin target agent image in runtime config"
+    )
+    assert names.index("Pin target agent image in runtime config") < names.index(
         "Roll out immutable service digest"
     )
     assert names.index("Roll out immutable service digest") < names.index(
@@ -207,6 +213,7 @@ def test_full_deploy_keeps_migration_rollout_and_smoke() -> None:
         "Run fail-closed database migration",
         "Bootstrap fixed dev administrator",
         "Synchronize fixed dev runtime identity",
+        "Pin target agent image in runtime config",
         "Roll out immutable service digest",
         "Run post-deploy smoke",
         "Record successful dev SHA in cluster",
@@ -249,6 +256,46 @@ def test_full_deploy_keeps_proxy_identity_and_cursor_contract_aligned() -> None:
     assert "echo ${cursor_value}" not in source
 
 
+def test_full_deploy_pins_agent_runtime_config_before_consumers_restart() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    pin = steps["Pin target agent image in runtime config"]
+    source = pin["run"]
+    services = [
+        document
+        for document in yaml.safe_load_all(
+            (ROOT / "deploy/management/services.yaml").read_text(encoding="utf-8")
+        )
+        if document
+    ]
+    gateway = next(
+        document
+        for document in services
+        if document.get("kind") == "Deployment"
+        and document.get("metadata", {}).get("name") == "api-gateway"
+    )
+    gateway_env_from = gateway["spec"]["template"]["spec"]["containers"][0]["envFrom"]
+
+    assert pin["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert pin["env"]["TARGET_AGENT_IMAGE"] == "${{ steps.image.outputs.image }}"
+    assert "@sha256:[0-9a-f]{64}" in source
+    assert '[[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]' in source
+    assert source.count("patch configmap management-runtime-config") == 1
+    assert '--patch "{\\"data\\":{\\"PUBLIC_MANAGEMENT_BASE_URL\\":' in source
+    assert '\\"TARGET_AGENT_IMAGE\\":' in source
+    assert "GITOPS_WEBHOOK_IMAGE" not in source.split("--patch", 1)[1].splitlines()[0]
+    assert "gitops_image_before" in source
+    assert "gitops_image_after" in source
+    assert 'test "${gitops_image_after}" = "${gitops_image_before}"' in source
+    assert 'test "${installed_management_base_url}" = "${AGENT_API_BASE_URL}"' in source
+    assert 'test "${installed_target_image}" = "${TARGET_AGENT_IMAGE}"' in source
+    assert names.index("Pin target agent image in runtime config") < names.index(
+        "Roll out immutable service digest"
+    )
+    assert "rollout_image_digest.py" in steps["Roll out immutable service digest"]["run"]
+    assert {"configMapRef": {"name": "management-runtime-config"}} in gateway_env_from
+
+
 def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety() -> None:
     steps = steps_by_name()
     validation = steps["Validate non-secret deployment inputs"]["run"]
@@ -256,6 +303,7 @@ def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety
     rollback = steps["Restore previous release after failure"]["run"]
 
     assert "FULL|CONSOLE" in validation
+    assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then' in validation
     assert steps["Run post-deploy console smoke"]["if"] == "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
     assert smoke["run"] == "bash scripts/post-deploy-console-smoke.sh"
     assert "steps.console_image.outputs.image" in smoke["env"]["EXPECTED_CONSOLE_IMAGE"]
