@@ -167,7 +167,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
     expect(screen.getByRole("link", { name: "리소스" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "홈" })).toBeTruthy();
-    expect(container.querySelector("[data-slot='unified-filter-bar']")).toBeNull();
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
     expect(sidebar.className).toContain("--motion-layout");
     expect(screen.getByText("Opsia").className.split(/\s+/u)).not.toContain("w-0");
 

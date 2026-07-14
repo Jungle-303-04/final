@@ -33,6 +33,7 @@ describe("S10 Applications surface", () => {
       pendingPromotion: true,
       query: "check",
     }, expect.any(AbortSignal));
+    expect(screen.queryByRole("textbox")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Table view" }));
     expect(screen.getByRole("region", { name: "Applications" })).toBeTruthy();
