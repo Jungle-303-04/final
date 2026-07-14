@@ -484,12 +484,13 @@ dead letter, outbox pending, command status 같은 운영 지표를 확인한다
 
 ### 10-applications
 
-`01-list-applications`는 등록된 애플리케이션(레포+워치+배포 바인딩) 목록이다. 첫 항목의 `application_id`를 자동 저장한다.
+`01-list-applications`는 strict 제품 카드 목록이다. 첫 항목의 `id`를 `application_id` Bruno 변수로 자동 저장한다. health/resource counts/open incidents/drift는 저장된 evidence completeness를 보존하며, 확인 불가 값을 0 또는 healthy로 합성하지 않는다.
 `02-create-application`은 데모 레포(`repo_ref`, `default_branch`, `manifest_path`)를 애플리케이션으로 등록한다. 응답의 `application.application_id`를 자동 저장한다.
 `03-connect-application`은 `repo_ref`, `branch`, `manifest_path`, `source_type`, `cluster_id`를 서버에서 다시 검증한 뒤 repository, application, watch target, deployment binding을 한 번에 등록한다.
 대상 클러스터 agent가 online이 아니면 400 `cluster_not_connected`가 정상 보호 응답이다. 먼저 target 등록 응답의 `bootstrap_command`를 실행하고 `11-clusters/03-connection-status`가 `online`이 된 뒤 다시 호출한다.
-`get-application`은 상세, `list-deployments`는 배포 바인딩 목록, `create-deployment`는 `cluster_id`/`namespace`에 배포를 묶는다.
-`06-list-runs`는 그 애플리케이션의 워크플로우 run 목록이다(웹훅 push 후 run이 생긴다).
+`get-application`은 endpoint와 최근 incident/activity를 포함한 strict 상세, `list-deployments`는 workflow run 기반 배포 이력이다. `create-deployment`만 `cluster_id`/`namespace`에 배포 binding을 만든다.
+`07-get-drift`는 최신 저장 diff evidence에서 semantic drift만 scalar allowlist로 반환한다. secret/credential/data 경로나 복합 값은 `value_redacted=true`로 닫힌다.
+`06-list-runs`는 운영·디버깅용 원시 워크플로우 run 목록이다(웹훅 push 후 run이 생긴다). 제품 화면은 strict 상세/배포/drift 요청을 사용한다.
 각 run에는 `workflow_run_id`, `application_id`, `commit_sha`, `status`, `current_step`, `created_at`, `metadata`, `approval_id`, `safe_pr`, `steps`가 들어온다.
 `steps`는 `workflow_run_steps` 테이블을 같은 응답에 붙인 값이고, 각 항목은 `name`, `status`, `message`, `details`, `updated_at` 구조다.
 프론트는 `details.resource`, `details.namespace`, `details.changes[]`를 사용해서 워크플로 단계별 리소스 이름과 필드 변경 미리보기를 그린다.

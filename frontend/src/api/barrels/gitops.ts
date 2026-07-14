@@ -10,6 +10,36 @@ export {
   type ApplicationListOptions,
 } from "../applications";
 export {
+  APPLICATION_CATALOG_PATH,
+  getApplicationDrift,
+  getApplicationOverview,
+  listApplicationCatalog,
+  listApplicationDeploymentHistory,
+  type ApplicationCatalogQuery,
+} from "../application-catalog";
+export {
+  applicationActivitySchema,
+  applicationCatalogItemSchema,
+  applicationCatalogSchema,
+  applicationCurrentDeploymentSchema,
+  applicationDeploymentHistorySchema,
+  applicationDeploymentSchema,
+  applicationDetailItemSchema,
+  applicationDetailSchema,
+  applicationDriftDifferenceSchema,
+  applicationDriftSchema,
+  applicationEndpointSchema,
+  applicationHealthSchema,
+  applicationIncidentPreviewSchema,
+  applicationResourceCountSchema,
+  type ApplicationCatalogEndpoint,
+  type ApplicationCatalogEndpointItem,
+  type ApplicationDeploymentHistoryEndpoint,
+  type ApplicationDetailEndpoint,
+  type ApplicationDetailEndpointItem,
+  type ApplicationDriftEndpoint,
+} from "../application-catalog-schemas";
+export {
   grantApproval,
   rejectApproval,
   type ApprovalDecisionOptions,

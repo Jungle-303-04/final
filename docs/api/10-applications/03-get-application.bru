@@ -13,4 +13,33 @@ tests {
   test("200 or auth/not-found", function () {
     expect([200, 401, 403, 404]).to.include(res.status);
   });
+
+  if (res.status === 200) {
+    test("strict application detail contract", function () {
+      const body = res.getBody();
+      expect(body).to.have.all.keys("application");
+      expect(body.application).to.have.all.keys(
+        "id",
+        "name",
+        "environments",
+        "lifecycle_status",
+        "repository_ref",
+        "default_branch",
+        "manifest_path",
+        "health",
+        "current_deployment",
+        "has_drift",
+        "drift_summary",
+        "resource_counts",
+        "resource_counts_completeness",
+        "open_incidents",
+        "endpoints",
+        "endpoints_completeness",
+        "recent_incidents",
+        "recent_activity"
+      );
+      expect(body.application.recent_incidents).to.be.an("array").with.lengthOf.at.most(3);
+      expect(body.application.recent_activity).to.be.an("array").with.lengthOf.at.most(3);
+    });
+  }
 }

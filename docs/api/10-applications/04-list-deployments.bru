@@ -1,5 +1,5 @@
 meta {
-  name: 04 배포 바인딩 목록
+  name: 04 배포 이력
   type: http
   seq: 4
   tags: [applications, deployment, read]
@@ -13,4 +13,25 @@ tests {
   test("200 or auth/not-found", function () {
     expect([200, 401, 403, 404]).to.include(res.status);
   });
+
+  if (res.status === 200) {
+    test("strict deployment history contract", function () {
+      const body = res.getBody();
+      expect(body).to.have.all.keys("deployments");
+      expect(body.deployments).to.be.an("array");
+      body.deployments.forEach((deployment) => {
+        expect(deployment).to.have.all.keys(
+          "id",
+          "environment",
+          "cluster_id",
+          "git_sha",
+          "version",
+          "deployed_at",
+          "deployed_by",
+          "status",
+          "gitops_change_id"
+        );
+      });
+    });
+  }
 }
