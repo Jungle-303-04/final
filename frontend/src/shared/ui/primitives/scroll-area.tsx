@@ -1,6 +1,6 @@
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 import type { ReactNode } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 export type ScrollAreaOrientation = "vertical" | "horizontal" | "both";
 

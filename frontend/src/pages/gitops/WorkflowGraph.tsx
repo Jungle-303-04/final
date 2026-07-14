@@ -16,7 +16,7 @@ import type {
 } from "../../features/gitops/gitOpsContract";
 import { releaseWaves } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { useProductColorMode } from "../../shared/ui/useProductTheme";
 import { buildWorkflowGraph, ownerStepId } from "./workflowGraphModel";
 import type { FlowDirection, WorkflowEdge, WorkflowNode } from "./workflowGraphTypes";

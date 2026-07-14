@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { cn } from "./primitives/cn";
+import { cn } from "@/shared/lib/cn";
 
 type ProductPageFrameProps = Omit<ComponentProps<"div">, "data-slot"> & {
   "data-slot"?: never;

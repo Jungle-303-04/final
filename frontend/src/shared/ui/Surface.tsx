@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { cn } from "./primitives/cn";
+import { cn } from "@/shared/lib/cn";
 
 type SurfaceElement = "section" | "aside" | "div";
 

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
 import { podWaveDelay } from "../../motion/useStagger";
 import { useI18n } from "../../shared/i18n";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import {
   podAbnormalBadge,
   podUsageLabel,

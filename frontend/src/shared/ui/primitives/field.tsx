@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 type Slotted<T> = T & { "data-slot"?: never };
 

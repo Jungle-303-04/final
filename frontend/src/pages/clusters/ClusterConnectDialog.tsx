@@ -1,16 +1,9 @@
-import {
-  IconBrandAws,
-  IconBrandAzure,
-  IconBrandGoogle,
-  type Icon,
-} from "@tabler/icons-react";
 import { Check, LoaderCircle, ServerCog } from "lucide-react";
 import {
   useEffect,
   useRef,
   useState,
   type ComponentType,
-  type SVGProps,
 } from "react";
 import { Link } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
@@ -22,9 +15,10 @@ import {
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n, type MessageKey } from "../../shared/i18n";
+import { ProviderLogo, type ProviderLogoKind } from "../../shared/brand/ProviderLogo";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import {
   Dialog,
   DialogContent,
@@ -40,13 +34,13 @@ import { clusterResourcesHref } from "./clusterNavigation";
 const POLL_INTERVAL_MS = 2_000;
 const providers: readonly {
   id: ClusterConnectProvider;
-  icon: ComponentType<SVGProps<SVGSVGElement>> | Icon;
+  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
   labelKey: MessageKey;
 }[] = [
-  { id: "aws", icon: IconBrandAws, labelKey: "clusters.connect.provider.aws" },
-  { id: "gcp", icon: IconBrandGoogle, labelKey: "clusters.connect.provider.gcp" },
-  { id: "azure", icon: IconBrandAzure, labelKey: "clusters.connect.provider.azure" },
-  { id: "onprem", icon: ServerCog, labelKey: "clusters.connect.provider.onprem" },
+  { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
+  { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
+  { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
+  { id: "onprem", logo: ServerCog, labelKey: "clusters.connect.provider.onprem" },
 ];
 
 type WizardStep = 1 | 2 | 3 | 4;
@@ -204,7 +198,7 @@ export function ClusterConnectDialog({
             <fieldset className="grid gap-2">
               <legend className="mb-1 text-sm font-medium">{t("clusters.connect.provider.label")}</legend>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {providers.map(({ id, icon: ProviderIcon, labelKey }) => (
+                {providers.map(({ id, logo, labelKey }) => (
                   <button
                     aria-pressed={provider === id}
                     className={cn(
@@ -215,7 +209,7 @@ export function ClusterConnectDialog({
                     onClick={() => setProvider(id)}
                     type="button"
                   >
-                    <ProviderIcon aria-hidden="true" className="size-6" />
+                    <ConnectProviderLogo logo={logo} />
                     <span>{t(labelKey)}</span>
                   </button>
                 ))}
@@ -260,6 +254,18 @@ export function ClusterConnectDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function ConnectProviderLogo({
+  logo,
+}: {
+  logo: ProviderLogoKind | ComponentType<{ className?: string }>;
+}) {
+  if (typeof logo === "string") {
+    return <ProviderLogo className="size-6" provider={logo} />;
+  }
+  const ProviderIcon = logo;
+  return <ProviderIcon className="size-6" />;
 }
 
 function isAbortError(error: unknown): boolean {

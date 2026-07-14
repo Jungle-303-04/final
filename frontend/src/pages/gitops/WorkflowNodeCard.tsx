@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { CheckCircle2, GitBranch, ShieldCheck } from "lucide-react";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import type { WorkflowNode } from "./workflowGraphTypes";
 
 export function WorkflowNodeCard({ data }: NodeProps<WorkflowNode>) {

@@ -5,7 +5,7 @@ import {
   translate,
   useOptionalI18n,
 } from "../../i18n";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 type ProgressAccessibleName =
   | { "aria-label": string; "aria-labelledby"?: never }

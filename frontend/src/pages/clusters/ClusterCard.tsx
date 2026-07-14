@@ -16,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../shared/ui/primitives/card";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 
 const connectionLabelKeys: Record<HomeConnectionState, MessageKey> = {
   online: "clusters.connection.online",

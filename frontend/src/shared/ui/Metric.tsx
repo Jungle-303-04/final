@@ -1,4 +1,4 @@
-import { cn } from "./primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { useI18n } from "../i18n";
 
 export type MetricTone = "neutral" | "critical" | "warning";

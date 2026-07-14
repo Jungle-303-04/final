@@ -8,7 +8,7 @@ import {
   type TranslationFunction,
 } from "../../i18n";
 import { Button } from "./button";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 type OwnedSlot<T> = Omit<T, "data-slot"> & { "data-slot"?: never };
 
