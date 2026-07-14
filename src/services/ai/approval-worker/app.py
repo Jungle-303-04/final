@@ -18,13 +18,29 @@ from packages.runtime.app import App, EventContext
 app = App("approval-worker")
 
 
+def execution_channel(route: str) -> str:
+    if route == "auto":
+        return "command"
+    if route == "draft_pr":
+        return "safe_pr"
+    if route == "approval_required":
+        return "manual_review"
+    if route == "forbidden":
+        return "blocked"
+    return "unknown"
+
+
 def candidate_summary(candidate: RecoveryActionCandidate | None) -> JsonObject | None:
     if candidate is None:
         return None
+    channel = execution_channel(candidate.route)
     return {
         "action_id": candidate.action_id,
         "title": candidate.title,
         "route": candidate.route,
+        "execution_channel": channel,
+        "auto_execution_allowed": candidate.route == "auto"
+        and not candidate.approval_required,
         "risk_level": candidate.risk_level,
         "blast_radius": candidate.blast_radius,
         "approval_required": candidate.approval_required,
@@ -45,6 +61,7 @@ def recovery_selection_details(evt: RecoverySelectionRequestedBody) -> JsonObjec
     plan = evt.plan
     recommended = recommended_candidate(plan)
     recommended_summary = candidate_summary(recommended)
+    channel = execution_channel(recommended.route) if recommended is not None else "unknown"
     return {
         "plan": plan.to_body(),
         "approval_summary": {
@@ -55,10 +72,16 @@ def recovery_selection_details(evt: RecoverySelectionRequestedBody) -> JsonObjec
             "target": plan.target,
             "recommended_action_id": plan.recommended_action_id,
             "execution_route": plan.execution_route,
+            "execution_channel": channel,
             "selection_required": plan.selection_required,
             "candidate_count": len(plan.candidates),
             "approval_required": bool(
                 recommended.approval_required if recommended is not None else True
+            ),
+            "auto_execution_allowed": bool(
+                recommended is not None
+                and recommended.route == "auto"
+                and not recommended.approval_required
             ),
             "reason": evt.reason,
             "recommended_candidate": recommended_summary,

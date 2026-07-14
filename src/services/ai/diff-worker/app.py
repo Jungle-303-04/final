@@ -29,6 +29,7 @@ def prepared_request(evt: SafePrPatchPreparedBody) -> SafePrRequestedBody:
         workflow_run_id=evt.workflow_run_id,
         environment=evt.environment,
         manifest_path=evt.manifest_path,
+        pr_kind=evt.pr_kind,
         approval_ref=evt.approval_ref,
         policy_decision_ref=evt.policy_decision_ref,
     )
@@ -48,6 +49,7 @@ async def on_safe_pr_patch_prepared(evt: SafePrPatchPreparedBody) -> AsyncIterat
         risk=assessment.risk,
         details={
             "provider": evt.provider,
+            "pr_kind": request.pr_kind,
             "patch_keys": sorted(evt.patch.keys()),
             "body_length": len(evt.body),
             "approval_ref": evt.approval_ref,
@@ -63,7 +65,7 @@ async def on_safe_pr_patch_prepared(evt: SafePrPatchPreparedBody) -> AsyncIterat
             request=request,
             summary=summary,
             risk=assessment.risk,
-            details=assessment.details,
+            details={"pr_kind": request.pr_kind, **assessment.details},
             workspace_id=evt.workspace_id,
         )
         return

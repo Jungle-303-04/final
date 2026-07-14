@@ -723,6 +723,7 @@ consumer:
 | `SafePrRequestedBody` | `body` | RCA 근거, 변경 이유, 검증 방법을 담는다. |
 | `SafePrRequestedBody` | `provider` | 현재 실제 처리자는 `github` provider다. |
 | `SafePrRequestedBody` | `patches` | 실제 커밋할 파일 변경 목록이다. |
+| `SafePrRequestedBody` | `pr_kind` | `safe_pr_patch`는 설정 변경 PR, `safe_pr_review_doc`은 설정값을 바꾸지 않는 RCA 검토 문서 PR이다. |
 | `SafePrRequestedBody` | `repository_id` | 어느 repository에 PR을 만들지 찾는다. |
 | `SafePrRequestedBody` | `binding_id` | 배포 binding과 연결한다. |
 | `SafePrRequestedBody` | `next_alert` | PR 이후 알림을 이어붙일 때 쓴다. |

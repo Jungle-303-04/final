@@ -69,6 +69,7 @@ def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody
         body=request.body,
         patch={
             "provider": request.provider,
+            "pr_kind": request.pr_kind,
             "repository_id": request.repository_id,
             "repo_ref": request.repo_ref,
             "base_branch": request.base_branch,
@@ -88,6 +89,7 @@ def patch_prepared_body(request: SafePrRequestedBody) -> SafePrPatchPreparedBody
         workflow_run_id=request.workflow_run_id,
         environment=request.environment,
         manifest_path=request.manifest_path,
+        pr_kind=request.pr_kind,
         approval_ref=request.approval_ref,
         policy_decision_ref=request.policy_decision_ref,
         next_alert=request.next_alert.to_body() if request.next_alert is not None else None,

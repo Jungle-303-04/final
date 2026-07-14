@@ -91,6 +91,7 @@ class DefaultSafePrPreflightPolicy:
             details={
                 "patch_count": len(request.patches),
                 "paths": [patch.path for patch in request.patches],
+                "pr_kind": request.pr_kind,
             }
         )
 
@@ -114,6 +115,7 @@ class DefaultSafePrDiffPolicy:
             risk=risk,
             details={
                 **preflight.details,
+                "pr_kind": request.pr_kind,
                 "approval_ref": request.approval_ref,
                 "policy_decision_ref": request.policy_decision_ref,
                 "manifest_path": request.manifest_path,

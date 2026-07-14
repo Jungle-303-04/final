@@ -477,6 +477,70 @@ def test_application_5xx_recovery_requires_gitops_pr_and_keeps_scale_fallback() 
     }
 
 
+def test_approval_required_recovery_dispatch_explains_manual_reason() -> None:
+    recovery_worker = load_service("ai/recovery-worker")
+    dispatch_worker = load_service("ai/dispatch-worker")
+
+    recovery_outs = run_handler(
+        recovery_worker.on_rca_completed,
+        report_for("missing_image_pull_secret"),
+    )
+    plan = recovery_outs[0].plan
+    selected = plan.candidates[0]
+
+    assert selected.route == "approval_required"
+    assert selected.draft.action_type == "image_pull_secret_fix"
+
+    dispatch_outs = run_handler(
+        dispatch_worker.on_recovery_action_selected,
+        RecoveryActionSelectedBody(
+            plan=plan,
+            selected=selected,
+            selected_by="operator-1",
+            auto_selected=False,
+            reason="operator review required",
+            workspace_id="workspace-1",
+        ),
+    )
+
+    assert subjects_of(dispatch_outs) == ["rca.action_required"]
+    action_required = dispatch_outs[0]
+    assert action_required.reason_code == "security_boundary"
+    assert "보안 경계 확인" in action_required.reason
+    assert action_required.next_actions[0]["action_type"] == "verify_image_pull_secret"
+    assert action_required.diagnostics["action_type"] == "image_pull_secret_fix"
+    assert action_required.diagnostics["route"] == "approval_required"
+    assert action_required.diagnostics["approval_reason"] == "security_boundary"
+
+
+def test_recovery_catalog_covers_recent_rule_root_causes_with_specific_actions() -> None:
+    recovery_worker = load_service("ai/recovery-worker")
+    expected = {
+        "app_port_bind_failed": "container_port_review",
+        "permission_denied_startup": "startup_security_context_review",
+        "config_key_missing": "config_key_review",
+        "missing_secret_reference": "secret_reference_fix",
+        "service_name_or_namespace_mismatch": "service_reference_review",
+        "network_policy_denied": "network_policy_review",
+        "metrics_server_unavailable": "autoscaling_metrics_recovery",
+        "missing_resource_requests": "resource_request_tuning",
+        "max_replica_limit_reached": "replica_scale",
+        "database_connectivity_failure": "dependency_connection_review",
+        "database_connection_pool_exhausted": "dependency_connection_review",
+        "database_credential_or_config_error": "dependency_config_review",
+    }
+
+    for root_cause, action_type in expected.items():
+        recovery_outs = run_handler(
+            recovery_worker.on_rca_completed,
+            report_for(root_cause),
+        )
+        plan = recovery_outs[0].plan
+
+        assert plan.candidates[0].draft.action_type == action_type
+        assert plan.candidates[0].draft.action_type != "manual_analysis"
+
+
 def test_recovery_command_targets_owner_deployment_from_pod_or_replicaset() -> None:
     assert command_target_name("Pod", "checkout-api-7d9f8c9b7c-abcde", {}) == "checkout-api"
     assert command_target_name("ReplicaSet", "checkout-api-7d9f8c9b7c", {}) == "checkout-api"
@@ -1541,8 +1605,12 @@ def test_user_selected_safe_pr_flow_requires_authority_instead_of_document_fallb
     assert approval_summary["kind"] == "recovery_selection"
     assert approval_summary["plan_id"] == plan.plan_id
     assert approval_summary["recommended_action_id"] == plan.recommended_action_id
+    assert approval_summary["execution_channel"] == "safe_pr"
     assert approval_summary["candidate_count"] == len(plan.candidates)
+    assert approval_summary["auto_execution_allowed"] is False
     assert approval_summary["recommended_candidate"]["route"] == selected.route
+    assert approval_summary["recommended_candidate"]["execution_channel"] == "safe_pr"
+    assert approval_summary["recommended_candidate"]["auto_execution_allowed"] is False
     assert approval_outs[0].details["candidates"][0]["action_id"] == selected.action_id
 
     action_selected = RecoveryActionSelectedBody(
@@ -1611,6 +1679,7 @@ def test_application_5xx_recovery_uses_review_patch_without_static_manifest(monk
     )
 
     assert subjects_of(dispatch_outs) == ["safe_pr.requested"]
+    assert dispatch_outs[0].pr_kind == "safe_pr_review_doc"
     patches = {patch.path: patch.content for patch in dispatch_outs[0].patches}
     assert len(patches) == 1
     path, content = next(iter(patches.items()))
