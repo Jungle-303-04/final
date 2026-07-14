@@ -24,6 +24,7 @@ export type ShellMessageKey =
   | "shell.filter.failed"
   | "shell.filter.rule"
   | "shell.filter.remove"
+  | "shell.filter.clearAll"
   | "shell.filter.group.cluster"
   | "shell.filter.group.namespace"
   | "shell.filter.group.application"

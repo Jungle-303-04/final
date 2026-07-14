@@ -26,6 +26,7 @@ export const shellEn = {
   "shell.filter.failed": "Filter suggestions are unavailable",
   "shell.filter.rule": "Same type: OR · different types: AND · labels: AND",
   "shell.filter.remove": "Remove {type} filter {label}",
+  "shell.filter.clearAll": "Clear all filters",
   "shell.filter.group.cluster": "Clusters",
   "shell.filter.group.namespace": "Namespaces",
   "shell.filter.group.application": "Applications",

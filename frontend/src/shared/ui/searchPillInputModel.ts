@@ -1,6 +1,8 @@
 export interface SearchModifier {
   key: string;
   value: string;
+  keyLabel?: string;
+  label?: string;
 }
 
 export interface ActiveSearchModifier {

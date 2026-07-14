@@ -56,7 +56,7 @@ describe("UnifiedFilterBar", () => {
     expect(screen.getByText("at least 4")).toBeTruthy();
     expect(screen.getByText("unknown")).toBeTruthy();
 
-    const input = screen.getByRole("combobox", { name: filterPlaceholder });
+    const input = screen.getByRole("textbox", { name: filterPlaceholder });
     await user.type(input, "check");
     await waitFor(() =>
       expect(search).toHaveBeenLastCalledWith(
@@ -194,7 +194,7 @@ describe("UnifiedFilterBar", () => {
     await user.click(screen.getByRole("button", { name: filterPlaceholder }));
     await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
     await user.type(
-      screen.getByRole("combobox", { name: filterPlaceholder }),
+      screen.getByRole("textbox", { name: filterPlaceholder }),
       "fresh",
     );
     await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
