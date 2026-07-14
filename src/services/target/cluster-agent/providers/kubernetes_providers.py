@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -619,6 +620,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     pod_spec = spec(item)
     owner_kind, owner_name = owner_ref(item)
     measured = dict(metrics or {})
+    cpu_request_mcores, mem_request_mib = pod_request_totals(pod_spec)
     containers = [
         container_summary(container)
         for container in pod_status.get("containerStatuses", [])
@@ -646,6 +648,8 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "containers": containers,
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),
+        "cpu_request_mcores": cpu_request_mcores,
+        "mem_request_mib": mem_request_mib,
         "restart_total": sum(int(container.get("restart_count", 0)) for container in containers),
         "waiting_reasons": [
             container.get("state_reason")
@@ -668,6 +672,50 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
             ),
         ],
     }
+
+
+def pod_request_totals(pod_spec: JsonObject) -> tuple[float | None, float | None]:
+    """Sum regular-container requests only when an entire resource axis is observed."""
+    containers = pod_spec.get("containers")
+    if not isinstance(containers, list) or not containers:
+        return None, None
+
+    cpu_total = 0.0
+    memory_total = 0.0
+    cpu_complete = True
+    memory_complete = True
+    for container in containers:
+        if not isinstance(container, dict):
+            cpu_complete = False
+            memory_complete = False
+            continue
+        resources = container.get("resources")
+        requests = resources.get("requests") if isinstance(resources, dict) else None
+        if not isinstance(requests, dict):
+            cpu_complete = False
+            memory_complete = False
+            continue
+
+        cpu = parse_cpu_mcores(requests.get("cpu"))
+        if _positive_finite(cpu):
+            cpu_total += cpu
+        else:
+            cpu_complete = False
+
+        memory = parse_memory_mib(requests.get("memory"))
+        if _positive_finite(memory):
+            memory_total += memory
+        else:
+            memory_complete = False
+
+    return (
+        cpu_total if cpu_complete else None,
+        memory_total if memory_complete else None,
+    )
+
+
+def _positive_finite(value: float | None) -> bool:
+    return value is not None and math.isfinite(value) and value > 0
 
 
 def container_summary(item: JsonObject) -> JsonObject:
