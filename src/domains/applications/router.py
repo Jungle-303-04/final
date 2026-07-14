@@ -32,6 +32,7 @@ from domains.identity.dependencies import (
     require_cluster_access,
     require_resource_access,
     require_session,
+    resolve_allowed_application_ids,
     resolve_allowed_cluster_ids,
 )
 from domains.target.management_guard import (
@@ -425,10 +426,10 @@ async def _product_scope(
         Permission.INVENTORY_READ.value,
     )
     application_task = asyncio.to_thread(
-        db.accessible_resource_ids,
-        current.user_id,
+        resolve_allowed_application_ids,
+        db,
+        current,
         workspace_id,
-        AccessResourceType.APPLICATION.value,
         Permission.APPLICATION_READ.value,
     )
     clusters, applications = await asyncio.gather(cluster_task, application_task)

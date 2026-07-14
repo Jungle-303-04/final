@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from domains.identity.dependencies import require_session
+from packages.contracts.identity import ServiceRole
 from packages.runtime.dependencies import get_db
 
 
@@ -182,14 +183,39 @@ class ProductApplicationsDb:
         }
 
 
-def _client(db: ProductApplicationsDb) -> TestClient:
+class ProductApplicationsWildcardAdminDb(ProductApplicationsDb):
+    def accessible_resource_ids(
+        self,
+        _user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        _permission: str,
+    ) -> set[str] | None:
+        assert workspace_id == "workspace-a"
+        assert resource_type in {"cluster", "application"}
+        return None
+
+    def list_workspace_cluster_ids(self, workspace_id: str) -> set[str]:
+        assert workspace_id == "workspace-a"
+        return {"cluster-a"}
+
+    def list_workspace_application_ids(self, workspace_id: str) -> set[str]:
+        assert workspace_id == "workspace-a"
+        return {"app-a"}
+
+
+def _client(
+    db: ProductApplicationsDb,
+    *,
+    roles: tuple[str, ...] = ("user",),
+) -> TestClient:
     module = importlib.import_module("domains.applications.router")
     app = FastAPI()
     app.include_router(module.router)
     app.dependency_overrides[require_session] = lambda: SimpleNamespace(
         user_id="user-a",
         workspace_id="workspace-a",
-        roles=("user",),
+        roles=roles,
     )
     app.dependency_overrides[get_db] = lambda: db
     return TestClient(app)
@@ -243,6 +269,20 @@ def test_product_application_filter_scope_fails_closed_before_projection_query()
     assert response.status_code == 404
     assert "cluster-secret" not in response.text
     assert db.query_calls == []
+
+
+def test_product_application_service_admin_wildcard_is_materialized_to_concrete_ids() -> None:
+    db = ProductApplicationsWildcardAdminDb()
+    response = _client(
+        db,
+        roles=(ServiceRole.SERVICE_ADMIN.value,),
+    ).get("/applications")
+
+    assert response.status_code == 200
+    assert response.json()["applications"][0]["id"] == "app-a"
+    filtered_call = next(kwargs for name, kwargs in db.query_calls if name == "filtered")
+    assert filtered_call["allowed_cluster_ids"] == {"cluster-a"}
+    assert filtered_call["allowed_application_ids"] == {"app-a"}
 
 
 def test_product_application_openapi_exposes_four_strict_bq_contracts() -> None:
