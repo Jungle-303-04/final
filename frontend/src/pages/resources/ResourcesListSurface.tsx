@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
+import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
@@ -19,6 +20,7 @@ import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
 import { ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
+import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 export function ResourcesListSurface({
@@ -27,14 +29,22 @@ export function ResourcesListSurface({
   metricHistory,
   onLoadMore,
   physicalTopology,
+  relationTopology,
   state,
+  topologyPinned,
+  topologyView,
+  onTopologyViewChange,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
   metricHistory: ResourceMetricsHistoryFrame;
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
+  relationTopology: RelationTopologyFrame;
   state: ReturnType<typeof useResourcesPageState>;
+  topologyPinned: boolean;
+  topologyView: ResourceTopologyView;
+  onTopologyViewChange: (view: ResourceTopologyView) => void;
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
@@ -132,10 +142,14 @@ export function ResourcesListSurface({
           breadcrumbs={breadcrumbs}
           clusterId={state.selectedClusterId ?? "unknown"}
           frame={physicalTopology}
+          relationFrame={relationTopology}
           onOpenPod={openPod}
           onRevealServer={revealServer}
           onSelectAll={rewindToAll}
           skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
+          topologyPinned={topologyPinned}
+          topologyView={topologyView}
+          onTopologyViewChange={onTopologyViewChange}
         />
       </Surface>
 

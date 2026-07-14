@@ -10,6 +10,7 @@ import {
   getNodePodsSummary,
   getClusterConnectStatus,
   getPhysicalTopology,
+  getRelationTopology,
   getResourceCapabilities,
   getResourceMetricsHistory,
   getSession,
@@ -50,6 +51,7 @@ import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
 import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
 import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
+import { createRelationTopologyAdapter } from "../features/resources/createRelationTopologyAdapter";
 import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
 import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
@@ -80,6 +82,7 @@ export function createApiComposition() {
     listResourceLabelFacets,
   });
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
+  const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
     getResourceMetricsHistory,
   });
@@ -123,6 +126,7 @@ export function createApiComposition() {
         resourcesPort,
         resourcesFilterPort,
         physicalTopologyPort,
+        relationTopologyPort,
         resourceMetricsHistoryPort,
         resourceCapabilitiesPort,
         resourceActionsPort,

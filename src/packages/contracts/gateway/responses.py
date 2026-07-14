@@ -970,6 +970,43 @@ class ResourceGraphSnapshotResponse(StrictModel):
         return self
 
 
+RelationsTopologyEdgeType = Literal["owns", "runs_on", "selects", "routes_to"]
+
+
+class RelationsTopologyNode(StrictModel):
+    id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    status: str
+
+
+class RelationsTopologyEdge(StrictModel):
+    from_node_id: str = Field(alias="from", min_length=1)
+    to_node_id: str = Field(alias="to", min_length=1)
+    type: RelationsTopologyEdgeType
+
+
+class RelationsTopologyResponse(StrictModel):
+    nodes: list[RelationsTopologyNode] = Field(default_factory=list)
+    edges: list[RelationsTopologyEdge] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_graph_integrity(self) -> Self:
+        node_ids = [node.id for node in self.nodes]
+        known_nodes = set(node_ids)
+        if len(known_nodes) != len(node_ids):
+            raise ValueError("relations topology node identities must be unique")
+        edge_keys = [(edge.from_node_id, edge.to_node_id, edge.type) for edge in self.edges]
+        if len(set(edge_keys)) != len(edge_keys):
+            raise ValueError("relations topology edges must be unique")
+        if any(
+            edge.from_node_id not in known_nodes or edge.to_node_id not in known_nodes
+            for edge in self.edges
+        ):
+            raise ValueError("relations topology edges must reference returned nodes")
+        return self
+
+
 class PhysicalTopologyServer(StrictModel):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)

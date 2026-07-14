@@ -1,83 +1,115 @@
-import {
-  Background,
-  ReactFlow,
-  type NodeTypes,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { Pause, Play, Server, Waypoints } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { Server, Waypoints } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
+import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import {
-  PhysicalTopologyServerCard,
-  PhysicalTopologyServerNode,
-} from "./PhysicalTopologyServerNode";
-import type { PhysicalServerNode } from "./physicalTopologyGraphTypes";
-import {
-  PHYSICAL_SERVER_HEIGHT,
-  PHYSICAL_SERVER_WIDTH,
-  physicalServerPlacements,
-} from "./physicalTopologyViewModel";
+import { ButtonGroup } from "../../shared/ui/primitives/button-group";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
-import { usePhysicalTopologyLayout } from "./usePhysicalTopologyLayout";
+import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
+import { RelationTopologyCanvas } from "./RelationTopologyCanvas";
+import {
+  PhysicalGraphBreadcrumb,
+  type PhysicalGraphBreadcrumbItem,
+  UnavailableTimeline,
+} from "./ResourcesGraphChrome";
+import { ResourcesPhysicalTopologyScene } from "./ResourcesPhysicalTopologyScene";
 
-const nodeTypes: NodeTypes = { "physical-server": PhysicalTopologyServerNode };
-
-export interface PhysicalGraphBreadcrumb {
-  id: string;
-  label: string;
-  onSelect: () => void;
-}
+export type PhysicalGraphBreadcrumb = PhysicalGraphBreadcrumbItem;
 
 export function ResourcesGraphShell({
   breadcrumbs,
   clusterId,
   frame,
+  relationFrame,
   onOpenPod,
   onSelectAll,
   onRevealServer,
   skeletonServerCount,
+  topologyPinned,
+  topologyView,
+  onTopologyViewChange,
 }: {
   breadcrumbs: PhysicalGraphBreadcrumb[];
   clusterId: string;
   frame: PhysicalTopologyFrame;
+  relationFrame: RelationTopologyFrame;
   onOpenPod: (pod: PhysicalTopologyPod) => void;
   onSelectAll: () => void;
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;
+  topologyPinned: boolean;
+  topologyView: ResourceTopologyView;
+  onTopologyViewChange: (view: ResourceTopologyView) => void;
 }) {
   const { formatNumber, t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const { capture, play } = useCameraMorph(rootRef);
-  const topology = frame.phase === "ready" ? frame.data : null;
-  const placements = useMemo(
-    () => topology === null ? [] : physicalServerPlacements(topology),
-    [topology],
+  const [displayedView, setDisplayedView] = useState<ResourceTopologyView>("physical");
+  const [autoHintVisible, setAutoHintVisible] = useState(false);
+  const [retainedPhysical, setRetainedPhysical] = useState<
+    Extract<PhysicalTopologyFrame, { phase: "ready" }> | null
+  >(
+    frame.phase === "ready" ? frame : null,
   );
-  const inputNodes = useMemo<PhysicalServerNode[]>(() => placements.map(
-    (placement, index) => ({
-      id: placement.server.id,
-      type: "physical-server",
-      position: { x: index * (PHYSICAL_SERVER_WIDTH + 24), y: 0 },
-      width: PHYSICAL_SERVER_WIDTH,
-      height: PHYSICAL_SERVER_HEIGHT,
-      data: {
-        clusterId,
-        index,
-        placement,
-        onOpenPod,
-        onRevealServer,
-      },
-    }),
-  ), [clusterId, onOpenPod, onRevealServer, placements]);
-  const nodes = usePhysicalTopologyLayout(inputNodes);
+  const [retainedRelation, setRetainedRelation] = useState<{
+    clusterId: string;
+    frame: Extract<RelationTopologyFrame, { phase: "ready" }>;
+  } | null>(relationFrame.phase === "ready" ? { clusterId, frame: relationFrame } : null);
 
   useEffect(() => {
-    if (frame.phase === "loading") {
+    if (frame.phase !== "ready" && relationFrame.phase !== "ready") return undefined;
+    const animationFrame = requestAnimationFrame(() => {
+      if (frame.phase === "ready") setRetainedPhysical(frame);
+      if (relationFrame.phase === "ready") {
+        setRetainedRelation({ clusterId, frame: relationFrame });
+      }
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [clusterId, frame, relationFrame]);
+
+  const physicalSceneFrame = displayedView === "physical" &&
+      topologyView !== displayedView &&
+      frame.phase !== "ready" &&
+      retainedPhysical?.data.clusterId === clusterId
+    ? retainedPhysical
+    : frame;
+  const relationSceneFrame = displayedView === "relations" &&
+      topologyView !== displayedView &&
+      relationFrame.phase !== "ready" &&
+      retainedRelation?.clusterId === clusterId
+    ? retainedRelation.frame
+    : relationFrame;
+  useEffect(() => {
+    if (topologyView === displayedView) return;
+    const targetPhase = topologyView === "relations" ? relationFrame.phase : frame.phase;
+    if (targetPhase !== "ready" && targetPhase !== "failed") return;
+    capture();
+    const animationFrame = requestAnimationFrame(() => {
+      setDisplayedView(topologyView);
+      setAutoHintVisible(
+        targetPhase === "ready" && topologyView === "relations" && !topologyPinned,
+      );
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [capture, displayedView, frame.phase, relationFrame.phase, topologyPinned, topologyView]);
+
+  useEffect(() => {
+    if (!autoHintVisible) return undefined;
+    const timeout = window.setTimeout(() => setAutoHintVisible(false), 6_000);
+    return () => window.clearTimeout(timeout);
+  }, [autoHintVisible]);
+
+  useEffect(() => {
+    const animationFrame = requestAnimationFrame(() => play());
+    return () => cancelAnimationFrame(animationFrame);
+  }, [displayedView, play]);
+
+  useEffect(() => {
+    if (displayedView === "physical" && frame.phase === "loading") {
       const animationFrame = requestAnimationFrame(() => {
         play();
         capture();
@@ -87,188 +119,111 @@ export function ResourcesGraphShell({
     if (frame.phase !== "ready") return undefined;
     const animationFrame = requestAnimationFrame(() => play());
     return () => cancelAnimationFrame(animationFrame);
-  }, [capture, frame.phase, play]);
+  }, [capture, displayedView, frame.phase, play]);
+
+  const displayedFrame = displayedView === "relations"
+    ? relationSceneFrame
+    : physicalSceneFrame;
+  const changeTopologyView = (view: ResourceTopologyView) => {
+    setAutoHintVisible(false);
+    onTopologyViewChange(view);
+  };
 
   return (
     <div
-      aria-busy={frame.phase === "loading"}
+      aria-busy={topologyView !== displayedView || displayedFrame.phase === "loading"}
       aria-live="polite"
-      className="group/resources-graph relative isolate h-80 overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40"
-      data-phase={frame.phase}
+      className="group/resources-graph relative isolate h-96 overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40 sm:h-80"
+      data-phase={displayedFrame.phase}
       data-slot="resources-graph-shell"
+      data-view={displayedView}
       ref={rootRef}
     >
       <div className="absolute inset-x-0 top-0 z-20 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b bg-background/80 px-3 py-2 backdrop-blur">
         <div className="flex min-w-0 items-center gap-2">
           <Badge variant="secondary">
-            <Server aria-hidden="true" />
-            <span id="resources-graph-title">{t("resources.graph.physical.title")}</span>
+            {displayedView === "physical" ? <Server aria-hidden="true" /> : <Waypoints aria-hidden="true" />}
+            <span id="resources-graph-title">
+              {t(displayedView === "physical"
+                ? "resources.graph.physical.title"
+                : "resources.graph.relations.title")}
+            </span>
           </Badge>
-          {frame.phase === "ready" ? (
+          {displayedView === "physical" && physicalSceneFrame.phase === "ready" ? (
             <Badge variant="outline">
               {t("resources.graph.server.total", {
-                count: formatNumber(frame.data.servers.length),
+                count: formatNumber(physicalSceneFrame.data.servers.length),
+              })}
+            </Badge>
+          ) : displayedView === "relations" && relationSceneFrame.phase === "ready" ? (
+            <Badge variant="outline">
+              {t("resources.graph.relations.total", {
+                count: formatNumber(relationSceneFrame.data.nodes.length),
               })}
             </Badge>
           ) : null}
         </div>
-        <PhysicalBreadcrumb items={breadcrumbs} onSelectAll={onSelectAll} />
+        <div className="flex min-w-0 items-center gap-2">
+          <ButtonGroup aria-label={t("resources.graph.view.aria")}>
+            <Button
+              aria-pressed={topologyView === "physical"}
+              onClick={() => changeTopologyView("physical")}
+              size="sm"
+              type="button"
+              variant={topologyView === "physical" ? "secondary" : "outline"}
+            >
+              {t("resources.graph.view.physical")}
+            </Button>
+            <Button
+              aria-pressed={topologyView === "relations"}
+              onClick={() => changeTopologyView("relations")}
+              size="sm"
+              type="button"
+              variant={topologyView === "relations" ? "secondary" : "outline"}
+            >
+              {t("resources.graph.view.relations")}
+            </Button>
+          </ButtonGroup>
+          <PhysicalGraphBreadcrumb items={breadcrumbs} onSelectAll={onSelectAll} />
+        </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 top-11" data-slot="topology-canvas">
-        {frame.phase === "loading" ? (
-          <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />
-        ) : frame.phase === "ready" && nodes.length > 0 &&
-          typeof ResizeObserver !== "undefined" ? (
-          <ReactFlow
-            colorMode="system"
-            fitView
-            fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
-            maxZoom={1.25}
-            minZoom={0.35}
-            nodeTypes={nodeTypes}
-            nodes={nodes}
-            nodesConnectable={false}
-            nodesDraggable={false}
-            panOnScroll={false}
-            proOptions={{ hideAttribution: true }}
-            zoomOnDoubleClick={false}
-            zoomOnScroll
-          >
-            <Background color="var(--border)" gap={22} size={1} />
-          </ReactFlow>
-        ) : frame.phase === "ready" && nodes.length > 0 ? (
-          <div className="flex h-full items-center gap-4 overflow-x-auto px-5 pb-12 pt-3">
-            {nodes.map((node) => (
-              <PhysicalTopologyServerCard data={node.data} key={node.id} />
-            ))}
-          </div>
+      <div className="absolute inset-x-0 bottom-0 top-20 sm:top-11" data-slot="topology-canvas">
+        {displayedView === "relations" ? (
+          <RelationTopologyCanvas frame={relationSceneFrame} />
         ) : (
-          <GraphUnavailable failed={frame.phase === "failed"} />
+          <ResourcesPhysicalTopologyScene
+            clusterId={clusterId}
+            frame={physicalSceneFrame}
+            onOpenPod={onOpenPod}
+            onRevealServer={onRevealServer}
+            skeletonServerCount={skeletonServerCount}
+          />
         )}
       </div>
 
-      <UnavailableTimeline />
-    </div>
-  );
-}
-
-function PhysicalBreadcrumb({
-  items,
-  onSelectAll,
-}: {
-  items: PhysicalGraphBreadcrumb[];
-  onSelectAll: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <nav aria-label={t("resources.graph.breadcrumb.aria")} className="flex min-w-0 items-center gap-1 overflow-hidden text-xs text-muted-foreground">
-      <button
-        className="rounded-sm px-1 py-0.5 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={onSelectAll}
-        type="button"
-      >
-        {t("resources.graph.breadcrumb.all")}
-      </button>
-      {items.map((item) => (
-        <span className="flex min-w-0 items-center gap-1" key={item.id}>
-          <span aria-hidden="true">›</span>
-          <button
-            className="max-w-36 truncate rounded-sm px-1 py-0.5 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={item.onSelect}
-            title={item.label}
-            type="button"
-          >
-            {item.label}
-          </button>
-        </span>
-      ))}
-    </nav>
-  );
-}
-
-function ServerSkeletons({ clusterId, count }: { clusterId: string; count: number | null }) {
-  const { t } = useI18n();
-  const visible = Math.max(1, Math.min(count ?? 3, 8));
-  return (
-    <div
-      aria-label={t("resources.graph.loading")}
-      className="flex h-full items-center gap-4 overflow-hidden px-5 pb-12 pt-3"
-      role="status"
-    >
-      {Array.from({ length: visible }, (_, index) => (
+      {autoHintVisible ? (
         <div
-          aria-hidden="true"
-          className="motion-node-land h-48 w-64 shrink-0 animate-pulse rounded-xl border bg-card/85 p-3 motion-reduce:animate-none"
-          data-morph-id={`server:${clusterId}:${index}`}
-          data-slot="physical-server-skeleton"
-          key={index}
+          className="absolute right-3 top-24 z-30 flex max-w-sm items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 text-xs shadow-lg backdrop-blur sm:top-14"
+          data-slot="resources-graph-auto-hint"
+          role="status"
         >
-          <div className="h-8 rounded-md bg-muted" />
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="h-7 rounded bg-muted" />
-            <div className="h-7 rounded bg-muted" />
-          </div>
-          <div className="mt-3 grid grid-cols-6 gap-1.5">
-            {Array.from({ length: 12 }, (_, podIndex) => (
-              <div className="size-8 rounded bg-muted" key={podIndex} />
-            ))}
-          </div>
+          <span>{t("resources.graph.autoHint")}</span>
+          <Button
+            onClick={() => {
+              setAutoHintVisible(false);
+              changeTopologyView("physical");
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("resources.graph.autoHint.revert")}
+          </Button>
         </div>
-      ))}
-    </div>
-  );
-}
+      ) : null}
 
-function GraphUnavailable({ failed }: { failed: boolean }) {
-  const { t } = useI18n();
-  return (
-    <div className="grid h-full place-items-center px-6 pb-10 text-center">
-      <div className="grid max-w-lg justify-items-center gap-2">
-        <div className="grid size-12 place-items-center rounded-xl border border-dashed bg-background/70 shadow-sm">
-          <Waypoints aria-hidden="true" className="size-6 text-muted-foreground" />
-        </div>
-        <p className="font-medium">
-          {failed
-            ? t("resources.graph.failed.title")
-            : t("resources.graph.empty.title")}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {failed
-            ? t("resources.graph.failed.description")
-            : t("resources.graph.empty.description")}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function UnavailableTimeline() {
-  const { t } = useI18n();
-  return (
-    <div
-      aria-describedby="resources-timeline-unavailable"
-      className="absolute inset-x-3 bottom-3 z-20 flex translate-y-1.5 items-center gap-3 rounded-xl border bg-background/95 px-3 py-2 opacity-100 shadow-lg backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:translate-y-0 motion-reduce:transition-opacity sm:opacity-0 sm:group-focus-within/resources-graph:translate-y-0 sm:group-focus-within/resources-graph:opacity-100 sm:group-hover/resources-graph:translate-y-0 sm:group-hover/resources-graph:opacity-100"
-      data-slot="resources-time-scrubber"
-      data-state="unavailable"
-    >
-      <Button aria-label={t("resources.timeline.play")} disabled size="icon-sm" type="button" variant="ghost">
-        <Play aria-hidden="true" />
-        <Pause aria-hidden="true" className="hidden" />
-      </Button>
-      <input
-        aria-label={t("resources.timeline.aria")}
-        className="h-2 min-w-0 flex-1 cursor-not-allowed accent-primary opacity-45"
-        disabled
-        max={100}
-        min={0}
-        readOnly
-        type="range"
-        value={100}
-      />
-      <span className="sr-only" id="resources-timeline-unavailable">
-        {t("resources.timeline.unavailable")}
-      </span>
+      <UnavailableTimeline />
     </div>
   );
 }

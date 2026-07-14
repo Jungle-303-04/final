@@ -13,6 +13,7 @@ import {
 
 const LEGACY_RESOURCE_KIND_QUERY_KEY = "kind";
 const WORKFLOW_VIEWS = ["overview", "edit", "runs", "yaml"] as const;
+const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
   appendNullableStableText(pairs, "detail", detail.detail);
@@ -24,7 +25,11 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   appendBoolean(pairs, "full", detail.full);
   appendNullableStableText(pairs, "node", detail.node);
   appendNullableStableText(pairs, "plan", detail.workflowPlan ?? null);
-  appendNullableStableText(pairs, "view", detail.workflowView ?? null);
+  appendNullableStableText(
+    pairs,
+    "view",
+    detail.resourceTopologyView ?? detail.workflowView ?? null,
+  );
   appendNullableStableText(pairs, "mode", detail.workflowMode ?? null);
 }
 
@@ -47,8 +52,15 @@ export function parseProductDetailQuery(
   if (workflowPlan !== null) detail.workflowPlan = workflowPlan;
   const workflowView = readStableText(params, "view");
   if (isWorkflowView(workflowView)) detail.workflowView = workflowView;
+  if (isResourceTopologyView(workflowView)) detail.resourceTopologyView = workflowView;
   if (readStableText(params, "mode") === "new") detail.workflowMode = "new";
   return detail;
+}
+
+function isResourceTopologyView(
+  value: string | null,
+): value is NonNullable<ProductDetailQuery["resourceTopologyView"]> {
+  return value !== null && RESOURCE_TOPOLOGY_VIEWS.some((view) => view === value);
 }
 
 function isWorkflowView(value: string | null): value is NonNullable<ProductDetailQuery["workflowView"]> {
