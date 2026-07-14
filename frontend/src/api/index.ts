@@ -1,4 +1,5 @@
 export * from "./barrels/ai";
+export * from "./barrels/alerts";
 export * from "./barrels/catalog";
 export * from "./barrels/gitops";
 export * from "./barrels/metrics";
