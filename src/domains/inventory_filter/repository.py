@@ -745,6 +745,10 @@ class InventoryFilterRepository(DatabaseConnection):
             "global_application_matches",
             replace(filters, applications=()),
         )
+        resource_type_matches = filtered(
+            "global_resource_type_matches",
+            replace(filters, resource_types=()),
+        )
         selected_matches = filtered("global_selected_matches", filters)
 
         cluster = ClusterRegistration.__table__
@@ -851,6 +855,20 @@ class InventoryFilterRepository(DatabaseConnection):
             application.c.application_id,
         ).limit(effective_limit)
 
+        resource_type_statement = select(
+            resource_type_matches.c.resource_type.label("id"),
+            resource_type_matches.c.resource_type.label("label"),
+            func.count(func.distinct(resource_type_matches.c.version_id)).label("count"),
+        ).group_by(resource_type_matches.c.resource_type)
+        if normalized_query:
+            resource_type_statement = resource_type_statement.where(
+                func.lower(resource_type_matches.c.resource_type).like(pattern, escape="\\")
+            )
+        resource_type_statement = resource_type_statement.order_by(
+            func.count(func.distinct(resource_type_matches.c.version_id)).desc(),
+            resource_type_matches.c.resource_type,
+        ).limit(effective_limit)
+
         label = InventoryResourceLabelVersion.__table__
         label_statement = (
             select(
@@ -896,6 +914,7 @@ class InventoryFilterRepository(DatabaseConnection):
             clusters = [dict(row) for row in conn.execute(cluster_statement).mappings()]
             namespaces = [dict(row) for row in conn.execute(namespace_statement).mappings()]
             applications = [dict(row) for row in conn.execute(application_statement).mappings()]
+            resource_types = [dict(row) for row in conn.execute(resource_type_statement).mappings()]
             labels = (
                 [dict(row) for row in conn.execute(label_statement).mappings()]
                 if normalized_query
@@ -910,6 +929,14 @@ class InventoryFilterRepository(DatabaseConnection):
             "clusters": _serialize_global_facets(clusters),
             "namespaces": _serialize_global_facets(namespaces),
             "applications": _serialize_global_facets(applications),
+            "resource_types": [
+                {
+                    "id": str(row["id"]),
+                    "label": str(row["label"]).replace("_", " ").replace("-", " ").title(),
+                    "count": int(row["count"]),
+                }
+                for row in resource_types
+            ],
             "labels": [
                 {"key": str(row["key"]), "value": str(row["value"]), "count": int(row["count"])}
                 for row in labels
@@ -1794,6 +1821,7 @@ def _empty_global_filter_facets() -> JsonObject:
         "clusters": [],
         "namespaces": [],
         "applications": [],
+        "resource_types": [],
         "labels": [],
         "resources": [],
     }

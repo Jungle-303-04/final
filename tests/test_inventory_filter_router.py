@@ -166,6 +166,7 @@ class InventoryFilterApiDb:
                 }
             ],
             "applications": [{"id": APPLICATION_ID, "label": "checkout", "count": 3}],
+            "resource_types": [{"id": "workload", "label": "Workload", "count": 5}],
             "labels": ([{"key": "team", "value": "checkout", "count": 2}] if searched else []),
             "resources": (
                 [
@@ -370,6 +371,7 @@ def test_global_filter_facets_return_structural_axes_and_search_only_dynamic_axe
             "clusters": CLUSTER_ID,
             "namespaces": f"{CLUSTER_ID}/shop",
             "applications": APPLICATION_ID,
+            "resources.types": "workload",
             "labels": "team=checkout",
         },
     )
@@ -378,6 +380,8 @@ def test_global_filter_facets_return_structural_axes_and_search_only_dynamic_axe
     initial_body = GlobalFilterFacetsResponse.model_validate(initial.json())
     assert initial_body.clusters[0].count == 7
     assert initial_body.clusters[0].count_completeness == "exact"
+    assert initial_body.resource_types[0].label == "Workload"
+    assert initial_body.resource_types[0].count == 5
     assert initial_body.labels == []
     assert initial_body.resources == []
     assert searched.status_code == 200
@@ -391,6 +395,7 @@ def test_global_filter_facets_return_structural_axes_and_search_only_dynamic_axe
     assert call["filters"].clusters == (CLUSTER_ID,)
     assert call["filters"].namespaces == ((CLUSTER_ID, "shop"),)
     assert call["filters"].applications == (APPLICATION_ID,)
+    assert call["filters"].resource_types == ("workload",)
     assert call["filters"].labels == (("team", "checkout"),)
 
 

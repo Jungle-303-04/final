@@ -821,10 +821,15 @@ class GlobalResourceFacetItem(GlobalClusterFacetItem):
     kind: str = Field(min_length=1)
 
 
+class GlobalResourceTypeFacetItem(GlobalClusterFacetItem):
+    pass
+
+
 class GlobalFilterFacetsResponse(StrictModel):
     clusters: list[GlobalClusterFacetItem] = Field(default_factory=list)
     namespaces: list[GlobalNamespaceFacetItem] = Field(default_factory=list)
     applications: list[GlobalApplicationFacetItem] = Field(default_factory=list)
+    resource_types: list[GlobalResourceTypeFacetItem] = Field(default_factory=list)
     labels: list[GlobalLabelFacetItem] = Field(default_factory=list)
     resources: list[GlobalResourceFacetItem] = Field(default_factory=list)
 
