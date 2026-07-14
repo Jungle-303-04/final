@@ -48,7 +48,7 @@ export function ratioSplitText(
   ratio: number,
   formatNumber: ReturnType<typeof useI18n>["formatNumber"],
 ): string {
-  const used = Math.max(0, ratio);
+  const used = Math.max(0, Math.min(1, ratio));
   const available = Math.max(0, 1 - used);
   return `${formatPercent(used, formatNumber)} / ${formatPercent(available, formatNumber)}`;
 }

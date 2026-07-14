@@ -63,6 +63,31 @@ describe("resources infra map model", () => {
     expect(model.nodes[0]?.visiblePods.map((pod) => pod.name)).toHaveLength(4);
     expect(model.nodes[0]?.hiddenPodCount).toBe(1);
   });
+
+  it("uses pod limits before requests when calculating pod capacity ratios", () => {
+    const model = buildInfraMapModel({
+      selectionActive: false,
+      topology: snapshot({
+        pods: [
+          pod({
+            cpuLimitMillicores: 1000,
+            cpuMillicores: 50,
+            cpuRequestMillicores: 100,
+            id: "pod:api",
+            memoryLimitMebibytes: 512,
+            memoryMebibytes: 128,
+            memoryRequestMebibytes: 64,
+            name: "api-gateway",
+          }),
+        ],
+      }),
+    });
+
+    const [apiPod] = model.nodes[0]?.visiblePods ?? [];
+
+    expect(apiPod?.cpu.ratio).toBeCloseTo(0.05);
+    expect(apiPod?.memory.ratio).toBeCloseTo(0.25);
+  });
 });
 
 function snapshot({

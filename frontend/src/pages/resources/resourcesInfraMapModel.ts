@@ -119,7 +119,7 @@ function toInfraMapPod(pod: PhysicalTopologyPod): InfraMapPod {
     cpu: {
       ratio: ratioFromValues(
         pod.cpuMillicores,
-        pod.cpuRequestMillicores ?? pod.cpuLimitMillicores,
+        pod.cpuLimitMillicores ?? pod.cpuRequestMillicores,
       ),
       value: pod.cpuMillicores,
     },
@@ -128,7 +128,7 @@ function toInfraMapPod(pod: PhysicalTopologyPod): InfraMapPod {
     memory: {
       ratio: ratioFromValues(
         pod.memoryMebibytes,
-        pod.memoryRequestMebibytes ?? pod.memoryLimitMebibytes,
+        pod.memoryLimitMebibytes ?? pod.memoryRequestMebibytes,
       ),
       value: pod.memoryMebibytes,
     },
