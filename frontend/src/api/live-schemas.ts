@@ -20,6 +20,17 @@ export const hotPodSchema = z.strictObject({
   ready: z.boolean(),
 });
 
+export const liveMetricsMetadataSchema = z.strictObject({
+  source: z.enum([
+    "kubelet_stats_summary",
+    "metrics_server_fallback",
+    "mixed",
+    "unavailable",
+  ]),
+  actual_interval_seconds: z.number().finite().nonnegative().nullable(),
+  degraded_reason: z.string().min(1).nullable(),
+});
+
 export const liveSummarySchema = z.strictObject({
   cluster_id: z.string().min(1),
   window_ms: nonNegativeIntegerSchema.max(60_000),
@@ -28,6 +39,7 @@ export const liveSummarySchema = z.strictObject({
   restart_delta: nonNegativeIntegerSchema,
   rollout_phase: z.enum(["idle", "progressing", "degraded"]),
   hot_pods: z.array(hotPodSchema).max(20),
+  metrics_metadata: liveMetricsMetadataSchema.nullable().optional(),
 });
 
 export const helloMessageSchema = z.strictObject({
@@ -73,6 +85,7 @@ export const realtimeMessageSchema = z.discriminatedUnion("type", [
 
 export type LiveSubscription = z.infer<typeof liveSubscriptionSchema>;
 export type HotPod = z.infer<typeof hotPodSchema>;
+export type LiveMetricsMetadata = z.infer<typeof liveMetricsMetadataSchema>;
 export type LiveSummary = z.infer<typeof liveSummarySchema>;
 export type HelloMessage = z.infer<typeof helloMessageSchema>;
 export type SnapshotMessage = z.infer<typeof snapshotMessageSchema>;

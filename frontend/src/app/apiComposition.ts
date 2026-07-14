@@ -39,7 +39,9 @@ import {
   postAiChat,
   openPodLogStream,
   openWorkloadLogStream,
+  createRealtimeClient,
 } from "../api";
+import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
@@ -86,6 +88,18 @@ export function createApiComposition() {
     listResourceLabelFacets,
   });
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
+  const physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = {
+    connect(subscription, handlers) {
+      const client = createRealtimeClient({
+        subscription,
+        reconnect: { baseDelayMs: 3_000, maxDelayMs: 30_000 },
+        onMessage: handlers.onMessage,
+        onStateChange: (state) => handlers.onStatusChange(state.status),
+      });
+      client.connect();
+      return () => client.close();
+    },
+  };
   const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
   const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
@@ -132,6 +146,7 @@ export function createApiComposition() {
         resourcesPort,
         resourcesFilterPort,
         physicalTopologyPort,
+        physicalTopologyRealtimePort,
         relationTopologyPort,
         changeTimelinePort,
         resourceMetricsHistoryPort,

@@ -5,6 +5,7 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
@@ -39,10 +40,13 @@ import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataF
 import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
 import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
+import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
+import { ResourcesLiveStatus } from "./ResourcesLiveStatus";
 
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
+  physicalTopologyRealtimePort,
   relationTopologyPort,
   changeTimelinePort,
   resourceMetricsHistoryPort,
@@ -52,6 +56,7 @@ export function ResourcesPage({
 }: {
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
+  physicalTopologyRealtimePort: PhysicalTopologyRealtimePort;
   relationTopologyPort: RelationTopologyPort;
   changeTimelinePort: ChangeTimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
@@ -68,7 +73,7 @@ export function ResourcesPage({
   const authorityKey = session
     ? `${session.workspaceId}:${session.userId}`
     : "anonymous";
-  const physicalTopology = usePhysicalTopologyDataFrame({
+  const physicalTopologyFrame = usePhysicalTopologyDataFrame({
     active:
       state.selectedClusterExists &&
       filter.state.common.clusters.length === 1,
@@ -77,6 +82,17 @@ export function ResourcesPage({
     reportUnauthorized,
     revision: state.podRevision,
   });
+  const physicalRealtime = usePhysicalTopologyRealtime({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1 &&
+      filter.detail.timeAt === undefined,
+    clusterId: state.selectedClusterId,
+    frame: physicalTopologyFrame,
+    port: physicalTopologyRealtimePort,
+    workspaceId: session?.workspaceId ?? null,
+  });
+  const physicalTopology = physicalRealtime.frame;
   const relationTopology = useRelationTopologyDataFrame({
     active:
       state.selectedClusterExists &&
@@ -202,15 +218,18 @@ export function ResourcesPage({
           {state.automaticRefreshPaused ? (
             <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
           ) : null}
-          <PollingFreshness
-            connectionState={physicalTopology.phase === "ready" && physicalTopology.refreshFailure
-              ? "disconnected"
-              : "connected"}
-            dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-            intervalSeconds={5}
-            isFetching={refreshing || physicalTopology.refreshing}
-            onRefresh={state.refresh}
-          />
+          <ResourcesLiveStatus state={physicalRealtime.live} />
+          {physicalRealtime.live.status === "connected" ? null : (
+            <PollingFreshness
+              connectionState={physicalTopology.phase === "ready" && physicalTopology.refreshFailure
+                ? "disconnected"
+                : "connected"}
+              dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
+              intervalSeconds={5}
+              isFetching={refreshing || physicalTopology.refreshing}
+              onRefresh={state.refresh}
+            />
+          )}
         </div>
       </header>
 
