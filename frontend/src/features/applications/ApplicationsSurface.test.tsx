@@ -40,6 +40,18 @@ describe("S10 Applications surface", () => {
     expect(screen.getByRole("cell", { name: "checkout-api" })).toBeTruthy();
   });
 
+  it("routes an empty catalog to the real GitOps connection flow", async () => {
+    const port = applicationsPort({
+      listApplications: vi.fn().mockResolvedValue([]),
+    });
+    renderApplications(port, "/applications?clusters=cluster-1");
+
+    expect(await screen.findByText("No applications to show.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Connect an application in GitOps" })
+      .getAttribute("href"))
+      .toBe("/gitops?clusters=cluster-1&mode=new");
+  });
+
   it("opens URL-backed detail and keeps overview evidence honest", async () => {
     const user = userEvent.setup();
     const port = applicationsPort();
