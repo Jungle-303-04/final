@@ -76,6 +76,7 @@ export const workflowsKo = {
   "workflows.editor.runtime": "실행 모드",
   "workflows.editor.steps": "배포 단계",
   "workflows.editor.addTarget": "대상 추가",
+  "workflows.editor.noAvailableTargets": "추가할 대상 없음",
   "workflows.editor.application": "애플리케이션",
   "workflows.editor.environment": "환경",
   "workflows.editor.cluster": "클러스터",
