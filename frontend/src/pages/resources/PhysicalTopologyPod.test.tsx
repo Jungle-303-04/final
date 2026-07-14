@@ -99,6 +99,23 @@ describe("PhysicalTopologyPod", () => {
     expect(usageColor(75)).toContain("color-mix(in oklch");
     expect(usageColor(75)).toContain("var(--status-warning)");
     expect(usageColor(90)).toContain("var(--destructive)");
+    expect(usageColor(106.2)).toBe(usageColor(100));
+  });
+
+  it("keeps the actual over-request value while the tooltip names its denominator", () => {
+    renderPod(pod({
+      usagePercent: 106.2,
+      cpuMillicores: 531,
+      cpuRequestMillicores: 500,
+      memoryMebibytes: 64,
+      memoryRequestMebibytes: 128,
+    }));
+
+    const button = screen.getByRole("button");
+    expect(button.getAttribute("aria-label")).toContain("106%");
+    expect(button.getAttribute("title")).toContain(
+      "요청량 대비 106% (0.531 / 0.5 코어)",
+    );
   });
 });
 
@@ -172,7 +189,9 @@ function pod(overrides: Partial<PhysicalTopologyPodValue>): PhysicalTopologyPodV
     serverId: "node:worker-a",
     usagePercent: null,
     cpuMillicores: null,
+    cpuRequestMillicores: null,
     memoryMebibytes: null,
+    memoryRequestMebibytes: null,
     phase: "Running",
     health: "healthy",
     restartCount: 0,

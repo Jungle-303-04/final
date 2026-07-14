@@ -113,8 +113,10 @@ def test_summarize_emits_measured_resource_delta_and_aggregate_metric_metadata()
     measured = {
         "sandbox/checkout-abc": {
             "cpu_mcores": 240.0,
+            "cpu_request_mcores": 300.0,
             "mem_bytes": 134_217_728,
             "mem_mib": 128.0,
+            "mem_request_mib": 256.0,
             "cpu_request_pct": 80.0,
             "cpu_limit_pct": 40.0,
             "mem_request_pct": 50.0,
@@ -137,7 +139,9 @@ def test_summarize_emits_measured_resource_delta_and_aggregate_metric_metadata()
         "degraded_reason": None,
     }
     assert delta.value["cpu_mcores"] == 240.0
+    assert delta.value["cpu_request_mcores"] == 300.0
     assert delta.value["mem_bytes"] == 134_217_728
+    assert delta.value["mem_request_mib"] == 256.0
     assert delta.value["cpu_request_pct"] == 80.0
     assert delta.value["metrics_metadata"] == summary.metrics_metadata.model_dump()
 

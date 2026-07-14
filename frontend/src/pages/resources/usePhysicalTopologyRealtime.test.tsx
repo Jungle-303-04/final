@@ -51,7 +51,9 @@ describe("physical topology realtime overlay", () => {
 
     expect(livePod(rendered.result.current).usagePercent).toBe(35);
     expect(livePod(rendered.result.current).cpuMillicores).toBe(210);
+    expect(livePod(rendered.result.current).cpuRequestMillicores).toBe(600);
     expect(livePod(rendered.result.current).memoryMebibytes).toBe(128);
+    expect(livePod(rendered.result.current).memoryRequestMebibytes).toBe(512);
     expect(rendered.result.current.live).toMatchObject({
       status: "connected",
       actualIntervalSeconds: 1.25,
@@ -103,6 +105,36 @@ describe("physical topology realtime overlay", () => {
     act(() => harness.latestHandlers().onStatusChange("disconnected"));
     expect(rendered.result.current.live.status).toBe("disconnected");
     expect(livePod(rendered.result.current).usagePercent).toBe(72);
+  });
+
+  it("clears request-relative usage when either request denominator is missing", async () => {
+    const harness = realtimeHarness();
+    const rendered = renderHook(() => usePhysicalTopologyRealtime({
+      active: true,
+      clusterId: "cluster-1",
+      frame: readyFrame(),
+      port: harness.port,
+      workspaceId: "default",
+    }));
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
+
+    act(() => {
+      harness.latestHandlers().onMessage({
+        type: "resource.delta",
+        seq: 1,
+        op: "replace",
+        key: "cluster-1/shop/pod/checkout-api-0",
+        value: {
+          ...livePodValue(35, 25),
+          cpu_request_mcores: null,
+          cpu_request_pct: null,
+        },
+      });
+    });
+
+    expect(livePod(rendered.result.current).usagePercent).toBeNull();
+    expect(livePod(rendered.result.current).cpuRequestMillicores).toBeNull();
+    expect(livePod(rendered.result.current).memoryRequestMebibytes).toBe(512);
   });
 
   it("closes while hidden and creates a fresh snapshot connection when visible again", async () => {
@@ -221,7 +253,9 @@ function livePodValue(cpuRequestPercent: number, memoryRequestPercent: number) {
     health: "healthy",
     restarts: 0,
     cpu_mcores: 210,
+    cpu_request_mcores: 600,
     mem_mib: 128,
+    mem_request_mib: 512,
     cpu_request_pct: cpuRequestPercent,
     mem_request_pct: memoryRequestPercent,
     observed_at: "2026-07-15T04:00:00Z",
