@@ -8,6 +8,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { cn } from "@/shared/lib/cn";
 import { PhysicalTopologyPod } from "./PhysicalTopologyPod";
 import type { PhysicalServerNode } from "./physicalTopologyGraphTypes";
+import { usageColor, useSmoothedUsageColor } from "./useSmoothedUsageColor";
 
 export function PhysicalTopologyServerNode({ data }: NodeProps<PhysicalServerNode>) {
   return <PhysicalTopologyServerCard data={data} />;
@@ -99,31 +100,33 @@ export function PhysicalTopologyServerCard({
 
 function MetricBar({ label, value }: { label: string; value: number | null }) {
   const rounded = value === null ? null : Math.round(value);
-  const valueRef = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const bar = valueRef.current;
-    if (!bar || rounded === null) return;
-    bar.style.width = `${Math.min(rounded, 100)}%`;
-    return () => {
-      bar.style.removeProperty("width");
-    };
-  }, [rounded]);
+  const metricRef = useRef<HTMLDivElement>(null);
+  const smoothedUsage = useSmoothedUsageColor(value, metricRef);
+  const displayedBarValue = value ?? smoothedUsage;
   return (
-    <div className="grid min-w-0 gap-1" data-metric={label.toLowerCase()}>
+    <div
+      className="grid min-w-0 gap-1"
+      data-metric={label.toLowerCase()}
+      data-usage-value={smoothedUsage === null ? "unknown" : smoothedUsage.toFixed(3)}
+      ref={metricRef}
+    >
       <span className="flex items-center justify-between gap-1 text-[0.625rem] text-muted-foreground">
         <span>{label}</span>
         <span>{rounded === null ? "—" : `${rounded}%`}</span>
       </span>
       <span className="h-1.5 overflow-hidden rounded-full bg-muted">
-        {rounded === null ? null : (
+        {displayedBarValue === null || smoothedUsage === null ? null : (
           <span
-            aria-label={`${label} ${rounded}%`}
+            aria-label={`${label} ${rounded === null ? "—" : `${rounded}%`}`}
             aria-valuemax={100}
             aria-valuemin={0}
-            aria-valuenow={Math.min(rounded, 100)}
-            className="block h-full rounded-full bg-primary transition-[width] duration-(--motion-value) ease-(--ease-spring) motion-reduce:transition-none"
-            ref={valueRef}
+            aria-valuenow={rounded === null ? undefined : Math.min(rounded, 100)}
+            className="block h-full rounded-full"
             role="progressbar"
+            style={{
+              backgroundColor: usageColor(smoothedUsage),
+              width: `${Math.min(Math.max(displayedBarValue, 0), 100)}%`,
+            }}
           />
         )}
       </span>
