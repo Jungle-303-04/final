@@ -25,6 +25,7 @@ import {
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import { usePhysicalTopologyLayout } from "./usePhysicalTopologyLayout";
 import { useGraphRefit } from "./useGraphRefit";
+import { UsageSmoothingBoundary } from "./useSmoothedUsageColor";
 
 const nodeTypes: NodeTypes = { "physical-server": PhysicalTopologyServerNode };
 
@@ -47,6 +48,10 @@ export function ResourcesPhysicalTopologyScene({
     () => topology === null ? [] : physicalServerPlacements(topology),
     [topology],
   );
+  const usageMarkCount = useMemo(
+    () => placements.reduce((count, placement) => count + placement.pods.length + 2, 0),
+    [placements],
+  );
   const inputNodes = useMemo<PhysicalServerNode[]>(() => placements.map(
     (placement, index) => ({
       id: placement.server.id,
@@ -68,35 +73,39 @@ export function ResourcesPhysicalTopologyScene({
   if (frame.phase === "ready" && nodes.length > 0 &&
       typeof ResizeObserver !== "undefined") {
     return (
-      <div className="h-full" ref={viewportRef}>
-        <ReactFlow
-          colorMode={colorMode}
-          fitView
-          fitViewOptions={{ padding: 0.12, minZoom: 0.4 }}
-          maxZoom={2}
-          minZoom={0.4}
-          nodeTypes={nodeTypes}
-          nodes={nodes}
-          nodesConnectable={false}
-          nodesDraggable={false}
-          onInit={setFlowInstance}
-          panOnScroll={false}
-          proOptions={{ hideAttribution: true }}
-          zoomOnDoubleClick={false}
-          zoomOnScroll
-        >
-          <Background color="var(--border)" gap={22} size={1} />
-        </ReactFlow>
-      </div>
+      <UsageSmoothingBoundary markCount={usageMarkCount}>
+        <div className="h-full" ref={viewportRef}>
+          <ReactFlow
+            colorMode={colorMode}
+            fitView
+            fitViewOptions={{ padding: 0.12, minZoom: 0.4 }}
+            maxZoom={2}
+            minZoom={0.4}
+            nodeTypes={nodeTypes}
+            nodes={nodes}
+            nodesConnectable={false}
+            nodesDraggable={false}
+            onInit={setFlowInstance}
+            panOnScroll={false}
+            proOptions={{ hideAttribution: true }}
+            zoomOnDoubleClick={false}
+            zoomOnScroll
+          >
+            <Background color="var(--border)" gap={22} size={1} />
+          </ReactFlow>
+        </div>
+      </UsageSmoothingBoundary>
     );
   }
   if (frame.phase === "ready" && nodes.length > 0) {
     return (
-      <div className="flex h-full items-center gap-4 overflow-x-auto px-5 pb-12 pt-3">
-        {nodes.map((node) => (
-          <PhysicalTopologyServerCard data={node.data} key={node.id} />
-        ))}
-      </div>
+      <UsageSmoothingBoundary markCount={usageMarkCount}>
+        <div className="flex h-full items-center gap-4 overflow-x-auto px-5 pb-12 pt-3">
+          {nodes.map((node) => (
+            <PhysicalTopologyServerCard data={node.data} key={node.id} />
+          ))}
+        </div>
+      </UsageSmoothingBoundary>
     );
   }
   return <GraphUnavailable failed={frame.phase === "failed"} />;

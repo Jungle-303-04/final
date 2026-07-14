@@ -1,5 +1,5 @@
 import { Pause, RotateCcw, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
 import { podWaveDelay } from "../../motion/useStagger";
@@ -10,6 +10,7 @@ import {
   podUsageLabel,
   podUsageTone,
 } from "./physicalTopologyViewModel";
+import { usageColor, useSmoothedUsageColor } from "./useSmoothedUsageColor";
 
 export function PhysicalTopologyPod({
   nodeIndex,
@@ -23,11 +24,13 @@ export function PhysicalTopologyPod({
   podIndex: number;
 }) {
   const { t } = useI18n();
-  const tone = podUsageTone(pod.usagePercent);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const smoothedUsage = useSmoothedUsageColor(pod.usagePercent, buttonRef);
+  const tone = podUsageTone(smoothedUsage);
   const badge = podAbnormalBadge(pod);
   const disabled = !pod.matchesFilter;
   const delay = podWaveDelay(nodeIndex, podIndex);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const color = smoothedUsage === null ? null : usageColor(smoothedUsage);
   useEffect(() => {
     const button = buttonRef.current;
     if (!button) return;
@@ -46,9 +49,7 @@ export function PhysicalTopologyPod({
       className={cn(
         "motion-pod-pop relative grid size-9 place-items-center rounded-md border text-[0.625rem] font-semibold shadow-xs transition-[opacity,transform,box-shadow] duration-(--motion-instant) motion-reduce:transition-none",
         "enabled:hover:z-10 enabled:hover:scale-125 enabled:hover:shadow-md",
-        tone === "neutral" && "border-border bg-muted text-muted-foreground",
-        tone === "amber" && "border-amber-500/50 bg-amber-500/30 text-amber-950 dark:text-amber-100",
-        tone === "red" && "border-destructive/60 bg-destructive/35 text-destructive-foreground",
+        tone !== "unknown" && "text-foreground",
         tone === "unknown" && "border-dashed border-border bg-background text-muted-foreground",
         disabled && "cursor-not-allowed opacity-20",
       )}
@@ -56,9 +57,15 @@ export function PhysicalTopologyPod({
       data-morph-id={`pod:${pod.id}`}
       data-slot="physical-topology-pod"
       data-usage-tone={tone}
+      data-usage-value={smoothedUsage === null ? "unknown" : smoothedUsage.toFixed(3)}
       disabled={disabled}
       onClick={() => onOpen(pod)}
       ref={buttonRef}
+      style={color === null ? undefined : {
+        "--usage-color": color,
+        backgroundColor: "color-mix(in oklch, var(--usage-color) 34%, var(--card))",
+        borderColor: "color-mix(in oklch, var(--usage-color) 62%, var(--border))",
+      } as CSSProperties}
       title={`${pod.namespace ?? "—"} · ${pod.name} · ${podUsageLabel(pod.usagePercent)}`}
       type="button"
     >
