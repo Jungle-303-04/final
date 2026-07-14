@@ -14,7 +14,7 @@ import {
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { Input } from "../../shared/ui/primitives/input";
 import {
   FormField,

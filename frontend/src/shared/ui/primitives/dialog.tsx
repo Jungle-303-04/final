@@ -8,7 +8,7 @@ import {
   type TranslationFunction,
 } from "../../i18n";
 import { Button } from "./button";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 function Dialog<Payload = unknown>(props: DialogPrimitive.Root.Props<Payload>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;

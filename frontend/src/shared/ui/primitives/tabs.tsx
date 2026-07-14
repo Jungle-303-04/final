@@ -1,7 +1,7 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cva } from "class-variance-authority";
 import { createContext, useContext, type ReactNode } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 const ORIENTATIONS = ["horizontal", "vertical"] as const;
 const ACTIVATION_MODES = ["automatic", "manual"] as const;

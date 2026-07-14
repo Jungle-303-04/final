@@ -1,26 +1,7 @@
-import {
-  IconBrandAws,
-  IconBrandAzure,
-  IconBrandGoogle,
-  type Icon,
-} from "@tabler/icons-react";
-import { Boxes, ServerCog } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
 import type { HomeClusterProvider } from "../home/homeContract";
 import { useI18n, type MessageKey } from "../../shared/i18n";
-import { cn } from "../../shared/ui/primitives/cn";
-
-const providerIcons: Record<
-  HomeClusterProvider,
-  ComponentType<SVGProps<SVGSVGElement>> | Icon
-> = {
-  aks: IconBrandAzure,
-  eks: IconBrandAws,
-  gke: IconBrandGoogle,
-  kind: Boxes,
-  onprem: ServerCog,
-  unknown: Boxes,
-};
+import { ProviderLogo } from "../../shared/brand/ProviderLogo";
+import { cn } from "../../shared/lib/cn";
 
 const providerLabelKeys: Record<HomeClusterProvider, MessageKey> = {
   aks: "clusterScope.provider.aks",
@@ -39,7 +20,6 @@ export function ClusterProviderIcon({
   provider: HomeClusterProvider;
 }) {
   const { t } = useI18n();
-  const IconComponent = providerIcons[provider];
   const label = t(providerLabelKeys[provider]);
 
   return (
@@ -51,7 +31,7 @@ export function ClusterProviderIcon({
       role="img"
       title={label}
     >
-      <IconComponent aria-hidden="true" className="size-4" />
+      <ProviderLogo className="size-4" provider={provider} />
     </span>
   );
 }

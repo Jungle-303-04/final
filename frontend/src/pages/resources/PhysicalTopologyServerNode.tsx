@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { STAGGER_MS, staggerDelay } from "../../motion/useStagger";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { PhysicalTopologyPod } from "./PhysicalTopologyPod";
 import type { PhysicalServerNode } from "./physicalTopologyGraphTypes";
 

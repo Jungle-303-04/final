@@ -1,7 +1,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 type OwnedSlot<T> = Omit<T, "data-slot"> & { "data-slot"?: never };
 type SelectTriggerSize = "default" | "sm";

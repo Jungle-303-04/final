@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "./button";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 import {
   Dialog,
   DialogContent,

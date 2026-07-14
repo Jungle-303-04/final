@@ -3,7 +3,7 @@ import { useId } from "react";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { Spinner } from "../../shared/ui/primitives/spinner";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { useI18n } from "../../shared/i18n";
 import type { AuthenticatedAuthState } from "./authContract";
 

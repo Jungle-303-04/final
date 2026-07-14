@@ -1,7 +1,7 @@
 import { Loader2Icon } from "lucide-react";
 import type { ComponentProps } from "react";
 import { DEFAULT_LOCALE, translate, useOptionalI18n } from "../../i18n";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 type SpinnerProps = Omit<ComponentProps<"svg">, "aria-hidden"> & {
   decorative?: boolean;
