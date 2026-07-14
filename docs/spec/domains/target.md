@@ -11,6 +11,7 @@ status: synced
 
 **한다:**
 - target Kubernetes 클러스터 **등록**: 설치 manifest(YAML) 생성, per-cluster agent 토큰 발급, (선택) `kubectl apply` 직접 실행, **원라인 인스톨러**(`GET /install/{agent_token}` — 토큰 해시 대조로 manifest 재렌더, `curl | kubectl apply` 한 줄 설치).
+- 제품 연결 위자드용 얇은 계약(`POST /clusters/connect`, `GET /clusters/{id}/connection`)을 제공한다. 등록·토큰·만료·권한은 별도 구현하지 않고 기존 target 등록 경계를 그대로 재사용한다.
 - 제어(쓰기) 허용 네임스페이스를 등록 요청의 `control_namespaces` CSV로 받아 설치 manifest ConfigMap에 `CONTROL_ALLOWED_NAMESPACES`로 주입(클러스터별 상이 가능, [command](./command.md)의 제어 정책과 같은 단일 기준).
 - 클러스터별 **desired state**(컴포넌트 목표 상태) 저장·버전 계산, desired/actual 비교(**reconcile drift 판정**) 순수 로직 제공.
 - cluster agent **정책(AgentPolicy)** 저장·조회·머지, agent가 보고하는 policy/reconcile 적용 상태 기록.
@@ -163,10 +164,12 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 |---|---|---|---|---|
 | `POST /targets/preflight` | `src/domains/target/router.py :: target_registration_preflight` | body: `TargetPreflightRequest` | `TargetPreflightResponse` | `require_admin_session`; `apply=true` + `deploy_provider="kube-context"` + allowlist 통과 시 실제 Kubernetes API `/version` 연결성까지 확인 |
 | `POST /targets` | `src/domains/target/router.py :: register_target` | body: `TargetRegisterRequest` | `TargetInstallResponse` | `require_admin_session` (kubectl apply 실행 가능 → admin 전용) |
+| `POST /clusters/connect` | `src/domains/target/router.py :: connect_cluster` | body: `ClusterConnectRequest` | `ClusterConnectResponse` | `require_admin_session`; 기존 `register_target`을 호출해 토큰 hash·UoW·만료 계약을 재사용하고 설치 명령만 제품 응답으로 좁힌다. |
 | `GET /install/{agent_token}` (`INSTALL_MANIFEST_PATH`) | `src/domains/target/router.py :: install_manifest_by_token` | path: `agent_token` | `PlainTextResponse`(`text/yaml`) | 없음(토큰 자체가 자격증명) — `hash_agent_token` 해시로 `authenticate_cluster_agent` 조회, 미등록/불일치 404 `"install link not found"`(존재 여부 비구분) |
 | `GET /clusters` | `src/domains/target/router.py :: list_clusters` | query: `limit: int = 100` | `ClusterListResponse` | `require_session` + `accessible_resource_ids(..., CLUSTER, Permission.CLUSTER_READ)` 필터 |
 | `GET /clusters/{cluster_id}` | `src/domains/target/router.py :: get_cluster` | path: `cluster_id` | `ClusterResponse` | `require_session` + `require_cluster_access(..., Permission.CLUSTER_READ)` |
 | `GET /clusters/{cluster_id}/connection-status` | `src/domains/target/router.py :: get_cluster_connection_status` | path: `cluster_id` | `ClusterConnectionStatusResponse` | `require_session` + `require_cluster_access(..., Permission.CLUSTER_READ)` |
+| `GET /clusters/{cluster_id}/connection` | `src/domains/target/router.py :: get_cluster_connection` | path: `cluster_id` | `ClusterConnectStatusResponse` | `require_session` + 기존 connection-status의 cluster read 권한; `waiting\|connected\|expired`로 제품 상태를 좁혀 반환한다. |
 | `DELETE /clusters/{cluster_id}` | `src/domains/target/router.py :: unregister_cluster` | path: `cluster_id`, query: `purge: bool = false` | 204 / 400 / 403 / 404 | `require_admin_session`; 기본은 soft-delete. `purge=true`는 `TEST_FIXTURE_PURGE_ENABLED=1`이면서 registration `environment=test`인 target role fixture만 물리 삭제 |
 | `PUT /clusters/{cluster_id}/policy` | `src/domains/target/router.py :: update_cluster_policy` | path: `cluster_id`, body: `AgentPolicy` | `dict[str, Any]` (`{"accepted": True, "policy": <stored>}`) | `require_admin_session` |
 | `GET /clusters/{cluster_id}/scheduling-profiles` | `src/domains/target/router.py :: get_cluster_scheduling_profiles` | path: `cluster_id` | `SchedulingPolicyResponse` | `require_session` + `require_cluster_access(..., Permission.CLUSTER_READ)` |
@@ -183,6 +186,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 요청/응답 모델 요약(정의는 `src/packages/contracts/gateway/requests.py`, `src/packages/contracts/gateway/responses.py`):
 - `TargetRegisterRequest`: `cluster_id: str | None`(미지정 시 서버가 `<name-slug>-<4자리 난수>` 생성), `name`, `environment`, `workspace_id`, `management_base_url: str = ""`(클라이언트 생략 가능. 서버가 공개 URL env 로 정규화하며 최종 미해결 시 등록 422), `image: str = ""`(placeholder면 env 기본 이미지로 치환, 최종 미해결 시 등록 422), `prometheus_base_url`, `loki_base_url`, `tempo_base_url`, `otel_traces_endpoint`, `evidence_interval_seconds`(범위 제한), `control_namespaces: str = ""`(제어 쓰기 허용 네임스페이스 CSV — 빈 값이면 agent 기본(sandbox)만. 설치 manifest ConfigMap의 `CONTROL_ALLOWED_NAMESPACES`로 주입), `install_node_collector: bool = True`, `install_sample_workload: bool = False`, `sample_workload_name`(k8s name 패턴), `sample_workload_image`, `apply: bool = False`, `kube_context: str | None = None`, `cloud_provider: str = "existing-k8s"`, `deploy_provider: str = "manual-manifest"`, `provider_config: dict[str, Any] = {}`.
 - `TargetPreflightRequest`: `cluster_id`, `cloud_provider`, `deploy_provider`, `provider_config`, `apply`, `kube_context`, `image`, `management_base_url: str = ""`.
+- `ClusterConnectRequest`: `name: str`, `provider: "aws"|"gcp"|"azure"|"onprem"`. provider는 pending 카드의 hint이며 agent snapshot이 들어오면 실측 provider가 우선한다.
 - `TargetPreflightResponse`: `valid`, `duplicate_cluster_id`, `provider_ready`, `agent_install_status`, `connection_status`, `kube_context_allowed`, `errors`, `warnings`, `selected`, `last_agent_id`, `last_seen_at`, `management_access`.
 - `AgentPolicy`: `cluster_id`, `generation`(≥1), `cluster_role`(`"management"|"target"`), `evidence: EvidenceRuntimePolicy`(`failure_policy: "allow_partial"|"strict"`, `max_attempts`, `providers: dict[str, EvidenceProviderPolicy]`), `bootstrap: BootstrapPolicy`, `desired_state: DesiredStatePolicy`, `scheduling: SchedulingPolicy`.
 - `EvidenceProviderPolicy`: `enabled: bool = True`, `interval_seconds`, `min_workers`, `max_workers`, `queue_age_target_seconds`, `queries: list[dict]`.
@@ -191,6 +195,7 @@ HTTP 엔드포인트(핸들러 함수도 public 심볼):
 - `EvidenceJobScheduleRequest`: `source_id: str = "cluster-snapshot"`, `window_start: str`, `provider_keys: list[str]`(min_length=1).
 - `EvidenceJobResultRequest`: `agent_id: str`, `lease_id: str`, `status: Literal["completed","failed"]`, `result: dict = {}`, `error: str = ""`. `{"result": result}` 직렬화 크기가 `MAX_EVIDENCE_PAYLOAD_BYTES`(1MiB)를 넘으면 `evidence payload exceeds size limit` 검증 오류가 난다.
 - `TargetInstallResponse`: `registered: bool`, `cluster_id: str`, `status: str`(`pending_install`), `applied: bool`, `apply_output: str | None`, `install_manifest: str`, `agent_token: str`(원문 1회 반환, 서버는 해시만 저장), `install_command: str = ""`, `bootstrap_command: str = ""`, `bootstrap_steps: list[{label, command}] = []`, `connect_timeout_seconds`, `connect_expires_at`, `connection_stage="token_issued"`, `management_access`.
+- `ClusterConnectResponse`: `cluster_id`, 서버 생성 `install_command`, `expires_at`. 원문 토큰을 별도 필드나 로그로 중복 노출하지 않는다. / `ClusterConnectStatusResponse`: `status="waiting"|"connected"|"expired"`, 실측이 있을 때만 `agent_version`, `connected_at`.
 - `ManagementAccessResponse`: `mode: "portforward"|"loadbalancer"|"ingress"|"nodeport"|"unknown"`, `external_url: str | null`, `agent_server_url: str`, `reachability: "external"|"self_only"`, `limitation_reason: "external_url_not_configured"|null`. `self_only`에서 management cluster는 허용하지만 다른 target cluster의 preflight/등록은 외부 주소가 필요하다는 오류로 닫힌다.
 - `EvidenceJobScheduleResponse`: `accepted: bool`, `evidence_key: str`, `queued: int`, `job_ids: list[str]`. / `EvidenceJobPollResponse`: `job: JsonMap | None`. / `EvidenceJobResultResponse`: `accepted: bool`, `evidence_key/event_id/correlation_id: str | None`.
 

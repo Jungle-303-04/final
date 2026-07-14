@@ -3646,3 +3646,5 @@ gone branch 0, `(prunable)` worktree 0이다.
 [VP-015 P5] 2026-07-14 13:22 KST / Skyhook Radar v1.5.7 고정 커밋 `88bd1e97fa5c10be8735154ae379d50c1ba1df2b` 889파일을 `references/radar-upstream/`에 보존, Apache-2.0 원문·root NOTICE·README 귀속 반영 / 이식 파일은 원본 헤더와 Opsia 수정 사실을 함께 남기는 규율 확정 / 다음 한 걸음: S0 모션 기반
 
 [VP-015 S0] 2026-07-14 13:31 KST / `frontend/src/motion/`에 VP-017 exact duration·easing·stagger token, FLIP camera morph(420ms·동시 200 상한), 520ms clamp, reduced-motion CSS/JS 차단을 중앙화 / 컴포넌트 밖 keyframes·animate 회귀 가드와 21개 계약 테스트 추가 / typecheck·lint·design guard·production build 통과, 화면 구조 변화 없음 / 다음 한 걸음: gate-fast→dev push 후 S1 Clusters
+
+[VP-015 S2] 2026-07-14 14:10 KST / `service_admin` 전용 4단계 클러스터 연결 위자드와 BQ-070/071 얇은 계약 구현; 서버 생성 일회성 한 줄 명령·TTL·2초 poll·abort·미확인 metadata 비합성, 기존 target 등록의 hashed token/UoW/권한 경계 재사용 / gate-fast 152 files·1013 tests 및 production build 통과 / 다음 한 걸음: dev push→자동 배포/public 확인 뒤 S3

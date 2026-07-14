@@ -13,7 +13,7 @@ updated: 2026-07-14
 URL      : https://k8s.woonyong.org
 배포 SHA : 10f0fad17bcf2e22880e4adae1194fa103736a69 (FULL, run 29302233623)
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 13:53 KST  S1 구현·gate 완료 · 자동 배포/public 확인 대기
+갱신     : 2026-07-14 14:08 KST  S1 배포 감시 · S2 구현 완료/gate 대기
 ```
 
 - public health: HTTP 200
@@ -68,6 +68,11 @@ URL      : https://k8s.woonyong.org
 - [x] 카드 클릭 URL이 기존 필터를 보존하며 `clusters=<id>`를 교체
 - [x] S1 전용 테스트 + 전체 `make gate-fast` — 149 files / 1007 tests
 - [ ] S0/S1 SHA 자동 배포 및 public `/clusters` 클릭 경로 확인
+- [x] S2 `service_admin` 전용 ＋ 버튼·4단계 기존 클러스터 연결 위자드
+- [x] 서버 발급 한 줄 명령 복사·2초 연결 poll·닫기 시 abort·등록 POST 무재시도
+- [x] `POST /clusters/connect`가 기존 안전한 target 등록 경계(UoW·hashed token·TTL)를 재사용
+- [x] `GET /clusters/{id}/connection`이 `waiting|connected|expired`만 반환하고 미확인 시각을 합성하지 않음
+- [ ] S2 전체 gate·dev push·자동 배포/public 확인
 
 ---
 

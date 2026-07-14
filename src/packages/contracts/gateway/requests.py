@@ -271,6 +271,11 @@ class TargetRegisterRequest(TargetProviderSelectionRequest):
         return self
 
 
+class ClusterConnectRequest(StrictModel):
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    provider: Literal["aws", "gcp", "azure", "onprem"]
+
+
 class TargetPreflightRequest(TargetProviderSelectionRequest):
     cluster_id: str = Field(default="", max_length=253)
     name: str | None = Field(default=None, max_length=120)

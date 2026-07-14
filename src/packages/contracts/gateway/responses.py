@@ -1446,6 +1446,18 @@ class ClusterConnectionStatusResponse(StrictModel):
     connect_expires_at: str | None = None
 
 
+class ClusterConnectResponse(StrictModel):
+    cluster_id: str
+    install_command: str = Field(min_length=1)
+    expires_at: str
+
+
+class ClusterConnectStatusResponse(StrictModel):
+    status: Literal["waiting", "connected", "expired"]
+    agent_version: str | None = None
+    connected_at: str | None = None
+
+
 class AlertChannelResponse(StrictModel):
     channel_id: str
     workspace_id: str
