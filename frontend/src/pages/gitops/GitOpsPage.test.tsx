@@ -107,6 +107,8 @@ describe("GitOpsPage workspace navigation", () => {
 
     const workspaceHeader = await screen.findByTestId("workflow-workspace-header");
     expect(within(workspaceHeader).getByRole("heading", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByLabelText("Release workflow graph").classList.contains("hidden")).toBe(false);
+    expect(screen.queryByRole("heading", { name: "Release order" })).toBeNull();
     const requiredFields = within(workspaceHeader).getByRole("button", { name: "2 required fields" });
 
     await user.click(requiredFields);
