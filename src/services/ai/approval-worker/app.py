@@ -39,8 +39,7 @@ def candidate_summary(candidate: RecoveryActionCandidate | None) -> JsonObject |
         "title": candidate.title,
         "route": candidate.route,
         "execution_channel": channel,
-        "auto_execution_allowed": candidate.route == "auto"
-        and not candidate.approval_required,
+        "auto_execution_allowed": candidate.route == "auto" and not candidate.approval_required,
         "risk_level": candidate.risk_level,
         "blast_radius": candidate.blast_radius,
         "approval_required": candidate.approval_required,
