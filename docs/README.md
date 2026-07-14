@@ -11,34 +11,37 @@
 
 ## 먼저 읽는 순서
 
-1. [repo README](../README.md)를 먼저 본다.
+1. [단일 세션 부트스트랩](SESSION-BOOTSTRAP.md)을 먼저 본다.
+   현재 작업 세션을 이어받는 운영 맥락과 dev 단일 트렁크 기준을 확인한다.
+
+2. [repo README](../README.md)를 본다.
    실행 기준, 서비스 목록, 검증 명령을 확인한다.
 
-2. [팀 온보딩 지도](onboarding/README.md)를 본다.
+3. [팀 온보딩 지도](onboarding/README.md)를 본다.
    민정, 가인, 찬빈 역할 경계를 먼저 잡는다.
 
-3. [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)을 본다.
+4. [현재 실제 흐름](rca-production-onboarding/00-current-runtime-flow.md)을 본다.
    command, evidence, RCA, PR, dashboard 흐름을 한 번에 본다.
 
-4. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
+5. [벤치마크 최소선 기준 프로덕션 완성 설계](rca-production-onboarding/05-production-completion-scope.md)를 본다.
    외부 기준 기능 범위를 최소선으로 두고 우리 설계 기준으로 빠진 production scope가 없는지 본다.
 
-5. [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)을 본다.
+6. [찾아보고 구현하는 방법](rca-production-onboarding/07-how-to-find-and-implement.md)을 본다.
    route, event, worker, provider, test를 찾는 순서를 익힌다.
 
-6. [Bruno API 테스트](api/README.md)를 연다.
+7. [Bruno API 테스트](api/README.md)를 연다.
    Gateway API를 사람이 직접 눌러 확인한다.
 
-7. [로컬 테스트 실행 기준](local-testing.md)을 본다.
+8. [로컬 테스트 실행 기준](local-testing.md)을 본다.
    로컬 계정 bootstrap, smoke, Bruno 값을 확인한다.
 
-8. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
+9. [AWS 테스트 기준](aws-testing-runbook.md)을 본다.
    실제 서비스 smoke 기준을 확인한다.
 
-9. [라이브 데모 런북](demo-runbook.md)을 본다.
+10. [라이브 데모 런북](demo-runbook.md)을 본다.
    클러스터 연결부터 자동 복구까지 발표 리허설 순서와 플랜B를 확인한다.
 
-10. [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)을 본다.
+11. [2026-07-07 연속 실행 계획](continuation-execution-plan-2026-07-07.md)을 본다.
    현재 밤샘 안정화 작업을 대화 맥락 없이 이어받을 때 필요한 SHA, run ID, 게이트, 다음 명령을 확인한다.
 
 ## 민정이 먼저 볼 문서
@@ -159,6 +162,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 
 루트 문서는 아래에 있다.
 
+- [SESSION-BOOTSTRAP](SESSION-BOOTSTRAP.md)
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
