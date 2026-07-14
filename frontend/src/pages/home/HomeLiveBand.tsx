@@ -74,12 +74,13 @@ function NodePanel({ state }: { state: HomePageState }) {
       </div>
       <ul
         aria-label={t("home.node.list")}
-        className="grid min-w-0 list-none gap-2 md:grid-cols-2 2xl:grid-cols-3"
+        className="flex min-w-0 snap-x list-none gap-3 overflow-x-auto pb-2"
         data-render-strategy="content-visibility"
+        data-slot="home-server-band"
       >
         {nodes.data.nodes.map((node) => (
           <li
-            className="[contain-intrinsic-size:auto_7rem] [content-visibility:auto]"
+            className="min-w-[17rem] flex-1 snap-start [contain-intrinsic-size:auto_7rem] [content-visibility:auto]"
             key={node.id}
           >
             <NodeItem node={node} state={state} />

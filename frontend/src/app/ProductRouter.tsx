@@ -25,9 +25,11 @@ export function ProductRouter({
   }
 
   const fallbackRoute = routeDefinitionForSurface(composition.surfaces[0].id);
-  const landingRoute = composition.releasedSurfaceIds.has("clusters")
-    ? routeDefinitionForSurface("clusters")
-    : fallbackRoute;
+  const landingRoute = composition.releasedSurfaceIds.has("home")
+    ? routeDefinitionForSurface("home")
+    : composition.releasedSurfaceIds.has("clusters")
+      ? routeDefinitionForSurface("clusters")
+      : fallbackRoute;
 
   return (
     <UnifiedFilterProvider>

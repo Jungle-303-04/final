@@ -7,6 +7,7 @@ import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
+import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
 import { useHomePageState } from "./useHomePageState";
@@ -47,7 +48,7 @@ export function HomePage({ port }: { port: HomePort }) {
       </header>
       {!state.selectedClusterExists ? (
         state.clusterSelection.kind === "unfiltered" ? (
-          <HomeClusterBoundary variant="required" />
+          <HomeClusterGrid clusters={state.choices.data.clusters} />
         ) : state.clusterSelection.kind === "multiple" ? (
           <HomeClusterBoundary variant="multiple" />
         ) : (
