@@ -79,7 +79,7 @@ export const shellKo = {
   "shell.theme.switchToLight": "라이트 모드로 전환",
   "shell.workspace.label": "워크스페이스",
   "shell.workspace.current": "현재 워크스페이스: {workspace}",
-  "shell.workspace.onlyCurrent": "세션 계약에는 현재 워크스페이스만 제공됩니다.",
+  "shell.workspace.onlyCurrent": "현재 워크스페이스만 사용할 수 있습니다.",
   "shell.profile.label": "프로필",
   "shell.profile.open": "{name} 프로필 메뉴 열기",
   "shell.profile.account": "프로필",

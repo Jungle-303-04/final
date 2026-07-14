@@ -14,7 +14,7 @@ export function ResourcesToolbar({
     <div className="flex justify-end border-b p-3">
       <Toggle
         aria-label={t("resources.filter.includeInactive")}
-        className="w-32 shrink-0"
+        className="w-40 shrink-0"
         onPressedChange={(pressed) => onIncludeDeletedChange(pressed)}
         pressed={includeDeleted}
         variant="outline"

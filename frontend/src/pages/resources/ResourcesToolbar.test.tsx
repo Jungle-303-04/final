@@ -25,4 +25,18 @@ describe("ResourcesToolbar", () => {
     await user.click(screen.getByRole("button", { name: "Include inactive resources" }));
     expect(onIncludeDeletedChange).toHaveBeenCalledWith(true);
   });
+
+  it("describes the retained rows in user language", () => {
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourcesToolbar
+          includeDeleted={false}
+          onIncludeDeletedChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "종료된 리소스 포함" })).toBeTruthy();
+    expect(screen.queryByText("비활성 포함")).toBeNull();
+  });
 });
