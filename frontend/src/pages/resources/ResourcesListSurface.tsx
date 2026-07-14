@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
@@ -10,12 +10,14 @@ import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
+import { ResourcesInfraMapView } from "./ResourcesInfraMapView";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
 import {
   ResourcesFailure,
   UnknownCompletenessEmpty,
 } from "./ResourcesPageFeedback";
 import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
+import { buildInfraMapModel } from "./resourcesInfraMapModel";
 import { ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
@@ -118,12 +120,29 @@ export function ResourcesListSurface({
       ),
     })),
   ];
+  const infraMapModel = useMemo(
+    () => physicalTopology.phase === "ready"
+      ? buildInfraMapModel({
+          selectionActive: state.selectedResourceType !== null,
+          topology: physicalTopology.data,
+        })
+      : null,
+    [physicalTopology, state.selectedResourceType],
+  );
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
       <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
         <ResourcesToolbar
           includeDeleted={state.includeDeleted}
           onIncludeDeletedChange={state.setIncludeDeleted}
+        />
+      </Surface>
+
+      <Surface aria-labelledby="resources-infra-map-title" className="min-w-0 overflow-hidden">
+        <ResourcesInfraMapView
+          model={infraMapModel}
+          onRetry={state.refresh}
+          phase={physicalTopology.phase}
         />
       </Surface>
 
