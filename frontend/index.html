@@ -1,29 +1,33 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <script>
       (() => {
-        let mode = "dark";
+        let storedTheme = null;
+        let locale = navigator.language?.toLowerCase().startsWith("ko") ? "ko" : "en";
         try {
-          mode = window.localStorage.getItem("theme-mode") === "light" ? "light" : "dark";
+          storedTheme = window.localStorage.getItem("opsia-theme");
+          const storedLocale = window.localStorage.getItem("opsia.locale");
+          if (storedLocale === "en" || storedLocale === "ko") locale = storedLocale;
         } catch {
-          mode = "dark";
+          storedTheme = null;
         }
-        document.documentElement.dataset.themeMode = mode;
-        document.documentElement.classList.toggle("dark", mode === "dark");
-        document.documentElement.classList.toggle("light", mode === "light");
-        document.documentElement.style.colorScheme = mode;
+        const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+        const isDark = storedTheme === "dark" || (storedTheme !== "light" && systemDark);
+        document.documentElement.classList.toggle("dark", isDark);
+        document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+        document.documentElement.lang = locale;
       })();
     </script>
     <style>
       :root {
-        --background: #0e1015;
-        --foreground: #eef0f1;
+        --background: oklch(1 0 0);
+        --foreground: oklch(0.145 0 0);
       }
-      :root[data-theme-mode="light"] {
-        --background: #f7f8fa;
-        --foreground: #1f2430;
+      :root.dark {
+        --background: oklch(0.145 0 0);
+        --foreground: oklch(0.985 0 0);
       }
       html,
       body,
@@ -37,7 +41,12 @@
       }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>운영 콘솔</title>
+    <meta
+      name="description"
+      content="Provider-neutral Kubernetes operations and GitOps control plane."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Opsia</title>
   </head>
   <body>
     <div id="root"></div>

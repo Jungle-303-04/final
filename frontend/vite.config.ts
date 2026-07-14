@@ -1,26 +1,42 @@
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
-import { fileURLToPath } from 'node:url';
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath, URL } from "node:url";
+import { defineConfig } from "vitest/config";
 
-const backend = process.env.VITE_BACKEND ?? 'http://127.0.0.1:8000';
-const proxy = { '/api': { target: backend, changeOrigin: true, ws: true, rewrite: (p: string) => p.replace(/^\/api/, '') } };
+const backendOrigin = process.env.VITE_BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
+const sourceRoot = fileURLToPath(new URL("./src", import.meta.url));
+const proxy = {
+  "/api": {
+    target: backendOrigin,
+    changeOrigin: true,
+    cookieDomainRewrite: "",
+    ws: true,
+    rewrite: (path: string) => backendOrigin.includes("k8s.woonyong.org")
+      ? path
+      : path.replace(/^\/api/, ""),
+  },
+};
 
 export default defineConfig({
-  plugins: [tailwindcss(), react()],
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": sourceRoot } },
+  server: { proxy },
+  preview: { proxy },
+  test: {
+    hookTimeout: 15_000,
+    testTimeout: 15_000,
+    maxWorkers: 4,
+  },
   build: {
-    // vendor chunk는 gzip 기준 약 280KB다. 경고 기준은 minified 크기보다 실제 전송 크기를 우선한다.
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id.includes('/node_modules/')) return undefined;
-          return 'vendor';
+          if (id.includes("@xyflow/react")) return "flow";
+          if (id.includes("cmdk")) return "overlays";
+          return undefined;
         },
       },
     },
   },
-  server: { proxy },
-  preview: { proxy },
 });

@@ -1,0 +1,80 @@
+import { describe, expect, it } from "vitest";
+import {
+  decodeResourceTarget,
+  decodeResourceSelection,
+  encodeResourceTarget,
+  encodeResourceSelection,
+} from "./resourcesUrlState";
+
+describe("Resources URL identity", () => {
+  it("round-trips backend-valid event names containing colons", () => {
+    const identity = {
+      resourceType: "event",
+      kind: "Event",
+      namespace: "shop",
+      name: "uid-1:Pod:checkout-api-0:BackOff",
+    } as const;
+
+    const selection = encodeResourceSelection(identity);
+
+    expect(selection).toEqual({
+      kind: "Event",
+      resource: "shop/uid-1:Pod:checkout-api-0:BackOff",
+    });
+    expect(decodeResourceSelection("event", selection.kind, selection.resource))
+      .toEqual(identity);
+  });
+
+  it("accepts provider-neutral catalog types and kinds within backend length bounds", () => {
+    const identity = {
+      resourceType: "custom.io:widget",
+      kind: "Custom-Widget",
+      namespace: null,
+      name: "widget:blue",
+    } as const;
+
+    const selection = encodeResourceSelection(identity);
+
+    expect(decodeResourceSelection(identity.resourceType, selection.kind, selection.resource))
+      .toEqual(identity);
+  });
+
+  it("rejects ambiguous composite identities instead of throwing during decode", () => {
+    expect(decodeResourceSelection("event", "Event", "shop/one/two")).toBeNull();
+    expect(() => encodeResourceSelection({
+      resourceType: "event",
+      kind: "Event",
+      namespace: "shop",
+      name: "one/two",
+    })).toThrowError(TypeError);
+  });
+
+  it("round-trips a self-contained detail target independently from list filters", () => {
+    const identity = {
+      resourceType: "custom.io:widget",
+      kind: "CustomWidget",
+      namespace: "shop",
+      name: "blue",
+    } as const;
+
+    const selection = encodeResourceTarget("provider/cluster-a", identity);
+
+    expect(selection.resource).toMatch(/^v1\//u);
+    expect(decodeResourceTarget("other-cluster", "pod", selection.kind, selection.resource))
+      .toEqual({ clusterId: "provider/cluster-a", identity });
+  });
+
+  it("keeps reading legacy detail identity with explicit fallback context", () => {
+    expect(decodeResourceTarget("cluster-a", "pod", "Pod", "shop/api-0"))
+      .toEqual({
+        clusterId: "cluster-a",
+        identity: {
+          resourceType: "pod",
+          kind: "Pod",
+          namespace: "shop",
+          name: "api-0",
+        },
+      });
+    expect(decodeResourceTarget(null, "pod", "Pod", "shop/api-0")).toBeNull();
+  });
+});
