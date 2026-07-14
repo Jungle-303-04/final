@@ -18,6 +18,14 @@ name: Dev Deploy
         options:
           - DEPLOY
           - FIRST_DEPLOY
+      deployment_scope:
+        description: FULL deploys services and console; CONSOLE leaves the unversioned legacy database and services untouched
+        required: true
+        default: FULL
+        type: choice
+        options:
+          - FULL
+          - CONSOLE
       postgres_snapshot_id:
         description: Completed recent PostgreSQL EBS snapshot with restore rehearsal tags
         required: false
@@ -66,6 +74,7 @@ jobs:
       MGMT_NS: management
       SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
       DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_mode || 'DEPLOY' }}
+      DEPLOYMENT_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_scope || 'FULL' }}
       FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID: ${{ inputs.postgres_snapshot_id }}
       FIRST_DEPLOY_NATS_SNAPSHOT_ID: ${{ inputs.nats_snapshot_id }}
       FIRST_DEPLOY_PREVIOUS_SHA: ${{ inputs.previous_release_sha }}
@@ -113,7 +122,12 @@ jobs:
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             [[ "${FIRST_DEPLOY_PREVIOUS_SHA}" =~ ^[0-9a-f]{40}$ ]]
+            case "${DEPLOYMENT_SCOPE}" in
+              FULL|CONSOLE) ;;
+              *) echo "invalid deployment scope" >&2; exit 1 ;;
+            esac
             if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" ]]; then
+              test "${DEPLOYMENT_SCOPE}" = "FULL"
               [[ "${FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
               [[ "${FIRST_DEPLOY_NATS_SNAPSHOT_ID}" =~ ^snap-[0-9a-f]{17}$ ]]
             else
@@ -148,6 +162,7 @@ jobs:
           aws-region: ${{ vars.AWS_DEV_REGION }}
 
       - name: Build and push immutable service image
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
         id: image
         shell: bash
         run: |
@@ -258,12 +273,12 @@ jobs:
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             delete deployment/console service/console --ignore-not-found --wait=true
 
-      - name: Capture current digest rollback plan
-        id: capture
+      - name: Capture current service digest rollback plan
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        id: service_capture
         shell: bash
         env:
           SERVICE_DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
-          CONSOLE_DEPLOY_IMAGE: ${{ steps.console_image.outputs.image }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
@@ -280,6 +295,22 @@ jobs:
             --managed-repository "${SERVICE_DEPLOY_IMAGE%@*}" \
             --previous-release-sha "${previous_sha}" \
             --output "${RUNNER_TEMP}/service-rollback-plan.json"
+
+      - name: Capture current console digest rollback plan
+        id: console_capture
+        shell: bash
+        env:
+          CONSOLE_DEPLOY_IMAGE: ${{ steps.console_image.outputs.image }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"
+          else
+            previous_sha="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get configmap opsia-deploy-status \
+              -o jsonpath='{.data.dev_sha}')"
+          fi
+          [[ "${previous_sha}" =~ ^[0-9a-f]{40}$ ]]
           uv run python scripts/capture_image_digests.py \
             --context "${MGMT_CONTEXT}" \
             --namespace "${MGMT_NS}" \
@@ -288,6 +319,7 @@ jobs:
             --output "${RUNNER_TEMP}/console-rollback-plan.json"
 
       - name: Enforce live auth bypass zero
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
         run: |
           set -euo pipefail
@@ -354,6 +386,7 @@ jobs:
             --namespace "${MGMT_NS}"
 
       - name: Run fail-closed database migration
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
         env:
           DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
@@ -372,10 +405,10 @@ jobs:
             wait --for=condition=complete job/management-database-migration --timeout=900s
 
       - name: Roll out immutable service digest
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
         env:
           DEPLOY_IMAGE: ${{ steps.image.outputs.image }}
-          CONSOLE_DEPLOY_IMAGE: ${{ steps.console_image.outputs.image }}
         run: |
           set -euo pipefail
           uv run python scripts/rollout_image_digest.py \
@@ -383,6 +416,13 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --image "${DEPLOY_IMAGE}" \
             --timeout 600s
+
+      - name: Roll out immutable console digest
+        shell: bash
+        env:
+          CONSOLE_DEPLOY_IMAGE: ${{ steps.console_image.outputs.image }}
+        run: |
+          set -euo pipefail
           uv run python scripts/rollout_image_digest.py \
             --plan "${RUNNER_TEMP}/console-rollback-plan.json" \
             --context "${MGMT_CONTEXT}" \
@@ -410,6 +450,7 @@ jobs:
             --namespace "${MGMT_NS}"
 
       - name: Run post-deploy smoke
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
         shell: bash
         env:
           PRE_DEPLOY_FRONTEND_BUNDLE: ${{ steps.pre_smoke.outputs.frontend_bundle }}
@@ -423,7 +464,17 @@ jobs:
           export EXPECTED_ALEMBIC_HEAD="$(uv run alembic heads | awk '{print $1}')"
           RUN_SMOKE=1 SMOKE_COMMIT_SHA="${SOURCE_SHA}" bash scripts/post-deploy-smoke.sh
 
+      - name: Run post-deploy console smoke
+        if: env.DEPLOYMENT_SCOPE == 'CONSOLE'
+        shell: bash
+        env:
+          PRE_DEPLOY_FRONTEND_BUNDLE: ${{ steps.pre_smoke.outputs.frontend_bundle }}
+          EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
+          CONSOLE_ROLLBACK_PLAN: ${{ runner.temp }}/console-rollback-plan.json
+        run: bash scripts/post-deploy-console-smoke.sh
+
       - name: Record successful dev SHA in cluster
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
         id: status
         shell: bash
         run: |
@@ -435,8 +486,21 @@ jobs:
             --output yaml \
             | kubectl --context "${MGMT_CONTEXT}" apply --filename -
 
+      - name: Record successful console SHA in cluster
+        if: env.DEPLOYMENT_SCOPE == 'CONSOLE'
+        id: console_status
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            create configmap opsia-console-deploy-status \
+            --from-literal="console_sha=${SOURCE_SHA}" \
+            --dry-run=client \
+            --output yaml \
+            | kubectl --context "${MGMT_CONTEXT}" apply --filename -
+
       - name: Restore previous release after failure
-        if: failure() && steps.capture.outcome == 'success'
+        if: failure() && steps.console_capture.outcome == 'success'
         shell: bash
         run: |
           set -uo pipefail
@@ -469,11 +533,13 @@ jobs:
             --context "${MGMT_CONTEXT}" \
             --timeout 600s \
             --apply || rollback_failed=1
-          uv run python scripts/revert_image_digests.py \
-            --plan "${RUNNER_TEMP}/service-rollback-plan.json" \
-            --context "${MGMT_CONTEXT}" \
-            --timeout 600s \
-            --apply || rollback_failed=1
+          if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then
+            uv run python scripts/revert_image_digests.py \
+              --plan "${RUNNER_TEMP}/service-rollback-plan.json" \
+              --context "${MGMT_CONTEXT}" \
+              --timeout 600s \
+              --apply || rollback_failed=1
+          fi
           if [[ "${DEPLOYMENT_MODE}" == "FIRST_DEPLOY" && \
                 -f "${RUNNER_TEMP}/database-writer-freeze-plan.json" ]]; then
             uv run python scripts/database_writer_freeze.py restore \

@@ -39,6 +39,7 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
     assert set(triggers["workflow_dispatch"]["inputs"]) == {
         "source_sha",
         "deployment_mode",
+        "deployment_scope",
         "postgres_snapshot_id",
         "nats_snapshot_id",
         "previous_release_sha",
@@ -49,6 +50,16 @@ def test_deploy_only_follows_a_successful_dev_push_gate_with_exact_opt_in() -> N
         "default": "DEPLOY",
         "type": "choice",
         "options": ["DEPLOY", "FIRST_DEPLOY"],
+    }
+    assert triggers["workflow_dispatch"]["inputs"]["deployment_scope"] == {
+        "description": (
+            "FULL deploys services and console; CONSOLE leaves the unversioned legacy "
+            "database and services untouched"
+        ),
+        "required": True,
+        "default": "FULL",
+        "type": "choice",
+        "options": ["FULL", "CONSOLE"],
     }
     assert deploy_job()["environment"] == "dev-deploy"
     condition = deploy_job()["if"]
@@ -106,11 +117,13 @@ def test_manual_first_deploy_requires_exact_gate_backup_and_previous_release_pro
     assert '--pvc-name "data-nats-0"' in backup_proof
     assert backup_proof.count("--max-age-hours 24") == 2
     assert "get configmap opsia-deploy-status" in backup_proof
-    capture = steps["Capture current digest rollback plan"]["run"]
-    assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
-    assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in capture
-    assert capture.count("--managed-repository") == 2
-    assert "--allow-missing-live" not in capture
+    service_capture = steps["Capture current service digest rollback plan"]["run"]
+    console_capture = steps["Capture current console digest rollback plan"]["run"]
+    for capture in (service_capture, console_capture):
+        assert 'previous_sha="${FIRST_DEPLOY_PREVIOUS_SHA}"' in capture
+        assert 'if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]' in capture
+        assert capture.count("--managed-repository") == 1
+        assert "--allow-missing-live" not in capture
     assert job["env"]["FIRST_DEPLOY_POSTGRES_SNAPSHOT_ID"] == ("${{ inputs.postgres_snapshot_id }}")
     assert job["env"]["FIRST_DEPLOY_NATS_SNAPSHOT_ID"] == "${{ inputs.nats_snapshot_id }}"
     assert job["env"]["FIRST_DEPLOY_PREVIOUS_SHA"] == "${{ inputs.previous_release_sha }}"
@@ -122,8 +135,13 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     assert "verify_dev_auth_bypass.py rendered" in rendered_auth
     assert "verify_dev_auth_bypass.py live" not in rendered_auth
     assert names.index("Render and verify auth bypass policy") < names.index("Run pre-deploy smoke")
-    assert names.index("Run pre-deploy smoke") < names.index("Capture current digest rollback plan")
-    assert names.index("Capture current digest rollback plan") < names.index(
+    assert names.index("Run pre-deploy smoke") < names.index(
+        "Capture current service digest rollback plan"
+    )
+    assert names.index("Capture current service digest rollback plan") < names.index(
+        "Capture current console digest rollback plan"
+    )
+    assert names.index("Capture current console digest rollback plan") < names.index(
         "Enforce live auth bypass zero"
     )
     assert names.index("Enforce live auth bypass zero") < names.index(
@@ -142,6 +160,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Roll out immutable service digest"
     )
     assert names.index("Roll out immutable service digest") < names.index(
+        "Roll out immutable console digest"
+    )
+    assert names.index("Roll out immutable console digest") < names.index(
         "Verify live auth bypass policy after rollout"
     )
     assert names.index("Verify live auth bypass policy after rollout") < names.index(
@@ -173,7 +194,7 @@ def test_smoke_failure_restores_both_previous_image_sets() -> None:
     assert "frontend_bundle" in pre["run"]
     assert "scripts/post-deploy-smoke.sh" in post["run"]
     assert "steps.pre_smoke.outputs.frontend_bundle" in post["env"]["PRE_DEPLOY_FRONTEND_BUNDLE"]
-    assert rollback["if"] == "failure() && steps.capture.outcome == 'success'"
+    assert rollback["if"] == "failure() && steps.console_capture.outcome == 'success'"
     assert rollback["run"].count("revert_image_digests.py") == 2
     assert "database_cutover_config.py switch --direction source" in rollback["run"]
     assert "database_writer_freeze.py restore" in rollback["run"]
@@ -185,7 +206,7 @@ def test_deploy_uses_immutable_digest_and_image_only_rollback_without_db_downgra
     assert "imageDetails[0].imageDigest" in source
     assert "rollout_image_digest.py" in source
     assert "revert_image_digests.py" in source
-    assert "steps.capture.outcome == 'success'" in source
+    assert "steps.console_capture.outcome == 'success'" in source
     assert "kubectl rollout undo" not in source
     assert "alembic downgrade" not in source
     assert "database-cutover-job.yaml" in source
@@ -229,7 +250,7 @@ def test_first_deploy_does_not_mutate_source_schema_or_create_missing_workloads(
     assert "DROP DATABASE" not in source
 
 
-def test_normal_manual_deploy_skips_cutover_but_keeps_migration_rollout_and_smoke() -> None:
+def test_full_manual_deploy_skips_cutover_but_keeps_migration_rollout_and_smoke() -> None:
     steps = steps_by_name()
     first_deploy_steps = (
         "Verify manual first-deploy backup",
@@ -242,15 +263,45 @@ def test_normal_manual_deploy_skips_cutover_but_keeps_migration_rollout_and_smok
     for name in first_deploy_steps:
         assert "inputs.deployment_mode == 'FIRST_DEPLOY'" in steps[name]["if"]
     for name in (
+        "Build and push immutable service image",
+        "Capture current service digest rollback plan",
+        "Enforce live auth bypass zero",
         "Run fail-closed database migration",
         "Roll out immutable service digest",
         "Run post-deploy smoke",
         "Record successful dev SHA in cluster",
     ):
-        assert "if" not in steps[name]
+        assert steps[name]["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
     assert deploy_job()["env"]["DEPLOYMENT_MODE"] == (
         "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_mode || 'DEPLOY' }}"
     )
+    assert deploy_job()["env"]["DEPLOYMENT_SCOPE"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.deployment_scope || 'FULL' }}"
+    )
+
+
+def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety() -> None:
+    steps = steps_by_name()
+    validation = steps["Validate non-secret deployment inputs"]["run"]
+    smoke = steps["Run post-deploy console smoke"]
+    rollback = steps["Restore previous release after failure"]["run"]
+
+    assert "FULL|CONSOLE" in validation
+    assert 'test "${DEPLOYMENT_SCOPE}" = "FULL"' in validation
+    assert steps["Run post-deploy console smoke"]["if"] == "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+    assert smoke["run"] == "bash scripts/post-deploy-console-smoke.sh"
+    assert "steps.console_image.outputs.image" in smoke["env"]["EXPECTED_CONSOLE_IMAGE"]
+    assert steps["Record successful console SHA in cluster"]["if"] == (
+        "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+    )
+    assert "opsia-console-deploy-status" in steps["Record successful console SHA in cluster"]["run"]
+    assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]' in rollback
+
+    console_smoke = (ROOT / "scripts/post-deploy-console-smoke.sh").read_text(encoding="utf-8")
+    assert 'test "${post_bundle}" != "${PRE_DEPLOY_FRONTEND_BUNDLE}"' in console_smoke
+    assert 'grep --fixed-strings --quiet "${SOURCE_SHA}"' in console_smoke
+    assert "EXPECTED_CONSOLE_IMAGE" in console_smoke
+    assert "alembic" not in console_smoke.lower()
 
 
 def test_failure_recovery_always_attempts_image_and_replica_restore() -> None:
@@ -301,10 +352,11 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         'tagged_image="${registry}/${CONSOLE_ECR_REPOSITORY}:${SOURCE_SHA}"'
         in steps["Build and push immutable console image"]["run"]
     )
-    capture = steps["Capture current digest rollback plan"]["run"]
-    assert '--managed-repository "${SERVICE_DEPLOY_IMAGE%@*}"' in capture
-    assert '--managed-repository "${CONSOLE_DEPLOY_IMAGE%@*}"' in capture
-    assert "--verified-live-image" not in capture
+    service_capture = steps["Capture current service digest rollback plan"]["run"]
+    console_capture = steps["Capture current console digest rollback plan"]["run"]
+    assert '--managed-repository "${SERVICE_DEPLOY_IMAGE%@*}"' in service_capture
+    assert '--managed-repository "${CONSOLE_DEPLOY_IMAGE%@*}"' in console_capture
+    assert "--verified-live-image" not in service_capture + console_capture
     assert source.count("rollout_image_digest.py") == 2
     assert source.count("revert_image_digests.py") == 2
 
@@ -336,7 +388,7 @@ def test_deploy_retires_legacy_console_before_repository_capture() -> None:
 
     assert names.index("Run pre-deploy smoke") < names.index("Retire legacy console deployment")
     assert names.index("Retire legacy console deployment") < names.index(
-        "Capture current digest rollback plan"
+        "Capture current service digest rollback plan"
     )
     assert "delete deployment/console service/console --ignore-not-found --wait=true" in retire
 
