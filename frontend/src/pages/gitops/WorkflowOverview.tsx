@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, PlayCircle, Settings2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
   ReleaseApplication,
@@ -28,7 +28,7 @@ import {
 import { Surface } from "../../shared/ui/Surface";
 import { environmentLabel, strategyLabel } from "./WorkflowFormControls";
 import { WorkflowGraph } from "./WorkflowGraph";
-import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 
 export function WorkflowOverview({
   plan,
@@ -57,36 +57,20 @@ export function WorkflowOverview({
 
   return (
     <div className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-col gap-4 border-l-2 border-primary bg-card px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-        <WorkflowInlineHeading
-          as="h2"
-          className="flex-1"
-          icon={setupIssues.length ? <AlertTriangle aria-hidden="true" /> : undefined}
-          title={setupIssues.length
-            ? t("workflows.overview.setupTitle", { count: setupIssues.length })
-            : t("workflows.overview.actionTitle")}
-          variant="compact"
-        />
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-          {firstSetupIssue ? (
-            <Button onClick={() => onEdit(firstSetupIssue.stepIndex, firstSetupIssue.field)}>
-              <Settings2 aria-hidden="true" />
-              {t("workflows.overview.setupAction")}
-            </Button>
-          ) : (
-            <>
-              <Button onClick={() => onEdit()} variant="outline">
-                <Settings2 aria-hidden="true" />
-                {t("workflows.overview.edit")}
-              </Button>
-              <Button onClick={onOpenRuns}>
-                <PlayCircle aria-hidden="true" />
-                {t("workflows.runs.check")}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      <WorkflowWorkspaceHeader
+        actions={firstSetupIssue ? (
+          <Button onClick={() => onEdit(firstSetupIssue.stepIndex, firstSetupIssue.field)}>
+            <AlertTriangle aria-hidden="true" />
+            {t("workflows.overview.setupActionCount", { count: setupIssues.length })}
+          </Button>
+        ) : (
+          <Button onClick={onOpenRuns}>
+            <CheckCircle2 aria-hidden="true" />
+            {t("workflows.runs.check")}
+          </Button>
+        )}
+        title={t("workflows.view.overview")}
+      />
 
       <WorkflowGraph
         applications={applications}

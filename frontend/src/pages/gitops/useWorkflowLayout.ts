@@ -67,5 +67,7 @@ export function useWorkflowLayout(
 }
 
 export function isNarrowGraphViewport(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches;
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(max-width: 900px)").matches;
 }

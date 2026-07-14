@@ -14,8 +14,10 @@ import type {
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { GitOpsPage } from "./GitOpsPage";
+import { installWorkflowGraphDomStubs } from "./GitOpsPage.testSupport";
 
 beforeEach(() => {
+  installWorkflowGraphDomStubs();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
     return window.setTimeout(() => callback(0), 0);
   });
@@ -45,7 +47,11 @@ describe("GitOpsPage workspace navigation", () => {
       "Runs",
       "YAML / PR",
     ]);
+    expect(within(navigation).queryByRole("button")).toBeNull();
     expect(screen.getAllByRole("navigation", { name: "Workflow workspace" })).toHaveLength(1);
+    const workspaceHeader = screen.getByTestId("workflow-workspace-header");
+    expect(within(workspaceHeader).getByRole("heading", { name: "Edit plan" })).toBeTruthy();
+    expect(within(workspaceHeader).getByRole("button", { name: "Save changes" })).toBeTruthy();
 
     await user.selectOptions(screen.getByLabelText("Select plan"), "plan-b");
 
@@ -63,6 +69,9 @@ describe("GitOpsPage workspace navigation", () => {
     await user.click(screen.getByRole("tab", { name: "YAML / PR" }));
     await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
       .toBe("/gitops?plan=plan-a&view=yaml"));
+    const workspaceHeader = screen.getByTestId("workflow-workspace-header");
+    expect(within(workspaceHeader).getByRole("heading", { name: "YAML / PR" })).toBeTruthy();
+    expect(within(workspaceHeader).getByRole("button", { name: "Generate YAML" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "New plan" }));
 
@@ -73,6 +82,19 @@ describe("GitOpsPage workspace navigation", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Enter a plan name.")).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Plan name")));
+  });
+
+  it("keeps the overview next action in the workspace header", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops?plan=plan-a&view=overview");
+
+    const workspaceHeader = await screen.findByTestId("workflow-workspace-header");
+    expect(within(workspaceHeader).getByRole("heading", { name: "Overview" })).toBeTruthy();
+    const requiredFields = within(workspaceHeader).getByRole("button", { name: "2 required fields" });
+
+    await user.click(requiredFields);
+    await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
+      .toBe("/gitops?plan=plan-a&view=edit"));
   });
 
   it("turns readiness blockers into one direct field-fix path", async () => {

@@ -35,6 +35,7 @@ import {
   shortRunId,
 } from "./RunWorkspaceParts";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 
 export function RunWorkspace({
   plan,
@@ -75,38 +76,34 @@ export function RunWorkspace({
 
   return (
     <div className="grid min-w-0 gap-4">
-      <WorkflowInlineHeading
+      <WorkflowWorkspaceHeader
+        actions={<>
+          <Button disabled={pending} onClick={onCheckReadiness} variant="outline">
+            <CheckCircle2 aria-hidden="true" />
+            {pending
+              ? t("workflows.runs.checking")
+              : readiness
+                ? t("workflows.runs.recheck")
+                : t("workflows.runs.check")}
+          </Button>
+          {readiness?.ready ? (
+            <Button disabled={pending} onClick={onStart}>
+              <CirclePlay aria-hidden="true" />
+              {pending ? t("workflows.runs.starting") : t("workflows.runs.start")}
+            </Button>
+          ) : null}
+        </>}
         title={t("workflows.runs.title")}
       />
 
-      <Surface aria-label={t("workflows.runs.precheckTitle")} className="grid min-w-0 gap-4 p-4">
-        <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {readiness ? (
+        <Surface aria-label={t("workflows.runs.precheckTitle")} className="grid min-w-0 gap-4 p-4">
           <WorkflowInlineHeading
             as="h3"
-            className="flex-1"
             icon={<CheckCircle2 aria-hidden="true" />}
             title={t("workflows.runs.precheckTitle")}
             variant="compact"
           />
-          <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-            <Button disabled={pending} onClick={onCheckReadiness} variant="outline">
-              <CheckCircle2 aria-hidden="true" />
-              {pending
-                ? t("workflows.runs.checking")
-                : readiness
-                  ? t("workflows.runs.recheck")
-                  : t("workflows.runs.check")}
-            </Button>
-            {readiness?.ready ? (
-              <Button disabled={pending} onClick={onStart}>
-                <CirclePlay aria-hidden="true" />
-                {pending ? t("workflows.runs.starting") : t("workflows.runs.start")}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        {readiness ? (
           <div className="grid min-w-0 gap-3 border-t pt-3" role="status">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {readiness.ready
@@ -142,8 +139,8 @@ export function RunWorkspace({
               </div>
             ) : null}
           </div>
-        ) : null}
-      </Surface>
+        </Surface>
+      ) : null}
 
       {orderedRuns.length ? (
         <div className="grid min-w-0 gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">

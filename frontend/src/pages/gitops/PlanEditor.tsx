@@ -19,6 +19,7 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Surface } from "../../shared/ui/Surface";
 import { PlanStepEditor } from "./PlanStepEditor";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 import {
   FormField,
   NativeSelect,
@@ -73,16 +74,14 @@ export function PlanEditor({
 
   return (
     <div className="grid min-w-0 gap-4">
-      <div className="sticky top-0 z-20 flex min-w-0 flex-col items-stretch gap-3 rounded-xl border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-        <WorkflowInlineHeading
-          className="flex-1"
-          title={t("workflows.editor.title")}
-        />
-        <Button disabled={pending || validationCodes.length > 0} onClick={onSave}>
+      <WorkflowWorkspaceHeader
+        actions={<Button disabled={pending || validationCodes.length > 0} onClick={onSave}>
           <Save aria-hidden="true" />
           {pending ? t("workflows.editor.saving") : t("workflows.editor.save")}
-        </Button>
-      </div>
+        </Button>}
+        sticky
+        title={t("workflows.editor.title")}
+      />
 
       {validationCodes.length ? (
         <div className="grid min-w-0 gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-foreground">
