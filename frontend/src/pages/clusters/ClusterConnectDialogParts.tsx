@@ -4,27 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/
 import { Button } from "../../shared/ui/primitives/button";
 import type { ConnectPhase } from "./ClusterConnectDialog";
 
-export function ConnectionModeButton({
-  description,
-  onClick,
-  title,
-}: {
-  description: string;
-  onClick: () => void;
-  title: string;
-}) {
-  return (
-    <button
-      className="grid min-h-36 content-center gap-2 rounded-xl border bg-card p-5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none"
-      onClick={onClick}
-      type="button"
-    >
-      <span className="font-semibold">{title}</span>
-      <span className="text-sm text-muted-foreground">{description}</span>
-    </button>
-  );
-}
-
 export function ConnectionCommandStep({
   copyState,
   expiresAt,
