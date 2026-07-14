@@ -415,6 +415,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-017-motion-spec](spec/frontend/vp-017-motion-spec.md)
 - [spec/frontend/vp-018-shell-corrections](spec/frontend/vp-018-shell-corrections.md)
 - [spec/frontend/vp-019-radar-full-port](spec/frontend/vp-019-radar-full-port.md)
+- [spec/frontend/vp-020-alerts](spec/frontend/vp-020-alerts.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)
