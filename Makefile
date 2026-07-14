@@ -13,12 +13,12 @@ export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
 
-.PHONY: help setup env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-setup: env sync hooks ## 최초 개발 환경 준비
+setup: env sync setup-hooks ## 최초 개발 환경 준비
 
 env: ## .env 파일 생성
 	@if [[ -f .env ]]; then \
@@ -50,6 +50,13 @@ format: ## Ruff 포맷 적용
 
 hooks: ## git 훅 설치(pre-commit 포맷 + pre-push 빠른 게이트)
 	uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+
+setup-hooks: hooks ## 커밋 메시지·포맷·pre-push 게이트 훅 설치
+	@hook_path="$$(git rev-parse --git-path hooks)/commit-msg"; \
+	mkdir -p "$$(dirname "$$hook_path")"; \
+	printf '%s\n' '#!/usr/bin/env sh' 'exec "$$(git rev-parse --show-toplevel)/scripts/commit-msg-gate.sh" "$$1"' > "$$hook_path"; \
+	chmod +x "$$hook_path"; \
+	echo "installed $$hook_path"
 
 test: ## 린트와 테스트 실행
 	bash scripts/test.sh
