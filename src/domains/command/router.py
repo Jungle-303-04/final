@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import time
-import uuid
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from domains.command.debug_queries import (
+    debug_query_plan,
+    is_reserved_log_stream_query,
+    queue_debug_query,
+)
 from domains.command.events import CommandRequestedBody
 from domains.command.handler import build_plan, command_requires_recorded_approval
 from domains.command.policy import (
-    DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS,
     DEFAULT_COMMAND_LEASE_SECONDS,
-    DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
-    DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
 )
 from domains.gitops.events import Diff
 from domains.identity.dependencies import (
@@ -84,8 +83,10 @@ RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
 # 제어 허용 네임스페이스는 packages.config.control 단일 기준(기본 sandbox 만).
 CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
+RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
 
 router = APIRouter()
+__all__ = ["debug_query_plan", "router"]
 
 
 def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> AcceptedResponse:
@@ -219,57 +220,6 @@ def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluste
     )
 
 
-def debug_query_plan(
-    payload: AgentDebugQueryRequest,
-    *,
-    workspace_id: str,
-    requested_by: str,
-    correlation_id: str,
-) -> JsonObject:
-    plan_basis = {
-        "workspace_id": workspace_id,
-        "cluster_id": payload.cluster_id,
-        "action": Command.TELEMETRY_QUERY_RUN_ACTION,
-        "query": payload.query,
-    }
-    encoded = json.dumps(plan_basis, sort_keys=True, separators=(",", ":"), default=str)
-    idempotency_key = hashlib.sha256(encoded.encode()).hexdigest()
-    return {
-        "command_id": f"cmd-debug-{idempotency_key[:24]}",
-        "idempotency_key": idempotency_key,
-        "cluster_id": payload.cluster_id,
-        "action": Command.TELEMETRY_QUERY_RUN_ACTION,
-        "namespace": Sandbox.NAMESPACE,
-        "diff": {
-            "resource": "telemetry/query",
-            "namespace": Sandbox.NAMESPACE,
-            "risk": Sandbox.RISK_TAG.value,
-            "basis": {"query": payload.query},
-        },
-        "payload": {"query": payload.query},
-        "steps": ["telemetry debug query"],
-        "lease": {
-            "lease_seconds": DEFAULT_COMMAND_LEASE_SECONDS,
-            "heartbeat_interval_seconds": DEFAULT_COMMAND_HEARTBEAT_INTERVAL_SECONDS,
-        },
-        "retry_policy": {
-            "max_attempts": DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
-            "retry_delay_seconds": DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
-        },
-        "routing_constraint": {
-            "channel": "agent",
-            "cluster_id": payload.cluster_id,
-            "workspace_id": workspace_id,
-            "required_capability": "collector",
-        },
-        "workspace_id": workspace_id,
-        "priority": COMMAND_PRIORITY_HIGH,
-        "requested_by": requested_by,
-        "reason": payload.reason or "telemetry debug query",
-        "correlation_id": correlation_id,
-    }
-
-
 async def lease_next_command(
     db: Any, cluster_id: str, workspace_id: str, agent_id: str, timeout: int
 ) -> JsonObject | None:
@@ -398,18 +348,21 @@ async def agent_debug_query(
 ) -> AgentDebugQueryResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_read_access(db, current, workspace_id, payload.cluster_id)
-    correlation_id = f"corr-debug-{uuid.uuid4()}"
-    plan = debug_query_plan(
+    if is_reserved_log_stream_query(payload.query):
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=RESERVED_LOG_STREAM_QUERY_MESSAGE,
+        )
+    queued = queue_debug_query(
+        db,
         payload,
         workspace_id=workspace_id,
         requested_by=current.user_id,
-        correlation_id=correlation_id,
     )
-    db.queue_agent_command(correlation_id, plan, CommandStatus.QUEUED)
     return AgentDebugQueryResponse(
         accepted=True,
-        command_id=str(plan["command_id"]),
-        correlation_id=correlation_id,
+        command_id=queued.command_id,
+        correlation_id=queued.correlation_id,
     )
 
 

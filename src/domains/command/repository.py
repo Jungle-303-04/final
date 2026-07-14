@@ -214,6 +214,38 @@ class AgentCommandRepository(DatabaseConnection):
             row = (await conn.execute(statement)).mappings().first()
         return row_dict(row) if row else None
 
+    async def list_agent_commands_by_correlation(
+        self,
+        workspace_id: str,
+        correlation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[JsonObject]:
+        """Read the newest bounded command batch for one workspace correlation."""
+        table = AgentCommand.__table__
+        statement = (
+            select(
+                table.c.command_id,
+                table.c.cluster_id,
+                table.c.correlation_id,
+                table.c.action,
+                table.c.payload,
+                table.c.status,
+                table.c.result,
+                table.c.completed_at,
+                table.c.created_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.correlation_id == correlation_id,
+            )
+            .order_by(table.c.created_at.desc(), table.c.command_id.desc())
+            .limit(max(1, min(limit, 20)))
+        )
+        async with self.async_connection() as conn:
+            rows = (await conn.execute(statement)).mappings().all()
+        return [row_dict(row) for row in rows]
+
     async def lease_agent_command(
         self,
         cluster_id: str,

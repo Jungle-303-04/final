@@ -2431,6 +2431,61 @@ def test_queue_agent_command_reports_insert_and_notifies_only_new_commands() -> 
     assert "pg_notify" in str(recorded[1])
 
 
+def test_agent_commands_by_correlation_is_workspace_scoped_newest_and_bounded() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "command_id": "cmd-2",
+                    "cluster_id": "cluster-1",
+                    "correlation_id": "corr-stream",
+                    "action": "telemetry.query.run",
+                    "payload": {},
+                    "status": "completed",
+                    "result": {},
+                    "completed_at": None,
+                    "created_at": datetime(2026, 7, 14, tzinfo=UTC),
+                }
+            ]
+
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @asynccontextmanager
+    async def stub_async_connection():
+        yield StubAsyncConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
+
+    rows = asyncio.run(
+        repository.list_agent_commands_by_correlation(
+            "workspace-1",
+            "corr-stream",
+            limit=999,
+        )
+    )
+
+    assert [row["command_id"] for row in rows] == ["cmd-2"]
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "agent_commands.workspace_id =" in sql
+    assert "agent_commands.correlation_id =" in sql
+    assert "ORDER BY agent_commands.created_at DESC, agent_commands.command_id DESC" in sql
+    assert "workspace-1" in compiled.params.values()
+    assert "corr-stream" in compiled.params.values()
+    assert 20 in compiled.params.values()
+
+
 def test_rca_report_save_writes_projection_columns() -> None:
     recorded: list[Any] = []
     repository = _repository_with_recorded_sql(RcaRepository, recorded)

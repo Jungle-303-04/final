@@ -1,0 +1,26 @@
+meta {
+  name: 14 워크로드 로그 스트림
+  type: http
+  seq: 14
+  tags: [clusters, workloads, logs, sse, read]
+}
+
+get {
+  url: {{base_url}}workloads/deployments/{{namespace}}/{{deployment_name}}/logs/stream?cluster_id={{cluster_id}}
+}
+
+tests {
+  test("bounded SSE or validated access/availability failure", function () {
+    expect([200, 401, 404, 422, 503]).to.include(res.status);
+  });
+
+  test("success uses only the SSE default message channel", function () {
+    if (res.status !== 200) return;
+    const headers = res.headers || {};
+    const contentType = headers["content-type"] || headers["Content-Type"] || "";
+    expect(String(contentType)).to.include("text/event-stream");
+    const body = String(res.getBody() || "");
+    expect(body).to.include("data: ");
+    expect(body).not.to.match(/^event:/m);
+  });
+}

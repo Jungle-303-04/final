@@ -15,15 +15,8 @@ import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
-
-const FOCUSABLE = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
+import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
+import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -43,6 +36,7 @@ export function ResourceDetailWorkspace({
   tab: string;
 }) {
   const { t } = useI18n();
+  const dock = useBottomDock();
   const filter = useUnifiedFilter();
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
@@ -53,6 +47,7 @@ export function ResourceDetailWorkspace({
     ? t("resources.detail.title", { name: identity.name })
     : t("resources.detail.errorTitle");
   const labels = contextLabels(filter.state, t);
+  const logTarget = detail.phase === "ready" ? logStreamTargetFromDetail(detail.data) : null;
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -74,11 +69,20 @@ export function ResourceDetailWorkspace({
   return (
     <section
       aria-labelledby="resource-detail-workspace-title"
-      aria-modal="true"
       className="motion-detail-workspace grid min-h-[calc(100svh-3.5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background"
       data-closing={closing || undefined}
       data-slot="resource-detail-workspace"
-      onKeyDown={(event) => trapWorkspaceKey(event, rootRef.current, requestClose)}
+      onKeyDown={(event) => {
+        if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {
+          event.preventDefault();
+          dock.openLogs(logTarget);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          requestClose();
+        }
+      }}
       ref={rootRef}
       role="dialog"
     >
@@ -139,28 +143,8 @@ export function ResourceDetailWorkspace({
   );
 }
 
-function trapWorkspaceKey(
-  event: React.KeyboardEvent<HTMLElement>,
-  root: HTMLElement | null,
-  onClose: () => void,
-) {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    onClose();
-    return;
-  }
-  if (event.key !== "Tab" || root === null) return;
-  const focusable = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
-  if (focusable.length === 0) return;
-  const first = focusable[0]!;
-  const last = focusable[focusable.length - 1]!;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
+function isEditingElement(target: EventTarget): boolean {
+  return target instanceof HTMLElement && target.matches("input, textarea, select, [contenteditable=true]");
 }
 
 function contextLabels(

@@ -1758,7 +1758,7 @@ AI_NO_DATA_ANSWER = "그 데이터가 없습니다."
 
 
 class AiEvidenceLink(StrictModel):
-    type: Literal["inventory-resource"]
+    type: Literal["inventory-resource", "log-stream"]
     id: str = Field(min_length=1, max_length=255)
     label: str = Field(min_length=1, max_length=512)
     link: str = Field(min_length=1, max_length=2048)

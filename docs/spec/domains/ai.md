@@ -225,7 +225,8 @@ HTTP 라우터의 목록/조회/메시지 추가/삭제 경로는 repository 호
     "query": "checkout"
   },
   "selection": {"type": "resource", "identity": "Pod/shop/checkout-api-0"},
-  "time": null
+  "time": null,
+  "log_stream_id": null
 }
 ```
 
@@ -236,6 +237,8 @@ HTTP 라우터의 목록/조회/메시지 추가/삭제 경로는 repository 호
 - `AiResourceSummary`는 `id`, `cluster_id`, `resource_type`, `kind`, `namespace`, `name`, `status`, `health`, `observed_at`, `link`만 노출한다. `raw`, labels, annotations, summary, uid/resourceVersion은 AI 경계에서 제외한다.
 - evidence/resource `link`는 제품 내부 `/...`만 허용한다. Resources 상세은 정본 `?detail=Kind/ns/name`을 사용하고 cluster-scoped namespace는 `~`로 직렬화한다. `//`, scheme, fragment, 공백·제어문자는 모델 검증에서 거부한다.
 - 명시한 `cluster_id`가 `inventory.read` 범위 밖이면 403이다. 목록/채팅의 묵시적 범위는 허용된 concrete cluster ID 집합으로만 조회하며 wildcard로 열지 않는다.
+- 선택적 `log_stream_id`는 raw line 대신 전달하는 opaque persisted command ID다. `/ai/chat`은 command의 workspace, 요청 사용자, protocol, cluster, exact target을 다시 검증하고 `inventory.read`와 `evidence.read`를 모두 확인한다. 권한/소유권/완료된 근거가 없으면 canonical no-data로 닫는다.
+- 로그 AI 근거는 첫 command의 workspace+correlation으로 최신 persisted batch를 최대 20개 조회하고, 동일 사용자·동일 논리 target인 completed Loki result에서 최신 evidence 최대 20개만 읽어 서버가 다시 redact/truncate한다. correlation 안에 다른 사용자/target/위조 correlation row가 섞이면 전체를 no-data로 닫는다. process-local stream cache나 브라우저가 보낸 raw line은 AI context로 사용하지 않는다. 응답 evidence type은 `log-stream`이고 내부 Resources 링크만 허용한다.
 
 ## 데이터 모델 (Data Model)
 

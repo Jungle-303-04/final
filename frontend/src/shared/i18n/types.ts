@@ -3,6 +3,7 @@ import type { IssuesMessageKey } from "./keys/issues";
 import type { MetricsMessageKey } from "./keys/metrics";
 import type { ResourcesMessageKey } from "./keys/resources";
 import type { WorkflowsMessageKey } from "./keys/workflows";
+import type { DockMessageKey } from "./keys/dock";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -126,6 +127,7 @@ type CoreMessageKey =
   | "shell.shortcut.resources.lastRow"
   | "shell.shortcut.resources.nextRow"
   | "shell.shortcut.resources.openRow"
+  | "shell.shortcut.resources.openLogs"
   | "shell.shortcut.resources.previousRow"
   | "shell.shortcut.route.applications"
   | "shell.shortcut.route.clusters"
@@ -275,6 +277,7 @@ type CoreMessageKey =
 
 export type MessageKey =
   | CoreMessageKey
+  | DockMessageKey
   | ClustersMessageKey
   | IssuesMessageKey
   | MetricsMessageKey

@@ -22,6 +22,7 @@ export const aiAssistantContextSchema = z.strictObject({
   filters: aiAssistantFiltersSchema,
   selection: aiAssistantSelectionSchema,
   time: z.string().datetime({ offset: true }).nullable(),
+  log_stream_id: z.string().min(1).nullable(),
 });
 
 export const aiEvidenceLinkSchema = z.strictObject({

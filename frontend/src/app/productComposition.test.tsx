@@ -4,6 +4,7 @@ import { createProductComposition } from "./productComposition";
 import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
 import type { AiAssistantPort } from "../features/ai-assistant/aiAssistantContract";
+import type { LogStreamPort } from "../features/log-stream/logStreamContract";
 
 const EmptySurface: ComponentType = () => null;
 const testAuthPort: AuthPort = {
@@ -18,6 +19,7 @@ const testAiAssistantPort: AiAssistantPort = {
   ask: async () => ({ answer: "no data", evidence: [] }),
   loadSuggestions: async () => [],
 };
+const testLogStreamPort: LogStreamPort = { open: () => () => undefined };
 
 describe("product composition", () => {
   it("keeps the production release closed when no approved surface is registered", () => {
@@ -53,6 +55,19 @@ describe("product composition", () => {
     );
 
     expect(composition.aiAssistant).toBe(testAiAssistantPort);
+  });
+
+  it("carries the log stream transport through the production composition", () => {
+    const composition = createProductComposition(
+      [],
+      testAuthPort,
+      testClusterScopePort,
+      undefined,
+      undefined,
+      testLogStreamPort,
+    );
+
+    expect(composition.logStream).toBe(testLogStreamPort);
   });
 
   it("rejects duplicate registrations instead of choosing one implicitly", () => {

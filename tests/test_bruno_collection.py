@@ -186,6 +186,8 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         "/clusters/{{cluster_id}}/summary",
         "/clusters/{{cluster_id}}/nodes/summary",
         "/clusters/{{cluster_id}}/nodes/{{node_name}}/pods/summary",
+        "/pods/{{namespace}}/{{pod_name}}/logs/stream?cluster_id=",
+        "/workloads/deployments/{{namespace}}/{{deployment_name}}/logs/stream?cluster_id=",
         "/metrics",
     ]
 

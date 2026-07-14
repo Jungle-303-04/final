@@ -11,6 +11,8 @@ import type { ClusterScopePort } from "../../features/cluster-scope/clusterScope
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import type { AiAssistantPort } from "../../features/ai-assistant/aiAssistantContract";
+import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
+import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import {
   PRODUCT_SHORTCUT_EVENT,
   type ProductShortcutEventDetail,
@@ -59,9 +61,11 @@ export function installMatchMedia(matches: boolean) {
 export function renderShell({
   aiAssistantPort,
   initialEntry = "/?clusters=cluster-1",
+  logStreamPort,
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
   aiAssistantPort?: AiAssistantPort;
+  logStreamPort?: LogStreamPort;
   initialEntry?: string;
   releasedSurfaceIds?: ReadonlySet<"home" | "resources" | "issues">;
 } = {}) {
@@ -83,6 +87,7 @@ export function renderShell({
                       <ProductShell
                         aiAssistantPort={aiAssistantPort}
                         auth={testAuth}
+                        logStreamPort={logStreamPort}
                         releasedSurfaceIds={releasedSurfaceIds}
                       />
                     )}>
@@ -103,6 +108,7 @@ export function renderShell({
 
 function ResourcesShortcutProbe() {
   const [shortcutId, setShortcutId] = useState("none");
+  const dock = useBottomDock();
 
   useEffect(() => {
     const handleShortcut = (event: Event) => {
@@ -113,7 +119,26 @@ function ResourcesShortcutProbe() {
     return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
   }, []);
 
-  return <p data-testid="resources-shortcut">{shortcutId}</p>;
+  return (
+    <>
+      <p data-testid="resources-shortcut">{shortcutId}</p>
+      {['checkout', 'payment'].map((name) => (
+        <button
+          key={name}
+          onClick={() => dock.openLogs({
+            type: "pod",
+            clusterId: "cluster-1",
+            namespace: "shop",
+            name,
+            container: null,
+          })}
+          type="button"
+        >
+          {name} 로그 열기
+        </button>
+      ))}
+    </>
+  );
 }
 
 export function replaceProperty(target: object, property: PropertyKey, value: unknown) {

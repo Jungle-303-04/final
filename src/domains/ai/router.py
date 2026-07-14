@@ -104,7 +104,7 @@ async def chat_with_context(
 ) -> AiChatResponse:
     """Return only current, authorized inventory facts with explicit evidence links."""
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    return answer_from_context(
+    return await answer_from_context(
         db,
         current=current,
         workspace_id=workspace_id,

@@ -361,7 +361,7 @@ def test_deploy_retires_legacy_console_before_repository_capture() -> None:
     assert "delete deployment/console service/console --ignore-not-found --wait=true" in retire
 
 
-def test_console_proxy_uses_runtime_dns_for_both_gateway_upstreams() -> None:
+def test_console_proxy_uses_runtime_dns_and_does_not_buffer_api_streams() -> None:
     image_config = (ROOT / "frontend/nginx.conf").read_text(encoding="utf-8")
     live_config = (ROOT / "deploy/management/console-dev.yaml").read_text(encoding="utf-8")
 
@@ -369,6 +369,11 @@ def test_console_proxy_uses_runtime_dns_for_both_gateway_upstreams() -> None:
         assert "resolver kube-dns.kube-system.svc.cluster.local valid=10s" in source
         assert "set $api_upstream http://api-gateway.management.svc.cluster.local:8000" in source
         assert "proxy_pass $api_upstream/" in source
+        rest_location = source.split("location /api/ {", 1)[1].split("\n\n", 1)[0]
+        assert "proxy_buffering off" in rest_location
+        assert "proxy_cache off" in rest_location
+        assert "proxy_read_timeout 3600s" in rest_location
+        assert "proxy_send_timeout 3600s" in rest_location
         assert (
             "set $realtime_upstream http://realtime-gateway.management.svc.cluster.local:8000"
             in source

@@ -47,6 +47,7 @@ function toEndpointContext(context: AiAssistantContext): AiAssistantContextEndpo
     },
     selection: context.selection,
     time: context.time,
+    log_stream_id: context.logStreamId,
   };
 }
 

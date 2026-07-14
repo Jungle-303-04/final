@@ -3,6 +3,7 @@
   --motion-quick: 180ms;
   --motion-pop: 340ms;
   --motion-ai: 300ms;
+  --motion-dock: 240ms;
   --motion-layout: 320ms;
   --motion-camera: 420ms;
   --motion-value: 500ms;
@@ -129,6 +130,36 @@
 
 .motion-ai-panel > [data-slot="ai-assistant-inner"] {
   width: var(--ai-width, 420px);
+}
+
+.motion-bottom-dock {
+  --dock-height: 280px;
+  height: var(--dock-height);
+  transition: height var(--motion-dock) var(--ease-spring);
+}
+
+.motion-bottom-dock[data-height="160"] { --dock-height: 160px; }
+.motion-bottom-dock[data-height="180"] { --dock-height: 180px; }
+.motion-bottom-dock[data-height="200"] { --dock-height: 200px; }
+.motion-bottom-dock[data-height="220"] { --dock-height: 220px; }
+.motion-bottom-dock[data-height="240"] { --dock-height: 240px; }
+.motion-bottom-dock[data-height="260"] { --dock-height: 260px; }
+.motion-bottom-dock[data-height="280"] { --dock-height: 280px; }
+.motion-bottom-dock[data-height="300"] { --dock-height: 300px; }
+.motion-bottom-dock[data-height="320"] { --dock-height: 320px; }
+.motion-bottom-dock[data-height="340"] { --dock-height: 340px; }
+.motion-bottom-dock[data-height="360"] { --dock-height: 360px; }
+.motion-bottom-dock[data-height="380"] { --dock-height: 380px; }
+.motion-bottom-dock[data-height="400"] { --dock-height: 400px; }
+.motion-bottom-dock[data-height="420"] { --dock-height: 420px; }
+.motion-bottom-dock[data-height="440"] { --dock-height: 440px; }
+.motion-bottom-dock[data-height="460"] { --dock-height: 460px; }
+.motion-bottom-dock[data-height="480"] { --dock-height: 480px; }
+.motion-bottom-dock[data-height="500"] { --dock-height: 500px; }
+.motion-bottom-dock[data-height="520"] { --dock-height: 520px; }
+
+.motion-bottom-dock[data-collapsed="true"] {
+  height: 40px;
 }
 
 @media (prefers-reduced-motion: reduce) {

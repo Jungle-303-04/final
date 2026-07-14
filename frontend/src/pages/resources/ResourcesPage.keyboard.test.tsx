@@ -10,7 +10,11 @@ import {
   type ProductShortcutEventDetail,
   type ShortcutMatcher,
 } from "../../app/shortcutRegistry";
-import { renderResources, resourcesPort } from "./ResourcesPage.testSupport";
+import {
+  renderResources,
+  resourcesPort,
+} from "./ResourcesPage.testSupport";
+import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
 
 let shortcutMatcher: ShortcutMatcher;
 let shortcutKeydown: (event: KeyboardEvent) => void;
@@ -133,9 +137,64 @@ describe("ResourcesPage keyboard navigation", () => {
     await waitFor(() => expect(document.activeElement).toBe(checkout));
     expect(matchedRoutes).toHaveBeenCalledTimes(1);
   }, 15_000);
+
+  it("opens exact pod logs with l from the focused row", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    const open = vi.fn().mockReturnValue(close);
+    renderWithLogStream({ open });
+    const table = await screen.findByRole("table", { name: "리소스 목록" });
+    const checkout = within(table).getByRole("button", { name: /checkout-api-0/u });
+
+    checkout.focus();
+    await user.keyboard("l");
+    expect(open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "pod",
+        clusterId: "cluster-1",
+        namespace: "shop",
+        name: "checkout-api-0",
+      }),
+      expect.any(Object),
+    );
+  }, 15_000);
+
+  it("opens the exact resource stream with l inside full detail", async () => {
+    const user = userEvent.setup();
+    const open = vi.fn().mockReturnValue(vi.fn());
+    renderWithLogStream(
+      { open },
+      "/resources?clusters=cluster-1&resources.types=pod&detail=Pod%2Fshop%2Fcheckout-api-0",
+    );
+    expect(await screen.findByRole("dialog", { name: "checkout-api-0 상세" })).toBeTruthy();
+    await user.keyboard("l");
+    expect(open).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "pod", name: "checkout-api-0" }),
+      expect.any(Object),
+    );
+  }, 15_000);
 });
 
 function resetDocumentTestClock() {
   vi.useRealTimers();
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+}
+
+function renderWithLogStream(
+  logStreamPort: LogStreamPort,
+  initialEntry = "/resources?clusters=cluster-1&resources.types=pod",
+) {
+  return renderResources(
+    resourcesPort(),
+    initialEntry,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    logStreamPort,
+  );
 }

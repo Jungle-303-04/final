@@ -91,17 +91,19 @@ describe("ResourcesPage URL-backed detail", () => {
     expect(close.className).not.toContain("fixed");
   });
 
-  it("traps focus and closes with Escape", async () => {
+  it("keeps initial focus without trapping sibling surfaces and closes with Escape", async () => {
     const user = userEvent.setup();
     renderResources(
       resourcesPort(),
       "/resources?clusters=cluster-1&resources.types=pod&detail=Pod%2Fshop%2Fcheckout-api-0",
     );
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    expect(dialog.hasAttribute("aria-modal")).toBe(false);
     const close = within(dialog).getByRole("button", { name: "상세 닫기" });
     await waitFor(() => expect(document.activeElement).toBe(close));
     await user.keyboard("{Shift>}{Tab}{/Shift}");
-    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(dialog.contains(document.activeElement)).toBe(false);
+    close.focus();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByTestId("resources-location").textContent).not.toContain("detail=");
