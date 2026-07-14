@@ -260,7 +260,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     await flushPromises();
 
     expect(
-      screen.getByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }),
+      screen.getByRole("heading", { name: "정보를 불러오지 못했습니다" }),
     ).toBeTruthy();
     act(() => vi.advanceTimersByTime(90_000));
     await flushPromises();

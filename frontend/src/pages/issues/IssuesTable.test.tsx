@@ -51,7 +51,7 @@ describe("IssuesTable", () => {
   it("renders the server order, literal status, resource scope, and an accessible caption", () => {
     render(<IssuesTable items={[OPENABLE_ISSUE, UNLINKED_ISSUE]} onOpen={vi.fn()} />);
 
-    expect(screen.getByText("현재 API 응답 범위의 인시던트 목록").className)
+    expect(screen.getByText("현재 조건의 인시던트 목록").className)
       .toContain("sr-only");
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);

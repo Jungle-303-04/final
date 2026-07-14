@@ -143,7 +143,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
     expect(port.loadCatalog).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }),
+      screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }),
     ).toBeNull();
   });
 
@@ -163,7 +163,7 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
     expect(
-      screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }),
+      screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }),
     ).toBeNull();
   });
 
@@ -242,7 +242,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(
       screen.getByRole("button", { name: "Include inactive resources" })
         .className,
-    ).toContain("w-32");
+    ).toContain("w-40");
     expect(screen.queryByText("Types observed in the inventory snapshot")).toBeNull();
     expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
