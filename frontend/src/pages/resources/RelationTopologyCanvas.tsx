@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
+import { useProductColorMode } from "../../shared/ui/useProductTheme";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import {
   RelationTopologyNode,
@@ -21,6 +22,7 @@ const nodeTypes: NodeTypes = { "relation-resource": RelationTopologyNode };
 
 export function RelationTopologyCanvas({ frame }: { frame: RelationTopologyFrame }) {
   const { t } = useI18n();
+  const colorMode = useProductColorMode();
   const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<string>>(new Set());
   const topology = frame.phase === "ready" ? frame.data : null;
   const kinds = useMemo(() => [...new Set(
@@ -91,7 +93,7 @@ export function RelationTopologyCanvas({ frame }: { frame: RelationTopologyFrame
       </div>
       {nodes.length > 0 && typeof ResizeObserver !== "undefined" ? (
         <ReactFlow
-          colorMode="system"
+          colorMode={colorMode}
           edges={edges}
           fitView
           fitViewOptions={{ padding: 0.2, maxZoom: 1 }}

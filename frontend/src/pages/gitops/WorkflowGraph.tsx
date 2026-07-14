@@ -17,6 +17,7 @@ import type {
 import { releaseWaves } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/ui/primitives/cn";
+import { useProductColorMode } from "../../shared/ui/useProductTheme";
 import { buildWorkflowGraph, ownerStepId } from "./workflowGraphModel";
 import type { FlowDirection, WorkflowEdge, WorkflowNode } from "./workflowGraphTypes";
 import { WorkflowNodeCard } from "./WorkflowNodeCard";
@@ -44,6 +45,7 @@ export function WorkflowGraph({
   className?: string;
 }) {
   const { t } = useI18n();
+  const colorMode = useProductColorMode();
   const verticalByShape = hasWideParallelWave(plan);
   const [narrowViewport, setNarrowViewport] = useState(isNarrowGraphViewport);
   const [direction, setDirection] = useState<FlowDirection>(
@@ -145,7 +147,7 @@ export function WorkflowGraph({
       <div ref={graphViewportRef} className={cn("min-w-0 bg-muted/20", heightClass)}>
         {plan.steps.length ? (
           <ReactFlow
-            colorMode="system"
+            colorMode={colorMode}
             edges={layout.edges}
             fitView
             fitViewOptions={{ padding: 0.18, minZoom: narrowViewport ? narrowMinZoom : 0.32 }}
