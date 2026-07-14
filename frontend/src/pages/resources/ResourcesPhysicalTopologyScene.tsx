@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useI18n } from "../../shared/i18n";
+import { useProductColorMode } from "../../shared/ui/useProductTheme";
 import {
   PhysicalTopologyServerCard,
   PhysicalTopologyServerNode,
@@ -33,6 +34,7 @@ export function ResourcesPhysicalTopologyScene({
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;
 }) {
+  const colorMode = useProductColorMode();
   const topology = frame.phase === "ready" ? frame.data : null;
   const placements = useMemo(
     () => topology === null ? [] : physicalServerPlacements(topology),
@@ -57,7 +59,7 @@ export function ResourcesPhysicalTopologyScene({
       typeof ResizeObserver !== "undefined") {
     return (
       <ReactFlow
-        colorMode="system"
+        colorMode={colorMode}
         fitView
         fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
         maxZoom={1.25}
