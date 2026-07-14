@@ -20,6 +20,10 @@ export interface GitOpsEndpointDependencies {
   listApplications(signal?: AbortSignal): Promise<{
     applications: Record<string, unknown>[];
   }>;
+  listApplicationDeployments(
+    applicationId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ deployments: Record<string, unknown>[] }>;
   listClusters(signal?: AbortSignal): Promise<{ clusters: ReleaseClusterEndpoint[] }>;
   listPlans(signal?: AbortSignal): Promise<{ plans: ReleasePlan[] }>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<{ runs: ReleaseRun[] }>;

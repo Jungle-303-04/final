@@ -42,6 +42,7 @@ import {
   createRealtimeClient,
   acknowledgeAlertEvent,
   listAlertEvents,
+  listApplicationDeployments,
   promoteAlertEvent,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
@@ -133,7 +134,10 @@ export function createApiComposition() {
     listApplicationCatalog,
     listApplicationDeploymentHistory,
   });
-  const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
+  const gitOpsPort = createGitOpsAdapter({
+    ...createReleaseFlowClient(),
+    listApplicationDeployments,
+  });
   const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
   const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   const alertEventsPort = createAlertEventsAdapter({
