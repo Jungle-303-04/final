@@ -73,10 +73,9 @@ export function buildInfraMapModel({
 
   const nodes = servers.map((server) => {
     const allPods = podsByServer.get(server.id) ?? [];
-    const displayedPods = selectionActive
-      ? allPods.filter((pod) => pod.matchesFilter)
-      : allPods;
-    const sortedPods = [...displayedPods].sort(comparePodsByWeight);
+    const sortedPods = [...allPods].sort((left, right) =>
+      comparePodsForDisplay(left, right, selectionActive)
+    );
     return {
       assignedPodCount: server.totalPodCount ?? allPods.length,
       cpuMillicores: server.cpuMillicores,
@@ -110,10 +109,7 @@ export function buildInfraMapModel({
     nodes: nodes.sort(compareNodes),
     selection: {
       active: selectionActive,
-      matchedPodCount: nodes.reduce(
-        (total, node) => total + node.visiblePods.length + node.hiddenPodCount,
-        0,
-      ),
+      matchedPodCount: topology.pods.filter((pod) => pod.matchesFilter).length,
     },
   };
 }
@@ -153,6 +149,17 @@ function comparePodsByWeight(
   right: PhysicalTopologyPod,
 ): number {
   return podWeight(right) - podWeight(left) || left.name.localeCompare(right.name);
+}
+
+function comparePodsForDisplay(
+  left: PhysicalTopologyPod,
+  right: PhysicalTopologyPod,
+  selectionActive: boolean,
+): number {
+  if (selectionActive && left.matchesFilter !== right.matchesFilter) {
+    return left.matchesFilter ? -1 : 1;
+  }
+  return comparePodsByWeight(left, right);
 }
 
 function podWeight(pod: PhysicalTopologyPod): number {
