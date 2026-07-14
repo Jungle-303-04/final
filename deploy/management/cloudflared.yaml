@@ -4,6 +4,9 @@ kind: Deployment
 metadata:
   name: cloudflared
   namespace: management
+  annotations:
+    opsia.io/cloudflare-hostname: k8s.woonyong.org
+    opsia.io/cloudflare-origin-service: http://console-dev.management.svc.cluster.local:80
 spec:
   replicas: 2
   strategy:
