@@ -15,6 +15,8 @@ AlertChannelId = Annotated[str, Field(min_length=1, max_length=120)]
 AlertMetric = Literal["cpu_pct", "mem_pct", "restart_count", "pod_not_ready"]
 AlertComparator = Literal[">", ">=", "<", "<="]
 AlertSeverity = Literal["critical", "high", "medium", "low"]
+AlertEventSeverity = Literal["critical", "high", "medium", "low", "warning", "info"]
+AlertEventStatus = Literal["firing", "resolved", "acked"]
 
 
 class AlertRuleScope(StrictModel):
@@ -146,6 +148,74 @@ class AlertRuleResponse(StrictModel):
 
 class AlertRuleListResponse(StrictModel):
     rules: list[AlertRuleResponse] = Field(default_factory=list)
+
+
+class AlertEventSubject(StrictModel):
+    cluster: str = Field(min_length=1, max_length=512)
+    namespace: str | None = Field(default=None, max_length=253)
+    kind: str = Field(min_length=1, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+
+
+class AlertEvidenceItem(StrictModel):
+    type: str = Field(min_length=1, max_length=80)
+    metric: str | None = Field(default=None, min_length=1, max_length=120)
+    observed_at: datetime | None = None
+    subject: AlertEventSubject | None = None
+    value: float | None = Field(default=None, allow_inf_nan=False)
+    summary: str | None = Field(default=None, min_length=1, max_length=1000)
+    link: str | None = Field(default=None, pattern=r"^/")
+
+    @model_validator(mode="after")
+    def require_material_evidence(self) -> AlertEvidenceItem:
+        if all(
+            value is None
+            for value in (
+                self.metric,
+                self.observed_at,
+                self.subject,
+                self.value,
+                self.summary,
+                self.link,
+            )
+        ):
+            raise ValueError("alert evidence must contain a material fact or reference")
+        return self
+
+
+class AlertEventResponse(StrictModel):
+    event_id: str = Field(min_length=1, max_length=120)
+    rule_id: str | None = Field(default=None, max_length=120)
+    rule_name: str | None = Field(default=None, max_length=120)
+    source: Literal["opsia", "alertmanager"]
+    severity: AlertEventSeverity
+    subject: AlertEventSubject
+    fired_at: datetime
+    resolved_at: datetime | None = None
+    status: AlertEventStatus
+    observed_value: float | None = Field(default=None, allow_inf_nan=False)
+    threshold: float | None = Field(default=None, allow_inf_nan=False)
+    evidence: list[AlertEvidenceItem] = Field(min_length=1)
+    incident_id: str | None = None
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
+    promoted_at: datetime | None = None
+    promoted_by: str | None = None
+
+    @model_validator(mode="after")
+    def require_opsia_rule_measurement(self) -> AlertEventResponse:
+        if self.source == "opsia" and (
+            not self.rule_id
+            or not self.rule_name
+            or self.observed_value is None
+            or self.threshold is None
+        ):
+            raise ValueError("Opsia alert events require a rule and observed threshold evidence")
+        return self
+
+
+class AlertIncidentPromotionResponse(StrictModel):
+    incident_id: str = Field(min_length=1, max_length=120)
 
 
 def _join(values: list[str]) -> str | None:
