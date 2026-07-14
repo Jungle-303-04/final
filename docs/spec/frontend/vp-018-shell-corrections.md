@@ -587,7 +587,88 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 
 ---
 
-## 11. 정정 요약 — VP-015 대비
+## 11. Radar 이식이 **절반도 안 됐다** ★ (실측)
+
+`references/radar-upstream/` 은 "889파일 착륙"이라고 기록돼 있지만,
+**정작 UI 라이브러리(`packages/k8s-ui/src/`)는 492개 중 268개만 들어왔다. 224개가 없다.**
+
+원본을 다시 클론해 1:1로 대조한 결과다. **추측이 아니다.**
+
+### 11.1 통째로 안 들어온 디렉터리
+
+| 디렉터리 | 원본 | 착륙 | 뭐가 없어졌나 |
+|---|---|---|---|
+| **`filter-state/`** | 3 | **0** | `filter-state-core.ts` — **VP-010 필터 엔진의 정본이다** |
+| **`charts/`** | 10 | **0** | `AreaChart` `MetricsSummary` `PrometheusChartsView` `SeriesLegend` `colors` `format` `saturation` — **시스템 메트릭 그래프 전부** |
+| **`applications/`** | 9 | **0** | `ApplicationsView` `ApplicationDetail` `ReadyBar` `AppChips` |
+| **`checks/`** | 5 | **0** | `ChecksView` `severity` `types` |
+| **`issues/`** | 9 | **0** | `IssuesView` `ResourceIssuesSection` `diagnostic` `issue-timing` |
+| **`compare/`** | 13 | **0** | 리비전 비교 전체 |
+| **`namespace-switcher/`** | 2 | **0** | `NamespacePicker` |
+| **`scope-pill/`** | 2 | **0** | `ScopePill` |
+| **`perf/`** | 2 | **0** | 성능 계측 |
+
+### 11.2 반쯤만 들어온 디렉터리 — **핵심이 빠졌다**
+
+| 디렉터리 | 원본 → 착륙 | **빠진 핵심** |
+|---|---|---|
+| **`timeline/`** | 20 → **4** | **`TimelineStrip` `scrubber-math` `TimelineSwimlanes` `TimelineToolbar` `timeline-filters`** — 시간 스크럽의 전부. S11이 이걸 쓴다 |
+| **`ui/`** | 48 → **24** | **`SearchPillInput`** ★ **`SearchBox` `Facet` `MultiSelectPicker` `SelectMenu` `Input` `SortableTh` `DistributionBar` `SummaryTile` **`FreshnessControl`** `PageHeader` `Collapse` `CardSection` `FetchResult` `RestrictedState` `RowActionMenu` `CenteredEmpty` `BoardSkeleton` `severity-tone` `tooltip-position` |
+| **`gitops/`** | 23 → **5** | `GitOpsTableView` `GitOpsDetailLayout` `RollbackDialog` `SyncOptionsDialog` `tree/` `insights/` `GitOpsGraphFilterRail` |
+| **`dock/`** | 10 → **6** | **`TerminalClipboardToolbar` `terminalClipboard` `useMultilinePasteConfirm`** — 터미널 붙여넣기·클립보드 |
+| **`topology/`** | 13 → **10** | 3파일 |
+| **`resources/`** | 211 → **160** | 렌더러 일부 + `resource-utils-crossplane/dra/hpa/nvidia` |
+| **`shared/`** | 8 → **5** | **`DetailShell`** `ManagedByChip` |
+| **`audit/`** | 6 → **4** | `AuditBadgeTooltip` |
+| **`utils/`** | — | **30개 누락**: `topology-neighborhood` `rbac-blast-radius` `workload-colors` `git-provider-urls` `applications` `application-topology` `custom-columns` `replica-scalers` `yaml` `validators` … |
+| **`assets/`** | — | `gitops/argocd.png` `gitops/flux.svg` |
+
+### 11.3 이미 들어온 좋은 것 — **쓰고 있지 않다**
+
+**`components/ui/provider-logos/` 에 `aws.png` `aws-dark.png` `azure.svg` `gcp.png` 가 이미 있다.**
+§5.1(클러스터 provider 실제 로고)이 요구한 것이 **저장소에 이미 존재하는데 안 쓰고 있다.**
+
+### 11.4 확정 — 남은 224파일을 **전부 착륙시킨다**
+
+**부분 이식은 최악이다.** 우리가 지금 손으로 다시 짜고 있는 것들
+(검색 칩 입력, 신선도 표시, 정렬 헤더, 차트, 타임라인)이 **원본에 이미 있다.**
+
+**단, 이식 순서는 슬라이스를 따른다.** 한꺼번에 224개를 붙이지 않는다.
+**각 슬라이스가 필요한 파일을 그때 가져와서 우리 문법으로 다시 칠한다** (§10.1-b).
+
+| 슬라이스 | 그때 가져올 Radar 파일 |
+|---|---|
+| **C3** 검색 | **`ui/SearchPillInput.tsx`** ★ `ui/SearchBox.tsx` `ui/Facet.tsx` `ui/MultiSelectPicker.tsx` `filter-state/*` |
+| **C4** 그래프 | `topology/` 나머지 3 · `utils/topology-neighborhood.ts` `utils/workload-colors.ts` |
+| **C7** 클러스터 | **`ui/provider-logos/*`** (이미 있음) · `ui/FreshnessControl.tsx`("N초 전 갱신") · `cluster-switcher/` `namespace-switcher/` `scope-pill/` |
+| **C9** 차트 | **`charts/*` 전체 10개** — 특히 `AreaChart.tsx` (shadcn `/charts/area` 와 대응) |
+| **S11** 타임라인 | **`timeline/TimelineStrip.tsx` `scrubber-math.ts` `TimelineToolbar.tsx` `TimelineSwimlanes.tsx`** |
+| **S12** Issues | `issues/*` 전체 9 |
+| **S14** GitOps | `gitops/*` 나머지 18 · `assets/gitops/*` · `types/gitops-*.ts` |
+| **S15** Checks | `checks/*` 전체 5 · `audit/AuditBadgeTooltip.tsx` |
+| **S10** Applications | `applications/*` 전체 9 · `utils/applications.ts` `utils/application-topology.ts` |
+| 공통 | `ui/SortableTh` `DistributionBar` `SummaryTile` `PageHeader` `Collapse` `CardSection` `FetchResult` `RestrictedState` `RowActionMenu` `CenteredEmpty` `BoardSkeleton` · `shared/DetailShell` |
+
+### 11.5 **헷갈리지 말 것** — Radar에서 가져올 것 / 안 가져올 것
+
+| | 판정 |
+|---|---|
+| **`ui/SearchPillInput.tsx`** | ★ **우리 C3(칩이 입력창 안)의 정본이다.** 이걸 가져온다 |
+| **`ui/FilterPill.tsx`** (이미 착륙함) | **우리 검색 칩이 아니다.** 원본 주석이 명시한다 — *"toggle pattern, not a combobox"*. `aria-pressed` 토글 버튼이다. **혼동 금지.** 심각도 필터 행 같은 데 쓴다 |
+| **Radar의 IA** (왼쪽 필터 사이드바 + `"Filter resources..."` 입력) | **안 가져온다.** 우리는 **1층 통합 태그 검색**이다 (VP-015 §3). **컴포넌트는 가져오되 IA는 우리 것.** |
+| **Radar의 라벨 텍스트** (`Pods` `Deployments` `Services` …) | **가져온다.** kind 표시명·컬럼명·감사 체크명은 Radar 것을 정본으로 쓰고 **한국어로 번역만** 한다. 새로 지어내지 않는다 |
+| **Radar의 `theme-*` 토큰** (`bg-theme-text-primary/10`) | **안 가져온다.** 전부 shadcn 시맨틱 토큰으로 치환 (§10.1-b) |
+| **Radar의 `clsx` 직접 사용** | **안 가져온다.** 우리는 `cn()` |
+| **`dock/LocalTerminalTab`** | 이미 착륙함. **우리는 웹이라 로컬 셸이 불가능하다. 렌더하지 않는다** (VP-015 §5.6) |
+
+### 11.6 라이선스
+
+Radar는 **Apache-2.0**. 이식 파일 상단에 **원본 헤더 보존 + 수정 사실 표기**, 루트 `NOTICE` 유지.
+`provider-logos` 는 **상표**다. nominative use이므로 `NOTICE` 에 상표 귀속을 별도로 적는다.
+
+---
+
+## 12. 정정 요약 — VP-015 대비
 
 | VP-015 조항 | 상태 |
 |---|---|
