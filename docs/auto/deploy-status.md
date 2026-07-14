@@ -13,7 +13,7 @@ updated: 2026-07-14
 URL      : https://k8s.woonyong.org
 배포 SHA : 10f0fad17bcf2e22880e4adae1194fa103736a69 (FULL, run 29302233623)
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 13:22 KST  P1~P5 완료 · S0 시작 가능
+갱신     : 2026-07-14 13:31 KST  P1~P5 완료 · S0 모션 기반 구현 완료
 ```
 
 - public health: HTTP 200
@@ -36,7 +36,7 @@ URL      : https://k8s.woonyong.org
 
 ## 슬라이스 (VP-016)
 
-- [ ] **S0**  모션 기반 (VP-017)      ← 화면 변화 없음. 토큰·FLIP 훅·테스트
+- [x] **S0**  모션 기반 (VP-017)      ← 정확한 토큰·FLIP·스태거·reduced-motion·가드
 - [ ] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
 - [ ] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
 - [ ] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
@@ -61,7 +61,13 @@ URL      : https://k8s.woonyong.org
 
 ## 이번 슬라이스에서 확인할 것
 
-(첫 슬라이스 배포 후 여기에 체크리스트가 채워진다)
+- [x] VP-017 duration·easing·stagger 토큰 중앙화
+- [x] FLIP rect 수집·역변환·420ms camera morph 테스트
+- [x] 스태거 520ms 상한·서버→파드 wave 테스트
+- [x] reduced-motion에서 CSS 모션 1ms·JS morph 완전 생략
+- [x] `@keyframes`·Web Animations 소유권을 `src/motion/`으로 제한하는 design guard
+- [x] S0 전용 21개 테스트·typecheck·lint·production build 통과
+- [ ] S0 SHA 자동 배포 및 public 화면 무회귀 확인
 
 ---
 

@@ -1,0 +1,96 @@
+:root {
+  --motion-instant: 120ms;
+  --motion-quick: 180ms;
+  --motion-pop: 340ms;
+  --motion-layout: 320ms;
+  --motion-camera: 420ms;
+  --motion-value: 500ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.2, 0.5, 1);
+  --ease-pop: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --stagger-node: 70ms;
+  --stagger-pod: 32ms;
+  --stagger-row: 18ms;
+  --stagger-max: 520ms;
+}
+
+@keyframes motion-pod-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-node-land {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes motion-ghost-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes motion-rail-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.motion-pod-pop {
+  animation: motion-pod-pop var(--motion-pop) var(--ease-pop) backwards;
+}
+
+.motion-node-land {
+  animation: motion-node-land var(--motion-layout) var(--ease-spring) backwards;
+}
+
+.motion-ghost-breathe {
+  animation: motion-ghost-breathe 1.6s var(--ease-in-out) infinite;
+}
+
+.motion-rail-flow {
+  animation: motion-rail-flow 1.2s linear infinite;
+  stroke-dasharray: 3 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+
+  .motion-ghost-breathe,
+  .motion-rail-flow {
+    animation: none !important;
+  }
+}
