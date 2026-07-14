@@ -19,6 +19,9 @@ from packages.contracts.gitops import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
+SAFE_PR_KIND_PATCH = "safe_pr_patch"
+SAFE_PR_KIND_REVIEW_DOC = "safe_pr_review_doc"
+
 
 @dataclass(frozen=True)
 class SafePrFilePatch(EventBody):
@@ -38,6 +41,7 @@ class SafePrRequestedBody(EventBody):
     body: str
     provider: str
     patches: list[SafePrFilePatch] = field(default_factory=list)
+    pr_kind: str = SAFE_PR_KIND_PATCH
     workspace_id: str = DEFAULT_WORKSPACE_ID
     repository_id: str = DEFAULT_REPOSITORY_ID
     binding_id: str = DEFAULT_DEPLOYMENT_BINDING_ID

@@ -1651,6 +1651,7 @@ def test_application_5xx_recovery_uses_review_patch_without_static_manifest(monk
     )
 
     assert subjects_of(dispatch_outs) == ["safe_pr.requested"]
+    assert dispatch_outs[0].pr_kind == "safe_pr_review_doc"
     patches = {patch.path: patch.content for patch in dispatch_outs[0].patches}
     assert len(patches) == 1
     path, content = next(iter(patches.items()))

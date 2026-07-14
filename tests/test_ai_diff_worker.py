@@ -39,6 +39,7 @@ def _prepared(request: SafePrRequestedBody) -> SafePrPatchPreparedBody:
         workflow_run_id=request.workflow_run_id,
         environment=request.environment,
         manifest_path=request.manifest_path,
+        pr_kind=request.pr_kind,
         approval_ref=request.approval_ref,
         policy_decision_ref=request.policy_decision_ref,
     )
@@ -51,6 +52,8 @@ def test_ai_diff_worker_emits_ready_after_allowed_diff() -> None:
 
     assert subjects_of(outs) == ["diff.explained", "safe_pr.ready_for_creation"]
     assert outs[0].ready_for_creation is True
+    assert outs[0].details["pr_kind"] == "safe_pr_patch"
+    assert outs[1].details["pr_kind"] == "safe_pr_patch"
     assert outs[1].request.patches
 
 
