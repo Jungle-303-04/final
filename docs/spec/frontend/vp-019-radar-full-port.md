@@ -251,7 +251,7 @@ GET /api/events/stream   (SSE)
 | **BQ-081** | **`SSE /events/stream?clusters=&namespaces=`** | 토폴로지 델타 + K8s 이벤트. **§7.1의 동적 스로틀·백오프·링버퍼를 서버/클라이언트 양쪽에 그대로** |
 | **BQ-082** | **`SSE /resources/stream?<filters>`** | 표(3층)의 행 상태 변화. 필터와 같은 canonical 쿼리 |
 | BQ-058/059 | 로그 SSE | **이미 있음** |
-| BQ-077 | 변경 적용 진행 SSE | S13 (미구현) |
+| BQ-077 | 변경 적용 진행 SSE | S13 (후속 구현 작업) |
 | **BQ-080** | **`SSE /ai/chat/stream`** | AI 응답 토큰 스트리밍 (VP-018 §9) |
 
 ### 7.3 화면에 어떻게 나타나나 (모순 없이)
