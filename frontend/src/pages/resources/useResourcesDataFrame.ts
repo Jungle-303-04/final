@@ -80,6 +80,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     state: RESOURCES_IDLE,
   });
   const [denied, setDenied] = useState<DeniedState | null>(null);
+  const [updatedAt, setUpdatedAt] = useState(0);
   const deniedRef = useRef<DeniedState | null>(null);
 
   const denyTarget = useCallback((
@@ -152,6 +153,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
       (data) => {
         if (!active) return;
         setCatalogRecord({ scope: catalogScope, state: resourcesSuccess(data) });
+        setUpdatedAt(Date.now());
         onRequestSuccess("catalog");
         recoverDeniedTarget(selectedClusterId, "catalog");
       },
@@ -194,6 +196,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
       (data) => {
         if (!active) return;
         setListRecord({ scope: listScope, state: resourcesSuccess(data) });
+        setUpdatedAt(Date.now());
         onRequestSuccess("list");
         recoverDeniedTarget(selectedClusterId, "list");
       },
@@ -229,6 +232,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
       (data) => {
         if (!active) return;
         setDetailRecord({ scope: detailScope, state: resourcesSuccess(data) });
+        setUpdatedAt(Date.now());
         onRequestSuccess("detail");
         recoverDeniedTarget(detailClusterId, "detail");
       },
@@ -248,6 +252,7 @@ export function useResourcesDataFrame(input: ResourcesDataFrameInput) {
     list,
     selectedTypeExists,
     denied: denied?.clusterId === selectedClusterId,
+    updatedAt,
   };
 }
 

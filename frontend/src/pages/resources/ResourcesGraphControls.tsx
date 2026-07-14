@@ -42,7 +42,7 @@ export function ResourcesGraphHeader({
   timelineRange: TimelineRange;
   topologyView: ResourceTopologyView;
 }) {
-  const { formatNumber, t } = useI18n();
+  const { formatNumber, locale, t } = useI18n();
   const count = displayedView === "physical" && physicalFrame.phase === "ready"
     ? physicalFrame.data.servers.length
     : displayedView === "relations" && relationFrame.phase === "ready"
@@ -74,7 +74,7 @@ export function ResourcesGraphHeader({
         {!collapsed ? (
           <>
             <TimelineRangeSelect onChange={onTimelineRangeChange} value={timelineRange} />
-            <ButtonGroup aria-label={t("resources.graph.view.aria")}>
+            <ButtonGroup aria-label={locale === "ko" ? "서버 배치 보기 방식" : "Server placement view"}>
               {(["physical", "relations"] as const).map((view) => (
                 <Button
                   aria-pressed={topologyView === view}

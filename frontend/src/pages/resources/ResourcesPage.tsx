@@ -1,4 +1,3 @@
-import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
@@ -17,7 +16,7 @@ import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Badge } from "../../shared/ui/primitives/badge";
-import { Button } from "../../shared/ui/primitives/button";
+import { PollingFreshness } from "../PollingFreshness";
 import { ResourceDetailWorkspace } from "./ResourceDetailWorkspace";
 import { ResourcesSurfaceLoadingPreview } from "./ResourcesLoadingPreview";
 import {
@@ -76,7 +75,7 @@ export function ResourcesPage({
     filterState: filter.state,
     port: physicalTopologyPort,
     reportUnauthorized,
-    revision: state.revision,
+    revision: state.podRevision,
   });
   const relationTopology = useRelationTopologyDataFrame({
     active:
@@ -196,19 +195,15 @@ export function ResourcesPage({
           {state.automaticRefreshPaused ? (
             <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
           ) : null}
-          <Button
-            aria-label={t("common.action.refresh")}
-            disabled={refreshing || (state.retryWaitSeconds ?? 0) > 0}
-            onClick={state.refresh}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            <RefreshCw
-              aria-hidden="true"
-              className={refreshing ? "motion-safe:animate-spin" : undefined}
-            />
-          </Button>
+          <PollingFreshness
+            connectionState={physicalTopology.phase === "ready" && physicalTopology.refreshFailure
+              ? "disconnected"
+              : "connected"}
+            dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
+            intervalSeconds={5}
+            isFetching={refreshing || physicalTopology.refreshing}
+            onRefresh={state.refresh}
+          />
         </div>
       </header>
 
