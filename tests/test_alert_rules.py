@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from domains.alert.router import router as alert_router
-from domains.alert.schemas import AlertRuleCreateRequest, AlertRuleScope
+from domains.alert.schemas import AlertRuleCreateRequest, AlertRulePatchRequest, AlertRuleScope
 from domains.identity.dependencies import require_admin_session
 from packages.runtime.dependencies import get_db
 
@@ -38,6 +38,8 @@ class StubAlertRuleDb:
         self.channel_workspace = channel_workspace
         self.channel_reads: list[tuple[str, str]] = []
         self.created: list[dict[str, Any]] = []
+        self.rules: dict[str, dict[str, Any]] = {}
+        self.updates: list[tuple[str, str, dict[str, Any]]] = []
 
     def get_alert_channel(self, workspace_id: str, channel_id: str) -> dict[str, Any] | None:
         self.channel_reads.append((workspace_id, channel_id))
@@ -51,7 +53,33 @@ class StubAlertRuleDb:
 
     def create_alert_rule(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.created.append(dict(payload))
-        return dict(payload)
+        row = stored_rule(**payload)
+        self.rules[str(payload["rule_id"])] = row
+        return dict(row)
+
+    def list_alert_rules(self, workspace_id: str) -> list[dict[str, Any]]:
+        return [dict(row) for row in self.rules.values() if row["workspace_id"] == workspace_id]
+
+    def update_alert_rule(
+        self,
+        workspace_id: str,
+        rule_id: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        self.updates.append((workspace_id, rule_id, dict(changes)))
+        row = self.rules.get(rule_id)
+        if row is None or row["workspace_id"] != workspace_id:
+            return None
+        row.update(changes)
+        row["updated_at"] = "2026-07-15T01:00:00Z"
+        return dict(row)
+
+    def delete_alert_rule(self, workspace_id: str, rule_id: str) -> bool:
+        row = self.rules.get(rule_id)
+        if row is None or row["workspace_id"] != workspace_id:
+            return False
+        del self.rules[rule_id]
+        return True
 
 
 ADMIN = SimpleNamespace(
@@ -67,6 +95,27 @@ def alert_app(db: StubAlertRuleDb) -> FastAPI:
     app.dependency_overrides[require_admin_session] = lambda: ADMIN
     app.dependency_overrides[get_db] = lambda: db
     return app
+
+
+def stored_rule(**overrides: Any) -> dict[str, Any]:
+    row = {
+        "rule_id": "alr-1",
+        "workspace_id": "workspace-1",
+        "created_by": "admin-1",
+        **VALID_RULE,
+        "scope": {
+            "clusters": ["cluster-a"],
+            "namespaces": ["cluster-a/shop"],
+            "applications": ["checkout"],
+            "labels": ["team=checkout"],
+        },
+        "last_fired_at": None,
+        "occurrence_count": 0,
+        "created_at": "2026-07-15T00:00:00Z",
+        "updated_at": "2026-07-15T00:00:00Z",
+    }
+    row.update(overrides)
+    return row
 
 
 def test_alert_rule_scope_reuses_canonical_resource_filter_shape() -> None:
@@ -158,3 +207,95 @@ def test_alert_rule_create_contract_is_published_in_openapi() -> None:
     assert operation["responses"]["201"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/AlertRuleCreatedResponse"
     )
+
+
+def test_list_alert_rules_returns_only_current_workspace_with_occurrence_summary() -> None:
+    db = StubAlertRuleDb()
+    db.rules = {
+        "alr-own": stored_rule(
+            rule_id="alr-own",
+            last_fired_at="2026-07-15T00:30:00Z",
+            occurrence_count=3,
+        ),
+        "alr-other": stored_rule(rule_id="alr-other", workspace_id="workspace-2"),
+    }
+
+    response = TestClient(alert_app(db)).get("/alert-rules")
+
+    assert response.status_code == 200
+    assert [rule["rule_id"] for rule in response.json()["rules"]] == ["alr-own"]
+    assert response.json()["rules"][0]["last_fired_at"] == "2026-07-15T00:30:00Z"
+    assert response.json()["rules"][0]["occurrence_count"] == 3
+
+
+def test_patch_alert_rule_updates_only_supplied_fields_and_revalidates_channels() -> None:
+    db = StubAlertRuleDb()
+    db.rules = {"alr-1": stored_rule()}
+    client = TestClient(alert_app(db))
+
+    response = client.patch(
+        "/alert-rules/alr-1",
+        json={"threshold": 85, "for_seconds": 30, "channels": ["chan-ops"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["threshold"] == 85.0
+    assert response.json()["for_seconds"] == 30
+    assert db.channel_reads == [("workspace-1", "chan-ops")]
+    assert db.updates == [
+        (
+            "workspace-1",
+            "alr-1",
+            {"threshold": 85.0, "for_seconds": 30, "channels": ["chan-ops"]},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {},
+        {"for_seconds": 0},
+        {"metric": "PrometheusRule"},
+        {"scope": {"labels": ["missing-equals"]}},
+    ),
+)
+def test_patch_alert_rule_rejects_empty_flapping_or_noncanonical_changes(
+    payload: dict[str, Any],
+) -> None:
+    with pytest.raises(ValidationError):
+        AlertRulePatchRequest.model_validate(payload)
+
+
+def test_patch_alert_rule_rejects_missing_workspace_channel_before_update() -> None:
+    db = StubAlertRuleDb(channel_workspace="workspace-2")
+    db.rules = {"alr-1": stored_rule()}
+
+    response = TestClient(alert_app(db)).patch(
+        "/alert-rules/alr-1",
+        json={"channels": ["chan-ops"]},
+    )
+
+    assert response.status_code == 422
+    assert db.updates == []
+
+
+def test_patch_and_delete_alert_rule_hide_other_workspace_rows_as_not_found() -> None:
+    db = StubAlertRuleDb()
+    db.rules = {"alr-other": stored_rule(rule_id="alr-other", workspace_id="workspace-2")}
+    client = TestClient(alert_app(db))
+
+    assert client.patch("/alert-rules/alr-other", json={"enabled": False}).status_code == 404
+    assert client.delete("/alert-rules/alr-other").status_code == 404
+    assert db.rules["alr-other"]["enabled"] is True
+
+
+def test_delete_alert_rule_returns_no_content() -> None:
+    db = StubAlertRuleDb()
+    db.rules = {"alr-1": stored_rule()}
+
+    response = TestClient(alert_app(db)).delete("/alert-rules/alr-1")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert db.rules == {}

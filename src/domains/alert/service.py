@@ -6,11 +6,20 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from domains.alert.schemas import AlertRuleCreatedResponse, AlertRuleCreateRequest
+from domains.alert.schemas import (
+    AlertRuleCreatedResponse,
+    AlertRuleCreateRequest,
+    AlertRulePatchRequest,
+    AlertRuleResponse,
+)
 
 
 class AlertChannelNotFoundError(ValueError):
     """규칙이 현재 워크스페이스에 없는 채널을 참조함."""
+
+
+class AlertRuleNotFoundError(LookupError):
+    """현재 워크스페이스에 규칙이 없음."""
 
 
 def create_alert_rule_setting(
@@ -33,6 +42,28 @@ def create_alert_rule_setting(
         }
     )
     return AlertRuleCreatedResponse(rule_id=str(saved.get("rule_id") or rule_id))
+
+
+def update_alert_rule_setting(
+    db: Any,
+    rule_id: str,
+    payload: AlertRulePatchRequest,
+    *,
+    workspace_id: str,
+) -> AlertRuleResponse:
+    changes = payload.model_dump(exclude_unset=True)
+    channels = changes.get("channels")
+    if isinstance(channels, list):
+        _require_workspace_channels(db, workspace_id, channels)
+    saved = db.update_alert_rule(workspace_id, rule_id, changes)
+    if saved is None:
+        raise AlertRuleNotFoundError(rule_id)
+    return alert_rule_response(saved)
+
+
+def alert_rule_response(row: dict[str, Any]) -> AlertRuleResponse:
+    fields = AlertRuleResponse.model_fields
+    return AlertRuleResponse.model_validate({key: row.get(key) for key in fields})
 
 
 def _require_workspace_channels(db: Any, workspace_id: str, channel_ids: list[str]) -> None:
