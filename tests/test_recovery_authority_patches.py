@@ -306,6 +306,7 @@ def test_dispatcher_generates_six_authority_pinned_patch_types(
     )
 
     assert isinstance(body, SafePrRequestedBody)
+    assert body.pr_kind == "safe_pr_patch"
     assert body.repository_id == "repo-1"
     assert body.binding_id == "binding-1"
     assert body.commit_sha == BASE_SHA

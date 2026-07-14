@@ -22,7 +22,12 @@ from domains.rca.events import (
     RecoveryActionSelectedBody,
     RecoveryPlan,
 )
-from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
+from domains.scm.events import (
+    SAFE_PR_KIND_PATCH,
+    SAFE_PR_KIND_REVIEW_DOC,
+    SafePrFilePatch,
+    SafePrRequestedBody,
+)
 from packages.config.constants import Command, GitHub, Sandbox, Target
 from packages.contracts.event_bus.bodies import EventBody, JsonObject
 from packages.contracts.gitops_authority import (
@@ -206,6 +211,7 @@ def build_safe_pr_request_body(
         body=body,
         provider=GitHub.PROVIDER,
         patches=patches,
+        pr_kind=safe_pr_kind(selected),
         workspace_id=workspace_id,
         repository_id=(
             authority.repository_id
@@ -243,6 +249,12 @@ def build_safe_pr_request_body(
         approval_ref=as_optional_str(draft.params.get("approval_ref")),
         policy_decision_ref=as_optional_str(draft.params.get("policy_decision_ref")),
     )
+
+
+def safe_pr_kind(selected: RecoveryActionCandidate) -> str:
+    if selected.draft.action_type == GITOPS_REVIEW_ACTION:
+        return SAFE_PR_KIND_REVIEW_DOC
+    return SAFE_PR_KIND_PATCH
 
 
 async def dispatch_safe_pr_body(

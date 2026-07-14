@@ -144,6 +144,7 @@ def change_document(request: SafePrRequestedBody) -> str:
         f"# {request.title}\n\n"
         f"{request.body}\n\n"
         f"- manifest_path: `{request.manifest_path}`\n"
+        f"- pr_kind: `{request.pr_kind}`\n"
         f"- workflow_run_id: `{request.workflow_run_id}`\n"
         f"- environment: `{request.environment}`\n\n"
         "## Evidence\n\n"

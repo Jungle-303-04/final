@@ -153,28 +153,42 @@ context가 없거나 action type이 지원되지 않거나 patch를 만들 수 �
 
 ## Safe PR Patch Compatibility
 
-`route=draft_pr`라고 해서 모두 실제 PR patch로 변환되는 것은 아니다.
+`route=draft_pr`라고 해서 모두 실제 설정 변경 PR인 것은 아니다.
+`dispatch-worker`는 `pr_kind`로 PR 성격을 나눈다.
+
+```text
+route=draft_pr
+  -> pr_kind=safe_pr_patch
+     실제 GitOps manifest 값을 바꾸는 PR이다.
+     GitOps authority context와 구조화 patch 생성이 필요하다.
+
+  -> pr_kind=safe_pr_review_doc
+     실제 설정값을 바꾸지 않는 복구 검토 문서 PR이다.
+     RCA 근거, 권장 조치, 검증 기준을 repository에 남긴다.
+```
+
 `dispatch-worker`는 현재 아래 action만 구조화된 manifest patch로 만들 수 있다.
 
-| action_type | route source | dispatch 지원 | 필요한 context | 실패 reason_code | 상태 |
-| --- | --- | --- | --- | --- | --- |
-| `oom_memory` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, container resource field | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
-| `replica_scale` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, `spec.replicas` | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
-| `image_rollback` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, 이전 image snapshot | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
-| `image_tag_fix` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, 보정할 image tag/digest | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
-| `probe_fix` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, probe path/port/timeout field | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
-| `selector_fix` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, selector/template label mismatch | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
-| `gitops_recovery_review` | `draft_pr` | 복구 검토 문서 PR | GitOps authority context 없이도 review patch 생성 | 없음 | 지원 |
-| `config_fix` | `draft_pr` | 아직 구조화 patch 없음 | config key/value와 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
-| `resource_request_tuning` | `draft_pr` | 아직 구조화 patch 없음 | request/limit 계산값과 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
-| `scheduling_constraint_fix` | `draft_pr` | 아직 구조화 patch 없음 | node selector, affinity, toleration patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+| action_type | pr_kind | route source | dispatch 지원 | 필요한 context | 실패 reason_code | 상태 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `oom_memory` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, container resource field | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `replica_scale` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, `spec.replicas` | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `image_rollback` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, 이전 image snapshot | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `image_tag_fix` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, 보정할 image tag/digest | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `probe_fix` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, probe path/port/timeout field | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `selector_fix` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, selector/template label mismatch | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
+| `gitops_recovery_review` | `safe_pr_review_doc` | `draft_pr` | 복구 검토 문서 PR | GitOps authority context 없이도 review patch 생성 | 없음 | 지원 |
+| `config_fix` | `safe_pr_patch` | `draft_pr` | 아직 구조화 patch 없음 | config key/value와 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+| `resource_request_tuning` | `safe_pr_patch` | `draft_pr` | 아직 구조화 patch 없음 | request/limit 계산값과 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+| `scheduling_constraint_fix` | `safe_pr_patch` | `draft_pr` | 아직 구조화 patch 없음 | node selector, affinity, toleration patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
 
 따라서 recovery 후보를 추가할 때는 먼저 아래를 확인한다.
 
 ```text
 1. 이 조치가 runtime command인가, GitOps manifest 변경인가, 수동 판단인가?
-2. draft_pr라면 dispatch-worker가 실제 patch를 만들 수 있는 action_type인가?
-3. patch를 만들 수 없다면 safe_pr로 보내지 말고 approval_required나 review PR로 분리한다.
+2. draft_pr라면 실제 설정 변경 PR인지 검토 문서 PR인지 pr_kind를 먼저 정한다.
+3. safe_pr_patch라면 dispatch-worker가 실제 patch를 만들 수 있는 action_type인지 확인한다.
+4. patch를 만들 수 없다면 safe_pr_patch로 위장하지 말고 approval_required나 safe_pr_review_doc으로 분리한다.
 ```
 
 ## 결론
