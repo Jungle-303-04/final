@@ -1,0 +1,85 @@
+import { Popover } from "@base-ui/react/popover";
+import { Columns3, Rows3, Settings2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { useI18n } from "../../shared/i18n";
+import { Button } from "../../shared/ui/primitives/button";
+import type { FlowDirection } from "./workflowGraphTypes";
+
+export function WorkflowViewSettings({
+  direction,
+  showCheckpoints,
+  showMetadata,
+  compact,
+  setDirection,
+  setShowCheckpoints,
+  setShowMetadata,
+  setCompact,
+}: {
+  direction: FlowDirection;
+  showCheckpoints: boolean;
+  showMetadata: boolean;
+  compact: boolean;
+  setDirection: (direction: FlowDirection) => void;
+  setShowCheckpoints: (checked: boolean) => void;
+  setShowMetadata: (checked: boolean) => void;
+  setCompact: (checked: boolean) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Popover.Root>
+      <Popover.Trigger render={<Button aria-label={t("workflows.graph.settings")} size="icon-sm" variant="ghost" />}>
+        <Settings2 aria-hidden="true" />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner
+          align="end"
+          className="isolate z-[100]"
+          collisionAvoidance={{ side: "flip", align: "shift", fallbackAxisSide: "end" }}
+          collisionPadding={{ top: 16, right: 16, bottom: 16, left: 72 }}
+          positionMethod="fixed"
+          side="bottom"
+          sideOffset={8}
+        >
+          <Popover.Popup className="grid w-[min(20rem,calc(100vw-5.5rem))] min-w-0 gap-4 rounded-xl bg-popover p-4 text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none">
+            <div className="grid min-w-0 gap-0.5">
+              <Popover.Title className="text-sm font-semibold">{t("workflows.graph.settings")}</Popover.Title>
+              <Popover.Description className="text-xs leading-5 text-muted-foreground">
+                {t("workflows.graph.settingsDescription")}
+              </Popover.Description>
+            </div>
+            <fieldset className="grid min-w-0 gap-2">
+              <legend className="text-xs font-medium text-muted-foreground">{t("workflows.graph.direction")}</legend>
+              <div className="grid grid-cols-2 rounded-lg bg-muted p-1">
+                <DirectionButton active={direction === "LR"} icon={<Columns3 aria-hidden="true" />} label={t("workflows.graph.horizontal")} onClick={() => setDirection("LR")} />
+                <DirectionButton active={direction === "TB"} icon={<Rows3 aria-hidden="true" />} label={t("workflows.graph.vertical")} onClick={() => setDirection("TB")} />
+              </div>
+            </fieldset>
+            <ViewToggle checked={showCheckpoints} description={t("workflows.graph.checkpointsDescription")} label={t("workflows.graph.checkpoints")} onChange={setShowCheckpoints} />
+            <ViewToggle checked={showMetadata} description={t("workflows.graph.metadataDescription")} label={t("workflows.graph.metadata")} onChange={setShowMetadata} />
+            <ViewToggle checked={compact} description={t("workflows.graph.compactDescription")} label={t("workflows.graph.compact")} onChange={setCompact} />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+function DirectionButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button aria-pressed={active} className="flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm [&_svg]:size-3.5 [&_svg]:shrink-0" onClick={onClick} type="button">
+      {icon}<span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function ViewToggle({ checked, label, description, onChange }: { checked: boolean; label: string; description: string; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex min-w-0 cursor-pointer items-start justify-between gap-4">
+      <span className="grid min-w-0 gap-0.5">
+        <strong className="text-xs font-medium text-foreground">{label}</strong>
+        <small className="text-[0.6875rem] leading-4 text-muted-foreground">{description}</small>
+      </span>
+      <input checked={checked} className="mt-0.5 size-4 shrink-0 accent-primary" onChange={(event) => onChange(event.target.checked)} type="checkbox" />
+    </label>
+  );
+}

@@ -246,7 +246,6 @@ function importedZodSchemaModules(implementation: ApiSource, sources: ApiSource[
   });
   return [...new Set(schemaModules)].sort();
 }
-
 function moduleProvidesZodSchema(
   filePath: string,
   sourcesByPath: Map<string, string>,
@@ -256,7 +255,6 @@ function moduleProvidesZodSchema(
   visited.add(filePath);
   const source = sourcesByPath.get(filePath) ?? "";
   if (/from\s+["']zod["']/u.test(source) && /\bz\./u.test(source)) return true;
-
   const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
   let hasTransitiveZodSchema = false;
   sourceFile.forEachChild((node) => {
@@ -277,7 +275,6 @@ function moduleProvidesZodSchema(
   });
   return hasTransitiveZodSchema;
 }
-
 function resolveModuleReference(filePath: string, specifier: string): string | null {
   if (specifier.startsWith(".")) return resolve(dirname(filePath), specifier);
   if (specifier.startsWith("@/")) return resolve(sourceRoot, specifier.slice(2));
@@ -286,7 +283,6 @@ function resolveModuleReference(filePath: string, specifier: string): string | n
   if (specifier.startsWith("/")) return resolve(specifier);
   return null;
 }
-
 async function collectScripts(directory: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -296,7 +292,6 @@ async function collectScripts(directory: string): Promise<string[]> {
   }
   return files.sort();
 }
-
 async function collectApiSources(): Promise<ApiSource[]> {
   return Promise.all((await collectScripts(apiRoot)).map(async (filePath) => ({
     filePath,

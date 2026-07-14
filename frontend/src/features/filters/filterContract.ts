@@ -64,6 +64,9 @@ export interface ProductDetailQuery {
   tab: string | null;
   full: boolean;
   node: string | null;
+  workflowPlan?: string | null;
+  workflowView?: "overview" | "edit" | "runs" | "yaml" | null;
+  workflowMode?: "new" | null;
 }
 
 export interface InvalidFilterValues {

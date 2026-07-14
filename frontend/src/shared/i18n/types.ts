@@ -1,6 +1,7 @@
 import type { IssuesMessageKey } from "./keys/issues";
 import type { MetricsMessageKey } from "./keys/metrics";
 import type { ResourcesMessageKey } from "./keys/resources";
+import type { WorkflowsMessageKey } from "./keys/workflows";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -247,7 +248,8 @@ export type MessageKey =
   | CoreMessageKey
   | IssuesMessageKey
   | MetricsMessageKey
-  | ResourcesMessageKey;
+  | ResourcesMessageKey
+  | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;
 export type TranslationParameters = Readonly<Record<string, TranslationParameter>>;

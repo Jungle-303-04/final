@@ -11,7 +11,6 @@ import {
 import {
   appendBoolean,
   appendList,
-  appendNullableStableText,
   appendText,
   hasQueryKey,
   isKubernetesNamespace,
@@ -26,16 +25,15 @@ import {
   parseStrictQuery,
   readMultiValues,
   readQueryValue,
-  readStableText,
   type StrictQuery,
 } from "./filterUrlSyntax";
 import {
   parseBooleanQuery,
   parseResourceView,
 } from "./filterUrlScalars";
+import { appendProductDetail, parseProductDetailQuery } from "./detailUrlCodec";
 
 const LEGACY_CLUSTER_QUERY_KEY = "cluster";
-const LEGACY_RESOURCE_KIND_QUERY_KEY = "kind";
 type MutableInvalidFilterValues = Record<keyof InvalidFilterValues, string[]>;
 
 export function parseProductFilterUrl(search: string): FilterUrlParseResult {
@@ -148,7 +146,7 @@ export function serializeProductFilterUrl(
   appendApplicationFilters(pairs, state);
   appendGitOpsFilters(pairs, state);
   appendCheckFilters(pairs, state);
-  appendDetail(pairs, detail);
+  appendProductDetail(pairs, detail);
   return pairs.length > 0 ? `?${pairs.join("&")}` : "";
 }
 
@@ -210,14 +208,6 @@ function appendCheckFilters(pairs: string[], state: UnifiedFilterState) {
   appendText(pairs, "checks.q", state.checks.query);
 }
 
-function appendDetail(pairs: string[], detail: ProductDetailQuery) {
-  appendNullableStableText(pairs, "resource", detail.resource);
-  appendNullableStableText(pairs, "resourceKind", detail.resourceKind);
-  appendNullableStableText(pairs, "tab", detail.tab);
-  appendBoolean(pairs, "full", detail.full);
-  appendNullableStableText(pairs, "node", detail.node);
-}
-
 function parseLegacyCluster(params: StrictQuery, invalid: string[]): readonly string[] {
   if (!hasQueryKey(params, LEGACY_CLUSTER_QUERY_KEY)) return [];
   const value = readQueryValue(params, LEGACY_CLUSTER_QUERY_KEY) ?? "";
@@ -268,22 +258,6 @@ function parseLabelList(
     else if (selector.length > 0) invalid.push(selector);
   }
   return normalizeLabels(accepted);
-}
-
-function parseProductDetailQuery(
-  params: StrictQuery,
-  invalidFull: string[],
-): ProductDetailQuery {
-  const detail = createEmptyProductDetailQuery();
-  detail.resource = readStableText(params, "resource");
-  detail.resourceKind = readStableText(params, "resourceKind");
-  if (!hasQueryKey(params, "resourceKind") && detail.resource !== null) {
-    detail.resourceKind = readStableText(params, LEGACY_RESOURCE_KIND_QUERY_KEY);
-  }
-  detail.tab = readStableText(params, "tab");
-  detail.full = parseBooleanQuery(params, "full", invalidFull, ["1"], ["0"]);
-  detail.node = readStableText(params, "node");
-  return detail;
 }
 
 function createInvalidFilterValues(): MutableInvalidFilterValues {
