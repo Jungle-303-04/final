@@ -74,6 +74,7 @@ export const workflowsEn = {
   "workflows.editor.runtime": "Runtime mode",
   "workflows.editor.steps": "Release steps",
   "workflows.editor.addTarget": "Add target",
+  "workflows.editor.noAvailableTargets": "No targets available",
   "workflows.editor.application": "Application",
   "workflows.editor.environment": "Environment",
   "workflows.editor.cluster": "Cluster",

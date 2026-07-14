@@ -119,6 +119,50 @@ describe("GitOpsPage workspace navigation", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Plan name")));
   });
 
+  it("adds and removes release targets explicitly while creating a plan", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops");
+
+    await user.click(await screen.findByRole("button", { name: "New plan" }));
+    await user.type(screen.getByLabelText("Plan name"), "Explicit target plan");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("heading", { name: "Choose release targets" })).toBeTruthy();
+    const applicationSelect = screen.getByLabelText("Application") as HTMLSelectElement;
+    const addTarget = screen.getByRole("button", { name: "Add target" }) as HTMLButtonElement;
+
+    expect(applicationSelect.value).toBe("checkout-api");
+    await user.click(addTarget);
+    expect(screen.getByText("Checkout API")).toBeTruthy();
+    expect(applicationSelect.value).toBe("payments-worker");
+
+    await user.click(addTarget);
+    expect(screen.getByText("Payments Worker")).toBeTruthy();
+    expect(addTarget.disabled).toBe(true);
+    expect(applicationSelect.disabled).toBe(true);
+    expect(screen.getByRole("option", { name: "No targets available" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Remove step: Checkout API" }));
+    expect(addTarget.disabled).toBe(false);
+    expect(applicationSelect.disabled).toBe(false);
+    expect(applicationSelect.value).toBe("checkout-api");
+  });
+
+  it("keeps the edit target action visible when every application is selected", async () => {
+    const user = userEvent.setup();
+    renderGitOps("/gitops?plan=plan-a&view=edit");
+
+    const addTarget = await screen.findByRole("button", { name: "Add target" }) as HTMLButtonElement;
+    const applicationSelect = screen.getByLabelText("Application") as HTMLSelectElement;
+    expect(addTarget.disabled).toBe(false);
+
+    await user.click(addTarget);
+
+    expect(addTarget.disabled).toBe(true);
+    expect(applicationSelect.disabled).toBe(true);
+    expect(screen.getByRole("option", { name: "No targets available" })).toBeTruthy();
+  });
+
   it("keeps the overview next action in the workspace header", async () => {
     const user = userEvent.setup();
     renderGitOps("/gitops?plan=plan-a&view=overview");
