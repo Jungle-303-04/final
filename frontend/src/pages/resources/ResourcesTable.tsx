@@ -222,7 +222,7 @@ function ResourceNameButton({
       type="button"
       variant="link"
     >
-      <span className="truncate">{item.name}</span>
+      <span className="truncate" title={item.name}>{item.name}</span>
       <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
     </Button>
   );
