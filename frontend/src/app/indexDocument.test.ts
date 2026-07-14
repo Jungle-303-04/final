@@ -19,5 +19,11 @@ describe("product document bootstrap", () => {
     expect(documentSource).toContain('getItem("opsia.locale")');
     expect(documentSource).toContain("document.documentElement.lang = locale");
     expect(documentSource).toContain("document.documentElement.style.colorScheme");
+    expect(documentSource).toContain(
+      'const selectedTheme = storedTheme === "dark" || storedTheme === "light"',
+    );
+    expect(documentSource).toContain('storedTheme === "system"');
+    expect(documentSource).toContain("prefers-color-scheme: dark");
+    expect(documentSource).toContain('selectedTheme === "system" && systemDark');
   });
 });

@@ -15,9 +15,9 @@ export default function ProductApp() {
       <ProductErrorBoundary>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="system"
           disableTransitionOnChange
-          enableSystem={false}
+          enableSystem
           storageKey="opsia-theme"
           themes={["light", "dark"]}
         >
