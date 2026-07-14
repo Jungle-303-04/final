@@ -5,7 +5,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const apiRoot = dirname(fileURLToPath(import.meta.url));
-const domainBarrels = ["ai", "catalog", "gitops", "metrics", "rca", "workloads"] as const;
+const domainBarrels = ["ai", "alerts", "catalog", "gitops", "metrics", "rca", "workloads"] as const;
 
 describe("product API domain barrels", () => {
   it("keeps the public index as re-exports only", async () => {
