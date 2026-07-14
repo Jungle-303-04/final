@@ -74,7 +74,7 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
         clusterId={scope.selection.cluster.id}
         copy={copy}
         port={port}
-        recoverySelection={{ state: "hidden" }}
+        recoverySelection={{ state: "enabled" }}
       />
     </ProductPageFrame>
   );
