@@ -211,6 +211,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [auto/cleanup-report](auto/cleanup-report.md)
 - [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
 - [auto/codex-directive-20260714-final](auto/codex-directive-20260714-final.md)
+- [auto/demo-readiness](auto/demo-readiness.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
 - [auto/deploy-drift-audit](auto/deploy-drift-audit.md)
 - [auto/deploy-setup](auto/deploy-setup.md)
