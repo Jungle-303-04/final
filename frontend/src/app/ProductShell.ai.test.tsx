@@ -14,11 +14,11 @@ beforeEach(() => installMatchMedia(false));
 afterEach(() => cleanup());
 
 describe("ProductShell AI panel", () => {
-  it("opens from the right at fixed inner width without moving its floating trigger", async () => {
+  it("opens from the right, hides its floating trigger, and keeps complete suggestions", async () => {
     const user = userEvent.setup();
     const port = assistantPort({
       loadSuggestions: vi.fn().mockResolvedValue([
-        { id: "why", label: "왜 재시작하나요?", prompt: "왜 재시작하나요?" },
+        { id: "why", label: "재시작 원인", prompt: "이 파드는 왜 재시작하나요?" },
       ]),
     });
     renderShell({ aiAssistantPort: port });
@@ -35,8 +35,11 @@ describe("ProductShell AI panel", () => {
     expect(panel.getAttribute("data-width")).toBe("420");
     expect(inner?.getAttribute("data-inner-width")).toBe("420");
     expect(panel.previousElementSibling?.id).toBe("product-main");
-    expect(screen.getAllByRole("button", { name: "Opsia AI 닫기" })).toContain(trigger);
-    expect(await screen.findByRole("button", { name: "왜 재시작하나요?" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Opsia AI 닫기" })).toHaveLength(1);
+    expect(await screen.findByRole("button", { name: "이 파드는 왜 재시작하나요?" }))
+      .toBeTruthy();
+    expect(screen.queryByRole("button", { name: "재시작 원인" })).toBeNull();
     expect(panel.textContent).toContain("home");
     expect(panel.textContent).toContain("cluster-1");
 
@@ -76,6 +79,42 @@ describe("ProductShell AI panel", () => {
       .toBe("/issues/event-1");
   });
 
+  it("submits with Enter, keeps Shift+Enter in the input, scrolls, and aborts a pending turn", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    let requestSignal: AbortSignal | undefined;
+    const ask = vi.fn((_context, _message, signal?: AbortSignal) => {
+      requestSignal = signal;
+      return new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      });
+    });
+    renderShell({ aiAssistantPort: assistantPort({ ask }) });
+    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
+
+    await user.type(input, "첫 줄");
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(ask).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(ask).toHaveBeenCalledOnce());
+    expect(ask.mock.calls[0]?.[1]).toBe("첫 줄");
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(screen.getByText("첫 줄")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "중단" })).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "중단" }));
+    expect(requestSignal?.aborted).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "중단" })).toBeNull());
+    expect(screen.queryByText("이 요청에는 AI를 사용할 수 없습니다.")).toBeNull();
+  });
+
   it("keeps an open detail and the user-selected sidebar state on wide screens", async () => {
     const user = userEvent.setup();
     renderShell({
@@ -106,7 +145,12 @@ describe("ProductShell AI panel", () => {
     expect(container.querySelector('[data-slot="unified-filter-bar"]')).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    const panel = screen.getByRole("complementary", { name: "Opsia AI" });
     await waitFor(() => expect(container.querySelector('[data-slot="unified-filter-bar"]')).toBeTruthy());
+    expect(panel.className).toContain("max-w-dvw");
+    expect(panel.querySelector('[data-slot="ai-assistant-inner"]')?.className)
+      .toContain("max-w-dvw");
+    expect(screen.queryByRole("button", { name: "Opsia AI 열기" })).toBeNull();
     expect(await screen.findByText(
       "Opsia AI 공간을 확보하기 위해 리소스 상세를 닫았습니다.",
     )).toBeTruthy();
