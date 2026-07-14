@@ -6,13 +6,11 @@
   }
 
   html {
-    min-width: 20rem;
     background: var(--background);
     font-family: var(--font-sans);
   }
 
   body {
-    min-width: 20rem;
     min-height: 100vh;
     margin: 0;
     color: var(--foreground);

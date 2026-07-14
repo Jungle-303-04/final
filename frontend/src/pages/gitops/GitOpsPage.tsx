@@ -44,7 +44,6 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
         <WorkflowInlineHeading
           as="h1"
           className="flex-1"
-          description={t("workflows.description")}
           icon={<GitBranch aria-hidden="true" />}
           title={t("workflows.title")}
           variant="page"
@@ -71,12 +70,20 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
       {page.data.error ? <LoadError onRetry={page.data.refresh} /> : null}
 
       {page.selectedPlan && page.draft ? (
-        <Tabs className="min-w-0 gap-4" onValueChange={(value) => value && page.setView(value as WorkflowView)} value={page.view}>
+        <Tabs
+          className="min-w-0 gap-4"
+          onValueChange={(value) => {
+            if (!value) return;
+            if (value === "edit") page.openEditor();
+            else page.setView(value as WorkflowView);
+          }}
+          value={page.view}
+        >
           <nav aria-label={t("workflows.view.aria")} className="min-w-0 border-b">
             <TabsList aria-label={t("workflows.view.aria")} className="grid h-auto w-full min-w-0 grid-cols-4 overflow-hidden rounded-none bg-transparent p-0" variant="line">
               {WORKFLOW_VIEWS.map((item) => (
                 <TabsTrigger className="h-10 min-w-0 px-1 text-[0.6875rem] sm:px-3 sm:text-sm" key={item} value={item}>
-                  <span className="min-w-0 truncate">{viewLabel(item, t)}</span>
+                  <span className="whitespace-nowrap">{viewLabel(item, t)}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -85,7 +92,7 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           <TabsContent className="min-w-0" value="overview">
             <WorkflowOverview
               applications={page.data.applications}
-              onEdit={() => page.setView("edit")}
+              onEdit={page.openEditor}
               onOpenRuns={() => { page.setView("runs"); void page.checkReadiness(); }}
               onSelectStep={page.setSelectedStepId}
               plan={page.selectedPlan}
@@ -94,12 +101,22 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
             />
           </TabsContent>
           <TabsContent className="min-w-0" value="edit">
-            <PlanEditor applications={page.data.applications} onChange={page.setDraft} onSave={() => void page.saveDraft()} pending={page.operation === "save"} plan={page.draft} />
+            <PlanEditor
+              applications={page.data.applications}
+              focusedField={page.editorTarget?.field}
+              focusedStepId={page.editorTarget?.stepId}
+              onChange={page.setDraft}
+              onSave={() => void page.saveDraft()}
+              pending={page.operation === "save"}
+              plan={page.draft}
+            />
           </TabsContent>
           <TabsContent className="min-w-0" value="runs">
             <RunWorkspace
+              applications={page.data.applications}
               onAction={(run, action) => void page.runAction(run.run_id, action)}
               onCheckReadiness={() => void page.checkReadiness()}
+              onEdit={page.openEditor}
               onStart={() => void page.startPlan()}
               pending={["readiness", "start", "run"].includes(page.operation)}
               plan={page.selectedPlan}
@@ -110,11 +127,14 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           <TabsContent className="min-w-0" value="yaml">
             <ManifestWorkspace
               onGenerate={(index) => void page.generateManifest(index)}
+              onEdit={page.openEditor}
               onSafePr={(index) => void page.submitSafePr(index)}
               pending={page.operation === "generate" ? "generate" : page.operation === "safe-pr" ? "safe-pr" : "idle"}
               plan={page.selectedPlan}
               result={page.manifest}
+              resultStepIndex={page.manifestStepIndex}
               safePr={page.safePr}
+              safePrStepIndex={page.safePrStepIndex}
             />
           </TabsContent>
         </Tabs>
@@ -126,7 +146,7 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
 function WorkflowContext({ plan }: { plan: ReleasePlan }) {
   const { t } = useI18n();
   return (
-    <dl className="grid min-w-0 grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4">
+    <dl className="grid min-w-0 grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border lg:grid-cols-4">
       <ContextFact label={t("workflows.context.status")} value={t(`workflows.status.${plan.status}`)} />
       <ContextFact label={t("workflows.context.targets")} value={String(plan.steps.length)} />
       <ContextFact label={t("workflows.context.policy")} value={policyLabel(settingString(plan, "approval_policy"), t)} />
@@ -174,7 +194,7 @@ function EmptyWorkflow({ onCreate }: { onCreate: () => void }) {
 }
 
 function ContextFact({ label, value }: { label: string; value: string }) {
-  return <div className="flex min-h-14 min-w-0 items-center justify-between gap-3 bg-card px-3 py-2.5"><dt className="shrink-0 text-xs font-medium text-muted-foreground">{label}</dt><dd className="m-0 min-w-0 text-right text-xs font-semibold [overflow-wrap:anywhere]">{value}</dd></div>;
+  return <div className="flex min-h-16 min-w-0 flex-col items-start justify-center gap-1 bg-card px-3 py-2.5 lg:min-h-14 lg:flex-row lg:items-center lg:justify-between lg:gap-3"><dt className="shrink-0 text-xs font-medium text-muted-foreground">{label}</dt><dd className="m-0 min-w-0 text-left text-xs font-semibold [overflow-wrap:anywhere] lg:text-right">{value}</dd></div>;
 }
 
 type T = ReturnType<typeof useI18n>["t"];

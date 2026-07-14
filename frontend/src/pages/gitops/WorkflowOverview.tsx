@@ -1,4 +1,4 @@
-import { ArrowRight, GitBranch, PlayCircle, Settings2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, PlayCircle, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type {
   ReleaseApplication,
@@ -10,8 +10,9 @@ import {
   applicationForStep,
   configString,
   releaseWaves,
-  settingString,
+  releaseStepSetupIssues,
   stepKey,
+  type StepSetupField,
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -25,7 +26,7 @@ import {
   SheetTitle,
 } from "../../shared/ui/primitives/sheet";
 import { Surface } from "../../shared/ui/Surface";
-import { environmentLabel, policyLabel, strategyLabel } from "./WorkflowFormControls";
+import { environmentLabel, strategyLabel } from "./WorkflowFormControls";
 import { WorkflowGraph } from "./WorkflowGraph";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
@@ -43,7 +44,7 @@ export function WorkflowOverview({
   run?: ReleaseRun;
   selectedStepId: string;
   onSelectStep: (stepId: string) => void;
-  onEdit: () => void;
+  onEdit: (stepIndex?: number, field?: StepSetupField) => void;
   onOpenRuns: () => void;
 }) {
   const { t } = useI18n();
@@ -51,6 +52,8 @@ export function WorkflowOverview({
   const selectedIndex = plan.steps.findIndex((step, index) => stepKey(step, index) === selectedStepId);
   const selectedStep = selectedIndex >= 0 ? plan.steps[selectedIndex] : undefined;
   const selectedApplication = selectedStep ? applicationForStep(selectedStep, applications) : undefined;
+  const setupIssues = releaseStepSetupIssues(plan, applications);
+  const firstSetupIssue = setupIssues[0];
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -58,58 +61,51 @@ export function WorkflowOverview({
         <WorkflowInlineHeading
           as="h2"
           className="flex-1"
-          description={t("workflows.overview.actionDescription")}
-          title={t("workflows.overview.actionTitle")}
+          icon={setupIssues.length ? <AlertTriangle aria-hidden="true" /> : undefined}
+          title={setupIssues.length
+            ? t("workflows.overview.setupTitle", { count: setupIssues.length })
+            : t("workflows.overview.actionTitle")}
           variant="compact"
         />
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-          <Button onClick={onEdit} variant="outline">
-            <Settings2 aria-hidden="true" />
-            {t("workflows.overview.edit")}
-          </Button>
-          <Button onClick={onOpenRuns}>
-            <PlayCircle aria-hidden="true" />
-            {t("workflows.overview.checkReadiness")}
-          </Button>
+          {firstSetupIssue ? (
+            <Button onClick={() => onEdit(firstSetupIssue.stepIndex, firstSetupIssue.field)}>
+              <Settings2 aria-hidden="true" />
+              {t("workflows.overview.setupAction")}
+            </Button>
+          ) : (
+            <>
+              <Button onClick={() => onEdit()} variant="outline">
+                <Settings2 aria-hidden="true" />
+                {t("workflows.overview.edit")}
+              </Button>
+              <Button onClick={onOpenRuns}>
+                <PlayCircle aria-hidden="true" />
+                {t("workflows.runs.check")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       <WorkflowGraph
         applications={applications}
+        className="hidden xl:block"
         onSelectStep={onSelectStep}
         plan={plan}
         run={run}
         selectedStepId={selectedStepId}
       />
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(15rem,.75fr)_minmax(0,1.25fr)]">
-        <Surface aria-label={t("workflows.overview.summary")} className="grid min-w-0 content-start gap-3 p-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
-            <h3 className="m-0 text-sm font-semibold">{t("workflows.overview.summary")}</h3>
-          </div>
-          <dl className="grid min-w-0 gap-3">
-            <SummaryFact label={t("workflows.context.status")} value={planStatusLabel(plan.status, t)} />
-            <SummaryFact label={t("workflows.context.targets")} value={String(plan.steps.length)} />
-            <SummaryFact label={t("workflows.context.policy")} value={policyLabel(settingString(plan, "approval_policy"), t)} />
-            <SummaryFact
-              label={t("workflows.context.runtime")}
-              value={settingString(plan, "runtime_mode", "review") === "live"
-                ? t("workflows.option.runtime.live")
-                : t("workflows.option.runtime.review")}
-            />
-          </dl>
-        </Surface>
-
-        <Surface aria-label={t("workflows.overview.order")} className="grid min-w-0 content-start gap-3 p-4">
+      <Surface aria-label={t("workflows.overview.order")} className="grid min-w-0 content-start gap-3 p-4">
           <h3 className="m-0 text-sm font-semibold">{t("workflows.overview.order")}</h3>
-          <div className="grid min-w-0 gap-1.5">
+          <div className="grid min-w-0 divide-y">
             {plan.steps.map((step, index) => {
               const key = stepKey(step, index);
               const application = applicationForStep(step, applications);
               return (
                 <button
-                  className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-2 rounded-lg border px-2.5 py-2 text-left hover:bg-muted/40"
+                  className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-2 px-1 py-2.5 text-left hover:bg-muted/40"
                   key={key}
                   onClick={() => onSelectStep(key)}
                   type="button"
@@ -117,13 +113,12 @@ export function WorkflowOverview({
                   <span className="grid size-6 place-items-center rounded-md bg-muted text-[0.6875rem] font-semibold">
                     {waves.get(key) ?? index + 1}
                   </span>
-                  <span className="flex min-w-0 items-baseline gap-2 overflow-hidden">
-                    <strong className="max-w-[58%] shrink-0 truncate text-xs" title={step.name || application?.name || step.application_id}>
+                  <span className="grid min-w-0 gap-0.5">
+                    <strong className="min-w-0 text-xs [overflow-wrap:anywhere]">
                       {step.name || application?.name || step.application_id}
                     </strong>
                     <small
-                      className="min-w-0 flex-1 truncate border-l pl-2 text-[0.6875rem] text-muted-foreground"
-                      title={`${configString(step, "environment", t("workflows.value.notSet"))} / ${application?.repository || step.application_id}`}
+                      className="min-w-0 text-[0.6875rem] text-muted-foreground [overflow-wrap:anywhere]"
                     >
                       {configString(step, "environment", t("workflows.value.notSet"))} / {application?.repository || step.application_id}
                     </small>
@@ -133,14 +128,13 @@ export function WorkflowOverview({
               );
             })}
           </div>
-        </Surface>
-      </div>
+      </Surface>
 
       <StepDetailSheet
         application={selectedApplication}
         index={selectedIndex}
         onClose={() => onSelectStep("")}
-        onEdit={onEdit}
+        onEdit={() => onEdit(selectedIndex)}
         open={Boolean(selectedStep)}
         step={selectedStep}
         wave={selectedStep ? waves.get(stepKey(selectedStep, selectedIndex)) : undefined}
@@ -225,15 +219,6 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
   );
 }
 
-function SummaryFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex min-w-0 items-start justify-between gap-4 border-b pb-2 last:border-b-0 last:pb-0">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="m-0 min-w-0 text-right text-xs font-medium [overflow-wrap:anywhere]">{value}</dd>
-    </div>
-  );
-}
-
 function DetailFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid min-w-0 grid-cols-[minmax(5.5rem,.35fr)_minmax(0,1fr)] gap-3">
@@ -241,10 +226,4 @@ function DetailFact({ label, value }: { label: string; value: string }) {
       <dd className="m-0 min-w-0 text-right text-xs font-medium [overflow-wrap:anywhere]">{value}</dd>
     </div>
   );
-}
-
-type T = ReturnType<typeof useI18n>["t"];
-
-function planStatusLabel(status: ReleasePlan["status"], t: T): string {
-  return t(`workflows.status.${status}`);
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { ReleaseApplication, ReleasePlanStep } from "./gitOpsContract";
+import type { ReleaseApplication, ReleasePlan, ReleasePlanStep } from "./gitOpsContract";
 import {
   createEmptyPlan,
   planValidationCodes,
+  releaseStepSetupIssues,
   releaseWaves,
+  stepSetupFields,
   syncSelectedApplications,
 } from "./workflowModel";
 
@@ -75,6 +77,33 @@ describe("workflowModel", () => {
       "name",
       "duplicate",
       "dependency",
+    ]);
+  });
+
+  it("finds the exact release fields that must be fixed before execution", () => {
+    const completePlan: ReleasePlan = {
+      ...createEmptyPlan(),
+      name: "Production release",
+      settings: { commit_sha: "abc123" },
+      steps: [{
+        ...step("storefront", []),
+        config: { image: "ghcr.io/team/storefront@sha256:123", cluster_id: "prod-a" },
+      }],
+    };
+
+    expect(stepSetupFields(completePlan, completePlan.steps[0], applications[0])).toEqual([]);
+
+    const missingPlan: ReleasePlan = {
+      ...completePlan,
+      settings: {},
+      steps: [{ ...completePlan.steps[0], config: {} }],
+    };
+    const applicationWithoutCluster = { ...applications[0], clusterId: "" };
+
+    expect(releaseStepSetupIssues(missingPlan, [applicationWithoutCluster])).toEqual([
+      { field: "commit_sha", stepId: "storefront", stepIndex: 0, stepName: "storefront" },
+      { field: "image", stepId: "storefront", stepIndex: 0, stepName: "storefront" },
+      { field: "cluster_id", stepId: "storefront", stepIndex: 0, stepName: "storefront" },
     ]);
   });
 });

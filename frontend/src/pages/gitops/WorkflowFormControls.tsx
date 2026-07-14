@@ -5,16 +5,21 @@ export function FormField({
   label,
   children,
   className,
+  error,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  error?: string;
 }) {
   return (
-    <label className={`grid min-w-0 gap-1.5 ${className || ""}`}>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      {children}
-    </label>
+    <div className={`grid min-w-0 gap-1.5 ${className || ""}`}>
+      <label className="contents">
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        {children}
+      </label>
+      {error ? <span className="text-xs font-medium text-destructive" role="alert">{error}</span> : null}
+    </div>
   );
 }
 

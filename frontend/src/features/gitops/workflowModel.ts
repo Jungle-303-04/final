@@ -2,6 +2,14 @@ import type { ReleaseApplication, ReleasePlan, ReleasePlanStep } from "./gitOpsC
 
 export type WorkflowView = "overview" | "edit" | "runs" | "yaml";
 export type WizardStage = "basics" | "targets" | "policy" | "review";
+export type StepSetupField = "commit_sha" | "image" | "cluster_id";
+
+export interface StepSetupIssue {
+  field: StepSetupField;
+  stepId: string;
+  stepIndex: number;
+  stepName: string;
+}
 
 export const WORKFLOW_VIEWS: WorkflowView[] = ["overview", "edit", "runs", "yaml"];
 export const WIZARD_STAGES: WizardStage[] = ["basics", "targets", "policy", "review"];
@@ -63,6 +71,39 @@ export function applicationForStep(
   applications: ReleaseApplication[],
 ): ReleaseApplication | undefined {
   return applications.find((application) => application.id === step.application_id);
+}
+
+export function stepSetupFields(
+  plan: ReleasePlan,
+  step: ReleasePlanStep,
+  application?: ReleaseApplication,
+): StepSetupField[] {
+  const missing: StepSetupField[] = [];
+  if (!configString(step, "commit_sha") && !settingString(plan, "commit_sha")) {
+    missing.push("commit_sha");
+  }
+  if (!configString(step, "image") && !settingString(plan, "image")) {
+    missing.push("image");
+  }
+  if (!configString(step, "cluster_id") && !application?.clusterId.trim()) {
+    missing.push("cluster_id");
+  }
+  return missing;
+}
+
+export function releaseStepSetupIssues(
+  plan: ReleasePlan,
+  applications: ReleaseApplication[],
+): StepSetupIssue[] {
+  return plan.steps.flatMap((step, stepIndex) => {
+    const application = applicationForStep(step, applications);
+    return stepSetupFields(plan, step, application).map((field) => ({
+      field,
+      stepId: stepKey(step, stepIndex),
+      stepIndex,
+      stepName: step.name || application?.name || step.application_id,
+    }));
+  });
 }
 
 export function updateStep(

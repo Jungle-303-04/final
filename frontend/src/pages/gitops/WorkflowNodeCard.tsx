@@ -43,14 +43,17 @@ export function WorkflowNodeCard({ data }: NodeProps<WorkflowNode>) {
           {data.statusLabel}
         </span>
       </div>
-      <strong className="line-clamp-2 min-w-0 text-xs leading-4 font-semibold [overflow-wrap:anywhere]">
+      <strong
+        className="line-clamp-2 min-w-0 text-xs leading-4 font-semibold [overflow-wrap:anywhere]"
+        title={data.title}
+      >
         {data.title}
       </strong>
       {data.showMetadata && data.kind === "application" ? (
         <div className="grid min-w-0 gap-0.5 text-[0.625rem] leading-3.5 text-muted-foreground">
-          <span className="truncate">{data.environment}</span>
-          <span className="truncate">{data.cluster}</span>
-          <span className="truncate">{data.strategy}</span>
+          <span className="truncate" title={data.environment}>{data.environment}</span>
+          <span className="truncate" title={data.cluster}>{data.cluster}</span>
+          <span className="truncate" title={data.strategy}>{data.strategy}</span>
         </div>
       ) : null}
       {data.showMetadata && data.kind !== "application" ? (

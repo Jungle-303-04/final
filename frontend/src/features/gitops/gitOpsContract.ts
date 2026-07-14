@@ -79,6 +79,27 @@ export interface ReleaseReadiness {
     message: string;
     blockers: string[];
   }[];
+  impact?: {
+    summary: string;
+    runtime_mode: string;
+    live_side_effects: boolean;
+    total_steps: number;
+    total_waves: number;
+    first_wave: number;
+    applications: string[];
+    environments: string[];
+    production_targets: string[];
+    production_target_count: number;
+    first_wave_steps: Record<string, unknown>[];
+  };
+  next_actions: {
+    action_id: string;
+    check_id: string;
+    label: string;
+    severity: string;
+    message: string;
+    blockers: string[];
+  }[];
   blockers: string[];
   warnings: string[];
 }

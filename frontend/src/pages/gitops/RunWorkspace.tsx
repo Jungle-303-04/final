@@ -8,14 +8,25 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
+  ReleaseApplication,
   ReleasePlan,
   ReleaseReadiness,
   ReleaseRun,
   ReleaseRunAction,
 } from "../../features/gitops/gitOpsContract";
+import {
+  releaseStepSetupIssues,
+  type StepSetupField,
+} from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
 import { Surface } from "../../shared/ui/Surface";
+import {
+  checkCoveredBySetupIssues,
+  groupSetupIssues,
+  ReadinessCheckRow,
+  SetupIssueRow,
+} from "./RunReadinessDetails";
 import {
   RunActions,
   RunFact,
@@ -27,18 +38,22 @@ import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function RunWorkspace({
   plan,
+  applications,
   runs,
   readiness,
   pending,
   onCheckReadiness,
+  onEdit,
   onStart,
   onAction,
 }: {
   plan: ReleasePlan;
+  applications: ReleaseApplication[];
   runs: ReleaseRun[];
   readiness?: ReleaseReadiness;
   pending: boolean;
   onCheckReadiness: () => void;
+  onEdit: (stepIndex?: number, field?: StepSetupField) => void;
   onStart: () => void;
   onAction: (run: ReleaseRun, action: ReleaseRunAction) => void;
 }) {
@@ -53,11 +68,14 @@ export function RunWorkspace({
     ? selectedRunId
     : orderedRuns[0]?.run_id || "";
   const selectedRun = orderedRuns.find((run) => run.run_id === effectiveSelectedRunId);
+  const setupIssues = releaseStepSetupIssues(plan, applications);
+  const setupIssueGroups = groupSetupIssues(setupIssues);
+  const attentionChecks = readiness?.checks.filter((check) => check.status === "blocked" || check.status === "warning") || [];
+  const remainingChecks = attentionChecks.filter((check) => !checkCoveredBySetupIssues(check, setupIssues));
 
   return (
     <div className="grid min-w-0 gap-4">
       <WorkflowInlineHeading
-        description={t("workflows.runs.description")}
         title={t("workflows.runs.title")}
       />
 
@@ -66,7 +84,6 @@ export function RunWorkspace({
           <WorkflowInlineHeading
             as="h3"
             className="flex-1"
-            description={t("workflows.runs.precheckDescription")}
             icon={<CheckCircle2 aria-hidden="true" />}
             title={t("workflows.runs.precheckTitle")}
             variant="compact"
@@ -74,32 +91,55 @@ export function RunWorkspace({
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
             <Button disabled={pending} onClick={onCheckReadiness} variant="outline">
               <CheckCircle2 aria-hidden="true" />
-              {pending ? t("workflows.runs.checking") : t("workflows.runs.check")}
+              {pending
+                ? t("workflows.runs.checking")
+                : readiness
+                  ? t("workflows.runs.recheck")
+                  : t("workflows.runs.check")}
             </Button>
-            <Button disabled={pending || readiness?.ready !== true} onClick={onStart}>
-              <CirclePlay aria-hidden="true" />
-              {pending ? t("workflows.runs.starting") : t("workflows.runs.start")}
-            </Button>
+            {readiness?.ready ? (
+              <Button disabled={pending} onClick={onStart}>
+                <CirclePlay aria-hidden="true" />
+                {pending ? t("workflows.runs.starting") : t("workflows.runs.start")}
+              </Button>
+            ) : null}
           </div>
         </div>
 
         {readiness ? (
-          <div className={`grid min-w-0 gap-2 rounded-lg border px-3 py-2.5 ${readiness.ready ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
-            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+          <div className="grid min-w-0 gap-3 border-t pt-3" role="status">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {readiness.ready
                 ? <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-emerald-600" />
                 : <AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-amber-600" />}
-              <strong className="shrink-0 text-xs">
-                {readiness.ready ? t("workflows.runs.ready") : t("workflows.runs.blocked")}
+              <strong className="text-xs">
+                {readiness.ready
+                  ? t("workflows.runs.ready")
+                  : t("workflows.runs.blockerCount", { count: readiness.blockers.length })}
               </strong>
-              <span className="min-w-0 flex-1 truncate border-l pl-2 text-xs text-muted-foreground" title={readiness.summary}>
-                {readiness.summary}
-              </span>
+              {readiness.impact ? (
+                <span className="text-xs text-muted-foreground">
+                  {t("workflows.runs.impact", {
+                    steps: readiness.impact.total_steps,
+                    waves: readiness.impact.total_waves,
+                    production: readiness.impact.production_target_count,
+                  })}
+                </span>
+              ) : null}
             </div>
-            {readiness.blockers.length ? (
-              <ul className="m-0 grid gap-1 pl-6 text-xs text-muted-foreground">
-                {readiness.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-              </ul>
+            {setupIssueGroups.length ? (
+              <div className="grid min-w-0 divide-y">
+                {setupIssueGroups.map((group) => (
+                  <SetupIssueRow group={group} key={group.stepId} onEdit={onEdit} />
+                ))}
+              </div>
+            ) : null}
+            {remainingChecks.length ? (
+              <div className="grid min-w-0 divide-y">
+                {remainingChecks.map((check) => (
+                  <ReadinessCheckRow check={check} key={check.check_id} onEdit={onEdit} />
+                ))}
+              </div>
             ) : null}
           </div>
         ) : null}
