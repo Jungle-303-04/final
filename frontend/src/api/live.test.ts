@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRealtimeUrl,
+  createRealtimeClient,
   createRealtimeSequenceState,
   reduceRealtimeSequence,
 } from "./live";
@@ -18,6 +19,11 @@ const summaryMessage = {
     pods_total: 4,
     restart_delta: 1,
     rollout_phase: "progressing" as const,
+    metrics_metadata: {
+      source: "kubelet_stats_summary" as const,
+      actual_interval_seconds: 1.1,
+      degraded_reason: null,
+    },
     hot_pods: [
       {
         namespace: "sandbox",
@@ -58,6 +64,18 @@ describe("realtime.v1 schema", () => {
         type: "hello",
         protocol: "realtime.v1",
         unexpected: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      realtimeMessageSchema.safeParse({
+        ...summaryMessage,
+        summary: {
+          ...summaryMessage.summary,
+          metrics_metadata: {
+            ...summaryMessage.summary.metrics_metadata,
+            unexpected: true,
+          },
+        },
       }).success,
     ).toBe(false);
     expect(
@@ -211,5 +229,13 @@ describe("same-origin realtime URL", () => {
       namespace: "sandbox",
       app: "store front",
     });
+  });
+
+  it("creates an idle client before the composition root starts it", () => {
+    const client = createRealtimeClient({
+      subscription: { workspaceId: "workspace-1", clusterId: "cluster-1" },
+    });
+
+    expect(client.getState().status).toBe("idle");
   });
 });

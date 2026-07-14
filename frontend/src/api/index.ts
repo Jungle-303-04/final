@@ -255,10 +255,12 @@ export {
   type InventoryResourceList,
 } from "./inventory-schemas";
 export {
+  liveMetricsMetadataSchema,
   liveSummarySchema,
   parseRealtimeMessage,
   realtimeMessageSchema,
   type LiveSubscription,
+  type LiveMetricsMetadata,
   type LiveSummary,
   type LiveSummaryMessage,
   type RealtimeMessage,

@@ -8,6 +8,7 @@ import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
+import { EMPTY_PHYSICAL_TOPOLOGY_REALTIME_PORT, type PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
@@ -52,6 +53,7 @@ export function renderResources(
   logStreamPort: LogStreamPort = EMPTY_LOG_STREAM_PORT,
   relationTopologyPort: RelationTopologyPort = resourcesRelationTopologyPort(),
   changeTimelinePort: ChangeTimelinePort = resourcesChangeTimelinePort(),
+  physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = EMPTY_PHYSICAL_TOPOLOGY_REALTIME_PORT,
 ) {
   const router = createMemoryRouter(
     [
@@ -72,6 +74,7 @@ export function renderResources(
                     <ResourcesPage
                       filterPort={filterPort}
                       physicalTopologyPort={physicalTopologyPort}
+                      physicalTopologyRealtimePort={physicalTopologyRealtimePort}
                       relationTopologyPort={relationTopologyPort}
                       changeTimelinePort={changeTimelinePort}
                       resourceMetricsHistoryPort={resourceMetricsHistoryPort}
@@ -293,8 +296,5 @@ export function deferred<T>() {
 }
 
 export function setVisibility(value: DocumentVisibilityState) {
-  Object.defineProperty(document, "visibilityState", {
-    configurable: true,
-    value,
-  });
+  Object.defineProperty(document, "visibilityState", { configurable: true, value });
 }
