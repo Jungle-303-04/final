@@ -80,7 +80,6 @@ export function useResourcesDetailState(
       (current) => ({
         ...current,
         detail: encodeResourceDetail(detailTarget.identity),
-        full: false,
         resource: null,
         resourceKind: null,
       }),

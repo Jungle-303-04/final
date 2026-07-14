@@ -191,19 +191,6 @@ export function ResourcesPage({
       />
     );
   }
-  if (state.detailRequested) {
-    return (
-      <ResourceDetailWorkspace
-        detail={state.detail}
-        identity={state.detailIdentity}
-        actionsPort={resourceActionsPort}
-        capabilities={resourceCapabilities}
-        onClose={state.closeDetail}
-        onTabChange={state.setDetailTab}
-        tab={state.detailTab}
-      />
-    );
-  }
   if (state.choices.data.clusters.length === 0) {
     return <ResourcesClusterBoundary variant="catalog-unconfirmed" />;
   }
@@ -212,83 +199,118 @@ export function ResourcesPage({
       (resource) => resource.phase === "ready" && resource.refreshing,
     ) || filtered.list.refreshing;
   return (
-    <ProductPageFrame>
-      <header className="flex min-w-0 justify-end">
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
-          {state.automaticRefreshPaused ? (
-            <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
-          ) : null}
-          <ResourcesLiveStatus state={physicalRealtime.live} />
-          {physicalRealtime.live.status === "connected" ? null : (
-            <PollingFreshness
-              connectionState={physicalTopology.phase === "ready" && physicalTopology.refreshFailure
-                ? "disconnected"
-                : "connected"}
-              dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-              intervalSeconds={5}
-              isFetching={refreshing || physicalTopology.refreshing}
-              onRefresh={state.refresh}
-            />
-          )}
-        </div>
-      </header>
+    <div
+      className="flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
+      data-detail-layout={state.detailRequested ? (state.detailFull ? "full" : "peek") : "closed"}
+    >
+      <div
+        className={state.detailRequested
+          ? state.detailFull
+            ? "hidden"
+            : "hidden min-w-0 flex-1 overflow-y-auto lg:block"
+          : "min-w-0 flex-1 overflow-y-auto"}
+        data-slot="resources-list-column"
+      >
+        <ProductPageFrame>
+          <header className="flex min-w-0 justify-end">
+            <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
+              {state.automaticRefreshPaused ? (
+                <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
+              ) : null}
+              <ResourcesLiveStatus state={physicalRealtime.live} />
+              {physicalRealtime.live.status === "connected" ? null : (
+                <PollingFreshness
+                  connectionState={
+                    physicalTopology.phase === "ready" && physicalTopology.refreshFailure
+                      ? "disconnected"
+                      : "connected"
+                  }
+                  dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
+                  intervalSeconds={5}
+                  isFetching={refreshing || physicalTopology.refreshing}
+                  onRefresh={state.refresh}
+                />
+              )}
+            </div>
+          </header>
 
-      {!state.selectedClusterExists ? (
-        state.clusterSelection.kind === "unknown" ? (
-          <UnknownSelection value={state.selectedClusterId} variant="cluster" />
-        ) : state.clusterSelection.kind === "unfiltered" ? (
-          <ResourcesFleetZoom clusters={state.choices.data.clusters} />
-        ) : state.clusterSelection.kind === "multiple" ? (
-          <ResourcesClusterBoundary variant="multiple" />
-        ) : (
-          <UnknownSelection value={state.selectedClusterId} variant="cluster" />
-        )
-      ) : state.denied ? (
-        <ResourcesDenied onRetry={state.refresh} />
-      ) : state.catalog.phase === "loading" ||
-        state.catalog.phase === "idle" ? (
-        <ProductStateScreen
-          kind="loading"
-          loadingPreview={<ResourcesSurfaceLoadingPreview />}
-          placement="content"
-        />
-      ) : state.catalog.phase === "failed" ? (
-        <ResourcesFailure
-          failure={state.catalog.failure}
-          onRetry={state.refresh}
-          retryWaitSeconds={state.retryWaitSeconds}
-        />
-      ) : state.catalog.data.items.length === 0 ? (
-        <UnknownCompletenessEmpty variant="catalog" />
-      ) : (
-        <>
-          <ResourcesRefreshFeedback
-            catalog={state.catalog}
-            choices={state.choices}
-            list={state.list}
-            filterList={filtered.list}
-          />
-          <CatalogFreshness observedAt={state.catalog.data.observedAt} />
-          <ResourcesListSurface
-            filterList={filtered.list}
-            metricHistory={metricHistory}
-            onLoadMore={filtered.loadMoreList}
-            listFallback={state.resourceTypeInvalid ? (
-              <UnknownSelection
-                value={state.selectedResourceType}
-                variant="resource"
+          {!state.selectedClusterExists ? (
+            state.clusterSelection.kind === "unknown" ? (
+              <UnknownSelection value={state.selectedClusterId} variant="cluster" />
+            ) : state.clusterSelection.kind === "unfiltered" ? (
+              <ResourcesFleetZoom clusters={state.choices.data.clusters} />
+            ) : state.clusterSelection.kind === "multiple" ? (
+              <ResourcesClusterBoundary variant="multiple" />
+            ) : (
+              <UnknownSelection value={state.selectedClusterId} variant="cluster" />
+            )
+          ) : state.denied ? (
+            <ResourcesDenied onRetry={state.refresh} />
+          ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
+            <ProductStateScreen
+              kind="loading"
+              loadingPreview={<ResourcesSurfaceLoadingPreview />}
+              placement="content"
+            />
+          ) : state.catalog.phase === "failed" ? (
+            <ResourcesFailure
+              failure={state.catalog.failure}
+              onRetry={state.refresh}
+              retryWaitSeconds={state.retryWaitSeconds}
+            />
+          ) : state.catalog.data.items.length === 0 ? (
+            <UnknownCompletenessEmpty variant="catalog" />
+          ) : (
+            <>
+              <ResourcesRefreshFeedback
+                catalog={state.catalog}
+                choices={state.choices}
+                filterList={filtered.list}
+                list={state.list}
               />
-            ) : null}
-            physicalTopology={physicalTopology}
-            relationTopology={relationTopology}
-            timelineFrame={changeTimeline}
-            topologyPinned={topology.pinned}
-            topologyView={topology.view}
-            onTopologyViewChange={topology.pin}
-            state={state}
+              <CatalogFreshness observedAt={state.catalog.data.observedAt} />
+              <ResourcesListSurface
+                filterList={filtered.list}
+                listFallback={state.resourceTypeInvalid ? (
+                  <UnknownSelection
+                    value={state.selectedResourceType}
+                    variant="resource"
+                  />
+                ) : null}
+                metricHistory={metricHistory}
+                onLoadMore={filtered.loadMoreList}
+                onTopologyViewChange={topology.pin}
+                physicalTopology={physicalTopology}
+                relationTopology={relationTopology}
+                state={state}
+                timelineFrame={changeTimeline}
+                topologyPinned={topology.pinned}
+                topologyView={topology.view}
+              />
+            </>
+          )}
+        </ProductPageFrame>
+      </div>
+      {state.detailRequested ? (
+        <div
+          className={state.detailFull
+            ? "min-w-0 flex-1"
+            : "min-w-0 w-full shrink-0 border-l bg-background lg:w-[30rem]"}
+          data-slot="resources-detail-column"
+        >
+          <ResourceDetailWorkspace
+            actionsPort={resourceActionsPort}
+            capabilities={resourceCapabilities}
+            detail={state.detail}
+            full={state.detailFull}
+            identity={state.detailIdentity}
+            onClose={state.closeDetail}
+            onFullChange={state.setDetailFull}
+            onTabChange={state.setDetailTab}
+            tab={state.detailTab}
           />
-        </>
-      )}
-    </ProductPageFrame>
+        </div>
+      ) : null}
+    </div>
   );
 }

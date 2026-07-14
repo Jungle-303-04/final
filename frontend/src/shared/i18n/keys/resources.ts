@@ -174,6 +174,8 @@ export type ResourcesMessageKey =
   | "resources.detail.title"
   | "resources.detail.errorTitle"
   | "resources.detail.close"
+  | "resources.detail.expand"
+  | "resources.detail.collapse"
   | "resources.detail.clusterScope"
   | "resources.detail.identityDescription"
   | "resources.detail.invalid.title"

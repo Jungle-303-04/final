@@ -176,6 +176,8 @@ export const resourcesKo = {
   "resources.detail.title": "{name} 상세",
   "resources.detail.errorTitle": "리소스 상세 정보 오류",
   "resources.detail.close": "상세 닫기",
+  "resources.detail.expand": "상세 전체 화면으로 보기",
+  "resources.detail.collapse": "목록과 상세 함께 보기",
   "resources.detail.clusterScope": "클러스터 범위",
   "resources.detail.identityDescription": "요청한 리소스 정보를 확인할 수 없습니다.",
   "resources.detail.invalid.title": "잘못된 상세 주소",

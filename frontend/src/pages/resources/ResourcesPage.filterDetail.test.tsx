@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CATALOG,
@@ -105,15 +105,18 @@ describe("ResourcesPage unified-filter detail identity", () => {
     }
   }, 15_000);
 
-  it("keeps collection controls out of the read-only detail workspace", async () => {
+  it("keeps collection controls in the list column and out of the detail panel", async () => {
     renderEnglishResources(resourcesPort(), canonicalDetailEntry());
-    expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
+    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
 
-    expect(screen.queryByRole(
+    expect(screen.getByRole(
       "button",
-      { hidden: true, name: "Include inactive resources" },
+      { name: "Include inactive resources" },
+    )).toBeTruthy();
+    expect(within(dialog).queryByRole(
+      "button",
+      { name: "Include inactive resources" },
     )).toBeNull();
-    expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
     expectDetailQueryPreserved(readResourcesQuery());
   }, 15_000);
 
