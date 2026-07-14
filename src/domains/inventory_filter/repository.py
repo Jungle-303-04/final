@@ -697,6 +697,224 @@ class InventoryFilterRepository(DatabaseConnection):
             ),
         }
 
+    def list_global_filter_facets(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+        query: str | None,
+        limit: int,
+    ) -> JsonObject:
+        """Return bounded, server-counted suggestions for the product-wide filter bar."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        if not workspace_id or not cluster_ids:
+            return _empty_global_filter_facets()
+        effective_limit = max(1, min(limit, 20))
+        normalized_query = (query or "").strip().casefold()
+        pattern = f"%{_escape_like(normalized_query)}%"
+        current = _current_versions(
+            workspace_id,
+            cluster_ids,
+            snapshot_revision,
+            include_deleted=False,
+        )
+        base = select(current).where(current.c.rank == 1).cte("global_filter_base")
+
+        def filtered(name: str, selected: ResourceFilters) -> Any:
+            return _apply_resource_filters(
+                base,
+                filters=replace(selected, query=None, include_deleted=False),
+                allowed_application_ids=application_ids,
+            ).cte(name)
+
+        cluster_matches = filtered(
+            "global_cluster_matches",
+            replace(filters, clusters=()),
+        )
+        namespace_matches = filtered(
+            "global_namespace_matches",
+            replace(filters, namespaces=()),
+        )
+        application_matches = filtered(
+            "global_application_matches",
+            replace(filters, applications=()),
+        )
+        selected_matches = filtered("global_selected_matches", filters)
+
+        cluster = ClusterRegistration.__table__
+        cluster_statement = (
+            select(
+                cluster.c.cluster_id.label("id"),
+                cluster.c.name.label("label"),
+                func.count(func.distinct(cluster_matches.c.version_id)).label("count"),
+            )
+            .select_from(
+                cluster.outerjoin(
+                    cluster_matches,
+                    cluster_matches.c.cluster_id == cluster.c.cluster_id,
+                )
+            )
+            .where(
+                cluster.c.workspace_id == workspace_id,
+                cluster.c.cluster_id.in_(cluster_ids),
+            )
+            .group_by(cluster.c.cluster_id, cluster.c.name)
+        )
+        if normalized_query:
+            cluster_statement = cluster_statement.where(
+                or_(
+                    func.lower(cluster.c.cluster_id).like(pattern, escape="\\"),
+                    func.lower(cluster.c.name).like(pattern, escape="\\"),
+                )
+            )
+        cluster_statement = cluster_statement.order_by(
+            func.count(func.distinct(cluster_matches.c.version_id)).desc(),
+            cluster.c.name,
+            cluster.c.cluster_id,
+        ).limit(effective_limit)
+
+        namespace_statement = (
+            select(
+                (
+                    namespace_matches.c.cluster_id + literal("/") + namespace_matches.c.namespace
+                ).label("id"),
+                namespace_matches.c.namespace.label("label"),
+                namespace_matches.c.cluster_id,
+                func.count(func.distinct(namespace_matches.c.version_id)).label("count"),
+            )
+            .where(namespace_matches.c.namespace.is_not(None))
+            .group_by(namespace_matches.c.cluster_id, namespace_matches.c.namespace)
+        )
+        if normalized_query:
+            namespace_statement = namespace_statement.where(
+                func.lower(namespace_matches.c.namespace).like(pattern, escape="\\")
+            )
+        namespace_statement = namespace_statement.order_by(
+            func.count(func.distinct(namespace_matches.c.version_id)).desc(),
+            namespace_matches.c.namespace,
+            namespace_matches.c.cluster_id,
+        ).limit(effective_limit)
+
+        application = Application.__table__
+        application_link = InventoryResourceApplicationVersion.__table__
+        application_counts = (
+            select(
+                application_link.c.application_id,
+                func.count(func.distinct(application_matches.c.version_id)).label("count"),
+            )
+            .select_from(
+                application_link.join(
+                    application_matches,
+                    and_(
+                        application_link.c.workspace_id == application_matches.c.workspace_id,
+                        application_link.c.version_id == application_matches.c.version_id,
+                    ),
+                )
+            )
+            .where(application_link.c.application_id.in_(application_ids))
+            .group_by(application_link.c.application_id)
+            .cte("global_application_counts")
+        )
+        application_statement = (
+            select(
+                application.c.application_id.label("id"),
+                application.c.name.label("label"),
+                func.coalesce(application_counts.c.count, 0).label("count"),
+            )
+            .select_from(
+                application.outerjoin(
+                    application_counts,
+                    application_counts.c.application_id == application.c.application_id,
+                )
+            )
+            .where(
+                application.c.workspace_id == workspace_id,
+                application.c.application_id.in_(application_ids),
+            )
+        )
+        if normalized_query:
+            application_statement = application_statement.where(
+                or_(
+                    func.lower(application.c.application_id).like(pattern, escape="\\"),
+                    func.lower(application.c.name).like(pattern, escape="\\"),
+                )
+            )
+        application_statement = application_statement.order_by(
+            func.coalesce(application_counts.c.count, 0).desc(),
+            application.c.name,
+            application.c.application_id,
+        ).limit(effective_limit)
+
+        label = InventoryResourceLabelVersion.__table__
+        label_statement = (
+            select(
+                label.c.key,
+                label.c.value,
+                func.count(func.distinct(selected_matches.c.version_id)).label("count"),
+            )
+            .select_from(
+                selected_matches.join(
+                    label,
+                    and_(
+                        label.c.workspace_id == selected_matches.c.workspace_id,
+                        label.c.version_id == selected_matches.c.version_id,
+                    ),
+                )
+            )
+            .where(label.c.selector.like(pattern, escape="\\"))
+            .group_by(label.c.key, label.c.value)
+            .order_by(
+                func.count(func.distinct(selected_matches.c.version_id)).desc(),
+                label.c.key,
+                label.c.value,
+            )
+            .limit(effective_limit)
+        )
+        resource_statement = (
+            select(
+                selected_matches.c.inventory_key.label("id"),
+                selected_matches.c.name.label("label"),
+                selected_matches.c.kind,
+                literal(1).label("count"),
+            )
+            .where(selected_matches.c.search_text.like(pattern, escape="\\"))
+            .order_by(
+                selected_matches.c.name,
+                selected_matches.c.kind,
+                selected_matches.c.inventory_key,
+            )
+            .limit(effective_limit)
+        )
+
+        with self.connection() as conn:
+            clusters = [dict(row) for row in conn.execute(cluster_statement).mappings()]
+            namespaces = [dict(row) for row in conn.execute(namespace_statement).mappings()]
+            applications = [dict(row) for row in conn.execute(application_statement).mappings()]
+            labels = (
+                [dict(row) for row in conn.execute(label_statement).mappings()]
+                if normalized_query
+                else []
+            )
+            resources = (
+                [dict(row) for row in conn.execute(resource_statement).mappings()]
+                if normalized_query
+                else []
+            )
+        return {
+            "clusters": _serialize_global_facets(clusters),
+            "namespaces": _serialize_global_facets(namespaces),
+            "applications": _serialize_global_facets(applications),
+            "labels": [
+                {"key": str(row["key"]), "value": str(row["value"]), "count": int(row["count"])}
+                for row in labels
+            ],
+            "resources": _serialize_global_facets(resources),
+        }
+
     def list_filtered_resources(
         self,
         *,
@@ -1250,6 +1468,32 @@ def _provider(settings: object) -> str:
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _serialize_global_facets(rows: Sequence[Mapping[str, Any]]) -> list[JsonObject]:
+    items: list[JsonObject] = []
+    for row in rows:
+        item: JsonObject = {
+            "id": str(row["id"]),
+            "label": str(row.get("label") or row["id"]),
+            "count": int(row["count"]),
+        }
+        if row.get("cluster_id") is not None:
+            item["cluster_id"] = str(row["cluster_id"])
+        if row.get("kind") is not None:
+            item["kind"] = str(row["kind"])
+        items.append(item)
+    return items
+
+
+def _empty_global_filter_facets() -> JsonObject:
+    return {
+        "clusters": [],
+        "namespaces": [],
+        "applications": [],
+        "labels": [],
+        "resources": [],
+    }
 
 
 def _empty_page() -> JsonObject:

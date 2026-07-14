@@ -5,6 +5,10 @@ import {
 } from "./productRoutes";
 import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
+import {
+  EMPTY_GLOBAL_FILTER_PORT,
+  type GlobalFilterPort,
+} from "../features/global-filter/globalFilterContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -14,6 +18,7 @@ export interface ProductSurfaceRegistration {
 export interface ProductComposition {
   auth: AuthPort;
   clusterScope: ClusterScopePort;
+  globalFilter: GlobalFilterPort;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
@@ -22,6 +27,7 @@ export function createProductComposition(
   registrations: readonly ProductSurfaceRegistration[],
   auth: AuthPort,
   clusterScope: ClusterScopePort,
+  globalFilter: GlobalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -46,6 +52,7 @@ export function createProductComposition(
   return {
     auth,
     clusterScope,
+    globalFilter,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };

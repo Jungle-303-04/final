@@ -60,6 +60,7 @@ describe("ProductShell", () => {
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");
+    expect(markup.match(/data-slot="unified-filter-bar"/gu)).toHaveLength(1);
   });
 
   it("never names an unreleased route while an unknown URL redirects", () => {

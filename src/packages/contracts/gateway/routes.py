@@ -121,6 +121,7 @@ CLUSTER_INVENTORY_EVENTS_PATH = "/clusters/{cluster_id}/inventory/events"
 RESOURCES_FILTER_FACETS_PATH = "/resources/filter-facets"
 FILTERED_RESOURCES_PATH = "/resources"
 RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
+FILTER_FACETS_PATH = "/filter-facets"
 RESOURCES_GRAPH_PATH = "/resources/graph"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"

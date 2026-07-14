@@ -3,13 +3,24 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { PRODUCT_LOCALE_STORAGE_KEY } from "./shared/i18n/locale";
 import ProductApp from "./ProductApp";
 
 beforeEach(() => {
   vi.useRealTimers();
-  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "visible",
+  });
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn(() => ({
@@ -26,7 +37,10 @@ afterEach(() => {
   cleanup();
   document.documentElement.className = "";
   document.documentElement.removeAttribute("lang");
-  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "visible",
+  });
   vi.useRealTimers();
   window.localStorage.clear();
   window.history.replaceState({}, "", "/");
@@ -35,7 +49,9 @@ afterEach(() => {
 
 describe("ProductApp root recovery", () => {
   it("owns locale resolution at the application root", () => {
-    const language = vi.spyOn(window.navigator, "language", "get").mockReturnValue("ko-KR");
+    const language = vi
+      .spyOn(window.navigator, "language", "get")
+      .mockReturnValue("ko-KR");
     vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => undefined));
 
     const first = render(<ProductApp />);
@@ -61,7 +77,9 @@ describe("ProductApp root recovery", () => {
       </StrictMode>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Sign in to Opsia" })).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "Sign in to Opsia" }),
+    ).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/session",
@@ -73,54 +91,107 @@ describe("ProductApp root recovery", () => {
 
   it("loads the real Home contract once in StrictMode and drills into Node Pods", async () => {
     window.history.replaceState({}, "", "/?cluster=cluster-1");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const path = typeof input === "string" ? input : input.toString();
-      return homeApiResponse(path);
-    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const path = typeof input === "string" ? input : input.toString();
+        return homeApiResponse(path);
+      });
 
-    render(<StrictMode><ProductApp /></StrictMode>);
+    render(
+      <StrictMode>
+        <ProductApp />
+      </StrictMode>,
+    );
 
-    expect(await screen.findByRole("heading", { name: "Cluster status" }, { timeout: 5_000 }))
-      .toBeTruthy();
-    await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 });
-    expect(screen.getByRole("navigation", { name: "Primary navigation" })).toBeTruthy();
+    expect(
+      await screen.findByRole(
+        "heading",
+        { name: "Cluster status" },
+        { timeout: 5_000 },
+      ),
+    ).toBeTruthy();
+    await screen.findByRole(
+      "button",
+      { name: /worker-b/u },
+      { timeout: 5_000 },
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Primary navigation" }),
+    ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
-    await waitFor(() => expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1));
-    await waitFor(() => expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1));
+    await waitFor(() =>
+      expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(
+        1,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary"),
+      ).toBe(1),
+    );
 
-    await userEvent.setup().click(await screen.findByRole("button", { name: /worker-b/u }, { timeout: 5_000 }));
-    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
-    expect(requestCount(
-      fetchMock,
-      "/api/clusters/cluster-1/nodes/worker-b/pods/summary",
-    )).toBe(1);
+    await userEvent
+      .setup()
+      .click(
+        await screen.findByRole(
+          "button",
+          { name: /worker-b/u },
+          { timeout: 5_000 },
+        ),
+      );
+    expect(
+      await screen.findByText("checkout-api-0", {}, { timeout: 5_000 }),
+    ).toBeTruthy();
+    expect(
+      requestCount(
+        fetchMock,
+        "/api/clusters/cluster-1/nodes/worker-b/pods/summary",
+      ),
+    ).toBe(1);
   }, 15_000);
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {
     window.history.replaceState({}, "", "/resources/pod?cluster=cluster-1");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const path = typeof input === "string" ? input : input.toString();
-      return homeApiResponse(path);
-    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const path = typeof input === "string" ? input : input.toString();
+        return homeApiResponse(path);
+      });
 
-    render(<StrictMode><ProductApp /></StrictMode>);
+    render(
+      <StrictMode>
+        <ProductApp />
+      </StrictMode>,
+    );
 
-    expect(await screen.findByRole("table", { name: "Resource list" }, { timeout: 5_000 }))
-      .toBeTruthy();
-    expect(screen.getByRole("link", { name: "Resources" }).getAttribute("aria-current"))
-      .toBe("page");
+    expect(
+      await screen.findByRole(
+        "table",
+        { name: "Resource list" },
+        { timeout: 5_000 },
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Resources" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
     const resource = await screen.findByRole(
       "button",
       { name: "Open details for checkout-api-0" },
       { timeout: 5_000 },
     );
-    expect(requestCount(
-      fetchMock,
-      "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200",
-    )).toBe(1);
+    expect(
+      requestCount(
+        fetchMock,
+        "/api/resources?clusters=cluster-1&resources.types=pod&resources.includeDeleted=false&limit=50",
+      ),
+    ).toBe(1);
 
     await userEvent.setup().click(resource);
     const dialog = await screen.findByRole(
@@ -130,19 +201,26 @@ describe("ProductApp root recovery", () => {
     );
     expect(dialog.textContent).toContain("Running");
     expect(window.location.pathname).toBe("/resources/pod");
-    expect(new URLSearchParams(window.location.search).get("resource"))
-      .toBe("v1/cluster-1/pod/shop/checkout-api-0");
-    expect(requestCount(
-      fetchMock,
-      "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50",
-    )).toBe(1);
+    expect(new URLSearchParams(window.location.search).get("resource")).toBe(
+      "v1/cluster-1/pod/shop/checkout-api-0",
+    );
+    expect(
+      requestCount(
+        fetchMock,
+        "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50",
+      ),
+    ).toBe(1);
   }, 15_000);
 });
 
-function requestCount(fetchMock: MockInstance<typeof globalThis.fetch>, path: string) {
-  return fetchMock.mock.calls.filter(([input]) => (
-    (typeof input === "string" ? input : input.toString()) === path
-  )).length;
+function requestCount(
+  fetchMock: MockInstance<typeof globalThis.fetch>,
+  path: string,
+) {
+  return fetchMock.mock.calls.filter(
+    ([input]) =>
+      (typeof input === "string" ? input : input.toString()) === path,
+  ).length;
 }
 
 function homeApiResponse(path: string): Response {
@@ -154,22 +232,24 @@ function homeApiResponse(path: string): Response {
       workspace_id: "test-workspace",
     },
     "/api/clusters?limit=100": {
-      clusters: [{
-        workspace_id: "test-workspace",
-        cluster_id: "cluster-1",
-        name: "cluster-1",
-        environment: "production",
-        status: "connected",
-        settings: {},
-        connection_status: "online",
-        last_agent_id: "agent-1",
-        last_agent_seen_at: "2026-07-12T10:00:00Z",
-        node_count: 2,
-        pod_count: 18,
-        incident_count: 0,
-        created_at: null,
-        updated_at: "2026-07-12T10:00:01Z",
-      }],
+      clusters: [
+        {
+          workspace_id: "test-workspace",
+          cluster_id: "cluster-1",
+          name: "cluster-1",
+          environment: "production",
+          status: "connected",
+          settings: {},
+          connection_status: "online",
+          last_agent_id: "agent-1",
+          last_agent_seen_at: "2026-07-12T10:00:00Z",
+          node_count: 2,
+          pod_count: 18,
+          incident_count: 0,
+          created_at: null,
+          updated_at: "2026-07-12T10:00:01Z",
+        },
+      ],
     },
     "/api/clusters/cluster-1/summary": {
       cluster_id: "cluster-1",
@@ -191,63 +271,119 @@ function homeApiResponse(path: string): Response {
     },
     "/api/clusters/cluster-1/nodes/summary": {
       cluster_id: "cluster-1",
-      nodes: [{
-        name: "worker-b",
-        ready: true,
-        health: "healthy",
-        pods_running: 9,
-        pods_capacity: 110,
-        cpu_pct: 35,
-        mem_pct: 47,
-        restarts_recent: 0,
-        conditions: [],
-      }],
+      nodes: [
+        {
+          name: "worker-b",
+          ready: true,
+          health: "healthy",
+          pods_running: 9,
+          pods_capacity: 110,
+          cpu_pct: 35,
+          mem_pct: 47,
+          restarts_recent: 0,
+          conditions: [],
+        },
+      ],
     },
     "/api/clusters/cluster-1/nodes/worker-b/pods/summary": {
       cluster_id: "cluster-1",
       node_name: "worker-b",
-      pods: [{
-        name: "checkout-api-0",
-        namespace: "shop",
-        phase: "Running",
-        health: "healthy",
-        ready: "1/1",
-        restarts: 0,
-        owner_kind: "Deployment",
-        owner_name: "checkout-api",
-        cpu_mcores: 120,
-        mem_mib: 256,
-        incident_correlation_id: null,
-      }],
+      pods: [
+        {
+          name: "checkout-api-0",
+          namespace: "shop",
+          phase: "Running",
+          health: "healthy",
+          ready: "1/1",
+          restarts: 0,
+          owner_kind: "Deployment",
+          owner_name: "checkout-api",
+          cpu_mcores: 120,
+          mem_mib: 256,
+          incident_correlation_id: null,
+        },
+      ],
     },
     "/api/clusters/cluster-1/inventory/summary": {
       cluster_id: "cluster-1",
       latest_snapshot: { collected_at: "2026-07-12T10:00:00Z" },
       counts: [{ resource_type: "pod", health: "healthy", count: 1 }],
     },
-    "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200": {
-      cluster_id: "cluster-1",
-      resource_type: "pod",
-      resources: [inventoryResource()],
-    },
-    "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50": {
-      cluster_id: "cluster-1",
-      identity: {
+    "/api/clusters/cluster-1/inventory/resources?resource_type=pod&include_deleted=false&limit=200":
+      {
+        cluster_id: "cluster-1",
         resource_type: "pod",
-        kind: "Pod",
-        namespace: "shop",
-        name: "checkout-api-0",
+        resources: [inventoryResource()],
       },
-      resource: inventoryResource(),
-      related: {},
-      events: [],
-    },
+    "/api/resources?clusters=cluster-1&resources.types=pod&resources.includeDeleted=false&limit=50":
+      {
+        items: [
+          {
+            resource: inventoryResource(),
+            cluster: {
+              cluster_id: "cluster-1",
+              name: "cluster-1",
+              provider: "eks",
+            },
+            application_ids: ["checkout"],
+            application_binding_completeness: "exact",
+          },
+        ],
+        next_cursor: null,
+        has_more: false,
+        counts: {
+          filtered_count: 1,
+          unfiltered_count: 1,
+          filtered_count_completeness: "exact",
+          unfiltered_count_completeness: "exact",
+        },
+        snapshot: filterSnapshot(),
+      },
+    "/api/resources/label-facets?surface=resources&clusters=cluster-1&resources.types=pod&resources.includeDeleted=false&limit=50":
+      {
+        surface: "resources",
+        items: [],
+        selected_resolutions: [],
+        next_cursor: null,
+        has_more: false,
+        counts: {
+          filtered_count: 1,
+          unfiltered_count: 1,
+          filtered_count_completeness: "exact",
+          unfiltered_count_completeness: "exact",
+        },
+        snapshot: filterSnapshot(),
+      },
+    "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=checkout-api-0&namespace=shop&related_limit=100&event_limit=50":
+      {
+        cluster_id: "cluster-1",
+        identity: {
+          resource_type: "pod",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-0",
+        },
+        resource: inventoryResource(),
+        related: {},
+        events: [],
+      },
   };
   if (!(path in responses)) throw new Error(`Unexpected test request: ${path}`);
   return new Response(JSON.stringify(responses[path]), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+}
+
+function filterSnapshot() {
+  return {
+    snapshot_revision: 42,
+    authorization_revision: "auth-1",
+    filter_fingerprint: "filter-1",
+    observed_at: "2026-07-12T10:00:00Z",
+    stale: false,
+    partial_reason_codes: [],
+  };
 }
 
 function inventoryResource() {

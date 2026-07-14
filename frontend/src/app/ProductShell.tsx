@@ -37,8 +37,12 @@ import { useProductTheme } from "../shared/ui/useProductTheme";
 import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
-import { ClusterScopePicker } from "../features/cluster-scope/ClusterScopePicker";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
+import { UnifiedFilterBar } from "../features/global-filter/UnifiedFilterBar";
+import {
+  EMPTY_GLOBAL_FILTER_PORT,
+  type GlobalFilterPort,
+} from "../features/global-filter/globalFilterContract";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
@@ -53,6 +57,7 @@ interface ProductShellProps {
   auth: AuthenticatedAuthState;
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
   defaultSidebarCollapsed?: boolean;
+  globalFilterPort?: GlobalFilterPort;
 }
 
 const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
@@ -81,12 +86,17 @@ export function ProductShell({
   auth,
   releasedSurfaceIds,
   defaultSidebarCollapsed,
+  globalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-          <ProductShellFrame auth={auth} releasedSurfaceIds={releasedSurfaceIds} />
+          <ProductShellFrame
+            auth={auth}
+            globalFilterPort={globalFilterPort}
+            releasedSurfaceIds={releasedSurfaceIds}
+          />
         </SidebarProvider>
       </TooltipProvider>
     </ProductSessionProvider>
@@ -96,7 +106,8 @@ export function ProductShell({
 function ProductShellFrame({
   auth,
   releasedSurfaceIds,
-}: Pick<ProductShellProps, "auth" | "releasedSurfaceIds">) {
+  globalFilterPort,
+}: Pick<ProductShellProps, "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const location = useLocation();
   const filter = useUnifiedFilter();
@@ -184,7 +195,7 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <ClusterScopePicker />
+            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <AuthSessionControl auth={auth} mode="toolbar" />

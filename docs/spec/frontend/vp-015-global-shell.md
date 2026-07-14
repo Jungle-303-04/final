@@ -891,7 +891,7 @@ Radar는 **Apache-2.0**. 반드시:
 | BQ | 계약 |
 |---|---|
 | BQ-069~072 | 클러스터 목록 · 연결(한 줄 명령 반환) · 연결 폴링 · 해제 |
-| BQ-073 | `GET /filter-facets` — **타입별 검색 제안** |
+| BQ-073 | `GET /filter-facets` — **타입별 검색 제안**. count는 `exact|partial|unavailable`을 동반하며 미확인 값을 0으로 합성하지 않는다 |
 | BQ-074 | `GET /topology?view=physical` — **서버 + 파드 배치 + 사용률 + 상태** |
 | BQ-075 | `GET /topology?view=relations` — 오브젝트 관계 엣지 |
 

@@ -1,5 +1,5 @@
-import { CircleAlert, Plus, RefreshCw, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CircleAlert, Plus, RefreshCw } from "lucide-react";
+import { useState } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type { ClustersPort } from "../../features/clusters/clustersContract";
@@ -9,7 +9,6 @@ import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
-import { Input } from "../../shared/ui/primitives/input";
 import { ClusterCard } from "./ClusterCard";
 import { ClusterConnectDialog } from "./ClusterConnectDialog";
 import { clusterResourcesHref } from "./clusterNavigation";
@@ -19,17 +18,11 @@ export function ClustersPage({ port }: { port: ClustersPort }) {
   const filter = useUnifiedFilter();
   const scope = useClusterScope();
   const session = useOptionalProductSession();
-  const [query, setQuery] = useState("");
   const [connectOpen, setConnectOpen] = useState(false);
   const canManageClusters = session?.roles.includes("service_admin") ?? false;
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const clusters = useMemo(() => scope.collection.phase === "ready"
-    ? scope.collection.data.clusters.filter((cluster) => normalizedQuery.length === 0 || [
-      cluster.name,
-      cluster.environment,
-      cluster.provider,
-    ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
-    : [], [normalizedQuery, scope.collection]);
+  const clusters = scope.collection.phase === "ready"
+    ? scope.collection.data.clusters
+    : [];
 
   if (scope.collection.phase === "loading" || scope.collection.phase === "idle") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -69,18 +62,7 @@ export function ClustersPage({ port }: { port: ClustersPort }) {
           <p className="mt-1 text-sm text-muted-foreground">{t("clusters.description")}</p>
         </div>
         <div className="flex min-w-0 items-center gap-2">
-          <label className="relative min-w-0 flex-1">
-            <span className="sr-only">{t("clusters.search.aria")}</span>
-            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label={t("clusters.search.aria")}
-              className="pl-8"
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder={t("clusters.search.placeholder")}
-              type="search"
-              value={query}
-            />
-          </label>
+          <div className="min-w-0 flex-1" />
           {canManageClusters ? (
             <Button onClick={() => setConnectOpen(true)} type="button">
               <Plus aria-hidden="true" />

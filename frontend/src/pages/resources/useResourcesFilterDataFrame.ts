@@ -12,6 +12,7 @@ import type {
   ResourcesFilterPort,
   ResourcesFilterResourcePage,
 } from "../../features/resources/resourcesFilterContract";
+import type { ResourcesPortFailure } from "../../features/resources/resourcesContract";
 import {
   mergeFacetFilterPages,
   mergeLabelFilterPages,
@@ -26,6 +27,8 @@ export interface ResourcesFilterDataFrameInput {
   facetAxis: ResourcesFilterFacetAxis | null;
   facetQuery: string;
   filterState: UnifiedFilterState;
+  onListFailure?: (failure: ResourcesPortFailure) => void;
+  onListSuccess?: () => void;
   port: ResourcesFilterPort;
   reportUnauthorized: () => void;
   revision: number;
@@ -58,15 +61,18 @@ export function useResourcesFilterDataFrame(
     active: input.active,
     channel: "list",
     load: useCallback(
-      (cursor: string | undefined, signal: AbortSignal) => input.port.listResourcePage(
-        requestState,
-        cursor === undefined ? {} : { cursor },
-        signal,
-      ),
+      (cursor: string | undefined, signal: AbortSignal) =>
+        input.port.listResourcePage(
+          requestState,
+          cursor === undefined ? {} : { cursor },
+          signal,
+        ),
       [input.port, requestState],
     ),
     merge: mergeResourceFilterPages,
     owner: input.port,
+    onFailure: input.onListFailure,
+    onSuccess: input.onListSuccess,
     reportUnauthorized: input.reportUnauthorized,
     revision: input.revision,
     scope: sharedScope,
@@ -76,35 +82,38 @@ export function useResourcesFilterDataFrame(
     active: input.active && input.facetAxis !== null,
     channel: "facet",
     load: useCallback(
-      (cursor: string | undefined, signal: AbortSignal) => input.port.listFacetPage(
-        requestState,
-        {
-          axis: input.facetAxis!,
-          ...(cursor === undefined ? {} : { cursor }),
-        },
-        signal,
-      ),
+      (cursor: string | undefined, signal: AbortSignal) =>
+        input.port.listFacetPage(
+          requestState,
+          {
+            axis: input.facetAxis!,
+            ...(cursor === undefined ? {} : { cursor }),
+          },
+          signal,
+        ),
       [input.facetAxis, input.port, requestState],
     ),
     merge: mergeFacetFilterPages,
     owner: input.port,
     reportUnauthorized: input.reportUnauthorized,
     revision: input.revision,
-    scope: input.facetAxis === null ? null : `${sharedScope}:${input.facetAxis}`,
+    scope:
+      input.facetAxis === null ? null : `${sharedScope}:${input.facetAxis}`,
   });
 
   const labels = useResourcesFilterPageChannel({
     active: input.active,
     channel: "labels",
     load: useCallback(
-      (cursor: string | undefined, signal: AbortSignal) => input.port.listLabelFacetPage(
-        requestState,
-        {
-          ...(facetQuery === "" ? {} : { facetQuery }),
-          ...(cursor === undefined ? {} : { cursor }),
-        },
-        signal,
-      ),
+      (cursor: string | undefined, signal: AbortSignal) =>
+        input.port.listLabelFacetPage(
+          requestState,
+          {
+            ...(facetQuery === "" ? {} : { facetQuery }),
+            ...(cursor === undefined ? {} : { cursor }),
+          },
+          signal,
+        ),
       [facetQuery, input.port, requestState],
     ),
     merge: mergeLabelFilterPages,

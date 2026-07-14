@@ -11,15 +11,15 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : 10f0fad17bcf2e22880e4adae1194fa103736a69 (FULL, run 29302233623)
+배포 SHA : ffd92adf28eb9f4c6f1023da4d64fd0f94090980 (FULL, run 29307309415)
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 14:08 KST  S1 배포 감시 · S2 구현 완료/gate 대기
+갱신     : 2026-07-14 14:43 KST  S1 public 확인 · S2 배포 중 · S3 local green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-D3C-AWTZ.js`
-- backend digest: `sha256:fcc6f15594683388588f2fa7ded3050ea5594871592aa7797ac0e20664aaec54`
-- console digest: `sha256:a177d3aa45518469af852e2f15af4cdb4d6b064775392291afcd7eefe70e8d17`
+- console bundle: `assets/index-D7YfREbT.js`
+- backend digest: `sha256:1d37b4f44a28cd16c713393e5875968991bd6130b3e71ab9fc010be14d706ad9`
+- console digest: `sha256:0581c1ae9bcab6d8146973623809cc7b7d029eccb32fa7113479a136c83bb9f4`
 - 로그인·클러스터·리소스 read smoke: 통과
 
 ---
@@ -37,7 +37,7 @@ URL      : https://k8s.woonyong.org
 ## 슬라이스 (VP-016)
 
 - [x] **S0**  모션 기반 (VP-017)      ← 정확한 토큰·FLIP·스태거·reduced-motion·가드
-- [ ] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
+- [x] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
 - [ ] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
 - [ ] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
 - [ ] **S4**  물리 뷰 그래프 (2층) ★  ← 클러스터 클릭 → 카메라가 서버로 내려간다
@@ -67,12 +67,19 @@ URL      : https://k8s.woonyong.org
 - [x] `node-land` 70ms 스태거·reduced-motion 연동
 - [x] 카드 클릭 URL이 기존 필터를 보존하며 `clusters=<id>`를 교체
 - [x] S1 전용 테스트 + 전체 `make gate-fast` — 149 files / 1007 tests
-- [ ] S0/S1 SHA 자동 배포 및 public `/clusters` 클릭 경로 확인
+- [x] S0/S1 SHA 자동 배포 및 public `/clusters` 경로 확인 — run `29307309415`, health/root/route 200
 - [x] S2 `service_admin` 전용 ＋ 버튼·4단계 기존 클러스터 연결 위자드
 - [x] 서버 발급 한 줄 명령 복사·2초 연결 poll·닫기 시 abort·등록 POST 무재시도
 - [x] `POST /clusters/connect`가 기존 안전한 target 등록 경계(UoW·hashed token·TTL)를 재사용
 - [x] `GET /clusters/{id}/connection`이 `waiting|connected|expired`만 반환하고 미확인 시각을 합성하지 않음
-- [ ] S2 전체 gate·dev push·자동 배포/public 확인
+- [x] S2 전체 gate·dev push — `4a3975b2b`, Dev Gate `29308053053` SUCCESS
+- [ ] S2 자동 배포/public 확인 — Dev Deploy `29308195905` 진행 중
+- [x] S3 BQ-073 `GET /filter-facets` 구조축/검색축·권한/snapshot/count 완전성 계약
+- [x] S3 shell 단일 command popover·타입 칩·canonical URL·abort/stale 응답 차단
+- [x] S3 Resources 표를 서버 필터 결과로 전환 — app/label/health/query/multi-namespace 실제 축소
+- [x] S3 local 검증 — frontend 155 files / 1015 tests, typecheck·lint PASS; backend targeted 20 tests PASS
+- [x] S3 `make gate-fast` — Ruff/import/compile/Dev Gate 계약 + frontend 155 files / 1015 tests
+- [ ] S3 dev push·자동 배포/public 확인
 
 ---
 

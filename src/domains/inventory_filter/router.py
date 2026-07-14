@@ -32,6 +32,7 @@ from packages.contracts.gateway.responses import (
     FilteredInventoryResourceListResponse,
     FilterResultCounts,
     FilterSnapshotMeta,
+    GlobalFilterFacetsResponse,
     LabelFacetPageResponse,
     ResourceFilterFacetPageResponse,
     ResourceGraphSnapshotResponse,
@@ -72,6 +73,50 @@ class PageState:
     latest_context: dict[str, Any]
     position: dict[str, Any] | None
     scope: CursorScope
+
+
+@router.get(
+    gateway_routes.FILTER_FACETS_PATH,
+    response_model=GlobalFilterFacetsResponse,
+)
+async def list_global_filter_facets(
+    q: str | None = Query(default=None, max_length=200),
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    applications: str | None = Query(default=None),
+    labels: str | None = Query(default=None),
+    limit: int = Query(default=8, ge=1, le=20),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> GlobalFilterFacetsResponse:
+    filters = _parse_filters(
+        clusters=clusters,
+        namespaces=namespaces,
+        applications=applications,
+        resource_types=None,
+        health=None,
+        labels=labels,
+        query=None,
+        include_deleted=False,
+    )
+    authorized = await _authorized_scope(db, current)
+    _require_requested_scope(authorized, filters)
+    if not authorized.cluster_ids:
+        return GlobalFilterFacetsResponse()
+    context = await _snapshot_context(db, authorized)
+    result = await asyncio.to_thread(
+        db.list_global_filter_facets,
+        workspace_id=authorized.workspace_id,
+        allowed_cluster_ids=set(authorized.cluster_ids),
+        allowed_application_ids=set(authorized.application_ids),
+        filters=filters,
+        snapshot_revision=int(context.get("snapshot_revision") or 0),
+        query=q,
+        limit=limit,
+    )
+    return GlobalFilterFacetsResponse.model_validate(
+        _global_facets_with_completeness(result, context)
+    )
 
 
 @router.get(
@@ -659,6 +704,35 @@ def _parse_filters(**kwargs: Any) -> ResourceFilters:
         return parse_resource_filters(**kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL) from exc
+
+
+def _global_facets_with_completeness(
+    result: Mapping[str, Any],
+    context: Mapping[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    revision = int(context.get("snapshot_revision") or 0)
+    sources = {
+        "clusters": "resources_complete",
+        "namespaces": "resources_complete",
+        "applications": "application_bindings_complete",
+        "labels": "labels_complete",
+        "resources": "resources_complete",
+    }
+    response: dict[str, list[dict[str, Any]]] = {}
+    for group, source in sources.items():
+        completeness = (
+            "unavailable" if revision <= 0 else "exact" if bool(context.get(source)) else "partial"
+        )
+        response[group] = [
+            {
+                **dict(item),
+                "count": None if completeness == "unavailable" else item.get("count"),
+                "count_completeness": completeness,
+            }
+            for item in result.get(group, [])
+            if isinstance(item, Mapping)
+        ]
+    return response
 
 
 def _parse_selected(axis: FacetAxis, value: str | None) -> tuple[str, ...]:

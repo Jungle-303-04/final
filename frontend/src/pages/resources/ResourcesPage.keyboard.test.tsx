@@ -38,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   window.removeEventListener("keydown", shortcutKeydown);
   shortcutMatcher.dispose();
+  document.querySelector('[data-slot="unified-filter-input"]')?.remove();
   cleanup();
   resetDocumentTestClock();
 });
@@ -83,19 +84,27 @@ describe("ResourcesPage keyboard navigation", () => {
       .toContain("clusters=cluster-1&resources.types=pod"));
   }, 15_000);
 
-  it("does not run collection shortcuts while the loaded-results search owns focus", async () => {
+  it("does not run collection shortcuts while the editable global filter owns focus", async () => {
     const user = userEvent.setup();
     renderResources(resourcesPort(), "/resources?clusters=cluster-1&resources.types=pod");
-    const search = await screen.findByRole("searchbox", { name: "표시된 결과 검색" }, { timeout: 5_000 });
+    await screen.findByRole("table", { name: "리소스 목록" }, { timeout: 5_000 });
+    const globalFilter = document.createElement("input");
+    globalFilter.setAttribute("aria-label", "전역 필터 검색");
+    globalFilter.setAttribute("data-slot", "unified-filter-input");
+    globalFilter.setAttribute("role", "combobox");
+    document.body.append(globalFilter);
 
-    await user.click(search);
+    await user.click(globalFilter);
     await user.keyboard("jGd");
-    fireEvent.keyDown(search, { key: "[" });
-    fireEvent.keyDown(search, { key: "]" });
-    expect((search as HTMLInputElement).value).toBe("jGd");
+    fireEvent.keyDown(globalFilter, { key: "[" });
+    fireEvent.keyDown(globalFilter, { key: "]" });
+    expect(globalFilter.value).toBe("jGd");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("resources-location").textContent)
-      .toContain("clusters=cluster-1&resources.types=pod&resources.q=jGd");
+      .toContain("clusters=cluster-1&resources.types=pod");
+    expect(screen.getByTestId("resources-location").textContent)
+      .not.toContain("resources.types=node");
+    expect(matchedRoutes).not.toHaveBeenCalled();
   }, 15_000);
 
   it("keeps global g chords available while reserving gg for the first resource row", async () => {
