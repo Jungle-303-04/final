@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   GeneratedManifest,
   GitOpsPort,
+  ReleaseApplication,
   ReleasePlan,
   ReleaseReadiness,
   ReleaseRunAction,
+  ReleaseTargetInput,
   SafePrResult,
 } from "../../features/gitops/gitOpsContract";
 import {
@@ -19,7 +21,7 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
 import { useWorkflowData } from "./useWorkflowData";
 
-type Operation = "idle" | "save" | "create" | "readiness" | "start" | "run" | "generate" | "safe-pr";
+type Operation = "idle" | "save" | "create" | "target" | "readiness" | "start" | "run" | "generate" | "safe-pr";
 export type WorkflowFeedback = { tone: "success" | "danger"; message: string };
 
 export function useGitOpsPageController(port: GitOpsPort) {
@@ -158,6 +160,21 @@ export function useGitOpsPageController(port: GitOpsPort) {
     } catch { handleError(); } finally { setOperation("idle"); }
   };
 
+  const createTarget = async (input: ReleaseTargetInput): Promise<ReleaseApplication | null> => {
+    setOperation("target");
+    try {
+      const application = await port.connectApplication(input);
+      data.replaceApplication(application);
+      setFeedback({ tone: "success", message: t("workflows.target.created") });
+      return application;
+    } catch {
+      setFeedback({ tone: "danger", message: t("workflows.target.createError") });
+      return null;
+    } finally {
+      setOperation("idle");
+    }
+  };
+
   const checkReadiness = async () => {
     if (!selectedPlan) return;
     setOperation("readiness");
@@ -211,7 +228,7 @@ export function useGitOpsPageController(port: GitOpsPort) {
     selectedStepId, setSelectedStepId, readiness, manifest, manifestStepIndex,
     safePr, safePrStepIndex, editorTarget, operation,
     feedback, setFeedback, latestRun, setView, selectPlan, openPlan, showPlanList, beginCreate, cancelCreate,
-    openEditor, saveDraft, createPlan, checkReadiness, startPlan, runAction,
+    openEditor, saveDraft, createPlan, createTarget, checkReadiness, startPlan, runAction,
     generateManifest, submitSafePr,
   };
 }

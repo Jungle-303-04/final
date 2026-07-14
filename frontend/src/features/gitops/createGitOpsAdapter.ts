@@ -3,6 +3,7 @@ import {
   type GitOpsFailureCode,
   type GitOpsPort,
   type ReleaseApplication,
+  type ReleaseCluster,
 } from "./gitOpsContract";
 import type { GitOpsEndpointDependencies } from "./gitOpsEndpointContract";
 
@@ -12,6 +13,20 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       return withPortFailure(async () => {
         const response = await endpoints.listApplications(signal);
         return response.applications.map(toApplication).filter((item): item is ReleaseApplication => item !== null);
+      });
+    },
+    async listClusters(signal) {
+      return withPortFailure(async () => {
+        const response = await endpoints.listClusters(signal);
+        return response.clusters.map(toCluster);
+      });
+    },
+    async connectApplication(input, signal) {
+      return withPortFailure(async () => {
+        const response = await endpoints.connectApplication(input, signal);
+        const application = toApplication(response.application);
+        if (!application) throw new Error("connected application is missing an id");
+        return application;
       });
     },
     async listPlans(signal) {
@@ -30,6 +45,20 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.submitSafePr(plan, stepIndex, signal)),
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
+  };
+}
+
+function toCluster(value: {
+  cluster_id: string;
+  name: string;
+  environment: string;
+  connection_status: string;
+}): ReleaseCluster {
+  return {
+    id: value.cluster_id,
+    name: value.name || value.cluster_id,
+    environment: value.environment,
+    connectionStatus: value.connection_status,
   };
 }
 

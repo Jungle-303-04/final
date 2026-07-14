@@ -52,6 +52,20 @@ function LocationProbe() {
 export function gitOpsPort(): GitOpsPort {
   return {
     listApplications: vi.fn().mockResolvedValue(applications),
+    listClusters: vi.fn().mockResolvedValue([{
+      id: "production-cluster",
+      name: "Production cluster",
+      environment: "production",
+      connectionStatus: "online",
+    }]),
+    connectApplication: vi.fn().mockResolvedValue({
+      id: "inventory-api",
+      name: "Inventory API",
+      repository: "team/inventory-api",
+      branch: "main",
+      clusterId: "production-cluster",
+      manifestPath: "deploy.yaml",
+    }),
     listPlans: vi.fn().mockResolvedValue([
       plan("plan-a", "Alpha release", "checkout-api"),
       plan("plan-b", "Bravo release", "payments-worker"),

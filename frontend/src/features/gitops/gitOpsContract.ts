@@ -29,6 +29,24 @@ export interface ReleaseApplication {
   manifestPath: string;
 }
 
+export interface ReleaseCluster {
+  id: string;
+  name: string;
+  environment: string;
+  connectionStatus: string;
+}
+
+export interface ReleaseTargetInput {
+  name: string;
+  repository: string;
+  branch: string;
+  manifestPath: string;
+  clusterId: string;
+  namespace: string;
+  environment: string;
+  token?: string;
+}
+
 export interface ReleasePlanStep {
   step_id?: string;
   application_id: string;
@@ -192,8 +210,10 @@ export type ReleaseRunAction =
 
 export interface GitOpsPort {
   listApplications(signal?: AbortSignal): Promise<ReleaseApplication[]>;
+  listClusters(signal?: AbortSignal): Promise<ReleaseCluster[]>;
   listPlans(signal?: AbortSignal): Promise<ReleasePlan[]>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<ReleaseRun[]>;
+  connectApplication(input: ReleaseTargetInput, signal?: AbortSignal): Promise<ReleaseApplication>;
   savePlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePlan>;
   previewPlan(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleasePreview>;
   checkReadiness(plan: ReleasePlan, signal?: AbortSignal): Promise<ReleaseReadiness>;
