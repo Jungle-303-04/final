@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryRouter,
@@ -132,6 +132,52 @@ describe("UnifiedFilterBar", () => {
     );
   });
 
+  it("keeps chips inside one fixed search border and removes the last chip with backspace", async () => {
+    const user = userEvent.setup();
+    renderFilter(
+      { search: vi.fn(async () => structuralSuggestions) },
+      "/resources?applications=checkout&resources.types=pod",
+    );
+
+    const control = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]');
+    expect(control?.className).toContain("h-9");
+    expect(control?.className).toContain("border");
+    expect(control?.className).toContain("overflow-x-auto");
+    expect(control?.className).not.toContain("flex-wrap");
+    expect(within(control!).getByText("checkout")).toBeTruthy();
+    expect(within(control!).getByText("Pod")).toBeTruthy();
+
+    const input = within(control!).getByRole("textbox", { name: filterPlaceholder });
+    await user.click(input);
+    await user.keyboard("{Backspace}");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("filter-location").textContent).toBe(
+        "/resources?applications=checkout",
+      ),
+    );
+    expect((input as HTMLInputElement).value).toBe("");
+    expect(within(control!).queryByText("Pod")).toBeNull();
+  });
+
+  it("clears every canonical chip from the same search control", async () => {
+    const user = userEvent.setup();
+    renderFilter(
+      { search: vi.fn(async () => structuralSuggestions) },
+      "/resources?clusters=cluster-a&applications=checkout&labels=team%3Dplatform",
+    );
+
+    const control = document.querySelector<HTMLElement>('[data-slot="search-pill-input"]')!;
+    await user.click(within(control).getByRole("button", { name: "Clear all filters" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("filter-location").textContent).toBe("/resources"),
+    );
+    expect(within(control).queryByText("cluster-a")).toBeNull();
+    expect(within(control).queryByText("checkout")).toBeNull();
+    expect(within(control).queryByText("team=platform")).toBeNull();
+  });
+
   it("aborts superseded requests and never paints a stale response", async () => {
     const user = userEvent.setup();
     const first = deferred<readonly GlobalFilterSuggestion[]>();
@@ -225,7 +271,7 @@ function counted<T extends Omit<GlobalFilterSuggestion, "count_completeness">>(
   return { count_completeness: "exact", ...item } as GlobalFilterSuggestion;
 }
 
-function renderFilter(port: GlobalFilterPort) {
+function renderFilter(port: GlobalFilterPort, initialEntry = "/resources") {
   const router = createMemoryRouter(
     [
       {
@@ -240,7 +286,7 @@ function renderFilter(port: GlobalFilterPort) {
         ),
       },
     ],
-    { initialEntries: ["/resources"] },
+    { initialEntries: [initialEntry] },
   );
   return render(<RouterProvider router={router} />);
 }
