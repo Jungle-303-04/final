@@ -618,10 +618,18 @@ def test_second_candidate_contract_batch_is_machine_verified_in_catalog_order() 
     assert tuple(item["candidate_id"] for item in second_batch) == SECOND_CANDIDATE_BATCH
     assert all(item["patch_capabilities"] == [] for item in second_batch)
     assert all(item["benchmark_fixtures"] == [] for item in second_batch)
-    assert all(
-        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
         for item in second_batch
-    )
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in SECOND_CANDIDATE_BATCH},
+        "database_connectivity_failure": ["dependency_connection_review", "manual_analysis"],
+        "database_credential_or_config_error": ["dependency_config_review", "manual_analysis"],
+        "database_connection_pool_exhausted": [
+            "dependency_connection_review",
+            "manual_analysis",
+        ],
+    }
     forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in second_batch]
     assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
     assert all(
@@ -681,6 +689,11 @@ def test_fourth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
         for item in fourth_batch
     } == {
         **{candidate_id: ["manual_analysis"] for candidate_id in FOURTH_CANDIDATE_BATCH},
+        "service_name_or_namespace_mismatch": [
+            "service_reference_review",
+            "manual_analysis",
+        ],
+        "network_policy_denied": ["network_policy_review", "manual_analysis"],
         "upstream_unavailable": ["rollout_restart", "deployment_scale", "manual_analysis"],
         "backend_readiness_failure": [
             "rollout_restart",
@@ -776,10 +789,13 @@ def test_seventh_candidate_contract_batch_is_machine_verified_in_catalog_order()
     assert tuple(item["candidate_id"] for item in seventh_batch) == SEVENTH_CANDIDATE_BATCH
     assert all(item["patch_capabilities"] == [] for item in seventh_batch)
     assert all(item["benchmark_fixtures"] == [] for item in seventh_batch)
-    assert all(
-        [action["action_type"] for action in item["allowed_remediations"]] == ["manual_analysis"]
+    assert {
+        item["candidate_id"]: [action["action_type"] for action in item["allowed_remediations"]]
         for item in seventh_batch
-    )
+    } == {
+        **{candidate_id: ["manual_analysis"] for candidate_id in SEVENTH_CANDIDATE_BATCH},
+        "config_key_missing": ["config_key_review", "manual_analysis"],
+    }
     forbidden_actions = [item["forbidden_remediations"][0]["action_type"] for item in seventh_batch]
     assert len(forbidden_actions) == len(set(forbidden_actions)) == 10
     assert all(
@@ -810,6 +826,7 @@ def test_eighth_candidate_contract_batch_is_machine_verified_in_catalog_order() 
             "manual_analysis",
         ],
         "pvc_pending": ["pvc_binding_fix", "manual_analysis"],
+        "missing_secret_reference": ["secret_reference_fix", "manual_analysis"],
     }
     assert {item["candidate_id"]: item["benchmark_fixtures"] for item in eighth_batch} == {
         **{candidate_id: [] for candidate_id in EIGHTH_CANDIDATE_BATCH},
