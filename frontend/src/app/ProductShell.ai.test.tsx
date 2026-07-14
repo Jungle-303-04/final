@@ -161,6 +161,7 @@ function assistantPort(overrides: Partial<AiAssistantPort> = {}): AiAssistantPor
   return {
     ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [] }),
     loadSuggestions: vi.fn().mockResolvedValue([]),
+    createAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     ...overrides,
   };
 }

@@ -19,6 +19,7 @@ const testClusterScopePort: ClusterScopePort = {
 const testAiAssistantPort: AiAssistantPort = {
   ask: async () => ({ answer: "no data", evidence: [] }),
   loadSuggestions: async () => [],
+  createAlertRule: async () => ({ ruleId: "rule-1" }),
 };
 const testLogStreamPort: LogStreamPort = { open: () => () => undefined };
 const testAlertEventsPort: AlertEventsPort = {

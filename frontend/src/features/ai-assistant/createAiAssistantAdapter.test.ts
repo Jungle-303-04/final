@@ -28,11 +28,13 @@ describe("AI assistant adapter", () => {
     const port = createAiAssistantAdapter({
       postAiChat,
       getAiSuggestions: vi.fn().mockResolvedValue({ suggestions: [] }),
+      postAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     });
 
     await expect(port.ask(CONTEXT, "Why?")).resolves.toEqual({
       answer: "BackOff is observed.",
       evidence: [{ type: "event", id: "1", label: "BackOff", link: "/issues/1" }],
+      action: null,
     });
     expect(postAiChat).toHaveBeenCalledWith(
       expect.objectContaining({

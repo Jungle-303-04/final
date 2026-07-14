@@ -32,9 +32,33 @@ export const aiEvidenceLinkSchema = z.strictObject({
   link: z.string().regex(/^\/(?!\/)[^\s]*$/u),
 });
 
+export const aiChatActionPayloadSchema = z.object({
+  name: z.string().min(1),
+  metric: z.string().min(1),
+  comparator: z.string().min(1),
+  threshold: z.number(),
+  for_seconds: z.number(),
+  severity: z.string().min(1),
+  scope: z.object({
+    clusters: z.array(z.string()),
+    namespaces: z.array(z.string()),
+    applications: z.array(z.string()),
+    labels: z.array(z.string()),
+  }),
+  channels: z.array(z.string()),
+  enabled: z.boolean(),
+});
+
+export const aiChatActionSchema = z.object({
+  type: z.literal("create_alert_rule"),
+  payload: aiChatActionPayloadSchema,
+  rationale: z.string(),
+});
+
 export const aiChatResponseSchema = z.strictObject({
   answer: z.string().min(1),
   evidence: z.array(aiEvidenceLinkSchema),
+  action: aiChatActionSchema.nullish(),
 }).superRefine((response, context) => {
   const ids = response.evidence.map((item) => `${item.type}\u001f${item.id}`);
   if (new Set(ids).size !== ids.length) {
