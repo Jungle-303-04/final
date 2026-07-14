@@ -11,13 +11,13 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S8 `1d430ba76` public · S9 local gate 완료
+배포 SHA : S9 `86c922eb4` public · S10 local gate 진행 중
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 18:49 KST  S8 public · S9 gate green
+갱신     : 2026-07-14 19:32 KST  S9 public · S10 구현/시각 검증 완료
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-DjRxj1b1.js`
+- console bundle: `assets/index-D7LbqrTl.js`
 - backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
 - console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
 - 로그인·클러스터·리소스 read smoke: 통과
@@ -45,8 +45,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S6**  상세 = 전체화면 덮기
 - [x] **S7**  AI 패널
 - [x] **S8**  하단 독 + 로그 스트림
-- [x] S9   관계 뷰 토글
-- [ ] S10  Applications
+- [x] **S9**   관계 뷰 토글          ← public strict 관계 graph 200·edge 참조 무결성 확인
+- [ ] **S10**  Applications          ← BQ-039~042·앱 카드/표·상세 5탭 구현, public 배포 전
 - [ ] S11  시간 스크럽 (TimelineStrip)
 - [ ] S12  Issues + RCA + 증거
 - [ ] S13  변경 적용 진행 ★           ← 고스트 파드. 데모의 클라이맥스
@@ -146,6 +146,18 @@ URL      : https://k8s.woonyong.org
   6초 힌트·즉시 되돌리기·수동 pin 시 힌트 종료, mobile 2행 header 공간 확보
 - [x] S9 검증 — backend Ruff + topology/resource graph 회귀 56 tests,
   frontend 185 files/1,107 tests·typecheck·lint·589-file design guard·production build PASS
+- [x] S9 자동 배포/public 확인 — gate `29323618648`, deploy `29323876248` SUCCESS;
+  health/root/relations topology 200, bundle `index-D7LbqrTl.js`, strict key·edge endpoint 참조 무결성 PASS
+- [x] S10 BQ-039~042 — Applications 목록·상세·배포 이력·Git↔cluster semantic drift를
+  workspace/application/cluster 권한과 temporal inventory·exact incident evidence에 묶고 raw payload 차단
+- [x] S10 Applications UI — 문제 우선 카드·동일 결과 표 전환, canonical 공통/app 필터,
+  URL-backed 상세·개요/리소스/배포 이력/차이/인시던트 5탭, 소유 화면 drilldown만 제공
+- [x] S10 정직성 — 미확인 health/count/incident/drift를 null·unknown·unavailable로 유지,
+  민감/복합 diff 양쪽 redaction, resource 목록·incident 상세·GitOps diff 중복 렌더 금지
+- [x] S10 local 검증 — backend 관련 45 tests, frontend 전체 188 files/1,121 tests,
+  typecheck·lint·610-file design guard·production build PASS
+- [x] S10 브라우저 시각 검증 — 실제 AWS shell + representative strict response로 desktop 1440px,
+  mobile 390px 목록·상세·5탭 확인; horizontal overflow 0, console error 0
 
 ---
 

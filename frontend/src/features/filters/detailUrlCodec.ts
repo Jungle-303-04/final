@@ -17,6 +17,7 @@ const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
   appendNullableStableText(pairs, "detail", detail.detail);
+  appendNullableStableText(pairs, "app", detail.application ?? null);
   if (detail.detail === null) {
     appendNullableStableText(pairs, "resource", detail.resource);
     appendNullableStableText(pairs, "resourceKind", detail.resourceKind);
@@ -39,6 +40,8 @@ export function parseProductDetailQuery(
 ): ProductDetailQuery {
   const detail = createEmptyProductDetailQuery();
   detail.detail = readStableText(params, "detail");
+  const application = readStableText(params, "app");
+  if (application !== null) detail.application = application;
   detail.resource = readStableText(params, "resource");
   detail.resourceKind = readStableText(params, "resourceKind");
   if (!hasQueryKey(params, "resourceKind") && detail.resource !== null) {

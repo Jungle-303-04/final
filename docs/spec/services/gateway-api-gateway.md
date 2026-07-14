@@ -23,7 +23,7 @@ status: synced
 | import | `domains.identity` | [../../domains/identity.md](../domains/identity.md) | 인증 라우터·admin 콘솔 라우터·가드(`require_session`/`require_admin_session`/`require_cluster_agent`) |
 | import | `domains.ai` | [../../domains/ai.md](../domains/ai.md) | AI conversation 라우터 |
 | import | `domains.alert` | [../../domains/alert.md](../domains/alert.md) | 알림 채널 admin 라우터 |
-| import | `domains.applications` | [../../domains/applications.md](../domains/applications.md) | application/deployment 바인딩 라우터 |
+| import | `domains.applications` | [../../domains/applications.md](../domains/applications.md) | application 제품 조회/deployment binding 라우터 |
 | import | `domains.catalog` | [../../domains/catalog.md](../domains/catalog.md) | service catalog 라우터 |
 | import | `domains.command` | [../../domains/command.md](../domains/command.md) | command 라우터(+agent 폴링 라우트) |
 | import | `domains.dashboard` | [../../domains/dashboard.md](../domains/dashboard.md) | dashboard read model 조회 라우터 |
@@ -178,10 +178,11 @@ status: synced
 | GET | `/repositories/discovery/branches` | 세션 | — |
 | GET | `/repositories/discovery/manifests` | 세션 | — |
 | POST | `/repositories/discovery/validate` | 세션 | — |
-| GET/POST | `/applications` | 세션 | — |
+| GET/POST | `/applications` | 세션 | GET은 application read + inventory read scope, POST는 기존 mutation 계약 |
 | POST | `/applications/connect` | 세션 | cluster `deploy.run` |
-| GET | `/applications/{application_id}` | 세션 | `require_resource_access`(application) |
-| GET/POST | `/applications/{application_id}/deployments` | 세션 | application 접근 (+POST 는 cluster 접근) |
+| GET | `/applications/{application_id}` | 세션 | application read; cluster evidence는 inventory read scope |
+| GET/POST | `/applications/{application_id}/deployments` | 세션 | GET은 deployment read 배포 이력, POST는 application manage + cluster deploy binding |
+| GET | `/applications/{application_id}/drift` | 세션 | application read; visible cluster의 저장 diff evidence |
 | GET | `/applications/{application_id}/runs` | 세션 | application 접근 |
 
 ### target / clusters (`src/domains/target/router.py`, `router.include_router(agent_router)`)

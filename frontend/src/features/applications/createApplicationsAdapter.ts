@@ -1,0 +1,177 @@
+import {
+  ApplicationsFailure,
+  type ApplicationCatalogEndpointItem,
+  type ApplicationCardModel,
+  type ApplicationDetailEndpointItem,
+  type ApplicationDetailModel,
+  type ApplicationsApiDependencies,
+  type ApplicationsFailureCode,
+  type ApplicationsPort,
+} from "./applicationsContract";
+
+export function createApplicationsAdapter(
+  api: ApplicationsApiDependencies,
+): ApplicationsPort {
+  return {
+    listApplications: (filter, signal) => withFailure(async () => {
+      const response = await api.listApplicationCatalog(filter, signal);
+      return sortApplicationsByAttention(response.applications.map(toCard));
+    }),
+    getApplication: (applicationId, signal) => withFailure(async () => {
+      assertApplicationId(applicationId);
+      return toDetail((await api.getApplicationOverview(applicationId, signal)).application);
+    }),
+    listDeployments: (applicationId, signal) => withFailure(async () => {
+      assertApplicationId(applicationId);
+      const response = await api.listApplicationDeploymentHistory(applicationId, signal);
+      return response.deployments.map((deployment) => ({
+        id: deployment.id,
+        environment: deployment.environment,
+        clusterId: deployment.cluster_id,
+        gitSha: deployment.git_sha,
+        version: deployment.version,
+        deployedAt: deployment.deployed_at,
+        deployedBy: deployment.deployed_by,
+        status: deployment.status,
+        gitOpsChangeId: deployment.gitops_change_id,
+      }));
+    }),
+    getDrift: (applicationId, signal) => withFailure(async () => {
+      assertApplicationId(applicationId);
+      const response = await api.getApplicationDrift(applicationId, signal);
+      return {
+        status: response.status,
+        summary: response.summary,
+        differences: response.differences.map((difference) => ({
+          resource: difference.resource,
+          fieldPath: difference.field_path,
+          oldValue: difference.old_value,
+          newValue: difference.new_value,
+          valueRedacted: difference.value_redacted,
+          changedBy: difference.changed_by,
+          changedAt: difference.changed_at,
+        })),
+        observedAt: response.observed_at,
+      };
+    }),
+  };
+}
+
+export function sortApplicationsByAttention(
+  applications: readonly ApplicationCardModel[],
+): ApplicationCardModel[] {
+  return [...applications].sort((left, right) => (
+    attentionRank(left) - attentionRank(right) ||
+    left.name.localeCompare(right.name) ||
+    left.id.localeCompare(right.id)
+  ));
+}
+
+function toCard(item: ApplicationCatalogEndpointItem): ApplicationCardModel {
+  return {
+    id: item.id,
+    name: item.name,
+    environments: [...item.environments],
+    lifecycleStatus: item.lifecycle_status,
+    health: {
+      status: item.health.status,
+      readyPods: item.health.ready_pods,
+      totalPods: item.health.total_pods,
+      restarts: item.health.restarts,
+    },
+    currentDeployment: item.current_deployment === null ? null : {
+      version: item.current_deployment.version,
+      image: item.current_deployment.image,
+      imageDigest: item.current_deployment.image_digest,
+      gitSha: item.current_deployment.git_sha,
+      deployedAt: item.current_deployment.deployed_at,
+      deployedBy: item.current_deployment.deployed_by,
+    },
+    hasDrift: item.has_drift,
+    driftSummary: item.drift_summary,
+    resourceCounts: item.resource_counts?.map((count) => ({ ...count })) ?? null,
+    resourceCountsCompleteness: item.resource_counts_completeness,
+    openIncidents: item.open_incidents,
+    repositoryRef: item.repository_ref,
+    defaultBranch: item.default_branch,
+    manifestPath: item.manifest_path,
+  };
+}
+
+function toDetail(item: ApplicationDetailEndpointItem): ApplicationDetailModel {
+  return {
+    ...toCard(item),
+    endpoints: item.endpoints?.map((endpoint) => ({
+      id: endpoint.id,
+      kind: endpoint.kind,
+      name: endpoint.name,
+      address: endpoint.url,
+    })) ?? null,
+    endpointsCompleteness: item.endpoints_completeness,
+    recentActivity: item.recent_activity.map((activity) => ({
+      id: activity.id,
+      type: activity.type,
+      summary: activity.summary,
+      occurredAt: activity.occurred_at,
+    })),
+    recentIncidents: item.recent_incidents.map((incident) => ({
+      id: incident.id,
+      title: incident.title,
+      status: incident.status,
+      startedAt: incident.started_at,
+    })),
+  };
+}
+
+function attentionRank(application: ApplicationCardModel): number {
+  if (application.openIncidents !== null && application.openIncidents > 0) return 0;
+  if (application.hasDrift === true) return 1;
+  const status = application.health.status?.toLowerCase() ?? "";
+  if (["degraded", "failed", "error", "unhealthy", "critical"].includes(status)) return 2;
+  return 3;
+}
+
+async function withFailure<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isAbortError(error) || error instanceof ApplicationsFailure) throw error;
+    throw normalizeFailure(error);
+  }
+}
+
+function normalizeFailure(error: unknown): ApplicationsFailure {
+  const kind = readString(error, "kind");
+  const status = readNumber(error, "status");
+  const codeByKind: Record<string, ApplicationsFailureCode> = {
+    forbidden: "forbidden",
+    network: "offline",
+    "not-found": "unavailable",
+    "invalid-payload": "invalid-response",
+  };
+  if (kind !== null && codeByKind[kind]) return new ApplicationsFailure(codeByKind[kind]);
+  if (status === 403) return new ApplicationsFailure("forbidden");
+  if (status === 404 || status === 503) return new ApplicationsFailure("unavailable");
+  return new ApplicationsFailure("unknown");
+}
+
+function assertApplicationId(applicationId: string): void {
+  if (applicationId.trim() === "") throw new ApplicationsFailure("invalid-response");
+}
+
+function readString(value: unknown, key: string): string | null {
+  if (typeof value !== "object" || value === null || !(key in value)) return null;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" ? field : null;
+}
+
+function readNumber(value: unknown, key: string): number | null {
+  if (typeof value !== "object" || value === null || !(key in value)) return null;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "number" && Number.isFinite(field) ? field : null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error &&
+    error.name === "AbortError";
+}

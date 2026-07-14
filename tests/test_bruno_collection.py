@@ -136,6 +136,7 @@ def test_every_gateway_route_has_a_bruno_request() -> None:
         routes.APPLICATION_CONNECT_PATH,
         "/applications/{{application_id}}",
         "/applications/{{application_id}}/deployments",
+        "/applications/{{application_id}}/drift",
         "/applications/{{application_id}}/runs",
         routes.REPOSITORY_DISCOVERY_PROBE_PATH,
         f"{routes.REPOSITORY_DISCOVERY_BRANCHES_PATH}?repo_ref=",
