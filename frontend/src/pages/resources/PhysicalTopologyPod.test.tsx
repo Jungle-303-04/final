@@ -99,6 +99,8 @@ describe("PhysicalTopologyPod", () => {
     expect(button.className).toContain("size-9");
     expect(container.querySelector("svg")).toBeNull();
     expect(container.querySelector("[data-pod-badge]")).toBeNull();
+    expect(button.className).toContain("transition-[opacity,transform,background-color]");
+    expect(button.className).not.toContain("box-shadow");
   });
 
   it("shows state only as an abnormal badge", () => {
@@ -140,6 +142,25 @@ describe("PhysicalTopologyPod", () => {
     rendered.rerender(podTree(pod({ usagePercent: 92 })));
     expect(screen.getByRole("button").dataset.usageValue).toBe("92.000");
     expect(frames.request).not.toHaveBeenCalled();
+  });
+
+  it("holds the last measured value when no newer measurement arrives", () => {
+    installMatchMedia(false);
+    const frames = installAnimationFrames();
+    const rendered = renderPod(pod({ usagePercent: 35 }));
+
+    rendered.rerender(podTree(pod({ usagePercent: 80 })));
+    for (const timestamp of [0, 250, 500, 750, 1_000, 1_250, 1_500, 1_750]) {
+      act(() => frames.advance(timestamp));
+    }
+    expect(screen.getByRole("button").dataset.usageValue).toBe("80.000");
+    const requestsAtRest = frames.request.mock.calls.length;
+
+    rendered.rerender(podTree(pod({ usagePercent: 80, health: "warning" })));
+    act(() => frames.advance(10_000));
+
+    expect(screen.getByRole("button").dataset.usageValue).toBe("80.000");
+    expect(frames.request).toHaveBeenCalledTimes(requestsAtRest);
   });
 
   it("observes visibility before animating when a scene has over 200 usage marks", () => {

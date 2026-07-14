@@ -156,8 +156,15 @@ describe("GitOpsPage workspace navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "New deployment target" }));
     expect(await screen.findByRole("dialog", { name: "New deployment target" })).toBeTruthy();
+    const preview = screen.getByRole("complementary", { name: "Deployment target preview" });
+    expect(within(preview).getAllByText("Not set").length).toBeGreaterThan(0);
     await user.type(screen.getByLabelText("Target name"), "Inventory API");
     await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
+    await user.type(screen.getByLabelText("GitHub token (optional)"), "production-secret-value");
+    expect(within(preview).getByText("Inventory API")).toBeTruthy();
+    expect(within(preview).getByText("team/inventory-api")).toBeTruthy();
+    expect(within(preview).getByText("Ready to register")).toBeTruthy();
+    expect(preview.textContent).not.toContain("production-secret-value");
     await user.click(screen.getByRole("button", { name: "Register target" }));
 
     await waitFor(() => expect(port.connectApplication).toHaveBeenCalledWith({
@@ -168,7 +175,7 @@ describe("GitOpsPage workspace navigation", () => {
       clusterId: "production-cluster",
       namespace: "default",
       environment: "development",
-      token: "",
+      token: "production-secret-value",
     }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "New deployment target" })).toBeNull());
     expect((screen.getByRole("checkbox", { name: /Inventory API/ }) as HTMLInputElement).checked).toBe(true);

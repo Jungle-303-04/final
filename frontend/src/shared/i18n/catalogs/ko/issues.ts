@@ -61,6 +61,8 @@ export const issuesKo = {
   "issues.time.unknown": "시간 미확인",
   "issues.detail.open": "{name} 상세 열기",
   "issues.detail.close": "인시던트 상세 닫기",
+  "issues.detail.expand": "인시던트 상세 전체 화면으로 보기",
+  "issues.detail.collapse": "인시던트 목록과 상세 함께 보기",
   "issues.detail.title": "인시던트 상세",
   "issues.detail.description": "선택한 인시던트의 상세 상태",
   "issues.detail.loading": "상세 정보를 불러오는 중입니다",

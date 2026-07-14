@@ -2,6 +2,7 @@ import type { NodeProps } from "@xyflow/react";
 import { Server } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { useFirstAppearanceMotion } from "../../motion/useFirstAppearanceMotion";
 import { STAGGER_MS, staggerDelay } from "../../motion/useStagger";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -26,20 +27,24 @@ export function PhysicalTopologyServerCard({
     ? t("resources.graph.server.unassigned")
     : server.name;
   const cardRef = useRef<HTMLElement>(null);
+  const entering = useFirstAppearanceMotion(`server:${clusterId}:${server.id}`);
   const delay = staggerDelay(index, STAGGER_MS.node);
   useEffect(() => {
     const card = cardRef.current;
-    if (!card) return;
+    if (!card || !entering) return;
     card.style.animationDelay = `${delay}ms`;
     return () => {
       card.style.removeProperty("animation-delay");
     };
-  }, [delay]);
+  }, [delay, entering]);
   return (
     <article
       aria-label={t("resources.graph.server.aria", { name: serverName })}
-      className="motion-node-land grid h-52 w-full grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-xl border bg-card/95 shadow-sm backdrop-blur transition-[border-color,box-shadow,transform] duration-(--motion-quick) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none"
-      data-morph-id={placement.unassigned ? undefined : `server:${clusterId}:${index}`}
+      className={cn(
+        "grid h-52 w-full grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-xl border bg-card/95 shadow-sm backdrop-blur transition-transform duration-(--motion-quick) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none",
+        entering && "motion-node-land",
+      )}
+      data-morph-id={placement.unassigned ? undefined : `server:${clusterId}:${server.id}`}
       data-server-id={server.id}
       data-slot="physical-topology-server"
       ref={cardRef}

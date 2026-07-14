@@ -12,6 +12,7 @@ import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
+import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
@@ -27,6 +28,7 @@ export function ResourceDetailWorkspace({
   onFullChange,
   onTabChange,
   full,
+  metricHistory,
   tab,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
@@ -37,6 +39,7 @@ export function ResourceDetailWorkspace({
   onFullChange: (full: boolean) => void;
   onTabChange: (tab: string) => void;
   full: boolean;
+  metricHistory: ResourceMetricsHistoryFrame;
   tab: string;
 }) {
   const { t } = useI18n();
@@ -149,7 +152,9 @@ export function ResourceDetailWorkspace({
       <div className="min-h-0 min-w-0 overflow-y-auto px-4 pb-6 sm:px-6">
         <ResourceDetailBody
           detail={detail}
+          full={full}
           identity={identity}
+          metricHistory={metricHistory}
           onTabChange={onTabChange}
           tab={tab}
         />

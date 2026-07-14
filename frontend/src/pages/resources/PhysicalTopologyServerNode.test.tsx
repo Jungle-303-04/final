@@ -15,6 +15,17 @@ afterEach(() => {
 });
 
 describe("PhysicalTopologyServerCard usage color", () => {
+  it("uses only transform for hover motion and a stable server identity", () => {
+    installMatchMedia();
+    const placement = physicalServerPlacements(PHYSICAL_TOPOLOGY)[0]!;
+    renderCard(placement);
+
+    const card = screen.getByRole("article", { name: "서버 worker-a" });
+    expect(card.dataset.morphId).toBe("server:cluster-1:node:worker-a");
+    expect(card.className).toContain("transition-transform");
+    expect(card.className).not.toContain("transition-[border-color,box-shadow,transform]");
+  });
+
   it("updates measured values, smooths color, and removes bars without usage evidence", () => {
     installMatchMedia();
     const frames = installAnimationFrames();

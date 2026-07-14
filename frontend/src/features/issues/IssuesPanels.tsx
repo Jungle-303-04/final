@@ -1,3 +1,4 @@
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -27,6 +28,9 @@ export function IssuesPanels({
   copy,
   detailRegionId,
   detailRegionRef,
+  full,
+  onClose,
+  onFullChange,
   onLoadMoreAudit,
   onSelectRecovery,
   selected,
@@ -42,8 +46,38 @@ export function IssuesPanels({
       tabIndex={-1}
     >
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle className="break-words">{selected.currentSubject}</CardTitle>
+        <CardHeader className="flex flex-row items-start gap-3 border-b">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="break-words">
+              {selected.symptom ?? selected.currentSubject}
+            </CardTitle>
+            <p className="mt-1 break-words text-xs text-muted-foreground">
+              {[selected.resourceKind, selected.namespace, selected.resourceName]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              aria-label={full ? copy.detailCollapse : copy.detailExpand}
+              className="hidden lg:inline-flex"
+              onClick={() => onFullChange(!full)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+            </Button>
+            <Button
+              aria-label={copy.detailClose}
+              onClick={onClose}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <IssueSectionFrame copy={copy} state={state.detail} unavailable={copy.genericFailure}>
