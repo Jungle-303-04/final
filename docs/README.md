@@ -208,6 +208,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 자동 조율 문서는 아래에 있다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
 - [auto/deploy-drift-audit](auto/deploy-drift-audit.md)
 - [auto/deploy-setup](auto/deploy-setup.md)
@@ -218,6 +219,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [auto/night-log-backend](auto/night-log-backend.md)
 - [auto/night-log-deploy](auto/night-log-deploy.md)
 - [auto/night-log-frontend](auto/night-log-frontend.md)
+- [auto/open-decisions-20260714](auto/open-decisions-20260714.md)
 
 프론트 상세 설계 문서는 아래에 있다.
 
@@ -394,6 +396,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/reference-contract-map](spec/frontend/reference-contract-map.md)
 - [spec/frontend/reference-feature-inventory](spec/frontend/reference-feature-inventory.md)
 - [spec/frontend/reference-porting-contract](spec/frontend/reference-porting-contract.md)
+- [spec/frontend/radar-parity-map](spec/frontend/radar-parity-map.md)
 - [spec/frontend/theme-first-paint-evidence-20260713](spec/frontend/theme-first-paint-evidence-20260713.md)
 - [spec/frontend/topology-engine](spec/frontend/topology-engine.md)
 - [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md)
@@ -403,6 +406,10 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-011-home-widget-dashboard](spec/frontend/vp-011-home-widget-dashboard.md)
 - [spec/frontend/vp-012-timeline-graph-table](spec/frontend/vp-012-timeline-graph-table.md)
 - [spec/frontend/vp-013-shadcn-migration](spec/frontend/vp-013-shadcn-migration.md)
+- [spec/frontend/vp-014-remaining-surfaces](spec/frontend/vp-014-remaining-surfaces.md)
+- [spec/frontend/vp-015-global-shell](spec/frontend/vp-015-global-shell.md)
+- [spec/frontend/vp-016-delivery-plan](spec/frontend/vp-016-delivery-plan.md)
+- [spec/frontend/vp-017-motion-spec](spec/frontend/vp-017-motion-spec.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)
