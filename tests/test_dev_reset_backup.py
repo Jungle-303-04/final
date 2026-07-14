@@ -11,17 +11,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "verify_first_deploy_backup", ROOT / "scripts/verify_first_deploy_backup.py"
+    "verify_dev_reset_backup", ROOT / "scripts/verify_dev_reset_backup.py"
 )
 assert SPEC is not None and SPEC.loader is not None
-verify_first_deploy_backup = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = verify_first_deploy_backup
-SPEC.loader.exec_module(verify_first_deploy_backup)
-assert isinstance(verify_first_deploy_backup, ModuleType)
+verify_dev_reset_backup = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = verify_dev_reset_backup
+SPEC.loader.exec_module(verify_dev_reset_backup)
+assert isinstance(verify_dev_reset_backup, ModuleType)
 
-LiveVolume = verify_first_deploy_backup.LiveVolume
-live_volume_from_documents = verify_first_deploy_backup.live_volume_from_documents
-verify_snapshot_document = verify_first_deploy_backup.verify_snapshot_document
+LiveVolume = verify_dev_reset_backup.LiveVolume
+live_volume_from_documents = verify_dev_reset_backup.live_volume_from_documents
+verify_snapshot_document = verify_dev_reset_backup.verify_snapshot_document
 
 SOURCE_SHA = "a" * 40
 SNAPSHOT_ID = "snap-0123456789abcdef0"
@@ -68,8 +68,7 @@ def snapshot_document(**overrides: Any) -> dict[str, Any]:
         "Tags": [
             {"Key": "opsia:source-sha", "Value": SOURCE_SHA},
             {"Key": "opsia:source-pvc", "Value": PVC_NAME},
-            {"Key": "opsia:restore-rehearsal", "Value": "passed"},
-            {"Key": "opsia:backup-kind", "Value": "pre-first-deploy"},
+            {"Key": "opsia:backup-kind", "Value": "pre-dev-reset"},
         ],
     }
     snapshot.update(overrides)
@@ -85,7 +84,7 @@ def test_live_volume_must_be_the_postgresql_ebs_claim() -> None:
     ) == LiveVolume(pvc_name=PVC_NAME, pv_name="pvc-volume", volume_id=VOLUME_ID)
 
 
-def test_completed_encrypted_snapshot_with_restore_rehearsal_is_accepted() -> None:
+def test_completed_encrypted_recent_dev_reset_snapshot_is_accepted() -> None:
     evidence = verify_snapshot_document(
         snapshot_document(),
         snapshot_id=SNAPSHOT_ID,

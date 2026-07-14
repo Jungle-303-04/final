@@ -74,6 +74,12 @@ def test_gateway_schema_rejects_invalid_payload(model: type, payload: dict) -> N
         model(**payload)
 
 
+def test_login_accepts_the_fixed_dev_admin_identifier() -> None:
+    request = LoginRequest(email="admin", password="local-password")
+
+    assert request.email == "admin"
+
+
 def test_target_register_request_allows_server_owned_management_url() -> None:
     request = TargetRegisterRequest(management_base_url="")
 

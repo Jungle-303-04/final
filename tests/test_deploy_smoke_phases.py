@@ -135,14 +135,37 @@ def test_post_deploy_smoke_enforces_new_release_contracts() -> None:
 
 
 def _write_post_deploy_read_fakes(
-    tmp_path: Path, *, login_ok: bool, strict_ok: bool
+    tmp_path: Path, *, login_ok: bool, reads_ok: bool
 ) -> dict[str, str]:
     curl_log = tmp_path / "curl.log"
     fake_curl = tmp_path / "curl"
     fake_curl.write_text(
         "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
         'printf \'%s\\n\' "$*" >>"${CURL_LOG}"\n'
-        + ("exit 0\n" if login_ok else "echo login-denied >&2\nexit 22\n"),
+        'url=""\n'
+        'output=""\n'
+        'previous=""\n'
+        'for argument in "$@"; do\n'
+        '  if [ "${previous}" = "--output" ]; then output="${argument}"; fi\n'
+        '  case "${argument}" in http://*|https://*) url="${argument}" ;; esac\n'
+        '  previous="${argument}"\n'
+        "done\n"
+        + (
+            'if [[ "${url}" == */auth/login ]]; then exit 0; fi\n'
+            if login_ok
+            else 'if [[ "${url}" == */auth/login ]]; then echo login-denied >&2; exit 22; fi\n'
+        )
+        + 'test -n "${output}"\n'
+        + (
+            'case "${url}" in\n'
+            "  */clusters*) printf '%s' '{\"clusters\":[]}' >\"${output}\" ;;\n"
+            "  */resources*) printf '%s' '{\"items\":[]}' >\"${output}\" ;;\n"
+            "  *) exit 22 ;;\n"
+            "esac\n"
+            if reads_ok
+            else "printf '%s' '{\"invalid\":true}' >\"${output}\"\n"
+        ),
         encoding="utf-8",
     )
     fake_curl.chmod(0o755)
@@ -167,20 +190,17 @@ def _write_post_deploy_read_fakes(
         "AUTH_PASSWORD": "not-a-real-secret",
         "AUTH_LOGIN_ATTEMPTS": "1",
         "AUTH_LOGIN_RETRY_INTERVAL_SECONDS": "0",
-        "SMOKE_RCA_CORRELATION_ID": "correlation-fixture",
-        "SMOKE_RCA_INCIDENT_ID": "incident-fixture",
-        "STRICT_API_SMOKE_SCRIPT": "/bin/true",
         "REAL_PYTHON": sys.executable,
-        "STRICT_EXIT_CODE": "0" if strict_ok else "17",
+        "STRICT_EXIT_CODE": "0",
         "STRICT_LOG": str(strict_log),
         "CURL_LOG": str(curl_log),
     }
 
 
 def _run_post_deploy_read_smoke(
-    tmp_path: Path, *, login_ok: bool, strict_ok: bool
+    tmp_path: Path, *, login_ok: bool, reads_ok: bool
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
-    env = _write_post_deploy_read_fakes(tmp_path, login_ok=login_ok, strict_ok=strict_ok)
+    env = _write_post_deploy_read_fakes(tmp_path, login_ok=login_ok, reads_ok=reads_ok)
     result = subprocess.run(
         ["bash", str(ROOT / "scripts/post_deploy_read_smoke.sh")],
         env=env,
@@ -191,22 +211,20 @@ def _run_post_deploy_read_smoke(
     return result, Path(env["STRICT_LOG"]), Path(env["CURL_LOG"])
 
 
-def test_post_deploy_read_smoke_logs_in_and_runs_strict_reads(tmp_path: Path) -> None:
+def test_post_deploy_read_smoke_logs_in_and_reads_current_catalogs(tmp_path: Path) -> None:
     result, strict_log, curl_log = _run_post_deploy_read_smoke(
-        tmp_path, login_ok=True, strict_ok=True
+        tmp_path, login_ok=True, reads_ok=True
     )
 
     assert result.returncode == 0, result.stderr
     assert "post-deploy operator login" in result.stdout
-    assert "post-deploy strict RCA reads" in result.stdout
-    strict_argv = strict_log.read_text(encoding="utf-8")
-    assert str(ROOT / "scripts/strict_api_smoke.py") in strict_argv
-    assert "/bin/true" not in strict_argv
-    assert "--correlation-id correlation-fixture" in strict_argv
-    assert "--incident-id incident-fixture" in strict_argv
+    assert "post-deploy cluster and resource reads" in result.stdout
+    assert not strict_log.exists()
     curl_calls = curl_log.read_text(encoding="utf-8").splitlines()
-    assert len(curl_calls) == 1
+    assert len(curl_calls) == 3
     assert "/auth/login" in curl_calls[0]
+    assert "/clusters?limit=100" in curl_calls[1]
+    assert "/resources?limit=1" in curl_calls[2]
     assert not any(
         endpoint in curl_calls[0]
         for endpoint in ("/github/webhook", "/commands", "/recovery-actions")
@@ -215,7 +233,7 @@ def test_post_deploy_read_smoke_logs_in_and_runs_strict_reads(tmp_path: Path) ->
 
 def test_post_deploy_read_smoke_stops_when_login_fails(tmp_path: Path) -> None:
     result, strict_log, curl_log = _run_post_deploy_read_smoke(
-        tmp_path, login_ok=False, strict_ok=True
+        tmp_path, login_ok=False, reads_ok=True
     )
 
     assert result.returncode != 0
@@ -224,11 +242,11 @@ def test_post_deploy_read_smoke_stops_when_login_fails(tmp_path: Path) -> None:
     assert "/auth/login" in curl_log.read_text(encoding="utf-8")
 
 
-def test_post_deploy_read_smoke_propagates_strict_read_failure(tmp_path: Path) -> None:
+def test_post_deploy_read_smoke_rejects_invalid_read_contract(tmp_path: Path) -> None:
     result, strict_log, curl_log = _run_post_deploy_read_smoke(
-        tmp_path, login_ok=True, strict_ok=False
+        tmp_path, login_ok=True, reads_ok=False
     )
 
-    assert result.returncode == 17
-    assert strict_log.exists()
+    assert result.returncode != 0
+    assert not strict_log.exists()
     assert "/auth/login" in curl_log.read_text(encoding="utf-8")

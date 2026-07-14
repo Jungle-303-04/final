@@ -89,3 +89,21 @@
 - [06:53 KST] [BLOCKED] first deploy는 retired table 제외 + nonzero legacy row의 canonical
   이관을 같은 cutover transaction에서 검증하는 백엔드 수정과 snapshot clone 전체
   row/checksum PASS 전까지 실행하지 않는다. 키 삭제·회전·교체 금지는 계속 유효하다.
+- [11:39 KST] [DB 재생성] 우녕 결정에 따라 보존 cutover를 폐기했다. 새 encrypted EBS
+  snapshot `snap-06d1dcfd1a93294cd`(PostgreSQL)와
+  `snap-0665493fc2a6f6c9f`(NATS)가 현재 PVC·source SHA와 일치하고 completed 상태임을
+  재검증한 뒤 DB writer 39개를 freeze했다. NATS JetStream PVC를 비우고 live
+  `public` schema를 drop/create한 다음 immutable baseline + Alembic upgrade를 실행했다.
+  결과는 `alembic_version=20260714_0200`; 관리자 `admin`은 `service_admin/active`로
+  bootstrap됐다. 비밀번호는 저장소·로그에 기록하지 않고 GitHub Environment Secret에만
+  저장한다. NATS/PostgreSQL/API/console을 복원한 뒤 public health/root 200을 확인했다.
+- [11:40 KST] [에이전트 재연결 버그] cluster-1 agent는 삭제된 DB token으로 계속 401을
+  받아 자동 재등록하지 못했다. cluster-2에는 cluster-agent Deployment 자체가 없다.
+  관리 클러스터 agent도 gateway connect 재시도 중이다. 이는 데이터로 덮지 않은 실제
+  복구 결함이며, FULL backend 배포 후 명시적 재등록/자기복구 계약을 별도 수정한다.
+  stale RCA fixture ID에 결합됐던 post-deploy smoke는 관리자 로그인·클러스터 목록·리소스
+  목록의 현재-tree 계약으로 교체했다.
+- [11:40 KST] [배포 상태] console run `29300699208`은 in-cluster health·신규 bundle·source
+  SHA·digest 검증까지 통과했지만 public Cloudflare edge가 이전 index를 반환해 실패했고
+  자동 rollback은 성공했다. 마지막 허용 폴백을 소진했으므로 파이프라인 반복 대신 DB
+  재생성·VP-012·Applications/GitOps 구현을 진행했다.

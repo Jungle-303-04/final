@@ -318,10 +318,14 @@ def test_aws_deploy_builds_and_patches_console_frontend_image() -> None:
 
 def test_aws_admin_bootstrap_uses_current_identity_repository() -> None:
     script = read("scripts/aws-up.sh")
+    admin_bootstrap = script[
+        script.index("bootstrap_admin() {") : script.index("register_target() {")
+    ]
 
-    assert "db.upsert_admin_account(" in script
-    assert "role = 'admin'" not in script
-    assert "workspace_members" not in script
+    assert "python -m controller.bootstrap_admin" in admin_bootstrap
+    assert "db.init()" not in admin_bootstrap
+    assert "role = 'admin'" not in admin_bootstrap
+    assert "workspace_members" not in admin_bootstrap
     assert "--from-literal=PUBLIC_BASE_URL=" in script
     assert "--from-literal=PUBLIC_API_BASE_URL=" in script
 

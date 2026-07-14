@@ -15,8 +15,7 @@ REGION = re.compile(r"[a-z]{2}(?:-gov)?-[a-z]+-[0-9]")
 SNAPSHOT_ID = re.compile(r"snap-[0-9a-f]{17}")
 VOLUME_ID = re.compile(r"vol-[0-9a-f]{17}")
 REQUIRED_TAGS = {
-    "opsia:restore-rehearsal": "passed",
-    "opsia:backup-kind": "pre-first-deploy",
+    "opsia:backup-kind": "pre-dev-reset",
 }
 
 
@@ -187,7 +186,7 @@ def resolve_live_volume(*, context: str, namespace: str, pvc_name: str) -> LiveV
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify first-deploy EBS backup evidence")
+    parser = argparse.ArgumentParser(description="Verify destructive dev-reset EBS backup evidence")
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", default="management")
     parser.add_argument("--region", required=True)
@@ -234,7 +233,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_age=timedelta(hours=args.max_age_hours),
     )
     print(
-        "first-deploy backup verified: "
+        "dev-reset backup verified: "
         f"snapshot={evidence.snapshot_id} volume={evidence.volume_id} source_sha={evidence.source_sha}"
     )
     return 0

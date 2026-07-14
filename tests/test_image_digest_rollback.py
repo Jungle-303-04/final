@@ -222,20 +222,10 @@ def test_capture_rejects_tagged_or_missing_live_targets(tmp_path: Path) -> None:
         )
 
 
-def test_first_deploy_may_explicitly_capture_only_existing_managed_targets(tmp_path: Path) -> None:
+def test_capture_rejects_missing_managed_targets_without_a_partial_escape_hatch(
+    tmp_path: Path,
+) -> None:
     expected = capture_image_digests.expected_deployment_containers(deployment_manifest(tmp_path))
-
-    plan = capture_image_digests.build_plan(
-        expected=expected,
-        live_document={"items": live_deployments()["items"][:1]},
-        namespace="management",
-        previous_release_sha=SHA,
-        allow_missing_live=True,
-    )
-
-    assert [(target.resource, target.container) for target in plan.targets] == [
-        ("deployment/api-gateway", "api-gateway")
-    ]
 
     with pytest.raises(ValueError, match="is missing"):
         capture_image_digests.build_plan(

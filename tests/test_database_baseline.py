@@ -8,14 +8,17 @@ from pathlib import Path
 import pytest
 
 from packages.storage.baseline import (
+    BASELINE_CONFIRM_DESTRUCTIVE_RESET_ENV,
     BASELINE_CONFIRM_EMPTY_TARGET_ENV,
     BASELINE_CONFIRM_SOURCE_COMMIT_ENV,
+    BASELINE_DESTRUCTIVE_RESET_CONFIRMATION,
     BASELINE_EMPTY_TARGET_CONFIRMATION,
     BASELINE_SOURCE_COMMIT,
     BASELINE_SQL_PATH,
     BASELINE_SQL_SHA256,
     BaselineDecision,
     _validate_operator_confirmation,
+    _validate_reset_confirmation,
     decide_bootstrap,
     load_baseline_sql,
 )
@@ -55,6 +58,7 @@ def test_baseline_runner_never_uses_alembic_stamp() -> None:
     assert "command.upgrade" in source
     assert "command.stamp" not in source
     assert "alembic stamp" not in source
+    assert "DROP SCHEMA public CASCADE" in source
 
 
 @pytest.mark.parametrize(
@@ -74,3 +78,34 @@ def test_operator_must_confirm_the_pinned_source_and_isolated_target(
 
     with pytest.raises(RuntimeError):
         _validate_operator_confirmation()
+
+
+@pytest.mark.parametrize(
+    ("source_commit", "confirmation"),
+    [
+        ("wrong", BASELINE_DESTRUCTIVE_RESET_CONFIRMATION),
+        (BASELINE_SOURCE_COMMIT, "wrong"),
+    ],
+)
+def test_dev_reset_requires_independent_destructive_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+    source_commit: str,
+    confirmation: str,
+) -> None:
+    monkeypatch.setenv(BASELINE_CONFIRM_SOURCE_COMMIT_ENV, source_commit)
+    monkeypatch.setenv(BASELINE_CONFIRM_DESTRUCTIVE_RESET_ENV, confirmation)
+
+    with pytest.raises(RuntimeError):
+        _validate_reset_confirmation()
+
+
+def test_dev_reset_accepts_only_the_exact_destructive_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(BASELINE_CONFIRM_SOURCE_COMMIT_ENV, BASELINE_SOURCE_COMMIT)
+    monkeypatch.setenv(
+        BASELINE_CONFIRM_DESTRUCTIVE_RESET_ENV,
+        BASELINE_DESTRUCTIVE_RESET_CONFIRMATION,
+    )
+
+    _validate_reset_confirmation()

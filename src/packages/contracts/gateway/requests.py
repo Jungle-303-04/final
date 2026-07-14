@@ -67,7 +67,12 @@ MAX_DEPLOYMENT_REPLICAS = 100
 class LoginRequest(StrictModel):
     # 우리 서비스 자체 계정 로그인 입력값
     # role 같은 권한 필드는 클라이언트 입력 금지, 서버가 DB/session 기준 결정
-    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    # 로그인은 고정 dev 관리자 식별자(`admin`)와 가입 계정 이메일을 모두 허용한다.
+    email: str = Field(
+        min_length=1,
+        max_length=320,
+        pattern=r"^[^@\s]+(?:@[^@\s]+\.[^@\s]+)?$",
+    )
     password: str = Field(min_length=8)
 
 
