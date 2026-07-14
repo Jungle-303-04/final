@@ -19,6 +19,9 @@ const productRoot = process.env.PRODUCT_DESIGN_GUARD_ROOT
   : sourceRoot
 const apiRoot = resolve(productRoot, 'api')
 const tokenFile = resolve(productRoot, 'styles', 'tokens.css')
+const protectedBrandAssets = new Set([
+  resolve(productRoot, 'shared', 'brand', 'azure.svg'),
+])
 const motionRoot = resolve(productRoot, 'motion')
 const motionTokenFile = resolve(motionRoot, 'tokens.css')
 
@@ -941,7 +944,7 @@ function inspectCssImports(filePath, source) {
 }
 
 function inspectRawColors(filePath, source) {
-  if (filePath === tokenFile) {
+  if (filePath === tokenFile || protectedBrandAssets.has(filePath)) {
     return
   }
 
