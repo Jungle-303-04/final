@@ -23,6 +23,29 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Prepare bounded commit message range
+        env:
+          BASE_SHA: ${{ github.event.before || github.event.pull_request.base.sha || '' }}
+          COMMIT_COUNT: ${{ github.event.pull_request.commits || 0 }}
+          PUSH_COMMITS: ${{ toJSON(github.event.commits) }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            COMMIT_COUNT="$(jq 'length' <<<"${PUSH_COMMITS}")"
+          fi
+          if [[ -z "${BASE_SHA}" || "${BASE_SHA}" =~ ^0+$ ]]; then
+            git fetch --no-tags --depth=2 origin "${GITHUB_SHA}"
+            BASE_SHA="$(git rev-parse HEAD^)"
+            COMMIT_COUNT=1
+          else
+            git fetch --no-tags --depth="$((COMMIT_COUNT + 1))" origin "${GITHUB_SHA}"
+          fi
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+          git update-ref refs/remotes/origin/dev "${BASE_SHA}"
+
+      - name: Enforce commit message convention
+        run: scripts/commit-msg-gate.sh --range origin/dev..HEAD
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

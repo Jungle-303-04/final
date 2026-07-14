@@ -306,6 +306,7 @@ def test_dispatcher_generates_six_authority_pinned_patch_types(
     )
 
     assert isinstance(body, SafePrRequestedBody)
+    assert body.pr_kind == "safe_pr_patch"
     assert body.repository_id == "repo-1"
     assert body.binding_id == "binding-1"
     assert body.commit_sha == BASE_SHA
@@ -348,6 +349,33 @@ def test_dispatcher_returns_unsupported_when_authority_is_unavailable() -> None:
     assert body.__subject__ == "rca.action_required"
     assert body.reason_code == "gitops_authority_unavailable"
     assert body.missing_evidence == ["gitops_authority_context"]
+
+
+def test_dispatcher_routes_resource_request_tuning_to_review_doc() -> None:
+    event = selected_event("resource_request_tuning")
+    selected = replace(
+        event.selected,
+        draft=replace(
+            event.selected.draft,
+            params={"root_cause": "missing_resource_requests", "strategy": "hpa_required_requests"},
+        ),
+    )
+    event = replace(event, selected=selected)
+
+    body = asyncio.run(
+        RecoveryDispatcher().dispatch_body(
+            event,
+            authority=None,
+            correlation_id="corr-1",
+        )
+    )
+
+    assert isinstance(body, SafePrRequestedBody)
+    assert body.pr_kind == "safe_pr_review_doc"
+    assert len(body.patches) == 1
+    assert "CPU request: `100m`" in body.patches[0].content
+    assert "Memory request: `256Mi`" in body.patches[0].content
+    assert "자동 적용값이 아닙니다" in body.patches[0].content
 
 
 def test_dispatcher_rejects_authority_for_another_cluster() -> None:

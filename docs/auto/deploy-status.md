@@ -11,16 +11,20 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S10 `051fcd3b0` public(console) · Applications API P0 fix/S11 local
+배포 SHA : V1 `61284a2b2` public(console) · 운영체제/다크/라이트 테마
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 20:27 KST  S10 console public · API 500 근본 수정 local 완료 · S11 local
+갱신     : 2026-07-14 22:01 KST  V1 console public · 실제 브라우저 검증 완료
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-MbLKlq1P.js`
+- console bundle: `assets/index-DFUbqWhB.js`
 - backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
-- console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
+- console digest: `sha256:ad8f8e834095b56cd255864c439f53a0d48ba5918ddfd8c6417cc34045da872a`
 - 로그인·클러스터·리소스 read smoke: 통과
+- Dev Gate: `29333928109` SUCCESS
+- CONSOLE 배포: `29334319541` SUCCESS — service/DB 단계 미실행
+- 공개 브라우저: source SHA `61284a2b211c177d0958a616d9ad5d8a672fe8f6`,
+  운영체제 기본·OS 변경 추종·명시적 다크/라이트 고정, desktop/mobile console error 0
 
 ---
 
@@ -42,7 +46,7 @@ URL      : https://k8s.woonyong.org
 - [x] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
 - [x] **S4**  물리 뷰 그래프 (2층) ★  ← public strict topology 200 실측
 - [x] **S5**  표 + 스파크라인 (3층)    ← `7354ee91` 자동 배포·public bundle 확인
-- [x] **S6**  상세 = 전체화면 덮기
+- [ ] **S6 (재작업)**  상세 = peek → 전체화면 3상태, 사이드바 독립
 - [x] **S7**  AI 패널
 - [x] **S8**  하단 독 + 로그 스트림
 - [x] **S9**   관계 뷰 토글          ← public strict 관계 graph 200·edge 참조 무결성 확인
@@ -104,8 +108,8 @@ URL      : https://k8s.woonyong.org
   public bundle `index-DDzxYCh0.js`, health/root 200
 - [x] S6 BQ-061 exact resource capability — inventory.read 선확인, deploy.run·연결된
   `command_receiver`·target namespace를 모두 만족한 Deployment restart/scale만 반환
-- [x] S6 전체화면 상세 — `?detail=kind/ns/name`, 뒤로가기·Esc·행 포커스 복귀,
-  J/K 연속 탐색, 56px nav rail, 읽기 전용 필터 맥락, 5개 탭, 320ms 동시 모션
+- [ ] S6 (재작업) 3상태 상세 — 기존 즉시 전체화면·56px nav rail 규정은 철회됨;
+  V2에서 상세의 사이드바 자동 접기를 제거했고 peek → full 동일 컴포넌트 전환은 후속 구현
 - [x] S6 capability 소비 — 응답 subject를 상세 identity와 재검증하고 허용된 mutation만
   확인 dialog와 실제 restart/scale API에 연결; 실패·403·불일치에는 버튼 미렌더
 - [x] S6 local 검증 — backend capability 67 tests 및 topology 회귀 11 tests,

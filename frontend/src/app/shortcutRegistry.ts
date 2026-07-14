@@ -59,9 +59,8 @@ const shortcutRouteLabelKeys = {
   gitops: "shell.shortcut.route.gitops",
   home: "shell.shortcut.route.home",
   issues: "shell.shortcut.route.issues",
-  metrics: "shell.shortcut.route.metrics",
   resources: "shell.shortcut.route.resources",
-  catalog: "shell.shortcut.route.catalog",
+  settings: "shell.shortcut.route.settings",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function shellShortcutDefinitions(

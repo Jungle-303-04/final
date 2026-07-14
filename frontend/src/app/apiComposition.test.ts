@@ -8,20 +8,22 @@ describe("API composition root", () => {
     const composition = createApiComposition();
 
     expect(composition.surfaces.map((surface) => surface.id)).toEqual([
-      "clusters",
       "home",
+      "clusters",
       "resources",
       "issues",
       "applications",
       "gitops",
+      "settings",
     ]);
     expect([...composition.releasedSurfaceIds]).toEqual([
-      "clusters",
       "home",
+      "clusters",
       "resources",
       "issues",
       "applications",
       "gitops",
+      "settings",
     ]);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();

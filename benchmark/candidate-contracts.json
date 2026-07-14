@@ -42,6 +42,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "autoscaling_metrics_recovery",
+          "route": "approval_required",
+          "blast_radius": "target_namespace",
+          "approval_required": true,
+          "rollback": "metrics adapter 또는 HPA 설정 변경 commit을 revert합니다.",
+          "post_verification": [
+            "HPA metric 조회 성공",
+            "ScalingActive 회복",
+            "replica 계산 재개"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -96,6 +108,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "resource_request_tuning",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "resource request 보정 commit을 revert합니다.",
+          "post_verification": [
+            "HPA metric 계산 성공",
+            "Pod Ready 유지",
+            "리소스 사용률 안정"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -147,8 +171,22 @@
       "contradicting_signals": [],
       "contradiction_policy": "not_modeled_v0.1",
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
-      "patch_capabilities": [],
+      "patch_capabilities": [
+        "safe_pr"
+      ],
       "allowed_remediations": [
+        {
+          "action_type": "replica_scale",
+          "route": "draft_pr",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "동반된 inverse patch로 replica 상한 또는 replica 수를 이전 값으로 되돌립니다.",
+          "post_verification": [
+            "Ready replica 증가",
+            "ScalingLimited 완화",
+            "5xx/latency 감소"
+          ]
+        },
         {
           "action_type": "manual_analysis",
           "route": "approval_required",
@@ -459,6 +497,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "container_port_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "포트 설정 변경이 있었다면 manifest 변경 commit을 revert합니다.",
+          "post_verification": [
+            "pod 재시작 루프 중단",
+            "프로세스 listen 성공",
+            "Ready 상태 회복"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -516,6 +566,18 @@
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
       "patch_capabilities": [],
       "allowed_remediations": [
+        {
+          "action_type": "startup_security_context_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "securityContext 또는 mount 권한 변경 commit을 revert합니다.",
+          "post_verification": [
+            "permission denied 로그 소멸",
+            "pod Ready 회복",
+            "보안 정책 위반 없음"
+          ]
+        },
         {
           "action_type": "manual_analysis",
           "route": "approval_required",
@@ -708,6 +770,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "dependency_connection_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "DB connection 설정 변경 commit을 revert합니다.",
+          "post_verification": [
+            "DB 연결 성공",
+            "pool exhausted 로그 감소",
+            "요청 성공률 회복"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -766,6 +840,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "dependency_config_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "DB 설정 참조 변경 commit을 revert합니다.",
+          "post_verification": [
+            "DB 인증 성공",
+            "설정 오류 로그 소멸",
+            "민감값 노출 없음"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -819,6 +905,18 @@
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
       "patch_capabilities": [],
       "allowed_remediations": [
+        {
+          "action_type": "dependency_connection_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "DB connection 설정 변경 commit을 revert합니다.",
+          "post_verification": [
+            "DB 연결 성공",
+            "pool exhausted 로그 감소",
+            "요청 성공률 회복"
+          ]
+        },
         {
           "action_type": "manual_analysis",
           "route": "approval_required",
@@ -1808,6 +1906,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "service_reference_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "service 참조 설정 변경 commit을 revert합니다.",
+          "post_verification": [
+            "DNS lookup 실패 소멸",
+            "대상 service 연결 성공",
+            "5xx/timeout 감소"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -1974,6 +2084,18 @@
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
       "patch_capabilities": [],
       "allowed_remediations": [
+        {
+          "action_type": "network_policy_review",
+          "route": "approval_required",
+          "blast_radius": "target_namespace",
+          "approval_required": true,
+          "rollback": "NetworkPolicy 변경 commit을 revert합니다.",
+          "post_verification": [
+            "허용 후 연결 성공",
+            "불필요한 namespace 노출 없음",
+            "5xx/timeout 감소"
+          ]
+        },
         {
           "action_type": "manual_analysis",
           "route": "approval_required",
@@ -4174,6 +4296,18 @@
       "patch_capabilities": [],
       "allowed_remediations": [
         {
+          "action_type": "config_key_review",
+          "route": "approval_required",
+          "blast_radius": "target_workload",
+          "approval_required": true,
+          "rollback": "ConfigMap key 보정 또는 참조 변경 commit을 revert합니다.",
+          "post_verification": [
+            "config load error 소멸",
+            "pod Ready 회복",
+            "잘못된 기본값 주입 없음"
+          ]
+        },
+        {
           "action_type": "manual_analysis",
           "route": "approval_required",
           "blast_radius": "unknown",
@@ -4683,6 +4817,18 @@
       "missing_evidence_policy": "all_required_evidence_and_supporting_signal_groups",
       "patch_capabilities": [],
       "allowed_remediations": [
+        {
+          "action_type": "secret_reference_fix",
+          "route": "approval_required",
+          "blast_radius": "target_namespace",
+          "approval_required": true,
+          "rollback": "Secret 참조 변경 commit을 revert하거나 이전 참조로 되돌립니다.",
+          "post_verification": [
+            "secret not found 이벤트 소멸",
+            "pod Ready 회복",
+            "민감값 노출 없음"
+          ]
+        },
         {
           "action_type": "manual_analysis",
           "route": "approval_required",

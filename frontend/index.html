@@ -13,8 +13,13 @@
         } catch {
           storedTheme = null;
         }
+        const selectedTheme = storedTheme === "dark" || storedTheme === "light"
+          ? storedTheme
+          : storedTheme === "system"
+            ? storedTheme
+            : "system";
         const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-        const isDark = storedTheme === "dark" || (storedTheme !== "light" && systemDark);
+        const isDark = selectedTheme === "dark" || (selectedTheme === "system" && systemDark);
         document.documentElement.classList.toggle("dark", isDark);
         document.documentElement.style.colorScheme = isDark ? "dark" : "light";
         document.documentElement.lang = locale;

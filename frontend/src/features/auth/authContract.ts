@@ -1,6 +1,8 @@
 import type { MessageKey, TranslationParameters } from "../../shared/i18n";
 
 export interface ProductSession {
+  displayName?: string | null;
+  email?: string | null;
   userId: string;
   roles: readonly string[];
   workspaceId: string;

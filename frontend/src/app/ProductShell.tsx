@@ -1,12 +1,11 @@
 import {
   Activity,
   Boxes,
-  ChartNoAxesCombined,
   GitBranch,
   Home,
   Layers3,
-  Library,
   Server,
+  Settings,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -14,7 +13,6 @@ import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useI18n, type MessageKey } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
-import { ThemeToggle } from "../shared/ui/ThemeToggle";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -31,9 +29,9 @@ import {
   SidebarText,
   useSidebar,
 } from "../shared/ui/primitives/sidebar";
+import { Separator } from "../shared/ui/primitives/separator";
 import { TooltipProvider } from "../shared/ui/primitives/tooltip";
 import { useProductTheme } from "../shared/ui/useProductTheme";
-import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
@@ -58,10 +56,12 @@ import {
 import { Toaster, toast } from "../shared/ui/primitives/sonner";
 import { AiAssistantPanel } from "./AiAssistantPanel";
 import { createAiAssistantContext } from "./aiAssistantContext";
-import { ProductSidebarTrigger, useDetailSidebarRail } from "./ProductShellSidebar";
+import { ProductSidebarTrigger } from "./ProductShellSidebar";
 import { BottomDockProvider, useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-stream/logStreamContract";
 import { BottomDock } from "./BottomDock";
+import { SidebarProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
+import { SidebarWorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -77,10 +77,9 @@ const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
   home: Home,
   resources: Boxes,
   issues: TriangleAlert,
-  metrics: ChartNoAxesCombined,
   applications: Layers3,
   gitops: GitBranch,
-  catalog: Library,
+  settings: Settings,
 };
 
 const navLabelKeys = {
@@ -89,9 +88,8 @@ const navLabelKeys = {
   gitops: "shell.nav.gitops",
   home: "shell.nav.home",
   issues: "shell.nav.issues",
-  metrics: "shell.nav.metrics",
   resources: "shell.nav.resources",
-  catalog: "shell.nav.catalog",
+  settings: "shell.nav.settings",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function ProductShell({
@@ -131,10 +129,12 @@ function ProductShellFrame({
   const location = useLocation();
   const filter = useUnifiedFilter();
   const dock = useBottomDock();
-  const { isMobile, open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+  const { isMobile } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
+  const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
+  const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
   const matchedRoute = productRouteForPath(location.pathname);
   const currentRoute = matchedRoute && releasedSurfaceIds.has(matchedRoute.id)
     ? matchedRoute
@@ -150,12 +150,6 @@ function ProductShellFrame({
     filter.state,
     filter.detail,
     dock.activeStreamId,
-  );
-  useDetailSidebarRail(
-    detailWorkspaceOpen,
-    isMobile,
-    sidebarOpen,
-    setSidebarOpen,
   );
   const shortcutDefinitions = shellShortcutDefinitions(releasedSurfaceIds, activeSurfaceId);
   const toggleShortcutHelp = useCallback(() => {
@@ -202,19 +196,22 @@ function ProductShellFrame({
         mobileDescription={t("shell.menu.mobileDescription")}
         mobileTitle={t("shell.menu.mobileTitle")}
       >
-        <SidebarHeader className="h-14 flex-row items-center gap-2 px-3 py-0">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
-            <Activity aria-hidden="true" className="size-4" />
-          </span>
-          <SidebarText className="text-sm font-semibold tracking-tight">
-            {t("product.name")}
-          </SidebarText>
+        <SidebarHeader className="h-14 flex-row items-center gap-2 px-2 py-0">
+          <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[state=collapsed]/sidebar:hidden">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
+              <Activity aria-hidden="true" className="size-4" />
+            </span>
+            <SidebarText className="text-sm font-semibold tracking-tight">
+              {t("product.name")}
+            </SidebarText>
+          </div>
+          {!isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
         </SidebarHeader>
 
         <SidebarContent className="p-0">
           <SidebarNavigation aria-label={t("shell.menu.primary")} id="product-primary-navigation">
             <SidebarMenu>
-              {navigationRoutes.map((routeDefinition) => {
+              {primaryNavigationRoutes.map((routeDefinition) => {
                 const Icon = routeIcons[routeDefinition.icon];
                 const label = t(navLabelKeys[routeDefinition.id]);
                 return (
@@ -232,10 +229,37 @@ function ProductShellFrame({
               })}
             </SidebarMenu>
           </SidebarNavigation>
+          {settingsRoute ? (
+            <>
+              <Separator className="mx-2 w-auto" />
+              <SidebarNavigation
+                aria-label={t("shell.nav.settings")}
+                className="flex-none"
+              >
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuLink
+                      isActive={currentRoute.id === settingsRoute.id}
+                      to={filter.navigationHref(settingsRoute.path)}
+                      tooltip={t(navLabelKeys[settingsRoute.id])}
+                    >
+                      <Settings aria-hidden="true" className="size-4 shrink-0" />
+                      <SidebarText>{t(navLabelKeys[settingsRoute.id])}</SidebarText>
+                    </SidebarMenuLink>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarNavigation>
+            </>
+          ) : null}
         </SidebarContent>
 
-        <SidebarFooter>
-          {!isMobile ? <ProductSidebarTrigger /> : null}
+        <SidebarFooter className="gap-1">
+          <SidebarWorkspaceSwitcher workspaceId={auth.session.workspaceId} />
+          <SidebarProfileMenu
+            auth={auth}
+            settingsHref={filter.navigationHref("/settings")}
+            themeController={themeController}
+          />
         </SidebarFooter>
       </Sidebar>
 
@@ -251,14 +275,12 @@ function ProductShellFrame({
               : <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />}
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
-            <AuthSessionControl auth={auth} mode="toolbar" />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}
               open={isShortcutHelpOpen}
             />
             <LocaleToggle />
-            <ThemeToggle controller={themeController} />
           </div>
         </header>
 

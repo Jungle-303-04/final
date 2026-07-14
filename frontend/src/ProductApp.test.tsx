@@ -120,7 +120,7 @@ describe("ProductApp root recovery", () => {
       screen.getByRole("navigation", { name: "Primary navigation" }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
     await waitFor(() =>
