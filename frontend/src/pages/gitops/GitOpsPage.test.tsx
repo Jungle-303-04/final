@@ -37,6 +37,7 @@ describe("GitOpsPage workspace navigation", () => {
     expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open Alpha release" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open Bravo release" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New plan" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Workflow workspace" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Open Bravo release" }));
@@ -49,6 +50,21 @@ describe("GitOpsPage workspace navigation", () => {
     await user.click(screen.getByRole("button", { name: "Plan list" }));
     await waitFor(() => expect(screen.getByTestId("gitops-location").textContent).toBe("/gitops"));
     expect(await screen.findByRole("button", { name: "Open Alpha release" })).toBeTruthy();
+  });
+
+  it("keeps the new-plan block as the empty list entry point", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    vi.mocked(port.listPlans).mockResolvedValue([]);
+    renderGitOps("/gitops", port);
+
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New plan" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Open / })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "New plan" }));
+
+    expect(await screen.findByRole("heading", { name: "Create release plan" })).toBeTruthy();
   });
 
   it("keeps one canonical tab row and changes the selected plan in place", async () => {
@@ -82,6 +98,7 @@ describe("GitOpsPage workspace navigation", () => {
     const user = userEvent.setup();
     renderGitOps("/gitops?plan=plan-a&view=edit");
     await screen.findByRole("navigation", { name: "Workflow workspace" });
+    expect(screen.queryByRole("button", { name: "New plan" })).toBeNull();
 
     await user.click(screen.getByRole("tab", { name: "YAML / PR" }));
     await waitFor(() => expect(screen.getByTestId("gitops-location").textContent)
@@ -90,6 +107,7 @@ describe("GitOpsPage workspace navigation", () => {
     expect(within(workspaceHeader).getByRole("heading", { name: "YAML / PR" })).toBeTruthy();
     expect(within(workspaceHeader).getByRole("button", { name: "Generate YAML" })).toBeTruthy();
 
+    await user.click(screen.getByRole("button", { name: "Plan list" }));
     await user.click(screen.getByRole("button", { name: "New plan" }));
 
     expect(await screen.findByRole("heading", { name: "Create release plan" })).toBeTruthy();

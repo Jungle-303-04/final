@@ -1,4 +1,4 @@
-import { GitBranch, LayoutGrid, Plus, RefreshCw, X } from "lucide-react";
+import { GitBranch, LayoutGrid, RefreshCw, X } from "lucide-react";
 import type { GitOpsPort, ReleasePlan } from "../../features/gitops/gitOpsContract";
 import { WORKFLOW_VIEWS, settingString, type WorkflowView } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
@@ -49,29 +49,24 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           title={t("workflows.title")}
           variant="page"
         />
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:max-w-2xl">
-          {page.selectedPlan ? (
-            <>
-              <Button className="self-stretch sm:self-end" onClick={page.showPlanList} variant="outline">
-                <LayoutGrid aria-hidden="true" />{t("workflows.plan.list")}
-              </Button>
-              <label className="grid min-w-0 flex-1 gap-1">
-                <span className="text-[0.6875rem] font-medium text-muted-foreground">{t("workflows.plan.select")}</span>
-                <NativeSelect
-                  className="w-full min-w-0 sm:w-72"
-                  disabled={!page.data.plans.length}
-                  onChange={page.selectPlan}
-                  value={page.selectedPlan.plan_id || ""}
-                >
-                  {page.data.plans.map((plan) => <option key={plan.plan_id || plan.name} value={plan.plan_id || ""}>{plan.name}</option>)}
-                </NativeSelect>
-              </label>
-            </>
-          ) : null}
-          <Button className="self-stretch sm:self-end" onClick={page.beginCreate}>
-            <Plus aria-hidden="true" />{t("workflows.plan.new")}
-          </Button>
-        </div>
+        {page.selectedPlan ? (
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:max-w-2xl">
+            <Button className="self-stretch sm:self-end" onClick={page.showPlanList} variant="outline">
+              <LayoutGrid aria-hidden="true" />{t("workflows.plan.list")}
+            </Button>
+            <label className="grid min-w-0 flex-1 gap-1">
+              <span className="text-[0.6875rem] font-medium text-muted-foreground">{t("workflows.plan.select")}</span>
+              <NativeSelect
+                className="w-full min-w-0 sm:w-72"
+                disabled={!page.data.plans.length}
+                onChange={page.selectPlan}
+                value={page.selectedPlan.plan_id || ""}
+              >
+                {page.data.plans.map((plan) => <option key={plan.plan_id || plan.name} value={plan.plan_id || ""}>{plan.name}</option>)}
+              </NativeSelect>
+            </label>
+          </div>
+        ) : null}
       </header>
 
       {page.feedback ? <FeedbackBanner feedback={page.feedback} onClose={() => page.setFeedback(undefined)} /> : null}
@@ -146,9 +141,9 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
             />
           </TabsContent>
         </Tabs>
-      ) : page.data.plans.length ? (
-        <WorkflowPlanPicker onSelect={page.openPlan} plans={page.data.plans} />
-      ) : <EmptyWorkflow onCreate={page.beginCreate} />}
+      ) : (
+        <WorkflowPlanPicker onCreate={page.beginCreate} onSelect={page.openPlan} plans={page.data.plans} />
+      )}
     </ProductPageFrame>
   );
 }
@@ -181,23 +176,6 @@ function LoadError({ onRetry }: { onRetry: () => void }) {
     <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-xs text-foreground">{t("workflows.feedback.loadError")}</span>
       <Button onClick={onRetry} size="sm" variant="outline"><RefreshCw aria-hidden="true" />{t("common.action.retry")}</Button>
-    </div>
-  );
-}
-
-function EmptyWorkflow({ onCreate }: { onCreate: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="grid min-h-[28rem] place-items-center border-y px-6 text-center">
-      <div className="grid w-full max-w-xl justify-items-center gap-3">
-        <WorkflowInlineHeading
-          className="w-full"
-          icon={<GitBranch aria-hidden="true" />}
-          title={t("workflows.plan.none")}
-          variant="section"
-        />
-        <Button onClick={onCreate}><Plus aria-hidden="true" />{t("workflows.plan.new")}</Button>
-      </div>
     </div>
   );
 }
