@@ -86,10 +86,17 @@ export function ResourcesPage({
     reportUnauthorized,
     revision: state.revision,
   });
+  const timelineReadBounded = filter.state.resources.types.length > 0 ||
+    filter.state.common.namespaces.length > 0 ||
+    filter.state.common.applications.length > 0 ||
+    filter.state.common.labels.length > 0 ||
+    filter.state.resources.health.length > 0 ||
+    filter.state.resources.query.trim().length > 0;
   const changeTimeline = useChangeTimelineDataFrame({
     active:
       state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1,
+      filter.state.common.clusters.length === 1 &&
+      timelineReadBounded,
     authorityKey,
     filterState: filter.state,
     port: changeTimelinePort,
