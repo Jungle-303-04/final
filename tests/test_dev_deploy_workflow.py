@@ -83,6 +83,26 @@ def test_deploy_checks_out_the_exact_tree_that_passed_the_gate() -> None:
     assert steps_by_name()["Install deployment dependencies"]["run"] == "uv sync --frozen"
 
 
+def test_automatic_deploy_uses_the_successful_gate_scope_proof() -> None:
+    steps = steps_by_name()
+    download = steps["Download automatic deployment scope"]
+    resolve = steps["Resolve automatic deployment scope"]
+
+    assert download["if"] == "github.event_name == 'workflow_run'"
+    assert download["uses"] == "actions/download-artifact@v4"
+    assert download["with"] == {
+        "name": "dev-deploy-scope",
+        "path": "${{ runner.temp }}/dev-deploy-scope",
+        "github-token": "${{ github.token }}",
+        "run-id": "${{ github.event.workflow_run.id }}",
+    }
+    assert resolve["if"] == "github.event_name == 'workflow_run'"
+    assert 'case "${scope}" in' in resolve["run"]
+    assert "FULL|CONSOLE" in resolve["run"]
+    assert 'echo "DEPLOYMENT_SCOPE=${scope}" >>"${GITHUB_ENV}"' in resolve["run"]
+    assert deploy_job()["env"]["DEPLOYMENT_SCOPE"].endswith("|| 'FULL' }}")
+
+
 def test_manual_deploy_requires_exact_gate_and_previous_release_proofs() -> None:
     document = workflow()
     steps = steps_by_name()
