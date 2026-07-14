@@ -38,7 +38,7 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
   if (scope.selection.kind === "empty") {
     return <ProductStateScreen kind="empty" placement="content" />;
   }
-  if (scope.selection.kind === "unfiltered" || scope.selection.kind === "multiple") {
+  if (scope.selection.kind === "multiple") {
     return <ProductStateScreen kind="empty" placement="content" />;
   }
   if (scope.selection.kind === "unavailable") {
@@ -68,10 +68,14 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
     );
   }
 
+  const clusterId = scope.selection.kind === "unfiltered"
+    ? null
+    : scope.selection.cluster.id;
+
   return (
     <ProductPageFrame>
       <IssuesSurface
-        clusterId={scope.selection.cluster.id}
+        clusterId={clusterId}
         copy={copy}
         port={port}
         recoverySelection={{ state: "enabled" }}
