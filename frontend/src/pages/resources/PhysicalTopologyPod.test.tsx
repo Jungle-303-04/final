@@ -4,10 +4,8 @@ import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
-import { physicalTopologySchema } from "../../api/physical-topology-schemas";
-import { PHYSICAL_TOPOLOGY_ENDPOINT } from "../../api/physical-topology.testSupport";
-import { toPhysicalTopology } from "../../features/resources/physicalTopologyCanonical";
 import { I18nProvider } from "../../shared/i18n";
+import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
 import { PhysicalTopologyPod } from "./PhysicalTopologyPod";
 import {
   exponentialUsageStep,
@@ -23,52 +21,48 @@ afterEach(() => {
 
 describe("PhysicalTopologyPod", () => {
   it("uses only API usage_pct for fill while keeping restart state in a badge", () => {
-    const apiPods = [
+    const [basePod] = PHYSICAL_TOPOLOGY.pods;
+    const [low, high, unknown]: PhysicalTopologyPodValue[] = [
       {
-        ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+        ...basePod,
         id: "pod:sandbox/low-restarting",
         name: "low-restarting",
-        usage_pct: 15,
-        cpu_mcores: 15,
-        cpu_request_mcores: 100,
-        mem_mib: 32,
-        mem_request_mib: 64,
+        usagePercent: 15,
+        cpuMillicores: 15,
+        cpuRequestMillicores: 100,
+        memoryMebibytes: 32,
+        memoryRequestMebibytes: 64,
         phase: "OOMKilled",
         health: "critical",
-        restarts: 3,
+        restartCount: 3,
       },
       {
-        ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+        ...basePod,
         id: "pod:sandbox/high-running",
         name: "high-running",
-        usage_pct: 85,
-        cpu_mcores: 85,
-        cpu_request_mcores: 100,
-        mem_mib: 32,
-        mem_request_mib: 64,
+        usagePercent: 85,
+        cpuMillicores: 85,
+        cpuRequestMillicores: 100,
+        memoryMebibytes: 32,
+        memoryRequestMebibytes: 64,
         phase: "Running",
         health: "healthy",
-        restarts: 0,
+        restartCount: 0,
       },
       {
-        ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+        ...basePod,
         id: "pod:sandbox/no-requests",
         name: "no-requests",
-        usage_pct: null,
-        cpu_mcores: 15,
-        cpu_request_mcores: null,
-        mem_mib: 32,
-        mem_request_mib: null,
+        usagePercent: null,
+        cpuMillicores: 15,
+        cpuRequestMillicores: null,
+        memoryMebibytes: 32,
+        memoryRequestMebibytes: null,
         phase: "Running",
         health: "healthy",
-        restarts: 0,
+        restartCount: 0,
       },
     ];
-    const endpoint = physicalTopologySchema.parse({
-      ...PHYSICAL_TOPOLOGY_ENDPOINT,
-      pods: apiPods,
-    });
-    const [low, high, unknown] = toPhysicalTopology("cluster-a", endpoint).pods;
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
         {([low, high, unknown] as const).map((value, index) => (

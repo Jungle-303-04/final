@@ -1,15 +1,4 @@
-import type {
-  AlertEvent,
-  AlertEventListOptions,
-  AlertIncidentPromotion,
-} from "../../api";
-import type { AlertEventsPort } from "./alertEventsContract";
-
-export interface AlertEventEndpoints {
-  listAlertEvents(options?: AlertEventListOptions): Promise<AlertEvent[]>;
-  acknowledgeAlertEvent(eventId: string, signal?: AbortSignal): Promise<AlertEvent>;
-  promoteAlertEvent(eventId: string, signal?: AbortSignal): Promise<AlertIncidentPromotion>;
-}
+import type { AlertEventEndpoints, AlertEventsPort } from "./alertEventsContract";
 
 export function createAlertEventsAdapter(endpoints: AlertEventEndpoints): AlertEventsPort {
   return {

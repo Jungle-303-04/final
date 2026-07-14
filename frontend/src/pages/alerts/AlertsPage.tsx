@@ -1,8 +1,12 @@
 import { BellRing, Check, ExternalLink, RefreshCw, Siren } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { AlertEvent, AlertEventSeverity } from "../../api";
 import { useAlertEvents } from "../../features/alerts/AlertEventsProvider";
+import type {
+  AlertEvent,
+  AlertEventSeverity,
+} from "../../features/alerts/alertEventsContract";
+import { alertEventResourceHref } from "../../features/filters/alertEventResourceHref";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -202,7 +206,7 @@ function AlertEventCard({
           )}
           <Link
             className={buttonVariants({ className: "sm:ml-auto", size: "sm", variant: "ghost" })}
-            to={resourceHref(event)}
+            to={alertEventResourceHref(event.subject)}
           >
             {t("alerts.action.resource")}
             <ExternalLink aria-hidden="true" />
@@ -265,34 +269,4 @@ function formatTimestamp(
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function resourceHref(event: AlertEvent): string {
-  const parameters = new URLSearchParams();
-  parameters.set("clusters", event.subject.cluster);
-  parameters.set("resources.types", resourceTypeForKind(event.subject.kind));
-  parameters.set("detail", [
-    event.subject.kind,
-    event.subject.namespace ?? "~",
-    event.subject.name,
-  ].join("/"));
-  return `/resources?${parameters.toString()}`;
-}
-
-function resourceTypeForKind(kind: string): string {
-  const known: Record<string, string> = {
-    ConfigMap: "config_map",
-    CronJob: "cron_job",
-    DaemonSet: "daemon_set",
-    Deployment: "deployment",
-    Event: "event",
-    Job: "job",
-    Node: "node",
-    Pod: "pod",
-    ReplicaSet: "replica_set",
-    Secret: "secret",
-    Service: "service",
-    StatefulSet: "stateful_set",
-  };
-  return known[kind] ?? kind.toLowerCase();
 }
