@@ -1,6 +1,7 @@
+import { Server } from "lucide-react";
 import type { ResourceHealthTone } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
-import { RatioMetric, PodMetric } from "./ResourcesInfraMapMetrics";
+import { RatioMetric } from "./ResourcesInfraMapMetrics";
 import type { InfraMapNode, InfraMapPod } from "./resourcesInfraMapModel";
 
 export function InfraMapNodeCard({
@@ -12,13 +13,15 @@ export function InfraMapNodeCard({
 }) {
   const { formatNumber, t } = useI18n();
   return (
-    <section className="min-w-0 rounded-lg border bg-background/65 p-3" data-slot="infra-map-node">
-      <div className="min-h-32 rounded-lg border border-dashed bg-muted/20 p-2">
-        <InfraMapPodArea node={node} selectionActive={selectionActive} />
-      </div>
-
-      <div className="mt-3 border-t pt-3">
-        <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
+    <section
+      className="min-w-0 overflow-hidden rounded-lg border bg-linear-to-b from-muted/20 via-background/70 to-muted/30 p-3 shadow-sm"
+      data-slot="infra-map-node"
+    >
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md border bg-background/75">
+            <Server aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          </span>
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold">
               {t("resources.infraMap.nodeLabel", { name: node.name })}
@@ -29,40 +32,45 @@ export function InfraMapNodeCard({
                 : t("resources.infraMap.nodeUnobserved")}
             </p>
           </div>
-          <HealthDot tone={node.health} />
         </div>
-        <div className="grid gap-2">
-          <RatioMetric
-            label={t("resources.infraMap.metric.cpu")}
-            valueText={node.cpuMillicores === null
-              ? null
-              : t("resources.infraMap.cpuValue", {
-                  value: formatNumber(node.cpuMillicores, { maximumFractionDigits: 1 }),
-                })}
-            ratio={node.cpuRatio}
-          />
-          <RatioMetric
-            label={t("resources.infraMap.metric.memory")}
-            valueText={node.memoryMebibytes === null
-              ? null
-              : t("resources.infraMap.memoryValue", {
-                  value: formatNumber(node.memoryMebibytes, { maximumFractionDigits: 1 }),
-                })}
-            ratio={node.memoryRatio}
-          />
-          <RatioMetric
-            label={t("resources.infraMap.metric.pods")}
-            ratio={node.podCapacity && node.podCapacity > 0
-              ? node.assignedPodCount / node.podCapacity
-              : null}
-            valueText={node.podCapacity === null
-              ? formatNumber(node.assignedPodCount)
-              : t("resources.infraMap.podCapacityValue", {
-                  capacity: formatNumber(node.podCapacity),
-                  count: formatNumber(node.assignedPodCount),
-                })}
-          />
-        </div>
+        <HealthDot tone={node.health} />
+      </div>
+
+      <div className="mt-3 rounded-md border border-dashed bg-background/50 p-2">
+        <InfraMapPodArea node={node} selectionActive={selectionActive} />
+      </div>
+
+      <div className="mt-3 grid gap-2 border-t pt-3">
+        <RatioMetric
+          label={t("resources.infraMap.metric.cpu")}
+          valueText={node.cpuMillicores === null
+            ? null
+            : t("resources.infraMap.cpuValue", {
+                value: formatNumber(node.cpuMillicores, { maximumFractionDigits: 1 }),
+              })}
+          ratio={node.cpuRatio}
+        />
+        <RatioMetric
+          label={t("resources.infraMap.metric.memory")}
+          valueText={node.memoryMebibytes === null
+            ? null
+            : t("resources.infraMap.memoryValue", {
+                value: formatNumber(node.memoryMebibytes, { maximumFractionDigits: 1 }),
+              })}
+          ratio={node.memoryRatio}
+        />
+        <RatioMetric
+          label={t("resources.infraMap.metric.pods")}
+          ratio={node.podCapacity && node.podCapacity > 0
+            ? node.assignedPodCount / node.podCapacity
+            : null}
+          valueText={node.podCapacity === null
+            ? formatNumber(node.assignedPodCount)
+            : t("resources.infraMap.podCapacityValue", {
+                capacity: formatNumber(node.podCapacity),
+                count: formatNumber(node.assignedPodCount),
+              })}
+        />
       </div>
     </section>
   );
@@ -78,7 +86,7 @@ function InfraMapPodArea({
   const { formatNumber, t } = useI18n();
   if (node.visiblePods.length === 0) {
     return (
-      <div className="grid min-h-24 place-items-center px-3 text-center text-xs text-muted-foreground">
+      <div className="grid min-h-20 place-items-center px-3 text-center text-xs text-muted-foreground">
         {selectionActive
           ? t("resources.infraMap.noSelectedPods")
           : t("resources.infraMap.noPods")}
@@ -86,10 +94,10 @@ function InfraMapPodArea({
     );
   }
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {node.visiblePods.map((pod) => <InfraMapPodCard key={pod.id} pod={pod} />)}
+    <div className="grid gap-1.5">
+      {node.visiblePods.map((pod) => <InfraMapPodSlot key={pod.id} pod={pod} />)}
       {node.hiddenPodCount > 0 ? (
-        <div className="grid min-h-24 place-items-center rounded-lg border bg-background/70 px-3 text-center text-xs font-medium text-muted-foreground">
+        <div className="flex h-8 min-w-0 items-center justify-center rounded-md border bg-background/70 px-3 text-xs font-medium text-muted-foreground">
           {t("resources.infraMap.morePods", {
             count: formatNumber(node.hiddenPodCount),
           })}
@@ -99,34 +107,21 @@ function InfraMapPodArea({
   );
 }
 
-function InfraMapPodCard({ pod }: { pod: InfraMapPod }) {
-  const { t } = useI18n();
+function InfraMapPodSlot({ pod }: { pod: InfraMapPod }) {
   return (
     <article
-      className="min-w-0 rounded-lg border bg-background/85 p-2 shadow-sm"
+      aria-label={`${pod.name} ${pod.status}`}
+      className="flex h-8 min-w-0 items-center gap-2 rounded-md border bg-background/80 px-2 shadow-sm data-[selected=true]:border-primary data-[selected=true]:bg-primary/10"
       data-selected={pod.selected || undefined}
       data-slot="infra-map-pod"
     >
-      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h4 className="truncate text-xs font-semibold" title={pod.name}>{pod.name}</h4>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {t("resources.infraMap.podSubtitle", {
-              namespace: pod.namespace ?? t("resources.detail.clusterScope"),
-              status: pod.status,
-            })}
-          </p>
-        </div>
-        <HealthDot tone={pod.health} />
+      <HealthDot tone={pod.health} />
+      <div className="min-w-0 flex-1" title={pod.name}>
+        <h4 className="truncate text-xs font-semibold">
+          {pod.name}
+        </h4>
       </div>
-      <div className="grid gap-1.5">
-        <PodMetric label={t("resources.infraMap.metric.cpu")} metric={pod.cpu} unit="m" />
-        <PodMetric
-          label={t("resources.infraMap.metric.memory")}
-          metric={pod.memory}
-          unit="MiB"
-        />
-      </div>
+      <span className="shrink-0 text-[11px] text-muted-foreground">{pod.status}</span>
     </article>
   );
 }
