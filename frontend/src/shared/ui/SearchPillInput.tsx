@@ -37,6 +37,8 @@ export interface SearchPillInputProps {
   /** Fires when the modifier autocomplete opens/closes, so the host can suppress
       its own results dropdown while a modifier is being completed. */
   onSuggestingChange?: (suggesting: boolean) => void;
+  /** Keep the modifier editable after Backspace. Global filters remove it outright. */
+  restorePillOnBackspace?: boolean;
 }
 
 function highlightPartial(text: string, partial: string): React.ReactNode {
@@ -70,6 +72,7 @@ export function SearchPillInput({
   inputClassName,
   getRemovePillLabel,
   onSuggestingChange,
+  restorePillOnBackspace = true,
   ...rest
 }: SearchPillInputProps) {
   const internalRef = useRef<HTMLInputElement>(null);
@@ -137,7 +140,7 @@ export function SearchPillInput({
       const last = pills[pills.length - 1];
       onChange({
         pills: pills.slice(0, -1),
-        text: `${last.key}:${last.value}`,
+        text: restorePillOnBackspace ? `${last.key}:${last.value}` : "",
       });
       return;
     }
@@ -160,12 +163,12 @@ export function SearchPillInput({
           key={`${p.key}:${p.value}:${i}`}
           className="inline-flex items-center gap-1 shrink-0 rounded-md bg-popover border border-border/60 pl-1.5 pr-1 py-0.5 text-xs whitespace-nowrap"
         >
-          <span className="text-muted-foreground/75">{p.key}:</span>
+          <span className="text-muted-foreground/75">{p.keyLabel ?? p.key}:</span>
           <span
             className="max-w-[16ch] truncate font-medium text-foreground"
-            title={p.value}
+            title={p.label ?? p.value}
           >
-            {p.value}
+            {p.label ?? p.value}
           </span>
           <button
             type="button"
