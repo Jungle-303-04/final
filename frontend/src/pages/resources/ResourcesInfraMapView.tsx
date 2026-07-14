@@ -24,7 +24,7 @@ export function ResourcesInfraMapView({
   return (
     <div
       aria-live="polite"
-      className="grid min-h-72 min-w-0 overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40 p-5 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
+      className="grid min-h-56 min-w-0 overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40 p-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
       data-slot="resources-infra-map-shell"
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -134,30 +134,11 @@ function InfraMapNodeGrid({
 
 function infraMapNodeGridLayout(nodeCount: number): {
   className: string;
-  name: "single" | "pair" | "trio" | "many";
+  name: "single" | "stack";
 } {
-  const baseClassName = "mt-5 grid w-full items-start gap-3";
-  if (nodeCount <= 1) {
-    return {
-      className: `${baseClassName} max-w-xl grid-cols-1 justify-self-center`,
-      name: "single",
-    };
-  }
-  if (nodeCount === 2) {
-    return {
-      className: `${baseClassName} max-w-5xl grid-cols-1 justify-self-center lg:grid-cols-2`,
-      name: "pair",
-    };
-  }
-  if (nodeCount === 3) {
-    return {
-      className: `${baseClassName} max-w-7xl grid-cols-1 justify-self-center lg:grid-cols-2 2xl:grid-cols-3`,
-      name: "trio",
-    };
-  }
   return {
-    className: `${baseClassName} grid-cols-1 md:grid-cols-2 2xl:grid-cols-3`,
-    name: "many",
+    className: "mt-4 grid w-full max-w-4xl grid-cols-1 items-start gap-2 justify-self-center",
+    name: nodeCount <= 1 ? "single" : "stack",
   };
 }
 
