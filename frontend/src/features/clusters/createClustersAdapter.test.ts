@@ -13,9 +13,12 @@ describe("Clusters adapter", () => {
     });
     await expect(port.loadConnection("production-a1b2")).resolves.toEqual({
       status: "waiting",
+      stage: "agent_connected",
       agentVersion: null,
-      connectedAt: null,
+      lastSeenAt: "2026-07-15T01:02:03Z",
     });
+    await expect(port.disconnect("production-a1b2")).resolves.toBeUndefined();
+    expect(endpoints.unregisterCluster).toHaveBeenCalledWith("production-a1b2", undefined);
   });
 
   it("rejects a multiline install command", async () => {
@@ -38,10 +41,16 @@ function dependencies() {
       install_command: "curl one-line | kubectl apply -f -",
       expires_at: "2026-07-14T06:00:00Z",
     })),
-    getClusterConnectStatus: vi.fn(async () => ({
-      status: "waiting" as const,
-      agent_version: null,
-      connected_at: null,
+    getClusterConnectionStatus: vi.fn(async () => ({
+      cluster_id: "production-a1b2",
+      connection_status: "online",
+      connection_stage: "agent_connected" as const,
+      last_agent_id: "agent-1",
+      last_seen_at: "2026-07-15T01:02:03Z",
+      agents: [],
+      connect_timeout_seconds: 60,
+      connect_expires_at: "2026-07-15T01:03:03Z",
     })),
+    unregisterCluster: vi.fn(async () => undefined),
   };
 }
