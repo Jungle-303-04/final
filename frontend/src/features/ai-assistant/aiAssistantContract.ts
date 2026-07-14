@@ -23,9 +23,34 @@ export interface AiEvidenceLink {
   link: `/${string}`;
 }
 
+export interface AiAlertRulePayload {
+  name: string;
+  metric: string;
+  comparator: string;
+  threshold: number;
+  for_seconds: number;
+  severity: string;
+  scope: {
+    clusters: string[];
+    namespaces: string[];
+    applications: string[];
+    labels: string[];
+  };
+  channels: string[];
+  enabled: boolean;
+}
+
+export interface AiChatActionProposal {
+  type: "create_alert_rule";
+  payload: AiAlertRulePayload;
+  rationale: string;
+}
+
 export interface AiAssistantAnswer {
   answer: string;
   evidence: AiEvidenceLink[];
+  /** AI가 제안한 실행 후보(사람이 한 번 눌러 실행). 지금은 알림 규칙 생성뿐. */
+  action?: AiChatActionProposal | null;
 }
 
 export interface AiAssistantSuggestion {
@@ -61,9 +86,15 @@ export interface AiAssistantPort {
     context: AiAssistantContext,
     signal?: AbortSignal,
   ): Promise<AiAssistantSuggestion[]>;
+  /** AI 제안 액션을 사람이 확정할 때 실행한다. 화이트리스트: 알림 규칙 생성. */
+  createAlertRule(
+    payload: AiAlertRulePayload,
+    signal?: AbortSignal,
+  ): Promise<{ ruleId: string }>;
 }
 
 export const EMPTY_AI_ASSISTANT_PORT: AiAssistantPort = {
   ask: async () => { throw new AiAssistantPortFailure("unavailable"); },
   loadSuggestions: async () => [],
+  createAlertRule: async () => { throw new AiAssistantPortFailure("unavailable"); },
 };

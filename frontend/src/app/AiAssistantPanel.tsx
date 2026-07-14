@@ -1,5 +1,8 @@
 import {
   ArrowUpRight,
+  BellPlus,
+  Check,
+  LoaderCircle,
   Send,
   Sparkles,
   Square,
@@ -16,10 +19,12 @@ import {
 import { useAuthSessionGate } from "../features/auth/AuthSessionGate";
 import {
   AiAssistantPortFailure,
+  type AiAlertRulePayload,
   type AiAssistantAnswer,
   type AiAssistantContext,
   type AiAssistantPort,
   type AiAssistantSuggestion,
+  type AiChatActionProposal,
 } from "../features/ai-assistant/aiAssistantContract";
 import { useI18n } from "../shared/i18n";
 import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
@@ -223,7 +228,16 @@ export function AiAssistantPanel({
                   <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
                     {entry.question}
                   </p>
-                  {entry.response.evidence.length === 0 ? (
+                  {entry.response.action ? (
+                    <div className="mr-auto grid w-fit max-w-[95%] gap-3 rounded-2xl rounded-bl-sm border bg-card px-3 py-3">
+                      <p className="text-sm leading-relaxed">{entry.response.answer}</p>
+                      <AlertRuleActionCard
+                        locale={locale}
+                        onCreate={port.createAlertRule}
+                        proposal={entry.response.action}
+                      />
+                    </div>
+                  ) : entry.response.evidence.length === 0 ? (
                     <p className="mr-auto w-fit max-w-[90%] rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm text-muted-foreground">
                       {t("shell.ai.noEvidence")}
                     </p>
@@ -350,4 +364,89 @@ function EvidenceLinks({ evidence }: { evidence: AiAssistantAnswer["evidence"] }
       ))}
     </div>
   );
+}
+
+function AlertRuleActionCard({
+  locale,
+  onCreate,
+  proposal,
+}: {
+  locale: string;
+  onCreate: AiAssistantPort["createAlertRule"];
+  proposal: AiChatActionProposal;
+}) {
+  const [status, setStatus] = useState<"idle" | "creating" | "created" | "failed">("idle");
+  const ko = locale === "ko";
+  const payload = proposal.payload;
+  const scopeText =
+    [...payload.scope.clusters, ...payload.scope.namespaces, ...payload.scope.applications].join(", ") ||
+    (ko ? "현재 화면 범위" : "Current view");
+  const condition = `${metricLabel(payload.metric, ko)} ${payload.comparator} ${payload.threshold}%`;
+
+  const create = async (rulePayload: AiAlertRulePayload) => {
+    setStatus("creating");
+    try {
+      await onCreate(rulePayload);
+      setStatus("created");
+    } catch {
+      setStatus("failed");
+    }
+  };
+
+  return (
+    <div className="grid gap-3 rounded-xl border bg-background p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <BellPlus aria-hidden="true" className="size-4 text-status-warning" />
+        {ko ? "알림 규칙을 만들까요?" : "Create an alert rule?"}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <ActionFact label={ko ? "이름" : "Name"} value={payload.name} />
+        <ActionFact label={ko ? "조건" : "Condition"} value={condition} />
+        <ActionFact label={ko ? "지속" : "For"} value={`${payload.for_seconds}${ko ? "초" : "s"}`} />
+        <ActionFact label={ko ? "범위" : "Scope"} value={scopeText} />
+      </dl>
+      {status === "created" ? (
+        <p className="flex items-center gap-1.5 text-sm font-medium text-status-healthy">
+          <Check aria-hidden="true" className="size-4" />
+          {ko ? "알림 규칙을 만들었습니다" : "Alert rule created"}
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            disabled={status === "creating"}
+            onClick={() => void create(payload)}
+            size="sm"
+            type="button"
+          >
+            {status === "creating" ? (
+              <LoaderCircle aria-hidden="true" className="animate-spin" />
+            ) : (
+              <BellPlus aria-hidden="true" />
+            )}
+            {ko ? "알림 만들기" : "Create alert"}
+          </Button>
+          {status === "failed" ? (
+            <span className="text-sm text-destructive">
+              {ko ? "만들지 못했습니다. 다시 시도하세요." : "Could not create. Try again."}
+            </span>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionFact({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate font-medium" title={value}>{value}</dd>
+    </>
+  );
+}
+
+function metricLabel(metric: string, ko: boolean): string {
+  if (metric === "cpu_pct") return ko ? "CPU 사용률" : "CPU usage";
+  if (metric === "mem_pct") return ko ? "메모리 사용률" : "Memory usage";
+  return metric;
 }

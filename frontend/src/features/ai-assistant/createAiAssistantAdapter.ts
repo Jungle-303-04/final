@@ -22,6 +22,7 @@ export function createAiAssistantAdapter(
             ...item,
             link: item.link as `/${string}`,
           })),
+          action: response.action ?? null,
         };
       });
     },
@@ -29,6 +30,9 @@ export function createAiAssistantAdapter(
       return withFailure(async () => (
         await endpoints.getAiSuggestions(toEndpointContext(context), signal)
       ).suggestions);
+    },
+    async createAlertRule(payload, signal) {
+      return withFailure(async () => endpoints.postAlertRule(payload, signal));
     },
   };
 }

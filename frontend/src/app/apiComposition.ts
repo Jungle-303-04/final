@@ -44,6 +44,7 @@ import {
   listAlertEvents,
   listApplicationDeployments,
   promoteAlertEvent,
+  createAlertRule,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -138,7 +139,15 @@ export function createApiComposition() {
     ...createReleaseFlowClient(),
     listApplicationDeployments,
   });
-  const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
+  const aiAssistantPort = createAiAssistantAdapter({
+    getAiSuggestions,
+    postAiChat,
+    postAlertRule: async (payload, signal) => ({
+      ruleId: (
+        await createAlertRule(payload as Parameters<typeof createAlertRule>[0], signal)
+      ).rule_id,
+    }),
+  });
   const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   const alertEventsPort = createAlertEventsAdapter({
     acknowledgeAlertEvent,
