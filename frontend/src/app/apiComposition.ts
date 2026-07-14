@@ -10,6 +10,7 @@ import {
   getNodePodsSummary,
   getClusterConnectStatus,
   getPhysicalTopology,
+  getResourceCapabilities,
   getResourceMetricsHistory,
   getSession,
   listEvidence,
@@ -27,6 +28,8 @@ import {
   listApplications,
   login,
   logout,
+  restartDeployment,
+  scaleDeployment,
   selectRecoveryAction,
   createReleaseFlowClient,
 } from "../api";
@@ -42,6 +45,8 @@ import { createResourcesAdapter } from "../features/resources/createResourcesAda
 import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
 import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
 import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
+import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
+import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -71,6 +76,13 @@ export function createApiComposition() {
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
     getResourceMetricsHistory,
+  });
+  const resourceCapabilitiesPort = createResourceCapabilitiesAdapter({
+    getResourceCapabilities,
+  });
+  const resourceActionsPort = createResourceActionsAdapter({
+    restartDeployment,
+    scaleDeployment,
   });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
@@ -104,6 +116,8 @@ export function createApiComposition() {
         resourcesFilterPort,
         physicalTopologyPort,
         resourceMetricsHistoryPort,
+        resourceCapabilitiesPort,
+        resourceActionsPort,
       ),
     },
     {

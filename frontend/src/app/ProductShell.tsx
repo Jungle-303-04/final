@@ -10,7 +10,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useI18n, type MessageKey } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
@@ -111,7 +111,7 @@ function ProductShellFrame({
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const location = useLocation();
   const filter = useUnifiedFilter();
-  const { isMobile } = useSidebar();
+  const { isMobile, open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
@@ -120,6 +120,17 @@ function ProductShellFrame({
     ? matchedRoute
     : navigationRoutes[0];
   const activeSurfaceId = currentRoute?.id;
+  const detailWorkspaceOpen = activeSurfaceId === "resources" && (
+    filter.detail.detail !== null ||
+    filter.detail.resource !== null ||
+    filter.detail.resourceKind !== null
+  );
+  useDetailSidebarRail(
+    detailWorkspaceOpen,
+    isMobile,
+    sidebarOpen,
+    setSidebarOpen,
+  );
   const shortcutDefinitions = shellShortcutDefinitions(releasedSurfaceIds, activeSurfaceId);
   const toggleShortcutHelp = useCallback(() => {
     setShortcutHelpOpen((value) => !value);
@@ -195,7 +206,9 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
+            {detailWorkspaceOpen
+              ? null
+              : <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />}
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <AuthSessionControl auth={auth} mode="toolbar" />
@@ -219,6 +232,33 @@ function ProductShellFrame({
       </SidebarInset>
     </>
   );
+}
+
+function useDetailSidebarRail(
+  active: boolean,
+  isMobile: boolean,
+  sidebarOpen: boolean,
+  setSidebarOpen: (next: boolean) => void,
+) {
+  const activeRef = useRef(false);
+  const restoreOpen = useRef(true);
+  useEffect(() => {
+    if (isMobile) {
+      if (activeRef.current) setSidebarOpen(restoreOpen.current);
+      activeRef.current = false;
+      return;
+    }
+    if (active && !activeRef.current) {
+      restoreOpen.current = sidebarOpen;
+      activeRef.current = true;
+      setSidebarOpen(false);
+      return;
+    }
+    if (!active && activeRef.current) {
+      activeRef.current = false;
+      setSidebarOpen(restoreOpen.current);
+    }
+  }, [active, isMobile, setSidebarOpen, sidebarOpen]);
 }
 
 function ProductSidebarTrigger({

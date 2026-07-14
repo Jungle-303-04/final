@@ -623,6 +623,46 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
+ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale"]
+
+
+class ResourceCapabilitySubject(StrictModel):
+    """Capability 판정이 묶인 exact inventory resource identity."""
+
+    resource_id: str = Field(min_length=1)
+    snapshot_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+
+
+class ResourceActionCapability(StrictModel):
+    """현재 actor가 바로 진입할 수 있는 실제 gateway action."""
+
+    capability_id: ResourceActionCapabilityId
+    method: Literal["POST"] = "POST"
+    path: str = Field(min_length=1, pattern=r"^/")
+
+
+class ResourceCapabilitiesResponse(StrictModel):
+    """권한 없는 버튼을 그리지 않도록 enabled action만 담는 응답."""
+
+    subject: ResourceCapabilitySubject
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    capabilities: list[ResourceActionCapability] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_capabilities(self) -> Self:
+        capability_ids = [item.capability_id for item in self.capabilities]
+        if capability_ids != sorted(capability_ids):
+            raise ValueError("resource capabilities must be sorted")
+        if len(capability_ids) != len(set(capability_ids)):
+            raise ValueError("resource capabilities must be unique")
+        return self
+
+
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
 FilterFacetAvailability = Literal["available", "restricted", "unresolved"]
 FilterFacetAxis = Literal["clusters", "namespaces", "applications"]

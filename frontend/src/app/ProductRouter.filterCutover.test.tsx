@@ -72,6 +72,7 @@ const FILTER_STATE: UnifiedFilterState = {
 };
 
 const DETAIL_QUERY: ProductDetailQuery = {
+  detail: null,
   resource: "checkout/api",
   resourceKind: "Deployment",
   tab: "events",
@@ -99,26 +100,17 @@ afterEach(() => {
 });
 
 describe("ProductRouter unified filter cutover", () => {
-  it("mounts one unified filter with URL-backed chips without rewriting filters or detail", async () => {
+  it("keeps URL-backed filters and hides editable controls while detail owns the content", async () => {
     const { container, router } = renderProductRouter(
       `/resources${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
-    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
-    expect(screen.getByRole("button", {
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(0);
+    expect(screen.queryByRole("button", {
       name: "Filter clusters, apps, labels, and resources",
-    })).toBeTruthy();
-    expect(screen.getByRole("button", {
-      name: "Remove Clusters filter cluster-a",
-    })).toBeTruthy();
-    expect(screen.getByRole("button", {
-      name: "Remove Clusters filter cluster-b",
-    })).toBeTruthy();
-    expect(screen.getByRole("button", {
-      name: "Remove Resources filter edge api",
-    })).toBeTruthy();
+    })).toBeNull();
 
     await waitFor(() => {
       expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);

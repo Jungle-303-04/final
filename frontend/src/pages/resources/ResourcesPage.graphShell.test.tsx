@@ -193,7 +193,7 @@ describe("ResourcesPage S4 physical topology", () => {
     }));
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
     expect(await within(dialog).findByText("Point-in-time evidence")).toBeTruthy();
-    expect(within(dialog).getAllByText("Unavailable")).toHaveLength(3);
+    expect(within(dialog).getAllByText("Unavailable")).toHaveLength(2);
   }, 15_000);
 });
 

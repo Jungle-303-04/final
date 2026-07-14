@@ -7,12 +7,16 @@ import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceActionsPort,
+  ResourceCapabilitiesPort,
+} from "../../features/resources/resourceCapabilitiesContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { ResourceDetailSheet } from "./ResourceDetailSheet";
+import { ResourceDetailWorkspace } from "./ResourceDetailWorkspace";
 import { ResourcesCatalog } from "./ResourcesCatalog";
 import {
   ResourcesCatalogLoadingPreview,
@@ -32,16 +36,22 @@ import { useResourcesPageState } from "./useResourcesPageState";
 import { ResourcesFleetZoom } from "./ResourcesFleetZoom";
 import { ResourcesListSurface } from "./ResourcesListSurface";
 import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
+import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
+import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
 
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
   resourceMetricsHistoryPort,
+  resourceCapabilitiesPort,
+  resourceActionsPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
+  resourceCapabilitiesPort: ResourceCapabilitiesPort;
+  resourceActionsPort: ResourceActionsPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -96,6 +106,26 @@ export function ResourcesPage({
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
   });
+  const detailResourceId = state.detail.phase === "ready"
+    ? state.detail.data.resource.inventoryKey
+    : null;
+  const resourceCapabilities = useResourceCapabilitiesDataFrame({
+    active: state.detailRequested && detailResourceId !== null,
+    authorityKey,
+    port: resourceCapabilitiesPort,
+    reportUnauthorized,
+    resourceId: detailResourceId,
+  });
+  const detailNavigationItems = useMemo(
+    () => (filteredPage?.items ?? []).map((item) => item.resource),
+    [filteredPage],
+  );
+  useResourceDetailNavigation({
+    active: state.detailRequested,
+    current: state.detailIdentity,
+    items: detailNavigationItems,
+    onNavigate: state.navigateDetail,
+  });
   const resourcesView = state.view;
   const setResourcesView = state.setView;
   useResourceTypeShortcuts(state.cycleResourceType);
@@ -111,6 +141,19 @@ export function ResourcesPage({
         failure={state.choices.failure}
         onRetry={state.refresh}
         retryWaitSeconds={state.retryWaitSeconds}
+      />
+    );
+  }
+  if (state.detailRequested) {
+    return (
+      <ResourceDetailWorkspace
+        detail={state.detail}
+        identity={state.detailIdentity}
+        actionsPort={resourceActionsPort}
+        capabilities={resourceCapabilities}
+        onClose={state.closeDetail}
+        onTabChange={state.setDetailTab}
+        tab={state.detailTab}
       />
     );
   }
@@ -210,16 +253,6 @@ export function ResourcesPage({
           </div>
         </>
       )}
-
-      <ResourceDetailSheet
-        detail={state.detail}
-        full={state.fullDetail}
-        identity={state.detailIdentity}
-        onClose={state.closeDetail}
-        onTabChange={state.setDetailTab}
-        open={state.detailRequested}
-        tab={state.detailTab}
-      />
     </ProductPageFrame>
   );
 }

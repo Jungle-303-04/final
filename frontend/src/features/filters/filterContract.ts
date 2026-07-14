@@ -59,6 +59,7 @@ export const COMMON_FILTER_AXIS_OPERATORS = {
 } as const satisfies Record<keyof UnifiedFilterState["common"], FilterAxisOperator>;
 
 export interface ProductDetailQuery {
+  detail: string | null;
   resource: string | null;
   resourceKind: string | null;
   tab: string | null;
@@ -176,6 +177,7 @@ export function createEmptyUnifiedFilterState(): UnifiedFilterState {
 
 export function createEmptyProductDetailQuery(): ProductDetailQuery {
   return {
+    detail: null,
     resource: null,
     resourceKind: null,
     tab: null,

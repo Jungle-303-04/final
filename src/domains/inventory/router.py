@@ -12,6 +12,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.inventory.capabilities import resource_capabilities_response
 from domains.inventory.events import InventorySnapshotRecordedBody
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import InventorySnapshotRequest
@@ -23,6 +24,7 @@ from packages.contracts.gateway.responses import (
     InventoryResourceResponse,
     InventorySnapshotResponse,
     InventorySummaryResponse,
+    ResourceCapabilitiesResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.runtime.dependencies import get_db, get_events
@@ -191,6 +193,33 @@ async def get_inventory_resource_detail(
         resource=InventoryResourceResponse(**public_resource),
         related=related,
         events=events,
+    )
+
+
+@router.get(
+    gateway_routes.RESOURCE_CAPABILITIES_PATH,
+    response_model=ResourceCapabilitiesResponse,
+)
+async def get_resource_capabilities(
+    resource: str = Query(min_length=1, max_length=255),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ResourceCapabilitiesResponse:
+    """권한·지원·안전 정책을 모두 만족하는 resource action만 공개한다."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    inventory_resource = db.get_inventory_resource_by_key(
+        workspace_id=workspace_id,
+        inventory_key=resource,
+    )
+    if inventory_resource is None:
+        raise HTTPException(status_code=404, detail="inventory resource not found")
+    cluster_id = str(inventory_resource["cluster_id"])
+    require_inventory_access(db, current, workspace_id, cluster_id)
+    return resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=inventory_resource,
     )
 
 

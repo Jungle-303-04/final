@@ -71,6 +71,18 @@ export {
   type ResourceMetricsHistoryEndpoint,
 } from "./resource-metrics-history-schemas";
 export {
+  getResourceCapabilities,
+  RESOURCE_CAPABILITIES_PATH,
+} from "./resource-capabilities";
+export {
+  resourceActionCapabilityIdSchema,
+  resourceActionCapabilitySchema,
+  resourceCapabilitiesSchema,
+  resourceCapabilitySubjectSchema,
+  type ResourceActionCapabilityId,
+  type ResourceCapabilitiesEndpoint,
+} from "./resource-capabilities-schemas";
+export {
   clusterImportCandidateSchema,
   clusterRegistrationFlowSchema,
   providerCatalogSchema,

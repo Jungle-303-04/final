@@ -20,7 +20,7 @@ import { encodeResourceTarget } from "./resourcesUrlState";
 afterEach(cleanup);
 
 describe("ResourcesPage unified-filter detail identity", () => {
-  it("does not retarget an open detail when Cluster and resource-type filters change", async () => {
+  it("writes the exact detail path and lets browser history close it", async () => {
     const port = resourcesPort();
     const view = renderEnglishResources(
       port,
@@ -29,23 +29,16 @@ describe("ResourcesPage unified-filter detail identity", () => {
     const row = await screen.findByRole("button", { name: "Open details for checkout-api-0" });
     fireEvent.click(row);
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
-    const target = readResourcesQuery().get("resource");
-    expect(target).toMatch(/^v1\//u);
+    expect(readResourcesQuery().get("detail")).toBe("Pod/shop/checkout-api-0");
+    expect(readResourcesQuery().get("resource")).toBeNull();
 
     await act(async () => {
-      await view.router.navigate(
-        "/resources?clusters=kubernetes-ops&resources.types=node" +
-        `&resource=${encodeURIComponent(target ?? "")}&resourceKind=Pod`,
-      );
+      await view.router.navigate(-1);
     });
 
-    await waitFor(() => expect(readResourcesQuery().get("clusters")).toBe("kubernetes-ops"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(readResourcesQuery().get("detail")).toBeNull();
     expect(port.loadResourceDetail).toHaveBeenCalledTimes(1);
-    expect(port.loadResourceDetail).toHaveBeenLastCalledWith(
-      "cluster-1",
-      expect.objectContaining({ resourceType: "pod", name: "checkout-api-0" }),
-      expect.any(AbortSignal),
-    );
   }, 15_000);
 
   it("loads a self-contained detail even when the partial catalog omits its type", async () => {
@@ -112,18 +105,14 @@ describe("ResourcesPage unified-filter detail identity", () => {
     }
   }, 15_000);
 
-  it("retains detail identity while changing the inactive-resource filter", async () => {
+  it("keeps collection controls out of the read-only detail workspace", async () => {
     renderEnglishResources(resourcesPort(), canonicalDetailEntry());
     expect(await screen.findByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole(
+    expect(screen.queryByRole(
       "button",
       { hidden: true, name: "Include inactive resources" },
-    ));
-
-    await waitFor(() => {
-      expect(readResourcesQuery().get("resources.includeDeleted")).toBe("true");
-    });
+    )).toBeNull();
     expect(screen.getByRole("dialog", { name: "checkout-api-0 details" })).toBeTruthy();
     expectDetailQueryPreserved(readResourcesQuery());
   }, 15_000);

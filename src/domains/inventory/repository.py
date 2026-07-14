@@ -428,6 +428,27 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_resource(dict(row)) if row else None
 
+    def get_inventory_resource_by_key(
+        self,
+        *,
+        workspace_id: str,
+        inventory_key: str,
+    ) -> JsonObject | None:
+        """서버가 발급한 inventory_key를 세션 workspace 안에서 다시 물질화한다."""
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.inventory_key == inventory_key,
+                table.c.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self.serialize_inventory_resource(dict(row)) if row else None
+
     def list_related_inventory_resources(
         self,
         *,

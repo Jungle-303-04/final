@@ -127,6 +127,9 @@ TOPOLOGY_PATH = "/topology"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서
 # fan-out하지 않도록 서버 batch 경계를 별도로 둔다.
 RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"
+# 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
+# disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
+RESOURCE_CAPABILITIES_PATH = "/capabilities"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"
 ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"

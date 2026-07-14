@@ -103,6 +103,7 @@ export function useProductShortcuts({
 }
 
 function hasProductDetail(detail: ReturnType<typeof useUnifiedFilter>["detail"]): boolean {
-  return detail.resource !== null || detail.resourceKind !== null || detail.tab !== null ||
+  return detail.detail !== null || detail.resource !== null ||
+    detail.resourceKind !== null || detail.tab !== null ||
     detail.full || detail.node !== null;
 }

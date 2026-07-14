@@ -57,15 +57,16 @@ describe("ResourcesPage unified-filter cutover", () => {
       view: "table",
     });
     expect(port.listResources).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", {
+    expect(screen.queryByRole("button", {
       hidden: true,
       name: "Include inactive resources",
-    }).getAttribute("aria-pressed")).toBe("true");
+    })).toBeNull();
 
     const dialog = await screen.findByRole("dialog", {
       name: "checkout-api-0 details",
     });
-    expect(dialog.className).toContain("max-w-none");
+    expect(dialog.getAttribute("data-slot")).toBe("resource-detail-workspace");
+    expect(dialog.className).not.toContain("max-w-2xl");
     expect(port.loadResourceDetail).toHaveBeenCalledWith(
       "cluster-1",
       {
