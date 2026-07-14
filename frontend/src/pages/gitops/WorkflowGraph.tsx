@@ -68,6 +68,7 @@ export function WorkflowGraph({
   const heightClass = graphHeightClass(layout.nodes.length, direction, narrowViewport);
 
   useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
     const media = window.matchMedia("(max-width: 900px)");
     const update = () => {
       setNarrowViewport(media.matches);

@@ -19,7 +19,7 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Surface } from "../../shared/ui/Surface";
 import { NativeSelect } from "./PlanEditor";
-import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
+import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 
 export function ManifestWorkspace({
   plan,
@@ -54,11 +54,32 @@ export function ManifestWorkspace({
 
   return (
     <div className="grid min-w-0 gap-4">
-      <WorkflowInlineHeading
+      <WorkflowWorkspaceHeader
+        actions={<>
+          <Button
+            disabled={!plan.steps.length || pending !== "idle"}
+            onClick={() => onGenerate(selectedStepIndex)}
+            variant={selectedResult ? "outline" : "default"}
+          >
+            <Code2 aria-hidden="true" />
+            {pending === "generate" ? t("workflows.yaml.generating") : t("workflows.yaml.generate")}
+          </Button>
+          {blockingDiagnostics.length ? (
+            <Button onClick={() => onEdit(selectedStepIndex, diagnosticField(blockingDiagnostics[0].code))}>
+              <PencilLine aria-hidden="true" />
+              {t("workflows.runs.editIssues")}
+            </Button>
+          ) : selectedResult ? (
+            <Button disabled={pending !== "idle"} onClick={() => onSafePr(selectedStepIndex)}>
+              <GitPullRequestArrow aria-hidden="true" />
+              {pending === "safe-pr" ? t("workflows.yaml.submitting") : t("workflows.yaml.safePr")}
+            </Button>
+          ) : null}
+        </>}
         title={t("workflows.view.yaml")}
       />
 
-      <Surface aria-label={t("workflows.yaml.title")} className="flex min-w-0 flex-col items-stretch gap-3 p-3 xl:flex-row xl:items-end xl:justify-between">
+      <Surface aria-label={t("workflows.yaml.title")} className="grid min-w-0 p-3">
         <label className="grid w-full min-w-0 gap-1.5 xl:max-w-xl">
           <span className="text-xs font-medium text-muted-foreground">{t("workflows.yaml.target")}</span>
           <NativeSelect
@@ -73,27 +94,6 @@ export function ManifestWorkspace({
             ))}
           </NativeSelect>
         </label>
-        <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row xl:w-auto">
-          <Button
-            disabled={!plan.steps.length || pending !== "idle"}
-            onClick={() => onGenerate(selectedStepIndex)}
-            variant="outline"
-          >
-            <Code2 aria-hidden="true" />
-            {pending === "generate" ? t("workflows.yaml.generating") : t("workflows.yaml.generate")}
-          </Button>
-          {blockingDiagnostics.length ? (
-            <Button onClick={() => onEdit(selectedStepIndex, diagnosticField(blockingDiagnostics[0].code))} variant="outline">
-              <PencilLine aria-hidden="true" />
-              {t("workflows.runs.editIssues")}
-            </Button>
-          ) : selectedResult ? (
-            <Button disabled={pending !== "idle"} onClick={() => onSafePr(selectedStepIndex)}>
-              <GitPullRequestArrow aria-hidden="true" />
-              {pending === "safe-pr" ? t("workflows.yaml.submitting") : t("workflows.yaml.safePr")}
-            </Button>
-          ) : null}
-        </div>
       </Surface>
 
       {selectedSafePr ? (

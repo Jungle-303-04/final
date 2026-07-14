@@ -32,26 +32,38 @@ export function RunActions({
     cancel: XCircle,
     notify: Bell,
   };
+  const actions = actionsForStatus(run.status);
+  const standardActions = actions.filter((action) => action !== "rollback" && action !== "cancel");
+  const dangerActions = actions.filter((action) => action === "rollback" || action === "cancel");
+  const renderAction = (action: ReleaseRunAction) => {
+    const Icon = icon[action];
+    const dangerous = action === "rollback" || action === "cancel";
+    const primary = action === "advance" || action === "resume" || action === "retry";
+    return (
+      <Button
+        disabled={pending}
+        key={action}
+        onClick={() => {
+          if (!dangerous || window.confirm(t("workflows.runs.confirmDanger"))) onAction(run, action);
+        }}
+        size="sm"
+        variant={dangerous ? "destructive" : primary ? "default" : "outline"}
+      >
+        <Icon aria-hidden="true" />
+        {t(`workflows.runs.action.${action}`)}
+      </Button>
+    );
+  };
   return (
-    <div className="flex min-w-0 flex-wrap gap-1.5">
-      {actionsForStatus(run.status).map((action) => {
-        const Icon = icon[action];
-        const dangerous = action === "rollback" || action === "cancel";
-        return (
-          <Button
-            disabled={pending}
-            key={action}
-            onClick={() => {
-              if (!dangerous || window.confirm(t("workflows.runs.confirmDanger"))) onAction(run, action);
-            }}
-            size="sm"
-            variant={dangerous ? "destructive" : "outline"}
-          >
-            <Icon aria-hidden="true" />
-            {t(`workflows.runs.action.${action}`)}
-          </Button>
-        );
-      })}
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+        {standardActions.map(renderAction)}
+      </div>
+      {dangerActions.length ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-l pl-1.5">
+          {dangerActions.map(renderAction)}
+        </div>
+      ) : null}
     </div>
   );
 }
