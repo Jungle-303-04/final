@@ -379,6 +379,44 @@ BQ-079  GET  /changes/active
 그리고 **VP-017 §7의 고스트 파드 · 단계 레일 · 트레이스 워터폴**을 구현하라.
 `motion-ghost-breathe` · `motion-rail-flow` CSS는 **정의만 되고 아무도 안 쓴다.**
 
+### C11 · 커밋 컨벤션을 **강제 장치로** 만든다
+
+**지금 아무 장치가 없다.** `commit-msg` 훅도 CI 검사도 없어서
+`origin/dev` 2,413개 중 **23개가 스코프 위반**(`feat(applications):`)이고 **영어 제목**도 섞여 있다.
+
+**컨벤션:**
+```
+<type>: <한국어 제목>
+```
+- 허용 타입: `feat` `fix` `refactor` `docs` `test` `chore` `style` `perf` `build` `ci` `revert`
+- **스코프 금지.** `feat(applications):` 는 위반이다. 변경된 파일과 제목으로 영향 범위를 전달한다
+- **제목은 한국어.** `feat: add workflow plan picker` 는 위반이다
+- 마침표로 끝내지 않는다 · 한 줄(72자 이하) 유지
+- **`수정` `작업` `변경` `업데이트` 로 끝나는 모호한 제목 금지.** **변경의 결과**를 서술한다
+- 본문이 필요하면 제목 아래 빈 줄 뒤에 한국어로. BREAKING CHANGE는 영어로
+
+**금지어 (오픈소스 공개 대비 — 우녕 정책):**
+커밋 **제목**에 **외부 레퍼런스 구현체 이름**과 **내부 기획 문서 ID**를 남기지 않는다.
+목록은 `scripts/commit-denylist.txt` 에 있다.
+> 커밋 제목은 **"무엇이 달라졌는가"** 를 말한다. "어디서 베꼈는가"나 "몇 번 문서를 따랐는가"는
+> 코드·문서 안에 남긴다. **레퍼런스 귀속은 `NOTICE` 와 파일 헤더에 남긴다** — 라이선스가 요구하는 곳이 거기다.
+
+**해야 할 일:**
+1. **`scripts/commit-msg-gate.sh` · `scripts/commit-denylist.txt` 가 이미 있다.** 6가지 위반 전부 잡는 것 검증 완료
+2. `.git/hooks/commit-msg` 에 연결한다 — `exec scripts/commit-msg-gate.sh "$1"`
+   팀원 전부에게 적용되도록 **`make setup-hooks`** 타깃 또는 `.pre-commit-config.yaml` 에 등록
+3. **`dev-gate.yml` 에 검사를 추가한다:** `scripts/commit-msg-gate.sh --range origin/dev..HEAD`
+   → **위반 커밋이 있으면 CI 빨간불.** 그러면 다시는 안 들어온다
+4. 게이트 스크립트의 유닛 테스트 (위반 6종 + 통과 2종)
+
+**과거 커밋(dev 2,413개 중 457개 위반)은 고치지 마라. 우녕이 "재작성 안 함"으로 결정했다.**
+히스토리 재작성 + force-push는 **배포 증적(SHA)·팀원 클론·진행 중인 작업을 전부 깨뜨린다.**
+`deploy-status.md`·night-log·Actions run·ECR 태그가 전부 특정 SHA를 가리키고 있다.
+**지금부터 들어오는 것만 막는다.**
+
+**저자 정보:** `choi woo-nyong <woonyong.kr@gmail.com>`.
+`git config user.name` 이 `woonyong` 으로 되어 있으면 고쳐라.
+
 ---
 
 ## 7. 건드리지 마라 (우녕 승인 필요)
