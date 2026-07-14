@@ -191,6 +191,8 @@ jobs:
           account_id="$(aws sts get-caller-identity --query Account --output text)"
           registry="${account_id}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           aws ecr describe-repositories --repository-names "${CONSOLE_ECR_REPOSITORY}" >/dev/null
+          aws ecr get-login-password \
+            | docker login --username AWS --password-stdin "${registry}"
           tagged_image="${registry}/${CONSOLE_ECR_REPOSITORY}:${SOURCE_SHA}"
           docker build \
             --file frontend/Dockerfile \

@@ -343,6 +343,8 @@ def test_service_and_console_images_share_the_gated_source_sha_and_digest_releas
         in steps["Build and push immutable service image"]["run"]
     )
     assert "docker build" in steps["Build and push immutable console image"]["run"]
+    assert "aws ecr get-login-password" in steps["Build and push immutable console image"]["run"]
+    assert "docker login --username AWS" in steps["Build and push immutable console image"]["run"]
     assert "--file frontend/Dockerfile" in steps["Build and push immutable console image"]["run"]
     assert (
         '--build-arg "SOURCE_SHA=${SOURCE_SHA}"'
