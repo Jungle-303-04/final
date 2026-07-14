@@ -69,6 +69,7 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
       return "replace";
     case "topology-view":
     case "time-range":
+    case "graph-visibility":
       return "push";
     case "time-at":
       return "replace";

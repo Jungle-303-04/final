@@ -40,6 +40,7 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
     appendText(pairs, "t.range", detail.timeRange);
   }
   if (detail.timeAt !== undefined) appendText(pairs, "t.at", String(detail.timeAt));
+  if (detail.graphCollapsed) appendText(pairs, "graph", "0");
 }
 
 export function parseProductDetailQuery(
@@ -47,6 +48,7 @@ export function parseProductDetailQuery(
   invalidFull: string[],
   invalidTimeRange: string[] = [],
   invalidTimeAt: string[] = [],
+  invalidGraph: string[] = [],
 ): ProductDetailQuery {
   const detail = createEmptyProductDetailQuery();
   detail.detail = readStableText(params, "detail");
@@ -76,6 +78,9 @@ export function parseProductDetailQuery(
     if (Number.isSafeInteger(parsed) && parsed > 0) detail.timeAt = parsed;
     else invalidTimeAt.push(timeAt);
   } else if (timeAt !== null) invalidTimeAt.push(timeAt);
+  const graph = readScalar(params, "graph", invalidGraph);
+  if (graph === "0") detail.graphCollapsed = true;
+  else if (graph !== null) invalidGraph.push(graph);
   return detail;
 }
 

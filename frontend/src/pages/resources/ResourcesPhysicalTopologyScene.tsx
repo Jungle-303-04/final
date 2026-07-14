@@ -1,7 +1,13 @@
-import { Background, ReactFlow, type NodeTypes } from "@xyflow/react";
+import {
+  Background,
+  ReactFlow,
+  type Edge,
+  type NodeTypes,
+  type ReactFlowInstance,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Waypoints } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useI18n } from "../../shared/i18n";
@@ -18,6 +24,7 @@ import {
 } from "./physicalTopologyViewModel";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import { usePhysicalTopologyLayout } from "./usePhysicalTopologyLayout";
+import { useGraphRefit } from "./useGraphRefit";
 
 const nodeTypes: NodeTypes = { "physical-server": PhysicalTopologyServerNode };
 
@@ -51,6 +58,9 @@ export function ResourcesPhysicalTopologyScene({
     }),
   ), [clusterId, onOpenPod, onRevealServer, placements]);
   const nodes = usePhysicalTopologyLayout(inputNodes);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<PhysicalServerNode, Edge>>();
+  useGraphRefit({ instance: flowInstance, nodes, viewportRef });
 
   if (frame.phase === "loading") {
     return <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />;
@@ -58,23 +68,26 @@ export function ResourcesPhysicalTopologyScene({
   if (frame.phase === "ready" && nodes.length > 0 &&
       typeof ResizeObserver !== "undefined") {
     return (
-      <ReactFlow
-        colorMode={colorMode}
-        fitView
-        fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
-        maxZoom={1.25}
-        minZoom={0.35}
-        nodeTypes={nodeTypes}
-        nodes={nodes}
-        nodesConnectable={false}
-        nodesDraggable={false}
-        panOnScroll={false}
-        proOptions={{ hideAttribution: true }}
-        zoomOnDoubleClick={false}
-        zoomOnScroll
-      >
-        <Background color="var(--border)" gap={22} size={1} />
-      </ReactFlow>
+      <div className="h-full" ref={viewportRef}>
+        <ReactFlow
+          colorMode={colorMode}
+          fitView
+          fitViewOptions={{ padding: 0.12, minZoom: 0.4 }}
+          maxZoom={2}
+          minZoom={0.4}
+          nodeTypes={nodeTypes}
+          nodes={nodes}
+          nodesConnectable={false}
+          nodesDraggable={false}
+          onInit={setFlowInstance}
+          panOnScroll={false}
+          proOptions={{ hideAttribution: true }}
+          zoomOnDoubleClick={false}
+          zoomOnScroll
+        >
+          <Background color="var(--border)" gap={22} size={1} />
+        </ReactFlow>
+      </div>
     );
   }
   if (frame.phase === "ready" && nodes.length > 0) {

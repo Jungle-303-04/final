@@ -14,6 +14,7 @@ import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
+import { ResourcesListScopeStatus } from "./ResourcesListScopeStatus";
 import {
   ResourcesFailure,
   UnknownCompletenessEmpty,
@@ -146,6 +147,13 @@ export function ResourcesListSurface({
     (current) => ({ ...current, timeAt }),
     "time-at",
   );
+  const changeGraphCollapsed = (collapsed: boolean) => filter.updateDetail(
+    (current) => ({
+      ...current,
+      graphCollapsed: collapsed ? true : undefined,
+    }),
+    "graph-visibility",
+  );
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
       <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
@@ -173,6 +181,8 @@ export function ResourcesListSurface({
           timelineRange={timelineRange}
           onTimelineAtChange={changeTimelineAt}
           onTimelineRangeChange={changeTimelineRange}
+          collapsed={filter.detail.graphCollapsed === true}
+          onCollapsedChange={changeGraphCollapsed}
         />
       </Surface>
 
@@ -241,7 +251,7 @@ function ResourcesListBody({
   const items = filterList.data.items.map((item) => item.resource);
   return (
     <div className="min-w-0">
-      <ListScopeStatus page={filterList.data} />
+      <ResourcesListScopeStatus page={filterList.data} />
       <ResourcesTable
         items={items}
         metricHistory={metricHistory}
@@ -267,34 +277,6 @@ function ResourcesListBody({
           </Button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ListScopeStatus({ page }: { page: ResourcesFilterResourcePage }) {
-  const { formatNumber, t } = useI18n();
-  const total = page.counts.filteredCount;
-  const shown = page.items.length;
-  const filteredText = total === null
-    ? ` · ${t("resources.list.unknownTotal")}`
-    : ` · ${t("resources.list.scope.filtered", { count: formatNumber(total) })}`;
-  const excludedText = page.excludedCount > 0
-    ? ` · ${t("resources.list.scope.excluded", {
-      count: formatNumber(page.excludedCount),
-    })}`
-    : "";
-  return (
-    <div
-      aria-label={t("resources.list.scope.aria")}
-      className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-      role="status"
-    >
-      {t("resources.list.scope.shown", { count: formatNumber(shown) })}
-      {filteredText}
-      {excludedText}
-      {page.counts.filteredCountCompleteness === "partial"
-        ? ` · ${t("common.state.partial")}`
-        : ""}
     </div>
   );
 }

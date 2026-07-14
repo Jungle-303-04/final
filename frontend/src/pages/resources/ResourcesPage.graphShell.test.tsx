@@ -13,7 +13,10 @@ import {
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 describe("ResourcesPage S4 physical topology", () => {
   it("renders verified servers and pods without re-filtering the response", async () => {
@@ -81,6 +84,30 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')
       ?.getAttribute("data-phase")).toBe("ready");
+  });
+
+  it("uses the large remembered graph height and keeps collapse in graph=0", async () => {
+    const user = userEvent.setup();
+    renderEnglishResources(
+      "/resources?clusters=cluster-1&resources.types=pod",
+      resourcesPhysicalTopologyPort(),
+    );
+
+    await screen.findByRole("article", { name: "Server worker-a" });
+    const graph = document.querySelector('[data-slot="resources-graph-shell"]');
+    expect(graph?.getAttribute("data-height")).toBe("720");
+    expect(graph?.className).toContain("h-(--product-graph-height-mobile)");
+    expect(graph?.className).not.toContain("h-96");
+    expect(document.querySelector('[data-slot="resources-graph-resize-handle"]')).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Collapse graph" }));
+    await waitFor(() => expect(readResourcesQuery().get("graph")).toBe("0"));
+    expect(graph?.getAttribute("data-collapsed")).toBe("true");
+    expect(document.querySelector('[data-slot="topology-canvas"]')).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Expand graph" }));
+    await waitFor(() => expect(readResourcesQuery().has("graph")).toBe(false));
+    expect(graph?.getAttribute("data-collapsed")).toBe("false");
   });
 
   it("aborts the old topology request and ignores its late response", async () => {

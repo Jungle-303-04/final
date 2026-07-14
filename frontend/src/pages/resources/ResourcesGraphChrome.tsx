@@ -66,7 +66,7 @@ export function UnavailableTimeline({ loading = false }: { loading?: boolean }) 
   return (
     <div
       aria-describedby="resources-timeline-unavailable"
-      className="absolute inset-x-3 bottom-3 z-20 flex translate-y-1.5 items-center gap-3 rounded-xl border bg-background/95 px-3 py-2 opacity-100 shadow-lg backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:translate-y-0 motion-reduce:transition-opacity sm:opacity-0 sm:group-focus-within/resources-graph:translate-y-0 sm:group-focus-within/resources-graph:opacity-100 sm:group-hover/resources-graph:translate-y-0 sm:group-hover/resources-graph:opacity-100"
+      className="flex min-h-14 shrink-0 items-center gap-3 border-t bg-background/40 px-3 py-2"
       data-slot="resources-time-scrubber"
       data-state={loading ? "loading" : "unavailable"}
     >
@@ -137,26 +137,21 @@ export function TimelineStrip({
   });
 
   return (
-    <>
+    <div
+      className="flex min-h-14 shrink-0 items-center gap-3 border-t bg-background/40 px-3 py-2"
+      data-slot="resources-time-scrubber"
+      data-state={playing ? "playing" : live ? "live" : "past"}
+    >
       {!live ? (
-        <div className="absolute left-3 top-24 z-30 rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium shadow-sm backdrop-blur sm:top-14" role="status">
+        <span className="shrink-0 rounded-full border bg-background/40 px-2.5 py-1 text-xs font-medium" role="status">
           {t("resources.timeline.past", { time: formatTime(selectedMs) })}
-        </div>
+        </span>
       ) : null}
       {selectedInGap ? (
-        <div className="absolute inset-x-0 bottom-16 z-30 mx-auto w-fit rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground" role="status">
+        <span className="shrink-0 rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground" role="status">
           {t("resources.timeline.noSnapshot")}
-        </div>
+        </span>
       ) : null}
-      <div
-        className={`absolute inset-x-3 bottom-3 z-20 flex translate-y-1.5 items-center gap-3 rounded-xl border bg-background/95 px-3 py-2 shadow-lg backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:translate-y-0 motion-reduce:transition-opacity ${
-          live && !playing
-            ? "opacity-100 sm:opacity-0 sm:group-focus-within/resources-graph:translate-y-0 sm:group-focus-within/resources-graph:opacity-100 sm:group-hover/resources-graph:translate-y-0 sm:group-hover/resources-graph:opacity-100"
-            : "translate-y-0 opacity-100"
-        }`}
-        data-slot="resources-time-scrubber"
-        data-state={playing ? "playing" : live ? "live" : "past"}
-      >
         <Button
           aria-label={t(playing ? "resources.timeline.pause" : "resources.timeline.play")}
           onClick={() => {
@@ -244,8 +239,7 @@ export function TimelineStrip({
             value={selectedMs}
           />
         </div>
-      </div>
-    </>
+    </div>
   );
 }
 
