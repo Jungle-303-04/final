@@ -23,6 +23,7 @@ import {
 interface HomeClusterFrameInput {
   clusterId: string | null;
   port: HomePort;
+  podRefreshRevision: number;
   refreshRevision: number;
   reportUnauthorized: () => void;
   scopeKey: string | null;
@@ -33,6 +34,7 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
   const {
     clusterId,
     port,
+    podRefreshRevision,
     refreshRevision,
     reportUnauthorized,
     scopeKey,
@@ -110,7 +112,7 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
     });
     const request = acquireHomeRequest(
       port,
-      `pods:${podKey}:r${refreshRevision}`,
+      `pods:${podKey}:r${refreshRevision}:p${podRefreshRevision}`,
       (signal) => port.loadNodePods(clusterId, selectedNodeName, signal),
     );
     settleFrameRequest({
@@ -128,7 +130,7 @@ export function useHomeClusterFrame(input: HomeClusterFrameInput) {
       request.release();
     };
   }, [
-    clusterId, nodes, port, refreshRevision, reportUnauthorized, scopeKey,
+    clusterId, nodes, podRefreshRevision, port, refreshRevision, reportUnauthorized, scopeKey,
     selectedNodeName, validNode,
   ]);
 

@@ -29,6 +29,8 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Resource filters" })).toBeTruthy();
     expect(screen.getByText("Physical placement")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Server placement view" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Topology");
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
     expect(screen.getByText("2 / 18 pods")).toBeTruthy();

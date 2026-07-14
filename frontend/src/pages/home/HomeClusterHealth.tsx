@@ -190,6 +190,7 @@ function UsageProgress({
       ) : (
         <Progress
           aria-label={label}
+          className="[&_[data-slot=progress-indicator]]:duration-500"
           value={Math.max(0, Math.min(value, 100))}
           valueText={value > 100
             ? t("home.metric.progressCapped", { value: formattedValue ?? "" })
