@@ -158,7 +158,7 @@ export function WorkflowGraph({
             nodesConnectable={false}
             nodesDraggable={false}
             onInit={setFlowInstance}
-            onNodeClick={(_event, node) => onSelectStep?.(ownerStepId(node.id))}
+            onNodeClick={(_event, node) => onSelectStep?.(node.data.ownerStepId || ownerStepId(node.id))}
             panOnScroll={false}
             proOptions={{ hideAttribution: true }}
             zoomOnDoubleClick={false}
