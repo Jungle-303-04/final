@@ -11,15 +11,15 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : 혼합 전환 중 — 기록 SHA ef8a7103f, S3 backend rollout 6464e01a3
+배포 SHA : S3 `6464e01a3` public · S4 포함 최신 dev `03030867` 배포 대기
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 15:34 KST  S2 public · S3 API public/console rollout · S4 local green
+갱신     : 2026-07-14 15:58 KST  S3 public · S4 배포 queue · S5 local green
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-BKqqyzX4.js`
-- backend digest: `sha256:a55d80c0c11bc99cccae24bdd010bb420b091f2534583ad626a0369ec882561f`
-- console digest: `sha256:7fead00dc27ccbf0a193f8e05533a43c2158d7ba3ebdefa099758c852e5db901`
+- console bundle: `assets/index-B0PpHX5h.js`
+- backend digest: `sha256:602b41368daf5488127b1538d1778c08cb89ce1bf94b6789d4855bff27eb39e3`
+- console digest: `sha256:d330fe6e15838828fd6bf556f5aeb51d75e1d1fa49045e77af3a7aa04088b1a9`
 - 로그인·클러스터·리소스 read smoke: 통과
 
 ---
@@ -39,8 +39,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S0**  모션 기반 (VP-017)      ← 정확한 토큰·FLIP·스태거·reduced-motion·가드
 - [x] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
 - [x] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
-- [ ] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
-- [ ] **S4**  물리 뷰 그래프 (2층) ★  ← 클러스터 클릭 → 카메라가 서버로 내려간다
+- [x] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
+- [ ] **S4**  물리 뷰 그래프 (2층) ★  ← 구현·gate 완료, 최신 자동 배포 queue
 - [ ] **S5**  표 + 스파크라인 (3층)
 - [ ] **S6**  상세 = 전체화면 덮기
 - [ ] **S7**  AI 패널
@@ -81,14 +81,25 @@ URL      : https://k8s.woonyong.org
 - [x] S3 `make gate-fast` — Ruff/import/compile/Dev Gate 계약 + frontend 155 files / 1015 tests
 - [x] S3 dev push·Dev Gate — `6464e01a3`, Dev Gate `29309632515` SUCCESS
 - [x] S3 backend public — `/api/filter-facets?q=check` HTTP 200
-- [ ] S3 console/public SHA 기록 완료 — Dev Deploy `29309787652` rollout 진행 중
+- [x] S3 console/public SHA 기록 완료 — Dev Deploy `29309787652` SUCCESS,
+  public bundle `index-B0PpHX5h.js`, health/root/Resources 200
 - [x] S4 BQ-074 물리 topology 계약 — 단일 권한 클러스터·snapshot·서버 판정
   `matches_filter`·matched/total 완전성·서버별 문제 우선 12개 제한·미확인 metric null
 - [x] S4 물리 그래프 — ELK/@xyflow 서버 카드·고정 파드·사용률 채움·비정상 배지·
   비매칭 opacity 20%·+N 표 이동·cluster↔server FLIP·골격/스태거/reduced-motion
 - [x] S4 local 검증 — backend 56 tests, frontend 161 files / 1028 tests,
   typecheck·lint·500-file design guard·production build PASS
-- [ ] S4 gate-fast·dev push·자동 배포/public 확인
+- [x] S4 gate-fast·dev push — `78b8ce0e2`, Dev Gate `29311971097` SUCCESS
+- [ ] S4 자동 배포/public 확인 — 전용 run `29312148262`와 후속 `29312738387`은 최신
+  dev로 queue 교체되어 취소, S4 포함 `03030867` run `29313095446` pending;
+  public topology는 아직 404
+- [x] S5 BQ-030 batch metrics history — 최대 100 pod stable ID를 권한·필터·snapshot과
+  다시 교차 검증하고 null/빈 points·completeness를 그대로 반환, per-row fan-out 금지
+- [x] S5 kind별 smart table — canonical facts만 소비, 정렬·snapshot-safe Load more 연결,
+  Recharts CPU 스파크라인은 실측 2점 이상일 때만 표시하고 클릭 시 같은 상세 identity 사용
+- [x] S5 local 검증 — backend targeted 31 tests, frontend 167 files / 1049 tests,
+  typecheck·lint·516-file design guard·production build PASS
+- [ ] S5 gate-fast·dev push·자동 배포/public 확인
 
 ---
 

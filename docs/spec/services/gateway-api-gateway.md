@@ -214,6 +214,7 @@ status: synced
 | POST | `/agent/inventory/snapshots` | agent | — |
 | GET | `/clusters/{cluster_id}/inventory/{resources,workloads,services,events,summary}` | 세션 | `require_cluster_access` |
 | GET | `/clusters/{cluster_id}/usage` | 세션 | `require_cluster_access` |
+| GET | `/metrics/history` | 세션 | Resources common filter + pinned snapshot에서 요청 pod ID 전부를 권한 교집합 재검증; batch only |
 | POST | `/agent/evidence` | agent | evidence_key 를 토큰 cluster 로 스코핑 |
 | POST | `/webhooks/alertmanager` | Bearer `ALERTMANAGER_WEBHOOK_TOKEN` | `cluster_id` 등록 확인 후 evidence 입구 |
 | GET | `/evidence` | 세션 | 세션 workspace 범위 evidence query(`limit`/`offset`/`cursor`) |

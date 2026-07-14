@@ -59,6 +59,18 @@ export {
   type PhysicalTopologyEndpointServer,
 } from "./physical-topology-schemas";
 export {
+  getResourceMetricsHistory,
+  RESOURCE_METRICS_HISTORY_PATH,
+  type ResourceMetricsHistoryQuery,
+  type ResourceMetricTimeRange,
+} from "./resource-metrics-history";
+export {
+  resourceMetricHistoryPointSchema,
+  resourceMetricHistorySeriesSchema,
+  resourceMetricsHistorySchema,
+  type ResourceMetricsHistoryEndpoint,
+} from "./resource-metrics-history-schemas";
+export {
   clusterImportCandidateSchema,
   clusterRegistrationFlowSchema,
   providerCatalogSchema,

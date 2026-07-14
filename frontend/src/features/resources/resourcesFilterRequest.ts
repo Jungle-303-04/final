@@ -21,6 +21,8 @@ import type {
 } from "./resourcesFilterEndpointContract";
 import type { PhysicalTopologyOptions } from "./physicalTopologyContract";
 import type { PhysicalTopologyEndpointQuery } from "./physicalTopologyEndpointContract";
+import type { ResourceMetricsHistoryOptions } from "./resourceMetricsHistoryContract";
+import type { ResourceMetricsHistoryEndpointQuery } from "./resourceMetricsHistoryEndpointContract";
 
 export function createResourceFacetRequest(
   state: UnifiedFilterState,
@@ -71,6 +73,20 @@ export function createPhysicalTopologyRequest(
     ...(options.snapshotRevision === undefined
       ? {}
       : { snapshotRevision: options.snapshotRevision }),
+  };
+}
+
+export function createResourceMetricsHistoryRequest(
+  state: UnifiedFilterState,
+  resourceIds: string[],
+  options: ResourceMetricsHistoryOptions,
+): ResourceMetricsHistoryEndpointQuery {
+  return {
+    ...baseFilterQuery(state),
+    ids: resourceIds,
+    snapshotRevision: options.snapshotRevision,
+    ...(options.range === undefined ? {} : { range: options.range }),
+    ...(options.limit === undefined ? {} : { limit: options.limit }),
   };
 }
 

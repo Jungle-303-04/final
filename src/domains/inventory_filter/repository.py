@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Integer, Select, and_, case, cast, func, literal, or_, select, tuple_, update
@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
 from domains.identity.models import ClusterRegistration
-from domains.inventory.models import ClusterInventoryResourceRecord
+from domains.inventory.models import ClusterInventoryResourceRecord, ClusterUsageSampleRecord
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
     InventoryResourceApplicationVersion,
@@ -1012,6 +1012,65 @@ class InventoryFilterRepository(DatabaseConnection):
             "next_position": next_position,
         }
 
+    def list_resource_metric_history(
+        self,
+        *,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        allowed_application_ids: Collection[str],
+        filters: ResourceFilters,
+        snapshot_revision: int,
+        resource_ids: Collection[str],
+        window_seconds: int,
+        limit: int,
+    ) -> JsonObject:
+        """Resolve requested pods inside the filtered cut, then read bounded real samples."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        application_ids = _ids(allowed_application_ids)
+        requested = _ids(resource_ids)
+        if not workspace_id or not cluster_ids or not requested or snapshot_revision <= 0:
+            return {"resources": [], "samples_by_cluster": {}}
+        resource_statement, _unused_sample_statement = _resource_metric_history_statements(
+            workspace_id=workspace_id,
+            cluster_ids=cluster_ids,
+            allowed_application_ids=application_ids,
+            filters=filters,
+            snapshot_revision=snapshot_revision,
+            resource_ids=requested,
+            window_seconds=window_seconds,
+            limit=limit,
+        )
+        with self.connection() as conn:
+            resources = [dict(row) for row in conn.execute(resource_statement).mappings().all()]
+            # Fail closed before touching time-series rows when any supplied id is not in
+            # the exact authorized + filtered + pinned resource cut.
+            if {str(row["resource_id"]) for row in resources} != set(requested):
+                return {"resources": resources, "samples_by_cluster": {}}
+            metric_cluster_ids = _ids({str(row["cluster_id"]) for row in resources})
+            _unused_resource_statement, sample_statement = _resource_metric_history_statements(
+                workspace_id=workspace_id,
+                cluster_ids=metric_cluster_ids,
+                allowed_application_ids=application_ids,
+                filters=filters,
+                snapshot_revision=snapshot_revision,
+                resource_ids=requested,
+                window_seconds=window_seconds,
+                limit=limit,
+            )
+            rows = [dict(row) for row in conn.execute(sample_statement).mappings().all()]
+        samples_by_cluster: dict[str, list[JsonObject]] = defaultdict(list)
+        for row in rows:
+            samples_by_cluster[str(row["cluster_id"])].append(
+                {
+                    "sampled_at": iso_or_none(row.get("sampled_at")),
+                    "usage": dict(row.get("usage") or {}),
+                }
+            )
+        return {
+            "resources": resources,
+            "samples_by_cluster": dict(samples_by_cluster),
+        }
+
     def list_physical_topology_resources(
         self,
         *,
@@ -1454,6 +1513,89 @@ def _physical_topology_statements(
         select(func.count()).select_from(base).scalar_subquery().label("unfiltered_count"),
     )
     return server_statement, pod_statement, count_statement
+
+
+def _resource_metric_history_statements(
+    *,
+    workspace_id: str,
+    cluster_ids: tuple[str, ...],
+    allowed_application_ids: tuple[str, ...],
+    filters: ResourceFilters,
+    snapshot_revision: int,
+    resource_ids: tuple[str, ...],
+    window_seconds: int,
+    limit: int,
+) -> tuple[Select[Any], Select[Any]]:
+    """Build pinned resource-resolution and revision-joined usage history statements."""
+    current = _current_versions(
+        workspace_id,
+        cluster_ids,
+        snapshot_revision,
+        include_deleted=filters.include_deleted,
+    )
+    base = select(current).where(current.c.rank == 1).cte("metric_history_inventory")
+    filtered = _apply_resource_filters(
+        base,
+        filters=filters,
+        allowed_application_ids=allowed_application_ids,
+    ).cte("metric_history_filter_matches")
+    resources = (
+        select(
+            filtered.c.inventory_key.label("resource_id"),
+            filtered.c.cluster_id,
+            filtered.c.namespace,
+            filtered.c.name,
+        )
+        .where(
+            filtered.c.inventory_key.in_(resource_ids),
+            filtered.c.resource_type == "pod",
+            filtered.c.namespace.is_not(None),
+        )
+        .order_by(filtered.c.inventory_key)
+    )
+
+    usage = ClusterUsageSampleRecord.__table__
+    revision = InventoryFilterRevision.__table__
+    eligible = (
+        select(
+            usage.c.cluster_id,
+            usage.c.sampled_at,
+            usage.c.usage,
+            func.max(usage.c.sampled_at)
+            .over(partition_by=usage.c.cluster_id)
+            .label("cluster_latest_sampled_at"),
+            func.row_number()
+            .over(partition_by=usage.c.cluster_id, order_by=usage.c.sampled_at.desc())
+            .label("recency_rank"),
+        )
+        .select_from(
+            usage.join(
+                revision,
+                and_(
+                    revision.c.workspace_id == usage.c.workspace_id,
+                    revision.c.cluster_id == usage.c.cluster_id,
+                    revision.c.snapshot_id == usage.c.snapshot_id,
+                ),
+            )
+        )
+        .where(
+            usage.c.workspace_id == workspace_id,
+            usage.c.cluster_id.in_(cluster_ids),
+            revision.c.revision_id <= snapshot_revision,
+        )
+        .cte("metric_history_eligible_samples")
+    )
+    history = (
+        select(eligible.c.cluster_id, eligible.c.sampled_at, eligible.c.usage)
+        .where(
+            eligible.c.sampled_at
+            >= eligible.c.cluster_latest_sampled_at
+            - timedelta(seconds=max(60, min(window_seconds, 24 * 60 * 60))),
+            eligible.c.recency_rank <= max(1, min(limit, 288)),
+        )
+        .order_by(eligible.c.cluster_id, eligible.c.sampled_at)
+    )
+    return resources, history
 
 
 def _sort_columns(table: Any) -> tuple[Any, ...]:

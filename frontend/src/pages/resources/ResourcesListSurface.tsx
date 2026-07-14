@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
+import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
+import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
 import {
@@ -22,11 +24,15 @@ import { useResourcesPageState } from "./useResourcesPageState";
 export function ResourcesListSurface({
   filterList,
   listFallback,
+  metricHistory,
+  onLoadMore,
   physicalTopology,
   state,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
+  metricHistory: ResourceMetricsHistoryFrame;
+  onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
   state: ReturnType<typeof useResourcesPageState>;
 }) {
@@ -144,7 +150,12 @@ export function ResourcesListSurface({
               {state.selectedResourceType}
             </h3>
           </div>
-          <ResourcesListBody filterList={filterList} state={state} />
+          <ResourcesListBody
+            filterList={filterList}
+            metricHistory={metricHistory}
+            onLoadMore={onLoadMore}
+            state={state}
+          />
         </Surface>
       )}
     </div>
@@ -153,11 +164,16 @@ export function ResourcesListSurface({
 
 function ResourcesListBody({
   filterList,
+  metricHistory,
+  onLoadMore,
   state,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
+  metricHistory: ResourceMetricsHistoryFrame;
+  onLoadMore: () => void;
   state: ReturnType<typeof useResourcesPageState>;
 }) {
+  const { t } = useI18n();
   if (filterList.phase === "idle" || filterList.phase === "loading") {
     return (
       <ProductStateScreen
@@ -189,9 +205,29 @@ function ResourcesListBody({
       <ListScopeStatus page={filterList.data} />
       <ResourcesTable
         items={items}
+        metricHistory={metricHistory}
         onOpen={state.openDetail}
         registerRowButton={state.registerRowButton}
       />
+      {filterList.data.hasMore || filterList.appending || filterList.appendFailure ? (
+        <div className="flex flex-wrap items-center justify-center gap-3 border-t px-4 py-3">
+          {filterList.appendFailure ? (
+            <span className="text-xs text-destructive" role="alert">
+              {t("resources.list.appendFailed")}
+            </span>
+          ) : null}
+          <Button
+            disabled={filterList.appending}
+            onClick={onLoadMore}
+            type="button"
+            variant="outline"
+          >
+            {filterList.appending
+              ? t("resources.list.loadingMore")
+              : t("resources.list.loadMore")}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

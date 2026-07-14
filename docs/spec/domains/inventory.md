@@ -37,6 +37,16 @@ status: synced
 결합한다. requests 근거가 없으면 `usage_pct=null`, metric이 없으면 CPU/MEM도 `null`이다.
 응답 DTO는 allowlist만 직렬화하여 inventory `summary/raw/annotations`와 secret을 노출하지 않는다.
 
+GAP-012/BQ-030 `GET /metrics/history?ids=...`는 `/resources`가 반환한 pod
+`inventory_key`를 최대 100개까지 서버에서 한 번에 처리한다. 같은 common filter와 session의
+cluster/application 권한, 같은 `snapshot_revision`의 교집합에서 모든 ID를 다시 확인하며 하나라도
+벗어나면 존재 여부를 구분하지 않는 404로 닫는다. `cluster_usage_samples`는
+`inventory_filter_revisions.snapshot_id`와 조인하므로 과거 cut에 최신 metric을 섞지 않는다.
+각 point의 `cpu_mcores`/`mem_mib`는 수집된 값만 반환하고 결측은 `null`, 이력이 전혀 없으면
+`points=[]`/`has_sparkline_points=false`/`completeness=unavailable`이다. 단건 API를 브라우저에서
+fan-out하거나 0을 합성하지 않는다. BQ-055의 filtered/unfiltered count는 기존 `GET /resources`의
+`counts`가 snapshot/completeness와 함께 제공하므로 중복 count route를 만들지 않는다.
+
 ## 의존성 (Dependencies)
 
 | 방향 | 대상 | 스펙 링크 | 용도 |

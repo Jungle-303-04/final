@@ -20,6 +20,7 @@ from domains.inventory_filter.cursor import (
     authorization_revision,
 )
 from domains.inventory_filter.graph import build_resource_graph
+from domains.inventory_filter.metrics_history import build_resource_metric_history
 from domains.inventory_filter.physical_topology import build_physical_topology
 from domains.inventory_filter.query import (
     ResourceFilters,
@@ -38,6 +39,7 @@ from packages.contracts.gateway.responses import (
     PhysicalTopologyResponse,
     ResourceFilterFacetPageResponse,
     ResourceGraphSnapshotResponse,
+    ResourceMetricsHistoryResponse,
 )
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
@@ -49,6 +51,14 @@ DEFAULT_GRAPH_NODE_LIMIT = 200
 MAX_GRAPH_NODE_LIMIT = 200
 DEFAULT_GRAPH_EDGE_LIMIT = 1000
 MAX_GRAPH_EDGE_LIMIT = 2000
+MAX_METRIC_HISTORY_IDS = 100
+MAX_METRIC_HISTORY_QUERY_LENGTH = 8192
+METRIC_HISTORY_RANGE_SECONDS = {
+    "15m": 15 * 60,
+    "1h": 60 * 60,
+    "6h": 6 * 60 * 60,
+    "24h": 24 * 60 * 60,
+}
 FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "resource filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "resource filter scope not found"
@@ -449,6 +459,114 @@ async def list_filtered_resources(
 
 
 @router.get(
+    gateway_routes.RESOURCE_METRICS_HISTORY_PATH,
+    response_model=ResourceMetricsHistoryResponse,
+)
+async def get_resource_metrics_history(
+    ids: str = Query(min_length=1, max_length=MAX_METRIC_HISTORY_QUERY_LENGTH),
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    applications: str | None = Query(default=None),
+    resources_types: str | None = Query(default=None, alias="resources.types"),
+    resource_types: str | None = Query(default=None, include_in_schema=False),
+    resources_health: str | None = Query(default=None, alias="resources.health"),
+    health: str | None = Query(default=None, include_in_schema=False),
+    labels: str | None = Query(default=None),
+    resources_q: str | None = Query(default=None, alias="resources.q"),
+    q: str | None = Query(default=None, include_in_schema=False),
+    resources_include_deleted: bool | None = Query(
+        default=None,
+        alias="resources.includeDeleted",
+    ),
+    include_deleted: bool | None = Query(default=None, include_in_schema=False),
+    snapshot_revision: int | None = Query(default=None, ge=1),
+    time_range: Literal["15m", "1h", "6h", "24h"] = Query(default="1h", alias="range"),
+    limit: int = Query(default=60, ge=1, le=288),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ResourceMetricsHistoryResponse:
+    resource_ids = _parse_metric_history_ids(ids)
+    filters = _parse_filters(
+        clusters=clusters,
+        namespaces=namespaces,
+        applications=applications,
+        resource_types=_coalesce_text(resources_types, resource_types),
+        health=_coalesce_text(resources_health, health),
+        labels=labels,
+        query=_coalesce_text(resources_q, q),
+        include_deleted=_coalesce_bool(resources_include_deleted, include_deleted),
+    )
+    authorized = await _authorized_scope(db, current)
+    _require_requested_scope(authorized, filters)
+    if not authorized.cluster_ids:
+        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+
+    latest_context = await _snapshot_context(db, authorized)
+    latest_revision = int(latest_context.get("snapshot_revision") or 0)
+    target_revision = snapshot_revision if snapshot_revision is not None else latest_revision
+    if target_revision <= 0:
+        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+    if target_revision > latest_revision:
+        raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+    context = latest_context
+    if snapshot_revision is not None:
+        context = await _snapshot_context(db, authorized, at_revision=target_revision)
+        if int(context.get("snapshot_revision") or 0) != target_revision:
+            raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+
+    result = await asyncio.to_thread(
+        db.list_resource_metric_history,
+        workspace_id=authorized.workspace_id,
+        allowed_cluster_ids=set(authorized.cluster_ids),
+        allowed_application_ids=set(authorized.application_ids),
+        filters=filters,
+        snapshot_revision=target_revision,
+        resource_ids=resource_ids,
+        window_seconds=METRIC_HISTORY_RANGE_SECONDS[time_range],
+        limit=limit,
+    )
+    resources = list(result.get("resources") or [])
+    if {str(item.get("resource_id")) for item in resources} != set(resource_ids):
+        # Missing, non-pod, unauthorized, and filtered-out ids share one response to avoid
+        # turning this batch endpoint into a resource-existence oracle.
+        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+
+    projection_complete = (
+        _filtered_completeness(
+            context,
+            filters=filters,
+            require_labels=bool(filters.labels),
+        )
+        == "exact"
+    )
+    history = build_resource_metric_history(
+        resources,
+        result.get("samples_by_cluster") or {},
+        projection_complete=projection_complete,
+    )
+    reasons = {
+        *(str(reason) for reason in context.get("partial_reason_codes") or []),
+        *(str(reason) for reason in history["partial_reason_codes"]),
+    }
+    fingerprint = filter_fingerprint(filters)
+    return ResourceMetricsHistoryResponse(
+        series=history["series"],
+        completeness=history["completeness"],
+        partial_reason_codes=sorted(reasons),
+        snapshot=FilterSnapshotMeta(
+            snapshot_revision=target_revision,
+            authorization_revision=authorized.authorization_revision,
+            filter_fingerprint=fingerprint,
+            observed_at=context.get("observed_at"),
+            stale=target_revision < latest_revision,
+            partial_reason_codes=sorted(
+                str(reason) for reason in context.get("partial_reason_codes") or []
+            ),
+        ),
+    )
+
+
+@router.get(
     gateway_routes.RESOURCE_LABEL_FACETS_PATH,
     response_model=LabelFacetPageResponse,
 )
@@ -836,6 +954,19 @@ def _parse_filters(**kwargs: Any) -> ResourceFilters:
         return parse_resource_filters(**kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL) from exc
+
+
+def _parse_metric_history_ids(value: str) -> tuple[str, ...]:
+    raw = value.split(",")
+    ids = tuple(item.strip() for item in raw)
+    if (
+        not ids
+        or any(not item or len(item) > 512 for item in ids)
+        or len(ids) > MAX_METRIC_HISTORY_IDS
+        or len(set(ids)) != len(ids)
+    ):
+        raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
+    return ids
 
 
 def _global_facets_with_completeness(
