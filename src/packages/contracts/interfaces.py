@@ -63,6 +63,8 @@ class DeadLetterStore(Protocol):
 class UserStore(Protocol):
     def get_user_by_email(self, email: str) -> JsonObject | None: ...
 
+    def get_user_by_id(self, user_id: str) -> JsonObject | None: ...
+
     def create_user(
         self,
         user_id: str,
@@ -148,6 +150,8 @@ class SessionStore(Protocol):
         user_id: str,
         roles: list[str] | None = None,
         workspace_id: str | None = None,
+        display_name: str | None = None,
+        email: str | None = None,
     ) -> Any: ...
 
     async def get_session(self, token: str | None) -> Any | None: ...

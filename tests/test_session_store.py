@@ -57,7 +57,13 @@ def test_memory_session_store_supports_oss_single_controller_contract() -> None:
     async def run() -> None:
         store = MemorySessionStore(session_config())
         await store.connect()
-        session = await store.create_session("user-1", ["user"], "ws-1")
+        session = await store.create_session(
+            "user-1",
+            ["user"],
+            "ws-1",
+            display_name="Local User",
+            email="local@example.com",
+        )
         assert await store.get_session(session.token) == session
         assert await store.touch_session(session.token) is True
 

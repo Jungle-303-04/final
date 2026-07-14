@@ -37,6 +37,13 @@ class StubPasswordAuth:
 
         self.sessions.touch_session = touch_session
         self.email_available = True
+        self.identity = {
+            "display_name": "Local User",
+            "email": "local@example.com",
+        }
+
+    def user_identity(self, _user_id: str) -> dict[str, str] | None:
+        return self.identity
 
     async def signup(
         self, email: str, password: str, password_confirm: str, client_key: str
@@ -56,6 +63,8 @@ class StubPasswordAuth:
             user_id="user-1",
             roles=["service_admin"],
             workspace_id="default",
+            display_name="Local User",
+            email="local@example.com",
         )
 
     async def check_email_available(self, email: str, client_key: str) -> bool:
@@ -211,10 +220,27 @@ def test_login_sets_httponly_session_cookie(monkeypatch) -> None:
 
     assert body.authenticated is True
     assert body.workspace_id == "default"
+    assert body.display_name == "Local User"
+    assert body.email == "local@example.com"
     assert password_auth.calls == [("login", ("local@example.com", "local-password", "127.0.0.1"))]
     assert "service_session=login-token" in cookie
     assert "httponly" in cookie
     assert "max-age=7200" in cookie
+
+
+def test_existing_session_resolves_human_profile_identity() -> None:
+    password_auth = StubPasswordAuth()
+    current = SimpleNamespace(
+        token="existing-token",
+        user_id="user-1",
+        roles=["service_admin"],
+        workspace_id="default",
+    )
+
+    body = asyncio.run(identity_router.session(current=current, password_auth=password_auth))
+
+    assert body.display_name == "Local User"
+    assert body.email == "local@example.com"
 
 
 def test_session_refresh_route_is_guarded_by_require_session() -> None:

@@ -298,6 +298,24 @@ class IdentityAccessRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
 
+    def get_user_by_id(self, user_id: str) -> JsonObject | None:
+        table = UserAccount.__table__
+        statement = (
+            select(
+                table.c.user_id,
+                table.c.email,
+                table.c.password_hash,
+                table.c.display_name,
+                table.c.status,
+                table.c.role,
+            )
+            .where(table.c.user_id == user_id)
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
+
     def create_user(
         self,
         user_id: str,

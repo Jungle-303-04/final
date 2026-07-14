@@ -141,6 +141,8 @@ class PasswordAuthService:
             user_id,
             roles_from_record(user),
             workspace_id_from_record(user) or self.db.get_default_workspace_id_for_user(user_id),
+            display_name=str(user["display_name"]),
+            email=str(user["email"]),
         )
 
     async def resend_email_verification(
@@ -198,7 +200,13 @@ class PasswordAuthService:
         )
         session = None
         if status == UserStatus.ACTIVE.value:
-            session = await self.sessions.create_session(user_id, roles, workspace_id)
+            session = await self.sessions.create_session(
+                user_id,
+                roles,
+                workspace_id,
+                display_name=str(user["display_name"]),
+                email=str(user["email"]),
+            )
         return EmailVerificationResult(
             user_id=user_id,
             status=status,
@@ -216,6 +224,15 @@ class PasswordAuthService:
     async def logout(self, token: str | None) -> None:
         if token:
             await self.sessions.delete_session(token)
+
+    def user_identity(self, user_id: str) -> dict[str, str] | None:
+        user = self.db.get_user_by_id(user_id)
+        if user is None:
+            return None
+        return {
+            "display_name": str(user["display_name"]),
+            "email": str(user["email"]),
+        }
 
 
 def user_id_from_record(user: dict[str, object]) -> str:
