@@ -20,19 +20,19 @@ import {
   login,
   logout,
   selectRecoveryAction,
+  createReleaseFlowClient,
 } from "../api";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
 import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
-import {
-  createApplicationsSurface,
-  createGitOpsSurface,
-} from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
+import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
+import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
 import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
+import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
 import { createProductComposition } from "./productComposition";
 
 export function createApiComposition() {
@@ -62,6 +62,7 @@ export function createApiComposition() {
     listApplicationRuns,
     listApplications,
   });
+  const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
   return createProductComposition([
     {
       id: "home",
@@ -81,7 +82,7 @@ export function createApiComposition() {
     },
     {
       id: "gitops",
-      Component: createGitOpsSurface(applicationsGitOpsPort),
+      Component: createGitOpsSurface(gitOpsPort),
     },
   ], createAuthAdapter({
     getSession,

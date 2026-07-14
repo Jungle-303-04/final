@@ -2,6 +2,7 @@ import type { MessageKey } from "./types";
 import { issuesKo } from "./catalogs/ko/issues";
 import { metricsKo } from "./catalogs/ko/metrics";
 import { resourcesKo } from "./catalogs/ko/resources";
+import { workflowsKo } from "./catalogs/ko/workflows";
 
 export const ko = {
   "product.name": "Opsia",
@@ -239,4 +240,5 @@ export const ko = {
   ...resourcesKo,
   ...issuesKo,
   ...metricsKo,
+  ...workflowsKo,
 } satisfies Record<MessageKey, string>;
