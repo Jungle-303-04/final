@@ -3,6 +3,7 @@ import type {
   ResourceDataQualityWarning,
   ResourceDetail,
   ResourceHealthCounts,
+  ResourceInfraMap,
   ResourceIdentity,
   ResourceList,
   ResourceRelatedGroup,
@@ -119,6 +120,29 @@ export function toResourceList(
     excludedCount,
     dataQualityWarnings,
     items,
+  };
+}
+
+export function toResourceInfraMap(
+  clusterId: string,
+  limit: number,
+  nodeList: ResourceList,
+  podList: ResourceList,
+): ResourceInfraMap {
+  assertSameIdentity(nodeList.clusterId, clusterId);
+  assertSameIdentity(podList.clusterId, clusterId);
+  assertSameResourceType(nodeList.resourceType, "node");
+  assertSameResourceType(podList.resourceType, "pod");
+  return {
+    clusterId,
+    completeness: "unknown",
+    limit,
+    nodes: nodeList.items,
+    pods: podList.items,
+    dataQualityWarnings: [
+      ...(nodeList.dataQualityWarnings ?? []),
+      ...(podList.dataQualityWarnings ?? []),
+    ],
   };
 }
 

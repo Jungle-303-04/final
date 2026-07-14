@@ -177,6 +177,20 @@ export interface ResourceList {
   items: ResourceSummary[];
 }
 
+export interface ResourceInfraMap {
+  clusterId: string;
+  completeness: ResourcesCollectionCompleteness;
+  limit: number;
+  nodes: ResourceSummary[];
+  pods: ResourceSummary[];
+  dataQualityWarnings?: ResourceDataQualityWarning[];
+}
+
+export interface ResourceInfraMapQuery {
+  includeDeleted?: boolean;
+  limit?: number;
+}
+
 export interface ResourceIdentity {
   resourceType: string;
   kind: string;
@@ -229,6 +243,11 @@ export class ResourcesPortFailure extends Error {
 
 export interface ResourcesPort {
   loadCatalog(clusterId: string, signal?: AbortSignal): Promise<ResourceCatalog>;
+  loadInfraMap(
+    clusterId: string,
+    query?: ResourceInfraMapQuery,
+    signal?: AbortSignal,
+  ): Promise<ResourceInfraMap>;
   listResources(
     clusterId: string,
     query: ResourceListQuery,

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomePortFailure } from "../../features/home/homeContract";
@@ -33,10 +33,10 @@ describe("ResourcesPage refresh and generation safety", () => {
       resourcesPort({ listResources }),
       "/resources?clusters=cluster-1&resources.types=pod",
     );
-    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
+    expect(await findTableText("checkout-api-0")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "새로 고침" }));
-    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
+    expect(await findTableText("checkout-api-0")).toBeTruthy();
     expect((await screen.findByRole("alert")).textContent)
       .toContain("목록을 갱신하지 못했습니다");
   }, 15_000);
@@ -74,11 +74,11 @@ describe("ResourcesPage refresh and generation safety", () => {
     expect(signals[0]?.aborted).toBe(true);
 
     act(() => newList.resolve(NODE_LIST));
-    expect(await screen.findByText("worker-new", {}, { timeout: 5_000 })).toBeTruthy();
+    expect(await findTableText("worker-new")).toBeTruthy();
     act(() => oldList.resolve(POD_LIST));
     await act(async () => Promise.resolve());
-    expect(screen.queryByText("checkout-api-0")).toBeNull();
-    expect(screen.getByText("worker-new")).toBeTruthy();
+    expect(queryTableText("checkout-api-0")).toBeNull();
+    expect(tableScope().getByText("worker-new")).toBeTruthy();
   }, 15_000);
 
   it("polls every 30 seconds only while visible and refreshes when visibility returns", async () => {
@@ -132,7 +132,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       "/resources?clusters=cluster-1&resources.types=pod",
     );
     await flushPromises();
-    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+    expect(tableScope().getByText("checkout-api-0")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "새로 고침" }));
     await flushPromises();
@@ -145,7 +145,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     fireEvent.click(screen.getByRole("button", { name: "권한 다시 확인" }));
     await flushPromises();
     expect(listResources).toHaveBeenCalledTimes(3);
-    expect(screen.queryByText("checkout-api-0")).toBeNull();
+    expect(queryTableText("checkout-api-0")).toBeNull();
 
     act(() => recovery.resolve({
       ...POD_LIST,
@@ -154,7 +154,7 @@ describe("ResourcesPage refresh and generation safety", () => {
       returned: 1,
     }));
     await flushPromises();
-    expect(screen.getByText("orders-api-0")).toBeTruthy();
+    expect(tableScope().getByText("orders-api-0")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" })).toBeNull();
   });
 
@@ -178,7 +178,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     fireEvent.click(screen.getByRole("button", { name: "다시 불러오기" }));
     await flushPromises();
     expect(listResources).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+    expect(tableScope().getByText("checkout-api-0")).toBeTruthy();
   });
 
   it("honors Retry-After before an automatic rate-limit recovery", async () => {
@@ -202,7 +202,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     act(() => vi.advanceTimersByTime(1));
     await flushPromises();
     expect(listResources).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+    expect(tableScope().getByText("checkout-api-0")).toBeTruthy();
   });
 
   it("surfaces a cluster-choice background failure while preserving the last valid frame", async () => {
@@ -216,13 +216,13 @@ describe("ResourcesPage refresh and generation safety", () => {
       "/resources?clusters=cluster-1&resources.types=pod",
       clusterPort,
     );
-    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
+    expect(await findTableText("checkout-api-0")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "새로 고침" }));
 
     expect(await screen.findByText("클러스터 목록을 갱신하지 못했습니다", {}, { timeout: 5_000 }))
       .toBeTruthy();
-    expect(screen.getByText("checkout-api-0")).toBeTruthy();
+    expect(tableScope().getByText("checkout-api-0")).toBeTruthy();
   });
 
   it("shows catalog observation freshness instead of implying that polling made stale data current", async () => {
@@ -244,4 +244,19 @@ async function flushPromises() {
   await act(async () => {
     for (let index = 0; index < 12; index += 1) await Promise.resolve();
   });
+}
+
+async function findTableText(text: string) {
+  const table = await screen.findByRole("table", { hidden: true }, { timeout: 5_000 });
+  return within(table).findByText(text, {}, { timeout: 5_000 });
+}
+
+function queryTableText(text: string) {
+  const table = screen.queryByRole("table", { hidden: true });
+  return table ? within(table).queryByText(text) : null;
+}
+
+function tableScope() {
+  const table = screen.getByRole("table", { hidden: true });
+  return within(table);
 }

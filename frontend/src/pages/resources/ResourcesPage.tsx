@@ -132,7 +132,7 @@ export function ResourcesPage({
             ) ? (
               <UnknownSelection value={state.selectedResourceType} variant="resource" />
             ) : (
-              <ResourcesListSurface state={state} />
+              <ResourcesListSurface port={port} state={state} />
             )}
           </div>
         </>
@@ -151,7 +151,13 @@ export function ResourcesPage({
   );
 }
 
-function ResourcesListSurface({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
+function ResourcesListSurface({
+  port,
+  state,
+}: {
+  port: ResourcesPort;
+  state: ReturnType<typeof useResourcesPageState>;
+}) {
   const { t } = useI18n();
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
@@ -167,10 +173,16 @@ function ResourcesListSurface({ state }: { state: ReturnType<typeof useResources
       </Surface>
 
       <Surface
-        aria-labelledby="resources-graph-unavailable-title"
+        aria-labelledby="resources-infra-map-title"
         className="min-w-0 overflow-hidden"
       >
-        <ResourcesGraphShell />
+        <ResourcesGraphShell
+          clusterId={state.selectedClusterId}
+          detail={state.detail}
+          detailRequested={state.detailRequested}
+          includeDeleted={state.includeDeleted}
+          port={port}
+        />
       </Surface>
 
       <Surface aria-labelledby="resources-list-title" className="min-w-0 overflow-hidden">

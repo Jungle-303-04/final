@@ -43,7 +43,8 @@ describe("ResourcesPage URL-backed detail", () => {
       { timeout: 5_000 },
     );
     detail.resolve(POD_DETAIL);
-    expect(await within(dialog).findByText("Running", {}, { timeout: 5_000 })).toBeTruthy();
+    expect((await within(dialog).findAllByText("Running", {}, { timeout: 5_000 })).length)
+      .toBeGreaterThan(0);
   }, 15_000);
 
   it("resolves a direct same-route detail deep link from canonical identity", async () => {
@@ -109,7 +110,7 @@ describe("ResourcesPage URL-backed detail", () => {
       "&resource=shop%2Fmissing&resourceKind=Pod",
     );
 
-    expect(await screen.findByText("checkout-api-0", {}, { timeout: 5_000 })).toBeTruthy();
+    expect(await findTableText("checkout-api-0")).toBeTruthy();
     const dialog = await screen.findByRole("dialog", { name: "missing 상세" });
     expect(dialog.textContent).toContain("리소스를 찾을 수 없습니다");
     expect(screen.getByRole("button", { name: "상세 닫기" })).toBeTruthy();
@@ -264,4 +265,9 @@ function longDetailUrl(): string {
 function resetDocumentTestClock() {
   vi.useRealTimers();
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+}
+
+async function findTableText(text: string) {
+  const table = await screen.findByRole("table", { hidden: true }, { timeout: 5_000 });
+  return within(table).findByText(text, {}, { timeout: 5_000 });
 }

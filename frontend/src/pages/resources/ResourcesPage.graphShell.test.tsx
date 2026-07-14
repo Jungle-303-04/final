@@ -4,6 +4,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  INFRA_MAP,
   renderResources,
   resourcesClusterPort,
   resourcesPort,
@@ -12,7 +13,7 @@ import {
 afterEach(cleanup);
 
 describe("ResourcesPage VP-012 four-layer surface", () => {
-  it("shows filters, physical-view slot, scrubber, and verified table together", async () => {
+  it("shows filters, Infra Map slot, and verified table together", async () => {
     const port = resourcesPort();
     renderEnglishResources(
       port,
@@ -21,18 +22,18 @@ describe("ResourcesPage VP-012 four-layer surface", () => {
 
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Resource filters" })).toBeTruthy();
-    expect(screen.getByText("Physical placement")).toBeTruthy();
-    expect(screen.getByRole("heading", {
-      level: 2,
-      name: "Graph data is not available yet",
-    })).toBeTruthy();
-
-    const timeline = screen.getByRole("slider", { name: "Time" });
-    const play = screen.getByRole("button", { name: "Play resource history" });
-    expect(timeline.getAttribute("disabled")).not.toBeNull();
-    expect(play.getAttribute("disabled")).not.toBeNull();
-    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("unavailable");
+    expect(screen.getByRole("heading", { level: 2, name: "Infra Map" })).toBeTruthy();
+    expect(screen.getByText("Cluster overview")).toBeTruthy();
+    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
+    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
+    const nodeGrid = document.querySelector('[data-slot="infra-map-node-grid"]');
+    if (!(nodeGrid instanceof HTMLElement)) throw new Error("Infra Map node grid not found");
+    expect(nodeGrid.dataset.layout).toBe("pair");
+    expect(await within(infraMap).findByText("Node: worker-a")).toBeTruthy();
+    expect(within(infraMap).getByText("checkout-api-0")).toBeTruthy();
+    expect(within(infraMap).getByText("orders-api-0")).toBeTruthy();
+    expect(within(infraMap).getByText("52% 2,100m")).toBeTruthy();
+    expect(within(infraMap).getByText("2% 2/110")).toBeTruthy();
 
     expect(screen.getAllByRole("img", { name: "CPU trend unavailable" })).toHaveLength(3);
     expect(document.querySelector('[data-slot="resource-trend-sparkline"]')).toBeNull();
@@ -44,9 +45,40 @@ describe("ResourcesPage VP-012 four-layer surface", () => {
       expect.objectContaining({ resourceType: "pod" }),
       expect.any(AbortSignal),
     );
+    expect(port.loadInfraMap).toHaveBeenCalledWith(
+      "cluster-1",
+      expect.objectContaining({ includeDeleted: false, limit: 200 }),
+      expect.any(AbortSignal),
+    );
   }, 15_000);
 
-  it("canonicalizes the retired graph mode without hiding either graph or table", async () => {
+  it("centers the Infra Map node when a cluster has a single observed node", async () => {
+    const port = resourcesPort({
+      loadInfraMap: async (clusterId) => ({
+        ...INFRA_MAP,
+        clusterId,
+        nodes: INFRA_MAP.nodes.slice(0, 1),
+        pods: INFRA_MAP.pods.filter((pod) =>
+          pod.facts.type === "pod" && pod.facts.nodeName === "worker-a"),
+      }),
+    });
+    renderEnglishResources(
+      port,
+      "/resources?clusters=cluster-1&resources.types=pod",
+    );
+
+    expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
+    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
+    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
+    expect(await within(infraMap).findByText("Node: worker-a")).toBeTruthy();
+    const nodeGrid = document.querySelector('[data-slot="infra-map-node-grid"]');
+    if (!(nodeGrid instanceof HTMLElement)) throw new Error("Infra Map node grid not found");
+    expect(nodeGrid.dataset.layout).toBe("single");
+    expect(nodeGrid.className).toContain("max-w-xl");
+    expect(within(infraMap).queryByText("Node: worker-b")).toBeNull();
+  }, 15_000);
+
+  it("canonicalizes the retired graph mode without hiding either Infra Map or table", async () => {
     const port = resourcesPort();
     renderEnglishResources(
       port,
@@ -54,10 +86,11 @@ describe("ResourcesPage VP-012 four-layer surface", () => {
     );
 
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Graph data is not available yet" }))
+    expect(screen.getByRole("heading", { name: "Infra Map" }))
       .toBeTruthy();
     await waitFor(() => expect(readResourcesQuery().has("resources.view")).toBe(false));
     expect(port.listResources).toHaveBeenCalledOnce();
+    expect(port.loadInfraMap).toHaveBeenCalledOnce();
   }, 15_000);
 
   it("keeps multi-Cluster scope unavailable instead of issuing a single-Cluster request", async () => {
@@ -87,13 +120,18 @@ describe("ResourcesPage VP-012 four-layer surface", () => {
       name: "Open details for checkout-api-0",
     }));
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
+    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
+    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
+    await waitFor(() => expect(within(infraMap).getByText("Selection")).toBeTruthy());
+    expect(within(infraMap).getByText("checkout-api-0")).toBeTruthy();
+    expect(within(infraMap).queryByText("orders-api-0")).toBeNull();
 
     expect(await within(dialog).findByText("Point-in-time evidence")).toBeTruthy();
     expect(within(dialog).getByText("CPU and memory history")).toBeTruthy();
     expect(within(dialog).getByText("Logs at the selected time")).toBeTruthy();
     expect(within(dialog).getByText("Related incident")).toBeTruthy();
     expect(within(dialog).getAllByText("Unavailable")).toHaveLength(3);
-    expect(within(dialog).getByText("Running")).toBeTruthy();
+    expect(within(dialog).getAllByText("Running").length).toBeGreaterThan(0);
     expect(port.loadResourceDetail).toHaveBeenCalledWith(
       "cluster-1",
       expect.objectContaining({ name: "checkout-api-0" }),
