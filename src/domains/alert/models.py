@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, Index, Integer, Text
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import Boolean, Float, Index, Integer, Text
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.storage.base import (
@@ -37,5 +37,30 @@ class AlertChannel(Base):
     last_test_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_test_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_test_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class AlertRule(Base):
+    """Opsia가 직접 평가하는 알림 규칙. 클러스터 PrometheusRule과 무관하다."""
+
+    __tablename__ = "alert_rules"
+    __table_args__ = (
+        Index("ix_alert_rules_workspace_enabled", "workspace_id", "enabled"),
+        Index("ix_alert_rules_workspace_name", "workspace_id", "name"),
+    )
+
+    rule_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = text_column()
+    name: Mapped[str] = text_column()
+    scope: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    metric: Mapped[str] = text_column()
+    comparator: Mapped[str] = text_column()
+    threshold: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    for_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    severity: Mapped[str] = text_column()
+    channels: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by: Mapped[str] = text_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
