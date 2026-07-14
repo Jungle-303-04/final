@@ -74,6 +74,42 @@ def empty_payload() -> ClusterEvidenceReceivedBody:
     )
 
 
+def topology_capacity_kubernetes() -> dict[str, Any]:
+    return {
+        "resource": {
+            "kind": "deployment",
+            "name": "checkout-api",
+            "namespace": "sandbox",
+        },
+        "pods": [
+            {
+                "name": "checkout-api-7f5c",
+                "namespace": "sandbox",
+                "node_name": "worker-a",
+                "cpu_mcores": 120.5,
+                "mem_mib": 96.0,
+                "cpu_request_mcores": 200.0,
+                "mem_request_mib": 256.0,
+                "cpu_limit_mcores": 500.0,
+                "mem_limit_mib": 512.0,
+            }
+        ],
+        "nodes": [
+            {
+                "name": "worker-a",
+                "ready": True,
+                "cpu_mcores": 650.0,
+                "mem_mib": 2048.0,
+                "allocatable_cpu_mcores": 2000.0,
+                "allocatable_mem_mib": 4096.0,
+                "pod_capacity": 110,
+            }
+        ],
+        "symptom": "CrashLoopBackOff",
+        "severity": "high",
+    }
+
+
 def event_by_subject(events: list[Any], subject: str) -> Any:
     return next(event for event in events if event.__subject__ == subject)
 
@@ -154,6 +190,41 @@ def test_evidence_worker_hydrates_reference_event_from_window_payload() -> None:
     assert outs[0].summary["resource"]["name"] == "checkout-api"
     assert outs[0].payload_size > 0
     assert db.called("get_evidence_window_payload")
+
+
+def test_evidence_worker_hydrates_topology_capacity_fields_from_window_payload() -> None:
+    evidence_worker = load_service("ai/evidence-worker")
+    full_payload = ClusterEvidenceReceivedBody.from_body(
+        {
+            **crashloop_payload(
+                source_id="cluster-snapshot",
+                window_start="window-capacity",
+            ).to_body(),
+            "evidence_key": "workspace-1:cluster-1:cluster-snapshot:window-capacity",
+            "kubernetes": topology_capacity_kubernetes(),
+        }
+    )
+    reference_payload = ClusterEvidenceReceivedBody.from_body(
+        compact_cluster_evidence_payload(full_payload, "corr-capacity")
+    )
+    db = SpyDb(get_evidence_window_payload=full_payload.to_body())
+
+    outs = run_handler(
+        evidence_worker.on_cluster_evidence,
+        reference_payload,
+        db=db,
+        correlation_id="corr-capacity",
+    )
+
+    assert subjects_of(outs) == ["evidence.built"]
+    saved = next(call for call in db.calls if call[0] == "save_evidence")[1][3]
+    saved_kubernetes = saved["kubernetes"]
+    assert saved_kubernetes["pods"][0]["cpu_request_mcores"] == 200.0
+    assert saved_kubernetes["pods"][0]["mem_limit_mib"] == 512.0
+    assert saved_kubernetes["nodes"][0]["allocatable_cpu_mcores"] == 2000.0
+    assert saved_kubernetes["nodes"][0]["pod_capacity"] == 110
+    assert saved_kubernetes[EVIDENCE_LINEAGE_KEY]["source"] == "kubernetes"
+    assert outs[0].evidence.kubernetes == {}
 
 
 def test_evidence_worker_accepts_legacy_full_payload_event() -> None:

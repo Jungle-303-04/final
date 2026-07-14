@@ -81,6 +81,40 @@ def evidence_request() -> AgentEvidenceRequest:
     )
 
 
+def topology_capacity_kubernetes() -> dict[str, object]:
+    return {
+        "resource": {
+            "kind": "deployment",
+            "name": "checkout-api",
+            "namespace": "sandbox",
+        },
+        "pods": [
+            {
+                "name": "checkout-api-7f5c",
+                "namespace": "sandbox",
+                "node_name": "worker-a",
+                "cpu_mcores": 120.5,
+                "mem_mib": 96.0,
+                "cpu_request_mcores": 200.0,
+                "mem_request_mib": 256.0,
+                "cpu_limit_mcores": 500.0,
+                "mem_limit_mib": 512.0,
+            }
+        ],
+        "nodes": [
+            {
+                "name": "worker-a",
+                "ready": True,
+                "cpu_mcores": 650.0,
+                "mem_mib": 2048.0,
+                "allocatable_cpu_mcores": 2000.0,
+                "allocatable_mem_mib": 4096.0,
+                "pod_capacity": 110,
+            }
+        ],
+    }
+
+
 def test_agent_evidence_dedupes_existing_window_before_emitting_event() -> None:
     events = SpyEvents()
     db = DedupeDb(existing={"event_id": "evt-old", "correlation_id": "corr-old"})
@@ -117,6 +151,30 @@ def test_agent_evidence_records_window_and_outbox_without_direct_emit() -> None:
     assert event_payload["kubernetes"] == {}
     assert event_payload["metrics"] == {}
     assert event_payload["logs"] == []
+
+
+def test_agent_evidence_preserves_capacity_fields_in_window_payload() -> None:
+    events = SpyEvents()
+    db = DedupeDb()
+    request = evidence_request().model_copy(
+        update={"kubernetes": topology_capacity_kubernetes()}
+    )
+
+    asyncio.run(agent_evidence(request, AGENT_IDENTITY, events, db))
+
+    stored_payload = db.recorded[0]["payload"]
+    stored_kubernetes = stored_payload["kubernetes"]
+    assert stored_kubernetes["pods"][0]["cpu_request_mcores"] == 200.0
+    assert stored_kubernetes["pods"][0]["mem_limit_mib"] == 512.0
+    assert stored_kubernetes["nodes"][0]["allocatable_cpu_mcores"] == 2000.0
+    assert stored_kubernetes["nodes"][0]["pod_capacity"] == 110
+
+    event_payload = db.recorded[0]["event_envelope"].payload
+    assert event_payload["kubernetes"] == {}
+    assert event_payload["metrics"] == {}
+    assert event_payload["logs"] == []
+    assert "pods" in event_payload["summary"]["kubernetes_keys"]
+    assert "nodes" in event_payload["summary"]["kubernetes_keys"]
 
 
 def test_agent_evidence_reuses_existing_window_without_outbox_duplicate() -> None:
