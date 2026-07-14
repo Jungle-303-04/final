@@ -2,6 +2,7 @@ import { Waypoints } from "lucide-react";
 import { useMemo } from "react";
 
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
+import { FirstAppearanceMotionBoundary } from "../../motion/useFirstAppearanceMotion";
 import { useI18n } from "../../shared/i18n";
 import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
@@ -30,27 +31,29 @@ export function ResourcesPhysicalTopologyScene({
     () => placements.reduce((count, placement) => count + placement.pods.length + 2, 0),
     [placements],
   );
-  if (frame.phase === "loading") {
-    return <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />;
-  }
-  if (frame.phase === "ready" && placements.length > 0) {
-    return (
-      <UsageSmoothingBoundary markCount={usageMarkCount}>
-        <div
-          className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-auto p-4 sm:p-5"
-          data-slot="physical-topology-grid"
-        >
-          {placements.map((placement, index) => (
-            <PhysicalTopologyServerCard
-              data={{ clusterId, index, placement, onOpenPod, onRevealServer }}
-              key={placement.server.id}
-            />
-          ))}
-        </div>
-      </UsageSmoothingBoundary>
-    );
-  }
-  return <GraphUnavailable failed={frame.phase === "failed"} />;
+  return (
+    <FirstAppearanceMotionBoundary scope={clusterId}>
+      {frame.phase === "loading" ? (
+        <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />
+      ) : frame.phase === "ready" && placements.length > 0 ? (
+        <UsageSmoothingBoundary markCount={usageMarkCount}>
+          <div
+            className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-auto p-4 sm:p-5"
+            data-slot="physical-topology-grid"
+          >
+            {placements.map((placement, index) => (
+              <PhysicalTopologyServerCard
+                data={{ clusterId, index, placement, onOpenPod, onRevealServer }}
+                key={placement.server.id}
+              />
+            ))}
+          </div>
+        </UsageSmoothingBoundary>
+      ) : (
+        <GraphUnavailable failed={frame.phase === "failed"} />
+      )}
+    </FirstAppearanceMotionBoundary>
+  );
 }
 
 function ServerSkeletons({ clusterId, count }: { clusterId: string; count: number | null }) {
@@ -65,7 +68,7 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
       {Array.from({ length: visible }, (_, index) => (
         <div
           aria-hidden="true"
-          className="motion-node-land h-52 w-full animate-pulse rounded-xl border bg-card/85 p-3 motion-reduce:animate-none"
+          className="h-52 w-full animate-pulse rounded-xl border bg-card/85 p-3 motion-reduce:animate-none"
           data-morph-id={`server:${clusterId}:${index}`}
           data-slot="physical-server-skeleton"
           key={index}
@@ -77,7 +80,7 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
           </div>
           <div className="mt-3 grid grid-cols-6 gap-1.5">
             {Array.from({ length: 12 }, (_, podIndex) => (
-              <div className="size-8 rounded bg-muted" key={podIndex} />
+              <div className="size-9 rounded bg-muted" key={podIndex} />
             ))}
           </div>
         </div>
