@@ -1,4 +1,5 @@
 import { CircleAlert, ExternalLink } from "lucide-react";
+import { cn } from "@/shared/lib/cn";
 import {
   Alert,
   AlertDescription,
@@ -62,10 +63,12 @@ export function IssueRecentChangesPanel({
                   <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
                     <RecentChangeFact
                       label={copy.recentChangesImageBeforeLabel}
+                      mono
                       value={change.imageBefore}
                     />
                     <RecentChangeFact
                       label={copy.recentChangesImageAfterLabel}
+                      mono
                       value={change.imageAfter}
                     />
                   </dl>
@@ -73,6 +76,8 @@ export function IssueRecentChangesPanel({
                 <dl className="grid min-w-0 gap-2 sm:grid-cols-3">
                   <RecentChangeFact
                     label={copy.recentChangesCommitLabel}
+                    mono
+                    short
                     value={change.commitSha}
                   />
                   <div className="min-w-0">
@@ -80,14 +85,20 @@ export function IssueRecentChangesPanel({
                       {copy.recentChangesRepositoryLabel}
                     </dt>
                     <dd className="grid min-w-0 gap-0.5">
-                      <span className="min-w-0 break-all">{change.repositoryId}</span>
-                      <span className="min-w-0 break-all text-muted-foreground">
+                      <span className="min-w-0 truncate" title={change.repositoryId ?? undefined}>
+                        {change.repositoryId}
+                      </span>
+                      <span
+                        className="min-w-0 truncate text-muted-foreground"
+                        title={change.repoRef ?? undefined}
+                      >
                         {change.repoRef}
                       </span>
                     </dd>
                   </div>
                   <RecentChangeFact
                     label={copy.recentChangesWorkflowLabel}
+                    mono
                     value={change.workflowRunId}
                   />
                 </dl>
@@ -114,15 +125,24 @@ export function IssueRecentChangesPanel({
 function RecentChangeFact({
   label,
   value,
+  mono = false,
+  short = false,
 }: {
   label: string;
   value: string | null;
+  /** 해시·태그처럼 고정폭이 어울리는 값 */
+  mono?: boolean;
+  /** 커밋 해시처럼 앞 7자만 보여주고 나머지는 호버로 확인 */
+  short?: boolean;
 }) {
   if (value === null) return null;
+  const display = short && value.length > 10 ? value.slice(0, 7) : value;
   return (
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-all">{value}</dd>
+      <dd className={cn("min-w-0 truncate", mono && "font-mono text-sm")} title={value}>
+        {display}
+      </dd>
     </div>
   );
 }
