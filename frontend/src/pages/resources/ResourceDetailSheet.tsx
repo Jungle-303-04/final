@@ -1,6 +1,5 @@
 import {
   Activity,
-  ChartNoAxesCombined,
   CircleAlert,
   FileCode2,
   Link2,
@@ -29,15 +28,21 @@ import {
 import { DefinitionGrid, ResourceFactsPanel } from "./ResourceFactsPanel";
 import { ResourceDetailLoadingPreview } from "./ResourcesLoadingPreview";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
+import { ResourceMetricsCharts } from "./ResourceMetricsCharts";
+import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 
 export function ResourceDetailBody({
   detail,
+  full,
   identity,
+  metricHistory,
   onTabChange,
   tab,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
+  full: boolean;
   identity: ResourceIdentity | null;
+  metricHistory: ResourceMetricsHistoryFrame;
   onTabChange: (tab: string) => void;
   tab: string;
 }) {
@@ -123,7 +128,9 @@ export function ResourceDetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
-        <PointInTimeEvidenceUnavailable />
+        {hasMetricPoints(metricHistory, resource.inventoryKey)
+          ? null
+          : <PointInTimeEvidenceUnavailable />}
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="yaml">
         <EmptySection icon={FileCode2} text={t("resources.detail.yamlUnavailable")} />
@@ -155,9 +162,10 @@ export function ResourceDetailBody({
         <CompletenessNote />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="metrics">
-        <EmptySection
-          icon={ChartNoAxesCombined}
-          text={t("resources.detail.metricsUnavailable")}
+        <ResourceMetricsCharts
+          frame={metricHistory}
+          resourceId={resource.inventoryKey}
+          wide={full}
         />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="events">
@@ -192,6 +200,12 @@ export function ResourceDetailBody({
         <CompletenessNote />
       </TabsContent>
     </Tabs>
+  );
+}
+
+function hasMetricPoints(frame: ResourceMetricsHistoryFrame, resourceId: string): boolean {
+  return frame.phase === "ready" && frame.data.series.some(
+    (series) => series.resourceId === resourceId && series.points.length > 0,
   );
 }
 

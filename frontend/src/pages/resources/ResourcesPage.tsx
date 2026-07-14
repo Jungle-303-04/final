@@ -137,13 +137,18 @@ export function ResourcesPage({
   const filteredPage = filtered.list.phase === "ready"
     ? filtered.list.data
     : null;
+  const detailResourceId = state.detail.phase === "ready"
+    ? state.detail.data.resource.inventoryKey
+    : null;
   const metricResourceIds = useMemo(
-    () => (filteredPage?.items ?? [])
-      .map((item) => item.resource)
-      .filter((resource) => resource.resourceType === "pod")
-      .slice(0, 100)
-      .map((resource) => resource.inventoryKey),
-    [filteredPage],
+    () => Array.from(new Set([
+      ...(detailResourceId ? [detailResourceId] : []),
+      ...(filteredPage?.items ?? [])
+        .map((item) => item.resource)
+        .filter((resource) => resource.resourceType === "pod")
+        .map((resource) => resource.inventoryKey),
+    ])).slice(0, 100),
+    [detailResourceId, filteredPage],
   );
   const metricHistory = useResourceMetricsHistoryDataFrame({
     active: metricResourceIds.length > 0,
@@ -154,9 +159,6 @@ export function ResourcesPage({
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
   });
-  const detailResourceId = state.detail.phase === "ready"
-    ? state.detail.data.resource.inventoryKey
-    : null;
   const resourceCapabilities = useResourceCapabilitiesDataFrame({
     active: state.detailRequested && detailResourceId !== null,
     authorityKey,
@@ -304,6 +306,7 @@ export function ResourcesPage({
             detail={state.detail}
             full={state.detailFull}
             identity={state.detailIdentity}
+            metricHistory={metricHistory}
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
             onTabChange={state.setDetailTab}
