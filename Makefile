@@ -81,10 +81,22 @@ gate-fast: ## pre-push용 빠른 정적 검사와 지정 변경 영역 테스트
 	PYTHONPATH=src uv run lint-imports --config .importlinter
 	uv run python -m compileall -q src scripts
 	uv run pytest -q $(FAST_TESTS)
-	cd frontend && npm ci --include=dev --no-audit --no-fund
-	cd frontend && npm run typecheck
-	cd frontend && npm run lint
-	cd frontend && npm test
+	@changed_files="$$(bash scripts/changed-files.sh)"; \
+	if grep -Eq '^frontend/' <<<"$$changed_files"; then \
+		base="$$(bash scripts/changed-files.sh --base)"; \
+		if [[ ! -d frontend/node_modules ]] || grep -Eq '^frontend/(package.json|package-lock.json)$$' <<<"$$changed_files"; then \
+			(cd frontend && npm ci --include=dev --no-audit --no-fund); \
+		fi; \
+		(cd frontend && npm run typecheck); \
+		(cd frontend && npm run lint); \
+		if grep -Eq '^frontend/(package.json|package-lock.json|vitest.config.[^/]+|vite.config.[^/]+|tsconfig[^/]*)$$' <<<"$$changed_files"; then \
+			(cd frontend && npm test); \
+		else \
+			(cd frontend && npm test -- --changed "$$base"); \
+		fi; \
+	else \
+		echo "[gate-fast] frontend 변경 없음 — 프론트 검사 생략"; \
+	fi
 
 events: ## 등록된 이벤트/구독자 한눈에 보기
 	uv run python scripts/events.py
