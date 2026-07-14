@@ -572,8 +572,8 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 
 ## 11. Radar 이식이 **절반도 안 됐다** ★ (실측)
 
-`references/radar-upstream/` 은 "889파일 착륙"이라고 기록돼 있지만,
-**정작 UI 라이브러리(`packages/k8s-ui/src/`)는 492개 중 268개만 들어왔다. 224개가 없다.**
+과거 v1.5.7 `88bd1e97…` 스냅샷은 UI 라이브러리(`packages/k8s-ui/src/`)가 실제
+268파일이었다. **P0에서 492파일이 존재하는 `10461f40…` 고정본으로 교체해 완결했다.**
 
 원본을 다시 클론해 1:1로 대조한 결과다. **추측이 아니다.**
 
@@ -715,7 +715,8 @@ R9  topology/ 3 · resources/ 51 · utils/ 30 · types/ 4 · assets/ 2 · perf/ 
 
 ### 11.6 라이선스
 
-Radar는 **Apache-2.0**. 이식 파일 상단에 **원본 헤더 보존 + 수정 사실 표기**, 루트 `NOTICE` 유지.
+Radar는 **Apache-2.0**. 파일별 헤더를 추가하지 않고 루트 `NOTICE`와
+`LICENSE-APACHE-2.0.txt`가 귀속·수정·라이선스를 영구히 담당한다.
 `provider-logos` 는 **상표**다. nominative use이므로 `NOTICE` 에 상표 귀속을 별도로 적는다.
 
 ---

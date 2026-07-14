@@ -28,7 +28,7 @@ priority: R0~R2 · C1~C10 이 S11 이후 신규 슬라이스보다 **먼저다**
 
 | 층 | 정본 | 결정하는 것 |
 |---|---|---|
-| **기능·구조·라벨** | **Radar** (`references/radar-upstream/`) | 어떤 화면·컴포넌트·컬럼·kind 렌더러·감사 체크·라벨이 있는가. **가져올 수 있는 건 전부 가져온다** |
+| **기능·구조·라벨** | **Radar** (`references/upstream/`) | 어떤 화면·컴포넌트·컬럼·kind 렌더러·감사 체크·라벨이 있는가. **가져올 수 있는 건 전부 가져온다** |
 | **디자인** | **shadcn/ui** | 색·간격·타이포·radius·primitive·문법. **Radar의 시각 언어는 버린다** |
 | **차별화** | **VP-010~019** | 필터=줌 · 3층 골격 · 파드 3채널 · 상세 3상태 · SLG 모션 · 3-way diff · RCA · 고스트 파드 · AI |
 
@@ -52,8 +52,9 @@ priority: R0~R2 · C1~C10 이 S11 이후 신규 슬라이스보다 **먼저다**
 
 ### 3.0 지금 상태 (실측 — 추측 아님)
 
-원본을 다시 클론해 1:1 대조했다.
-**`packages/k8s-ui/src` 492파일 중 268만 착륙. 224개가 없다.**
+원격 원본을 다시 내려받아 1:1 대조했다.
+**`10461f40…`의 `packages/k8s-ui/src` 492파일 전체를 `references/upstream/`에 고정했다.**
+과거 v1.5.7 `88bd1e97…`은 실제 268파일이므로 492파일 원본이라는 기록은 폐기한다.
 
 **통째로 없는 것:** `filter-state/`(VP-010 엔진 정본!) · `charts/`(10) · `applications/`(9) ·
 `checks/`(5) · `issues/`(9) · `compare/`(13) · `namespace-switcher/`(2) · `scope-pill/`(2) · `perf/`(2)
@@ -67,10 +68,10 @@ FetchResult · RestrictedState · RowActionMenu · CenteredEmpty · BoardSkeleto
 
 **이미 있는데 안 쓰는 것:** `ui/provider-logos/` (`aws.png` `aws-dark.png` `azure.svg` `gcp.png`)
 
-### 3.1 방법 — **토큰 어댑터 한 장.** 224파일 클래스를 손으로 고치지 마라
+### 3.1 방법 — **흡수 코드모드 한 번.** 492파일 클래스를 손으로 고치지 마라
 
 Radar의 `theme-*` 는 **19개짜리 얇은 별칭**이다 (`theme/tailwind-theme.css` 실측).
-**이 별칭이 가리키는 곳을 우리 shadcn 토큰으로 바꾸면 224파일이 전부 우리 색이 된다.**
+**흡수 스크립트가 이 별칭을 우리 shadcn 시맨틱 토큰으로 치환한다.**
 
 `shared/ui/radar/radar-theme.css` — **이 파일 하나:**
 ```
@@ -100,8 +101,8 @@ theme-border → var(--border)            theme-border-light   → color-mix(--b
 ### 3.2 이식 순서 — **상세 페이지가 먼저**
 
 ```
-R0  어댑터 + 서브트리 완결
-    · 누락 224파일 착륙 (서브트리 완결)
+R0  어댑터 + 스냅샷 흡수
+    · 완결된 492파일 스냅샷에서 필요한 부품을 우리 구조로 흡수
     · shared/ui/radar/radar-theme.css
     · codemod 3종 (팔레트 · 브랜드색 · clsx→cn)
     · C6(테마 :root/.dark 짝) 을 여기서 먼저
@@ -274,7 +275,7 @@ shadcn `sidebar-*` 블록 + `NavUser` + `TeamSwitcher` 패턴.
 **이게 안 되면 Radar 어댑터(R0)도 무의미하다. 이걸 먼저 끝내라.**
 
 ### C7 · 클러스터 — 실제 로고 (이미 저장소에 있다)
-`references/radar-upstream/packages/k8s-ui/src/components/ui/provider-logos/`
+`references/upstream/packages/k8s-ui/src/components/ui/provider-logos/`
 → `aws.png` `aws-dark.png` `azure.svg` `gcp.png` **를 쓴다.**
 enum → 로고 매핑(문자열 매칭 금지). 온프렘은 lucide `server` + "우리 서버".
 `NOTICE` 에 **상표 귀속** 별도 명시.
@@ -437,6 +438,6 @@ BQ-079  GET  /changes/active
 - **모션은 `web/src/motion/` 에서만.** 컴포넌트 인라인 `@keyframes`·`animate()` 금지
 - **DB**: 개발 중엔 마이그레이션 안 한다. 스키마가 바뀌면 **DB를 날리고 다시 만든다**
 - **비밀 값은 커밋·로그·문서·night-log 에 절대 쓰지 않는다.** 이름과 절차만
-- **라이선스**: Radar = Apache-2.0 (NOTICE + 원본 헤더 보존 + 수정 표기). provider-logos = **상표**. shadcn = MIT
+- **라이선스**: Radar = Apache-2.0 (루트 NOTICE + 전문 + 상당한 수정·재작성 표기). provider-logos = **상표**. shadcn = MIT
 - 슬라이스마다 **배포하고 `docs/auto/deploy-status.md` 갱신.** 안 하면 완료가 아니다
 - **목표모드.** 막히면 3번 시도 후 다음으로 넘어가고 `night-log.md` 에 남겨라. **멈추지 마라**

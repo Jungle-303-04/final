@@ -1,7 +1,0 @@
-{
-  "private": true,
-  "workspaces": ["web", "packages/*"],
-  "overrides": {
-    "dompurify": "3.4.0"
-  }
-}

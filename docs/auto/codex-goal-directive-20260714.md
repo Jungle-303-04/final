@@ -69,9 +69,9 @@ git push origin dev
 
 Radar는 **Apache-2.0**이고 **우리 저장소는 공개다.** 안 하면 라이선스 위반이다.
 
-1. `references/radar-upstream/` 에 **고정 커밋** 서브트리로 추가
+1. `references/upstream/` 에 **고정 커밋** 서브트리로 추가
 2. 루트 `NOTICE` — 원저작자(Skyhook) · Apache-2.0 · 출처 URL
-3. 이식한 파일 상단에 **원본 헤더 보존 + 수정 사실 표기**
+3. 파일별 헤더는 추가하지 않고 루트 `NOTICE`에 상당한 수정·재작성 사실 표기
 4. `README.md`에 명시
 
 **`scripts/radar.sh`는 삭제하지 않는다.** (레퍼런스 실행용. 과거 삭제 지시는 취소됨)
