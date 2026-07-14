@@ -142,11 +142,11 @@ describe("ProductShell AI panel", () => {
         "&detail=Pod%2Fshop%2Fcheckout-api-0",
       releasedSurfaceIds: new Set(["home", "resources"]),
     });
-    expect(container.querySelector('[data-slot="unified-filter-bar"]')).toBeNull();
+    expect(container.querySelectorAll('[data-slot="unified-filter-bar"]')).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
     const panel = screen.getByRole("complementary", { name: "Opsia AI" });
-    await waitFor(() => expect(container.querySelector('[data-slot="unified-filter-bar"]')).toBeTruthy());
+    await waitFor(() => expect(container.querySelectorAll('[data-slot="unified-filter-bar"]')).toHaveLength(1));
     expect(panel.className).toContain("max-w-dvw");
     expect(panel.querySelector('[data-slot="ai-assistant-inner"]')?.className)
       .toContain("max-w-dvw");

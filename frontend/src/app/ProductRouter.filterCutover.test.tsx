@@ -100,17 +100,17 @@ afterEach(() => {
 });
 
 describe("ProductRouter unified filter cutover", () => {
-  it("keeps URL-backed filters and hides editable controls while detail owns the content", async () => {
+  it("keeps one shell-owned filter in the same slot while detail is open", async () => {
     const { container, router } = renderProductRouter(
       `/resources${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
-    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(0);
-    expect(screen.queryByRole("button", {
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
+    expect(screen.getByRole("button", {
       name: "Filter clusters, apps, labels, and resources",
-    })).toBeNull();
+    })).toBeTruthy();
 
     await waitFor(() => {
       expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
