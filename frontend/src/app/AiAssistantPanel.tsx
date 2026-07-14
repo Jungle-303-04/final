@@ -217,11 +217,15 @@ export function AiAssistantPanel({
             <div aria-live="polite" className="mt-5 grid gap-4">
               {visibleEntries.map((entry) => (
                 <article className="grid gap-2" key={entry.id}>
-                  <p className="ml-8 rounded-lg bg-muted px-3 py-2 text-sm">{entry.question}</p>
+                  <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+                    {entry.question}
+                  </p>
                   {entry.response.evidence.length === 0 ? (
-                    <Alert><AlertDescription>{t("shell.ai.noEvidence")}</AlertDescription></Alert>
+                    <p className="mr-auto w-fit max-w-[90%] rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm text-muted-foreground">
+                      {t("shell.ai.noEvidence")}
+                    </p>
                   ) : (
-                    <div className="grid gap-3 rounded-lg border px-3 py-3">
+                    <div className="mr-auto grid w-fit max-w-[92%] gap-3 rounded-2xl rounded-bl-sm border bg-card px-3 py-3">
                       <p className="text-sm leading-relaxed">{entry.response.answer}</p>
                       <EvidenceLinks evidence={entry.response.evidence} />
                     </div>
@@ -230,10 +234,10 @@ export function AiAssistantPanel({
               ))}
               {pendingQuestion?.contextKey === contextKey ? (
                 <article className="grid gap-2" data-slot="ai-pending-turn">
-                  <p className="ml-8 rounded-lg bg-muted px-3 py-2 text-sm">
+                  <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
                     {pendingQuestion.question}
                   </p>
-                  <p className="mr-8 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+                  <p className="mr-auto w-fit max-w-[90%] animate-pulse rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm text-muted-foreground motion-reduce:animate-none">
                     {t("shell.ai.pending")}
                   </p>
                 </article>
