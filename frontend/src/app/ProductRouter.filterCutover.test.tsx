@@ -125,7 +125,7 @@ describe("ProductRouter unified filter cutover", () => {
       emptyClusterScope,
     );
 
-    await user.click(await screen.findByRole("link", { name: "Issues" }));
+    await user.click(await screen.findByRole("link", { name: "Incidents" }));
 
     expect(currentLocation(router)).toBe(`/issues${FILTER_ONLY_SEARCH}`);
     expect(router.state.historyAction).toBe("PUSH");

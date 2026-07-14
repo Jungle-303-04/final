@@ -39,26 +39,37 @@ export function ThemeToggle({ controller }: { controller: ProductThemeController
         aria-label={t("shell.theme.choose")}
         className="w-40 p-1"
       >
-        {themeOptions.map(({ icon: Icon, label, value }) => {
-          const selected = controller.selection === value;
-          return (
-            <Button
-              aria-pressed={selected}
-              className={cn("w-full justify-start", selected && "bg-accent")}
-              key={value}
-              onClick={() => {
-                controller.select(value);
-                setOpen(false);
-              }}
-              variant="ghost"
-            >
-              <Icon aria-hidden="true" data-icon="inline-start" />
-              <span>{t(label)}</span>
-              {selected ? <Check aria-hidden="true" className="ml-auto" /> : null}
-            </Button>
-          );
-        })}
+        <ThemeSelectionList controller={controller} onSelect={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
   );
+}
+
+export function ThemeSelectionList({
+  controller,
+  onSelect,
+}: {
+  controller: ProductThemeController;
+  onSelect?: () => void;
+}) {
+  const { t } = useI18n();
+  return themeOptions.map(({ icon: Icon, label, value }) => {
+    const selected = controller.selection === value;
+    return (
+      <Button
+        aria-pressed={selected}
+        className={cn("w-full justify-start", selected && "bg-accent")}
+        key={value}
+        onClick={() => {
+          controller.select(value);
+          onSelect?.();
+        }}
+        variant="ghost"
+      >
+        <Icon aria-hidden="true" data-icon="inline-start" />
+        <span>{t(label)}</span>
+        {selected ? <Check aria-hidden="true" className="ml-auto" /> : null}
+      </Button>
+    );
+  });
 }

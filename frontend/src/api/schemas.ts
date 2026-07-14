@@ -5,6 +5,8 @@ const integerSchema = z.number().int();
 
 export const authSessionSchema = z.strictObject({
   authenticated: z.boolean(),
+  display_name: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
   user_id: z.string(),
   roles: z.array(z.string()),
   workspace_id: z.string(),

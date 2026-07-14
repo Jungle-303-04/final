@@ -8,6 +8,8 @@ import {
 
 export interface AuthEndpointSession {
   authenticated: boolean;
+  display_name?: string | null;
+  email?: string | null;
   user_id: string;
   roles: readonly string[];
   workspace_id: string;
@@ -70,6 +72,8 @@ export function createAuthAdapter(
 }
 
 function toProductSession(wireSession: AuthEndpointSession): ProductSession {
+  const displayName = canonicalOptionalIdentity(wireSession.display_name);
+  const email = canonicalOptionalIdentity(wireSession.email);
   const userId = canonicalIdentity(wireSession.user_id);
   const workspaceId = canonicalIdentity(wireSession.workspace_id);
   if (userId === null || workspaceId === null) {
@@ -82,10 +86,19 @@ function toProductSession(wireSession: AuthEndpointSession): ProductSession {
   }
 
   return {
+    ...(displayName === null ? {} : { displayName }),
+    ...(email === null ? {} : { email }),
     userId,
     roles: [...new Set(roles)].sort((left, right) => left.localeCompare(right)),
     workspaceId,
   };
+}
+
+function canonicalOptionalIdentity(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const canonical = canonicalIdentity(value);
+  if (canonical === null) throw new AuthPortFailure("invalid-response");
+  return canonical;
 }
 
 function canonicalIdentity(value: string): string | null {

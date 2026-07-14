@@ -35,7 +35,7 @@ function TestShell(props: ComponentProps<typeof ProductShell>) {
 
 describe("ProductShell", () => {
   it("renders only released surfaces and keeps the current route accessible", () => {
-    const releasedSurfaceIds = new Set<ProductSurfaceId>(["home", "issues", "catalog"]);
+    const releasedSurfaceIds = new Set<ProductSurfaceId>(["home", "issues", "settings"]);
     const markup = renderToStaticMarkup(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/issues"]}>
@@ -49,12 +49,13 @@ describe("ProductShell", () => {
     );
 
     expect(markup).toContain("Home");
-    expect(markup).toContain("Issues");
-    expect(markup).toContain("Catalog");
+    expect(markup).toContain("Incidents");
+    expect(markup).toContain("Settings");
     expect(markup).not.toContain("Timeline");
     expect(markup).not.toContain("Topology");
     expect(markup).not.toContain("workspace_id");
-    expect(markup).toContain("Sign out");
+    expect(markup).toContain("Open profile menu for test-use…");
+    expect(markup).toContain("Current workspace: test-workspace");
     expect(markup).toContain('aria-label="Current language: English"');
     expect(markup).toContain("test-user");
     expect(markup).toContain('aria-current="page"');
@@ -68,7 +69,7 @@ describe("ProductShell", () => {
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <MemoryRouter initialEntries={["/not-released"]}>
           <Routes>
-            <Route element={<TestShell auth={testAuth} releasedSurfaceIds={new Set(["catalog"])} />}>
+            <Route element={<TestShell auth={testAuth} releasedSurfaceIds={new Set(["settings"])} />}>
               <Route path="*" element={<p>Redirecting</p>} />
             </Route>
           </Routes>
@@ -76,7 +77,7 @@ describe("ProductShell", () => {
       </I18nProvider>,
     );
 
-    expect(markup).toContain("Catalog");
+    expect(markup).toContain("Settings");
     expect(markup).not.toContain("Home");
   });
 
@@ -128,7 +129,8 @@ describe("ProductShell", () => {
 
     expect(markup).toContain("홈");
     expect(markup).toContain("인시던트");
-    expect(markup).toContain("로그아웃");
+    expect(markup).toContain("test-use… 프로필 메뉴 열기");
+    expect(markup).toContain("워크스페이스");
     expect(markup).toContain("언어");
   });
 });

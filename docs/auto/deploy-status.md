@@ -46,7 +46,7 @@ URL      : https://k8s.woonyong.org
 - [x] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
 - [x] **S4**  물리 뷰 그래프 (2층) ★  ← public strict topology 200 실측
 - [x] **S5**  표 + 스파크라인 (3층)    ← `7354ee91` 자동 배포·public bundle 확인
-- [x] **S6**  상세 = 전체화면 덮기
+- [ ] **S6 (재작업)**  상세 = peek → 전체화면 3상태, 사이드바 독립
 - [x] **S7**  AI 패널
 - [x] **S8**  하단 독 + 로그 스트림
 - [x] **S9**   관계 뷰 토글          ← public strict 관계 graph 200·edge 참조 무결성 확인
@@ -108,8 +108,8 @@ URL      : https://k8s.woonyong.org
   public bundle `index-DDzxYCh0.js`, health/root 200
 - [x] S6 BQ-061 exact resource capability — inventory.read 선확인, deploy.run·연결된
   `command_receiver`·target namespace를 모두 만족한 Deployment restart/scale만 반환
-- [x] S6 전체화면 상세 — `?detail=kind/ns/name`, 뒤로가기·Esc·행 포커스 복귀,
-  J/K 연속 탐색, 56px nav rail, 읽기 전용 필터 맥락, 5개 탭, 320ms 동시 모션
+- [ ] S6 (재작업) 3상태 상세 — 기존 즉시 전체화면·56px nav rail 규정은 철회됨;
+  V2에서 상세의 사이드바 자동 접기를 제거했고 peek → full 동일 컴포넌트 전환은 후속 구현
 - [x] S6 capability 소비 — 응답 subject를 상세 identity와 재검증하고 허용된 mutation만
   확인 dialog와 실제 restart/scale API에 연결; 실패·403·불일치에는 버튼 미렌더
 - [x] S6 local 검증 — backend capability 67 tests 및 topology 회귀 11 tests,

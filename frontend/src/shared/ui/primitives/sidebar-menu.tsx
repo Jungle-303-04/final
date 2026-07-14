@@ -161,7 +161,7 @@ export function SidebarMenuLink({
     <Link
       aria-current={active ? "page" : undefined}
       aria-disabled={unavailable || undefined}
-      className={cn(SIDEBAR_MENU_INTERACTIVE_CLASSES, className)}
+      className={sidebarMenuInteractiveClassName(className)}
       data-active={active ? "" : undefined}
       data-disabled={unavailable ? "" : undefined}
       data-sidebar-state={state}
@@ -198,7 +198,7 @@ export function SidebarMenuButton({
     <button
       aria-disabled={unavailable || undefined}
       aria-label={ariaLabel}
-      className={cn(SIDEBAR_MENU_INTERACTIVE_CLASSES, className)}
+      className={sidebarMenuInteractiveClassName(className)}
       data-disabled={unavailable ? "" : undefined}
       data-sidebar-state={state}
       data-slot="sidebar-menu-button"
@@ -237,3 +237,7 @@ function withCollapsedTooltip(
 
 const SIDEBAR_MENU_INTERACTIVE_CLASSES =
   "group/sidebar-menu-button flex h-9 w-full min-w-0 items-center gap-3 overflow-hidden rounded-lg border border-transparent px-2.5 text-left text-sm font-medium text-sidebar-foreground/70 outline-none transition-[color,background-color,border-color] duration-100 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[sidebar-state=collapsed]:justify-center data-[sidebar-state=collapsed]:px-0 data-[sidebar-state=collapsed]:[&>span:last-child]:sr-only data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground aria-disabled:pointer-events-none aria-disabled:opacity-50 motion-reduce:transition-none forced-colors:data-active:border-[Highlight] forced-colors:data-active:bg-[Highlight] forced-colors:data-active:text-[HighlightText] forced-colors:focus-visible:outline forced-colors:focus-visible:outline-2 forced-colors:focus-visible:outline-offset-2 forced-colors:focus-visible:outline-[CanvasText] forced-colors:aria-disabled:border-[GrayText] forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-disabled:opacity-100";
+
+export function sidebarMenuInteractiveClassName(className?: string): string {
+  return cn(SIDEBAR_MENU_INTERACTIVE_CLASSES, className);
+}

@@ -28,6 +28,24 @@ describe("canonical auth adapter", () => {
     });
   });
 
+  it("preserves optional profile identity fields when the API proves them", async () => {
+    const dependencies = endpoints({
+      getSession: vi.fn().mockResolvedValue({
+        ...AUTHENTICATED_WIRE_SESSION,
+        display_name: "Woo Nyong",
+        email: "woonyong.kr@gmail.com",
+      }),
+    });
+
+    await expect(createAuthAdapter(dependencies).loadSession()).resolves.toMatchObject({
+      status: "authenticated",
+      session: {
+        displayName: "Woo Nyong",
+        email: "woonyong.kr@gmail.com",
+      },
+    });
+  });
+
   it("discards every identity field from an unauthenticated response", async () => {
     const dependencies = endpoints({
       getSession: vi.fn().mockResolvedValue({

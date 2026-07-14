@@ -75,7 +75,10 @@ describe("ProductShell keyboard and help interaction", () => {
 
     await user.keyboard("t");
     expect(window.localStorage.getItem("theme")).toBe("system");
-    expect(screen.getByRole("button", { name: "테마 선택" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "test-use… 프로필 메뉴 열기" }));
+    expect(screen.getByRole("button", { name: "운영체제" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "다크" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "라이트" })).toBeTruthy();
   });
 
   it("dispatches Resources actions and route chords from one shortcut authority", async () => {
@@ -132,7 +135,27 @@ describe("ProductShell keyboard and help interaction", () => {
     await waitFor(() => expect(screen.getByRole("tooltip").textContent).toBe("홈"));
   });
 
-  it("uses the 56px navigation rail for a resource detail and restores the prior shell", async () => {
+  it("keeps workspace proof and account actions in the sidebar footer", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole("button", {
+      name: "현재 워크스페이스: test-workspace",
+    }));
+    expect(await screen.findByText(
+      "세션 계약에는 현재 워크스페이스만 제공됩니다.",
+    )).toBeTruthy();
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "test-use… 프로필 메뉴 열기" }));
+    expect(screen.getByRole("link", { name: "프로필" }).getAttribute("href"))
+      .toBe("/settings?clusters=cluster-1#profile");
+    expect(screen.getByRole("link", { name: "설정" }).getAttribute("href"))
+      .toBe("/settings?clusters=cluster-1");
+    expect(screen.getByRole("button", { name: "로그아웃" })).toBeTruthy();
+  });
+
+  it("keeps the sidebar state independent from resource detail state", async () => {
     const user = userEvent.setup();
     const { container } = renderShell({
       initialEntry: "/resources?clusters=cluster-1&resources.types=pod" +
@@ -141,15 +164,15 @@ describe("ProductShell keyboard and help interaction", () => {
     });
     const sidebar = screen.getByRole("complementary", { name: "제품 메뉴" });
 
-    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("collapsed"));
+    expect(sidebar.getAttribute("data-state")).toBe("expanded");
     expect(screen.getByRole("link", { name: "리소스" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "홈" })).toBeTruthy();
     expect(container.querySelector("[data-slot='unified-filter-bar']")).toBeNull();
     expect(sidebar.className).toContain("--motion-layout");
-    expect(screen.getByText("Opsia").className).toContain("w-0");
+    expect(screen.getByText("Opsia").className.split(/\s+/u)).not.toContain("w-0");
 
     await user.click(screen.getByRole("link", { name: "홈" }));
-    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("expanded"));
+    expect(sidebar.getAttribute("data-state")).toBe("expanded");
     expect(screen.getByText("Home content")).toBeTruthy();
   });
 
@@ -184,9 +207,12 @@ describe("ProductShell keyboard and help interaction", () => {
 
     expect(screen.getByRole("combobox", { name: "Current language: English" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Issues" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Choose theme" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Open profile menu for test-use…" }));
+    expect(screen.getByRole("button", { name: "Operating system" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dark" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Light" })).toBeTruthy();
     expect(window.localStorage.getItem("opsia.locale")).toBe("en");
   });
 
