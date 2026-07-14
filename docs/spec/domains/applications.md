@@ -3,15 +3,16 @@ source_commit: 664925a6
 status: synced
 ---
 
-# applications — 애플리케이션·deployment binding·워크플로 런 조회 HTTP API
+# applications — 애플리케이션 제품 조회·deployment binding·워크플로 런 HTTP API
 
-> 소스: `src/domains/applications/` · 테스트: `tests/test_applications_router.py`, `tests/test_promotion_and_global.py`
+> 소스: `src/domains/applications/` · 테스트: `tests/test_application_product_*.py`, `tests/test_applications_product_repository.py`, `tests/test_applications_router.py`, `tests/test_promotion_and_global.py`
 
 ## 책임 (Responsibility)
 
-- 애플리케이션 목록/조회/업서트, repository manifest 검증 기반 app 연결, 애플리케이션별 deployment binding 목록/업서트, 애플리케이션별 workflow run 목록 HTTP API를 제공한다.
-- 이 도메인은 라우터만 소유한다 — 테이블·리포지토리·이벤트 없음. 저장은 다른 도메인 리포지토리 메서드(`db.get_application`, `db.upsert_application`, `db.register_repository`, `db.register_watch_target`, `db.register_deployment_binding`, `db.list_application_deployment_bindings`, `db.list_application_workflow_runs`, `db.list_cluster_registrations`)를 합성 `Database`([registry](./registry.md)) 경유로 호출한다.
-- 파일 구성: `__init__.py`(docstring `"애플리케이션 관리 도메인"`), `router.py` 뿐.
+- Applications 제품 화면을 위해 목록 카드, 상세, 배포 이력, semantic drift를 strict allowlist 응답으로 제공한다. raw application metadata, inventory summary, workflow step payload는 제품 응답에 그대로 노출하지 않는다.
+- repository manifest 검증 기반 app 연결, application/deployment binding 업서트, 원시 workflow run 운영 조회도 함께 제공한다. GET `/deployments`는 배포 이력이고 POST `/deployments`만 binding 생성이다.
+- `ApplicationsProductRepository`는 기존 inventory temporal read model과 RCA timeline을 읽어 application에 정확히 귀속된 evidence만 투영한다. 별도 테이블·이벤트는 소유하지 않는다.
+- 파일 구성: `router.py`(HTTP·권한·합성), `repository.py`(inventory/incident evidence query), `product_projection.py`(provider-neutral allowlist projection).
 
 ## 의존성 (Dependencies)
 
@@ -20,6 +21,7 @@ status: synced
 | import | `domains.identity` | [./identity.md](./identity.md) | `require_session`, `require_resource_access`, `require_cluster_access` |
 | import | `domains.gitops.repository_discovery` | [./gitops.md](./gitops.md) | `/applications/connect`에서 manifest 재검증(`RepositoryDiscoveryService.validate_manifest`) |
 | import | `domains.target.router` | [./target.md](./target.md) | deployment 정의 생성 전 cluster-agent 최신 연결 상태 판정(`cluster_connection_status`) |
+| import | `domains.inventory` / `domains.rca` schema | [./inventory.md](./inventory.md) / [./rca.md](./rca.md) | application inventory 및 incident evidence read-only projection |
 | import | `packages.contracts` | [../packages/contracts.md](../packages/contracts.md) | gateway routes/요청·응답 모델, `AccessResourceType`, `Permission`, `DEFAULT_WORKSPACE_ID` |
 | import | `packages.runtime` | [../packages/runtime.md](../packages/runtime.md) | `get_db` |
 | import | `packages.storage` | [../packages/storage.md](../packages/storage.md) | `unit_of_work_or_null` |
@@ -39,7 +41,6 @@ status: synced
 | `MANIFEST_VALIDATION_FAILED` | `"manifest validation failed"` | `src/domains/applications/router.py :: MANIFEST_VALIDATION_FAILED` |
 | `CLUSTER_NOT_CONNECTED_CODE` | `"cluster_not_connected"` | `src/domains/applications/router.py :: CLUSTER_NOT_CONNECTED_CODE` |
 | `CLUSTER_NOT_CONNECTED_DETAIL` | `"에이전트가 연결되지 않은 클러스터입니다"` | `src/domains/applications/router.py :: CLUSTER_NOT_CONNECTED_DETAIL` |
-| `GITHUB_CREDENTIAL_SCOPE` | `"github"` | `src/domains/applications/router.py :: GITHUB_CREDENTIAL_SCOPE` |
 | `repository_discovery_service` | `def repository_discovery_service() -> RepositoryDiscoveryService` — 기본 discovery service DI factory | `src/domains/applications/router.py :: repository_discovery_service` |
 | `require_application_access` | `def require_application_access(db: Any, current: Any, workspace_id: str, application_id: str, permission: str) -> None` — `require_resource_access(db, current, workspace_id, AccessResourceType.APPLICATION.value, application_id, permission)` 위임 | `src/domains/applications/router.py :: require_application_access` |
 | `get_application_or_404` | `def get_application_or_404(db: Any, workspace_id: str, application_id: str) -> dict[str, Any]` — `db.get_application` None이면 404 | `src/domains/applications/router.py :: get_application_or_404` |
@@ -52,12 +53,13 @@ status: synced
 
 | 메서드+경로 | 핸들러(앵커) | 요청 | 응답 | 권한 |
 |---|---|---|---|---|
-| `GET /applications` (`gateway_routes.APPLICATIONS_PATH`) | `src/domains/applications/router.py :: list_applications` | query `limit: int = 100 (ge=1, le=500)` | `ApplicationListResponse` | `require_session` + `db.accessible_resource_ids(user_id, workspace_id, APPLICATION, Permission.APPLICATION_READ)`로 접근 가능한 ID만 조회 |
+| `GET /applications` (`gateway_routes.APPLICATIONS_PATH`) | `src/domains/applications/router.py :: list_applications` | VP-010 canonical filter + `limit: int = 100 (ge=1, le=200)` | `ApplicationProductListResponse` strict cards | `require_session` + application `APPLICATION_READ` + cluster `INVENTORY_READ` 범위의 교집합 |
 | `POST /applications` (`APPLICATIONS_PATH`) | `src/domains/applications/router.py :: upsert_application` | `ApplicationUpsertRequest` | `ApplicationResponse` | `require_session` |
 | `POST /applications/connect` (`APPLICATION_CONNECT_PATH`) | `src/domains/applications/router.py :: connect_application` | `ApplicationConnectRequest` | `ApplicationResponse` | `require_session` + target cluster `Permission.DEPLOY_RUN` |
-| `GET /applications/{application_id}` (`APPLICATION_PATH`) | `src/domains/applications/router.py :: get_application` | — | `ApplicationResponse` | `require_session` + `Permission.APPLICATION_READ` (resource access) |
-| `GET /applications/{application_id}/deployments` (`APPLICATION_DEPLOYMENTS_PATH`) | `src/domains/applications/router.py :: list_application_deployments` | query `limit: int = 100 (ge=1, le=500)` | `DeploymentBindingListResponse` | `require_session` + `Permission.DEPLOYMENT_READ` |
+| `GET /applications/{application_id}` (`APPLICATION_PATH`) | `src/domains/applications/router.py :: get_application` | — | `ApplicationProductDetailResponse` | `require_session` + application `Permission.APPLICATION_READ`; cluster evidence는 `INVENTORY_READ` 범위만 투영 |
+| `GET /applications/{application_id}/deployments` (`APPLICATION_DEPLOYMENTS_PATH`) | `src/domains/applications/router.py :: list_application_deployments` | query `limit: int = 100 (ge=1, le=500)` | `ApplicationDeploymentHistoryResponse` | `require_session` + application `Permission.DEPLOYMENT_READ`; 허용 cluster의 workflow run만 투영 |
 | `POST /applications/{application_id}/deployments` (`APPLICATION_DEPLOYMENTS_PATH`) | `src/domains/applications/router.py :: upsert_application_deployment` | `DeploymentBindingUpsertRequest` | `DeploymentBindingResponse` | `require_session` + application `Permission.APPLICATION_MANAGE` + cluster `Permission.DEPLOY_RUN` (cluster_id `"*"`면 등록된 **모든** 클러스터에 대해 검사) |
+| `GET /applications/{application_id}/drift` (`APPLICATION_DRIFT_PATH`) | `src/domains/applications/router.py :: get_application_drift` | — | `ApplicationDriftResponse` | `require_session` + application `Permission.APPLICATION_READ`; 허용 cluster의 저장된 diff evidence만 투영 |
 | `GET /applications/{application_id}/runs` (`APPLICATION_RUNS_PATH`) | `src/domains/applications/router.py :: list_application_runs` | query `limit: int = 100 (ge=1, le=500)` | `WorkflowRunListResponse`; command result가 저장된 run은 `promotion_gate`에 completed/applied/failed resources/rollout ready 판정을 구조화해 포함 | `require_session` + `Permission.DEPLOYMENT_READ` |
 
 요청·응답 모델은 [contracts](../packages/contracts.md)의 `packages/contracts/gateway/requests.py` / `responses.py` 정의를 사용한다.
@@ -68,7 +70,7 @@ status: synced
 
 ## 데이터 모델 (Data Model)
 
-없음 (이 도메인은 테이블을 소유하지 않는다). 애플리케이션/binding/run read model은 소유 도메인 스펙 참조.
+없음 (이 도메인은 테이블을 소유하지 않는다). application/binding/run/inventory/RCA temporal read model은 소유 도메인 스펙을 참조한다.
 
 ## 이벤트 (Events)
 
@@ -109,11 +111,22 @@ status: synced
 
 ### 목록 조회 (`GET /applications`)
 
-`accessible_ids = db.accessible_resource_ids(...)` → `db.list_applications(workspace_id, application_ids=accessible_ids, limit=limit)` — 권한 필터를 리포지토리 쿼리에 위임.
+1. VP-010 canonical filter(`clusters`, `namespaces`, `applications`, `applications.environment`, `applications.status`, `applications.pendingPromotion`, `applications.q`)를 파싱한다. 요청한 cluster/application이 세션 허용 범위를 벗어나면 404로 닫는다. application label projection은 아직 증명할 source가 없어 label 요청을 503으로 닫는다.
+2. `list_filtered_applications`로 권한 범위 안의 ID를 고르고 application, visible deployment binding/run, active temporal inventory, exact application incident projection을 합성한다.
+3. card는 identity/repository allowlist, health, current deployment, drift, resource kind counts, open incident 수만 반환한다. 확인할 snapshot이 없으면 건강/드리프트/집계 값을 0이나 healthy로 합성하지 않고 `unknown`, `null`, `unavailable`로 반환한다.
+4. 정렬은 open incident → drift → degraded/unknown health → name/id 순이다.
+
+### 상세·배포 이력·drift 조회
+
+- 상세는 card에 증명된 Service endpoint, 최근 incident 최대 3개, 최근 activity 최대 3개를 더한다. inventory application binding이 incomplete하면 집계 completeness는 `partial`; snapshot 자체가 없으면 `unavailable`이다.
+- 배포 이력은 application의 visible workflow run을 `id`, environment/cluster, git SHA/version, deployed time/actor, closed status, GitOps change ID로만 투영한다. binding 목록은 이 GET에서 반환하지 않는다.
+- drift는 최신 저장 `diff` step의 semantic classification만 사용한다. 증명된 change가 없으면 `in_sync` 또는 `unknown`이며, unknown을 clean으로 바꾸지 않는다. scalar 값만 노출하고 secret/token/credential/data 경로 또는 object/array/긴 값은 `null` + `value_redacted=true`로 닫는다.
+- `/applications/{id}/runs`는 운영·디버깅용 기존 raw workflow run 계약으로 유지한다. Applications 제품 화면은 strict 상세/배포/drift 계약을 사용한다.
 
 ## 불변식·오류 (Invariants & Errors)
 
 - 존재하지 않는 애플리케이션 → HTTP 404 `"application not found"`.
+- 요청한 application/cluster filter가 세션 허용 범위를 벗어나면 404. 구현되지 않은 application label evidence filter는 503 `"application label projection is unavailable"`.
 - `/applications/connect` manifest validation 실패 → HTTP 422 `"manifest validation failed"` 또는 discovery validation의 첫 번째 error.
 - `/applications/connect` 또는 deployment binding 생성 대상 cluster-agent가 online이 아니면 HTTP 400 `{"code":"cluster_not_connected","detail":"에이전트가 연결되지 않은 클러스터입니다","clusters":["cluster-id"]}`. 글로벌/다중 대상이면 실패 클러스터 목록 전체를 포함한다.
 - 권한 부족 → identity 의존성이 던지는 HTTPException ([identity](./identity.md)).
@@ -123,6 +136,7 @@ status: synced
 - `/applications/connect`에서 검증한 `source_type`은 application metadata, binding deploy_policy(`manifest_source`), watch target settings 모두에 남아야 한다. validate 단계와 실제 render-worker 단계가 다른 렌더러를 쓰면 안 된다.
 - binding의 `repository_id`/`app_name`은 항상 소속 애플리케이션에서 파생(클라이언트 입력을 신뢰하지 않음).
 - 글로벌 바인딩(`cluster_id="*"`)은 권한 전수 검증 후에만 확장 생성 — 부분 권한으로는 아무 바인딩도 생기지 않는다. 등록 클러스터가 없으면 422 `"no registered clusters to expand global binding"`.
+- 제품 응답은 raw metadata/summary/workflow step을 포함하지 않는다. evidence completeness가 부족하면 숫자 0, healthy, in-sync를 합성하지 않는다.
 
 ## 설정 (Settings)
 

@@ -384,9 +384,11 @@ endpoint에는 계속 `apiRequest`와 runtime schema를 사용한다.
 | APIQ-014 | `scaleDeployment` | POST `.../deployments/{deployment}/scale` | `DeploymentScaleRequest`; replicas 0..100 | `AcceptedResponse`, 200 | live mutation 제한 |
 | APIQ-014 | `restartDeployment` | POST `.../deployments/{deployment}/restart` | body 객체 필수; 내부 필드 optional | `AcceptedResponse`, 200 | command_id 없음 |
 | APIQ-013 | approval grant/reject | POST `/approvals/{approval_id}/{grant|reject}` | body absent/null/`{}` 허용; reason nullable | `AcceptedResponse`, 200 | 404/409 가능 |
-| APIQ-006 | applications list | GET `/applications` | `limit=100`(1..500) | `ApplicationListResponse`, 200 | cursor/filter/sort 없음 |
-| APIQ-006 | application detail | GET `/applications/{application_id}` | path | `ApplicationResponse`, 200 | 내부 JsonMap |
-| APIQ-006 | deployments/runs | GET 각 application subresource | `limit=100`(1..500) | binding/run list, 200 | 내부 JsonMap |
+| APIQ-006 | applications list | GET `/applications` | VP-010 canonical filter + `limit=100`(1..200) | `ApplicationProductListResponse`, 200 | strict card; 권한 밖 scope 404, label evidence 미지원 503 |
+| APIQ-006 | application detail | GET `/applications/{application_id}` | path | `ApplicationProductDetailResponse`, 200 | strict overview/resource counts/endpoints/recent items |
+| APIQ-006 | deployments | GET `/applications/{application_id}/deployments` | `limit=100`(1..500) | `ApplicationDeploymentHistoryResponse`, 200 | workflow run 기반 strict 배포 이력; binding 목록 아님 |
+| APIQ-006 | drift | GET `/applications/{application_id}/drift` | path | `ApplicationDriftResponse`, 200 | semantic diff; 민감·복합 값 redacted |
+| APIQ-006 | runs | GET `/applications/{application_id}/runs` | `limit=100`(1..500) | `WorkflowRunListResponse`, 200 | 운영·디버깅용 raw 호환 계약 |
 | APIQ-015 | catalog list/detail | GET `/catalog/items[/{item_id}]` | item path만 | list/detail response, 200 | item JsonMap·pagination 없음 |
 | APIQ-024 / APIQ-005 | RCA timeline | GET `/dashboard/rca/timeline` | `cluster_id?`, `limit=50`(1..100) | `RcaTimelineResponse`, 200 | teaser만 limit=6 |
 | APIQ-016 | `getRcaIncident` | GET `/dashboard/rca/incidents/{incident_id}` | path, `cluster_id?` | `RcaIncidentResponse`, 200 | stable id 필요 |

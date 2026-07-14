@@ -60,6 +60,7 @@ export const COMMON_FILTER_AXIS_OPERATORS = {
 
 export interface ProductDetailQuery {
   detail: string | null;
+  application?: string | null;
   resource: string | null;
   resourceKind: string | null;
   tab: string | null;

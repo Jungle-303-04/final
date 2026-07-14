@@ -1,0 +1,35 @@
+meta {
+  name: 07 애플리케이션 드리프트
+  type: http
+  seq: 7
+  tags: [applications, drift, read]
+}
+
+get {
+  url: {{base_url}}applications/{{application_id}}/drift
+}
+
+tests {
+  test("200 or auth/not-found", function () {
+    expect([200, 401, 403, 404]).to.include(res.status);
+  });
+
+  if (res.status === 200) {
+    test("strict semantic drift contract", function () {
+      const body = res.getBody();
+      expect(body).to.have.all.keys("status", "summary", "differences", "observed_at");
+      expect(body.differences).to.be.an("array");
+      body.differences.forEach((difference) => {
+        expect(difference).to.have.all.keys(
+          "resource",
+          "field_path",
+          "old_value",
+          "new_value",
+          "value_redacted",
+          "changed_by",
+          "changed_at"
+        );
+      });
+    });
+  }
+}

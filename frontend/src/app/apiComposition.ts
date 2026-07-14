@@ -24,9 +24,10 @@ import {
   listResourceFilterFacets,
   listResourceLabelFacets,
   connectCluster,
-  listApplicationDeployments,
-  listApplicationRuns,
-  listApplications,
+  getApplicationDrift,
+  getApplicationOverview,
+  listApplicationCatalog,
+  listApplicationDeploymentHistory,
   login,
   logout,
   restartDeployment,
@@ -41,8 +42,8 @@ import {
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
-import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
-import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
+import { createApplicationsAdapter } from "../features/applications/createApplicationsAdapter";
+import { createApplicationsSurface } from "../features/applications/createApplicationsSurface";
 import { createHomeAdapter } from "../features/home/createHomeAdapter";
 import { createClustersAdapter } from "../features/clusters/createClustersAdapter";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
@@ -103,10 +104,11 @@ export function createApiComposition() {
     listRcaTimeline,
     selectRecoveryAction,
   });
-  const applicationsGitOpsPort = createApplicationsGitOpsAdapter({
-    listApplicationDeployments,
-    listApplicationRuns,
-    listApplications,
+  const applicationsPort = createApplicationsAdapter({
+    getApplicationDrift,
+    getApplicationOverview,
+    listApplicationCatalog,
+    listApplicationDeploymentHistory,
   });
   const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
   const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
@@ -138,7 +140,7 @@ export function createApiComposition() {
     },
     {
       id: "applications",
-      Component: createApplicationsSurface(applicationsGitOpsPort),
+      Component: createApplicationsSurface(applicationsPort),
     },
     {
       id: "gitops",

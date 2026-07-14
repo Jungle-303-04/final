@@ -1863,6 +1863,168 @@ class AiResourceSummary(StrictModel):
         return self
 
 
+ApplicationProjectionCompleteness = Literal["exact", "partial", "unavailable"]
+ApplicationHealthStatus = Literal["healthy", "degraded", "unknown"]
+ApplicationDeploymentStatus = Literal["succeeded", "failed", "running", "pending", "unknown"]
+ApplicationDriftStatus = Literal["in_sync", "drifted", "unknown"]
+ApplicationActivityType = Literal["deployment", "incident", "change"]
+ApplicationDriftScalar = str | int | float | bool | None
+
+
+class ApplicationHealthSummary(StrictModel):
+    status: ApplicationHealthStatus
+    ready_pods: int | None = Field(default=None, ge=0)
+    total_pods: int | None = Field(default=None, ge=0)
+    restarts: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_pod_counts(self) -> Self:
+        if (
+            self.ready_pods is not None
+            and self.total_pods is not None
+            and self.ready_pods > self.total_pods
+        ):
+            raise ValueError("ready pod count cannot exceed total pod count")
+        return self
+
+
+class ApplicationCurrentDeployment(StrictModel):
+    version: str | None = None
+    image: str | None = None
+    image_digest: str | None = None
+    git_sha: str | None = None
+    deployed_at: str | None = None
+    deployed_by: str | None = None
+
+
+class ApplicationResourceKindCount(StrictModel):
+    kind: str = Field(min_length=1)
+    count: int = Field(ge=0)
+
+
+class ApplicationProductCard(StrictModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    environments: list[str] = Field(default_factory=list)
+    lifecycle_status: str = Field(min_length=1)
+    repository_ref: str | None = None
+    default_branch: str | None = None
+    manifest_path: str | None = None
+    health: ApplicationHealthSummary
+    current_deployment: ApplicationCurrentDeployment | None = None
+    has_drift: bool | None = None
+    drift_summary: str | None = None
+    resource_counts: list[ApplicationResourceKindCount] | None = None
+    resource_counts_completeness: ApplicationProjectionCompleteness
+    open_incidents: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_card_semantics(self) -> Self:
+        if self.has_drift is not True and self.drift_summary is not None:
+            raise ValueError("drift summary requires confirmed drift")
+        if self.has_drift is True and not self.drift_summary:
+            raise ValueError("confirmed drift requires a summary")
+        if self.resource_counts_completeness == "unavailable" and self.resource_counts is not None:
+            raise ValueError("unavailable resource counts must be null")
+        if self.resource_counts_completeness != "unavailable" and self.resource_counts is None:
+            raise ValueError("available resource counts must be an array")
+        if self.resource_counts is not None:
+            kinds = [item.kind for item in self.resource_counts]
+            if kinds != sorted(set(kinds)):
+                raise ValueError("resource count kinds must be unique and sorted")
+        return self
+
+
+class ApplicationEndpointSummary(StrictModel):
+    id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+
+
+class ApplicationRecentIncident(StrictModel):
+    id: str = Field(min_length=1)
+    title: str | None = None
+    status: str = Field(min_length=1)
+    started_at: str | None = None
+
+
+class ApplicationRecentActivity(StrictModel):
+    id: str = Field(min_length=1)
+    type: ApplicationActivityType
+    summary: str | None = None
+    occurred_at: str | None = None
+
+
+class ApplicationProductDetail(ApplicationProductCard):
+    endpoints: list[ApplicationEndpointSummary] | None = None
+    endpoints_completeness: ApplicationProjectionCompleteness
+    recent_incidents: list[ApplicationRecentIncident] = Field(default_factory=list, max_length=3)
+    recent_activity: list[ApplicationRecentActivity] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def validate_detail_semantics(self) -> Self:
+        if self.endpoints_completeness == "unavailable" and self.endpoints is not None:
+            raise ValueError("unavailable endpoints must be null")
+        if self.endpoints_completeness != "unavailable" and self.endpoints is None:
+            raise ValueError("available endpoints must be an array")
+        return self
+
+
+class ApplicationProductListResponse(StrictModel):
+    applications: list[ApplicationProductCard] = Field(default_factory=list)
+
+
+class ApplicationProductDetailResponse(StrictModel):
+    application: ApplicationProductDetail
+
+
+class ApplicationDeploymentHistoryItem(StrictModel):
+    id: str = Field(min_length=1)
+    environment: str | None = None
+    cluster_id: str = Field(min_length=1)
+    git_sha: str | None = None
+    version: str | None = None
+    deployed_at: str | None = None
+    deployed_by: str | None = None
+    status: ApplicationDeploymentStatus
+    gitops_change_id: str | None = None
+
+
+class ApplicationDeploymentHistoryResponse(StrictModel):
+    deployments: list[ApplicationDeploymentHistoryItem] = Field(default_factory=list)
+
+
+class ApplicationDriftDifference(StrictModel):
+    resource: str = Field(min_length=1)
+    field_path: str = Field(min_length=1)
+    old_value: ApplicationDriftScalar = None
+    new_value: ApplicationDriftScalar = None
+    value_redacted: bool
+    changed_by: str | None = None
+    changed_at: str | None = None
+
+
+class ApplicationDriftResponse(StrictModel):
+    status: ApplicationDriftStatus
+    summary: str | None = None
+    differences: list[ApplicationDriftDifference] = Field(default_factory=list)
+    observed_at: str | None = None
+
+    @model_validator(mode="after")
+    def validate_drift_semantics(self) -> Self:
+        if self.status == "drifted" and (not self.differences or not self.summary):
+            raise ValueError("drifted response requires differences and a summary")
+        if self.status != "drifted" and (self.differences or self.summary is not None):
+            raise ValueError("non-drift response cannot carry differences or summary")
+        if any(
+            item.value_redacted is False and item.old_value is None and item.new_value is None
+            for item in self.differences
+        ):
+            raise ValueError("empty drift values must be marked redacted")
+        return self
+
+
 class ApplicationResponse(StrictModel):
     application: JsonMap
 
