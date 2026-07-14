@@ -16,6 +16,16 @@ NO_PLAN_REASON = "복구 계획이 없습니다."
 NO_CANDIDATES_REASON = "복구 후보가 없어 사용자 선택이 필요합니다."
 AUTO_SELECTED_BY = "agent-select"
 APPROVAL_REQUIRED_COMMAND_REASON = "선택 후보가 승인 필요한 command action입니다."
+AUTO_ROUTE_APPROVAL_REQUIRED_REASON = (
+    "선택 후보 route=auto는 command 실행 채널을 의미하지만 "
+    "approval_required=true라 자동 실행하지 않습니다."
+)
+APPROVAL_REQUIRED_REASON = (
+    "선택 후보가 approval_required=true라 사용자 선택이 필요합니다."
+)
+NON_AUTO_ROUTE_REASON = (
+    "선택 후보 route가 command 자동 실행 채널이 아니라 사용자 선택이 필요합니다."
+)
 
 
 @dataclass(frozen=True)
@@ -70,16 +80,12 @@ def requires_approval(candidate: object) -> bool:
 def selection_reason(candidate: object) -> str:
     if requires_approval(candidate):
         return f"{APPROVAL_REQUIRED_COMMAND_REASON} {candidate_reason_suffix(candidate)}"
+    if bool(getattr(candidate, "approval_required", False)) and getattr(candidate, "route", "") == "auto":
+        return f"{AUTO_ROUTE_APPROVAL_REQUIRED_REASON} {candidate_reason_suffix(candidate)}"
     if bool(getattr(candidate, "approval_required", False)):
-        return (
-            "선택 후보가 approval_required=true라 사용자 선택이 필요합니다. "
-            f"{candidate_reason_suffix(candidate)}"
-        )
+        return f"{APPROVAL_REQUIRED_REASON} {candidate_reason_suffix(candidate)}"
     if getattr(candidate, "route", "") != "auto":
-        return (
-            "선택 후보 route가 자동 실행 대상이 아니라 사용자 선택이 필요합니다. "
-            f"{candidate_reason_suffix(candidate)}"
-        )
+        return f"{NON_AUTO_ROUTE_REASON} {candidate_reason_suffix(candidate)}"
     return (
         "자동 선택 조건을 충족하지 못해 사용자 선택이 필요합니다. "
         f"{candidate_reason_suffix(candidate)}"
@@ -88,8 +94,9 @@ def selection_reason(candidate: object) -> str:
 
 def auto_selection_reason(candidate: object) -> str:
     return (
-        "자동 선택 조건을 충족했습니다: route=auto, approval_required=false, "
-        f"command_policy=approval_not_required. {candidate_reason_suffix(candidate)}"
+        "자동 선택 조건을 충족했습니다: route=auto(command 실행 채널), "
+        "approval_required=false, command_policy=approval_not_required. "
+        f"{candidate_reason_suffix(candidate)}"
     )
 
 

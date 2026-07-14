@@ -1541,8 +1541,12 @@ def test_user_selected_safe_pr_flow_requires_authority_instead_of_document_fallb
     assert approval_summary["kind"] == "recovery_selection"
     assert approval_summary["plan_id"] == plan.plan_id
     assert approval_summary["recommended_action_id"] == plan.recommended_action_id
+    assert approval_summary["execution_channel"] == "safe_pr"
     assert approval_summary["candidate_count"] == len(plan.candidates)
+    assert approval_summary["auto_execution_allowed"] is False
     assert approval_summary["recommended_candidate"]["route"] == selected.route
+    assert approval_summary["recommended_candidate"]["execution_channel"] == "safe_pr"
+    assert approval_summary["recommended_candidate"]["auto_execution_allowed"] is False
     assert approval_outs[0].details["candidates"][0]["action_id"] == selected.action_id
 
     action_selected = RecoveryActionSelectedBody(
