@@ -17,16 +17,18 @@ describe("application catalog items", () => {
     renderUi(<ApplicationCard application={application} onOpen={onOpen} />);
 
     const ready = screen.getByTestId("application-ready-bar");
-    expect(ready).toHaveTextContent("2/3");
-    expect(within(ready).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "2");
-    expect(within(ready).getByRole("progressbar")).toHaveStyle({ width: "67%" });
+    expect(ready.textContent).toContain("2/3");
+    expect(within(ready).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("2");
+    expect(
+      ready.querySelector<HTMLElement>('[data-slot="application-ready-fill"]')?.style.width,
+    ).toBe("67%");
 
     const deployment = screen.getByTestId("application-deployment-channel");
     expect(within(deployment).getByText("v2.4.1")).toBeTruthy();
     expect(within(deployment).getByText("a3f9c2e")).toBeTruthy();
 
-    expect(screen.getByTestId("application-drift-channel")).toHaveTextContent("spec.replicas differs");
-    expect(screen.getByTestId("application-incident-channel")).toHaveTextContent("Open incidents 1");
+    expect(screen.getByTestId("application-drift-channel").textContent).toContain("spec.replicas differs");
+    expect(screen.getByTestId("application-incident-channel").textContent).toContain("Open incidents 1");
 
     await user.click(screen.getByRole("button", { name: /checkout-api/i }));
     expect(onOpen).toHaveBeenCalledOnce();
@@ -60,7 +62,7 @@ describe("application catalog items", () => {
 
     const workerRow = screen.getByRole("row", { name: /worker/i });
     expect(within(workerRow).queryByRole("progressbar")).toBeNull();
-    expect(within(workerRow).getByText("Unavailable")).toBeTruthy();
+    expect(within(workerRow).getByTestId("application-ready-bar").textContent).toContain("Unavailable");
   });
 });
 

@@ -1,5 +1,7 @@
+import { Boxes } from "lucide-react";
 import { useI18n } from "../../shared/i18n";
 import { StatusMark } from "../../shared/ui/StatusMark";
+import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import {
   Table,
@@ -11,7 +13,13 @@ import {
 } from "../../shared/ui/primitives/table";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationCardModel } from "./applicationsContract";
-import { applicationStatusTone, shortSha } from "./applicationPresentation";
+import { applicationStatusTone } from "./applicationPresentation";
+import {
+  ApplicationDeploymentChannel,
+  ApplicationDriftChannel,
+  ApplicationIncidentChannel,
+  ApplicationReadyBar,
+} from "./ApplicationCatalogSignals";
 
 export function ApplicationsTable({
   applications,
@@ -28,27 +36,51 @@ export function ApplicationsTable({
         <TableHeader>
           <TableRow>
             <TableHead>{copy.title}</TableHead>
-            <TableHead>{copy.environment}</TableHead>
             <TableHead>{copy.health}</TableHead>
             <TableHead>{copy.pods}</TableHead>
             <TableHead>{copy.deployment}</TableHead>
-            <TableHead>{copy.resources}</TableHead>
+            <TableHead>{copy.drift}</TableHead>
             <TableHead>{copy.incidents}</TableHead>
+            <TableHead>{copy.resources}</TableHead>
             <TableHead><span className="sr-only">{copy.details}</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {applications.map((application) => (
             <TableRow key={application.id}>
-              <TableCell className="font-medium">{application.name}</TableCell>
-              <TableCell>{application.environments.join(", ") || copy.unavailable}</TableCell>
+              <TableCell>
+                <div className="flex min-w-48 items-center gap-2.5">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <Boxes aria-hidden="true" className="size-4" />
+                  </span>
+                  <span className="grid min-w-0 gap-1">
+                    <span className="truncate font-medium">{application.name}</span>
+                    <span className="flex min-w-0 flex-wrap gap-1">
+                      {application.environments.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">{copy.unavailable}</span>
+                      ) : application.environments.map((environment) => (
+                        <Badge key={environment} variant="outline">{environment}</Badge>
+                      ))}
+                    </span>
+                  </span>
+                </div>
+              </TableCell>
               <TableCell>
                 <StatusMark label={application.health.status ?? copy.unknown} tone={applicationStatusTone(application.health.status)} />
               </TableCell>
-              <TableCell>{podRatio(application, copy.unavailable)}</TableCell>
-              <TableCell>{[application.currentDeployment?.version, shortSha(application.currentDeployment?.gitSha ?? null)].filter(Boolean).join(" · ") || copy.unavailable}</TableCell>
-              <TableCell>{resourceTotal(application) ?? copy.unavailable}</TableCell>
-              <TableCell>{application.openIncidents ?? copy.unavailable}</TableCell>
+              <TableCell>
+                <ApplicationReadyBar health={application.health} label={copy.pods} unavailable={copy.unavailable} />
+              </TableCell>
+              <TableCell>
+                <ApplicationDeploymentChannel deployment={application.currentDeployment} unavailable={copy.unavailable} />
+              </TableCell>
+              <TableCell className="max-w-56">
+                <ApplicationDriftChannel aligned={copy.aligned} application={application} drift={copy.drift} unavailable={copy.unavailable} />
+              </TableCell>
+              <TableCell>
+                <ApplicationIncidentChannel count={application.openIncidents} noIncidents={copy.noIncidents} openIncidents={copy.openIncidents} unavailable={copy.unavailable} />
+              </TableCell>
+              <TableCell className="font-mono text-xs tabular-nums">{resourceTotal(application) ?? copy.unavailable}</TableCell>
               <TableCell className="text-right">
                 <Button onClick={() => onOpen(application.id)} size="sm" type="button" variant="ghost">{copy.details}</Button>
               </TableCell>
@@ -58,11 +90,6 @@ export function ApplicationsTable({
       </Table>
     </div>
   );
-}
-
-function podRatio(application: ApplicationCardModel, unavailable: string): string {
-  const { readyPods, totalPods } = application.health;
-  return readyPods === null || totalPods === null ? unavailable : `${readyPods}/${totalPods}`;
 }
 
 function resourceTotal(application: ApplicationCardModel): number | null {

@@ -37,7 +37,7 @@ describe("S10 Applications surface", () => {
 
     await user.click(screen.getByRole("button", { name: "Table view" }));
     expect(screen.getByRole("region", { name: "Applications" })).toBeTruthy();
-    expect(screen.getByRole("cell", { name: "checkout-api" })).toBeTruthy();
+    expect(within(screen.getByRole("row", { name: /checkout-api/ })).getByText("checkout-api")).toBeTruthy();
   });
 
   it("routes an empty catalog to the real GitOps connection flow", async () => {
