@@ -5,22 +5,18 @@ type HeadingTag = "h1" | "h2" | "h3" | "strong";
 type HeadingVariant = "page" | "section" | "compact";
 
 const variantStyles: Record<HeadingVariant, {
-  description: string;
   icon: string;
   title: string;
 }> = {
   page: {
-    description: "text-sm",
     icon: "size-10 rounded-xl border bg-card shadow-sm [&_svg]:size-5",
     title: "text-xl",
   },
   section: {
-    description: "text-xs",
     icon: "size-9 rounded-lg bg-primary/10 [&_svg]:size-4",
     title: "text-base",
   },
   compact: {
-    description: "text-xs",
     icon: "size-8 rounded-lg bg-primary/10 [&_svg]:size-4",
     title: "text-sm",
   },
@@ -29,7 +25,6 @@ const variantStyles: Record<HeadingVariant, {
 export function WorkflowInlineHeading({
   as = "h2",
   className,
-  description,
   icon,
   title,
   titleId,
@@ -37,7 +32,6 @@ export function WorkflowInlineHeading({
 }: {
   as?: HeadingTag;
   className?: string;
-  description?: string;
   icon?: ReactNode;
   title: string;
   titleId?: string;
@@ -52,7 +46,7 @@ export function WorkflowInlineHeading({
           {icon}
         </span>
       ) : null}
-      <div className="grid min-w-0 flex-1 gap-0.5">
+      <div className="grid min-w-0 flex-1">
         <Heading
           className={cn(
             "m-0 min-w-0 font-semibold [overflow-wrap:anywhere]",
@@ -62,13 +56,6 @@ export function WorkflowInlineHeading({
         >
           {title}
         </Heading>
-        {description ? (
-          <span
-            className={cn("min-w-0 text-muted-foreground [overflow-wrap:anywhere]", styles.description)}
-          >
-            {description}
-          </span>
-        ) : null}
       </div>
     </div>
   );

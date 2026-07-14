@@ -172,8 +172,13 @@ export function ManifestWorkspace({
           </div>
         </div>
       ) : (
-        <div className="grid min-h-80 place-items-center rounded-xl border border-dashed px-6 text-center text-sm leading-6 text-muted-foreground">
-          {t("workflows.yaml.empty")}
+        <div className="grid min-h-80 place-items-center rounded-xl border border-dashed bg-muted/15 px-6 text-center">
+          <div className="grid justify-items-center gap-3">
+            <span className="grid size-12 place-items-center rounded-lg border bg-card text-primary shadow-sm">
+              <FileCode2 aria-hidden="true" className="size-5" />
+            </span>
+            <strong className="text-sm">{t("workflows.yaml.empty")}</strong>
+          </div>
         </div>
       )}
     </div>

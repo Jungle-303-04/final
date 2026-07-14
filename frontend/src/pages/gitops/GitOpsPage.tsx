@@ -182,7 +182,6 @@ function EmptyWorkflow({ onCreate }: { onCreate: () => void }) {
       <div className="grid w-full max-w-xl justify-items-center gap-3">
         <WorkflowInlineHeading
           className="w-full"
-          description={t("workflows.plan.noneDescription")}
           icon={<GitBranch aria-hidden="true" />}
           title={t("workflows.plan.none")}
           variant="section"

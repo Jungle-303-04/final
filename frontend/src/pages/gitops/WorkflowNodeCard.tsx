@@ -15,6 +15,8 @@ export function WorkflowNodeCard({ data }: NodeProps<WorkflowNode>) {
     <div
       className={cn(
         "grid size-full min-w-0 content-start gap-2 overflow-hidden rounded-lg border bg-card p-3 text-card-foreground shadow-sm transition-shadow",
+        data.kind === "approval" && "bg-amber-500/[0.04]",
+        (data.kind === "preflight" || data.kind === "verification") && "bg-muted/40",
         data.selected && "border-primary ring-2 ring-primary/20",
         data.tone === "danger" && "border-destructive/50",
         data.tone === "warning" && "border-amber-500/50",
@@ -55,11 +57,6 @@ export function WorkflowNodeCard({ data }: NodeProps<WorkflowNode>) {
           <span className="truncate" title={data.cluster}>{data.cluster}</span>
           <span className="truncate" title={data.strategy}>{data.strategy}</span>
         </div>
-      ) : null}
-      {data.showMetadata && data.kind !== "application" ? (
-        <p className="m-0 line-clamp-2 text-[0.625rem] leading-3.5 text-muted-foreground [overflow-wrap:anywhere]">
-          {data.note}
-        </p>
       ) : null}
       <Handle className="!size-2 !border-2 !border-background !bg-primary" position={sourcePosition} type="source" />
     </div>

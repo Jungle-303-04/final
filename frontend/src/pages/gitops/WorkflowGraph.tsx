@@ -165,8 +165,13 @@ export function WorkflowGraph({
             {!narrowViewport ? <MiniMap pannable zoomable /> : null}
           </ReactFlow>
         ) : (
-          <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
-            {t("workflows.graph.empty")}
+          <div className="grid h-full place-items-center px-6 text-center">
+            <div className="grid justify-items-center gap-3">
+              <span className="grid size-12 place-items-center rounded-lg border bg-card text-primary shadow-sm">
+                <GitBranch aria-hidden="true" className="size-5" />
+              </span>
+              <strong className="text-sm">{t("workflows.graph.empty")}</strong>
+            </div>
           </div>
         )}
       </div>

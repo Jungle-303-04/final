@@ -43,7 +43,6 @@ export function buildWorkflowGraph(
       t("workflows.graph.preflight"),
       "PRE-FLIGHT",
       run ? "succeeded" : "pending",
-      t("workflows.graph.preflightNote"),
       options,
       t,
     ));
@@ -66,13 +65,12 @@ export function buildWorkflowGraph(
         type: "workflow",
         position: { x: 0, y: 0 },
         width: options.compact ? 176 : options.narrow ? 160 : 196,
-        height: options.compact ? 78 : 108,
+        height: options.compact ? 74 : 88,
         data: nodeData({
           kind: "approval",
           title: gate === "safe_pr" ? t("workflows.graph.safePrApproval") : t("workflows.graph.manualApproval"),
           eyebrow: "APPROVAL",
           status: status === "waiting_for_approval" ? status : run ? "succeeded" : "pending",
-          note: step.name || application?.name || step.application_id,
           selected: selectedStepId === key,
         }, options, t),
       });
@@ -115,7 +113,6 @@ export function buildWorkflowGraph(
       t("workflows.graph.verification"),
       "VERIFY",
       run?.status === "succeeded" ? "succeeded" : "pending",
-      t("workflows.graph.verificationNote"),
       options,
       t,
     ));
@@ -142,7 +139,6 @@ function checkpointNode(
   title: string,
   eyebrow: string,
   status: string,
-  note: string,
   options: GraphOptions,
   t: TranslationFunction,
 ): WorkflowNode {
@@ -151,8 +147,8 @@ function checkpointNode(
     type: "workflow",
     position: { x: 0, y: 0 },
     width: options.compact ? 176 : options.narrow ? 160 : 196,
-    height: options.compact ? 78 : 108,
-    data: nodeData({ kind, title, eyebrow, status, note, selected: false }, options, t),
+    height: options.compact ? 74 : 88,
+    data: nodeData({ kind, title, eyebrow, status, selected: false }, options, t),
   };
 }
 

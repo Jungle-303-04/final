@@ -6,17 +6,15 @@ import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 export function WizardSection({
   icon,
   title,
-  description,
   children,
 }: {
   icon: ReactNode;
   title: string;
-  description?: string;
   children: ReactNode;
 }) {
   return (
     <section aria-label={title} className="grid min-w-0 gap-5 border-y py-5">
-      <WorkflowInlineHeading description={description} icon={icon} title={title} />
+      <WorkflowInlineHeading icon={icon} title={title} />
       {children}
     </section>
   );
