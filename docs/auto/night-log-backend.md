@@ -58,3 +58,10 @@ Dev Gate run `29287592346` SUCCESS(1분 47초)다.
 새 head `20260714_0345`를 사용한 snapshot clone의 62-table data-only copy가 row count·checksum·
 FK·sequence·catalog까지 통과했다는 실환경 증거는 아직 없다. 배포 설정 세션의 clone 재실증이
 재개 조건이며 그 전에는 `FIRST_DEPLOY`와 `AWS_DEV_DEPLOY_ENABLED=1`을 실행하지 않는다.
+
+[계약 착륙: BQ-024] 2026-07-14 09:00 KST / GitOps provider-neutral 변경 목록과
+cluster·namespace·application·environment·approval facet을 구현했다. workspace session과
+cluster/application grant를 강제하며 credential·raw metadata/details는 노출하지 않는다.
+authoritative changeType·label projection은 `unavailable`로 명시하고 필터를 fail-closed한다.
+RED `dbd0bc6a1`, GREEN `2bfe44ec8`; 집중 검증 126 passed, import contract 8 kept,
+gate-fast backend 19 + frontend 39 PASS, T1=T2=`2bfe44ec8`. 다음 계약은 Checks strict list/facet이다.

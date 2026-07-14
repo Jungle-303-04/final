@@ -1354,3 +1354,18 @@ Bundle route는 200을 반환한다.
   전에 GitHub Actions 결제 실패 또는 spending limit로 종료됐다. workflow 배선은 확인됐으나
   서버 실행 증거가 없으므로 P0-0은 `in_progress`다. 결제 복구 또는 CodeBuild 대체 gate가
   dev push에서 실제 실행될 때까지 AWS 배포 스위치를 켜지 않는다.
+
+### GitOps canonical filter 하위 계약
+
+- 계약 경로: `GET /gitops/filter-results`, `GET /gitops/filter-facets`.
+- item은 `change_id`, application/repository/binding/cluster/namespace identity,
+  environment, revision, workflow status/current step, latest approval status, summary,
+  observed time만 노출한다. credential, provider payload, workflow metadata와 approval details는
+  응답에 포함하지 않는다.
+- 서버가 workspace session과 `inventory.read` cluster grant, `application.read` application
+  grant를 교집합으로 적용한다. 빈 grant는 exact empty, 요청한 비인가 scope는 404다.
+- authoritative desired-manifest change type과 label projection이 없으므로 해당 capability는
+  `unavailable`이며 필터 요청도 빈 결과로 fail-closed한다. mutable projection의 다음 페이지는
+  snapshot revision이 생길 때까지 503으로 차단한다.
+- 코드 증거: RED `dbd0bc6a1`, GREEN `2bfe44ec8`; 집중 검증 126 passed, import contract 8 kept,
+  `gate-fast` 19 backend + 39 frontend tests PASS, 게이트 트리 `2bfe44ec8` T1=T2.
