@@ -48,6 +48,38 @@ AUTHORITY_PATCH_ACTIONS = frozenset(
         "selector_fix",
     }
 )
+APPROVAL_REQUIRED_CONTEXTS: dict[str, JsonObject] = {
+    "image_pull_secret_fix": {
+        "reason_code": "security_boundary",
+        "label": "보안 경계 확인",
+        "reason": "registry 인증 정보나 Secret 참조 변경은 자동으로 결정하지 않고 운영자 확인이 필요합니다.",
+        "next_action": "verify_image_pull_secret",
+    },
+    "registry_recovery": {
+        "reason_code": "external_dependency",
+        "label": "외부 의존성 확인",
+        "reason": "외부 registry 장애 또는 mirror 전환은 플랫폼 밖 상태와 운영 정책 확인이 필요합니다.",
+        "next_action": "verify_registry_status",
+    },
+    "pvc_binding_fix": {
+        "reason_code": "data_safety",
+        "label": "데이터 안전성 확인",
+        "reason": "PVC와 StorageClass 변경은 데이터 보존과 바인딩 정책에 영향을 줄 수 있어 운영자 판단이 필요합니다.",
+        "next_action": "verify_storage_binding",
+    },
+    "manual_analysis": {
+        "reason_code": "manual_only",
+        "label": "수동 분석 필요",
+        "reason": "자동 복구 후보가 충분하지 않아 운영자 RCA 검토가 필요합니다.",
+        "next_action": "review_rca_findings",
+    },
+}
+DEFAULT_APPROVAL_REQUIRED_CONTEXT: JsonObject = {
+    "reason_code": "manual_review_required",
+    "label": "운영자 승인 필요",
+    "reason": "선택된 복구 조치는 자동 실행 조건을 충족하지 않아 운영자 확인이 필요합니다.",
+    "next_action": "review_recovery_action",
+}
 
 
 @dataclass(frozen=True)
@@ -79,11 +111,7 @@ class RecoveryDispatcher:
         if selected.route == self.routes.safe_pr:
             return await dispatch_safe_pr_body(evt, authority, correlation_id)
         if selected.route == self.routes.approval_required:
-            return RcaActionRequiredBody(
-                reason=f"승인 필요: {selected.title}",
-                evidence_ref=evt.plan.evidence_ref,
-                workspace_id=evt.workspace_id,
-            )
+            return approval_required_body(evt)
         if selected.route == self.routes.forbidden:
             return RcaActionRequiredBody(
                 reason=f"자동 조치 차단: {selected.title}",
@@ -95,6 +123,42 @@ class RecoveryDispatcher:
             evidence_ref=evt.plan.evidence_ref,
             workspace_id=evt.workspace_id,
         )
+
+
+def approval_required_body(evt: RecoveryActionSelectedBody) -> RcaActionRequiredBody:
+    selected = evt.selected
+    context = APPROVAL_REQUIRED_CONTEXTS.get(
+        selected.draft.action_type,
+        DEFAULT_APPROVAL_REQUIRED_CONTEXT,
+    )
+    reason_code = str(context["reason_code"])
+    label = str(context["label"])
+    reason = str(context["reason"])
+    next_action = str(context["next_action"])
+    return RcaActionRequiredBody(
+        reason=f"승인 필요({label}): {selected.title}. {reason}",
+        evidence_ref=evt.plan.evidence_ref,
+        workspace_id=evt.workspace_id,
+        reason_code=reason_code,
+        next_actions=[
+            {
+                "action_type": next_action,
+                "reason": reason,
+                "target": evt.plan.target,
+            }
+        ],
+        diagnostics={
+            "plan_id": evt.plan.plan_id,
+            "incident_id": evt.plan.incident_id,
+            "action_id": selected.action_id,
+            "action_type": selected.draft.action_type,
+            "route": selected.route,
+            "risk_level": selected.risk_level,
+            "blast_radius": selected.blast_radius,
+            "approval_reason": reason_code,
+            "approval_label": label,
+        },
+    )
 
 
 def build_safe_pr_request_body(
