@@ -70,6 +70,14 @@ def test_global_filter_facets_model_count_completeness_without_false_zero() -> N
                 }
             ],
             "applications": [],
+            "resource_types": [
+                {
+                    "id": "pod",
+                    "label": "Pod",
+                    "count": 12,
+                    "count_completeness": "exact",
+                }
+            ],
             "labels": [
                 {
                     "key": "team",
@@ -93,6 +101,7 @@ def test_global_filter_facets_model_count_completeness_without_false_zero() -> N
     assert response.namespaces[0].cluster_id == "cluster-a"
     assert response.namespaces[0].count_completeness == "partial"
     assert response.labels[0].count is None
+    assert response.resource_types[0].id == "pod"
     assert response.resources[0].kind == "Deployment"
 
 
