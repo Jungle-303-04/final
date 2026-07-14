@@ -81,7 +81,7 @@ describe("HomePage", () => {
     });
     renderHome(port);
 
-    expect(await screen.findByRole("heading", { name: "관측된 Cluster가 없습니다" }))
+    expect(await screen.findByRole("heading", { name: "연결된 클러스터가 없습니다" }))
       .toBeTruthy();
     expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeNull();
@@ -140,7 +140,7 @@ describe("HomePage", () => {
     renderHome(port, ["/?clusters=cluster-1"], reportUnauthorized);
 
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
-    expect(screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }))
+    expect(screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }))
       .toBeNull();
   });
 });
