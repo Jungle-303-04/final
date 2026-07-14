@@ -45,6 +45,7 @@ export function IssuesSurface({
     issue: IssueSummary;
   } | null>(null);
   const [panels, setPanels] = useState<IssuePanelsState>(emptyPanels());
+  const [detailFull, setDetailFull] = useState(false);
   const [revision, setRevision] = useState(0);
   const mutationRef = useRef<AbortController | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
@@ -177,9 +178,17 @@ export function IssuesSurface({
   const selectIssue = useCallback((issue: IssueSummary) => {
     abortAuditPage();
     requestDetailFocus(issue.id);
+    setDetailFull(false);
     setPanels(loadingPanels(issue.incidentId !== null));
     setSelectedRecord({ scope: clusterId, issue });
   }, [abortAuditPage, clusterId, requestDetailFocus]);
+
+  const closeIssue = useCallback(() => {
+    abortAuditPage();
+    setDetailFull(false);
+    setPanels(emptyPanels());
+    setSelectedRecord(null);
+  }, [abortAuditPage]);
 
   const refreshList = useCallback(() => {
     setListRecord((current) => ({
@@ -194,8 +203,19 @@ export function IssuesSurface({
   }, [clusterId]);
 
   return (
-    <div className="grid gap-4 lg:min-h-96 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.6fr)]">
-      <Card aria-label={copy.listLabel} role="region">
+    <div
+      className="flex min-h-96 min-w-0 gap-4"
+      data-detail-layout={selected === null ? "closed" : detailFull ? "full" : "peek"}
+    >
+      <Card
+        aria-label={copy.listLabel}
+        className={selected === null
+          ? "min-w-0 flex-1"
+          : detailFull
+            ? "hidden"
+            : "hidden min-w-0 flex-1 lg:block"}
+        role="region"
+      >
         <CardHeader className="border-b">
           <CardTitle>{copy.listLabel}</CardTitle>
           <Button
@@ -220,22 +240,30 @@ export function IssuesSurface({
         </CardContent>
       </Card>
       {selected === null ? (
-        <Card className="min-h-48 lg:min-h-96" role="status">
+        <Card className="hidden min-h-48 min-w-[30rem] lg:block lg:min-h-96" role="status">
           <CardContent className="grid min-h-48 place-items-center text-muted-foreground lg:min-h-96">
             {copy.detailEmpty}
           </CardContent>
         </Card>
       ) : (
-        <IssuesPanels
-          capability={recoverySelection}
-          copy={copy}
-          detailRegionId={detailRegionId}
-          detailRegionRef={detailRegionRef}
-          onLoadMoreAudit={loadMoreAudit}
-          onSelectRecovery={selectRecovery}
-          selected={selected}
-          state={panels}
-        />
+        <div className={detailFull
+          ? "min-w-0 flex-1"
+          : "min-w-0 w-full shrink-0 lg:w-[30rem]"}
+        >
+          <IssuesPanels
+            capability={recoverySelection}
+            copy={copy}
+            detailRegionId={detailRegionId}
+            detailRegionRef={detailRegionRef}
+            full={detailFull}
+            onClose={closeIssue}
+            onFullChange={setDetailFull}
+            onLoadMoreAudit={loadMoreAudit}
+            onSelectRecovery={selectRecovery}
+            selected={selected}
+            state={panels}
+          />
+        </div>
       )}
     </div>
   );

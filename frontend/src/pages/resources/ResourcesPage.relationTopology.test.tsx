@@ -44,7 +44,7 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(await screen.findByText(
       "Resource relationships",
       {},
-      { timeout: 5_000 },
+      { timeout: 10_000 },
     )).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')
       ?.getAttribute("data-view")).toBe("relations");

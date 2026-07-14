@@ -1,5 +1,5 @@
-import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ChevronDown, GitBranch, RefreshCw } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import type {
   GitOpsPort,
@@ -23,6 +23,7 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
   const { formatDate, t } = useI18n();
   const [request, setRequest] = useState(0);
   const [rows, setRows] = useState<GitOpsSyncTarget[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const refresh = useCallback(() => {
@@ -90,9 +91,12 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
         </div>
         {rows.length === 0 ? (
           <div className="grid min-h-52 place-items-center p-8 text-center">
-            <div>
+            <div className="grid max-w-md justify-items-center gap-2 rounded-xl border border-dashed p-6">
+              <span className="grid size-10 place-items-center rounded-full bg-muted text-muted-foreground">
+                <GitBranch aria-hidden="true" className="size-5" />
+              </span>
               <p className="font-medium">{t("workflows.sync.empty.title")}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{t("workflows.sync.empty.description")}</p>
+              <p className="text-sm text-muted-foreground">{t("workflows.sync.empty.description")}</p>
             </div>
           </div>
         ) : (
@@ -105,38 +109,66 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
                 <TableHead>{t("workflows.sync.table.status")}</TableHead>
                 <TableHead>{t("workflows.sync.table.revision")}</TableHead>
                 <TableHead>{t("workflows.sync.table.observed")}</TableHead>
+                <TableHead className="w-16 text-right">
+                  <span className="sr-only">{t("common.action.details")}</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => {
                 const status = syncStatus(row.syncStatus, t);
+                const selected = row.id === selectedId;
                 return (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <span className="grid min-w-40 gap-0.5">
-                        <span className="font-medium">{row.applicationName}</span>
-                        <span className="font-mono text-xs text-muted-foreground">{row.applicationId}</span>
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="grid min-w-36 gap-0.5">
-                        <span>{row.clusterId ?? t("common.value.unavailable")}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {row.namespace ?? t("common.value.unavailable")}
+                  <Fragment key={row.id}>
+                    <TableRow data-state={selected ? "selected" : undefined}>
+                      <TableCell>
+                        <span className="grid min-w-40 gap-0.5">
+                          <span className="font-medium">{row.applicationName}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{row.applicationId}</span>
                         </span>
-                      </span>
-                    </TableCell>
-                    <TableCell>{row.environment ?? t("common.value.unavailable")}</TableCell>
-                    <TableCell title={status.raw ?? undefined}>
-                      <StatusMark label={status.label} tone={status.tone} />
-                    </TableCell>
-                    <TableCell className="max-w-48 truncate font-mono text-xs" title={row.revision ?? undefined}>
-                      {row.revision ?? t("common.value.unavailable")}
-                    </TableCell>
-                    <TableCell>
-                      {formatObserved(row.observedAt, formatDate, t("common.value.unavailable"))}
-                    </TableCell>
-                  </TableRow>
+                      </TableCell>
+                      <TableCell>
+                        <span className="grid min-w-36 gap-0.5">
+                          <span>{row.clusterId ?? t("common.value.unavailable")}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {row.namespace ?? t("common.value.unavailable")}
+                          </span>
+                        </span>
+                      </TableCell>
+                      <TableCell>{row.environment ?? t("common.value.unavailable")}</TableCell>
+                      <TableCell title={status.raw ?? undefined}>
+                        <StatusMark label={status.label} tone={status.tone} />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs" title={row.revision ?? undefined}>
+                        {compactRevision(row.revision, t("common.value.unavailable"))}
+                      </TableCell>
+                      <TableCell>
+                        {formatObserved(row.observedAt, formatDate, t("common.value.unavailable"))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          aria-expanded={selected}
+                          aria-label={`${selected ? t("common.action.close") : t("common.action.details")}: ${row.applicationName}`}
+                          onClick={() => setSelectedId(selected ? null : row.id)}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <ChevronDown
+                            aria-hidden="true"
+                            className={selected ? "rotate-180 transition-transform motion-reduce:transition-none" : "transition-transform motion-reduce:transition-none"}
+                          />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {selected ? (
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell className="p-0" colSpan={7}>
+                          <SyncTargetDetails row={row} status={status} />
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </Fragment>
                 );
               })}
             </TableBody>
@@ -144,6 +176,39 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
         )}
       </Surface>
     </div>
+  );
+}
+
+function SyncTargetDetails({
+  row,
+  status,
+}: {
+  row: GitOpsSyncTarget;
+  status: ReturnType<typeof syncStatus>;
+}) {
+  const { formatDate, t } = useI18n();
+  const unavailable = t("common.value.unavailable");
+  const items = [
+    [t("workflows.sync.table.application"), row.applicationId],
+    [t("workflows.sync.table.target"), [row.clusterId, row.namespace].filter(Boolean).join(" / ") || unavailable],
+    [t("workflows.sync.table.environment"), row.environment ?? unavailable],
+    [t("workflows.sync.table.status"), status.raw ?? status.label],
+    [t("workflows.sync.table.revision"), row.revision ?? unavailable],
+    [t("workflows.sync.table.observed"), formatObserved(row.observedAt, formatDate, unavailable)],
+  ] as const;
+
+  return (
+    <dl
+      aria-label={`${row.applicationName} ${t("common.action.details")}`}
+      className="grid gap-x-6 gap-y-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-3"
+    >
+      {items.map(([label, value]) => (
+        <div className="min-w-0" key={label}>
+          <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+          <dd className="mt-1 break-all text-sm">{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -176,6 +241,11 @@ function formatObserved(
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) return unavailable;
   return formatDate(timestamp, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function compactRevision(value: string | null, unavailable: string): string {
+  if (value === null) return unavailable;
+  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
 function isAbortError(error: unknown): boolean {

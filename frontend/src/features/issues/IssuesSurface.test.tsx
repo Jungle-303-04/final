@@ -35,6 +35,30 @@ describe("IssuesSurface", () => {
     fireEvent.click(issue);
     await waitFor(() => expect(document.activeElement).toBe(detail));
   });
+  it("opens at 480px, expands without a second sheet, and closes back to the list", async () => {
+    const port = issuesPort();
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    expect(document.querySelector('[data-detail-layout="peek"]')).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Incidents" })).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open incident detail full screen" }));
+    expect(document.querySelector('[data-detail-layout="full"]')).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Incidents" }).className).toContain("hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show incident list and detail" }));
+    expect(document.querySelector('[data-detail-layout="peek"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close incident detail" }));
+    expect(document.querySelector('[data-detail-layout="closed"]')).toBeTruthy();
+  });
 
   it("keeps incident, evidence, analysis, and recovery loads independently observable", async () => {
     const port = issuesPort();

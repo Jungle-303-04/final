@@ -31,4 +31,18 @@ describe("motion CSS contract", () => {
     expect(tokens).toContain(`animation-delay: 0ms ${priority}`);
     expect(tokens).toContain(`transition-duration: 1ms ${priority}`);
   });
+
+  it("animates wizard stages without animating layout dimensions", () => {
+    expect(tokens).toContain("@keyframes motion-wizard-stage-enter");
+    expect(tokens).toContain(".motion-wizard-stage");
+    expect(tokens).toContain("transform: translateX(0.5rem)");
+    expect(tokens).not.toContain("transition: width var(--motion-layout)");
+    expect(tokens).not.toContain("transition: height var(--motion-layout)");
+  });
+
+  it("keeps live preview motion disabled for reduced-motion users", () => {
+    expect(tokens).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.motion-live-preview-value[\s\S]*?transition: none !important/,
+    );
+  });
 });

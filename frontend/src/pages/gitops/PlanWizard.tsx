@@ -139,8 +139,9 @@ export function PlanWizard({
         </div>
       ) : null}
 
-      <div className="min-h-[26rem] min-w-0">
-        {stage === "basics" ? (
+      <div className="min-h-[26rem] min-w-0 overflow-hidden">
+        <div className="motion-wizard-stage" data-stage={stage} key={stage}>
+          {stage === "basics" ? (
           <WizardSection
             icon={<GitBranch aria-hidden="true" />}
             title={t("workflows.wizard.basicsTitle")}
@@ -254,7 +255,8 @@ export function PlanWizard({
             <WizardMobileOrder plan={plan} title={t("workflows.overview.order")} />
             <WorkflowGraph applications={applications} className="hidden xl:block" controls={false} plan={plan} />
           </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <footer className="flex min-w-0 flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
