@@ -25,7 +25,9 @@ const PHYSICAL_TOPOLOGY_ENDPOINT = {
     server_id: "node:worker-a",
     usage_pct: null,
     cpu_mcores: 12.5,
+    cpu_request_mcores: 100,
     mem_mib: 48,
+    mem_request_mib: 64,
     phase: "CrashLoopBackOff",
     health: "critical",
     restarts: 7,
@@ -88,7 +90,12 @@ describe("physical topology adapter", () => {
         totalPodCount: 14,
         totalPodCountCompleteness: "partial",
       }],
-      pods: [{ matchesFilter: true, usagePercent: null }],
+      pods: [{
+        matchesFilter: true,
+        usagePercent: null,
+        cpuRequestMillicores: 100,
+        memoryRequestMebibytes: 64,
+      }],
       truncatedByServer: { "node:worker-a": 13 },
       metricsObservedAt: "2026-07-14T05:20:00Z",
     });

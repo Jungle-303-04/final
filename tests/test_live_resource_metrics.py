@@ -100,8 +100,10 @@ def test_kubelet_stats_join_actual_usage_with_complete_request_and_limit_totals(
     measured = asyncio.run(collect())["shop/checkout-0"]
 
     assert measured["cpu_mcores"] == 300.0
+    assert measured["cpu_request_mcores"] == 150.0
     assert measured["mem_bytes"] == 201_326_592
     assert measured["mem_mib"] == 192.0
+    assert measured["mem_request_mib"] == 192.0
     assert measured["cpu_request_pct"] == 200.0
     assert measured["cpu_limit_pct"] == 50.0
     assert measured["mem_request_pct"] == 100.0
@@ -166,9 +168,11 @@ def test_partial_kubelet_measurement_and_denominator_remain_none() -> None:
 
     measured = asyncio.run(collect())["shop/checkout-0"]
     assert measured["cpu_mcores"] is None
+    assert measured["cpu_request_mcores"] is None
     assert measured["cpu_request_pct"] is None
     assert measured["cpu_limit_pct"] is None
     assert measured["mem_mib"] == 64.0
+    assert measured["mem_request_mib"] == 192.0
     assert measured["mem_request_pct"] == pytest.approx(100 / 3)
     assert measured["mem_limit_pct"] is None
     assert measured["metrics_metadata"]["degraded_reason"] == "kubelet_measurement_partial"
