@@ -1,10 +1,10 @@
-import { Box, Pause, RotateCcw, X } from "lucide-react";
+import { Pause, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
 import { podWaveDelay } from "../../motion/useStagger";
 import { useI18n } from "../../shared/i18n";
-import { cn } from "@/shared/lib/cn";
+import { cn } from "../../shared/lib/cn";
 import {
   podAbnormalBadge,
   podUsageLabel,
@@ -45,7 +45,7 @@ export function PhysicalTopologyPod({
       })}
       className={cn(
         "motion-pod-pop relative grid size-9 place-items-center rounded-md border text-[0.625rem] font-semibold shadow-xs transition-[opacity,transform,box-shadow] duration-(--motion-instant) motion-reduce:transition-none",
-        "enabled:hover:z-10 enabled:scale-125 enabled:shadow-md",
+        "enabled:hover:z-10 enabled:hover:scale-125 enabled:hover:shadow-md",
         tone === "neutral" && "border-border bg-muted text-muted-foreground",
         tone === "amber" && "border-amber-500/50 bg-amber-500/30 text-amber-950 dark:text-amber-100",
         tone === "red" && "border-destructive/60 bg-destructive/35 text-destructive-foreground",
@@ -62,7 +62,6 @@ export function PhysicalTopologyPod({
       title={`${pod.namespace ?? "—"} · ${pod.name} · ${podUsageLabel(pod.usagePercent)}`}
       type="button"
     >
-      <Box aria-hidden="true" className="size-3.5" />
       {badge === null ? null : (
         <span
           aria-label={t(`resources.graph.pod.badge.${badge}`)}

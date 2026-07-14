@@ -9,6 +9,7 @@ import {
   physicalServerPlacements,
   podAbnormalBadge,
   podUsageTone,
+  visiblePhysicalPods,
 } from "./physicalTopologyViewModel";
 
 describe("physical topology view model", () => {
@@ -32,7 +33,7 @@ describe("physical topology view model", () => {
       .toBe("crash-loop");
     expect(podAbnormalBadge(pod({ phase: "Pending", usagePercent: 99 })))
       .toBe("pending");
-    expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 3 })))
+    expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 1 })))
       .toBe("restarting");
     expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 0 })))
       .toBeNull();
@@ -54,6 +55,26 @@ describe("physical topology view model", () => {
       pods: [{ id: "pod:pending", matchesFilter: false }],
       countCompleteness: "unavailable",
     });
+  });
+
+  it("puts problem pods first, renders at most twelve, and reports the local remainder", () => {
+    const normalPods = Array.from({ length: 13 }, (_, index) => pod({
+      id: `pod:normal-${index}`,
+      name: `normal-${index}`,
+    }));
+    const pending = pod({ id: "pod:pending", name: "pending", phase: "Pending" });
+    const sorted = visiblePhysicalPods([...normalPods, pending]);
+    expect(sorted).toHaveLength(MAX_VISIBLE_PODS_PER_SERVER);
+    expect(sorted[0]?.id).toBe("pod:pending");
+
+    const placements = physicalServerPlacements({
+      ...PHYSICAL_TOPOLOGY,
+      pods: [...normalPods, pending],
+      truncatedByServer: { "node:worker-a": 4 },
+    });
+    expect(placements[0]?.omittedCount).toBe(6);
+    expect(placements[0]?.visibleTotalCount).toBe(MAX_VISIBLE_PODS_PER_SERVER);
+    expect(placements[0]?.pods[0]?.id).toBe("pod:pending");
   });
 });
 
