@@ -1,0 +1,39 @@
+meta {
+  name: 07 맥락 기반 AI 제안
+  type: http
+  seq: 7
+  tags: [ai, read]
+}
+
+get {
+  url: {{base_url}}ai/suggestions?context={{ai_context}}
+}
+
+script:pre-request {
+  const context = {
+    screen: "resources",
+    filters: {
+      clusters: [String(bru.getVar("cluster_id"))],
+      namespaces: [], applications: [], labels: [],
+      resource_types: ["pod"], health: [], query: ""
+    },
+    selection: null,
+    time: null
+  };
+  bru.setVar("ai_context", encodeURIComponent(JSON.stringify(context)));
+}
+
+tests {
+  test("suggestions are returned or auth/validation fails explicitly", function () {
+    expect([200, 401, 403, 422]).to.include(res.status);
+  });
+
+  test("successful suggestions use the strict wrapper", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    expect(body).to.have.all.keys("suggestions");
+    body.suggestions.forEach((item) => {
+      expect(item).to.have.all.keys("id", "label", "prompt");
+    });
+  });
+}

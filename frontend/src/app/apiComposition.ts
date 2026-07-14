@@ -32,7 +32,10 @@ import {
   scaleDeployment,
   selectRecoveryAction,
   createReleaseFlowClient,
+  getAiSuggestions,
+  postAiChat,
 } from "../api";
+import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
 import { createApplicationsGitOpsAdapter } from "../features/applications-gitops/createApplicationsGitOpsAdapter";
 import { createApplicationsSurface } from "../features/applications-gitops/createApplicationsGitOpsSurfaces";
@@ -100,6 +103,7 @@ export function createApiComposition() {
     listApplications,
   });
   const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
+  const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
   return createProductComposition([
     {
       id: "clusters",
@@ -136,5 +140,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort, globalFilterPort);
+  }), homePort, globalFilterPort, aiAssistantPort);
 }

@@ -28,6 +28,13 @@ DEAD_LETTER_REPLAY_PATH = "/dead-letters/{dead_letter_id}/replay"
 AI_CONVERSATIONS_PATH = "/ai/conversations"
 AI_CONVERSATION_PATH = "/ai/conversations/{conversation_id}"
 AI_CONVERSATION_MESSAGES_PATH = "/ai/conversations/{conversation_id}/messages"
+# Context-bound AI facade. These routes are intentionally separate from the
+# asynchronous conversation workflow: every synchronous answer must carry
+# materialized, user-authorized evidence.
+AI_CHAT_PATH = "/ai/chat"
+AI_SUGGESTIONS_PATH = "/ai/suggestions"
+AI_RESOURCES_PATH = "/ai/resources/{kind}"
+AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
 # 관리 콘솔 — 조직/그룹/멤버/권한 (프론트 콘솔 전용, admin 세션)
 ORGS_PATH = "/orgs"
 ORG_PATH = "/orgs/{org_id}"
