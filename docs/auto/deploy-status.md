@@ -11,16 +11,20 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S10 `051fcd3b0` public(console) · Applications API P0 fix/S11 local
+배포 SHA : V1 `61284a2b2` public(console) · 운영체제/다크/라이트 테마
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 20:27 KST  S10 console public · API 500 근본 수정 local 완료 · S11 local
+갱신     : 2026-07-14 22:01 KST  V1 console public · 실제 브라우저 검증 완료
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-MbLKlq1P.js`
+- console bundle: `assets/index-DFUbqWhB.js`
 - backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
-- console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
+- console digest: `sha256:ad8f8e834095b56cd255864c439f53a0d48ba5918ddfd8c6417cc34045da872a`
 - 로그인·클러스터·리소스 read smoke: 통과
+- Dev Gate: `29333928109` SUCCESS
+- CONSOLE 배포: `29334319541` SUCCESS — service/DB 단계 미실행
+- 공개 브라우저: source SHA `61284a2b211c177d0958a616d9ad5d8a672fe8f6`,
+  운영체제 기본·OS 변경 추종·명시적 다크/라이트 고정, desktop/mobile console error 0
 
 ---
 
