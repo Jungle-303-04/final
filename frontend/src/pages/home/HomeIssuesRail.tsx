@@ -1,4 +1,4 @@
-import { CircleAlert, Clock3 } from "lucide-react";
+import { CircleAlert, Clock3, TriangleAlert } from "lucide-react";
 import type { HomeClusterChoice, HomeClusterOverview } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { Surface } from "../../shared/ui/Surface";
@@ -105,7 +105,7 @@ function IssueContent({
         <div className="grid gap-2 p-3 pr-4">
         {overview.data.incidents.map((incident) => (
           <Item key={incident.id} variant="muted">
-            <ItemMedia variant="icon"><CircleAlert aria-hidden="true" /></ItemMedia>
+            <ItemMedia variant="icon"><CircleAlert aria-hidden="true" className="text-destructive" /></ItemMedia>
             <ItemContent>
               <ItemTitle>{incident.symptom ?? t("home.issue.analyzing")}</ItemTitle>
               <ItemDescription>
@@ -121,7 +121,7 @@ function IssueContent({
         ))}
         {overview.data.warnings.map((warning) => (
           <Item key={warning.id} variant="outline">
-            <ItemMedia variant="icon"><CircleAlert aria-hidden="true" /></ItemMedia>
+            <ItemMedia variant="icon"><TriangleAlert aria-hidden="true" className="text-status-warning" /></ItemMedia>
             <ItemContent>
               <ItemTitle>{warning.reason ?? warning.name}</ItemTitle>
               <ItemDescription>{warning.message ?? t("home.issue.noDetail")}</ItemDescription>
