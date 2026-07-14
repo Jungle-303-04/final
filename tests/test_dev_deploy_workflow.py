@@ -301,6 +301,9 @@ def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety
     assert 'test "${post_bundle}" != "${PRE_DEPLOY_FRONTEND_BUNDLE}"' in console_smoke
     assert 'grep --fixed-strings --quiet "${SOURCE_SHA}"' in console_smoke
     assert "EXPECTED_CONSOLE_IMAGE" in console_smoke
+    assert "for attempt in $(seq 1 12)" in console_smoke
+    assert '"${BASE_URL}/?source_sha=${SOURCE_SHA}"' in console_smoke
+    assert "public edge not converged" in console_smoke
     assert "alembic" not in console_smoke.lower()
 
 

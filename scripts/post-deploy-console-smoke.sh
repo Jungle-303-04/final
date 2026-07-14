@@ -96,17 +96,28 @@ done < <(jq -r '.targets[] | [.namespace, .resource, .container] | @tsv' \
   "${CONSOLE_ROLLBACK_PLAN}")
 
 echo "==> post-deploy public edge"
-test "$(curl --silent --show-error \
-  --connect-timeout 5 \
-  --max-time 15 \
-  --output /dev/null \
-  --write-out '%{http_code}' \
-  "${BASE_URL}/api/healthz")" = "200"
-public_index="$(curl --silent --show-error \
-  --connect-timeout 5 \
-  --max-time 15 \
-  "${BASE_URL}/")"
-grep --fixed-strings --quiet "${post_bundle}" <<<"${public_index}"
+public_edge_ready=0
+for attempt in $(seq 1 12); do
+  public_health="$(curl --silent --show-error \
+    --connect-timeout 5 \
+    --max-time 15 \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    "${BASE_URL}/api/healthz")"
+  public_index="$(curl --silent --show-error \
+    --connect-timeout 5 \
+    --max-time 15 \
+    --header 'Cache-Control: no-cache' \
+    "${BASE_URL}/?source_sha=${SOURCE_SHA}")"
+  if [[ "${public_health}" == "200" ]] && \
+    grep --fixed-strings --quiet "${post_bundle}" <<<"${public_index}"; then
+    public_edge_ready=1
+    break
+  fi
+  echo "public edge not converged: attempt=${attempt} health=${public_health}" >&2
+  sleep 5
+done
+test "${public_edge_ready}" = "1"
 
 printf 'post-deploy console smoke passed: bundle=%s source_sha=%s\n' \
   "${post_bundle}" "${SOURCE_SHA}"
