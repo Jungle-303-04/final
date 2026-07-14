@@ -34,7 +34,11 @@ export function ProductRouter({
       >
         <Routes>
           <Route element={(
-            <ProductShell auth={auth} releasedSurfaceIds={composition.releasedSurfaceIds} />
+            <ProductShell
+              auth={auth}
+              globalFilterPort={composition.globalFilter}
+              releasedSurfaceIds={composition.releasedSurfaceIds}
+            />
           )}>
             {composition.surfaces.map(({ id, Component }) => {
               const routeDefinition = routeDefinitionForSurface(id);

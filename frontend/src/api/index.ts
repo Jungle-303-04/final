@@ -24,6 +24,15 @@ export { listClusters, type ListClustersOptions } from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
 export {
+  GLOBAL_FILTER_FACETS_PATH,
+  listGlobalFilterFacets,
+  type GlobalFilterFacetQuery,
+} from "./global-filter";
+export {
+  globalFilterFacetsSchema,
+  type GlobalFilterFacets,
+} from "./global-filter-schemas";
+export {
   getProviderCatalog,
   getProviderClusterDiscovery,
   preflightTargetRegistration,

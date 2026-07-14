@@ -1,9 +1,13 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect } from "react";
+import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
+import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type {
-  ResourceList,
-  ResourcesPort,
-} from "../../features/resources/resourcesContract";
+  ResourcesFilterPort,
+  ResourcesFilterResourcePage,
+} from "../../features/resources/resourcesFilterContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -25,19 +29,42 @@ import {
   ResourcesClusterBoundary,
   UnknownCompletenessEmpty,
   UnknownSelection,
-  UnsupportedFilterProjection,
 } from "./ResourcesPageFeedback";
-import { filterResourceRows, ResourcesTable } from "./ResourcesTable";
+import { ResourcesTable } from "./ResourcesTable";
 import { ResourcesToolbar } from "./ResourcesToolbar";
+import { useResourcesFilterDataFrame } from "./useResourcesFilterDataFrame";
+import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
 import { useResourcesPageState } from "./useResourcesPageState";
 
 export function ResourcesPage({
+  filterPort,
   port,
 }: {
+  filterPort: ResourcesFilterPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
+  const { reportUnauthorized } = useAuthSessionGate();
+  const session = useOptionalProductSession();
+  const filter = useUnifiedFilter();
   const state = useResourcesPageState(port);
+  const filtered = useResourcesFilterDataFrame({
+    active:
+      state.selectedClusterExists &&
+      state.selectedResourceType !== null &&
+      !state.resourceTypeInvalid,
+    authorityKey: session
+      ? `${session.workspaceId}:${session.userId}`
+      : "anonymous",
+    facetAxis: null,
+    facetQuery: "",
+    filterState: filter.state,
+    onListFailure: state.recordListFailure,
+    onListSuccess: state.recordListSuccess,
+    port: filterPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
   const resourcesView = state.view;
   const setResourcesView = state.setView;
   useResourceTypeShortcuts(state.cycleResourceType);
@@ -59,9 +86,10 @@ export function ResourcesPage({
   if (state.choices.data.clusters.length === 0) {
     return <ResourcesClusterBoundary variant="catalog-unconfirmed" />;
   }
-  const refreshing = [state.choices, state.catalog, state.list, state.detail].some(
-    (resource) => resource.phase === "ready" && resource.refreshing,
-  );
+  const refreshing =
+    [state.choices, state.catalog, state.list, state.detail].some(
+      (resource) => resource.phase === "ready" && resource.refreshing,
+    ) || filtered.list.refreshing;
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
@@ -97,7 +125,8 @@ export function ResourcesPage({
         )
       ) : state.denied ? (
         <ResourcesDenied onRetry={state.refresh} />
-      ) : state.catalog.phase === "loading" || state.catalog.phase === "idle" ? (
+      ) : state.catalog.phase === "loading" ||
+        state.catalog.phase === "idle" ? (
         <ProductStateScreen
           kind="loading"
           loadingPreview={<ResourcesCatalogLoadingPreview />}
@@ -117,6 +146,7 @@ export function ResourcesPage({
             catalog={state.catalog}
             choices={state.choices}
             list={state.list}
+            filterList={filtered.list}
           />
           <CatalogFreshness observedAt={state.catalog.data.observedAt} />
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -126,13 +156,19 @@ export function ResourcesPage({
               selectedResourceType={state.selectedResourceType}
             />
             {state.resourceTypeInvalid || !state.selectedResourceType ? (
-              <UnknownSelection value={state.selectedResourceType} variant="resource" />
+              <UnknownSelection
+                value={state.selectedResourceType}
+                variant="resource"
+              />
             ) : !state.catalog.data.items.some(
-              (item) => item.resourceType === state.selectedResourceType,
-            ) ? (
-              <UnknownSelection value={state.selectedResourceType} variant="resource" />
+                (item) => item.resourceType === state.selectedResourceType,
+              ) ? (
+              <UnknownSelection
+                value={state.selectedResourceType}
+                variant="resource"
+              />
             ) : (
-              <ResourcesListSurface state={state} />
+              <ResourcesListSurface filterList={filtered.list} state={state} />
             )}
           </div>
         </>
@@ -151,18 +187,26 @@ export function ResourcesPage({
   );
 }
 
-function ResourcesListSurface({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
+function ResourcesListSurface({
+  filterList,
+  state,
+}: {
+  filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
+  state: ReturnType<typeof useResourcesPageState>;
+}) {
   const { t } = useI18n();
   return (
-    <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
-      <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
+    <div
+      className="grid min-w-0 gap-4"
+      data-slot="resources-four-layer-surface"
+    >
+      <Surface
+        aria-label={t("resources.layer.filters")}
+        className="min-w-0 overflow-hidden"
+      >
         <ResourcesToolbar
           includeDeleted={state.includeDeleted}
-          namespace={state.namespace}
           onIncludeDeletedChange={state.setIncludeDeleted}
-          onNamespaceChange={state.setNamespace}
-          onSearchChange={state.setSearch}
-          search={state.search}
         />
       </Surface>
 
@@ -173,23 +217,29 @@ function ResourcesListSurface({ state }: { state: ReturnType<typeof useResources
         <ResourcesGraphShell />
       </Surface>
 
-      <Surface aria-labelledby="resources-list-title" className="min-w-0 overflow-hidden">
+      <Surface
+        aria-labelledby="resources-list-title"
+        className="min-w-0 overflow-hidden"
+      >
         <div className="border-b px-4 py-3">
-          <h3 className="font-medium" id="resources-list-title">{state.selectedResourceType}</h3>
+          <h3 className="font-medium" id="resources-list-title">
+            {state.selectedResourceType}
+          </h3>
         </div>
-        {state.filterProjectionUnsupported ? (
-          <UnsupportedFilterProjection embedded />
-        ) : (
-          <ResourcesListBody state={state} />
-        )}
+        <ResourcesListBody filterList={filterList} state={state} />
       </Surface>
     </div>
   );
 }
 
-function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPageState> }) {
-  const { t } = useI18n();
-  if (state.list.phase === "idle" || state.list.phase === "loading") {
+function ResourcesListBody({
+  filterList,
+  state,
+}: {
+  filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
+  state: ReturnType<typeof useResourcesPageState>;
+}) {
+  if (filterList.phase === "idle" || filterList.phase === "loading") {
     return (
       <ProductStateScreen
         kind="loading"
@@ -198,59 +248,61 @@ function ResourcesListBody({ state }: { state: ReturnType<typeof useResourcesPag
       />
     );
   }
-  if (state.list.phase === "failed") {
+  if (filterList.phase === "failed" && filterList.failure) {
     return (
       <ResourcesFailure
-        failure={state.list.failure}
+        failure={filterList.failure}
         onRetry={state.refresh}
         retryWaitSeconds={state.retryWaitSeconds}
       />
     );
   }
-  if (state.list.data.items.length === 0) {
+  if (
+    filterList.phase !== "ready" ||
+    filterList.data === null ||
+    filterList.data.items.length === 0
+  ) {
     return <UnknownCompletenessEmpty variant="list" />;
   }
-  const filtered = filterResourceRows(state.list.data.items, state.search);
+  const items = filterList.data.items.map((item) => item.resource);
   return (
     <div className="min-w-0">
-      <ListScopeStatus filtered={filtered.length} list={state.list.data} />
-      {filtered.length === 0 ? (
-        <div className="grid min-h-48 place-items-center p-6 text-sm text-muted-foreground">
-          {t("resources.list.emptySearch")}
-        </div>
-      ) : (
-        <ResourcesTable
-          items={filtered}
-          onOpen={state.openDetail}
-          registerRowButton={state.registerRowButton}
-        />
-      )}
+      <ListScopeStatus page={filterList.data} />
+      <ResourcesTable
+        items={items}
+        onOpen={state.openDetail}
+        registerRowButton={state.registerRowButton}
+      />
     </div>
   );
 }
 
-function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceList }) {
+function ListScopeStatus({ page }: { page: ResourcesFilterResourcePage }) {
   const { formatNumber, t } = useI18n();
-  const filteredText = filtered === list.returned
-    ? ""
-    : ` · ${t("resources.list.scope.filtered", { count: formatNumber(filtered) })}`;
-  const excludedText = (list.excludedCount ?? 0) > 0
-    ? ` · ${t("resources.list.scope.excluded", {
-      count: formatNumber(list.excludedCount ?? 0),
-    })}`
-    : "";
+  const total = page.counts.filteredCount;
+  const shown = page.items.length;
+  const filteredText =
+    total === null
+      ? ` · ${t("resources.list.unknownTotal")}`
+      : ` · ${t("resources.list.scope.filtered", { count: formatNumber(total) })}`;
+  const excludedText =
+    page.excludedCount > 0
+      ? ` · ${t("resources.list.scope.excluded", {
+          count: formatNumber(page.excludedCount),
+        })}`
+      : "";
   return (
     <div
       aria-label={t("resources.list.scope.aria")}
       className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
       role="status"
     >
-      {t("resources.list.scope.shown", { count: formatNumber(list.returned) })}
-      {filteredText}{excludedText} · {t("resources.list.unknownTotal")} · {t(
-        "resources.list.scope.limit",
-        { count: formatNumber(list.limit) },
-      )}
-      {list.limitReached ? ` · ${t("resources.list.scope.limitReached")}` : ""}
+      {t("resources.list.scope.shown", { count: formatNumber(shown) })}
+      {filteredText}
+      {excludedText}
+      {page.counts.filteredCountCompleteness === "partial"
+        ? ` · ${t("common.state.partial")}`
+        : ""}
     </div>
   );
 }
@@ -258,8 +310,15 @@ function ListScopeStatus({ filtered, list }: { filtered: number; list: ResourceL
 function useResourceTypeShortcuts(cycle: (direction: -1 | 1) => void) {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey ||
-        isEditingTarget(event.target) || document.querySelector('[role="dialog"]')) return;
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        isEditingTarget(event.target) ||
+        document.querySelector('[role="dialog"]')
+      )
+        return;
       if (event.key !== "[" && event.key !== "]") return;
       event.preventDefault();
       cycle(event.key === "]" ? 1 : -1);
@@ -270,6 +329,8 @@ function useResourceTypeShortcuts(cycle: (direction: -1 | 1) => void) {
 }
 
 function isEditingTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement &&
-    target.matches("input, textarea, select, [contenteditable=true]");
+  return (
+    target instanceof HTMLElement &&
+    target.matches("input, textarea, select, [contenteditable=true]")
+  );
 }

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from packages.contracts.gateway import routes
 from packages.contracts.gateway.responses import (
     FilteredInventoryResourceListResponse,
+    GlobalFilterFacetsResponse,
     LabelFacetPageResponse,
     ResourceFilterFacetPageResponse,
 )
@@ -45,6 +46,54 @@ def test_inventory_filter_route_constants_are_additive_and_canonical() -> None:
     assert routes.RESOURCES_FILTER_FACETS_PATH == "/resources/filter-facets"
     assert routes.FILTERED_RESOURCES_PATH == "/resources"
     assert routes.RESOURCE_LABEL_FACETS_PATH == "/resources/label-facets"
+    assert routes.FILTER_FACETS_PATH == "/filter-facets"
+
+
+def test_global_filter_facets_model_count_completeness_without_false_zero() -> None:
+    response = GlobalFilterFacetsResponse.model_validate(
+        {
+            "clusters": [
+                {
+                    "id": "cluster-a",
+                    "label": "prod-eks",
+                    "count": 18,
+                    "count_completeness": "exact",
+                }
+            ],
+            "namespaces": [
+                {
+                    "id": "cluster-a/shop",
+                    "label": "shop",
+                    "cluster_id": "cluster-a",
+                    "count": 4,
+                    "count_completeness": "partial",
+                }
+            ],
+            "applications": [],
+            "labels": [
+                {
+                    "key": "team",
+                    "value": "checkout",
+                    "count": None,
+                    "count_completeness": "unavailable",
+                }
+            ],
+            "resources": [
+                {
+                    "id": "deployment:shop/checkout",
+                    "label": "checkout",
+                    "kind": "Deployment",
+                    "count": 1,
+                    "count_completeness": "exact",
+                }
+            ],
+        }
+    )
+
+    assert response.namespaces[0].cluster_id == "cluster-a"
+    assert response.namespaces[0].count_completeness == "partial"
+    assert response.labels[0].count is None
+    assert response.resources[0].kind == "Deployment"
 
 
 def test_structural_facet_page_models_each_axis_and_selection_resolution() -> None:

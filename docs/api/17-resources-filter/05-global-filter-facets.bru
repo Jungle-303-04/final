@@ -1,0 +1,28 @@
+meta {
+  name: 05 전역 검색 제안
+  type: http
+  seq: 5
+  tags: [resources, filters, read]
+}
+
+get {
+  url: {{base_url}}filter-facets?q=check&limit=8
+}
+
+tests {
+  test("200 or validated access failure", function () {
+    expect([200, 400, 401, 403, 409, 422]).to.include(res.status);
+  });
+
+  test("200 response exposes server-defined suggestion groups and honest counts", function () {
+    if (res.status !== 200) return;
+    const body = res.getBody();
+    ["clusters", "namespaces", "applications", "labels", "resources"].forEach((group) => {
+      expect(body[group]).to.be.an("array");
+      body[group].forEach((item) => {
+        expect(item).to.have.property("count_completeness");
+        if (item.count_completeness === "unavailable") expect(item.count).to.equal(null);
+      });
+    });
+  });
+}

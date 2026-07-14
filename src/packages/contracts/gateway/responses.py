@@ -689,6 +689,40 @@ class ResourceFilterFacetPageResponse(StrictModel):
     snapshot: FilterSnapshotMeta
 
 
+class GlobalClusterFacetItem(StrictModel):
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+
+
+class GlobalNamespaceFacetItem(GlobalClusterFacetItem):
+    cluster_id: str = Field(min_length=1)
+
+
+class GlobalApplicationFacetItem(GlobalClusterFacetItem):
+    pass
+
+
+class GlobalLabelFacetItem(StrictModel):
+    key: str = Field(min_length=1)
+    value: str
+    count: int | None = Field(default=None, ge=0)
+    count_completeness: FilterCountCompleteness
+
+
+class GlobalResourceFacetItem(GlobalClusterFacetItem):
+    kind: str = Field(min_length=1)
+
+
+class GlobalFilterFacetsResponse(StrictModel):
+    clusters: list[GlobalClusterFacetItem] = Field(default_factory=list)
+    namespaces: list[GlobalNamespaceFacetItem] = Field(default_factory=list)
+    applications: list[GlobalApplicationFacetItem] = Field(default_factory=list)
+    labels: list[GlobalLabelFacetItem] = Field(default_factory=list)
+    resources: list[GlobalResourceFacetItem] = Field(default_factory=list)
+
+
 class InventoryResourceClusterIdentity(StrictModel):
     cluster_id: str = Field(min_length=1)
     name: str | None = None
