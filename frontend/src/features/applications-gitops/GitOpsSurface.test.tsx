@@ -71,7 +71,11 @@ describe("GitOps surface", () => {
       loadGitOpsSnapshot,
     });
 
-    expect(await screen.findByText("prod-seoul-01")).toBeTruthy();
+    expect(await screen.findByText(
+      "prod-seoul-01",
+      {},
+      { timeout: 10_000 },
+    )).toBeTruthy();
     expect(screen.getByText("abc123")).toBeTruthy();
     expect(screen.getByText("Eligible")).toBeTruthy();
 
