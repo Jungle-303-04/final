@@ -27,12 +27,14 @@ export function physicalServerPlacements(
   topology: PhysicalTopologySnapshot,
 ): PhysicalServerPlacement[] {
   const placements: PhysicalServerPlacement[] = topology.servers.map((server) => {
-    const pods = topology.pods.filter((pod) => pod.serverId === server.id);
+    const allPods = topology.pods.filter((pod) => pod.serverId === server.id);
+    const pods = visiblePhysicalPods(allPods);
+    const locallyOmitted = allPods.length - pods.length;
     return {
       unassigned: false,
       server,
       pods,
-      omittedCount: topology.truncatedByServer[server.id] ?? 0,
+      omittedCount: (topology.truncatedByServer[server.id] ?? 0) + locallyOmitted,
       visibleMatchedCount: pods.filter((pod) => pod.matchesFilter).length,
       visibleTotalCount: pods.length,
       matchedCount: server.matchedPodCount,
@@ -47,9 +49,11 @@ export function physicalServerPlacements(
             : "exact",
     };
   });
-  const unassignedPods = topology.pods.filter((pod) => pod.serverId === null);
-  if (unassignedPods.length > 0 || topology.unassignedTruncatedCount > 0) {
-    const omittedCount = topology.unassignedTruncatedCount;
+  const allUnassignedPods = topology.pods.filter((pod) => pod.serverId === null);
+  if (allUnassignedPods.length > 0 || topology.unassignedTruncatedCount > 0) {
+    const pods = visiblePhysicalPods(allUnassignedPods);
+    const serverOmittedCount = topology.unassignedTruncatedCount;
+    const omittedCount = serverOmittedCount + allUnassignedPods.length - pods.length;
     placements.push({
       unassigned: true,
       server: {
@@ -58,25 +62,44 @@ export function physicalServerPlacements(
         cpuPercent: null,
         memoryPercent: null,
         status: "Pending",
-        matchedPodCount: omittedCount === 0
-          ? unassignedPods.filter((pod) => pod.matchesFilter).length
+        matchedPodCount: serverOmittedCount === 0
+          ? allUnassignedPods.filter((pod) => pod.matchesFilter).length
           : null,
-        totalPodCount: unassignedPods.length + omittedCount,
-        matchedPodCountCompleteness: omittedCount === 0 ? "exact" : "unavailable",
-        totalPodCountCompleteness: omittedCount === 0 ? "exact" : "partial",
+        totalPodCount: allUnassignedPods.length + serverOmittedCount,
+        matchedPodCountCompleteness: serverOmittedCount === 0 ? "exact" : "unavailable",
+        totalPodCountCompleteness: serverOmittedCount === 0 ? "exact" : "partial",
       },
-      pods: unassignedPods,
+      pods,
       omittedCount,
-      visibleMatchedCount: unassignedPods.filter((pod) => pod.matchesFilter).length,
-      visibleTotalCount: unassignedPods.length,
-      matchedCount: omittedCount === 0
-        ? unassignedPods.filter((pod) => pod.matchesFilter).length
+      visibleMatchedCount: pods.filter((pod) => pod.matchesFilter).length,
+      visibleTotalCount: pods.length,
+      matchedCount: serverOmittedCount === 0
+        ? allUnassignedPods.filter((pod) => pod.matchesFilter).length
         : null,
-      totalCount: unassignedPods.length + omittedCount,
-      countCompleteness: omittedCount === 0 ? "exact" : "unavailable",
+      totalCount: allUnassignedPods.length + serverOmittedCount,
+      countCompleteness: serverOmittedCount === 0 ? "exact" : "unavailable",
     });
   }
   return placements;
+}
+
+export function visiblePhysicalPods(pods: PhysicalTopologyPod[]): PhysicalTopologyPod[] {
+  return pods
+    .map((pod, index) => ({ index, pod, priority: podProblemPriority(pod) }))
+    .sort((left, right) => left.priority - right.priority || left.index - right.index)
+    .slice(0, MAX_VISIBLE_PODS_PER_SERVER)
+    .map(({ pod }) => pod);
+}
+
+function podProblemPriority(pod: PhysicalTopologyPod): number {
+  const badge = podAbnormalBadge(pod);
+  if (badge === "crash-loop") return 0;
+  if (badge === "pending") return 1;
+  if (badge === "restarting") return 2;
+  if (!["healthy", "ready", "ok"].includes(pod.health.toLocaleLowerCase())) return 3;
+  if ((pod.usagePercent ?? 0) >= 80) return 4;
+  if ((pod.usagePercent ?? 0) >= 60) return 5;
+  return 6;
 }
 
 export function podUsageTone(usagePercent: number | null): PodUsageTone {
@@ -90,7 +113,7 @@ export function podAbnormalBadge(pod: PhysicalTopologyPod): PodAbnormalBadge {
   const phase = pod.phase.toLocaleLowerCase();
   if (phase.includes("crashloop") || phase.includes("backoff")) return "crash-loop";
   if (phase === "pending") return "pending";
-  if (pod.restartCount >= 3) return "restarting";
+  if (pod.restartCount > 0) return "restarting";
   return null;
 }
 
