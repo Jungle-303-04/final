@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -69,6 +70,7 @@ def run_gate(tmp_path: Path, subject: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [str(GATE), str(message)],
         cwd=ROOT,
+        env={**os.environ, "LC_ALL": "C"},
         check=False,
         capture_output=True,
         text=True,
