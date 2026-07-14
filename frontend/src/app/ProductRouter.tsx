@@ -25,6 +25,9 @@ export function ProductRouter({
   }
 
   const fallbackRoute = routeDefinitionForSurface(composition.surfaces[0].id);
+  const landingRoute = composition.releasedSurfaceIds.has("clusters")
+    ? routeDefinitionForSurface("clusters")
+    : fallbackRoute;
 
   return (
     <UnifiedFilterProvider>
@@ -42,6 +45,7 @@ export function ProductRouter({
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>
+            <Route index element={<ProductFallbackRedirect path={landingRoute.path} />} />
             {composition.surfaces.map(({ id, Component }) => {
               const routeDefinition = routeDefinitionForSurface(id);
               const routePath = routeDefinition.match === "prefix"

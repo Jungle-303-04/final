@@ -141,7 +141,7 @@ describe("ProductRouter unified filter cutover", () => {
     await user.keyboard("gh");
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("PUSH");
   });
@@ -168,7 +168,7 @@ describe("ProductRouter unified filter cutover", () => {
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
@@ -185,6 +185,18 @@ describe("ProductRouter unified filter cutover", () => {
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
+
+  it("uses Clusters as the landing screen while Home remains directly available", async () => {
+    const { router } = renderProductRouter(
+      `/${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+    );
+
+    await waitFor(() => {
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+    });
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
 });
 
 const emptyClusterScope: ClusterScopePort = {
@@ -198,6 +210,7 @@ function renderProductRouter(
 ) {
   const composition = createProductComposition([
     { id: "home", Component: HomeSurface },
+    { id: "clusters", Component: ClustersSurface },
     { id: "resources", Component: ResourcesSurface },
     { id: "issues", Component: IssuesSurface },
     ...(includeWorkflows ? [{ id: "gitops" as const, Component: WorkflowsSurface }] : []),
@@ -228,6 +241,10 @@ function HomeSurface() {
 
 function ResourcesSurface() {
   return <p>Resources surface</p>;
+}
+
+function ClustersSurface() {
+  return <p>Clusters surface</p>;
 }
 
 function IssuesSurface() {

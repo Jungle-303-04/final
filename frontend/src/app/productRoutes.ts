@@ -26,7 +26,7 @@ export interface ProductRouteDefinition {
 }
 
 export const PRODUCT_ROUTE_CATALOG = [
-  route("home", "Home", "/", "g h", "exact"),
+  route("home", "Home", "/home", "g h", "exact"),
   route("clusters", "Clusters", "/clusters", "g k"),
   route("resources", "Resources", "/resources", "g r"),
   route("issues", "Incidents", "/issues", "g i"),
@@ -68,7 +68,6 @@ function route(
 }
 
 function ownsPath(routeDefinition: ProductRouteDefinition, pathname: string): boolean {
-  if (routeDefinition.id === "home" && pathname === "/home") return true;
   if (routeDefinition.match === "exact") return pathname === routeDefinition.path;
   return pathname === routeDefinition.path || pathname.startsWith(`${routeDefinition.path}/`);
 }
