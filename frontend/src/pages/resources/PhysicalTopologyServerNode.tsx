@@ -38,7 +38,7 @@ export function PhysicalTopologyServerCard({
   return (
     <article
       aria-label={t("resources.graph.server.aria", { name: serverName })}
-      className="motion-node-land grid h-52 w-66 grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-xl border bg-card/95 shadow-sm backdrop-blur transition-[border-color,box-shadow,transform] duration-(--motion-quick) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none"
+      className="motion-node-land grid h-52 w-full grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-xl border bg-card/95 shadow-sm backdrop-blur transition-[border-color,box-shadow,transform] duration-(--motion-quick) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none"
       data-morph-id={placement.unassigned ? undefined : `server:${clusterId}:${index}`}
       data-server-id={server.id}
       data-slot="physical-topology-server"

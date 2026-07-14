@@ -1,33 +1,12 @@
-import {
-  Background,
-  ReactFlow,
-  type Edge,
-  type NodeTypes,
-  type ReactFlowInstance,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import { Waypoints } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useI18n } from "../../shared/i18n";
-import { useProductColorMode } from "../../shared/ui/useProductTheme";
-import {
-  PhysicalTopologyServerCard,
-  PhysicalTopologyServerNode,
-} from "./PhysicalTopologyServerNode";
-import type { PhysicalServerNode } from "./physicalTopologyGraphTypes";
-import {
-  PHYSICAL_SERVER_HEIGHT,
-  PHYSICAL_SERVER_WIDTH,
-  physicalServerPlacements,
-} from "./physicalTopologyViewModel";
+import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
+import { physicalServerPlacements } from "./physicalTopologyViewModel";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
-import { usePhysicalTopologyLayout } from "./usePhysicalTopologyLayout";
-import { useGraphRefit } from "./useGraphRefit";
 import { UsageSmoothingBoundary } from "./useSmoothedUsageColor";
-
-const nodeTypes: NodeTypes = { "physical-server": PhysicalTopologyServerNode };
 
 export function ResourcesPhysicalTopologyScene({
   clusterId,
@@ -42,7 +21,6 @@ export function ResourcesPhysicalTopologyScene({
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;
 }) {
-  const colorMode = useProductColorMode();
   const topology = frame.phase === "ready" ? frame.data : null;
   const placements = useMemo(
     () => topology === null ? [] : physicalServerPlacements(topology),
@@ -52,57 +30,21 @@ export function ResourcesPhysicalTopologyScene({
     () => placements.reduce((count, placement) => count + placement.pods.length + 2, 0),
     [placements],
   );
-  const inputNodes = useMemo<PhysicalServerNode[]>(() => placements.map(
-    (placement, index) => ({
-      id: placement.server.id,
-      type: "physical-server",
-      position: { x: index * (PHYSICAL_SERVER_WIDTH + 24), y: 0 },
-      width: PHYSICAL_SERVER_WIDTH,
-      height: PHYSICAL_SERVER_HEIGHT,
-      data: { clusterId, index, placement, onOpenPod, onRevealServer },
-    }),
-  ), [clusterId, onOpenPod, onRevealServer, placements]);
-  const nodes = usePhysicalTopologyLayout(inputNodes);
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<PhysicalServerNode, Edge>>();
-  useGraphRefit({ instance: flowInstance, nodes, viewportRef });
-
   if (frame.phase === "loading") {
     return <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />;
   }
-  if (frame.phase === "ready" && nodes.length > 0 &&
-      typeof ResizeObserver !== "undefined") {
+  if (frame.phase === "ready" && placements.length > 0) {
     return (
       <UsageSmoothingBoundary markCount={usageMarkCount}>
-        <div className="h-full" ref={viewportRef}>
-          <ReactFlow
-            colorMode={colorMode}
-            fitView
-            fitViewOptions={{ padding: 0.12, minZoom: 0.4 }}
-            maxZoom={2}
-            minZoom={0.4}
-            nodeTypes={nodeTypes}
-            nodes={nodes}
-            nodesConnectable={false}
-            nodesDraggable={false}
-            onInit={setFlowInstance}
-            panOnScroll={false}
-            proOptions={{ hideAttribution: true }}
-            zoomOnDoubleClick={false}
-            zoomOnScroll
-          >
-            <Background color="var(--border)" gap={22} size={1} />
-          </ReactFlow>
-        </div>
-      </UsageSmoothingBoundary>
-    );
-  }
-  if (frame.phase === "ready" && nodes.length > 0) {
-    return (
-      <UsageSmoothingBoundary markCount={usageMarkCount}>
-        <div className="flex h-full items-center gap-4 overflow-x-auto px-5 pb-12 pt-3">
-          {nodes.map((node) => (
-            <PhysicalTopologyServerCard data={node.data} key={node.id} />
+        <div
+          className="grid h-full grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-auto p-4 sm:p-5"
+          data-slot="physical-topology-grid"
+        >
+          {placements.map((placement, index) => (
+            <PhysicalTopologyServerCard
+              data={{ clusterId, index, placement, onOpenPod, onRevealServer }}
+              key={placement.server.id}
+            />
           ))}
         </div>
       </UsageSmoothingBoundary>
@@ -115,11 +57,15 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
   const { t } = useI18n();
   const visible = Math.max(1, Math.min(count ?? 3, 8));
   return (
-    <div aria-label={t("resources.graph.loading")} className="flex h-full items-center gap-4 overflow-hidden px-5 pb-12 pt-3" role="status">
+    <div
+      aria-label={t("resources.graph.loading")}
+      className="grid h-full grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
+      role="status"
+    >
       {Array.from({ length: visible }, (_, index) => (
         <div
           aria-hidden="true"
-          className="motion-node-land h-48 w-64 shrink-0 animate-pulse rounded-xl border bg-card/85 p-3 motion-reduce:animate-none"
+          className="motion-node-land h-52 w-full animate-pulse rounded-xl border bg-card/85 p-3 motion-reduce:animate-none"
           data-morph-id={`server:${clusterId}:${index}`}
           data-slot="physical-server-skeleton"
           key={index}
