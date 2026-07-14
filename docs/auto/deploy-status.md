@@ -1,20 +1,82 @@
 ---
-title: AWS dev 배포 상태
-status: observed-live-snapshot
-observed_at: 2026-07-13T21:52:00+09:00
-update_mode: manual-snapshot
+title: AWS dev 배포 상태 — 팀원용 단일 진입점
+status: active
+updated: 2026-07-14
 ---
+
+# 지금 배포된 것
+
+> **팀원용.** 이 파일만 보면 "지금 뭐가 되는지"와 "어떻게 확인하는지"를 알 수 있다.
+> 세션이 슬라이스를 닫을 때마다 갱신한다. **갱신 안 된 슬라이스는 완료가 아니다.**
+
+```
+URL      : https://k8s.woonyong.org
+배포 SHA : 대기 (S0 시작 전)
+갱신     : 2026-07-14  기획 확정 · 코덱스 목표모드 전환 [D-048]
+```
+
+---
+
+## 선행 조건 (이게 끝나야 S1을 시작한다)
+
+- [ ] P1  기획 문서 dev 착륙 (VP-014~017, radar-parity-map)
+- [ ] P2  `AWS_DEV_DEPLOY_ENABLED=1`  ← **0이면 자동 배포가 안 된다. 최우선**
+- [ ] P3  백엔드 FULL 배포 (live가 07-13 구버전)
+- [ ] P4  에이전트 재등록 (DB 재생성으로 토큰 소실 → 클러스터 데이터 0)
+- [ ] P5  Radar 서브트리 + NOTICE (Apache-2.0. 이식 전 필수)
+
+---
+
+## 슬라이스 (VP-016)
+
+- [ ] **S0**  모션 기반 (VP-017)      ← 화면 변화 없음. 토큰·FLIP 훅·테스트
+- [ ] **S1**  Clusters 목록           ← 클러스터 카드. 안에 서버가 작은 블록으로 미리 보인다
+- [ ] **S2**  클러스터 연결 위자드     ← ＋ 버튼 → 한 줄 명령 복사 → 자동 연결
+- [ ] **S3**  태그형 검색 (1층)       ← 타이핑 → 타입별 제안 → 칩
+- [ ] **S4**  물리 뷰 그래프 (2층) ★  ← 클러스터 클릭 → 카메라가 서버로 내려간다
+- [ ] **S5**  표 + 스파크라인 (3층)
+- [ ] **S6**  상세 = 전체화면 덮기
+- [ ] **S7**  AI 패널
+- [ ] **S8**  하단 독 + 로그 스트림
+- [ ] S9   관계 뷰 토글
+- [ ] S10  Applications
+- [ ] S11  시간 스크럽 (TimelineStrip)
+- [ ] S12  Issues + RCA + 증거
+- [ ] S13  변경 적용 진행 ★           ← 고스트 파드. 데모의 클라이맥스
+- [ ] S14  GitOps (변경 + 동기화 2탭)
+- [ ] S15  Checks (31개 감사)
+- [ ] S16  Settings + 정책
+- [ ] S17  Home 위젯 조합
+
+**S0~S8이 끝나면 이미 시연 가능한 제품이다.**
+
+---
+
+## 이번 슬라이스에서 확인할 것
+
+(첫 슬라이스 배포 후 여기에 체크리스트가 채워진다)
+
+---
+
+## 기획 정본
+
+| 문서 | 내용 |
+|---|---|
+| `docs/auto/codex-goal-directive-20260714.md` | **세션이 따르는 지시서** |
+| `docs/spec/frontend/vp-015-global-shell.md` | 화면 골격 (충돌 시 이게 이긴다) |
+| `docs/spec/frontend/vp-017-motion-spec.md` | 모션 규격 (수치가 계약) |
+| `docs/spec/frontend/vp-016-delivery-plan.md` | 슬라이스 계획 |
+| `docs/auto/open-decisions-20260714.md` | 미확정 6건 (기본값으로 진행) |
+
+---
+
+# (이전) 07-13 인프라 관측 스냅샷
+
 
 # AWS dev 배포 상태
 
 팀원이 현재 접속 가능한 환경과 실제 배포 artifact를 확인하는 단일 진입점이다. 배포 파이프라인이
 이 파일을 갱신하는 단계는 아직 연결되지 않았으므로 관측 시각을 먼저 확인한다.
-
-<!-- pipeline-observation:begin -->
-## 배포 파이프라인 관측값
-
-파이프라인 갱신은 아직 연결되지 않았다. 아래 수동 관측값이 현재 증거다.
-<!-- pipeline-observation:end -->
 
 ## 접속
 
@@ -54,11 +116,3 @@ Deployment와 ECR에 OCI source revision attestation이 없으므로 digest가 �
 - live DB에는 `alembic_version`이 없고 create-all 기반 부분 스키마가 있어 임의 stamp를 할 수 없다.
 - live Deployment의 `DEV_AUTH_BYPASS=0` 명시값은 확인되지 않았다. 새 배포 전 렌더와 live 값을
   모두 차단 게이트로 검증해야 한다.
-- 배포 파이프라인용 digest 경계는 관리 서비스 이미지와 정확히 일치하는 container만 private
-  rollback plan에 포함하고 같은 immutable digest로 순차 rollout한다. console과 인프라 이미지는
-  다른 artifact이므로 서비스 digest로 덮어쓰지 않는다. 이 경계는 `a7b35ac90`에 착륙했지만,
-  AWS 자격증명 만료와 Actions runner 결제 게이트 때문에 live 실행은 아직 증명되지 않았다.
-- `9d78b4567`의 `Dev Deploy` workflow는 성공한 `Dev Gate`의 dev push SHA와
-  `AWS_DEV_DEPLOY_ENABLED=1`을 동시에 요구한다. 현재 switch는 OFF다. Actions runner 복구,
-  live 인증 우회 0 검증, versioned DB, 현재 배포 SHA를 담은 `opsia-deploy-status` ConfigMap이
-  확인되기 전에는 workload를 변경하지 않는다.
