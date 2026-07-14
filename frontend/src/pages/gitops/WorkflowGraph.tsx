@@ -24,6 +24,7 @@ import { WorkflowViewSettings } from "./WorkflowViewSettings";
 import { isNarrowGraphViewport, useWorkflowLayout } from "./useWorkflowLayout";
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNodeCard };
+const narrowMinZoom = 0.38;
 
 export function WorkflowGraph({
   plan,
@@ -86,7 +87,7 @@ export function WorkflowGraph({
       innerFrame = requestAnimationFrame(() => {
         void flowInstance.fitView({
           padding: 0.18,
-          minZoom: narrowViewport ? 0.45 : 0.2,
+          minZoom: narrowViewport ? narrowMinZoom : 0.2,
           maxZoom: narrowViewport ? 1 : 1.2,
         });
       });
@@ -113,7 +114,7 @@ export function WorkflowGraph({
   }, []);
 
   return (
-    <section aria-label={t("workflows.graph.label")} className={cn("min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm", className)}>
+    <section aria-label={t("workflows.graph.label")} className={cn("min-w-0 overflow-hidden rounded-lg border bg-card shadow-sm", className)}>
       <div className="flex min-w-0 items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           <GitBranch aria-hidden="true" className="size-4 shrink-0 text-primary" />
@@ -147,9 +148,9 @@ export function WorkflowGraph({
             colorMode="system"
             edges={layout.edges}
             fitView
-            fitViewOptions={{ padding: 0.18, minZoom: narrowViewport ? 0.62 : 0.32 }}
+            fitViewOptions={{ padding: 0.18, minZoom: narrowViewport ? narrowMinZoom : 0.32 }}
             maxZoom={1.4}
-            minZoom={narrowViewport ? 0.45 : 0.2}
+            minZoom={narrowViewport ? narrowMinZoom : 0.2}
             nodeTypes={nodeTypes}
             nodes={layout.nodes}
             nodesConnectable={false}
