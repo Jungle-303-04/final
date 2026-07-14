@@ -188,6 +188,72 @@ class RcaTimelineResponse(StrictModel):
     items: list[RcaTimelineItem]
 
 
+ChangeTimelineEventKind = Literal[
+    "inventory_event",
+    "incident",
+    "deployment",
+    "gitops_change",
+]
+ChangeTimelineSeverity = Literal["info", "warning", "critical", "unknown"]
+
+
+class ChangeTimelineBucket(StrictModel):
+    startMs: int = Field(ge=0)
+    endMs: int = Field(gt=0)
+    total: int = Field(ge=0)
+    warnings: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.startMs >= self.endMs or self.warnings > self.total:
+            raise ValueError("change timeline bucket is invalid")
+        return self
+
+
+class ChangeTimelineEvent(StrictModel):
+    id: str = Field(min_length=1, max_length=512)
+    kind: ChangeTimelineEventKind
+    occurredMs: int = Field(ge=0)
+    title: str = Field(min_length=1, max_length=240)
+    severity: ChangeTimelineSeverity
+
+
+class ChangeTimelineGap(StrictModel):
+    from_: int = Field(alias="from", serialization_alias="from", ge=0)
+    to: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.from_ >= self.to:
+            raise ValueError("change timeline gap is invalid")
+        return self
+
+
+class ChangeTimelineResponse(StrictModel):
+    buckets: list[ChangeTimelineBucket] = Field(default_factory=list)
+    events: list[ChangeTimelineEvent] = Field(default_factory=list)
+    gaps: list[ChangeTimelineGap] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> Self:
+        bucket_ranges = [(item.startMs, item.endMs) for item in self.buckets]
+        gap_ranges = [(item.from_, item.to) for item in self.gaps]
+        if any(
+            current[0] < previous[1]
+            for previous, current in zip(bucket_ranges, bucket_ranges[1:], strict=False)
+        ):
+            raise ValueError("change timeline buckets are not ordered")
+        if any(
+            current[0] < previous[1]
+            for previous, current in zip(gap_ranges, gap_ranges[1:], strict=False)
+        ):
+            raise ValueError("change timeline gaps are not ordered")
+        event_keys = [(item.occurredMs, item.kind, item.id) for item in self.events]
+        if event_keys != sorted(event_keys):
+            raise ValueError("change timeline events are not ordered")
+        return self
+
+
 class AuditTimelineItem(StrictModel):
     event_id: str = Field(min_length=1)
     subject: str

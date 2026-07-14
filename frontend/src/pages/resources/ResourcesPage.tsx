@@ -7,6 +7,7 @@ import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
+import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
@@ -42,11 +43,13 @@ import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataF
 import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
 import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
 import { useResourceTypeShortcuts } from "./useResourceTypeShortcuts";
+import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 
 export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
   relationTopologyPort,
+  changeTimelinePort,
   resourceMetricsHistoryPort,
   resourceCapabilitiesPort,
   resourceActionsPort,
@@ -55,6 +58,7 @@ export function ResourcesPage({
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
   relationTopologyPort: RelationTopologyPort;
+  changeTimelinePort: ChangeTimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
@@ -84,6 +88,17 @@ export function ResourcesPage({
       filter.state.common.clusters.length === 1,
     filterState: filter.state,
     port: relationTopologyPort,
+    reportUnauthorized,
+    revision: state.revision,
+  });
+  const changeTimeline = useChangeTimelineDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    authorityKey,
+    filterState: filter.state,
+    port: changeTimelinePort,
+    range: filter.detail.timeRange ?? "1h",
     reportUnauthorized,
     revision: state.revision,
   });
@@ -265,6 +280,7 @@ export function ResourcesPage({
               }
               physicalTopology={physicalTopology}
               relationTopology={relationTopology}
+              timelineFrame={changeTimeline}
               topologyPinned={topology.pinned}
               topologyView={topology.view}
               onTopologyViewChange={topology.pin}

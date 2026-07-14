@@ -125,7 +125,12 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
   );
   state.checks.query = readQueryValue(params, "checks.q") ?? "";
 
-  const detail = parseProductDetailQuery(params, invalid.detailFull);
+  const detail = parseProductDetailQuery(
+    params,
+    invalid.detailFull,
+    invalid.timeRange,
+    invalid.timeAt,
+  );
   return {
     state,
     detail,
@@ -268,6 +273,6 @@ function createInvalidFilterValues(): MutableInvalidFilterValues {
     issuesEnvironment: [], applicationsEnvironment: [], applicationsStatus: [],
     applicationsPendingPromotion: [],
     gitopsEnvironment: [], gitopsApproval: [], gitopsChangeType: [],
-    checksSeverity: [], checksCategory: [], detailFull: [],
+    checksSeverity: [], checksCategory: [], detailFull: [], timeRange: [], timeAt: [],
   };
 }

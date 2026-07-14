@@ -136,6 +136,8 @@ RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 FILTER_FACETS_PATH = "/filter-facets"
 RESOURCES_GRAPH_PATH = "/resources/graph"
 TOPOLOGY_PATH = "/topology"
+# Resources time scrubber: actual observed changes plus explicit collection gaps.
+CHANGES_PATH = "/changes"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서
 # fan-out하지 않도록 서버 batch 경계를 별도로 둔다.
 RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"

@@ -11,13 +11,13 @@ updated: 2026-07-14
 
 ```
 URL      : https://k8s.woonyong.org
-배포 SHA : S9 `86c922eb4` public · S10 local gate 진행 중
+배포 SHA : S10 `051fcd3b0` public(console) · Applications API P0 fix/S11 local
 상태판 소스: dev의 이 파일이 포함된 커밋
-갱신     : 2026-07-14 19:32 KST  S9 public · S10 구현/시각 검증 완료
+갱신     : 2026-07-14 20:27 KST  S10 console public · API 500 근본 수정 local 완료 · S11 local
 ```
 
 - public health: HTTP 200
-- console bundle: `assets/index-D7LbqrTl.js`
+- console bundle: `assets/index-MbLKlq1P.js`
 - backend digest: `sha256:7a96ee6f5d8b1b67815d54d107d20c6f70eec2c51f97156518c1346a010be7db`
 - console digest: `sha256:6b21c379ac18325d29d5d7a0786a1789d52f6fc4649d28cdd52c13555f2276cc`
 - 로그인·클러스터·리소스 read smoke: 통과
@@ -46,8 +46,8 @@ URL      : https://k8s.woonyong.org
 - [x] **S7**  AI 패널
 - [x] **S8**  하단 독 + 로그 스트림
 - [x] **S9**   관계 뷰 토글          ← public strict 관계 graph 200·edge 참조 무결성 확인
-- [ ] **S10**  Applications          ← BQ-039~042·앱 카드/표·상세 5탭 구현, public 배포 전
-- [ ] S11  시간 스크럽 (TimelineStrip)
+- [ ] **S10**  Applications          ← console public, service-admin scope 500 수정 local·재배포 전
+- [ ] **S11**  시간 스크럽 (TimelineStrip) ← BQ-057·히스토그램/gap/마커/재생 local 완료, public 전
 - [ ] S12  Issues + RCA + 증거
 - [ ] S13  변경 적용 진행 ★           ← 고스트 파드. 데모의 클라이맥스
 - [ ] S14  GitOps (변경 + 동기화 2탭)
@@ -158,6 +158,19 @@ URL      : https://k8s.woonyong.org
   typecheck·lint·610-file design guard·production build PASS
 - [x] S10 브라우저 시각 검증 — 실제 AWS shell + representative strict response로 desktop 1440px,
   mobile 390px 목록·상세·5탭 확인; horizontal overflow 0, console error 0
+- [x] S10 dev push·Dev Gate — `051fcd3b0`, gate `29326238164` SUCCESS;
+  자동 Dev Deploy `29326466743` SUCCESS, public bundle `index-MbLKlq1P.js`
+- [x] S10 public 500 원인/근본 수정 — trusted-proxy service-admin의 application wildcard `None`을
+  `set(None)` 처리하던 신규 product scope를 정본 `resolve_allowed_application_ids`로 교체;
+  concrete workspace application ID 물질화 회귀 포함 Applications 관련 47 tests PASS, 재배포 전
+- [x] S11 BQ-057 — `[from,to)`·24h/1,440 bucket·1,000 event 상한, strict stable 정렬,
+  immutable inventory/RCA/workflow evidence만 합치고 관측 부재 bucket은 병합 gap으로 명시
+- [x] S11 TimelineStrip — `t.range`/`t.at`, 15m/1h/6h/24h, histogram·warning,
+  native range·incident button·gap 상태·과거 badge·12초 bounded replay, 보간/가짜 snapshot 없음
+- [x] S11 local 검증 — backend 관련 76 tests·전체 2,250 passed/3 skipped,
+  frontend 전체 193 files/1,132 tests·typecheck·lint·623-file design guard·production build PASS
+- [x] S11 브라우저 시각 검증 — strict representative response로 desktop 1440px·mobile 390px,
+  historical URL·marker·overlay 확인, document horizontal overflow 0
 
 ---
 

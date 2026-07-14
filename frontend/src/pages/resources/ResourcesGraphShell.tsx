@@ -2,6 +2,7 @@ import { Server, Waypoints } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
+import type { TimelineRange } from "../../features/filters/filterContract";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
@@ -13,10 +14,12 @@ import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import { RelationTopologyCanvas } from "./RelationTopologyCanvas";
 import {
   PhysicalGraphBreadcrumb,
+  TimelineRangeSelect,
+  TimelineStrip,
   type PhysicalGraphBreadcrumbItem,
-  UnavailableTimeline,
 } from "./ResourcesGraphChrome";
 import { ResourcesPhysicalTopologyScene } from "./ResourcesPhysicalTopologyScene";
+import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 
 export type PhysicalGraphBreadcrumb = PhysicalGraphBreadcrumbItem;
 
@@ -32,6 +35,11 @@ export function ResourcesGraphShell({
   topologyPinned,
   topologyView,
   onTopologyViewChange,
+  timelineAtMs,
+  timelineFrame,
+  timelineRange,
+  onTimelineAtChange,
+  onTimelineRangeChange,
 }: {
   breadcrumbs: PhysicalGraphBreadcrumb[];
   clusterId: string;
@@ -44,6 +52,11 @@ export function ResourcesGraphShell({
   topologyPinned: boolean;
   topologyView: ResourceTopologyView;
   onTopologyViewChange: (view: ResourceTopologyView) => void;
+  timelineAtMs: number | undefined;
+  timelineFrame: ChangeTimelineFrame;
+  timelineRange: TimelineRange;
+  onTimelineAtChange: (value: number | undefined) => void;
+  onTimelineRangeChange: (value: TimelineRange) => void;
 }) {
   const { formatNumber, t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -164,6 +177,7 @@ export function ResourcesGraphShell({
           ) : null}
         </div>
         <div className="flex min-w-0 items-center gap-2">
+          <TimelineRangeSelect onChange={onTimelineRangeChange} value={timelineRange} />
           <ButtonGroup aria-label={t("resources.graph.view.aria")}>
             <Button
               aria-pressed={topologyView === "physical"}
@@ -223,7 +237,7 @@ export function ResourcesGraphShell({
         </div>
       ) : null}
 
-      <UnavailableTimeline />
+      <TimelineStrip atMs={timelineAtMs} frame={timelineFrame} onAtChange={onTimelineAtChange} />
     </div>
   );
 }

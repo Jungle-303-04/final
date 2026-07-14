@@ -68,6 +68,9 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "topology-view-reset":
       return "replace";
     case "topology-view":
+    case "time-range":
       return "push";
+    case "time-at":
+      return "replace";
   }
 }
