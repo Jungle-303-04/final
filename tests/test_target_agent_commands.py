@@ -215,6 +215,49 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     assert applied["manifest"]["kind"] == "ConfigMap"
 
 
+def test_rollout_restart_keeps_plan_diff_payload() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    restarted: dict[str, object] = {}
+
+    async def stub_patch(
+        namespace: str, deployment: str, patch: dict[str, object]
+    ) -> tuple[bool, str, dict[str, object]]:
+        restarted.update(
+            namespace=namespace,
+            deployment=deployment,
+            patch=patch,
+        )
+        return True, "deployment restarted", {"ready": True}
+
+    agent.patch_deployment = stub_patch
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.ROLLOUT_RESTART_ACTION,
+                "payload": {
+                    "diff": {
+                        "resource": "deployment/report-generator",
+                        "namespace": "sandbox",
+                    },
+                    "payload": {},
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert restarted["namespace"] == "sandbox"
+    assert restarted["deployment"] == "report-generator"
+    assert restarted["patch"] == module.build_rollout_restart_patch()
+
+
 def test_catalog_helm_install_command_reports_only_real_runner_success(monkeypatch) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

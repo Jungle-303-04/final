@@ -1218,9 +1218,11 @@ class TargetClusterAgent:
         payload = command.get(Gateway.PAYLOAD)
         if not isinstance(payload, dict):
             return dict(command)
-        if str(command.get(Gateway.ACTION, "")) == AgentConfig.APPLY_MANIFEST_ACTION and isinstance(
-            payload.get("diff"), dict
-        ):
+        action = str(command.get(Gateway.ACTION, ""))
+        if action in {
+            AgentConfig.APPLY_MANIFEST_ACTION,
+            AgentConfig.ROLLOUT_RESTART_ACTION,
+        } and isinstance(payload.get("diff"), dict):
             return payload
         nested_payload = payload.get(Gateway.PAYLOAD)
         return nested_payload if isinstance(nested_payload, dict) else payload
