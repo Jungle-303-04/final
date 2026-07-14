@@ -53,7 +53,7 @@ describe("ResourcesPage S11 timeline strip", () => {
     await user.click(marker);
 
     await waitFor(() => expect(readQuery().has("t.at")).toBe(true));
-    expect(screen.getByText("No snapshot for this interval")).toBeTruthy();
+    expect(screen.getByText("No record in this interval")).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-time-scrubber"]')
       ?.getAttribute("data-state")).toBe("past");
     expect(timelinePort.loadChangeTimeline).toHaveBeenCalledWith(
