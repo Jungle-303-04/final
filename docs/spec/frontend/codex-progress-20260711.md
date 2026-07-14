@@ -1831,6 +1831,14 @@ API 완성: listResourceFilterFacets (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
 API 완성: listFilteredResources (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
 API 완성: listResourceLabelFacets (a9febb22bfcfc004ddaba73a345e2c1daa0da96a)
 
+### 2026-07-14 — 운영 프론트 전환 이후 API 증거 정책
+
+위 `API 완성:` SHA 행은 랩 시절 진척 이력을 남기는 문서 장부이며 CI 입력이 아니다.
+운영 테스트는 Git 이력이나 특정 commit 도달 가능성을 요구하지 않는다. 현재 소스 트리에서
+composition endpoint마다 계약 테스트, public barrel named export, import된 Zod schema가
+모두 존재하는지를 검증한다. 따라서 shallow clone, fork, squash/rebase에서도 제품 계약은
+동일하게 검증된다.
+
 ## 2026-07-14 Resources 필터 소비 adapter 격리 착륙
 
 - RED `b4a806f34c0ffd12dce3523c40e4d98e3e587cff`은 세 endpoint별 단일 호출, canonical

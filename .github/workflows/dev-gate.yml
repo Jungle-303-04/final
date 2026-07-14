@@ -22,9 +22,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          # frontend API boundary tests verify anchored completion commits are ancestors.
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
