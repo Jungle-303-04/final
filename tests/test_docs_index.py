@@ -107,6 +107,7 @@ def test_docs_do_not_use_forbidden_external_product_names() -> None:
         "GitHub App",
         "GHCR",
         "Vercel",
+        "슬랙",
     )
 
     checked_paths = list(DOCS_DIR.rglob("*.md"))
