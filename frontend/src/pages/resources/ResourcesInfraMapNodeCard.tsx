@@ -1,7 +1,12 @@
 import { Server } from "lucide-react";
 
 import { useI18n } from "../../shared/i18n";
-import { type InfraMapMetricMode, RatioMetric } from "./ResourcesInfraMapMetrics";
+import {
+  CountMetric,
+  type InfraMapMetricMode,
+  RatioMetric,
+  ratioSplitText,
+} from "./ResourcesInfraMapMetrics";
 import type { InfraMapNode, InfraMapPod } from "./resourcesInfraMapModel";
 
 export function InfraMapNodeCard({
@@ -13,7 +18,7 @@ export function InfraMapNodeCard({
   node: InfraMapNode;
   selectionActive: boolean;
 }) {
-  const { formatNumber, t } = useI18n();
+  const { t } = useI18n();
   return (
     <section
       className="min-w-0 overflow-hidden rounded-md border bg-linear-to-b from-muted/30 via-background/80 to-muted/20 p-2 shadow-sm"
@@ -52,32 +57,15 @@ export function InfraMapNodeCard({
           <RatioMetric
             label={t("resources.infraMap.metric.cpu")}
             ratio={node.cpuRatio}
-            valueText={node.cpuMillicores === null
-              ? null
-              : t("resources.infraMap.cpuValue", {
-                  value: formatNumber(node.cpuMillicores, { maximumFractionDigits: 1 }),
-                })}
           />
           <RatioMetric
             label={t("resources.infraMap.metric.memory")}
             ratio={node.memoryRatio}
-            valueText={node.memoryMebibytes === null
-              ? null
-              : t("resources.infraMap.memoryValue", {
-                  value: formatNumber(node.memoryMebibytes, { maximumFractionDigits: 1 }),
-                })}
           />
-          <RatioMetric
+          <CountMetric
             label={t("resources.infraMap.metric.pods")}
-            ratio={node.podCapacity && node.podCapacity > 0
-              ? node.assignedPodCount / node.podCapacity
-              : null}
-            valueText={node.podCapacity === null
-              ? formatNumber(node.assignedPodCount)
-              : t("resources.infraMap.podCapacityValue", {
-                  capacity: formatNumber(node.podCapacity),
-                  count: formatNumber(node.assignedPodCount),
-                })}
+            total={node.podCapacity}
+            value={node.assignedPodCount}
           />
         </div>
       </div>
@@ -195,24 +183,14 @@ function podMetricForMode(
 } {
   const { formatNumber, t } = helpers;
   if (metricMode === "cpu") {
-    const valueText = pod.cpu.value === null
-      ? null
-      : t("resources.infraMap.cpuValue", {
-          value: formatNumber(pod.cpu.value, { maximumFractionDigits: 1 }),
-        });
     return {
-      displayText: ratioDisplay(pod.cpu.ratio, valueText, helpers),
+      displayText: ratioDisplay(pod.cpu.ratio, helpers),
       label: t("resources.infraMap.metric.cpu"),
       ratio: pod.cpu.ratio,
     };
   }
-  const valueText = pod.memory.value === null
-    ? null
-    : t("resources.infraMap.memoryValue", {
-        value: formatNumber(pod.memory.value, { maximumFractionDigits: 1 }),
-      });
   return {
-    displayText: ratioDisplay(pod.memory.ratio, valueText, helpers),
+    displayText: ratioDisplay(pod.memory.ratio, helpers),
     label: t("resources.infraMap.metric.memory"),
     ratio: pod.memory.ratio,
   };
@@ -220,17 +198,10 @@ function podMetricForMode(
 
 function ratioDisplay(
   ratio: number | null,
-  valueText: string | null,
   { formatNumber, t }: Pick<ReturnType<typeof useI18n>, "formatNumber" | "t">,
 ): string {
-  if (ratio === null) return valueText ?? t("common.value.unavailable");
-  return t("resources.infraMap.percentWithValue", {
-    percent: formatNumber(ratio, {
-      maximumFractionDigits: 0,
-      style: "percent",
-    }),
-    value: valueText ?? "",
-  });
+  if (ratio === null) return t("common.value.unavailable");
+  return ratioSplitText(ratio, formatNumber);
 }
 
 function clampPercent(value: number): number {
