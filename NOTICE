@@ -1,0 +1,14 @@
+Opsia
+Copyright 2026 Opsia contributors
+
+This product includes and adapts portions of Radar, a Kubernetes visibility
+project developed by Skyhook.
+
+Radar
+Copyright 2025 Skyhook
+https://github.com/skyhook-io/radar
+Source revision: 88bd1e97fa5c10be8735154ae379d50c1ba1df2b (v1.5.7)
+
+Radar is licensed under the Apache License, Version 2.0. The unmodified source
+snapshot and its license are preserved in references/radar-upstream/. Opsia
+modifications are identified in adapted source files as they are introduced.
