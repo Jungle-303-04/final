@@ -107,3 +107,21 @@
   SHA·digest 검증까지 통과했지만 public Cloudflare edge가 이전 index를 반환해 실패했고
   자동 rollback은 성공했다. 마지막 허용 폴백을 소진했으므로 파이프라인 반복 대신 DB
   재생성·VP-012·Applications/GitOps 구현을 진행했다.
+- [12:19 KST] [FULL 배포 성공] Dev Gate run `29302066218` 성공 뒤 gated SHA
+  `10f0fad17bcf2e22880e4adae1194fa103736a69`의 FULL deploy run `29302233623`이 성공했다.
+  migration·고정 관리자 bootstrap·서비스 Deployment 38개·console digest rollout·관리자
+  로그인/cluster/resource read smoke가 모두 통과했고 rollback은 실행되지 않았다. 공개 경로는
+  health/root 200, bundle `assets/index-D3C-AWTZ.js`; 새 audit timeline/recent-changes OpenAPI
+  경로와 bundle source SHA를 확인했다.
+- [12:25 KST] [agent 복구] cluster-1/cluster-2를 새 token으로 명시적 재등록해 두 agent와
+  node collector가 모두 Ready, evidence API 200으로 복구됐다. 동시 등록 시 같은 관리자
+  `user_accounts` upsert가 긴 transaction 안에서 경쟁해 cluster-2가 lock timeout 500을 냈고,
+  직렬 재시도는 성공했다. DB reset 뒤 agent가 스스로 신뢰를 재수립하지 못하는 문제와 함께
+  target 등록 transaction의 동시성 결함으로 남긴다.
+- [12:26 KST] [runtime identity 복구] 기존 trusted-proxy UUID가 새 고정 `admin` UUID와 달라
+  공개 세션이 DB 권한 없는 주체로 해석되어 cluster 0개를 반환했다. ConfigMap을 고정 admin
+  ID로 동기화하고 API를 재기동해 cluster 2개를 확인했다. 최신 resource API가
+  `FILTER_CURSOR_SIGNING_KEY` 부재를 503으로 차단한 것도 확인해 기존 Secret의 다른 키를
+  보존한 채 새 key를 추가했다. 최종 공개 smoke는 admin/service_admin, cluster 2개,
+  resource 100개, health 200이다. FULL workflow가 두 runtime 계약을 bootstrap 직후 자동
+  동기화하도록 저장소에도 반영했다. 비밀 값은 기록하지 않는다.

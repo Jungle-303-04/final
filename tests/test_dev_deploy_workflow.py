@@ -125,6 +125,9 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
         "Bootstrap fixed dev administrator"
     )
     assert names.index("Bootstrap fixed dev administrator") < names.index(
+        "Synchronize fixed dev runtime identity"
+    )
+    assert names.index("Synchronize fixed dev runtime identity") < names.index(
         "Roll out immutable service digest"
     )
     assert names.index("Roll out immutable service digest") < names.index(
@@ -203,6 +206,7 @@ def test_full_deploy_keeps_migration_rollout_and_smoke() -> None:
         "Enforce live auth bypass zero",
         "Run fail-closed database migration",
         "Bootstrap fixed dev administrator",
+        "Synchronize fixed dev runtime identity",
         "Roll out immutable service digest",
         "Run post-deploy smoke",
         "Record successful dev SHA in cluster",
@@ -227,7 +231,22 @@ def test_full_deploy_bootstraps_fixed_admin_without_persisting_plaintext_credent
     assert "delete secret management-admin-bootstrap" in step["run"]
     assert "controller.bootstrap_admin" in manifest
     assert "key: AUTH_PASSWORD" in manifest
-    assert "temp24qw" not in manifest
+
+
+def test_full_deploy_keeps_proxy_identity_and_cursor_contract_aligned() -> None:
+    job = deploy_job()
+    step = steps_by_name()["Synchronize fixed dev runtime identity"]
+    source = step["run"]
+
+    assert step["if"] == "env.DEPLOYMENT_SCOPE == 'FULL'"
+    assert job["env"]["PROJECT_SLUG"] == "kubernetes-ops"
+    assert "uuid.uuid5" in source
+    assert "TRUSTED_PROXY_AUTH_USER_ID" in source
+    assert "FILTER_CURSOR_SIGNING_KEY" in source
+    assert "openssl rand -hex 32" in source
+    assert "patch configmap management-runtime-config" in source
+    assert "patch secret management-runtime-secret" in source
+    assert "echo ${cursor_value}" not in source
 
 
 def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety() -> None:

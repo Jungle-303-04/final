@@ -59,6 +59,7 @@ jobs:
       PREVIOUS_RELEASE_SHA: ${{ inputs.previous_release_sha }}
       AUTH_EMAIL: admin
       AUTH_PASSWORD: ${{ secrets.AWS_DEV_AUTH_PASSWORD }}
+      PROJECT_SLUG: kubernetes-ops
       SMOKE_CLUSTER_ID: ${{ secrets.AWS_DEV_SMOKE_CLUSTER_ID }}
       SMOKE_RCA_CORRELATION_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_CORRELATION_ID }}
       SMOKE_RCA_INCIDENT_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_INCIDENT_ID }}
@@ -323,6 +324,42 @@ jobs:
             --filename "${RUNNER_TEMP}/admin-bootstrap-job.yaml"
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             wait --for=condition=complete job/management-admin-bootstrap --timeout=300s
+
+      - name: Synchronize fixed dev runtime identity
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        run: |
+          set -euo pipefail
+          admin_id="$(python3 - <<'PY'
+          import os
+          import uuid
+
+          project_slug = os.environ["PROJECT_SLUG"].strip()
+          identifier = os.environ["AUTH_EMAIL"].strip().lower()
+          print("user-" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{project_slug}:{identifier}")))
+          PY
+          )"
+          [[ "${admin_id}" =~ ^user-[0-9a-f-]{36}$ ]]
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            patch configmap management-runtime-config --type merge \
+            --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\"}}"
+
+          cursor_encoded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get secret management-runtime-secret \
+            --output jsonpath='{.data.FILTER_CURSOR_SIGNING_KEY}')"
+          cursor_value=""
+          if [[ -n "${cursor_encoded}" ]]; then
+            cursor_value="$(printf '%s' "${cursor_encoded}" | base64 --decode 2>/dev/null || true)"
+          fi
+          if (( ${#cursor_value} < 32 )); then
+            cursor_value="$(openssl rand -hex 32)"
+            cursor_encoded="$(printf '%s' "${cursor_value}" | base64 | tr -d '\n')"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              patch secret management-runtime-secret --type merge \
+              --patch "{\"data\":{\"FILTER_CURSOR_SIGNING_KEY\":\"${cursor_encoded}\"}}" \
+              >/dev/null
+          fi
+          unset admin_id cursor_encoded cursor_value
 
       - name: Roll out immutable service digest
         if: env.DEPLOYMENT_SCOPE == 'FULL'
