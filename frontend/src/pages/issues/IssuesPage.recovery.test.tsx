@@ -15,6 +15,26 @@ import { IssuesPage } from "./IssuesPage";
 afterEach(cleanup);
 
 describe("IssuesPage recovery approval", () => {
+  it("loads all incidents when no cluster filter is selected", async () => {
+    const port = issuesPort();
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <MemoryRouter initialEntries={["/issues"]}>
+          <AuthSessionGateProvider reportUnauthorized={() => undefined}>
+            <UnifiedFilterProvider>
+              <ClusterScopeProvider authorityKey="default:user" port={clusterScopePort}>
+                <IssuesPage port={port} />
+              </ClusterScopeProvider>
+            </UnifiedFilterProvider>
+          </AuthSessionGateProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Elevated response latency" })).toBeTruthy();
+    expect(port.listIssues).toHaveBeenCalledWith(null, 50, expect.any(AbortSignal));
+  });
+
   it("submits a selected recovery candidate from the product page", async () => {
     const port = issuesPort();
     render(
