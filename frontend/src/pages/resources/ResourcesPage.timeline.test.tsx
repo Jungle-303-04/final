@@ -20,6 +20,30 @@ import {
 afterEach(cleanup);
 
 describe("ResourcesPage S11 timeline strip", () => {
+  it("does not issue an overflow-prone all-resource timeline read", async () => {
+    const timelinePort = resourcesChangeTimelinePort();
+    renderResources(
+      resourcesPort(),
+      "/resources?clusters=cluster-1",
+      resourcesClusterPort(),
+      vi.fn(),
+      "ko",
+      resourcesFilterPort(),
+      resourcesPhysicalTopologyPort(),
+      resourcesMetricHistoryPort(),
+      resourcesCapabilitiesPort(),
+      resourcesActionsPort(),
+      EMPTY_LOG_STREAM_PORT,
+      resourcesRelationTopologyPort(),
+      timelinePort,
+    );
+
+    expect(await screen.findByRole("article", { name: "서버 worker-a" })).toBeTruthy();
+    expect(timelinePort.loadChangeTimeline).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
+      ?.getAttribute("data-state")).toBe("unavailable");
+  });
+
   it("jumps to evidence-backed incidents and persists the historical coordinate", async () => {
     const user = userEvent.setup();
     const timelinePort = resourcesChangeTimelinePort({
