@@ -70,6 +70,7 @@ export const resourcesEn = {
   "resources.infraMap.metric.cpu": "CPU",
   "resources.infraMap.metric.memory": "Memory",
   "resources.infraMap.metric.pods": "Pods",
+  "resources.infraMap.metricTabs.aria": "Infra Map Pod metric",
   "resources.infraMap.morePods": "+ {count} more",
   "resources.infraMap.nodeLabel": "Node: {name}",
   "resources.infraMap.nodeNotReady": "NotReady",

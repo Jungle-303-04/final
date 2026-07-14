@@ -33,7 +33,7 @@ describe("ResourcesPage VP-012 four-layer surface", () => {
     expect(within(infraMap).getByText("checkout-api-0")).toBeTruthy();
     expect(within(infraMap).getByText("orders-api-0")).toBeTruthy();
     expect(within(infraMap).getByText("52% 2,100m")).toBeTruthy();
-    expect(within(infraMap).getByText("2% 2/110")).toBeTruthy();
+    expect(within(infraMap).getAllByText("2% 2/110").length).toBeGreaterThan(0);
 
     expect(screen.getAllByRole("img", { name: "CPU trend unavailable" })).toHaveLength(3);
     expect(document.querySelector('[data-slot="resource-trend-sparkline"]')).toBeNull();
@@ -76,6 +76,35 @@ describe("ResourcesPage VP-012 four-layer surface", () => {
     expect(nodeGrid.dataset.layout).toBe("single");
     expect(nodeGrid.className).toContain("max-w-xl");
     expect(within(infraMap).queryByText("Node: worker-b")).toBeNull();
+  }, 15_000);
+
+  it("switches the Infra Map Pod slot fill metric from the header tabs", async () => {
+    const user = userEvent.setup();
+    const port = resourcesPort();
+    renderEnglishResources(
+      port,
+      "/resources?clusters=cluster-1&resources.types=pod",
+    );
+
+    expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
+    const infraMap = document.querySelector('[data-slot="resources-infra-map-shell"]');
+    if (!(infraMap instanceof HTMLElement)) throw new Error("Infra Map shell not found");
+    expect(await within(infraMap).findByText("Node: worker-a")).toBeTruthy();
+    const firstPod = podSlotByName(infraMap, "checkout-api-0");
+    expect(firstPod.dataset.metric).toBe("cpu");
+    expect(firstPod.dataset.metricAvailable).toBe("true");
+    const cpuFill = firstPod.querySelector('[data-slot="infra-map-pod-fill"]');
+    if (!(cpuFill instanceof HTMLElement)) throw new Error("Infra Map Pod fill not found");
+    expect(Number(cpuFill.getAttribute("value"))).toBeGreaterThan(0);
+
+    await user.click(within(infraMap).getByRole("button", { name: "Memory" }));
+
+    const updatedPod = podSlotByName(infraMap, "checkout-api-0");
+    expect(updatedPod.dataset.metric).toBe("memory");
+    expect(updatedPod.dataset.metricAvailable).toBe("true");
+    const memoryFill = updatedPod.querySelector('[data-slot="infra-map-pod-fill"]');
+    if (!(memoryFill instanceof HTMLElement)) throw new Error("Infra Map Pod fill not found");
+    expect(Number(memoryFill.getAttribute("value"))).toBeGreaterThan(0);
   }, 15_000);
 
   it("canonicalizes the retired graph mode without hiding either Infra Map or table", async () => {
@@ -147,4 +176,11 @@ function renderEnglishResources(port: ReturnType<typeof resourcesPort>, entry: s
 function readResourcesQuery(): URLSearchParams {
   const location = screen.getByTestId("resources-location").textContent ?? "";
   return new URL(location, "https://product.test").searchParams;
+}
+
+function podSlotByName(container: HTMLElement, name: string): HTMLElement {
+  const heading = within(container).getByText(name);
+  const pod = heading.closest('[data-slot="infra-map-pod"]');
+  if (!(pod instanceof HTMLElement)) throw new Error(`${name} Pod slot not found`);
+  return pod;
 }

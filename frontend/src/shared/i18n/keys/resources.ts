@@ -68,6 +68,7 @@ export type ResourcesMessageKey =
   | "resources.infraMap.metric.cpu"
   | "resources.infraMap.metric.memory"
   | "resources.infraMap.metric.pods"
+  | "resources.infraMap.metricTabs.aria"
   | "resources.infraMap.morePods"
   | "resources.infraMap.nodeLabel"
   | "resources.infraMap.nodeNotReady"

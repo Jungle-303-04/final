@@ -24,6 +24,22 @@ describe("buildInfraMapModel", () => {
     expect(model.selection.active).toBe(false);
   });
 
+  it("scales Pod CPU and memory usage against the hosting Node when Node ratios exist", () => {
+    const model = buildInfraMapModel({
+      detail: null,
+      nodes: INFRA_MAP.nodes,
+      pods: POD_LIST.items,
+    });
+
+    const checkout = model.nodes
+      .find((node) => node.name === "worker-a")
+      ?.visiblePods.find((pod) => pod.name === "checkout-api-0");
+    expect(checkout?.cpu.scale).toBeGreaterThan(0);
+    expect(checkout?.cpu.scale).toBeLessThan(1);
+    expect(checkout?.memory.scale).toBeGreaterThan(0);
+    expect(checkout?.memory.scale).toBeLessThan(1);
+  });
+
   it("projects a selected Node to the Pods scheduled on that Node", () => {
     const model = buildInfraMapModel({
       detail: detailFor(INFRA_MAP.nodes[0]!),

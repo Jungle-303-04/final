@@ -70,6 +70,7 @@ export const resourcesKo = {
   "resources.infraMap.metric.cpu": "CPU",
   "resources.infraMap.metric.memory": "Memory",
   "resources.infraMap.metric.pods": "Pods",
+  "resources.infraMap.metricTabs.aria": "Infra Map Pod 기준",
   "resources.infraMap.morePods": "외 {count}개",
   "resources.infraMap.nodeLabel": "Node: {name}",
   "resources.infraMap.nodeNotReady": "NotReady",

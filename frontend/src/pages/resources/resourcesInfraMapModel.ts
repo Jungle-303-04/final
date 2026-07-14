@@ -77,12 +77,12 @@ export function buildInfraMapModel({
     if (nodeName !== null && !nodeRecords.has(nodeName)) nodeRecords.set(nodeName, null);
   }
 
-  const maxCpu = maxMetric(pods, "cpu");
-  const maxMemory = maxMetric(pods, "memory");
   const podsByNode = new Map<string, InfraMapPod[]>();
   for (const pod of pods) {
     const nodeName = podNodeName(pod);
     if (nodeName === null) continue;
+    const node = nodeRecords.get(nodeName) ?? null;
+    const nodeFacts = node?.facts.type === "node" ? node.facts : null;
     const selected = selectionActive && (
       selectedPodKeys.has(resourceKey(pod)) ||
       selectedPodKeys.has(resourceIdentityKey(pod)) ||
@@ -96,8 +96,8 @@ export function buildInfraMapModel({
       namespace: pod.namespace,
       status: pod.status,
       health: pod.health,
-      cpu: metricForPod(pod, "cpu", maxCpu),
-      memory: metricForPod(pod, "memory", maxMemory),
+      cpu: metricForPod(pod, "cpu", nodeFacts),
+      memory: metricForPod(pod, "memory", nodeFacts),
       selected,
     };
     const group = podsByNode.get(nodeName) ?? [];
@@ -217,23 +217,30 @@ function podNodeName(pod: ResourceSummary): string | null {
   return pod.facts.type === "pod" ? pod.facts.nodeName : null;
 }
 
-function maxMetric(pods: ResourceSummary[], metric: "cpu" | "memory"): number | null {
-  const values = pods
-    .map((pod) => metricValue(pod, metric))
-    .filter((value): value is number => value !== null && value > 0);
-  return values.length === 0 ? null : Math.max(...values);
-}
-
 function metricForPod(
   pod: ResourceSummary,
   metric: "cpu" | "memory",
-  maxValue: number | null,
+  nodeFacts: Extract<ResourceSummary["facts"], { type: "node" }> | null,
 ): InfraMapPodMetric {
   const value = metricValue(pod, metric);
+  const nodeCapacity = nodeCapacityForMetric(nodeFacts, metric);
   return {
     value,
-    scale: value === null || maxValue === null || maxValue <= 0 ? null : value / maxValue,
+    scale: value === null || nodeCapacity === null || nodeCapacity <= 0
+      ? null
+      : value / nodeCapacity,
   };
+}
+
+function nodeCapacityForMetric(
+  nodeFacts: Extract<ResourceSummary["facts"], { type: "node" }> | null,
+  metric: "cpu" | "memory",
+): number | null {
+  if (nodeFacts === null) return null;
+  const ratio = metric === "cpu" ? nodeFacts.cpuRatio : nodeFacts.memoryRatio;
+  const used = metric === "cpu" ? nodeFacts.cpuMillicores : nodeFacts.memoryMebibytes;
+  if (ratio === null || used === null || ratio <= 0 || used <= 0) return null;
+  return used / ratio;
 }
 
 function metricValue(pod: ResourceSummary, metric: "cpu" | "memory"): number | null {
@@ -246,5 +253,9 @@ function comparePodsByWeight(left: InfraMapPod, right: InfraMapPod): number {
 }
 
 function podWeight(pod: InfraMapPod): number {
-  return Math.max(pod.cpu.scale ?? 0, pod.memory.scale ?? 0);
+  return Math.max(metricWeight(pod.cpu), metricWeight(pod.memory));
+}
+
+function metricWeight(metric: InfraMapPodMetric): number {
+  return metric.scale ?? metric.value ?? 0;
 }

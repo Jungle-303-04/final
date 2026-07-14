@@ -1,13 +1,15 @@
 import { Server } from "lucide-react";
 import type { ResourceHealthTone } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
-import { RatioMetric } from "./ResourcesInfraMapMetrics";
+import { type InfraMapMetricMode, RatioMetric } from "./ResourcesInfraMapMetrics";
 import type { InfraMapNode, InfraMapPod } from "./resourcesInfraMapModel";
 
 export function InfraMapNodeCard({
+  metricMode,
   node,
   selectionActive,
 }: {
+  metricMode: InfraMapMetricMode;
   node: InfraMapNode;
   selectionActive: boolean;
 }) {
@@ -15,6 +17,7 @@ export function InfraMapNodeCard({
   return (
     <section
       className="min-w-0 overflow-hidden rounded-lg border bg-linear-to-b from-muted/20 via-background/70 to-muted/30 p-3 shadow-sm"
+      data-metric={metricMode}
       data-slot="infra-map-node"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -37,7 +40,11 @@ export function InfraMapNodeCard({
       </div>
 
       <div className="mt-3 rounded-md border border-dashed bg-background/50 p-2">
-        <InfraMapPodArea node={node} selectionActive={selectionActive} />
+        <InfraMapPodArea
+          metricMode={metricMode}
+          node={node}
+          selectionActive={selectionActive}
+        />
       </div>
 
       <div className="mt-3 grid gap-2 border-t pt-3">
@@ -77,9 +84,11 @@ export function InfraMapNodeCard({
 }
 
 function InfraMapPodArea({
+  metricMode,
   node,
   selectionActive,
 }: {
+  metricMode: InfraMapMetricMode;
   node: InfraMapNode;
   selectionActive: boolean;
 }) {
@@ -95,7 +104,9 @@ function InfraMapPodArea({
   }
   return (
     <div className="grid gap-1.5">
-      {node.visiblePods.map((pod) => <InfraMapPodSlot key={pod.id} pod={pod} />)}
+      {node.visiblePods.map((pod) => (
+        <InfraMapPodSlot key={pod.id} metricMode={metricMode} pod={pod} />
+      ))}
       {node.hiddenPodCount > 0 ? (
         <div className="flex h-8 min-w-0 items-center justify-center rounded-md border bg-background/70 px-3 text-xs font-medium text-muted-foreground">
           {t("resources.infraMap.morePods", {
@@ -107,21 +118,46 @@ function InfraMapPodArea({
   );
 }
 
-function InfraMapPodSlot({ pod }: { pod: InfraMapPod }) {
+function InfraMapPodSlot({
+  metricMode,
+  pod,
+}: {
+  metricMode: InfraMapMetricMode;
+  pod: InfraMapPod;
+}) {
+  const { formatNumber, t } = useI18n();
+  const selectedMetric = podMetricForMode(pod, metricMode, { formatNumber, t });
+  const fillPercent = selectedMetric.ratio === null
+    ? null
+    : clampPercent(selectedMetric.ratio * 100);
   return (
     <article
-      aria-label={`${pod.name} ${pod.status}`}
-      className="flex h-8 min-w-0 items-center gap-2 rounded-md border bg-background/80 px-2 shadow-sm data-[selected=true]:border-primary data-[selected=true]:bg-primary/10"
+      aria-label={`${pod.name} ${pod.status} ${selectedMetric.label} ${selectedMetric.displayText}`}
+      className="relative flex h-8 min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-background/80 px-2 shadow-sm data-[selected=true]:border-primary data-[selected=true]:bg-primary/10"
+      data-metric={metricMode}
+      data-metric-available={fillPercent === null ? "false" : "true"}
       data-selected={pod.selected || undefined}
       data-slot="infra-map-pod"
     >
+      {fillPercent === null ? null : (
+        <progress
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full appearance-none bg-transparent [&::-moz-progress-bar]:bg-primary/15 [&::-webkit-progress-bar]:bg-transparent [&::-webkit-progress-value]:bg-primary/15"
+          data-slot="infra-map-pod-fill"
+          max={100}
+          value={fillPercent}
+        />
+      )}
       <HealthDot tone={pod.health} />
-      <div className="min-w-0 flex-1" title={pod.name}>
-        <h4 className="truncate text-xs font-semibold">
-          {pod.name}
-        </h4>
+      <div className="relative z-10 min-w-0 flex-1" title={pod.name}>
+        <h4 className="truncate text-xs font-semibold">{pod.name}</h4>
       </div>
-      <span className="shrink-0 text-[11px] text-muted-foreground">{pod.status}</span>
+      <span
+        className="relative z-10 shrink-0 text-[11px] tabular-nums text-muted-foreground"
+        title={`${selectedMetric.label} ${selectedMetric.displayText}`}
+      >
+        {selectedMetric.displayText}
+      </span>
     </article>
   );
 }
@@ -144,4 +180,58 @@ function nodeStatusText(
   if (ready === true) return t("resources.infraMap.nodeReady");
   if (ready === false) return t("resources.infraMap.nodeNotReady");
   return t("common.state.unknown");
+}
+
+function podMetricForMode(
+  pod: InfraMapPod,
+  metricMode: InfraMapMetricMode,
+  helpers: Pick<ReturnType<typeof useI18n>, "formatNumber" | "t">,
+): {
+  displayText: string;
+  label: string;
+  ratio: number | null;
+} {
+  const { formatNumber, t } = helpers;
+  if (metricMode === "cpu") {
+    const valueText = pod.cpu.value === null
+      ? null
+      : t("resources.infraMap.cpuValue", {
+          value: formatNumber(pod.cpu.value, { maximumFractionDigits: 1 }),
+        });
+    return {
+      displayText: ratioDisplay(pod.cpu.scale, valueText, helpers),
+      label: t("resources.infraMap.metric.cpu"),
+      ratio: pod.cpu.scale,
+    };
+  }
+  const valueText = pod.memory.value === null
+    ? null
+    : t("resources.infraMap.memoryValue", {
+        value: formatNumber(pod.memory.value, { maximumFractionDigits: 1 }),
+      });
+  return {
+    displayText: ratioDisplay(pod.memory.scale, valueText, helpers),
+    label: t("resources.infraMap.metric.memory"),
+    ratio: pod.memory.scale,
+  };
+}
+
+function ratioDisplay(
+  ratio: number | null,
+  valueText: string | null,
+  { formatNumber, t }: Pick<ReturnType<typeof useI18n>, "formatNumber" | "t">,
+): string {
+  if (ratio === null) return valueText ?? t("common.value.unavailable");
+  return t("resources.infraMap.percentWithValue", {
+    percent: formatNumber(ratio, {
+      maximumFractionDigits: 0,
+      style: "percent",
+    }),
+    value: valueText ?? "",
+  });
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
 }

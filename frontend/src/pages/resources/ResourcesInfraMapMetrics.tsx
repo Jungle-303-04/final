@@ -1,6 +1,7 @@
 import { useI18n } from "../../shared/i18n";
 import { Progress } from "../../shared/ui/primitives/progress";
-import type { InfraMapPodMetric } from "./resourcesInfraMapModel";
+
+export type InfraMapMetricMode = "cpu" | "memory";
 
 export function RatioMetric({
   label,
@@ -23,31 +24,6 @@ export function RatioMetric({
         value: valueText ?? "",
       });
   return <MetricBar label={label} value={percent} valueText={display} />;
-}
-
-export function PodMetric({
-  label,
-  metric,
-  unit,
-}: {
-  label: string;
-  metric: InfraMapPodMetric;
-  unit: string;
-}) {
-  const { formatNumber, t } = useI18n();
-  const valueText = metric.value === null
-    ? t("common.value.unavailable")
-    : t("resources.infraMap.podUsageValue", {
-        unit,
-        value: formatNumber(metric.value, { maximumFractionDigits: 1 }),
-      });
-  return (
-    <MetricBar
-      label={label}
-      value={metric.scale === null ? null : metric.scale * 100}
-      valueText={valueText}
-    />
-  );
 }
 
 function MetricBar({

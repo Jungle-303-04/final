@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { RefreshCw, Server, Waypoints } from "lucide-react";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { InfraMapNodeCard } from "./ResourcesInfraMapNodeCard";
+import type { InfraMapMetricMode } from "./ResourcesInfraMapMetrics";
 import type { InfraMapModel } from "./resourcesInfraMapModel";
 
 export type InfraMapViewPhase = "idle" | "loading" | "ready" | "failed";
@@ -18,6 +20,7 @@ export function ResourcesInfraMapView({
   phase: InfraMapViewPhase;
 }) {
   const { t } = useI18n();
+  const [metricMode, setMetricMode] = useState<InfraMapMetricMode>("cpu");
   return (
     <div
       aria-live="polite"
@@ -36,11 +39,14 @@ export function ResourcesInfraMapView({
             {t("resources.infraMap.description")}
           </p>
         </div>
-        <Badge variant="outline">
-          {model?.selection.active
-            ? t("resources.infraMap.badge.selected")
-            : t("resources.infraMap.badge.overview")}
-        </Badge>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <InfraMapMetricTabs onChange={setMetricMode} value={metricMode} />
+          <Badge variant="outline">
+            {model?.selection.active
+              ? t("resources.infraMap.badge.selected")
+              : t("resources.infraMap.badge.overview")}
+          </Badge>
+        </div>
       </div>
 
       {phase === "loading" || phase === "idle" ? (
@@ -48,7 +54,7 @@ export function ResourcesInfraMapView({
       ) : phase === "failed" ? (
         <InfraMapFailure onRetry={onRetry} />
       ) : model && model.nodes.length > 0 ? (
-        <InfraMapNodeGrid model={model} />
+        <InfraMapNodeGrid metricMode={metricMode} model={model} />
       ) : (
         <InfraMapEmpty />
       )}
@@ -56,7 +62,57 @@ export function ResourcesInfraMapView({
   );
 }
 
-function InfraMapNodeGrid({ model }: { model: InfraMapModel }) {
+function InfraMapMetricTabs({
+  onChange,
+  value,
+}: {
+  onChange: (value: InfraMapMetricMode) => void;
+  value: InfraMapMetricMode;
+}) {
+  const { t } = useI18n();
+  const options: InfraMapMetricMode[] = ["cpu", "memory"];
+  return (
+    <div
+      aria-label={t("resources.infraMap.metricTabs.aria")}
+      className="flex h-8 items-center gap-0.5 rounded-lg border bg-background/70 p-0.5"
+      role="group"
+    >
+      {options.map((option) => {
+        const active = option === value;
+        return (
+          <Button
+            aria-pressed={active}
+            className="h-7 rounded-md px-2 data-[active=true]:bg-muted"
+            data-active={active || undefined}
+            key={option}
+            onClick={() => onChange(option)}
+            size="sm"
+            type="button"
+            variant={active ? "secondary" : "ghost"}
+          >
+            {infraMapMetricLabel(option, t)}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+function infraMapMetricLabel(
+  option: InfraMapMetricMode,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (option === "cpu") return t("resources.infraMap.metric.cpu");
+  return t("resources.infraMap.metric.memory");
+}
+
+function InfraMapNodeGrid({
+  metricMode,
+  model,
+}: {
+  metricMode: InfraMapMetricMode;
+  model: InfraMapModel;
+}) {
   const layout = infraMapNodeGridLayout(model.nodes.length);
   return (
     <div
@@ -67,6 +123,7 @@ function InfraMapNodeGrid({ model }: { model: InfraMapModel }) {
       {model.nodes.map((node) => (
         <InfraMapNodeCard
           key={node.id}
+          metricMode={metricMode}
           node={node}
           selectionActive={model.selection.active}
         />
