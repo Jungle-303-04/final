@@ -33,6 +33,12 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(document.body.textContent).not.toContain("Topology");
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
+    const physicalGrid = document.querySelector('[data-slot="physical-topology-grid"]');
+    expect(physicalGrid?.className)
+      .toContain("grid-cols-[repeat(auto-fit,minmax(320px,1fr))]");
+    expect(document.querySelector(".react-flow")).toBeNull();
+    expect(screen.getByRole("article", { name: "Server worker-a" }).className)
+      .toContain("w-full");
     expect(screen.getByText("2 / 18 pods")).toBeTruthy();
 
     const crashLoop = screen.getByRole("button", {
@@ -51,10 +57,11 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(document.querySelectorAll('[data-pod-badge="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
 
-    const timeline = screen.getByRole("slider", { name: "Time" });
-    expect(timeline.getAttribute("disabled")).toBeNull();
-    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("live");
+    const timeline = document.querySelector('[data-slot="resources-time-scrubber"]');
+    expect(timeline?.getAttribute("data-state")).toBe("live");
+    expect(timeline?.getAttribute("data-expanded")).toBe("false");
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ clusters: ["cluster-1"] }),
