@@ -46,6 +46,8 @@ class EventIdAcceptedResponse(StrictModel):
 
 class AuthSessionResponse(StrictModel):
     authenticated: bool
+    display_name: str | None = None
+    email: str | None = None
     user_id: str
     roles: list[str]
     workspace_id: str
