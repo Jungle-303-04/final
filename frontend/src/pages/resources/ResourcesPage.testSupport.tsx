@@ -9,6 +9,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type { HomePort } from "../../features/home/homeContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
+import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
 import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
 import type { ResourceActionsPort, ResourceCapabilitiesPort } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
@@ -21,6 +22,7 @@ import { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage
 import { BottomDockProvider } from "../../features/bottom-dock/BottomDockProvider";
 import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../../features/log-stream/logStreamContract";
 import { ClusterScopeProbe, LocationProbe } from "./ResourcesPage.testProbes.testSupport";
+import { resourcesChangeTimelinePort } from "./ResourcesPage.timelineTestSupport";
 
 export {
   CATALOG,
@@ -32,6 +34,7 @@ export {
 } from "./ResourcesPage.testFixtures";
 export { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
 export { resourcesActionsPort, resourcesCapabilitiesPort } from "./ResourcesPage.testRuntime";
+export { resourcesChangeTimelinePort } from "./ResourcesPage.timelineTestSupport";
 
 type ClusterPort = Pick<HomePort, "listClusterChoices">;
 
@@ -48,6 +51,7 @@ export function renderResources(
   resourceActionsPort: ResourceActionsPort = resourcesActionsPort(),
   logStreamPort: LogStreamPort = EMPTY_LOG_STREAM_PORT,
   relationTopologyPort: RelationTopologyPort = resourcesRelationTopologyPort(),
+  changeTimelinePort: ChangeTimelinePort = resourcesChangeTimelinePort(),
 ) {
   const router = createMemoryRouter(
     [
@@ -69,6 +73,7 @@ export function renderResources(
                       filterPort={filterPort}
                       physicalTopologyPort={physicalTopologyPort}
                       relationTopologyPort={relationTopologyPort}
+                      changeTimelinePort={changeTimelinePort}
                       resourceMetricsHistoryPort={resourceMetricsHistoryPort}
                       resourceCapabilitiesPort={resourceCapabilitiesPort}
                       resourceActionsPort={resourceActionsPort}

@@ -11,6 +11,7 @@ export interface KubernetesLabelFilter {
 }
 
 export type ResourceView = "graph" | "table";
+export type TimelineRange = "15m" | "1h" | "6h" | "24h";
 
 export interface UnifiedFilterState {
   common: {
@@ -70,6 +71,8 @@ export interface ProductDetailQuery {
   workflowPlan?: string | null;
   workflowView?: "overview" | "edit" | "runs" | "yaml" | null;
   workflowMode?: "new" | null;
+  timeRange?: TimelineRange;
+  timeAt?: number;
 }
 
 export interface InvalidFilterValues {
@@ -93,6 +96,8 @@ export interface InvalidFilterValues {
   checksSeverity: readonly string[];
   checksCategory: readonly string[];
   detailFull: readonly string[];
+  timeRange: readonly string[];
+  timeAt: readonly string[];
 }
 
 export interface FilterUrlParseResult {
@@ -121,6 +126,8 @@ export type DetailMutationIntent =
   | "detail-expand"
   | "topology-view"
   | "topology-view-reset"
+  | "time-range"
+  | "time-at"
   | "drill-in";
 
 export type UnifiedFilterUpdater =

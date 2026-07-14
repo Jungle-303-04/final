@@ -11,6 +11,7 @@ import {
   getClusterConnectStatus,
   getPhysicalTopology,
   getRelationTopology,
+  getChangeTimeline,
   getResourceCapabilities,
   getResourceMetricsHistory,
   getSession,
@@ -53,6 +54,7 @@ import { createResourcesAdapter } from "../features/resources/createResourcesAda
 import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
 import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
 import { createRelationTopologyAdapter } from "../features/resources/createRelationTopologyAdapter";
+import { createChangeTimelineAdapter } from "../features/resources/createChangeTimelineAdapter";
 import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
 import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
@@ -84,6 +86,7 @@ export function createApiComposition() {
   });
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
   const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
+  const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
     getResourceMetricsHistory,
   });
@@ -129,6 +132,7 @@ export function createApiComposition() {
         resourcesFilterPort,
         physicalTopologyPort,
         relationTopologyPort,
+        changeTimelinePort,
         resourceMetricsHistoryPort,
         resourceCapabilitiesPort,
         resourceActionsPort,
