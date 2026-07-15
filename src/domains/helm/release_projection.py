@@ -6,6 +6,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from domains.target.connectivity import (
+    AGENT_STATUS_ONLINE,
+    AGENT_STATUS_STALE,
+    cluster_connection_status,
+)
 from packages.contracts.helm.releases import (
     HelmFeatureAvailability,
     HelmObservationCoverage,
@@ -47,13 +52,14 @@ def helm_release_list(
     storage_rows: Sequence[Mapping[str, Any]],
     *,
     contexts: Mapping[str, Mapping[str, Any]],
+    agent_statuses: Mapping[str, Mapping[str, Any]],
     selected_cluster_ids: Iterable[str],
 ) -> HelmReleaseListResponse:
     """Build a list without treating a storage payload as a Helm API response."""
 
     selected = tuple(sorted({_text(value) for value in selected_cluster_ids if _text(value)}))
     coverage = helm_observation_coverage(contexts, selected_cluster_ids=selected)
-    observed = _observed_rows(storage_rows, contexts)
+    observed = _observed_rows(storage_rows, contexts, agent_statuses)
     latest_by_release: dict[tuple[str, str, str], ObservedHelmStorage] = {}
     for item in observed:
         key = (item.scope.cluster_id, item.storage_namespace, item.release_name)
@@ -74,6 +80,7 @@ def helm_release_detail(
     storage_rows: Sequence[Mapping[str, Any]],
     *,
     contexts: Mapping[str, Mapping[str, Any]],
+    agent_statuses: Mapping[str, Mapping[str, Any]],
     selected_cluster_id: str,
     namespace: str,
     release_name: str,
@@ -85,7 +92,7 @@ def helm_release_detail(
     selected_name = _text(release_name)
     observed = [
         item
-        for item in _observed_rows(storage_rows, contexts)
+        for item in _observed_rows(storage_rows, contexts, agent_statuses)
         if item.scope.cluster_id == cluster
         and item.storage_namespace == selected_namespace
         and item.release_name == selected_name
@@ -162,16 +169,19 @@ def helm_observation_coverage(
 def _observed_rows(
     storage_rows: Sequence[Mapping[str, Any]],
     contexts: Mapping[str, Mapping[str, Any]],
+    agent_statuses: Mapping[str, Mapping[str, Any]],
 ) -> tuple[ObservedHelmStorage, ...]:
     return tuple(
         observed
         for row in storage_rows
-        if (observed := _observed_storage(row, contexts)) is not None
+        if (observed := _observed_storage(row, contexts, agent_statuses)) is not None
     )
 
 
 def _observed_storage(
-    row: Mapping[str, Any], contexts: Mapping[str, Mapping[str, Any]]
+    row: Mapping[str, Any],
+    contexts: Mapping[str, Mapping[str, Any]],
+    agent_statuses: Mapping[str, Mapping[str, Any]],
 ) -> ObservedHelmStorage | None:
     labels = _string_mapping(row.get("labels"))
     if labels.get(HELM_STORAGE_OWNER_LABEL, "").casefold() != HELM_STORAGE_OWNER_VALUE:
@@ -193,7 +203,7 @@ def _observed_storage(
             workspace_id=workspace_id,
             cluster_id=cluster_id,
             namespaces=(namespace,),
-            freshness=_freshness(context),
+            freshness=_freshness(context, agent_statuses.get(cluster_id)),
         ),
         release_name=release_name,
         storage_namespace=namespace,
@@ -226,7 +236,19 @@ def _release(item: ObservedHelmStorage) -> HelmRelease:
     )
 
 
-def _freshness(context: Mapping[str, Any]) -> str:
+def _freshness(context: Mapping[str, Any], agent: Mapping[str, Any] | None) -> str:
+    """Combine authoritative heartbeat liveness with inventory completeness.
+
+    A complete inventory snapshot is evidence of what was observed, not proof that
+    the agent is still connected.  Connection states therefore take precedence;
+    only an online agent can make a complete observation ``live``.
+    """
+
+    connection = cluster_connection_status(agent)
+    if connection == AGENT_STATUS_STALE:
+        return "stale"
+    if connection != AGENT_STATUS_ONLINE:
+        return "disconnected"
     if int(context.get("snapshot_revision") or 0) <= 0:
         return "disconnected"
     if not bool(context.get("resources_complete")) or not bool(context.get("labels_complete")):

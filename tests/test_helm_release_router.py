@@ -13,6 +13,15 @@ from packages.runtime.dependencies import get_db
 
 
 class HelmReleaseDb:
+    def __init__(self, agent_statuses: dict[str, dict[str, str]] | None = None) -> None:
+        self.agent_statuses = (
+            agent_statuses
+            if agent_statuses is not None
+            else {
+                "cluster-a": {"last_seen_at": datetime.now(UTC).isoformat()},
+            }
+        )
+
     def accessible_resource_ids(
         self,
         _user_id: str,
@@ -74,8 +83,21 @@ class HelmReleaseDb:
             }
         ]
 
+    def latest_cluster_agent_statuses(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, dict[str, str]]:
+        assert workspace_id == "workspace-a"
+        assert cluster_ids.issubset({"cluster-a"})
+        return {
+            cluster_id: status
+            for cluster_id, status in self.agent_statuses.items()
+            if cluster_id in cluster_ids
+        }
 
-def _client() -> TestClient:
+
+def _client(agent_statuses: dict[str, dict[str, str]] | None = None) -> TestClient:
     module = importlib.import_module("domains.helm.release_router")
     app = FastAPI()
     app.include_router(module.router)
@@ -84,7 +106,7 @@ def _client() -> TestClient:
         workspace_id="workspace-a",
         roles=("user",),
     )
-    app.dependency_overrides[get_db] = HelmReleaseDb
+    app.dependency_overrides[get_db] = lambda: HelmReleaseDb(agent_statuses)
     return TestClient(app)
 
 
@@ -95,6 +117,7 @@ def test_release_list_is_rbac_scoped_and_never_decodes_storage_payload() -> None
     body = response.json()
     assert body["coverage"]["availability"] == "available"
     assert body["releases"][0]["name"] == "storefront"
+    assert body["releases"][0]["scope"]["freshness"] == "live"
     assert body["releases"][0]["chart"] is None
     assert body["releases"][0]["resource_health"]["reason_code"] == "owned_resources_not_correlated"
     assert "must-not-leak" not in response.text
@@ -121,3 +144,16 @@ def test_release_list_hides_an_unauthorized_requested_scope() -> None:
     response = _client().get("/helm/releases?clusters=cluster-private")
 
     assert response.status_code == 404
+
+
+def test_release_scope_reports_stale_or_missing_agent_without_relaxing_rbac() -> None:
+    stale = _client({"cluster-a": {"last_seen_at": "2000-01-01T00:00:00+00:00"}}).get(
+        "/helm/releases?clusters=cluster-a"
+    )
+    disconnected = _client({}).get("/helm/releases?clusters=cluster-a")
+
+    assert stale.status_code == 200
+    assert stale.json()["releases"][0]["scope"]["freshness"] == "stale"
+    assert disconnected.status_code == 200
+    assert disconnected.json()["releases"][0]["scope"]["freshness"] == "disconnected"
+    assert "must-not-leak" not in stale.text

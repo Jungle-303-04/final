@@ -26,11 +26,22 @@ describe("createHelmAdapter", () => {
       commands: { reasonCode: "agent_helm_executor_not_integrated" },
     });
   });
+
+  it("preserves server-derived stale freshness without frontend inference", async () => {
+    const port = createHelmAdapter({
+      listHelmReleases: vi.fn().mockResolvedValue(listEndpoint("stale")),
+      getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
+    });
+
+    const list = await port.listReleases({ clusterIds: ["cluster-a"] });
+
+    expect(list.releases[0]?.scope.freshness).toBe("stale");
+  });
 });
 
-function listEndpoint() {
+function listEndpoint(freshness: "live" | "stale" | "partial" | "disconnected" = "live") {
   return {
-    releases: [releaseEndpoint()],
+    releases: [releaseEndpoint(freshness)],
     coverage: { availability: "available" as const, observed_at: null, reason_codes: [] },
   };
 }
@@ -48,13 +59,13 @@ function detailEndpoint() {
   };
 }
 
-function releaseEndpoint() {
+function releaseEndpoint(freshness: "live" | "stale" | "partial" | "disconnected" = "live") {
   return {
     scope: {
       workspace_id: "workspace-a",
       cluster_id: "cluster-a",
       namespaces: ["storefront"],
-      freshness: "live" as const,
+      freshness,
     },
     name: "storefront",
     storage_namespace: "storefront",
