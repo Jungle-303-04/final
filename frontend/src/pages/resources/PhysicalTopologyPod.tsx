@@ -30,7 +30,6 @@ export function PhysicalTopologyPod({
   const smoothedUsage = useSmoothedUsageColor(pod.usagePercent, buttonRef);
   const tone = podUsageTone(smoothedUsage);
   const badge = podAbnormalBadge(pod);
-  const disabled = !pod.matchesFilter;
   const entering = useFirstAppearanceMotion(`pod:${pod.id}`);
   const delay = podWaveDelay(nodeIndex, podIndex);
   const color = smoothedUsage === null ? null : usageColor(smoothedUsage);
@@ -67,17 +66,16 @@ export function PhysicalTopologyPod({
       className={cn(
         "relative grid size-9 place-items-center rounded-md border border-border text-[0.625rem] font-semibold shadow-xs transition-[opacity,transform,background-color] duration-(--motion-instant) motion-reduce:transition-none",
         entering && "motion-pod-pop",
-        "enabled:hover:z-10 enabled:hover:scale-125 enabled:hover:shadow-md",
+        "hover:z-10 hover:scale-125 hover:shadow-md",
         tone !== "unknown" && "text-foreground",
         tone === "unknown" && "border-dashed border-border bg-background text-muted-foreground",
-        disabled && "cursor-not-allowed opacity-20",
+        !pod.matchesFilter && "opacity-45 hover:opacity-100 focus-visible:opacity-100",
       )}
       data-matches-filter={String(pod.matchesFilter)}
       data-morph-id={`pod:${pod.id}`}
       data-slot="physical-topology-pod"
       data-usage-tone={tone}
       data-usage-value={smoothedUsage === null ? "unknown" : smoothedUsage.toFixed(3)}
-      disabled={disabled}
       onClick={() => onOpen(pod)}
       ref={buttonRef}
       style={color === null ? undefined : {

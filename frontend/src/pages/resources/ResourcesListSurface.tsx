@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
@@ -30,6 +29,7 @@ import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export function ResourcesListSurface({
   filterList,
@@ -69,8 +69,7 @@ export function ResourcesListSurface({
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
-  const openPod = (pod: PhysicalTopologyPod) => {
-    if (state.selectedResourceType !== "pod") state.selectResourceType("pod");
+  const openPod = (pod: PhysicalPodOpenTarget) => {
     state.openDetail({
       resourceType: "pod",
       kind: "Pod",

@@ -50,6 +50,26 @@ describe("NodePodsPopover", () => {
     expect(port.loadNodePods).toHaveBeenCalledTimes(1);
   });
 
+  it("opens detail from an actual pod returned by the node contract", async () => {
+    const user = userEvent.setup();
+    const onOpenPod = vi.fn();
+    renderPopover(nodePodsPort(), 3, onOpenPod);
+
+    await user.click(screen.getByRole("button", {
+      name: "worker-a 서버의 파드 전체 보기",
+    }));
+    const overlay = await screen.findByRole("dialog", { name: "worker-a 서버의 파드" });
+    fireEvent.click(within(overlay).getByRole("button", {
+      name: "checkout-api-0 상세 열기",
+    }));
+
+    expect(onOpenPod).toHaveBeenCalledWith(expect.objectContaining({
+      name: "checkout-api-0",
+      namespace: "shop",
+    }));
+    expect(screen.queryByRole("dialog", { name: "worker-a 서버의 파드" })).toBeNull();
+  });
+
   it("keeps a clicked overlay pinned after the hover-close delay", async () => {
     const user = userEvent.setup();
     renderPopover(nodePodsPort(), 3);
@@ -67,7 +87,11 @@ describe("NodePodsPopover", () => {
   });
 });
 
-function renderPopover(port: Pick<HomePort, "loadNodePods">, expectedTotal: number) {
+function renderPopover(
+  port: Pick<HomePort, "loadNodePods">,
+  expectedTotal: number,
+  onOpenPod = vi.fn(),
+) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <NodePodsPopover
@@ -75,6 +99,7 @@ function renderPopover(port: Pick<HomePort, "loadNodePods">, expectedTotal: numb
         expectedTotal={expectedTotal}
         nodeName="worker-a"
         omittedCount={16}
+        onOpenPod={onOpenPod}
         onUnauthorized={vi.fn()}
         port={port}
       />

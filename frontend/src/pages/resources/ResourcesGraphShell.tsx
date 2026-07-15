@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { HomePort } from "../../features/home/homeContract";
 import type { TimelineRange } from "../../features/filters/filterContract";
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -16,6 +15,7 @@ import { ResourcesGraphHeader, ResourcesGraphResizeHandle } from "./ResourcesGra
 import { ResourcesPhysicalTopologyScene } from "./ResourcesPhysicalTopologyScene";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResizableGraphHeight } from "./useResizableGraphHeight";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export type PhysicalGraphBreadcrumb = PhysicalGraphBreadcrumbItem;
 
@@ -47,7 +47,7 @@ export function ResourcesGraphShell({
   clusterId: string;
   frame: PhysicalTopologyFrame;
   relationFrame: RelationTopologyFrame;
-  onOpenPod: (pod: PhysicalTopologyPod) => void;
+  onOpenPod: (pod: PhysicalPodOpenTarget) => void;
   nodePodsPort: Pick<HomePort, "loadNodePods">;
   onNodePodsUnauthorized: () => void;
   onSelectAll: () => void;

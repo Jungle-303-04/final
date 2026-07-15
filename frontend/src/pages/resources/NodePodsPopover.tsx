@@ -13,6 +13,7 @@ import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Button } from "../../shared/ui/primitives/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primitives/popover";
 import { ScrollArea } from "../../shared/ui/primitives/scroll-area";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 type NodePodsPort = Pick<HomePort, "loadNodePods">;
 type NodePodsFrame =
@@ -25,6 +26,7 @@ export function NodePodsPopover({
   expectedTotal,
   nodeName,
   omittedCount,
+  onOpenPod,
   onUnauthorized,
   port,
 }: {
@@ -32,6 +34,7 @@ export function NodePodsPopover({
   expectedTotal: number;
   nodeName: string;
   omittedCount: number;
+  onOpenPod: (pod: PhysicalPodOpenTarget) => void;
   onUnauthorized: () => void;
   port: NodePodsPort;
 }) {
@@ -84,6 +87,12 @@ export function NodePodsPopover({
   const returnedCount = frame.phase === "ready" ? frame.data.pods.length : 0;
   const returnedPods = frame.phase === "ready" ? frame.data.pods : [];
   const unavailableCount = Math.max(0, expectedTotal - returnedCount);
+  const selectPod = (pod: HomePodSummary) => {
+    pinnedRef.current = false;
+    cancelClose();
+    setOpen(false);
+    onOpenPod(pod);
+  };
 
   return (
     <Popover
@@ -171,7 +180,9 @@ export function NodePodsPopover({
               orientation="vertical"
             >
               <ul className="divide-y px-2" role="list">
-                {returnedPods.map((pod) => <PodRow key={pod.id} pod={pod} />)}
+                {returnedPods.map((pod) => (
+                  <PodRow key={pod.id} onOpen={() => selectPod(pod)} pod={pod} />
+                ))}
               </ul>
             </ScrollArea>
             {unavailableCount > 0 ? (
@@ -191,7 +202,7 @@ export function NodePodsPopover({
   );
 }
 
-function PodRow({ pod }: { pod: HomePodSummary }) {
+function PodRow({ onOpen, pod }: { onOpen: () => void; pod: HomePodSummary }) {
   const { formatNumber, t } = useI18n();
   const usage = pod.cpuMillicores === null && pod.memoryMebibytes === null
     ? t("resources.graph.server.pods.usageUnavailable")
@@ -199,25 +210,33 @@ function PodRow({ pod }: { pod: HomePodSummary }) {
       pod.memoryMebibytes === null ? "—" : `${formatMetric(pod.memoryMebibytes)} MiB`
     }`;
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-2 py-2.5">
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-baseline gap-1.5">
-          <span className="shrink-0 text-[0.6875rem] text-muted-foreground">{pod.namespace}</span>
-          <OverflowIdentity className="text-xs font-semibold" side="left" value={pod.name} />
+    <li>
+      <button
+        aria-label={t("resources.table.openDetail", { name: pod.name })}
+        className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onOpen}
+        type="button"
+      >
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <span className="shrink-0 text-[0.6875rem] text-muted-foreground">{pod.namespace}</span>
+            <OverflowIdentity className="text-xs font-semibold" side="left" value={pod.name} />
+          </div>
+          <p className="mt-1 text-[0.6875rem] text-muted-foreground">
+            {pod.phase} · {pod.health}
+          </p>
         </div>
-        <p className="mt-1 text-[0.6875rem] text-muted-foreground">
-          {pod.phase} · {pod.health}
-        </p>
-      </div>
-      <div className="grid min-w-28 justify-items-end gap-1 text-[0.6875rem]">
-        <span className="font-medium tabular-nums">{usage}</span>
-        <span className={cn("flex items-center gap-1 text-muted-foreground", pod.restartCount > 0 && "text-destructive") }>
-          <RotateCcw aria-hidden="true" className="size-3" />
-          {t("resources.graph.server.pods.restarts", {
-            count: formatNumber(pod.restartCount),
-          })}
-        </span>
-      </div>
+        <div className="grid min-w-28 justify-items-end gap-1 text-[0.6875rem]">
+          <span className="font-medium tabular-nums">{usage}</span>
+          <span className={cn("flex items-center gap-1 text-muted-foreground", pod.restartCount > 0 && "text-destructive") }>
+            <RotateCcw aria-hidden="true" className="size-3" />
+            {t("resources.graph.server.pods.restarts", {
+              count: formatNumber(pod.restartCount),
+            })}
+          </span>
+        </div>
+        <span className="sr-only">{t("resources.table.openDetail.sr")}</span>
+      </button>
     </li>
   );
 }
