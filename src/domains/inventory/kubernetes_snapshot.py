@@ -274,6 +274,8 @@ def _event_resource(item: JsonObject, *, collected_at: object = None) -> JsonObj
         "kind": "Event",
         "namespace": _text(item.get("namespace"), "default"),
         "name": name,
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
         "status": event_type,
         "health": "degraded" if event_type.lower() == "warning" else "healthy",
         "labels": _labels(item),
@@ -342,6 +344,10 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
         "labels_complete": resources_complete
         and all(item.get("labels_complete") is True for item in label_sources),
         "resources_complete": resources_complete,
+        # Existing evidence queries are namespace/label scoped. They never prove a
+        # complete Event collection, so a Timeline Event producer must fail closed
+        # until an authoritative cluster-wide collector supplies this contract.
+        "kubernetes_event_capture": _kubernetes_event_capture(kubernetes),
         # RCA test/label-selector snapshots are evidence, not authoritative fleet liveness.
         # Legacy payloads have no scope list and are treated as normal inventory.
         "live_inventory": live_inventory,
@@ -361,3 +367,13 @@ def _resources_complete(_kubernetes: JsonObject) -> bool:
     # success rather than full-cluster coverage. A dedicated authoritative sweep contract
     # must be introduced before this path may destructively replace cluster inventory.
     return False
+
+
+def _kubernetes_event_capture(kubernetes: JsonObject) -> JsonObject:
+    collection_limits = _mapping(kubernetes.get("collection_limits"))
+    limits = _mapping(collection_limits.get("lists"))
+    event_limit = _mapping(limits.get("events"))
+    return {
+        "complete": False,
+        "truncated": event_limit.get("truncated") is True,
+    }

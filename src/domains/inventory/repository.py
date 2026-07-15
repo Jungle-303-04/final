@@ -13,6 +13,10 @@ from typing import Any, Literal
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.inventory.kubernetes_events import (
+    KubernetesEventCapture,
+    kubernetes_event_timeline_events,
+)
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
@@ -261,55 +265,64 @@ def inventory_timeline_events(
     previous_rows: Sequence[Mapping[str, object]],
     current_rows: Sequence[Mapping[str, object]],
     resources_complete: bool,
+    event_capture: KubernetesEventCapture | None = None,
 ) -> tuple[TimelineEvent, ...]:
-    """Derive durable inventory changes from one authoritative collection cut.
+    """Derive durable inventory and Kubernetes Event facts from one collection cut.
 
     An incomplete collection may be missing arbitrary namespaces or resource kinds, so it
-    cannot truthfully establish either an addition or a deletion. The resource read model
-    still accepts it, but the timeline receives no fact until a complete collection has
-    established the comparison boundary.
+    cannot truthfully establish inventory additions or deletions. Kubernetes Event facts
+    use a separate complete-capture proof because Event absence never means deletion.
     """
-    if not resources_complete:
-        return ()
-
-    previous_by_key = {
-        str(row["inventory_key"]): row
-        for row in previous_rows
-        if is_timeline_inventory_resource(row)
-    }
-    current_by_key = {
-        str(row["inventory_key"]): row
-        for row in current_rows
-        if is_timeline_inventory_resource(row)
-    }
-    changes: list[tuple[InventoryTimelineChange, Mapping[str, object]]] = []
-    for inventory_key in sorted(current_by_key):
-        current = current_by_key[inventory_key]
-        previous = previous_by_key.get(inventory_key)
-        if previous is None:
-            changes.append(("add", current))
-        elif inventory_resource_changed(previous, current):
-            changes.append(("update", current))
-    for inventory_key in sorted(set(previous_by_key) - set(current_by_key)):
-        changes.append(("delete", previous_by_key[inventory_key]))
-
-    return tuple(
-        inventory_change_timeline_event(
-            workspace_id=workspace_id,
-            cluster_id=cluster_id,
-            observed_at=observed_at,
-            event_type=event_type,
-            resource=resource,
+    inventory_events: tuple[TimelineEvent, ...] = ()
+    if resources_complete:
+        previous_by_key = {
+            str(row["inventory_key"]): row
+            for row in previous_rows
+            if is_timeline_inventory_resource(row)
+        }
+        current_by_key = {
+            str(row["inventory_key"]): row
+            for row in current_rows
+            if is_timeline_inventory_resource(row)
+        }
+        changes: list[tuple[InventoryTimelineChange, Mapping[str, object]]] = []
+        for inventory_key in sorted(current_by_key):
+            current = current_by_key[inventory_key]
+            previous = previous_by_key.get(inventory_key)
+            if previous is None:
+                changes.append(("add", current))
+            elif inventory_resource_changed(previous, current):
+                changes.append(("update", current))
+        for inventory_key in sorted(set(previous_by_key) - set(current_by_key)):
+            changes.append(("delete", previous_by_key[inventory_key]))
+        inventory_events = tuple(
+            inventory_change_timeline_event(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                observed_at=observed_at,
+                event_type=event_type,
+                resource=resource,
+            )
+            for event_type, resource in changes
         )
-        for event_type, resource in changes
+    event_events = kubernetes_event_timeline_events(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        previous_rows=previous_rows,
+        current_rows=current_rows,
+        capture=event_capture or KubernetesEventCapture(complete=False, truncated=False),
     )
+    return inventory_events + event_events
 
 
 def is_timeline_inventory_resource(resource: Mapping[str, object]) -> bool:
-    """Exclude derived health/usage rollups until they receive their own source contract."""
+    """Exclude derived rollups and Event facts from generic inventory change mapping."""
     return str(resource.get("resource_type") or "") not in {
         HEALTH_RESOURCE_TYPE,
         USAGE_RESOURCE_TYPE,
+        # Kubernetes Event has UID/count/last-occurrence semantics and enters
+        # Timeline only through domains.inventory.kubernetes_events.
+        EVENT_RESOURCE_TYPE,
     }
 
 
@@ -579,6 +592,7 @@ class InventoryRepository(DatabaseConnection):
                 previous_rows=previous_rows,
                 current_rows=normalized,
                 resources_complete=resources_complete,
+                event_capture=KubernetesEventCapture.from_snapshot_summary(source_summary),
             )
             missing_inventory_keys = sorted(
                 {str(row["inventory_key"]) for row in previous_rows}
