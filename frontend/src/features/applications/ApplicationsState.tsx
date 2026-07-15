@@ -1,5 +1,55 @@
+import { RefreshCw } from "lucide-react";
+import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { Button } from "../../shared/ui/primitives/button";
+import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationsFailure } from "./applicationsContract";
+import type { ApplicationsResource } from "./useApplicationsData";
+
+export function ApplicationsRefreshControl<T>({
+  onRefresh,
+  resource,
+}: {
+  onRefresh: () => void;
+  resource: Extract<ApplicationsResource<T>, { phase: "ready" }>;
+}) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  const feedback = resource.refreshing
+    ? copy.refreshing
+    : resource.refreshFailure
+      ? copy.refreshFailed
+      : null;
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <Button
+        aria-label={copy.refresh}
+        disabled={resource.refreshing}
+        onClick={onRefresh}
+        size="icon"
+        type="button"
+        variant="outline"
+      >
+        <RefreshCw
+          aria-hidden="true"
+          className={resource.refreshing ? "motion-safe:animate-spin" : undefined}
+        />
+      </Button>
+      {feedback ? (
+        <span
+          aria-atomic="true"
+          aria-live="polite"
+          className={resource.refreshFailure ? "text-xs text-destructive" : "sr-only"}
+          data-slot="applications-refresh-feedback"
+          role={resource.refreshFailure ? "alert" : "status"}
+        >
+          {feedback}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 export function ApplicationsFailureState({
   failure,

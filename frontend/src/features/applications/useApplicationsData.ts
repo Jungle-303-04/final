@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import {
   ApplicationsFailure,
@@ -12,7 +12,13 @@ import {
 
 export type ApplicationsResource<T> =
   | { phase: "loading" }
-  | { phase: "ready"; data: T; refreshing: boolean }
+  | {
+    phase: "ready";
+    data: T;
+    refreshing: boolean;
+    /** A refresh failed after this data was successfully observed. */
+    refreshFailure: ApplicationsFailure | null;
+  }
   | { phase: "failed"; failure: ApplicationsFailure };
 
 export function useApplicationCatalog(
@@ -115,6 +121,9 @@ function useApplicationsResource<T>(
   options: { reuseReady?: (data: T) => boolean } = {},
 ): readonly [ApplicationsResource<T>, () => void] {
   const [revision, refresh] = useReducer((value: number) => value + 1, 0);
+  const [manualRefresh, setManualRefresh] = useState<{ key: string; token: number } | null>(null);
+  const activeRefreshRef = useRef<{ key: string; token: number } | null>(null);
+  const nextRefreshTokenRef = useRef(0);
   const [record, setRecord] = useState<{
     key: string | null;
     state: ApplicationsResource<T>;
@@ -123,41 +132,93 @@ function useApplicationsResource<T>(
     record.state.phase === "ready" && !record.state.refreshing &&
     options.reuseReady?.(record.state.data) === true;
   const state: ApplicationsResource<T> = key === null
-    ? { phase: "ready", data: null as T, refreshing: false }
+    ? { phase: "ready", data: null as T, refreshing: false, refreshFailure: null }
     : record.key === key
       ? record.state
       : reusable
         ? record.state
       : { phase: "loading" };
+  const clearActiveRefresh = useCallback((requestKey: string, requestToken: number) => {
+    if (
+      activeRefreshRef.current?.key === requestKey
+      && activeRefreshRef.current.token === requestToken
+    ) {
+      activeRefreshRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const activeRefresh = activeRefreshRef.current;
+    if (activeRefresh !== null && activeRefresh.key !== key) {
+      clearActiveRefresh(activeRefresh.key, activeRefresh.token);
+    }
+  }, [clearActiveRefresh, key]);
 
   useEffect(() => {
     if (key === null || reusable) return;
     const request = acquireSharedRequest(owner, `${key}:${revision}`, load);
+    const isManualRefresh = manualRefresh?.key === key &&
+      activeRefreshRef.current?.key === key &&
+      activeRefreshRef.current.token === manualRefresh.token;
     let active = true;
     void request.promise.then(
       (data) => {
-        if (active) setRecord({ key, state: { phase: "ready", data, refreshing: false } });
+        if (!active) return;
+        if (isManualRefresh) clearActiveRefresh(key, manualRefresh.token);
+        setRecord({
+          key,
+          state: { phase: "ready", data, refreshing: false, refreshFailure: null },
+        });
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
-        setRecord({
-          key,
-          state: {
-            phase: "failed",
-            failure: error instanceof ApplicationsFailure
-              ? error
-              : new ApplicationsFailure("unknown"),
-          },
+        if (isManualRefresh) clearActiveRefresh(key, manualRefresh.token);
+        const failure = error instanceof ApplicationsFailure
+          ? error
+          : new ApplicationsFailure("unknown");
+        setRecord((current) => {
+          if (current.key === key && current.state.phase === "ready") {
+            return {
+              key,
+              state: {
+                ...current.state,
+                refreshing: false,
+                refreshFailure: failure,
+              },
+            };
+          }
+          return { key, state: { phase: "failed", failure } };
         });
       },
     );
     return () => {
       active = false;
       request.release();
+      if (isManualRefresh) clearActiveRefresh(key, manualRefresh.token);
     };
-  }, [key, load, owner, reusable, revision]);
+  }, [clearActiveRefresh, key, load, manualRefresh, owner, reusable, revision]);
 
-  return [state, refresh] as const;
+  const requestRefresh = useCallback(() => {
+    if (key === null || activeRefreshRef.current?.key === key) return;
+    const token = nextRefreshTokenRef.current + 1;
+    nextRefreshTokenRef.current = token;
+    activeRefreshRef.current = { key, token };
+    setManualRefresh({ key, token });
+    setRecord((current) => {
+      if (current.key !== key || current.state.phase !== "ready") return current;
+      return {
+        key,
+        state: {
+          ...current.state,
+          refreshing: true,
+          refreshFailure: null,
+        },
+      };
+    });
+    refresh();
+  }, [key, refresh]);
+
+  return [state, requestRefresh] as const;
 }
 
 function isAbortError(error: unknown): boolean {
