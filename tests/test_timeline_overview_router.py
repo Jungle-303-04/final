@@ -5,17 +5,20 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from domains.identity.dependencies import require_session
 from domains.timeline.repository import TimelineOverviewAggregate, TimelineOverviewBucketAggregate
+from domains.timeline.service import BEFORE_RETAINED_HISTORY_DETAIL, FUTURE_WINDOW_DETAIL
 from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope
 from packages.contracts.timeline import (
     TimelineCoverage,
     TimelinePinSet,
     TimelineQuery,
+    TimelineQueryBounds,
     TimelineWindow,
 )
 from packages.runtime.dependencies import get_db
@@ -99,6 +102,19 @@ def _query(*, mode: str = "live", cluster_id: str = "cluster-a") -> TimelineQuer
     )
 
 
+@pytest.fixture(autouse=True)
+def server_authoritative_timeline_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep retained aggregate fixtures deterministic without a browser clock."""
+    monkeypatch.setattr(
+        "domains.timeline.service.timeline_query_bounds",
+        lambda: TimelineQueryBounds(
+            server_now_ms=2_000,
+            earliest_queryable_ms=1_000,
+            max_window_ms=10_000,
+        ),
+    )
+
+
 def test_timeline_overview_uses_the_snapshot_scope_predicate_and_safe_aggregate_shape() -> None:
     db = TimelineOverviewDb()
     response = _client(db).post(
@@ -109,6 +125,11 @@ def test_timeline_overview_uses_the_snapshot_scope_predicate_and_safe_aggregate_
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
     assert payload["window"] == {"from_ms": 1_000, "to_ms": 2_000}
+    assert payload["query_bounds"] == {
+        "server_now_ms": 2_000,
+        "earliest_queryable_ms": 1_000,
+        "max_window_ms": 10_000,
+    }
     assert payload["bucket_width_ms"] == 3_600_000
     assert payload["buckets"] == [
         {"from_ms": 1_000, "to_ms": 2_000, "event_count": 4, "problem_count": 2}
@@ -151,6 +172,7 @@ def test_timeline_overview_reports_known_gaps_without_claiming_unavailable_sourc
     assert availability["kubernetes_event"] == "observed"
     assert availability["inventory"] == "unavailable"
     assert "coverage_count" not in payload
+    assert payload["query_bounds"]["earliest_queryable_ms"] == 1_000
 
 
 def test_pinned_overview_preserves_scope_level_partial_coverage_without_inventing_pin_coverage() -> (
@@ -212,7 +234,11 @@ def test_timeline_overview_fails_closed_for_scope_and_invalid_controls() -> None
     client = _client(db)
     forbidden = client.post(
         "/timeline/overview",
-        json={"query": _query(cluster_id="cluster-hidden").model_dump(mode="json")},
+        json={
+            "query": _query(cluster_id="cluster-hidden", mode="frozen")
+            .model_copy(update={"window": TimelineWindow(from_ms=999, to_ms=2_001)})
+            .model_dump(mode="json")
+        },
     )
     pinned = _query().model_copy(
         update={"filters": _query().filters.model_copy(update={"pinned_only": True})}
@@ -237,6 +263,41 @@ def test_timeline_overview_fails_closed_for_scope_and_invalid_controls() -> None
     assert invalid_activity.status_code == 422
     assert invalid_range.status_code == 422
     assert len(db.overview_calls) == 1
+
+
+@pytest.mark.parametrize("mode", ("live", "frozen"))
+def test_timeline_overview_rejects_a_future_window_for_each_read_mode(mode: str) -> None:
+    db = TimelineOverviewDb()
+    response = _client(db).post(
+        "/timeline/overview",
+        json={
+            "query": _query(mode=mode)
+            .model_copy(update={"window": TimelineWindow(from_ms=1_000, to_ms=2_001)})
+            .model_dump(mode="json")
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": FUTURE_WINDOW_DETAIL}
+    assert db.overview_calls == []
+    assert db.coverage_calls == []
+
+
+def test_timeline_overview_rejects_a_window_before_the_server_retention_boundary() -> None:
+    db = TimelineOverviewDb()
+    response = _client(db).post(
+        "/timeline/overview",
+        json={
+            "query": _query(mode="frozen")
+            .model_copy(update={"window": TimelineWindow(from_ms=999, to_ms=2_000)})
+            .model_dump(mode="json")
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": BEFORE_RETAINED_HISTORY_DETAIL}
+    assert db.overview_calls == []
+    assert db.coverage_calls == []
 
 
 def test_timeline_overview_reports_coverage_unavailability_without_downgrading_to_zero_gaps() -> (

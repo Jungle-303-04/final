@@ -83,6 +83,7 @@ def _capabilities() -> TimelineCapabilityDescriptor:
         selected_source_mode="retained",
         available_source_modes=("retained",),
         max_retained_range_ms=7_200_000,
+        query_bounds=timeline_capability_descriptor().query_bounds,
         namespace_filter_policy="not_required",
         control_surface=timeline_capability_descriptor().control_surface,
     )
@@ -172,6 +173,7 @@ def test_timeline_capability_descriptor_never_claims_an_unavailable_source_mode(
             selected_source_mode="local",
             available_source_modes=("retained",),
             max_retained_range_ms=7_200_000,
+            query_bounds=timeline_capability_descriptor().query_bounds,
             namespace_filter_policy="not_required",
             control_surface=timeline_capability_descriptor().control_surface,
         )
@@ -180,6 +182,7 @@ def test_timeline_capability_descriptor_never_claims_an_unavailable_source_mode(
             selected_source_mode="retained",
             available_source_modes=("retained", "retained"),
             max_retained_range_ms=7_200_000,
+            query_bounds=timeline_capability_descriptor().query_bounds,
             namespace_filter_policy="not_required",
             control_surface=timeline_capability_descriptor().control_surface,
         )

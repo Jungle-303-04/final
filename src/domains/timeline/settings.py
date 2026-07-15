@@ -6,6 +6,8 @@ invent batch, frame-rate, or retention values locally.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from packages.config.settings import env
 from packages.contracts.timeline import (
     RealtimePolicy,
@@ -20,6 +22,7 @@ from packages.contracts.timeline import (
     TimelineLensZoomOption,
     TimelineLiveSessionPolicy,
     TimelinePinsControl,
+    TimelineQueryBounds,
     TimelineRangePreset,
     TimelineReconnectPolicy,
 )
@@ -120,7 +123,28 @@ def timeline_max_window_ms() -> int:
     )
 
 
-def timeline_capability_descriptor() -> TimelineCapabilityDescriptor:
+def timeline_query_bounds(*, now: datetime | None = None) -> TimelineQueryBounds:
+    """Materialize the retained strip's only authoritative time boundary.
+
+    This is intentionally policy metadata, not evidence coverage.  A caller
+    still needs the per-source coverage projection before claiming that any
+    point inside this window was actually collected.
+    """
+    observed_now = now or datetime.now(UTC)
+    if observed_now.tzinfo is None:
+        raise ValueError("timeline server clock must be timezone-aware")
+    server_now_ms = max(0, int(observed_now.timestamp() * 1_000))
+    retention_ms = timeline_realtime_policy().retention_seconds * 1_000
+    return TimelineQueryBounds(
+        server_now_ms=server_now_ms,
+        earliest_queryable_ms=max(0, server_now_ms - retention_ms),
+        max_window_ms=timeline_max_window_ms(),
+    )
+
+
+def timeline_capability_descriptor(
+    *, query_bounds: TimelineQueryBounds | None = None
+) -> TimelineCapabilityDescriptor:
     """Describe only Timeline sources implemented by this server deployment.
 
     Retained history is the sole implemented source today.  The descriptor is
@@ -131,6 +155,7 @@ def timeline_capability_descriptor() -> TimelineCapabilityDescriptor:
         selected_source_mode="retained",
         available_source_modes=("retained",),
         max_retained_range_ms=timeline_max_window_ms(),
+        query_bounds=query_bounds or timeline_query_bounds(),
         namespace_filter_policy="not_required",
         control_surface=timeline_control_surface(),
     )

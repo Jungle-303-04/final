@@ -401,6 +401,27 @@ class TimelineControlSurface(StrictModel):
         return self
 
 
+class TimelineQueryBounds(StrictModel):
+    """One server-observed strip boundary, not a claim of source coverage.
+
+    ``earliest_queryable_ms`` comes from configured retained-history policy.
+    It prevents a browser clock from constructing a silently empty range, but
+    it does not mean every source collected continuous evidence in that span.
+    The separate ``coverage`` contract remains the only representation of
+    observed gaps and unavailable sources.
+    """
+
+    server_now_ms: int = Field(ge=0)
+    earliest_queryable_ms: int = Field(ge=0)
+    max_window_ms: int = Field(ge=1_000)
+
+    @model_validator(mode="after")
+    def validate_retained_boundary(self) -> TimelineQueryBounds:
+        if self.earliest_queryable_ms > self.server_now_ms:
+            raise ValueError("timeline earliest queryable bound must not exceed server time")
+        return self
+
+
 class TimelineCapabilityDescriptor(StrictModel):
     """Server-owned Timeline source and scope constraints for a read session.
 
@@ -412,6 +433,7 @@ class TimelineCapabilityDescriptor(StrictModel):
     selected_source_mode: TimelineSourceMode
     available_source_modes: tuple[TimelineSourceMode, ...] = Field(min_length=1)
     max_retained_range_ms: int = Field(ge=1_000)
+    query_bounds: TimelineQueryBounds
     namespace_filter_policy: TimelineNamespaceFilterPolicy
     control_surface: TimelineControlSurface
 
@@ -476,6 +498,7 @@ class TimelineOverview(StrictModel):
     """Safe retained-strip aggregate.  It contains no raw ledger event payloads."""
 
     window: TimelineWindow
+    query_bounds: TimelineQueryBounds
     bucket_width_ms: int = Field(ge=1_000)
     buckets: tuple[TimelineOverviewBucket, ...] = Field(min_length=1, max_length=256)
     coverage: tuple[TimelineCoverage, ...] = ()

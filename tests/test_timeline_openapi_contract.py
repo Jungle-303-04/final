@@ -57,6 +57,7 @@ def test_timeline_capability_and_overview_examples_are_strict_json_contracts() -
 
     overview = TimelineOverview(
         window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        query_bounds=descriptor.query_bounds,
         bucket_width_ms=3_600_000,
         buckets=(
             TimelineOverviewBucket(
@@ -81,6 +82,7 @@ def test_timeline_capability_and_overview_examples_are_strict_json_contracts() -
     overview_payload = json.loads(overview.model_dump_json())
     assert overview_payload == {
         "window": {"from_ms": 1_000, "to_ms": 2_000},
+        "query_bounds": descriptor_payload["query_bounds"],
         "bucket_width_ms": 3_600_000,
         "buckets": [{"from_ms": 1_000, "to_ms": 2_000, "event_count": 3, "problem_count": 1}],
         "coverage": [],
@@ -121,6 +123,9 @@ def test_timeline_openapi_exposes_shared_capabilities_and_overview_models() -> N
     assert overview_operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/TimelineOverview"
     }
+    assert overview_operation["responses"]["422"]["description"] == (
+        "Timeline overview window is outside server-authoritative bounds."
+    )
     pin_get = document["paths"]["/timeline/pins"]["get"]
     pin_put = document["paths"]["/timeline/pins"]["put"]
     pin_delete = document["paths"]["/timeline/pins/{pin_id}"]["delete"]
@@ -138,12 +143,23 @@ def test_timeline_openapi_exposes_shared_capabilities_and_overview_models() -> N
     }
     assert any(parameter["name"] == "expected_revision" for parameter in pin_delete["parameters"])
     capability_schema = document["components"]["schemas"]["TimelineCapabilityDescriptor"]
+    bounds_schema = document["components"]["schemas"]["TimelineQueryBounds"]
     overview_schema = document["components"]["schemas"]["TimelineOverview"]
     assert capability_schema["additionalProperties"] is False
     assert "control_surface" in capability_schema["properties"]
+    assert capability_schema["properties"]["query_bounds"] == {
+        "$ref": "#/components/schemas/TimelineQueryBounds"
+    }
+    assert bounds_schema["additionalProperties"] is False
+    assert set(bounds_schema["properties"]) == {
+        "server_now_ms",
+        "earliest_queryable_ms",
+        "max_window_ms",
+    }
     assert overview_schema["additionalProperties"] is False
     assert set(overview_schema["properties"]) == {
         "window",
+        "query_bounds",
         "bucket_width_ms",
         "buckets",
         "coverage",

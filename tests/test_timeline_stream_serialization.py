@@ -71,6 +71,7 @@ def _snapshot(sequence: int = 4) -> TimelineStreamFrame:
             selected_source_mode="retained",
             available_source_modes=("retained",),
             max_retained_range_ms=7_200_000,
+            query_bounds=timeline_capability_descriptor().query_bounds,
             namespace_filter_policy="not_required",
             control_surface=timeline_capability_descriptor().control_surface,
         ),
@@ -117,12 +118,13 @@ def test_snapshot_serializes_the_server_owned_reconnect_budget() -> None:
         "strategy": "replace_with_snapshot",
     }
     assert snapshot.capabilities is not None
-    assert snapshot.capabilities.model_dump(exclude={"control_surface"}) == {
+    assert snapshot.capabilities.model_dump(exclude={"control_surface", "query_bounds"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 7_200_000,
         "namespace_filter_policy": "not_required",
     }
+    assert snapshot.capabilities.query_bounds.max_window_ms == 2_592_000_000
 
 
 def test_live_sse_frame_keeps_opaque_cursor_without_claiming_a_terminal() -> None:

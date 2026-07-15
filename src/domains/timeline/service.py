@@ -30,6 +30,7 @@ from domains.timeline.settings import (
     timeline_capability_descriptor,
     timeline_control_selection_is_valid,
     timeline_max_window_ms,
+    timeline_query_bounds,
     timeline_realtime_policy,
 )
 from packages.contracts.parity import ClusterScope, Freshness
@@ -45,9 +46,12 @@ from packages.contracts.timeline import (
     TimelinePinTarget,
     TimelinePinUpsertRequest,
     TimelineQuery,
+    TimelineQueryBounds,
 )
 
 INVALID_WINDOW_DETAIL = "timeline window exceeds the server read limit"
+BEFORE_RETAINED_HISTORY_DETAIL = "timeline window starts before retained history"
+FUTURE_WINDOW_DETAIL = "timeline window ends after server time"
 INVALID_CONTROL_SELECTION_DETAIL = "timeline control selection is unavailable"
 SCOPE_NOT_FOUND_DETAIL = "timeline scope not found"
 FRESHNESS_UNAVAILABLE_DETAIL = "timeline freshness is unavailable"
@@ -91,10 +95,10 @@ async def resolve_timeline_read(
     db: Any,
     current: Any,
     requested_query: TimelineQuery,
+    *,
+    enforce_server_time_bounds: bool = False,
 ) -> TimelineReadResolution:
     """Authorize one query and derive freshness only from persisted agent state."""
-    _validate_window(requested_query)
-    _validate_control_selection(requested_query)
     authorized = await resolve_authorized_timeline_scope(db, current)
     requested_workspace_id = requested_query.scopes[0].workspace_id
     if requested_workspace_id != authorized.workspace_id:
@@ -102,6 +106,11 @@ async def resolve_timeline_read(
 
     requested_cluster_ids = {scope.cluster_id for scope in requested_query.scopes}
     require_timeline_cluster_ids(authorized, requested_cluster_ids)
+    _validate_window(requested_query)
+    _validate_control_selection(requested_query)
+    query_bounds = timeline_query_bounds()
+    if enforce_server_time_bounds:
+        _validate_server_time_bounds(requested_query, query_bounds)
     scopes = await _observed_scopes(db, authorized.workspace_id, requested_query.scopes)
     read_scope = TimelineLedgerReadScope(
         workspace_id=authorized.workspace_id,
@@ -138,13 +147,27 @@ async def resolve_timeline_read(
         cursor_binding=binding,
         pin_set=pin_set,
         policy=timeline_realtime_policy(),
-        capabilities=timeline_capability_descriptor(),
+        capabilities=timeline_capability_descriptor(query_bounds=query_bounds),
     )
 
 
 def _validate_window(query: TimelineQuery) -> None:
     if query.window.to_ms - query.window.from_ms > timeline_max_window_ms():
         raise HTTPException(status_code=422, detail=INVALID_WINDOW_DETAIL)
+
+
+def _validate_server_time_bounds(query: TimelineQuery, bounds: TimelineQueryBounds) -> None:
+    """Reject unavailable strip windows before an aggregate can look silently empty.
+
+    Authorization runs before this check so a caller cannot use a malformed
+    range to learn about a hidden workspace or cluster.  The same retained
+    limits apply to live and frozen presentation modes; mode never grants a
+    browser permission to substitute its own clock.
+    """
+    if query.window.from_ms < bounds.earliest_queryable_ms:
+        raise HTTPException(status_code=422, detail=BEFORE_RETAINED_HISTORY_DETAIL)
+    if query.window.to_ms > bounds.server_now_ms:
+        raise HTTPException(status_code=422, detail=FUTURE_WINDOW_DETAIL)
 
 
 def _validate_control_selection(query: TimelineQuery) -> None:

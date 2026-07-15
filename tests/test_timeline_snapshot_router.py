@@ -216,12 +216,13 @@ def test_timeline_snapshot_is_bounded_ndjson_with_an_opaque_cursor() -> None:
     assert frames[0].scopes[0].freshness == "live"
     assert frames[0].events[0].event_id == "inventory-event-7"
     assert frames[0].capabilities is not None
-    assert frames[0].capabilities.model_dump(exclude={"control_surface"}) == {
+    assert frames[0].capabilities.model_dump(exclude={"control_surface", "query_bounds"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 2_592_000_000,
         "namespace_filter_policy": "not_required",
     }
+    assert frames[0].capabilities.query_bounds.max_window_ms == 2_592_000_000
     assert frames[0].cursor == frames[1].cursor
     assert "sequence" not in response.text
     call = db.snapshot_calls[0]
