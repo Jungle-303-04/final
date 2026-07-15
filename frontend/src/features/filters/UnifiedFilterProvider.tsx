@@ -11,6 +11,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type {
   DetailMutationIntent,
   FilterMutationIntent,
+  ProductDetailQuery,
   ProductDetailUpdater,
   UnifiedFilterController,
   UnifiedFilterUpdater,
@@ -57,8 +58,11 @@ export function UnifiedFilterProvider({ children }: { children: ReactNode }) {
     }, { replace: true });
   }, [location.hash, location.pathname, location.search, navigate, parsed]);
 
-  const navigationHref = useCallback((path: `/${string}`) => (
-    `${path}${serializeProductFilterUrl(latest.current.state)}`
+  const navigationHref = useCallback((
+    path: `/${string}`,
+    detail?: ProductDetailQuery,
+  ) => (
+    `${path}${serializeProductFilterUrl(latest.current.state, detail)}`
   ), []);
 
   const updateFilters = useCallback((

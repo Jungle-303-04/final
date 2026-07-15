@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
+import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import {
@@ -33,6 +34,8 @@ import type {
 import { IssueStatusMark } from "./IssueStatusMark";
 import { IssueAuditTimelinePanel } from "./IssueAuditTimelinePanel";
 import { IssueRecentChangesPanel } from "./IssueRecentChangesPanel";
+import { evidenceFallbackLabel } from "./issueEvidencePresentation";
+import type { IssueRcaNarrative } from "./issuesEvidenceContract";
 import { IssueEmpty, IssueSectionFrame } from "./IssueSectionFrame";
 import {
   issueEvidenceCount,
@@ -323,19 +326,23 @@ function EvidencePanel({
           <ul className="grid gap-3">
             {page.items.map((record) => (
               <li className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3" key={record.id}>
-                <div className="flex min-w-0 flex-wrap items-start gap-2">
-                  <p className="min-w-0 flex-1 break-words font-medium">{record.summary}</p>
-                  <Badge variant="outline">{record.kind}</Badge>
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                  <p className="truncate font-medium" title={record.summary}>
+                    {copy.evidenceRecordLabel(record.summary)}
+                  </p>
+                  <Badge className="max-w-40 truncate" title={record.kind} variant="outline">
+                    {copy.evidenceKindLabel(record.kind)}
+                  </Badge>
                 </div>
-                <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {record.clusterId ? <span className="truncate">{record.clusterId}</span> : null}
+                <div className="flex min-w-0 items-center gap-3 overflow-hidden text-xs text-muted-foreground">
+                  {record.clusterId ? <span className="shrink-0 truncate">{record.clusterId}</span> : null}
                   {record.evidenceRef ? (
-                    <span className="max-w-full truncate font-mono" title={record.evidenceRef}>
+                    <span className="min-w-0 flex-1 truncate font-mono" title={record.evidenceRef}>
                       {record.evidenceRef}
                     </span>
                   ) : null}
                   {record.createdAt ? (
-                    <time className="tabular-nums" dateTime={record.createdAt}>
+                    <time className="shrink-0 tabular-nums" dateTime={record.createdAt}>
                       {copy.auditTime(record.createdAt)}
                     </time>
                   ) : null}
@@ -343,15 +350,24 @@ function EvidencePanel({
                 <ul className="grid gap-2 text-sm text-muted-foreground">
                   {record.sources.map((source, index) => (
                     <li className="grid min-w-0 gap-1 rounded-lg border bg-card p-2.5" key={`${source.source}:${index}`}>
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Badge variant="secondary">{source.source}</Badge>
+                      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                        <Badge className="max-w-44 truncate" title={source.source} variant="secondary">
+                          {copy.evidenceSourceLabel(source.source)}
+                        </Badge>
                         {source.collector ? (
-                          <span className="truncate font-mono text-[11px]" title={source.collector}>
-                            {source.collector}{source.collectorVersion ? `@${source.collectorVersion}` : ""}
+                          <span
+                            className="truncate font-mono text-[11px]"
+                            title={`${source.collector}${source.collectorVersion ? `@${source.collectorVersion}` : ""}`}
+                          >
+                            {copy.evidenceCollectorLabel(
+                              `${source.collector}${source.collectorVersion ? `@${source.collectorVersion}` : ""}`,
+                            )}
                           </span>
                         ) : null}
                       </div>
-                      <p className="break-words leading-relaxed">{source.summary}</p>
+                      <p className="truncate leading-relaxed" title={source.summary}>
+                        {copy.evidenceSummaryLabel(source.source, source.summary)}
+                      </p>
                       {source.collectedAt ? (
                         <time className="text-[11px] tabular-nums" dateTime={source.collectedAt}>
                           {copy.auditTime(source.collectedAt)}
@@ -384,7 +400,7 @@ function ReportsPanel({
         ) : (
           <ul className="grid gap-3">
             {page.items.map((report) => (
-              <li className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3" key={report.id}>
+              <li className="grid min-w-0 gap-4 rounded-xl border bg-muted/15 p-4 shadow-sm" key={report.id}>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {report.severity ? (
                     <IssueStatusMark label={report.severity} tone={issueStatusTone(report.severity)} />
@@ -401,14 +417,41 @@ function ReportsPanel({
                     </time>
                   ) : null}
                 </div>
-                <div className="grid gap-1">
+                <div className="grid gap-1 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3">
                   <p className="text-xs font-medium text-muted-foreground">{copy.rootCause}</p>
-                  <p className="break-words font-medium leading-relaxed">{report.rootCause}</p>
+                  <p className="break-words text-base font-semibold leading-relaxed">
+                    {report.candidates.find(({ id }) => id === report.selectedCandidateId)?.title
+                      ?? evidenceFallbackLabel(report.rootCause)}
+                  </p>
                 </div>
+                <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+                  {report.symptom ? (
+                    <ReportFact label={copy.symptom} value={humanizeFilterValue(report.symptom)} />
+                  ) : null}
+                  {[report.namespace, report.resourceKind, report.resourceName].some(Boolean) ? (
+                    <ReportFact
+                      label={copy.target}
+                      value={[report.namespace, report.resourceKind, report.resourceName].filter(Boolean).join(" / ")}
+                    />
+                  ) : null}
+                </dl>
+                {report.reason ? (
+                  <section className="grid gap-1 rounded-lg border bg-card px-3 py-2.5">
+                    <h4 className="text-xs font-medium text-muted-foreground">{copy.rootCause}</h4>
+                    <p className="break-words text-sm leading-relaxed">{report.reason}</p>
+                  </section>
+                ) : null}
                 <div className="grid gap-1 rounded-lg border border-status-healthy/30 bg-status-healthy/5 p-3">
                   <p className="text-xs font-medium text-status-healthy">{copy.recommended}</p>
-                  <p className="break-words text-sm leading-relaxed">{report.action}</p>
+                  <p className="break-words text-sm leading-relaxed">
+                    {report.action === "plan_recovery"
+                      ? copy.recoveryLabel
+                      : evidenceFallbackLabel(report.action)}
+                  </p>
                 </div>
+                {report.narrative ? (
+                  <ReportNarrative copy={copy} narrative={report.narrative} />
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   {report.supportingEvidence.length > 0 ? (
                     <Badge variant="secondary">
@@ -420,13 +463,238 @@ function ReportsPanel({
                       {copy.missingEvidence} {copy.listCount(report.missingEvidence.length)}
                     </Badge>
                   ) : null}
+                  {report.secondarySymptoms.map((symptom) => (
+                    <Badge key={symptom} title={symptom} variant="outline">
+                      {humanizeFilterValue(symptom)}
+                    </Badge>
+                  ))}
+                  {report.evidenceRef ? (
+                    <Badge className="max-w-full" title={report.evidenceRef} variant="outline">
+                      <span className="max-w-52 truncate">{copy.evidenceLabel} · {report.evidenceRef}</span>
+                    </Badge>
+                  ) : null}
                 </div>
+                {report.supportingEvidence.length > 0 || report.missingEvidence.length > 0 ? (
+                  <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+                    {report.supportingEvidence.length > 0 ? (
+                      <ReportEvidenceList
+                        items={report.supportingEvidence}
+                        label={copy.supportingEvidence}
+                        tone="healthy"
+                      />
+                    ) : null}
+                    {report.missingEvidence.length > 0 ? (
+                      <ReportEvidenceList
+                        items={report.missingEvidence}
+                        label={copy.missingEvidence}
+                        tone="warning"
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {report.supportingEvidenceRefs.length > 0 ? (
+                  <section className="grid min-w-0 gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">{copy.supportingEvidence}</h4>
+                    <ul className="grid gap-2">
+                      {report.supportingEvidenceRefs.map((evidence, index) => (
+                        <li
+                          className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border bg-card p-2.5"
+                          key={`${evidence.source}:${evidence.name}:${index}`}
+                        >
+                          <Badge className="max-w-32 truncate" title={evidence.source} variant="secondary">
+                            {copy.evidenceSourceLabel(evidence.source)}
+                          </Badge>
+                          <div className="grid min-w-0 gap-1">
+                            <span className="truncate text-xs font-medium" title={evidence.name}>
+                              {humanizeFilterValue(evidence.name)}
+                            </span>
+                            {evidence.summary ? (
+                              <p className="line-clamp-3 break-words text-xs leading-relaxed text-muted-foreground" title={evidence.summary}>
+                                {evidence.summary}
+                              </p>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {report.candidates.length > 0 ? (
+                  <section className="grid min-w-0 gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">{copy.rootCause}</h4>
+                    <ul className="grid gap-2">
+                      {report.candidates.map((candidate) => (
+                        <li className="grid min-w-0 gap-1 rounded-lg border bg-card p-2.5" key={candidate.id}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium" title={candidate.title ?? candidate.id}>
+                              {candidate.title ?? humanizeFilterValue(candidate.id)}
+                            </span>
+                            {candidate.id === report.selectedCandidateId ? (
+                              <Badge variant="secondary">{copy.recommended}</Badge>
+                            ) : null}
+                            {candidate.score !== null ? (
+                              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                                {Math.round(candidate.score * 100)}%
+                              </span>
+                            ) : null}
+                          </div>
+                          {candidate.reason ? (
+                            <p className="line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground" title={candidate.reason}>
+                              {candidate.reason}
+                            </p>
+                          ) : null}
+                          {candidate.supportingEvidence.length > 0 ? (
+                            <p className="break-words text-[11px] leading-relaxed text-status-healthy">
+                              {copy.supportingEvidence} · {candidate.supportingEvidence.map(evidenceFallbackLabel).join(" · ")}
+                            </p>
+                          ) : null}
+                          {candidate.missingEvidence.length > 0 ? (
+                            <p className="break-words text-[11px] leading-relaxed text-status-warning">
+                              {copy.missingEvidence} · {candidate.missingEvidence.map(evidenceFallbackLabel).join(" · ")}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {report.missingEvidenceChecks.length > 0 ? (
+                  <section className="grid min-w-0 gap-2 rounded-lg border border-status-warning/30 bg-status-warning/5 p-3">
+                    <h4 className="text-xs font-medium text-status-warning">{copy.missingEvidence}</h4>
+                    <ul className="grid gap-2">
+                      {report.missingEvidenceChecks.map((check) => (
+                        <li className="grid min-w-0 gap-1 rounded-md border bg-card p-2.5" key={check.checkId}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium" title={check.checkId}>
+                              {humanizeFilterValue(check.checkId)}
+                            </span>
+                            {check.status ? <Badge variant="outline">{humanizeFilterValue(check.status)}</Badge> : null}
+                          </div>
+                          {check.source ? (
+                            <p className="text-[11px] text-muted-foreground">{copy.evidenceSourceLabel(check.source)}</p>
+                          ) : null}
+                          {check.reason ? <p className="break-words text-xs leading-relaxed">{check.reason}</p> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
       </IssueSectionFrame>
     </SectionCard>
+  );
+}
+
+function ReportNarrative({
+  copy,
+  narrative,
+}: {
+  copy: IssuesSurfaceCopy;
+  narrative: IssueRcaNarrative;
+}) {
+  return (
+    <article className="grid min-w-0 gap-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+      <header className="flex items-center gap-2 text-sm font-semibold">
+        <BrainCircuit aria-hidden="true" className="size-4 text-primary" />
+        <h4>{copy.narrativeLabel}</h4>
+      </header>
+      <NarrativeText
+        label={copy.narrativeSummary}
+        value={narrative.executiveSummary}
+      />
+      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+        <NarrativeText label={copy.narrativeImpact} value={narrative.impact} />
+        <NarrativeText label={copy.narrativeReasoning} value={narrative.reasoning} />
+      </div>
+      <section className="grid gap-1 rounded-lg border border-status-healthy/30 bg-card p-3">
+        <h5 className="text-xs font-medium text-status-healthy">
+          {copy.narrativeRecommendedAction}
+        </h5>
+        <p className="break-words text-sm leading-relaxed">{narrative.recommendedAction}</p>
+      </section>
+      {narrative.recurrencePrevention.length > 0 || narrative.limitations.length > 0 ? (
+        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+          {narrative.recurrencePrevention.length > 0 ? (
+            <NarrativeList
+              items={narrative.recurrencePrevention}
+              label={copy.narrativeRecurrencePrevention}
+            />
+          ) : null}
+          {narrative.limitations.length > 0 ? (
+            <NarrativeList
+              items={narrative.limitations}
+              label={copy.narrativeLimitations}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function NarrativeText({ label, value }: { label: string; value: string }) {
+  return (
+    <section className="grid gap-1">
+      <h5 className="text-xs font-medium text-muted-foreground">{label}</h5>
+      <p className="break-words text-sm leading-relaxed">{value}</p>
+    </section>
+  );
+}
+
+function NarrativeList({ items, label }: { items: readonly string[]; label: string }) {
+  return (
+    <section className="grid min-w-0 gap-1.5 rounded-lg border bg-card p-3">
+      <h5 className="text-xs font-medium text-muted-foreground">{label}</h5>
+      <ul className="grid gap-1.5 text-xs leading-relaxed">
+        {items.map((item, index) => (
+          <li className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2" key={`${item}:${index}`}>
+            <span aria-hidden="true">•</span>
+            <span className="break-words">{item}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ReportFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border bg-card px-3 py-2.5">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-medium" title={value}>{value}</dd>
+    </div>
+  );
+}
+
+function ReportEvidenceList({
+  items,
+  label,
+  tone,
+}: {
+  items: readonly string[];
+  label: string;
+  tone: "healthy" | "warning";
+}) {
+  return (
+    <section className="min-w-0 rounded-lg border bg-card p-3">
+      <h4 className={tone === "healthy"
+        ? "text-xs font-medium text-status-healthy"
+        : "text-xs font-medium text-status-warning"}
+      >
+        {label} · {items.length}
+      </h4>
+      <ul className="mt-2 grid gap-1.5 text-xs leading-relaxed">
+        {items.map((item, index) => (
+          <li className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2" key={`${item}:${index}`}>
+            <span aria-hidden="true">•</span>
+            <span className="break-words" title={item}>{evidenceFallbackLabel(item)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

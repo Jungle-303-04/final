@@ -143,7 +143,7 @@ export type ProductDetailUpdater =
 
 export interface UnifiedFilterController extends FilterUrlParseResult {
   canonicalize(): void;
-  navigationHref(path: `/${string}`): string;
+  navigationHref(path: `/${string}`, detail?: ProductDetailQuery): string;
   updateDetail(update: ProductDetailUpdater, intent: DetailMutationIntent): void;
   updateFilters(update: UnifiedFilterUpdater, intent: FilterMutationIntent): void;
 }

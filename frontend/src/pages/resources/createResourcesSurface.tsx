@@ -11,7 +11,12 @@ import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import { ResourcesPage } from "./ResourcesPage";
+import {
+  EMPTY_POD_TERMINAL_PORT,
+  type PodTerminalPort,
+} from "../../features/pod-terminal/podTerminalContract";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -24,6 +29,8 @@ export function createResourcesSurface(
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
   resourceCapabilitiesPort: ResourceCapabilitiesPort,
   resourceActionsPort: ResourceActionsPort,
+  podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
+  resourceManifestPort?: ResourceManifestPort,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -37,6 +44,8 @@ export function createResourcesSurface(
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}
         resourceCapabilitiesPort={resourceCapabilitiesPort}
         resourceActionsPort={resourceActionsPort}
+        podTerminalPort={podTerminalPort}
+        resourceManifestPort={resourceManifestPort}
         port={port}
       />
     );

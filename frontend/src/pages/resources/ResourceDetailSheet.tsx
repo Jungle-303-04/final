@@ -16,6 +16,7 @@ import {
 } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { StatusMark } from "../../shared/ui/StatusMark";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import {
@@ -116,9 +117,11 @@ export function ResourceDetailBody({
               <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {resource.kind}
               </p>
-              <h3 className="font-heading text-lg font-semibold [overflow-wrap:anywhere]" id="resource-status-title">
-                {resource.name}
-              </h3>
+              <OverflowIdentity
+                className="font-heading text-lg font-semibold"
+                render={<h3 aria-label={resource.name} id="resource-status-title" />}
+                value={resource.name}
+              />
             </div>
             <StatusMark label={resource.healthStatus} tone={resource.health} />
           </div>
@@ -136,9 +139,13 @@ export function ResourceDetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
-        {hasMetricPoints(metricHistory, resource.inventoryKey)
-          ? null
-          : <PointInTimeEvidenceUnavailable />}
+        {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
+          <ResourceMetricsCharts
+            frame={metricHistory}
+            resourceId={resource.inventoryKey}
+            wide={full}
+          />
+        ) : <PointInTimeEvidenceUnavailable />}
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
@@ -149,15 +156,14 @@ export function ResourceDetailBody({
             <ul className="grid gap-2">
               {group.items.map((item) => (
                 <li
-                  className="flex min-w-0 flex-col items-start gap-2 text-sm sm:flex-row sm:justify-between"
+                  className="flex min-w-0 items-center justify-between gap-3 text-sm"
                   key={item.id}
                 >
-                  <span
-                    className="min-w-0 flex-1 [overflow-wrap:anywhere]"
-                    data-slot="resource-related-identity"
-                  >
-                    {item.kind} · {item.namespace ?? t("resources.detail.clusterScope")}/{item.name}
-                  </span>
+                  <OverflowIdentity
+                    className="min-w-0 flex-1"
+                    render={<span data-slot="resource-related-identity" />}
+                    value={`${item.kind} · ${item.namespace ?? t("resources.detail.clusterScope")}/${item.name}`}
+                  />
                   <StatusMark label={item.healthStatus} tone={item.health} />
                 </li>
               ))}
@@ -183,14 +189,13 @@ export function ResourceDetailBody({
               className="absolute inset-y-0 left-0 w-1 bg-warning"
             />
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-              <h3
-                className="min-w-0 font-medium [overflow-wrap:anywhere]"
-                data-slot="resource-event-title"
-              >
-                {event.facts.type === "event" && event.facts.reason
+              <OverflowIdentity
+                className="min-w-0 font-medium"
+                render={<h3 data-slot="resource-event-title" />}
+                value={event.facts.type === "event" && event.facts.reason
                   ? event.facts.reason
                   : event.name}
-              </h3>
+              />
               <StatusMark label={event.healthStatus} tone={event.health} />
             </div>
             {event.facts.type === "event" && event.facts.message ? (

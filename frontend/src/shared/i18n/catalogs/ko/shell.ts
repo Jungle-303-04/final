@@ -65,6 +65,7 @@ export const shellKo = {
   "shell.ai.action.creating": "알림을 만들고 있습니다…",
   "shell.ai.action.createdShort": "생성됨",
   "shell.ai.action.created": "알림 규칙이 생성되었습니다 · {id}",
+  "shell.ai.action.viewRules": "알림 규칙 보기",
   "shell.ai.action.failed": "알림 규칙을 만들지 못했습니다. 내용을 확인하고 다시 시도하세요.",
   "shell.ai.action.editTitle": "알림 규칙 수정",
   "shell.ai.action.editDescription": "AI가 채운 값을 확인한 뒤 사람이 직접 생성합니다.",

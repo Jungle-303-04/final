@@ -5,6 +5,7 @@ import type {
   IssueEvidenceReference,
   IssueEvidenceSource,
   IssueMissingEvidenceCheck,
+  IssueRcaNarrative,
   IssueRcaReport,
   IssueRcaReportPage,
 } from "./issuesEvidenceContract";
@@ -15,6 +16,7 @@ import type {
   IssuesEndpointEvidenceRef,
   IssuesEndpointEvidenceSource,
   IssuesEndpointMissingCheck,
+  IssuesEndpointRcaNarrative,
   IssuesEndpointRcaReport,
   IssuesEndpointRcaReportPage,
 } from "./issuesEndpointContract";
@@ -91,6 +93,10 @@ function rcaReport(
 ): IssueRcaReport {
   const workspaceId = required(item.workspace_id, "RCA report workspace_id");
   requireCorrelation(correlationId, item.correlation_id);
+  const narrative = item.narrative === null ? null : rcaNarrative(item.narrative);
+  if ((item.narrative_status === "generated") !== (narrative !== null)) {
+    throw new IssuesCanonicalError("RCA narrative status does not match narrative availability");
+  }
   return {
     id: `rca-report:${encodeURIComponent(workspaceId)}/${item.id}`,
     correlationId,
@@ -113,7 +119,24 @@ function rcaReport(
     candidates: item.candidates.map(candidateScore),
     supportingEvidenceRefs: item.supporting_evidence_refs.map(evidenceReference),
     missingEvidenceChecks: item.missing_evidence_checks.map(missingCheck),
+    narrative,
+    narrativeStatus: item.narrative_status,
     createdAt: timestamp(item.created_at),
+  };
+}
+
+function rcaNarrative(item: IssuesEndpointRcaNarrative): IssueRcaNarrative {
+  return {
+    locale: item.locale,
+    executiveSummary: required(item.executive_summary, "RCA narrative executive_summary"),
+    impact: required(item.impact, "RCA narrative impact"),
+    reasoning: required(item.reasoning, "RCA narrative reasoning"),
+    recommendedAction: required(item.recommended_action, "RCA narrative recommended_action"),
+    recurrencePrevention: item.recurrence_prevention.map((value) => required(
+      value,
+      "RCA narrative recurrence_prevention",
+    )),
+    limitations: item.limitations.map((value) => required(value, "RCA narrative limitations")),
   };
 }
 

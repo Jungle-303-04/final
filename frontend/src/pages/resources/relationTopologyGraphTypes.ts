@@ -1,8 +1,10 @@
 import type { Node } from "@xyflow/react";
-import type { RelationTopologyNode as RelationNode } from "../../features/resources/relationTopologyContract";
+import type { RelationTopologyGraphNode } from "../../features/resources/relationTopologyGraphModel";
 
 export interface RelationTopologyNodeData extends Record<string, unknown> {
-  resource: RelationNode;
+  graphNode: RelationTopologyGraphNode;
+  onSelect: (resourceId: string) => void;
+  selected: boolean;
 }
 
 export type RelationGraphNode = Node<RelationTopologyNodeData, "relation-resource">;

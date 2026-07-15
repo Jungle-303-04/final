@@ -15,6 +15,7 @@ import {
   type ResourceFactWarningSink,
 } from "./resourceFactSafety";
 import {
+  invalidResponse,
   optionalNonNegativeInteger,
   optionalNonNegativeNumber,
   responseBoolean,
@@ -98,7 +99,19 @@ function podFacts(
       () => responseStringArray(summary.terminated_reasons),
       warn,
     ),
+    containerNames: optionalFact(
+      "containerNames",
+      [],
+      () => podContainerNames(summary.containers),
+      warn,
+    ),
   };
+}
+
+function podContainerNames(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) invalidResponse();
+  return responseStringArray(value.map((item) => responseRecord(item).name));
 }
 
 function nodeFacts(

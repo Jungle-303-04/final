@@ -20,7 +20,10 @@ import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { ClusterCard } from "./ClusterCard";
 import { ClusterConnectDialog } from "./ClusterConnectDialog";
-import { ClusterDisconnectDialog } from "./ClusterDisconnectDialog";
+import {
+  ClusterDisconnectDialog,
+  type DisconnectPhase,
+} from "./ClusterDisconnectDialog";
 import { clusterResourcesHref } from "./clusterNavigation";
 
 export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectPort }) {
@@ -30,6 +33,8 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
   const session = useOptionalProductSession();
   const [connectOpen, setConnectOpen] = useState(false);
   const [disconnectCluster, setDisconnectCluster] = useState<HomeClusterChoice | null>(null);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [disconnectPhase, setDisconnectPhase] = useState<DisconnectPhase>("confirm");
   const canManageClusters = session?.roles.includes("service_admin") ?? false;
   const clusters = scope.collection.phase === "ready"
     ? activeClusterChoices(scope.collection.data.clusters)
@@ -61,10 +66,6 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
       />
     );
   }
-  if (scope.collection.data.clusters.length === 0) {
-    return <ProductStateScreen kind="empty" placement="content" />;
-  }
-
   return (
     <ProductPageFrame className="gap-6">
       <header className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] lg:items-end">
@@ -121,8 +122,12 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
               href={clusterResourcesHref(filter.state, cluster.id)}
               index={index}
               key={cluster.id}
+              disconnectPhase={disconnectCluster?.id === cluster.id ? disconnectPhase : undefined}
               onDisconnect={canOfferClusterDisconnect(session?.roles, cluster)
-                ? () => setDisconnectCluster(cluster)
+                ? () => {
+                    setDisconnectCluster(cluster);
+                    setDisconnectOpen(true);
+                  }
                 : undefined}
             />
           ))}
@@ -132,6 +137,7 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
       {canManageClusters ? (
         <>
           <ClusterConnectDialog
+            existingNames={clusters.map((cluster) => cluster.name)}
             onConnected={scope.refresh}
             onOpenChange={setConnectOpen}
             open={connectOpen}
@@ -144,13 +150,23 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
               refreshAfterClusterDisconnect(scope, clusterId);
             }}
             onOpenChange={(open) => {
-              if (!open) setDisconnectCluster(null);
+              setDisconnectOpen(open);
+              if (!open && !isResumableDisconnectPhase(disconnectPhase)) {
+                setDisconnectCluster(null);
+              }
             }}
-            open={disconnectCluster !== null}
+            onPhaseChange={(clusterId, phase) => {
+              if (disconnectCluster?.id === clusterId) setDisconnectPhase(phase);
+            }}
+            open={disconnectOpen && disconnectCluster !== null}
             port={port}
           />
         </>
       ) : null}
     </ProductPageFrame>
   );
+}
+
+function isResumableDisconnectPhase(phase: DisconnectPhase): boolean {
+  return phase === "submitting" || phase === "uninstalling" || phase === "cleanup-required";
 }

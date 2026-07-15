@@ -126,6 +126,14 @@ export function podUsageLabel(usagePercent: number | null): string {
   return `${measured}%`;
 }
 
+export function podShortLabel(name: string): string {
+  return Array.from(name.normalize("NFKC"))
+    .filter((character) => /[\p{L}\p{N}]/u.test(character))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 export function podUsageEvidence(pod: PhysicalTopologyPod): PodUsageEvidence | null {
   const {
     cpuMillicores,

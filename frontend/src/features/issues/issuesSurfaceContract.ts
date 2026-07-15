@@ -17,6 +17,8 @@ export interface IssuesSurfaceCopy {
   listEmpty: string;
   listLoading: string;
   listCount: (count: number) => string;
+  listBrowseResources: string;
+  listBrowseAlerts: string;
   detailLabel: string;
   detailEmpty: string;
   detailLoading: string;
@@ -27,6 +29,8 @@ export interface IssuesSurfaceCopy {
   auditUnavailable: string;
   auditRoot: string;
   auditCause: (causationId: string) => string;
+  auditEvent: (subject: string) => string;
+  auditStage: (stage: IssueAuditTimelinePage["items"][number]["journeyStage"]) => string;
   auditPayload: string;
   auditLoadMore: string;
   auditLoadingMore: string;
@@ -42,6 +46,11 @@ export interface IssuesSurfaceCopy {
   recentChangesRepositoryLabel: string;
   recentChangesWorkflowLabel: string;
   evidenceLabel: string;
+  evidenceRecordLabel: (summary: string) => string;
+  evidenceKindLabel: (kind: string) => string;
+  evidenceSourceLabel: (source: string) => string;
+  evidenceCollectorLabel: (collector: string) => string;
+  evidenceSummaryLabel: (source: string, summary: string) => string;
   reportsLabel: string;
   recoveryLabel: string;
   sectionLoading: string;
@@ -54,10 +63,18 @@ export interface IssuesSurfaceCopy {
   target: string;
   updated: string;
   confidence: string;
+  symptom: string;
   supportingEvidence: string;
   missingEvidence: string;
   rootCause: string;
   recommended: string;
+  narrativeLabel: string;
+  narrativeSummary: string;
+  narrativeImpact: string;
+  narrativeReasoning: string;
+  narrativeRecommendedAction: string;
+  narrativeRecurrencePrevention: string;
+  narrativeLimitations: string;
   approvalRequired: string;
   selectionPending: string;
   selectionReceived: (eventId: string) => string;

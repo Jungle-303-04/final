@@ -7,6 +7,20 @@ import type {
   IssuesPort,
 } from "../../features/issues/issuesContract";
 import type { IssuesSurfaceCopy } from "../../features/issues/issuesSurfaceContract";
+import {
+  issueAuditEventLabel,
+  issueAuditStageLabel,
+} from "../../features/issues/issueAuditPresentation";
+import {
+  evidenceCollectorLabel,
+  evidenceFallbackLabel,
+  evidenceKindToken,
+  evidenceRecordSources,
+  evidenceRecordSubject,
+  evidenceSourceKind,
+  evidenceSummaryFacts,
+  type EvidenceCountKind,
+} from "../../features/issues/issueEvidencePresentation";
 import { useI18n } from "../../shared/i18n";
 import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -94,6 +108,8 @@ function createIssuesCopy(
     listEmpty: t("issues.surface.listEmpty"),
     listLoading: t("issues.surface.listLoading"),
     listCount: (count) => formatNumber(count),
+    listBrowseResources: t("issues.empty.resources"),
+    listBrowseAlerts: t("issues.empty.alerts"),
     detailLabel: t("issues.surface.detail"),
     detailEmpty: t("issues.surface.detailEmpty"),
     detailLoading: t("issues.surface.detailLoading"),
@@ -104,6 +120,8 @@ function createIssuesCopy(
     auditUnavailable: t("issues.audit.unavailable"),
     auditRoot: t("issues.audit.root"),
     auditCause: (causationId) => t("issues.audit.cause", { causationId }),
+    auditEvent: (subject) => issueAuditEventLabel(subject, t),
+    auditStage: (stage) => issueAuditStageLabel(stage, t),
     auditPayload: t("issues.audit.payload"),
     auditLoadMore: t("issues.audit.loadMore"),
     auditLoadingMore: t("issues.audit.loadingMore"),
@@ -119,6 +137,18 @@ function createIssuesCopy(
     recentChangesRepositoryLabel: t("issues.recentChanges.repository"),
     recentChangesWorkflowLabel: t("issues.recentChanges.workflow"),
     evidenceLabel: t("issues.surface.evidence"),
+    evidenceRecordLabel: (summary) => evidenceRecordLabel(summary, t),
+    evidenceKindLabel: (kind) => evidenceKindLabel(kind, t),
+    evidenceSourceLabel: (source) => evidenceSourceLabel(source, t),
+    evidenceCollectorLabel: (collector) => /^cluster-agent(?:@unknown)?$/i.test(collector.trim())
+      ? t("issues.evidence.collector.clusterAgent")
+      : evidenceCollectorLabel(collector),
+    evidenceSummaryLabel: (source, summary) => evidenceSummaryLabel(
+      source,
+      summary,
+      t,
+      formatNumber,
+    ),
     reportsLabel: t("issues.surface.reports"),
     recoveryLabel: t("issues.surface.recovery"),
     sectionLoading: t("issues.surface.sectionLoading"),
@@ -131,10 +161,18 @@ function createIssuesCopy(
     target: t("issues.table.target"),
     updated: t("issues.table.updated"),
     confidence: t("issues.detail.meta.confidence"),
+    symptom: t("issues.detail.section.symptom"),
     supportingEvidence: t("issues.detail.section.evidence"),
     missingEvidence: t("issues.detail.section.missingEvidence"),
     rootCause: t("issues.surface.rootCause"),
     recommended: t("issues.surface.recommended"),
+    narrativeLabel: t("issues.report.narrative.label"),
+    narrativeSummary: t("issues.report.narrative.summary"),
+    narrativeImpact: t("issues.report.narrative.impact"),
+    narrativeReasoning: t("issues.report.narrative.reasoning"),
+    narrativeRecommendedAction: t("issues.report.narrative.recommendedAction"),
+    narrativeRecurrencePrevention: t("issues.report.narrative.recurrencePrevention"),
+    narrativeLimitations: t("issues.report.narrative.limitations"),
     approvalRequired: t("issues.surface.approvalRequired"),
     selectionPending: t("issues.surface.selectionPending"),
     selectionReceived: (eventId) => t("issues.surface.selectionReceived", { eventId }),
@@ -144,6 +182,56 @@ function createIssuesCopy(
       count: formatNumber(excludedCount),
     }),
   };
+}
+
+const EVIDENCE_COUNT_MESSAGE: Record<EvidenceCountKind, MessageKey> = {
+  pods: "issues.evidence.count.pods",
+  nodes: "issues.evidence.count.nodes",
+  events: "issues.evidence.count.events",
+  results: "issues.evidence.count.results",
+  entries: "issues.evidence.count.entries",
+  queries: "issues.evidence.count.queries",
+};
+
+function evidenceSourceLabel(source: string, t: TranslationFunction): string {
+  const key: Record<ReturnType<typeof evidenceSourceKind>, MessageKey | null> = {
+    kubernetes: "issues.evidence.source.kubernetes",
+    metrics: "issues.evidence.source.metrics",
+    logs: "issues.evidence.source.logs",
+    traces: "issues.evidence.source.traces",
+    unknown: null,
+  };
+  const message = key[evidenceSourceKind(source)];
+  return message === null ? evidenceFallbackLabel(source) : t(message);
+}
+
+function evidenceKindLabel(kind: string, t: TranslationFunction): string {
+  return evidenceKindToken(kind) === "rca_bundle"
+    ? t("issues.evidence.kind.rcaBundle")
+    : evidenceFallbackLabel(kind);
+}
+
+function evidenceRecordLabel(summary: string, t: TranslationFunction): string {
+  const subject = evidenceRecordSubject(summary);
+  const sources = evidenceRecordSources(summary).map((source) => evidenceSourceLabel(source, t));
+  if (subject !== null && sources.length > 0) return [subject, ...sources].join(" · ");
+  return evidenceFallbackLabel(summary);
+}
+
+function evidenceSummaryLabel(
+  source: string,
+  summary: string,
+  t: TranslationFunction,
+  formatNumber: (value: number | bigint, options?: Intl.NumberFormatOptions) => string,
+): string {
+  const facts = evidenceSummaryFacts(summary);
+  if (facts.length > 0) {
+    return facts.map(({ kind, count }) => t(EVIDENCE_COUNT_MESSAGE[kind], {
+      count: formatNumber(count),
+    })).join(" · ");
+  }
+  if (evidenceSourceKind(source) !== "unknown") return t("issues.evidence.summary.collected");
+  return evidenceFallbackLabel(summary);
 }
 
 function formatAuditTime(

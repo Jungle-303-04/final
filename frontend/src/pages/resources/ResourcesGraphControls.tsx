@@ -15,13 +15,16 @@ import {
   TimelineRangeSelect,
   type PhysicalGraphBreadcrumbItem,
 } from "./ResourcesGraphChrome";
+import { ResourcesToolbar } from "./ResourcesToolbar";
 import { MAX_GRAPH_HEIGHT, MIN_GRAPH_HEIGHT } from "./useResizableGraphHeight";
 
 export function ResourcesGraphHeader({
   breadcrumbs,
   collapsed,
   displayedView,
+  includeDeleted,
   onCollapsedChange,
+  onIncludeDeletedChange,
   onSelectAll,
   onTimelineRangeChange,
   onTopologyViewChange,
@@ -33,7 +36,9 @@ export function ResourcesGraphHeader({
   breadcrumbs: PhysicalGraphBreadcrumbItem[];
   collapsed: boolean;
   displayedView: ResourceTopologyView;
+  includeDeleted: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onIncludeDeletedChange: (value: boolean) => void;
   onSelectAll: () => void;
   onTimelineRangeChange: (value: TimelineRange) => void;
   onTopologyViewChange: (view: ResourceTopologyView) => void;
@@ -50,10 +55,10 @@ export function ResourcesGraphHeader({
       : null;
   return (
     <div className={cn(
-      "relative z-20 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2",
+      "relative z-20 flex min-w-0 items-center gap-2 overflow-hidden border-b bg-background px-3 py-2",
       collapsed ? "flex-1" : "shrink-0",
     )}>
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Badge variant="secondary">
           {displayedView === "physical" ? <Server aria-hidden="true" /> : <Waypoints aria-hidden="true" />}
           <span id="resources-graph-title">
@@ -70,27 +75,38 @@ export function ResourcesGraphHeader({
           </Badge>
         )}
       </div>
-      <div className="flex min-w-0 items-center gap-2">
-        {!collapsed ? (
-          <>
-            <TimelineRangeSelect onChange={onTimelineRangeChange} value={timelineRange} />
-            <ButtonGroup aria-label={locale === "ko" ? "서버 배치 보기 방식" : "Server placement view"}>
-              {(["physical", "relations"] as const).map((view) => (
-                <Button
-                  aria-pressed={topologyView === view}
-                  key={view}
-                  onClick={() => onTopologyViewChange(view)}
-                  size="sm"
-                  type="button"
-                  variant={topologyView === view ? "secondary" : "outline"}
-                >
-                  {t(`resources.graph.view.${view}`)}
-                </Button>
-              ))}
-            </ButtonGroup>
-            <PhysicalGraphBreadcrumb items={breadcrumbs} onSelectAll={onSelectAll} />
-          </>
-        ) : null}
+      <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden">
+        <div
+          className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          data-slot="resources-graph-toolbar"
+        >
+          <div className="flex shrink-0 items-center gap-1.5">
+            {!collapsed ? (
+              <>
+                <TimelineRangeSelect onChange={onTimelineRangeChange} value={timelineRange} />
+                <ButtonGroup aria-label={locale === "ko" ? "서버 배치 보기 방식" : "Server placement view"}>
+                  {(["physical", "relations"] as const).map((view) => (
+                    <Button
+                      aria-pressed={topologyView === view}
+                      key={view}
+                      onClick={() => onTopologyViewChange(view)}
+                      size="sm"
+                      type="button"
+                      variant={topologyView === view ? "secondary" : "outline"}
+                    >
+                      {t(`resources.graph.view.${view}`)}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+                <PhysicalGraphBreadcrumb items={breadcrumbs} onSelectAll={onSelectAll} />
+              </>
+            ) : null}
+            <ResourcesToolbar
+              includeDeleted={includeDeleted}
+              onIncludeDeletedChange={onIncludeDeletedChange}
+            />
+          </div>
+        </div>
         <Button
           aria-expanded={!collapsed}
           aria-label={t(collapsed ? "resources.graph.expand" : "resources.graph.collapse")}

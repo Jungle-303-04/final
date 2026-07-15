@@ -1,4 +1,4 @@
-import { Boxes, ServerCog } from "lucide-react";
+import { Boxes, Server } from "lucide-react";
 import { useState } from "react";
 
 import awsDarkLogo from "./aws-dark.png";
@@ -48,7 +48,6 @@ export function ProviderLogo({
       />
     );
   }
-  const Icon = provider === "onprem" ? ServerCog : Boxes;
+  const Icon = provider === "kind" ? Boxes : Server;
   return <Icon aria-hidden="true" className={className} />;
 }
-

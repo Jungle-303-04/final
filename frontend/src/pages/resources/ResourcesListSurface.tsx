@@ -6,6 +6,10 @@ import type { ResourceTopologyView } from "../../features/filters/resourceTopolo
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import type { ResourceSummary } from "../../features/resources/resourcesContract";
+import {
+  exactRelationNodeId,
+  exactRelationResourceIdentity,
+} from "../../features/resources/relationTopologyGraphModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
@@ -23,7 +27,6 @@ import {
 } from "./ResourcesPageFeedback";
 import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
 import { ResourcesTable } from "./ResourcesTable";
-import { ResourcesToolbar } from "./ResourcesToolbar";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
@@ -165,15 +168,21 @@ export function ResourcesListSurface({
     }),
     "graph-visibility",
   );
+  const listedResources = filterList.phase === "ready" && filterList.data
+    ? filterList.data.items.map((item) => item.resource)
+    : [];
+  const selectRelationResource = (resourceId: string) => {
+    const identity = exactRelationResourceIdentity(resourceId, listedResources);
+    if (identity === null) return false;
+    state.openDetail(identity);
+    return true;
+  };
+  const selectedRelationResourceId = exactRelationNodeId(
+    state.detailIdentity,
+    listedResources,
+  );
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
-      <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
-        <ResourcesToolbar
-          includeDeleted={state.includeDeleted}
-          onIncludeDeletedChange={state.setIncludeDeleted}
-        />
-      </Surface>
-
       <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <aside className="sticky top-4 hidden min-w-0 lg:block" data-slot="resources-catalog-rail">
           <ResourcesCatalog
@@ -193,7 +202,10 @@ export function ResourcesListSurface({
               breadcrumbs={breadcrumbs}
               clusterId={state.selectedClusterId ?? "unknown"}
               frame={physicalTopology}
+              includeDeleted={state.includeDeleted}
               relationFrame={relationTopology}
+              onSelectRelationResource={selectRelationResource}
+              selectedRelationResourceId={selectedRelationResourceId}
               onOpenPod={openPod}
               nodePodsPort={nodePodsPort}
               onNodePodsUnauthorized={onNodePodsUnauthorized}
@@ -215,6 +227,7 @@ export function ResourcesListSurface({
               onTimelineRangeChange={changeTimelineRange}
               collapsed={filter.detail.graphCollapsed === true}
               onCollapsedChange={changeGraphCollapsed}
+              onIncludeDeletedChange={state.setIncludeDeleted}
             />
           </Surface>
 

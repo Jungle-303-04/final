@@ -13,9 +13,11 @@ const providerLabelKeys: Record<HomeClusterProvider, MessageKey> = {
 };
 
 export function ClusterProviderIcon({
+  appearance = "compact",
   className,
   provider,
 }: {
+  appearance?: "card" | "compact";
   className?: string;
   provider: HomeClusterProvider;
 }) {
@@ -25,13 +27,24 @@ export function ClusterProviderIcon({
   return (
     <span
       aria-label={label}
-      className={cn("inline-grid size-4 shrink-0 place-items-center", className)}
+      className={cn(
+        "inline-grid shrink-0 place-items-center",
+        appearance === "card"
+          ? "size-9 rounded-lg border bg-muted/45 text-foreground shadow-xs"
+          : "size-4",
+        className,
+      )}
       data-provider={provider}
       data-slot="cluster-provider-icon"
       role="img"
       title={label}
     >
-      <ProviderLogo className="size-4" provider={provider} />
+      <ProviderLogo
+        className={appearance === "card"
+          ? provider === "eks" ? "h-4 w-7" : "size-5"
+          : provider === "eks" ? "h-2.5 w-4" : "size-3.5"}
+        provider={provider}
+      />
     </span>
   );
 }

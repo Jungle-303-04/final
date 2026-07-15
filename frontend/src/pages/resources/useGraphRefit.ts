@@ -6,18 +6,20 @@ import type {
 import { useEffect, useState, type RefObject } from "react";
 
 export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
+  fitKey,
   instance,
-  nodes,
+  nodeCount,
   viewportRef,
 }: {
+  fitKey: string;
   instance: ReactFlowInstance<NodeType, EdgeType> | undefined;
-  nodes: NodeType[];
+  nodeCount: number;
   viewportRef: RefObject<HTMLDivElement | null>;
 }) {
   const [viewportRevision, setViewportRevision] = useState(0);
 
   useEffect(() => {
-    if (!instance || nodes.length === 0) return undefined;
+    if (!instance || nodeCount === 0) return undefined;
     let innerFrame = 0;
     const outerFrame = requestAnimationFrame(() => {
       innerFrame = requestAnimationFrame(() => {
@@ -28,7 +30,7 @@ export function useGraphRefit<NodeType extends Node, EdgeType extends Edge>({
       cancelAnimationFrame(outerFrame);
       cancelAnimationFrame(innerFrame);
     };
-  }, [instance, nodes, viewportRevision]);
+  }, [fitKey, instance, nodeCount, viewportRevision]);
 
   useEffect(() => {
     const viewport = viewportRef.current;

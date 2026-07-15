@@ -65,6 +65,7 @@ export const shellEn = {
   "shell.ai.action.creating": "Creating alert…",
   "shell.ai.action.createdShort": "Created",
   "shell.ai.action.created": "Alert rule created · {id}",
+  "shell.ai.action.viewRules": "View alert rule",
   "shell.ai.action.failed": "The alert rule could not be created. Review it and try again.",
   "shell.ai.action.editTitle": "Edit alert rule",
   "shell.ai.action.editDescription": "Review the AI-filled values before a person creates the rule.",

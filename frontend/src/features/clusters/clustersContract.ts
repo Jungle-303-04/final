@@ -49,6 +49,7 @@ export interface ClustersPort {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<ClusterConnectionSnapshot>;
+  reissue(clusterId: string, signal?: AbortSignal): Promise<ClusterConnectReceipt>;
 }
 
 export interface ClusterDisconnectPort {

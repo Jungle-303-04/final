@@ -10,7 +10,9 @@ import type { PhysicalTopologyRealtimePort } from "../../features/resources/phys
 import type { ResourceSummary } from "../../features/resources/resourcesContract";
 import {
   ResourceTimelineModel,
+  podTimelineIdentity,
 } from "../../features/resource-timeline";
+import type { ResourceMetricLiveSeries } from "./resourceMetricLiveSeries";
 import { mergePhysicalTopologyRealtime } from "./mergePhysicalTopologyRealtime";
 import {
   createRealtimeOverlay,
@@ -27,6 +29,7 @@ export interface PhysicalTopologyRealtimeResult {
   frame: PhysicalTopologyFrame;
   live: PhysicalTopologyLiveState;
   replay: PhysicalTopologyReplayState;
+  metricSeries: readonly ResourceMetricLiveSeries[];
   selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
 }
 
@@ -218,9 +221,28 @@ export function usePhysicalTopologyRealtime(input: {
     if (replayAtMs !== undefined && timeline.getCursor().mode !== "replay") return [];
     return timeline.selectTableRows(currentRows);
   }, [replayAtMs, timeline, timelineRevision]);
+  const metricSeries = useMemo(() => {
+    void timelineRevision;
+    return rows.flatMap((row): ResourceMetricLiveSeries[] => {
+      if (row.facts.type !== "pod" || row.namespace === null) return [];
+      const samples = timeline.getPodSamples(podTimelineIdentity({
+        clusterId: row.clusterId,
+        namespace: row.namespace,
+        name: row.name,
+      })).filter((sample) => sample.present && (
+        sample.cpuMillicores !== undefined || sample.memoryMebibytes !== undefined
+      )).map((sample) => ({
+        observedAt: sample.observedAt,
+        cpuMillicores: sample.cpuMillicores ?? null,
+        memoryMebibytes: sample.memoryMebibytes ?? null,
+      }));
+      return samples.length === 0 ? [] : [{ resourceId: row.inventoryKey, points: samples }];
+    });
+  }, [rows, timeline, timelineRevision]);
   return {
     frame: selectedFrame,
     live: scopedOverlay.live,
+    metricSeries,
     replay,
     selectTableRows,
   };

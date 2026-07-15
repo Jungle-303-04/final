@@ -13,8 +13,8 @@ export interface ResourceMetricsHistoryEndpointResponse {
   series: Array<{
     resource_id: string;
     cluster_id: string;
-    resource_type: "pod";
-    namespace: string;
+    resource_type: "pod" | "node";
+    namespace: string | null;
     name: string;
     points: Array<{
       observed_at: string;

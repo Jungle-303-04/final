@@ -63,6 +63,7 @@ export type ShellMessageKey =
   | "shell.ai.action.creating"
   | "shell.ai.action.createdShort"
   | "shell.ai.action.created"
+  | "shell.ai.action.viewRules"
   | "shell.ai.action.failed"
   | "shell.ai.action.editTitle"
   | "shell.ai.action.editDescription"
