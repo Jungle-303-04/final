@@ -596,6 +596,7 @@ def test_manual_direct_command_accepts_management_cluster_without_recorded_appro
                 namespace="sandbox",
                 diff=manual_diff(),
                 direct_execution=True,
+                direct_execution_confirmed=True,
             ),
             current_session(),
             SpyAccessDb(allowed=True, cluster_role="management"),
@@ -607,6 +608,33 @@ def test_manual_direct_command_accepts_management_cluster_without_recorded_appro
         assert isinstance(events.body, CommandRequestedBody)
         assert events.body.direct_execution is True
         assert events.body.approval_ref is None
+
+    asyncio.run(run())
+
+
+def test_manual_direct_command_requires_explicit_confirmation() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        try:
+            await commands(
+                CommandRequest(
+                    cluster_id="cluster-1",
+                    action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                    namespace="sandbox",
+                    diff=manual_diff(),
+                    direct_execution=True,
+                ),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert exc.detail == "direct command requires explicit confirmation"
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert events.body is None
 
     asyncio.run(run())
 
