@@ -531,6 +531,135 @@ describe("TimelineSurface", () => {
     expect(await screen.findByText("Available filters are currently unavailable.")).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: /Deployment/ })).toBeNull();
   });
+
+  it("keeps an unbroken kind facet named and viewport-contained at 320px", async () => {
+    const user = userEvent.setup();
+    const longKind = "AcmePlatformWorkloadDeploymentConfiguration";
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 320 });
+    try {
+      renderTimeline(timelinePort({
+        readTimelineOverview: vi.fn().mockResolvedValue({
+          ...timelineOverview(),
+          facets: { activity: [], kinds: [{ kind: longKind, count: 1 }] },
+        }),
+      }), "/timeline", "en-US");
+
+      await screen.findByText("Deployment checkout changed");
+      await user.click(screen.getByText("Kinds"));
+      const checkbox = await screen.findByRole("checkbox", { name: longKind });
+      const label = checkbox.closest("label")?.querySelector<HTMLElement>("[data-slot='timeline-kind-label']");
+      const popover = checkbox.closest<HTMLElement>("[data-slot='timeline-kind-popover']");
+
+      expect(label?.textContent).toContain(longKind);
+      expect(label?.className).toContain("min-w-0");
+      expect(label?.className).toContain("[overflow-wrap:anywhere]");
+      expect(popover?.className).toContain("w-[min(24rem,calc(100vw-2rem))]");
+      expect(popover?.className).toContain("max-w-[calc(100vw-2rem)]");
+      expect(popover?.className).toContain("overflow-x-hidden");
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
+    }
+  });
+
+  it("accepts a shared reverse-order activity URL and keeps its semantic selection through history", async () => {
+    const port = timelinePort();
+    const { router } = renderTimeline(port, "/timeline?activity=warnings,unhealthy", "en-US");
+
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("activity")).toBe("unhealthy,warnings");
+      expect(port.readTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ activity: ["unhealthy", "warnings"] }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+    expect(screen.getByRole("checkbox", { name: "Problems only" })).toHaveProperty("checked", true);
+
+    await act(async () => { await router.navigate("/timeline?activity=changes"); });
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("activity")).toBe("changes"));
+    await act(async () => { await router.navigate("/timeline?activity=warnings,unhealthy"); });
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("activity")).toBe("unhealthy,warnings"));
+
+    await act(async () => { await router.navigate(-1); });
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("activity")).toBe("changes"));
+    await act(async () => { await router.navigate(1); });
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("activity")).toBe("unhealthy,warnings");
+      expect(port.readTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ activity: ["unhealthy", "warnings"] }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
+  it("preserves raw kind filters during loading, failure, and back-forward navigation", async () => {
+    const overview = deferred<ReturnType<typeof timelineOverview>>();
+    const readTimeline = vi.fn().mockResolvedValue(snapshot());
+    const readTimelineOverview = vi.fn().mockReturnValue(overview.promise);
+    const port = timelinePort({ readTimeline, readTimelineOverview });
+    const { router } = renderTimeline(port, "/timeline?kinds=Deployment", "en-US");
+
+    await waitFor(() => expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: ["Deployment"] }) }),
+      expect.any(AbortSignal),
+    ));
+    expect(readTimelineOverview).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: [] }) }),
+      expect.any(AbortSignal),
+    );
+
+    await act(async () => { await router.navigate("/timeline?kinds=Pod"); });
+    await waitFor(() => expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: ["Pod"] }) }),
+      expect.any(AbortSignal),
+    ));
+    expect(readTimelineOverview).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await router.navigate(-1); });
+    await waitFor(() => expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: ["Deployment"] }) }),
+      expect.any(AbortSignal),
+    ));
+    await act(async () => { await router.navigate(1); });
+    await waitFor(() => expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: ["Pod"] }) }),
+      expect.any(AbortSignal),
+    ));
+    expect(readTimeline.mock.calls.every(([query]) => query.filters.kinds.length > 0)).toBe(true);
+  });
+
+  it("keeps a kind filter when its overview request fails and removes unsupported kinds only after a successful facet response", async () => {
+    const user = userEvent.setup();
+    const failurePort = timelinePort({
+      readTimelineOverview: vi.fn().mockRejectedValue(new TimelineFailure("offline")),
+    });
+    const failed = renderTimeline(failurePort, "/timeline?kinds=Pod", "en-US");
+    await waitFor(() => expect(failurePort.readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: ["Pod"] }) }),
+      expect.any(AbortSignal),
+    ));
+    await user.click(screen.getByText("Kinds"));
+    expect(await screen.findByText("Available filters are currently unavailable.")).toBeTruthy();
+    failed.unmount();
+
+    const successReadTimeline = vi.fn().mockResolvedValue(snapshot());
+    const successPort = timelinePort({ readTimeline: successReadTimeline });
+    const { router } = renderTimeline(successPort, "/timeline?kinds=UnsupportedKind", "en-US");
+    await waitFor(() => {
+      expect(successReadTimeline.mock.calls.some(([query]) => (
+        query.filters.kinds[0] === "UnsupportedKind"
+      ))).toBe(true);
+      expect(new URLSearchParams(router.state.location.search).get("kinds")).toBeNull();
+    });
+    expect(successPort.readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ kinds: [] }) }),
+      expect.any(AbortSignal),
+    );
+  });
 });
 
 function timelinePort(overrides: Partial<TimelinePort> = {}): TimelinePort {

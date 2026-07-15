@@ -254,15 +254,19 @@ function KindMenu({
   const [open, setOpen] = useState(false);
   return (
     <details
-      className="relative min-w-28"
+      className="relative min-w-0 max-w-full"
+      data-slot="timeline-kind-menu"
       onKeyDown={closeDetailsOnEscape}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary className="flex h-9 cursor-pointer list-none items-center rounded-md border px-2 text-sm font-medium outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-ring">
+      <summary className="flex h-9 min-w-28 cursor-pointer list-none items-center rounded-md border px-2 text-sm font-medium outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-ring">
         {label}
       </summary>
       {open ? (
-        <div className="absolute z-20 mt-1 grid min-w-56 max-w-[min(24rem,calc(100vw-2rem))] gap-2 rounded-lg border bg-popover p-2 text-popover-foreground shadow-md">
+        <div
+          className="absolute left-0 z-20 mt-1 grid w-[min(24rem,calc(100vw-2rem))] min-w-0 max-w-[calc(100vw-2rem)] gap-2 overflow-x-hidden rounded-lg border bg-popover p-2 text-popover-foreground shadow-md"
+          data-slot="timeline-kind-popover"
+        >
           {frame.phase === "loading" ? (
             <p aria-live="polite" className="text-sm text-muted-foreground" role="status">
               {t("timeline.toolbar.overviewLoading")}
@@ -274,17 +278,23 @@ function KindMenu({
           ) : frame.overview.facets.kinds.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("timeline.toolbar.noKinds")}</p>
           ) : (
-            <ul className="grid max-h-60 gap-1 overflow-y-auto" aria-label={label}>
+            <ul className="grid min-w-0 max-h-60 gap-1 overflow-x-hidden overflow-y-auto" aria-label={label}>
               {frame.overview.facets.kinds.map((facet) => (
-                <li key={facet.kind}>
+                <li className="min-w-0" key={facet.kind}>
                   <label className="flex min-w-0 items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted">
                     <input
+                      aria-label={facet.kind}
                       checked={selectedKinds.includes(facet.kind)}
                       className="size-4 accent-primary"
                       onChange={(event) => onKindChange(facet.kind, event.currentTarget.checked)}
                       type="checkbox"
                     />
-                    <span className="min-w-0 flex-1 break-words">{facet.kind}</span>
+                    <span
+                      className="min-w-0 flex-1 [overflow-wrap:anywhere]"
+                      data-slot="timeline-kind-label"
+                    >
+                      {facet.kind}
+                    </span>
                     <output className="shrink-0 text-xs text-muted-foreground">{facet.count}</output>
                   </label>
                 </li>

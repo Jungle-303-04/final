@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { StrictMode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +19,7 @@ import {
   type TimelineStreamFrame,
 } from "../../features/timeline/timelineContract";
 import { I18nProvider } from "../../shared/i18n";
-import { createTimelineSurface } from "./createTimelineSurface";
+import { createTimelineSurface, TimelineCapabilityGate } from "./createTimelineSurface";
 
 afterEach(cleanup);
 
@@ -34,7 +35,7 @@ describe("Timeline capability route gate", () => {
 
     expect(await screen.findByRole("heading", { name: "Timeline" })).toBeTruthy();
     await waitFor(() => expect(readCapabilities).toHaveBeenCalledTimes(1));
-    expect(readCapabilities).toHaveBeenCalledWith(undefined, "workspace-a");
+    expect(readCapabilities).toHaveBeenCalledWith(expect.any(AbortSignal), "workspace-a");
 
     fireEvent.click(screen.getByRole("button", { name: "switch to cluster-b" }));
     await waitFor(() => expect(port.readTimeline).toHaveBeenLastCalledWith(
@@ -104,6 +105,69 @@ describe("Timeline capability route gate", () => {
     expect(await screen.findByRole("heading", { name: "Timeline" })).toBeTruthy();
     expect(readCapabilities).toHaveBeenCalledTimes(2);
   });
+
+  it("renders the route in StrictMode after its scope resolves", async () => {
+    const readCapabilities = vi.fn().mockResolvedValue(CAPABILITIES);
+    renderTimelineRoute(timelinePort({ readCapabilities }), undefined, true);
+
+    expect(await screen.findByRole("heading", { name: "Timeline" })).toBeTruthy();
+    expect(readCapabilities).toHaveBeenCalledTimes(1);
+    expect(readCapabilities).toHaveBeenLastCalledWith(expect.any(AbortSignal), "workspace-a");
+  });
+
+  it("re-arms the capability request during StrictMode setup cleanup setup", async () => {
+    const readCapabilities = vi.fn().mockResolvedValue(CAPABILITIES);
+    renderTimelineCapabilityGate(timelinePort({ readCapabilities }), true);
+
+    expect(await screen.findByText("capability-ready")).toBeTruthy();
+    await waitFor(() => expect(readCapabilities).toHaveBeenCalledTimes(2));
+    const firstSignal = readCapabilities.mock.calls[0]?.[0] as AbortSignal;
+    expect(firstSignal.aborted).toBe(true);
+    expect(readCapabilities).toHaveBeenLastCalledWith(expect.any(AbortSignal), "workspace-a");
+  });
+
+  it("ignores a cancelled StrictMode preflight after the replacement request resolves", async () => {
+    const first = deferred<TimelineCapabilities>();
+    const second = deferred<TimelineCapabilities>();
+    const readCapabilities = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    renderTimelineCapabilityGate(timelinePort({ readCapabilities }), true);
+
+    await waitFor(() => expect(readCapabilities).toHaveBeenCalledTimes(2));
+    second.resolve(CAPABILITIES);
+    expect(await screen.findByText("capability-ready")).toBeTruthy();
+    first.reject(new TimelineFailure("invalid-response"));
+    await Promise.resolve();
+    expect(screen.getByText("capability-ready")).toBeTruthy();
+  });
+
+  it("shows a StrictMode capability error and retries with a fresh active request", async () => {
+    const readCapabilities = vi.fn()
+      .mockRejectedValueOnce(new TimelineFailure("offline"))
+      .mockRejectedValueOnce(new TimelineFailure("offline"))
+      .mockResolvedValueOnce(CAPABILITIES);
+    renderTimelineCapabilityGate(timelinePort({ readCapabilities }), true);
+
+    expect(await screen.findByRole("heading", { name: "Unable to reach the control plane" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("capability-ready")).toBeTruthy();
+    expect(readCapabilities).toHaveBeenCalledTimes(3);
+  });
+
+  it("cancels an active capability request when the gate actually unmounts", async () => {
+    const pending = deferred<TimelineCapabilities>();
+    const readCapabilities = vi.fn().mockReturnValue(pending.promise);
+    const view = renderTimelineCapabilityGate(timelinePort({ readCapabilities }));
+
+    await waitFor(() => expect(readCapabilities).toHaveBeenCalledTimes(1));
+    const signal = readCapabilities.mock.calls[0]?.[0] as AbortSignal;
+    view.unmount();
+    expect(signal.aborted).toBe(true);
+
+    pending.resolve(CAPABILITIES);
+    await Promise.resolve();
+  });
 });
 
 const CAPABILITIES: TimelineCapabilities = {
@@ -117,9 +181,10 @@ const CAPABILITIES: TimelineCapabilities = {
 function renderTimelineRoute(
   port: TimelinePort,
   clusterScopePort: ClusterScopePort = { listClusterChoices: async () => clusterCollection() },
+  strictMode = false,
 ) {
   const TimelineRoute = createTimelineSurface(port);
-  return render(
+  const tree = (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <MemoryRouter initialEntries={["/timeline?clusters=cluster-a"]}>
         <AuthSessionGateProvider reportUnauthorized={() => undefined}>
@@ -131,8 +196,25 @@ function renderTimelineRoute(
           </UnifiedFilterProvider>
         </AuthSessionGateProvider>
       </MemoryRouter>
-    </I18nProvider>,
+    </I18nProvider>
   );
+  return render(strictMode ? <StrictMode>{tree}</StrictMode> : tree);
+}
+
+function renderTimelineCapabilityGate(port: TimelinePort, strictMode = false) {
+  const tree = (
+    <I18nProvider navigatorLanguage="en-US" storage={null}>
+      <TimelineCapabilityGate
+        enabled
+        port={port}
+        scopeContent={<span>scope-pending</span>}
+        workspaceCacheKey="workspace-a"
+      >
+        <span>capability-ready</span>
+      </TimelineCapabilityGate>
+    </I18nProvider>
+  );
+  return render(strictMode ? <StrictMode>{tree}</StrictMode> : tree);
 }
 
 function ScopeSwitch() {
