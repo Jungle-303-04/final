@@ -80,6 +80,9 @@ class _MappedResult:
     def __iter__(self) -> Iterator[dict[str, Any]]:
         return iter(self.rows)
 
+    def all(self) -> list[dict[str, Any]]:
+        return self.rows
+
 
 def test_current_versions_are_workspace_authorization_and_snapshot_scoped() -> None:
     sql = _sql(
@@ -134,6 +137,62 @@ def test_resolve_filter_clusters_returns_complete_response_identity() -> None:
             "provider": "eks",
         }
     }
+
+
+def test_filter_snapshot_contexts_reads_each_cluster_freshness_in_one_scoped_query() -> None:
+    class Connection:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
+        def execute(self, statement: Any) -> _MappedResult:
+            self.statements.append(statement)
+            return _MappedResult(
+                [
+                    {
+                        "cluster_id": "cluster-a",
+                        "revision_id": 8,
+                        "observed_at": None,
+                        "labels_complete": True,
+                        "resources_complete": True,
+                        "application_bindings_complete": True,
+                        "partial_reason_codes": [],
+                    }
+                ]
+            )
+
+    connection_instance = Connection()
+
+    @contextmanager
+    def connection() -> Iterator[Connection]:
+        yield connection_instance
+
+    repository = object.__new__(InventoryFilterRepository)
+    repository.connection = connection  # type: ignore[method-assign]
+
+    contexts = repository.filter_snapshot_contexts("workspace-a", {"cluster-a", "cluster-b"})
+
+    assert len(connection_instance.statements) == 1
+    assert contexts == {
+        "cluster-a": {
+            "snapshot_revision": 8,
+            "observed_at": None,
+            "labels_complete": True,
+            "resources_complete": True,
+            "application_bindings_complete": True,
+            "partial_reason_codes": [],
+        },
+        "cluster-b": {
+            "snapshot_revision": 0,
+            "observed_at": None,
+            "labels_complete": False,
+            "resources_complete": False,
+            "application_bindings_complete": False,
+            "partial_reason_codes": ["missing_inventory_projection"],
+        },
+    }
+    sql = _sql(connection_instance.statements[0])
+    assert "workspace_id = 'workspace-a'" in sql
+    assert "cluster_id in ('cluster-a', 'cluster-b')" in sql
 
 
 def test_resource_filter_sql_uses_same_axis_or_cross_axis_and_and_label_and() -> None:

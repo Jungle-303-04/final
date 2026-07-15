@@ -49,6 +49,20 @@ export {
   type HelmReleaseListEndpoint,
 } from "./helm-releases-schemas";
 export {
+  getTrafficOverview,
+  TRAFFIC_OVERVIEW_PATH,
+  type TrafficOverviewQuery,
+} from "./traffic-overview";
+export {
+  trafficClusterScopeSchema,
+  trafficObservationStatusSchema,
+  trafficObservationSummarySchema,
+  trafficOverviewSchema,
+  trafficRelationshipsSchema,
+  trafficScopeCoverageSchema,
+  type TrafficOverviewEndpoint,
+} from "./traffic-overview-schemas";
+export {
   timelineCapabilityDescriptorSchema,
   timelineCoverageSchema,
   timelineCursorSchema,
