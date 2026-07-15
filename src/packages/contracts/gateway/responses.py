@@ -1927,10 +1927,22 @@ class AiChatResponse(StrictModel):
     answer: str = Field(min_length=1, max_length=4000)
     evidence: list[AiEvidenceLink] = Field(default_factory=list, max_length=20)
     action: AiChatAction | None = None
+    # Capability/identity questions are answered by the configured model from
+    # the product capability contract, not from cluster evidence. Keeping this
+    # explicit prevents an arbitrary evidence-free operational claim from
+    # passing the response boundary.
+    answer_kind: Literal["capability"] | None = None
 
     @model_validator(mode="after")
     def require_evidence_or_canonical_no_data(self) -> Self:
-        if not self.evidence and self.action is None and self.answer != AI_NO_DATA_ANSWER:
+        if self.answer_kind == "capability" and (self.evidence or self.action is not None):
+            raise ValueError("AI capability answers cannot carry operational evidence or actions")
+        if (
+            not self.evidence
+            and self.action is None
+            and self.answer_kind != "capability"
+            and self.answer != AI_NO_DATA_ANSWER
+        ):
             raise ValueError("AI answer without evidence must use the canonical no-data answer")
         identities = [(item.type, item.id) for item in self.evidence]
         if len(set(identities)) != len(identities):
