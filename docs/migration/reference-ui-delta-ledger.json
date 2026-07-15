@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 249,
+  "pendingCount": 243,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -67,8 +67,36 @@
         "blobId": "aee4343969b6128d3086aafd03c11485378bebbb",
         "sha256": "95d2168ba469b3a2ebd02fcf1eba8de04c11af7db4ebb18d1da752cef9a51ae4"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog:batch-signal-chip:v1",
+          "legacyContractIds": [],
+          "symbol": "BatchSignalChip",
+          "interaction": "a catalog or detail row exposes one typed batch signal badge and its explanatory tooltip only when the authorized projection supplies a signal",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime",
+              "applications.detail.overview-projection"
+            ],
+            "state": "blocked",
+            "blockedReason": "ApplicationProductCard and ApplicationProductDetail expose only aggregate pod health; they do not carry a provider-neutral batch signal, retained-run outcome, or signal explanation.",
+            "rationale": "Current cards have deployment, drift, incident, and readiness channels, but cannot truthfully render the new batch badge without a Python-owned projection."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -79,8 +107,64 @@
         "blobId": "f5d960ff1aee6268d69b492ba3a839a1a4143d9d",
         "sha256": "0842e4e498abb29fab0da5e247fd29eae1ba9a9f05bd7b0d09a91338fa86d429"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:detail:scope-and-view-parity-test:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationDetail shell tests",
+          "interaction": "controlled application versus workload scope, overview/topology/history/cost selection, single-workload defaulting, and invalid workload recovery preserve the selected route state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.scope-tabs",
+              "applications.detail.parity"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current URL model has only overview/resources/deployments/drift/incidents and no typed workload scope, application topology, history, or optional cost projection contract.",
+            "rationale": "ApplicationsSurface.test.tsx already proves generic URL-backed detail navigation, but it cannot prove the new controlled scope rules until the missing projection and route state exist."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:evidence-and-batch-parity-test:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationDetail evidence tests",
+          "interaction": "overview and history avoid duplicating current incidents, distinguish runtime from delivery health, preserve source provenance and conflicts, and report batch outcomes without treating idle jobs as serving failures",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+              "tests/test_application_product_contract.py",
+              "tests/test_application_product_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.delivery-status",
+              "applications.detail.overview-projection",
+              "applications.detail.history"
+            ],
+            "state": "blocked",
+            "blockedReason": "The existing strict product response deliberately contains bounded generic activity and incidents only; it lacks runtime-versus-delivery, source conflict, batch, workload, and partial-history fields needed to assert these semantics.",
+            "rationale": "Existing adapter and Python contract tests are the correct proof locations, but currently validate the smaller generic projection rather than source-equivalent evidence."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -94,8 +178,164 @@
         "blobId": "afda73b7e10993a1e5473672d87029e2a494a7a1",
         "sha256": "11602ded7f48d054263506058d93aa3e6253d3d5e045992829dc8d94ae34c21b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:detail:scope-tabs-and-cost:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationDetail, ApplicationWorkspace, ApplicationViewTabs",
+          "interaction": "back navigation, controlled application/workload scope, overview/topology/history tabs, and an optional cost tab select exactly one application workspace without rendering workload runtime in app scope",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "tab and scope selection retain their final selected state without transform or color-transition motion when reduced motion is requested",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:ApplicationViewTabs",
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:ApplicationScopeSelector"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationFilters.ts",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.scope-tabs",
+              "applications.detail.parity"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current detail workspace has a different fixed five-tab model and no normalized workload key, app-scope topology/history view, or application-cost callback.",
+            "rationale": "ApplicationDetailWorkspace is the existing route owner and must be extended rather than importing the upstream shell."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:overview-evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationOverview and overview panels",
+          "interaction": "overview combines operational issues, runtime and deployment delivery verdicts, restart warnings, workload matrix, retained batch activity, deployment-source provenance, and authorized entrypoint/dependency resource links",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.overview-projection",
+              "applications.catalog.delivery-status"
+            ],
+            "state": "blocked",
+            "blockedReason": "Current detail data has aggregate health, endpoints, counts, three activity records, and three incidents, but has no workload matrix, delivery-source status, batch activity, source provenance/conflict, or relationship references.",
+            "rationale": "The existing overview is a safe generic projection; it is a partial destination, not evidence that the richer source behavior has been ported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:topology-drilldown:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationTopology and TopologyWorkloadLegend",
+          "interaction": "authorized application topology colors workload ownership, hover-focuses the matching rail row, expands stable ReplicaSets, drills workload nodes into runtime, routes generated runs to their parent, routes related resources to detail, and labels deployment-source-only versus runtime-only resources",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "hover focus, legend selection, and ReplicaSet expansion remain immediate state changes without graph camera or layout animation under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:ApplicationTopology",
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:TopologyWorkloadLegend"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.detail.topology"
+            ],
+            "state": "blocked",
+            "blockedReason": "ApplicationsPort has no application-topology, ownership, relationship edge, deployment-inventory, generated-run, or topology freshness projection; the current Resources link is only a count drilldown.",
+            "rationale": "The product must request an authorized Python projection and compose its own topology route, not reuse the upstream React graph or infer edges from displayed counts."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:history-and-source-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationHistoryView, ApplicationLatestHistory, ApplicationLatestChangeFact",
+          "interaction": "history exposes loading and partial-source state, current incidents, deployment anchors, retained latest-change or incident preview, direct workload navigation only for unambiguous objects, and source-view navigation without duplicate actions",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/ApplicationDeploymentsPanel.tsx",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.history"
+            ],
+            "state": "blocked",
+            "blockedReason": "GET /applications/{id}/deployments exposes workflow-run deployment rows but no retained source anchors, partial-source status, source references, incident-to-workload identity, or history summary required for this behavior.",
+            "rationale": "The existing deployments and incident tabs are reusable destinations only after a dedicated authorized history contract separates source evidence from current incident evidence."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:identity-environment-switcher:v1",
+          "legacyContractIds": [],
+          "symbol": "EnvSwitcher and ApplicationScopeSelector",
+          "interaction": "environment siblings switch among real application instances, show confidence/evidence and promotion lag, scale from inline pills to a searchable listbox, and dismiss scope/environment popovers on outside pointer or Escape",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "chevron rotation and color transitions are suppressed while popover open/close and selection remain fully perceivable under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:EnvSwitcher",
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:useDismissablePopover"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationFilters.ts",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.detail.identity-switcher",
+              "applications.detail.scope-tabs"
+            ],
+            "state": "blocked",
+            "blockedReason": "ApplicationProductDetail currently supplies a flat environments string list, not immutable instance identities, environment ordering/evidence, promotion-lag evidence, or workload descriptors for a searchable scope selector.",
+            "rationale": "The route can already write URL detail keys, but must never manufacture application siblings or workload addresses from display labels."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -109,8 +349,37 @@
         "blobId": "8cea5254b141c9739c0961e9e51d4ee9dc65a795",
         "sha256": "89356f9b5fa563536ba8ad1bf66e47c6ed529c38dbf2c4e4d174672626cc3059"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog:delivery-batch-aggregation-test:v1",
+          "legacyContractIds": [],
+          "symbol": "buildSingleAppEntry parity tests",
+          "interaction": "catalog aggregation verifies delivery degradation overrides runtime-only display when appropriate and a successful retained batch outcome is not falsely presented as an unhealthy serving workload",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+              "tests/test_application_product_contract.py",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime",
+              "applications.catalog.delivery-status",
+              "applications.detail.overview-projection"
+            ],
+            "state": "blocked",
+            "blockedReason": "Current application health is a three-state aggregate and does not expose the independent runtime, delivery, or retained batch evidence needed to verify precedence rules.",
+            "rationale": "Existing adapter tests prove provider-neutral basic health mapping; the new parity test belongs across the Python contract and adapter after those evidence fields are introduced."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -124,8 +393,63 @@
         "blobId": "6acde47995f9dd1e557797ec19b948c1e0309ccf",
         "sha256": "f55a9887a6d0028a13c36144dce0250aca4f497cfb670604321e7b84a09c9604"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog:job-runtime-and-sort:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationRuntimeCell and runtimeSortValue",
+          "interaction": "catalog status strips, runtime cells, status facets, and ready-column sorting use batch runtime state for job apps while retaining serving readiness for non-job apps; grouped rows explain mixed runtime states in a tooltip",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationsSurface.tsx",
+              "frontend/src/features/applications/ApplicationsTable.tsx",
+              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime",
+              "applications.catalog.delivery-status"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current list projection has no workload class, batch runtime, retained run, mixed-group member, or source delivery fields, so the browser cannot perform this status and sort policy without hardcoding or guessing.",
+            "rationale": "ApplicationsSurface currently supports grid/table switching and attention sorting, but its aggregate readiness must remain separate from batch execution semantics."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:catalog:batch-signal-priority:v1",
+          "legacyContractIds": [],
+          "symbol": "firstBatchSignal and list row badges",
+          "interaction": "single and folded application rows show the highest-severity non-job batch signal with a shared explanatory tooltip while job rows present their runtime state instead",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationsTable.tsx",
+              "frontend/src/features/applications/applicationPresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime"
+            ],
+            "state": "blocked",
+            "blockedReason": "No current product field identifies batch signals, severity ordering, source detail, or the application members over which a group signal would be selected.",
+            "rationale": "ApplicationCard and ApplicationsTable are shared destinations, but must consume one server-supplied signal model rather than independently rank raw workloads."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -139,8 +463,34 @@
         "blobId": "8bc727b11481aac1ca0a62a13cc539bbe5465102",
         "sha256": "82a0a521d0a83fb3e55551d11d65e2ba68391f274c3f1556ec2a94a07f528ced"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:public-api:application-view-type:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationView type export",
+          "interaction": "a product-owned application detail boundary exposes a typed application view selection instead of coupling consumers to the source component implementation",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "applications.public-api",
+              "applications.detail.scope-tabs"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "ApplicationDetailWorkspace already owns a typed private tab union and URL controller; it is the correct starting point for a reusable product boundary, although it does not yet expose source-equivalent views."
+          }
+        }
+      ]
     },
     {
       "status": "M",

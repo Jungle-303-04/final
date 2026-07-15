@@ -511,16 +511,53 @@ test('check는 분류 interaction을 보존하면서 feature ledger에 없는 le
   }
 })
 
-test('동결된 최신 UI delta ledger는 Timeline 분류만 생성 입력에서 반영하고 나머지 pending을 출하 완료로 위장하지 않는다', async () => {
+test('동결된 최신 UI delta ledger는 생성 입력의 Timeline·Applications 분류를 보존하고 실제 pending만 보고한다', async () => {
   const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
   const ledgerPath = path.join(scriptDirectory, '..', 'docs', 'migration', 'reference-ui-delta-ledger.json')
+  const classificationPath = path.join(
+    scriptDirectory,
+    '..',
+    'docs',
+    'migration',
+    'reference-ui-delta-classifications.json',
+  )
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'))
+  const classificationInput = JSON.parse(await readFile(classificationPath, 'utf8'))
 
   assert.equal(ledger.baseRevision, BASE)
   assert.equal(ledger.targetRevision, TARGET)
   assert.equal(ledger.schemaVersion, 3)
   assert.equal(ledger.fileCount, 276)
-  assert.equal(ledger.pendingCount, 249)
+  assert.equal(classificationInput.targetRevision, TARGET)
+
+  const expectedClassifications = Object.entries(classificationInput.classifications)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([filePath, classification]) => ({
+      path: filePath,
+      classification: classification.classification,
+      interactions: classification.interactions,
+    }))
+  const actualClassifications = ledger.files
+    .filter((row) => row.classification === 'classified')
+    .map((row) => ({
+      path: row.path,
+      classification: row.classification,
+      interactions: row.interactions,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path))
+  assert.deepEqual(actualClassifications, expectedClassifications)
+
+  const classifiedTimelinePaths = actualClassifications
+    .map((row) => row.path)
+    .filter((filePath) => filePath.includes('/timeline/'))
+  const classifiedApplicationPaths = actualClassifications
+    .map((row) => row.path)
+    .filter((filePath) => filePath.startsWith('packages/k8s-ui/src/components/applications/'))
+  assert.ok(classifiedTimelinePaths.length > 0)
+  assert.equal(classifiedApplicationPaths.length, 6)
+
+  const actualPending = ledger.files.filter((row) => row.classification === 'pending').length
+  assert.equal(ledger.pendingCount, actualPending)
   assert.deepEqual(validateDeltaLedger(ledger), [])
-  assert.throws(() => assertDeltaLedgerClassified(ledger), /249개 pending/)
+  assert.throws(() => assertDeltaLedgerClassified(ledger), new RegExp(`${actualPending}개 pending`))
 })
