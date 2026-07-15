@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -9,13 +10,22 @@ from dataclasses import dataclass
 import httpx
 
 from domains.alert.delivery import post_alert_webhook
+from domains.alert.evaluation import AlertEvaluationEngine
 from domains.alert.events import AlertDispatchedBody, AlertRejectedBody, AlertRequestedBody
+from domains.alert.measurements import (
+    DEFAULT_MEASUREMENT_MAX_AGE_SECONDS,
+    AlertRuleMeasurementLoader,
+)
 from domains.alert.repository import severity_matches
-from packages.config.logs import get_logger
+from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.alert.provider import AlertProvider
 from packages.contracts.event_bus.bodies import EventBody
 from packages.runtime.app import App, EventContext
+from packages.runtime.async_db import AsyncDb
+from packages.runtime.service import AsyncService
+from packages.runtime.worker import WorkerRuntime
+from packages.storage.database import Database, wait_for_database
 
 app = App("alert-worker")
 LOGGER = get_logger(__name__)
@@ -30,6 +40,9 @@ DEFAULT_ALERT_HTTP_TIMEOUT_SECONDS = "10"
 ALERT_BLOCKED_SEVERITIES_ENV = "ALERT_BLOCKED_SEVERITIES"
 ALERT_AUTO_COMMAND_ENVIRONMENTS_ENV = "ALERT_AUTO_COMMAND_ENVIRONMENTS"
 DEFAULT_ALERT_AUTO_COMMAND_ENVIRONMENTS = "sandbox,staging"
+ALERT_EVALUATION_INTERVAL_SECONDS_ENV = "ALERT_EVALUATION_INTERVAL_SECONDS"
+DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS = "10"
+ALERT_MEASUREMENT_MAX_AGE_SECONDS_ENV = "ALERT_MEASUREMENT_MAX_AGE_SECONDS"
 ALERT_SEVERITY_BLOCKED_REASON = "alert severity blocked by policy"
 AUTO_COMMAND_ENVIRONMENT_DENIED_REASON = "auto command not allowed for environment"
 # 웹훅 URL 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
@@ -238,5 +251,80 @@ async def on_alert_requested(
         yield evt.next_command
 
 
+async def run_alert_evaluation(
+    engine: AlertEvaluationEngine,
+    stopping: asyncio.Event,
+) -> None:
+    """Evaluate real measurements continuously without killing delivery on one bad cycle."""
+    while not stopping.is_set():
+        try:
+            transitions = await engine.evaluate_once()
+            if transitions:
+                LOGGER.info(
+                    "alert evaluation transitions",
+                    extra={
+                        CONTEXT_KEY: {
+                            "count": len(transitions),
+                            "transitions": [
+                                str(transition.get("transition") or "")
+                                for transition in transitions
+                            ],
+                        }
+                    },
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - 다음 주기에 자동 복구해야 하는 운영 루프
+            LOGGER.warning(
+                "alert evaluation cycle failed",
+                extra={CONTEXT_KEY: {"exception_type": type(exc).__name__}},
+                exc_info=exc,
+            )
+        try:
+            await asyncio.wait_for(stopping.wait(), timeout=engine.interval_seconds)
+        except TimeoutError:
+            continue
+
+
+async def serve_alert_worker() -> None:
+    """Run the NATS delivery consumer and the DB-backed rule evaluator as one service."""
+    evaluation_store = Database()
+    await wait_for_database(evaluation_store)
+    evaluation_db = AsyncDb(evaluation_store)
+    interval_seconds = float(
+        env(
+            ALERT_EVALUATION_INTERVAL_SECONDS_ENV,
+            DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS,
+        )
+    )
+    measurement_max_age_seconds = float(
+        env(
+            ALERT_MEASUREMENT_MAX_AGE_SECONDS_ENV,
+            str(DEFAULT_MEASUREMENT_MAX_AGE_SECONDS),
+        )
+    )
+    loader = AlertRuleMeasurementLoader(
+        evaluation_db,
+        max_age_seconds=measurement_max_age_seconds,
+    )
+    engine = AlertEvaluationEngine(
+        evaluation_db,
+        load_measurements=loader,
+        interval_seconds=interval_seconds,
+    )
+    stopping = asyncio.Event()
+    evaluation_task = asyncio.create_task(
+        run_alert_evaluation(engine, stopping),
+        name="alert-rule-evaluation",
+    )
+    try:
+        await WorkerRuntime(app.handler_spec()).run()
+    finally:
+        stopping.set()
+        await evaluation_task
+        await evaluation_store.dispose_async()
+        evaluation_store.dispose()
+
+
 if __name__ == "__main__":
-    app.run()
+    AsyncService(app.name, serve_alert_worker).run()

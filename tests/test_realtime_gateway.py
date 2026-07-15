@@ -149,6 +149,82 @@ def test_late_browser_gets_state_via_snapshot() -> None:
     }
 
 
+def test_live_summary_persists_agent_observed_pod_metrics() -> None:
+    module = load_gateway_module()
+    persisted: list[tuple[str, str, dict[str, Any]]] = []
+
+    def persist_live_usage(
+        workspace_id: str,
+        cluster_id: str,
+        _sampled_at: object,
+        usage: dict[str, Any],
+    ) -> bool:
+        persisted.append((workspace_id, cluster_id, usage))
+        return True
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        persist_live_usage=persist_live_usage,
+    )
+    client = TestClient(app)
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers=browser_headers(),
+    ) as browser:
+        browser.receive_json()
+        browser.receive_json()
+        with client.websocket_connect(
+            f"/live/agent?cluster_id={CLUSTER}",
+            headers={"x-agent-token": GOOD_TOKEN},
+        ) as agent:
+            agent.receive_json()
+            agent.send_json(summary_payload())
+            agent.send_json(
+                {
+                    "type": "resource.delta",
+                    "op": "replace",
+                    "key": f"{CLUSTER}/sandbox/pod/game-0",
+                    "value": {
+                        "ready": "1/1",
+                        "phase": "Running",
+                        "restarts": 2,
+                        "node": "node-a",
+                        "cpu_mcores": 530,
+                        "cpu_request_mcores": 500,
+                        "cpu_request_pct": 106,
+                        "mem_mib": 48,
+                        "mem_request_mib": 64,
+                        "mem_request_pct": 75,
+                    },
+                }
+            )
+            agent.send_json(summary_payload())
+            assert [browser.receive_json()["type"] for _ in range(3)] == [
+                "live.summary",
+                "resource.delta",
+                "live.summary",
+            ]
+
+    assert len(persisted) == 1
+    workspace_id, cluster_id, usage = persisted[0]
+    assert (workspace_id, cluster_id) == (WORKSPACE, CLUSTER)
+    assert usage["restart_total"] == 2
+    assert usage["pods"]["sandbox/game-0"] == {
+        "cpu_mcores": 530,
+        "cpu_request_mcores": 500,
+        "cpu_request_pct": 106,
+        "mem_mib": 48,
+        "mem_request_mib": 64,
+        "mem_request_pct": 75,
+        "ready": "1/1",
+        "phase": "Running",
+        "restarts": 2,
+        "node": "node-a",
+    }
+
+
 def test_agent_rejected_with_bad_token() -> None:
     _, client = make_client()
     with client.websocket_connect(
