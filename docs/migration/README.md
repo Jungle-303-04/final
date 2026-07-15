@@ -17,6 +17,10 @@ feature row and rejects a newly added source section until it has a product
 boundary. This keeps the mapping structured without copying action lists into
 Python or the browser.
 
+`make reference-feature-parity-check` is the release-only completion gate. It
+fails until every product feature is `implemented`; reference evidence and
+intentionally non-product server surfaces are the only excluded statuses.
+
 The generator also writes
 `src/packages/contracts/reference_feature_catalog.json`. This is the runtime
 catalog: every feature receives a unique contract ID, so browser and desktop

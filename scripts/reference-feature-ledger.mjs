@@ -36,6 +36,7 @@ const DELIVERY_STATUSES = new Set([
   "reference_only",
   "not_applicable",
 ]);
+const NON_PRODUCT_DELIVERY_STATUSES = new Set(["reference_only", "not_applicable"]);
 
 function tableCells(line) {
   return line
@@ -170,6 +171,25 @@ export function validateFeatureLedger(ledger) {
   return errors;
 }
 
+export function assertFeatureDeliveryComplete(ledger) {
+  const validationErrors = validateFeatureLedger(ledger);
+  if (validationErrors.length > 0) {
+    throw new Error(`기능 ledger validation failed:\n${validationErrors.join("\n")}`);
+  }
+  const incomplete = ledger.features.filter(
+    (feature) =>
+      !NON_PRODUCT_DELIVERY_STATUSES.has(feature.deliveryStatus)
+      && feature.deliveryStatus !== "implemented",
+  );
+  if (incomplete.length > 0) {
+    throw new Error(
+      `출하 동등성 미완료 (${incomplete.length}개):\n${incomplete
+        .map((feature) => `${feature.contractId}: ${feature.deliveryStatus}`)
+        .join("\n")}`,
+    );
+  }
+}
+
 function parseArguments(argv) {
   const values = {
     source: DEFAULT_SOURCE,
@@ -178,11 +198,16 @@ function parseArguments(argv) {
     portMap: DEFAULT_PORT_MAP,
     sourceRevision: DEFAULT_REVISION,
     check: false,
+    requireComplete: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === "--check") {
       values.check = true;
+      continue;
+    }
+    if (flag === "--require-complete") {
+      values.requireComplete = true;
       continue;
     }
     if (
@@ -243,6 +268,7 @@ export async function writeFeatureLedger({
   portMap = DEFAULT_PORT_MAP,
   sourceRevision,
   check = false,
+  requireComplete = false,
 }) {
   const markdown = await readFile(source, "utf8");
   const loadedPortMap =
@@ -250,6 +276,7 @@ export async function writeFeatureLedger({
       ? JSON.parse(await readFile(portMap, "utf8"))
       : portMap;
   const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap);
+  if (requireComplete) assertFeatureDeliveryComplete(ledger);
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`;
   const serializedContracts = `${JSON.stringify(contractCatalog(ledger), null, 2)}\n`;
   if (check) {
