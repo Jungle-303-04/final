@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
+import { ProductFloatingActionAvoidance } from "../../shared/ui/ProductFloatingActionAvoidance";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import { Button } from "../../shared/ui/primitives/button";
@@ -145,18 +146,20 @@ export function TimelineSurface({
           </Button>
         </div>
       </div>
-      <TimelineDataBoundary
-        formatDate={formatDate}
-        formatNumber={formatNumber}
-        frame={timeline.frame}
-        grouping={url.state.grouping}
-        onRetry={timeline.retry}
-        onSelectedEventKeyChange={url.setSelectedEventKey}
-        selectedEventKey={url.state.selectedEventKey}
-        sort={url.state.sort}
-        t={t}
-        viewMode={url.state.viewMode}
-      />
+      <ProductFloatingActionAvoidance>
+        <TimelineDataBoundary
+          formatDate={formatDate}
+          formatNumber={formatNumber}
+          frame={timeline.frame}
+          grouping={url.state.grouping}
+          onRetry={timeline.retry}
+          onSelectedEventKeyChange={url.setSelectedEventKey}
+          selectedEventKey={url.state.selectedEventKey}
+          sort={url.state.sort}
+          t={t}
+          viewMode={url.state.viewMode}
+        />
+      </ProductFloatingActionAvoidance>
     </ProductPageFrame>
   );
 }

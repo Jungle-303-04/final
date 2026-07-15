@@ -50,6 +50,8 @@ describe("product theme token contract", () => {
     expect(lightTokens.get("--product-floating-action-inline-inset")).toBe("1.5rem");
     expect(lightTokens.get("--product-floating-action-block-end"))
       .toContain("env(safe-area-inset-bottom, 0px)");
+    expect(lightTokens.get("--product-floating-action-inline-clearance"))
+      .toContain("var(--product-floating-action-size)");
     expect(lightTokens.get("--product-floating-action-clearance"))
       .toContain("var(--product-floating-action-size)");
     expect(lightTokens.get("--product-floating-action-clearance"))

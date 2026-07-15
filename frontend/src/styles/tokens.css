@@ -60,6 +60,7 @@
   --product-floating-action-size: 3.5rem;
   --product-floating-action-inline-inset: 1.5rem;
   --product-floating-action-block-end: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  --product-floating-action-inline-clearance: calc(var(--product-floating-action-size) + 0.5rem);
   --product-floating-action-clearance: calc(
     var(--product-floating-action-size) + var(--product-floating-action-block-end)
   );
