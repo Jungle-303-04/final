@@ -19,40 +19,83 @@ test('원본의 모든 파일을 결정적인 이식 상태와 검증 대상으�
   )
 
   assert.deepEqual(
-    rows.map(({ path, disposition, target, verification }) => ({ path, disposition, target, verification })),
+    rows.map(({ path, language, purpose, disposition, target, verification }) => ({
+      path,
+      language,
+      purpose,
+      disposition,
+      target,
+      verification,
+    })),
     [
       {
         path: 'README.md',
+        language: 'markdown',
+        purpose: 'build/docs-only',
         disposition: 'build/docs-only',
         target: 'docs/migration',
         verification: 'scripts/reference-ledger.test.mjs',
       },
       {
         path: 'cmd/desktop/main.go',
+        language: 'go',
+        purpose: 'desktop-port',
         disposition: 'desktop-port',
         target: 'desktop',
         verification: 'desktop/src-tauri/tests/reference_parity.rs',
       },
       {
         path: 'examples/demo.yaml',
+        language: 'yaml',
+        purpose: 'frozen',
         disposition: 'frozen',
         target: null,
         verification: 'scripts/reference-ledger.test.mjs',
       },
       {
         path: 'internal/server/routes.go',
+        language: 'go',
+        purpose: 'python-port',
         disposition: 'python-port',
         target: 'src',
         verification: 'tests/contracts/test_reference_parity.py',
       },
       {
         path: 'web/src/App.tsx',
+        language: 'tsx',
+        purpose: 'frontend-port',
         disposition: 'frontend-port',
         target: 'frontend/src',
         verification: 'frontend/src/reference/referenceParity.test.ts',
       },
     ],
   )
+})
+
+test('ledger는 원격 출처와 파일별 언어·용도를 누락 없이 요구한다', () => {
+  const errors = validateLedger({
+    schemaVersion: 2,
+    sourceRevision: REVISION,
+    sourceRepository: '',
+    files: [
+      {
+        path: 'web/src/App.tsx',
+        size: 1,
+        sha256: HASH,
+        language: '',
+        purpose: '',
+        disposition: 'frontend-port',
+        target: 'frontend/src',
+        verification: 'frontend/src/reference/referenceParity.test.ts',
+      },
+    ],
+  })
+
+  assert.deepEqual(errors, [
+    'sourceRepository must be an HTTPS URL',
+    'web/src/App.tsx: language is required',
+    'web/src/App.tsx: purpose is required',
+  ])
 })
 
 test('누락된 해시와 이식 검증 대상을 ledger 오류로 보고한다', () => {
