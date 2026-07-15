@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Annotated, Any, cast
 
@@ -87,6 +88,7 @@ RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
 CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
+OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
 
 router = APIRouter()
 __all__ = ["debug_query_plan", "router"]
@@ -636,7 +638,21 @@ async def command_events(
             if initial and initial[-1].kind in {"completed", "failed"}:
                 return
             while True:
-                live = await subscription.next()
+                try:
+                    live = await asyncio.wait_for(
+                        subscription.next(), timeout=OPERATION_EVENT_REPLAY_POLL_SECONDS
+                    )
+                except TimeoutError:
+                    # Redis is only a low-latency wake-up. A failed listener or
+                    # cross-replica publish is repaired from PostgreSQL without
+                    # asking the browser to poll command status.
+                    replayed = await replay(delivered)
+                    async for item in emit(replayed):
+                        yield item
+                    if replayed and replayed[-1].kind in {"completed", "failed"}:
+                        return
+                    yield ": keep-alive\n\n"
+                    continue
                 if live.sequence <= delivered:
                     continue
                 if live.sequence != delivered + 1:
