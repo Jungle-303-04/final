@@ -53,9 +53,10 @@ describe("BottomDock operation center P2", () => {
     reopenAction.focus();
     await user.keyboard("{Enter}");
 
-    expect(screen.getByRole("region", {
+    const operationCenter = screen.getByRole("region", {
       name: language === "ko-KR" ? "작업 센터" : "Operation center",
-    })).toBeTruthy();
+    });
+    await waitFor(() => expect(document.activeElement).toBe(operationCenter));
     store.dispose();
   });
 });
