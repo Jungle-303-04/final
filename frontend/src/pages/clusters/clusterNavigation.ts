@@ -1,3 +1,4 @@
+import { routeDefinitionForSurface } from "../../app/productRoutes";
 import { serializeProductFilterUrl } from "../../features/filters/filterUrl";
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
 
@@ -9,5 +10,5 @@ export function clusterResourcesHref(
     ...state,
     common: { ...state.common, clusters: [clusterId] },
   };
-  return `/resources${serializeProductFilterUrl(next)}`;
+  return `${routeDefinitionForSurface("resources").path}${serializeProductFilterUrl(next)}`;
 }

@@ -9,6 +9,7 @@ import { alertsEn } from "./catalogs/en/alerts";
 
 export const en = {
   "product.name": "Opsia",
+  "shell.brand.landing": "Go to {route}",
   "common.action.back": "Back",
   "common.action.cancel": "Cancel",
   "common.action.clear": "Clear",
@@ -181,6 +182,9 @@ export const en = {
   "home.action.reconnect": "Reconnect",
   "home.action.reload": "Reload",
   "home.cluster.available": "Available clusters",
+  "home.cluster.grid.aria": "Cluster resource explorer",
+  "home.cluster.grid.title": "Explore resources by cluster",
+  "home.cluster.grid.description": "Choose a cluster to explore its resources.",
   "home.cluster.label": "Cluster",
   "home.cluster.select": "Select cluster",
   "home.cluster.unknown.description": "The URL scope {cluster} is not in the current result. Another cluster was not selected automatically. Choose an accessible cluster above.",

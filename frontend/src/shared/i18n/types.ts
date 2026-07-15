@@ -16,6 +16,7 @@ export type SupportedLocale = "en" | "ko";
  */
 type CoreMessageKey =
   | "product.name"
+  | "shell.brand.landing"
   | "common.action.back"
   | "common.action.cancel"
   | "common.action.clear"
@@ -144,6 +145,9 @@ type CoreMessageKey =
   | "auth.session.retry"
   | "home.cluster.label"
   | "home.cluster.available"
+  | "home.cluster.grid.aria"
+  | "home.cluster.grid.title"
+  | "home.cluster.grid.description"
   | "home.cluster.select"
   | "home.cluster.unknown.description"
   | "home.cluster.unknown.title"
