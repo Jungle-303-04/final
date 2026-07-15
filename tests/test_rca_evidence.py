@@ -416,7 +416,7 @@ def test_crashloop_flow_auto_selects_restart_and_queues_command() -> None:
     assert auto_command.policy_decision_ref is None
     assert auto_command.actor["auto_selected"] is True
 
-    queue_db = SpyDb()
+    queue_db = SpyDb(queue_agent_command=True)
     command_outs = run_handler(
         command_worker.on_command_requested,
         auto_command,
