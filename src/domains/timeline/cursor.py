@@ -63,9 +63,23 @@ class TimelineReplayCursorCodec:
 
 
 def timeline_query_fingerprint(query: TimelineQuery) -> str:
-    """Canonical query identity used by the shared user/scope-bound cursor codec."""
+    """Canonical query identity independent from transient collection freshness."""
+    payload = {
+        "scopes": [
+            {
+                "workspace_id": scope.workspace_id,
+                "cluster_id": scope.cluster_id,
+                "namespaces": scope.namespaces,
+            }
+            for scope in query.scopes
+        ],
+        "window": query.window.model_dump(mode="json"),
+        "filters": query.filters.model_dump(mode="json"),
+        "grouping": query.grouping,
+        "sort": query.sort,
+    }
     encoded = json.dumps(
-        query.model_dump(mode="json"),
+        payload,
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,

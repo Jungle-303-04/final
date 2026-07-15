@@ -25,7 +25,7 @@ from domains.timeline.repository import (
     _timeline_events_statement,
     replay_result,
 )
-from packages.contracts.parity import ClusterScope, ResourceRef
+from packages.contracts.parity import ClusterScope, Freshness, ResourceRef
 from packages.contracts.timeline import (
     TimelineEvent,
     TimelineInventoryLocatorSubject,
@@ -39,7 +39,7 @@ def _query(
     *,
     workspace_id: str = "workspace-a",
     cluster_id: str = "cluster-a",
-    freshness: str = "live",
+    freshness: Freshness = "live",
     from_ms: int = 1_000,
     to_ms: int = 2_000,
 ) -> TimelineQuery:
