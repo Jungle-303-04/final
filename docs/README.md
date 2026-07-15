@@ -196,6 +196,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [oss/SECURITY](oss/SECURITY.md)
 - [oss/publication-checklist](oss/publication-checklist.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
+- [pod-terminal](pod-terminal.md)
 - [production-readiness](production-readiness.md)
 - [release-flow-production-readiness](release-flow-production-readiness.md)
 - [remediation-plan-2026-07-11](remediation-plan-2026-07-11.md)
