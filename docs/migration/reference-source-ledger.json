@@ -4289,40 +4289,40 @@
       "size": 2643,
       "sha256": "1a4f061a2e574a0409a2c316b5961499e797d2b02a7814f99b54dfda9c07d141",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/desktop_open_url.go",
       "size": 1640,
       "sha256": "8bb28afc7c5e575f982f7bc2c81da508bd9bbd9f2660f20647adfcde9ad43cec",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/desktop_save_file.go",
       "size": 2698,
       "sha256": "fa6d73b8bdddce72cc327f3dec16745d40306033842dee30054cf626278226b1",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/desktop_update.go",
       "size": 2269,
       "sha256": "96f4bb9340b6af8a667d040a3789859221126e8c7e78caa63be0b1bd20174194",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/diagnostics.go",
@@ -4439,30 +4439,30 @@
       "size": 5782,
       "sha256": "56a035cdb7302a67ffca67652911f4cc562a58a39e06ad9c24b6a188e6668436",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/localterm_unix.go",
       "size": 1287,
       "sha256": "33ce83afb4241eb66a18db14af8003e5404032a0ce0b5be0f18e3347c6cf2ea4",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/localterm_windows.go",
       "size": 5841,
       "sha256": "e80a17ddf848b802a00296898a1ca03e8e952ded2b2c446f71ed9bb11c390785",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/server/logs.go",
@@ -5139,60 +5139,60 @@
       "size": 4322,
       "sha256": "11dbefd240bbbf6a52b5980a783bc133f2338805a9375656c0745748b08ed24d",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/updater/apply_linux.go",
       "size": 4928,
       "sha256": "2c31bdde86fb21ec22723ab4073f459f99d5b77a3fcebe358dfea86a9566c67c",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/updater/apply_windows.go",
       "size": 3079,
       "sha256": "109969fd7e224b2d48ca6d0d34dd2a636abee1a82c6b17ebd97d3eb66e44e969",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/updater/extract.go",
       "size": 923,
       "sha256": "f1a88aa00ade2a83e83d45d4e09dac70ddc841678e956b7aaa2164b75a11a191",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/updater/extract_zip.go",
       "size": 1178,
       "sha256": "643851ded508b3dc9938fed1aaae450c5ecae523ec7a0fed10e7d862726d3772",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/updater/updater.go",
       "size": 4812,
       "sha256": "e2d1af7f43e51408188f1eedfc3af62d7129dbfc64e9aab08a3c749a2fa7ad64",
       "language": "go",
-      "purpose": "python-port",
-      "disposition": "python-port",
-      "target": "src",
-      "verification": "tests/contracts/test_reference_parity.py"
+      "purpose": "desktop-port",
+      "disposition": "desktop-port",
+      "target": "desktop",
+      "verification": "desktop/src-tauri/tests/reference_parity.rs"
     },
     {
       "path": "internal/version/birthtime_darwin.go",

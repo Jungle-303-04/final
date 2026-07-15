@@ -10,6 +10,9 @@ test('원본의 모든 파일을 결정적인 이식 상태와 검증 대상으�
   const rows = buildLedgerRows(
     [
       { path: 'internal/server/routes.go', size: 12, sha256: HASH },
+      { path: 'internal/server/localterm_unix.go', size: 13, sha256: HASH },
+      { path: 'internal/server/desktop_save_file.go', size: 14, sha256: HASH },
+      { path: 'internal/updater/updater.go', size: 15, sha256: HASH },
       { path: 'web/src/App.tsx', size: 34, sha256: HASH },
       { path: 'cmd/desktop/main.go', size: 56, sha256: HASH },
       { path: 'README.md', size: 78, sha256: HASH },
@@ -53,12 +56,36 @@ test('원본의 모든 파일을 결정적인 이식 상태와 검증 대상으�
         verification: 'scripts/reference-ledger.test.mjs',
       },
       {
+        path: 'internal/server/desktop_save_file.go',
+        language: 'go',
+        purpose: 'desktop-port',
+        disposition: 'desktop-port',
+        target: 'desktop',
+        verification: 'desktop/src-tauri/tests/reference_parity.rs',
+      },
+      {
+        path: 'internal/server/localterm_unix.go',
+        language: 'go',
+        purpose: 'desktop-port',
+        disposition: 'desktop-port',
+        target: 'desktop',
+        verification: 'desktop/src-tauri/tests/reference_parity.rs',
+      },
+      {
         path: 'internal/server/routes.go',
         language: 'go',
         purpose: 'python-port',
         disposition: 'python-port',
         target: 'src',
         verification: 'tests/contracts/test_reference_parity.py',
+      },
+      {
+        path: 'internal/updater/updater.go',
+        language: 'go',
+        purpose: 'desktop-port',
+        disposition: 'desktop-port',
+        target: 'desktop',
+        verification: 'desktop/src-tauri/tests/reference_parity.rs',
       },
       {
         path: 'web/src/App.tsx',

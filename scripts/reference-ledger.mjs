@@ -74,6 +74,20 @@ export function classifyReferencePath(relativePath) {
   const value = normalizedPath(relativePath)
   if (value === 'examples' || value.startsWith('examples/')) return 'frozen'
   if (value === 'cmd/desktop' || value.startsWith('cmd/desktop/')) return 'desktop-port'
+  // Desktop-native code stays inside the local Tauri process.  In particular,
+  // these files must never be read as authorization for the Python gateway to
+  // spawn a local shell, inherit a kubeconfig, write a workstation file, or
+  // replace a desktop binary.
+  if (
+    value === 'internal/updater' ||
+    value.startsWith('internal/updater/') ||
+    value.startsWith('internal/server/desktop_') ||
+    value === 'internal/server/localterm.go' ||
+    value === 'internal/server/localterm_unix.go' ||
+    value === 'internal/server/localterm_windows.go'
+  ) {
+    return 'desktop-port'
+  }
   if (value === 'web' || value.startsWith('web/') || value === 'packages/k8s-ui' || value.startsWith('packages/k8s-ui/')) {
     return 'frontend-port'
   }
