@@ -7,9 +7,10 @@ Both transports therefore expose the exact same ordered records.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 
-from packages.contracts.timeline import TimelineStreamFrame
+from packages.contracts.timeline import TimelineEvent, TimelineStreamFrame
 
 
 class TimelineStreamProtocolError(ValueError):
@@ -35,7 +36,24 @@ def _encoded_frames(frames: Iterable[TimelineStreamFrame]) -> tuple[str, ...]:
 
 
 def _encode(frame: TimelineStreamFrame) -> str:
-    return frame.model_dump_json(exclude_defaults=True, exclude_none=True)
+    # A discriminated subject's ``kind`` can equal its model default.  Omitting
+    # defaults would remove that discriminator and make the NDJSON frame
+    # impossible for a strict browser/desktop decoder to validate.
+    payload = frame.model_dump(mode="json", exclude_defaults=True, exclude_none=True)
+    if frame.event is not None:
+        payload["event"] = _event_payload(frame.event)
+    if frame.events:
+        payload["events"] = [_event_payload(event) for event in frame.events]
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _event_payload(event: TimelineEvent) -> dict[str, object]:
+    payload = event.model_dump(mode="json", exclude_defaults=True, exclude_none=True)
+    subject = payload.get("subject")
+    if not isinstance(subject, dict):
+        raise TimelineStreamProtocolError("timeline event subject is invalid")
+    subject["kind"] = event.subject.kind
+    return payload
 
 
 def _validated(frames: Iterable[TimelineStreamFrame]) -> tuple[TimelineStreamFrame, ...]:

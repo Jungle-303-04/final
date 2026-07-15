@@ -54,6 +54,7 @@ from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
+from domains.timeline.router import router as timeline_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -336,6 +337,7 @@ class ApiGateway:
             manifest_editor_router
         )  # exact resource -> Git source -> approved Safe PR
         app.include_router(changes_router)  # Resources 시간 스크럽용 실측 변경·수집 gap
+        app.include_router(timeline_router)  # retained Timeline snapshot (source-specific RBAC)
         app.include_router(issue_filter_router)  # workspace Issues 필터·facet 서버 집계
         app.include_router(log_stream_router)  # bounded, redacted pod/workload log SSE
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)

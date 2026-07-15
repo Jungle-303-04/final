@@ -72,6 +72,13 @@ def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
     ]
 
 
+def test_serialized_timeline_events_keep_their_discriminated_subject_kind() -> None:
+    encoded = encode_ndjson((_snapshot(), TimelineStreamFrame(kind="end", cursor=_cursor(4))))
+    snapshot = TimelineStreamFrame.model_validate_json(encoded.splitlines()[0])
+
+    assert snapshot.events[0].subject.kind == "resource"
+
+
 @pytest.mark.parametrize(
     ("frames", "message"),
     [
