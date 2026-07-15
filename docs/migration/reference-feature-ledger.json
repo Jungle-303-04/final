@@ -23,7 +23,13 @@
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-002",
@@ -45,7 +51,13 @@
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-003",
@@ -67,7 +79,13 @@
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-004",
@@ -89,7 +107,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-005",
@@ -111,7 +135,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-006",
@@ -133,7 +163,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-007",
@@ -155,7 +191,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-008",
@@ -179,7 +221,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-009",
@@ -203,7 +251,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-010",
@@ -227,7 +281,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-011",
@@ -249,7 +309,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-012",
@@ -271,7 +337,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-013",
@@ -293,7 +365,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-014",
@@ -316,7 +394,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-015",
@@ -339,7 +423,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-016",
@@ -362,7 +452,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-017",
@@ -385,7 +481,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-018",
@@ -408,7 +510,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-019",
@@ -431,7 +539,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-020",
@@ -454,7 +568,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-021",
@@ -478,7 +598,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-022",
@@ -502,7 +628,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-023",
@@ -526,7 +658,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-024",
@@ -550,7 +688,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-025",
@@ -574,7 +718,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-026",
@@ -598,7 +748,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-027",
@@ -622,7 +778,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-028",
@@ -646,7 +808,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-029",
@@ -670,7 +838,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-030",
@@ -694,7 +868,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-031",
@@ -718,7 +898,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-032",
@@ -742,7 +928,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-033",
@@ -766,7 +958,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-034",
@@ -792,7 +990,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-035",
@@ -816,7 +1020,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-036",
@@ -840,7 +1050,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-037",
@@ -864,7 +1080,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-038",
@@ -887,7 +1109,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-039",
@@ -910,7 +1138,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-040",
@@ -933,7 +1167,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-041",
@@ -956,7 +1196,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-042",
@@ -979,7 +1225,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-043",
@@ -1001,7 +1253,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-044",
@@ -1023,7 +1281,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-045",
@@ -1045,7 +1309,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-046",
@@ -1067,7 +1337,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-047",
@@ -1089,7 +1365,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-048",
@@ -1111,7 +1393,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-049",
@@ -1133,7 +1421,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-050",
@@ -1155,7 +1449,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-051",
@@ -1177,7 +1477,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-052",
@@ -1199,7 +1505,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-053",
@@ -1221,7 +1533,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-054",
@@ -1243,7 +1561,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-055",
@@ -1265,7 +1589,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-056",
@@ -1287,7 +1617,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-057",
@@ -1309,7 +1645,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-058",
@@ -1331,7 +1673,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-059",
@@ -1353,7 +1701,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-060",
@@ -1375,7 +1729,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-061",
@@ -1397,7 +1757,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-062",
@@ -1419,7 +1785,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-063",
@@ -1441,7 +1813,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-064",
@@ -1463,7 +1841,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-065",
@@ -1485,7 +1869,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-066",
@@ -1507,7 +1897,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-067",
@@ -1529,7 +1925,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-068",
@@ -1551,7 +1953,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-069",
@@ -1573,7 +1981,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-070",
@@ -1595,7 +2009,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-071",
@@ -1617,7 +2037,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-072",
@@ -1639,7 +2065,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-073",
@@ -1661,7 +2093,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-074",
@@ -1683,7 +2121,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-075",
@@ -1705,7 +2149,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-076",
@@ -1727,7 +2177,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-077",
@@ -1749,7 +2205,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-078",
@@ -1770,7 +2232,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-079",
@@ -1791,7 +2259,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-080",
@@ -1812,7 +2286,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-081",
@@ -1833,7 +2313,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-082",
@@ -1854,7 +2340,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-083",
@@ -1875,7 +2367,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-084",
@@ -1896,7 +2394,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-085",
@@ -1917,7 +2421,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-086",
@@ -1938,7 +2448,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-087",
@@ -1959,7 +2475,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-088",
@@ -1980,7 +2502,13 @@
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_feature_catalog.py"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-089",
@@ -2006,7 +2534,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-090",
@@ -2032,7 +2566,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-091",
@@ -2058,7 +2598,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-092",
@@ -2084,7 +2630,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-093",
@@ -2110,7 +2662,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-094",
@@ -2136,7 +2694,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-095",
@@ -2162,7 +2726,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-096",
@@ -2188,7 +2758,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-097",
@@ -2214,7 +2790,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-098",
@@ -2240,7 +2822,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-099",
@@ -2266,7 +2854,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-100",
@@ -2292,7 +2886,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-101",
@@ -2318,7 +2918,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-102",
@@ -2344,7 +2950,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-103",
@@ -2370,7 +2982,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-104",
@@ -2396,7 +3014,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-105",
@@ -2422,7 +3046,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-106",
@@ -2448,7 +3078,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-107",
@@ -2474,7 +3110,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-108",
@@ -2501,7 +3143,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-109",
@@ -2527,7 +3175,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-110",
@@ -2554,7 +3208,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-111",
@@ -2580,7 +3240,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-112",
@@ -2608,7 +3274,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-113",
@@ -2634,7 +3306,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-114",
@@ -2660,7 +3338,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-115",
@@ -2686,7 +3370,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-116",
@@ -2712,7 +3402,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-117",
@@ -2738,7 +3434,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-118",
@@ -2765,7 +3467,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-119",
@@ -2791,7 +3499,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-120",
@@ -2817,7 +3531,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-121",
@@ -2843,7 +3563,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-122",
@@ -2869,7 +3595,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-123",
@@ -2895,7 +3627,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-124",
@@ -2921,7 +3659,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-125",
@@ -2948,7 +3692,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-126",
@@ -2974,7 +3724,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-127",
@@ -3000,7 +3756,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-128",
@@ -3026,7 +3788,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-129",
@@ -3052,7 +3820,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-130",
@@ -3078,7 +3852,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-131",
@@ -3104,7 +3884,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-132",
@@ -3130,7 +3916,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-133",
@@ -3156,7 +3948,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-134",
@@ -3182,7 +3980,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-135",
@@ -3208,7 +4012,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-136",
@@ -3234,7 +4044,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-137",
@@ -3260,7 +4076,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-138",
@@ -3286,7 +4108,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-139",
@@ -3312,7 +4140,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-140",
@@ -3338,7 +4172,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-141",
@@ -3364,7 +4204,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-142",
@@ -3390,7 +4236,13 @@
       "verification": [
         "tests/test_resource_capabilities_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-143",
@@ -3416,7 +4268,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-144",
@@ -3442,7 +4300,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-145",
@@ -3468,7 +4332,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-146",
@@ -3494,7 +4364,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-147",
@@ -3520,7 +4396,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-148",
@@ -3546,7 +4428,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-149",
@@ -3572,7 +4460,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-150",
@@ -3598,7 +4492,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-151",
@@ -3630,7 +4530,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-152",
@@ -3656,7 +4562,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-153",
@@ -3682,7 +4594,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-154",
@@ -3708,7 +4626,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-155",
@@ -3734,7 +4658,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-156",
@@ -3763,7 +4693,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": null
+      }
     },
     {
       "id": "reference-feature-157",
@@ -3794,7 +4730,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": null
+      }
     },
     {
       "id": "reference-feature-158",
@@ -3820,7 +4762,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": null
+      }
     },
     {
       "id": "reference-feature-159",
@@ -3846,7 +4794,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": null
+      }
     },
     {
       "id": "reference-feature-160",
@@ -3872,7 +4826,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-161",
@@ -3898,7 +4858,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-162",
@@ -3925,7 +4891,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-163",
@@ -3951,7 +4923,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/log-stream.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-164",
@@ -3978,7 +4956,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-165",
@@ -4004,7 +4988,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-166",
@@ -4030,7 +5020,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-167",
@@ -4056,7 +5052,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-168",
@@ -4082,7 +5084,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-169",
@@ -4108,7 +5116,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-170",
@@ -4134,7 +5148,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-171",
@@ -4160,7 +5180,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-172",
@@ -4187,7 +5213,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-173",
@@ -4214,7 +5246,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-174",
@@ -4240,7 +5278,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-175",
@@ -4266,7 +5310,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-176",
@@ -4293,7 +5343,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-177",
@@ -4319,7 +5375,13 @@
       "verification": [
         "tests/test_command_router.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-178",
@@ -4345,7 +5407,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-179",
@@ -4371,7 +5439,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-180",
@@ -4397,7 +5471,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-181",
@@ -4424,7 +5504,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-182",
@@ -4450,7 +5536,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-183",
@@ -4476,7 +5568,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-184",
@@ -4502,7 +5600,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-185",
@@ -4528,7 +5632,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-186",
@@ -4554,7 +5664,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-187",
@@ -4581,7 +5697,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-188",
@@ -4609,7 +5731,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-189",
@@ -4635,7 +5763,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-190",
@@ -4661,7 +5795,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-191",
@@ -4687,7 +5827,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-192",
@@ -4713,7 +5859,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-193",
@@ -4739,7 +5891,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-194",
@@ -4765,7 +5923,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-195",
@@ -4792,7 +5956,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-196",
@@ -4818,7 +5988,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-197",
@@ -4845,7 +6021,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-198",
@@ -4871,7 +6053,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-199",
@@ -4898,7 +6086,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-200",
@@ -4924,7 +6118,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-201",
@@ -4950,7 +6150,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-202",
@@ -4976,7 +6182,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-203",
@@ -5002,7 +6214,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-204",
@@ -5028,7 +6246,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-205",
@@ -5054,7 +6278,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-206",
@@ -5082,7 +6312,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-207",
@@ -5110,7 +6346,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-208",
@@ -5136,7 +6378,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-209",
@@ -5162,7 +6410,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-210",
@@ -5188,7 +6442,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-211",
@@ -5215,7 +6475,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-212",
@@ -5241,7 +6507,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-213",
@@ -5267,7 +6539,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-214",
@@ -5293,7 +6571,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-215",
@@ -5319,7 +6603,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-216",
@@ -5346,7 +6636,13 @@
       "verification": [
         "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-217",
@@ -5372,7 +6668,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-218",
@@ -5398,7 +6700,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-219",
@@ -5426,7 +6734,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-220",
@@ -5452,7 +6766,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-221",
@@ -5478,7 +6798,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-222",
@@ -5504,7 +6830,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-223",
@@ -5530,7 +6862,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-224",
@@ -5556,7 +6894,13 @@
       "verification": [
         "tests/test_operation_event_hub.py",
         "frontend/src/api/operation-events.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": null
+      }
     },
     {
       "id": "reference-feature-225",
@@ -5582,7 +6926,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-226",
@@ -5606,7 +6956,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-227",
@@ -5629,7 +6985,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": null
+      }
     },
     {
       "id": "reference-feature-228",
@@ -5653,7 +7015,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-229",
@@ -5676,7 +7044,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-230",
@@ -5700,7 +7074,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-231",
@@ -5724,7 +7104,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-232",
@@ -5749,7 +7135,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-233",
@@ -5773,7 +7165,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-234",
@@ -5796,7 +7194,13 @@
       "verification": [
         "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-235",
@@ -5819,7 +7223,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-236",
@@ -5842,7 +7252,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-237",
@@ -5865,7 +7281,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-238",
@@ -5888,7 +7310,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-239",
@@ -5911,7 +7339,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     },
     {
       "id": "reference-feature-240",
@@ -5934,7 +7368,13 @@
       "verification": [
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
-      ]
+      ],
+      "coverage": {
+        "backend": null,
+        "frontend": null,
+        "desktop": null,
+        "realtime": "not_required"
+      }
     }
   ]
 }

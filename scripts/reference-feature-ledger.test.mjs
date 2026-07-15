@@ -222,6 +222,50 @@ test("출하 게이트는 구현 상태여도 행별 backend/frontend 증거 없
   );
 });
 
+test("행별 증거 override가 있는 구현 기능만 출하 게이트를 통과한다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 단축키 |",
+    ].join("\n"),
+    REVISION,
+    {
+      ...PORT_MAP,
+      features: {
+        "reference.feature.001": {
+          deliveryStatus: "implemented",
+          coverage: {
+            backend: {
+              route: "/api/feature-contracts",
+              handler: "domains.parity.router.list_feature_contracts",
+              test: "tests/test_feature_contract_router.py",
+            },
+            frontend: {
+              consumer: "frontend/src/shared/parity/referenceParity.ts",
+              test: "frontend/src/shared/parity/referenceParity.test.ts",
+            },
+            desktop: {
+              bridge: "desktop",
+              test: "desktop/tests/catalog.rs",
+            },
+          },
+        },
+      },
+      sections: {
+        ...PORT_MAP.sections,
+        "전역 셸": {
+          ...PORT_MAP.sections["전역 셸"],
+          deliveryStatus: "implemented",
+        },
+      },
+    },
+  );
+
+  assert.doesNotThrow(() => assertFeatureDeliveryComplete(ledger));
+});
+
 test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
   const errors = validateFeatureLedger({
     schemaVersion: 1,
@@ -242,6 +286,12 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
         frontendContract: "",
         desktopContract: null,
         verification: [],
+        coverage: {
+          backend: null,
+          frontend: null,
+          desktop: null,
+          realtime: "not_required",
+        },
       },
       {
         id: "reference-feature-001",
@@ -257,6 +307,12 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
         frontendContract: "frontend/src/shared/parity/referenceParity.ts",
         desktopContract: null,
         verification: ["scripts/reference-feature-ledger.test.mjs"],
+        coverage: {
+          backend: null,
+          frontend: null,
+          desktop: null,
+          realtime: "not_required",
+        },
       },
     ],
   });
@@ -322,6 +378,12 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
           frontendContract: "frontend/src/shared/streaming",
           desktopContract: null,
           verification: ["tests/test_operation_event_hub.py"],
+          coverage: {
+            backend: null,
+            frontend: null,
+            desktop: null,
+            realtime: null,
+          },
         },
       ],
     });
