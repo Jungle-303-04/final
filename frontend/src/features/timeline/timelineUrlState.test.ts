@@ -71,7 +71,7 @@ describe("Timeline URL state", () => {
     expect(parseTimelineUrlState(
       new URLSearchParams("from=-1&to=bad&window=-100"),
       retainedOptions,
-    ).mode).toEqual({ kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS, all: false });
+    ).mode).toEqual({ kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS });
   });
 
   it("does not apply retained time parameters to a local source", () => {
@@ -86,7 +86,7 @@ describe("Timeline URL state", () => {
       localOptions,
     );
 
-    expect(state.mode).toEqual({ kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS, all: false });
+    expect(state.mode).toEqual({ kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS });
     expect(written.get("foreign")).toBe("keep");
     expect(written.get("from")).toBeNull();
     expect(written.get("to")).toBeNull();
