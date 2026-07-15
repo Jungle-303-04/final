@@ -168,7 +168,7 @@ function timelineQuery(overrides: Partial<TimelineQuery> = {}): TimelineQuery {
       search: "",
       grouping: "app",
       sort: "importance",
-      selectedEventId: null,
+      selectedEventKey: null,
     },
     ...overrides,
   };

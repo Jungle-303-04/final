@@ -195,6 +195,116 @@ describe("TimelineSurface", () => {
     expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
   });
 
+  it("opens a deep-linked real event drawer, supports Arrow navigation, and restores focus after Escape", async () => {
+    const user = userEvent.setup();
+    const first = event({
+      id: "event-shared",
+      nativeId: "native-first",
+      sourceKey: "inventory:event-first",
+      title: "Checkout deployment changed",
+    });
+    const second = event({
+      id: "event-shared",
+      nativeId: "native-second",
+      occurredAt: "2026-07-15T00:01:00Z",
+      sourceKey: "inventory:event-second",
+      title: "Checkout deployment recovered",
+    });
+    const { router } = renderTimeline(
+      timelinePort({ readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [first, second] })) }),
+      "/timeline?foreign=keep&view=list&from=1000&to=2000&grouping=owner&sort=name&q=checkout&event=inventory%3Aevent-first",
+      "en-US",
+    );
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("inventory:event-first")).toBeTruthy();
+    expect(screen.getByText("native-first")).toBeTruthy();
+    expect([...document.querySelectorAll<HTMLElement>("[data-selected=true]")]
+      .map((control) => control.dataset.eventKey)).toEqual(["inventory:event-first"]);
+
+    await user.keyboard("{ArrowRight}");
+    await waitFor(() => expect(screen.getByText("inventory:event-second")).toBeTruthy());
+    const navigated = new URLSearchParams(router.state.location.search);
+    expect(navigated.get("event")).toBe("inventory:event-second");
+    expect(navigated.get("foreign")).toBe("keep");
+    expect(navigated.get("from")).toBe("1000");
+    expect(navigated.get("to")).toBe("2000");
+    expect(navigated.get("grouping")).toBe("owner");
+    expect(navigated.get("sort")).toBe("name");
+    expect(navigated.get("q")).toBe("checkout");
+    expect([...document.querySelectorAll<HTMLElement>("[data-selected=true]")]
+      .map((control) => control.dataset.eventKey)).toEqual(["inventory:event-second"]);
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const selected = screen.getByRole("button", { name: "Checkout deployment recovered" });
+    expect(document.activeElement).toBe(selected);
+
+    await act(async () => {
+      await router.navigate("/timeline?foreign=keep&view=swimlane&from=1000&to=2000&grouping=owner&sort=name&q=checkout&event=inventory%3Aevent-second");
+    });
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("inventory:event-second")).toBeTruthy();
+    expect(document.querySelector("[data-timeline-marker][data-event-key='inventory:event-second']")).not.toBeNull();
+  });
+
+  it("renders a time-positioned swimlane and applies URL grouping and sort without fixture-only view data", async () => {
+    const checkoutOwner = {
+      apiGroup: "apps",
+      version: "v1",
+      kind: "Deployment",
+      namespace: "payments",
+      name: "checkout",
+      uid: "checkout-owner",
+    };
+    const paymentsOwner = { ...checkoutOwner, name: "payments", uid: "payments-owner" };
+    const events = [
+      event({
+        id: "event-z",
+        nativeId: "native-z",
+        occurredAt: "2026-07-15T00:02:00Z",
+        owner: checkoutOwner,
+        sourceKey: "inventory:event-z",
+        title: "Zebra update",
+      }),
+      event({
+        id: "event-a",
+        nativeId: "native-a",
+        occurredAt: "2026-07-15T00:00:00Z",
+        owner: paymentsOwner,
+        sourceKey: "inventory:event-a",
+        title: "Alpha update",
+      }),
+    ];
+    const port = timelinePort({ readTimeline: vi.fn().mockResolvedValue(snapshot({ events })) });
+    const { unmount } = renderTimeline(port, "/timeline?view=list&grouping=owner&sort=name", "en-US");
+
+    await screen.findByText("Alpha update");
+    expect([...document.querySelectorAll<HTMLElement>("[data-timeline-event-control]")]
+      .map((control) => control.dataset.eventId)).toEqual(["event-a", "event-z"]);
+    unmount();
+
+    renderTimeline(port, "/timeline?grouping=owner&sort=name", "en-US");
+    const swimlane = await screen.findByRole("region", { name: "Timeline swimlane" });
+    expect(swimlane.dataset.timelineGrouping).toBe("owner");
+    expect(swimlane.dataset.timelineSort).toBe("name");
+    expect([...swimlane.querySelectorAll<HTMLElement>("[data-timeline-marker]")]
+      .map((marker) => marker.dataset.timelineTime)).toEqual([
+        "2026-07-15T00:00:00Z",
+        "2026-07-15T00:02:00Z",
+      ]);
+    expect(swimlane.querySelectorAll("[data-timeline-lane]")).toHaveLength(2);
+  });
+
+  it.each([320, 768, 1440])("keeps timeline event controls reachable at %ipx", async (width) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    renderTimeline(timelinePort(), "/timeline?view=list", "en-US");
+
+    const control = await screen.findByRole("button", { name: "Deployment checkout changed" });
+    expect(control.className).toContain("motion-reduce:transition-none");
+    expect(control.closest("li")?.className).toContain("min-w-0");
+  });
+
   it.each([
     {
       navigatorLanguage: "en-US",
@@ -257,7 +367,7 @@ function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): T
         search: "",
         grouping: "app" as const,
         sort: "importance" as const,
-        selectedEventId: null,
+        selectedEventKey: null,
       },
     },
     window: { fromMs: 1_000, toMs: 2_000 },
@@ -333,7 +443,7 @@ async function* idleStream(
   yield* [] as TimelineStreamFrame[];
 }
 
-function event(): TimelineEvent {
+function event(overrides: Partial<TimelineEvent> = {}): TimelineEvent {
   const resource = {
     apiGroup: "apps",
     version: "v1",
@@ -357,6 +467,7 @@ function event(): TimelineEvent {
     title: "Deployment checkout changed",
     owner: null,
     metadata: {},
+    ...overrides,
   };
 }
 

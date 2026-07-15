@@ -88,7 +88,7 @@ function timelineQuery(): TimelineQuery {
       search: "",
       grouping: "app",
       sort: "importance",
-      selectedEventId: null,
+      selectedEventKey: null,
     },
   };
 }

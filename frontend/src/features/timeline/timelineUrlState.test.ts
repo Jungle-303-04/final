@@ -18,7 +18,7 @@ describe("Timeline URL state", () => {
   it("parses every source-owned URL value while preserving no legacy filter state", () => {
     const state = parseTimelineUrlState(
       new URLSearchParams(
-        "foreign=keep&view=list&window=all&activity=changes,warnings,invalid&kinds=Pod,Deployment&deleted=0&pinnedOnly=1&q=checkout&grouping=owner&sort=recent&event=event-1&filter=legacy",
+        "foreign=keep&view=list&window=all&activity=changes,warnings,invalid&kinds=Pod,Deployment&deleted=0&pinnedOnly=1&q=checkout&grouping=owner&sort=recent&event=inventory%3Acheckout%3A7&filter=legacy",
       ),
       retainedOptions,
     );
@@ -33,7 +33,7 @@ describe("Timeline URL state", () => {
       kindFilter: ["Pod", "Deployment"],
       grouping: "owner",
       sort: "recent",
-      selectedEventId: "event-1",
+      selectedEventKey: "inventory:checkout:7",
     });
 
     const written = writeTimelineSearchParams(
@@ -53,7 +53,7 @@ describe("Timeline URL state", () => {
     expect(written.get("q")).toBe("checkout");
     expect(written.get("grouping")).toBe("owner");
     expect(written.get("sort")).toBe("recent");
-    expect(written.get("event")).toBe("event-1");
+    expect(written.get("event")).toBe("inventory:checkout:7");
   });
 
   it("normalizes invalid and oversized retained ranges without losing a valid end", () => {

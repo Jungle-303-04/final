@@ -12,6 +12,7 @@ import {
 export interface TimelineUrlStateController {
   state: TimelineUrlState;
   setSearch: (search: string) => void;
+  setSelectedEventKey: (sourceKey: string | null) => void;
   setViewMode: (viewMode: TimelineViewMode) => void;
 }
 
@@ -49,7 +50,11 @@ export function useTimelineUrlState(
   }, [currentSearch, setSearchParams, urlOptions]);
 
   const setSearch = useCallback((search: string) => update({ ...state, search }), [state, update]);
+  const setSelectedEventKey = useCallback(
+    (selectedEventKey: string | null) => update({ ...state, selectedEventKey }),
+    [state, update],
+  );
   const setViewMode = useCallback((viewMode: TimelineViewMode) => update({ ...state, viewMode }), [state, update]);
 
-  return { state, setSearch, setViewMode };
+  return { state, setSearch, setSelectedEventKey, setViewMode };
 }

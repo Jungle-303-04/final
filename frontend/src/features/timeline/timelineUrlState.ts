@@ -54,7 +54,7 @@ export interface TimelineUrlState {
   kindFilter: readonly string[];
   grouping: TimelineGrouping;
   sort: TimelineSort;
-  selectedEventId: string | null;
+  selectedEventKey: string | null;
 }
 
 export const DEFAULT_TIMELINE_URL_STATE: TimelineUrlState = {
@@ -67,7 +67,7 @@ export const DEFAULT_TIMELINE_URL_STATE: TimelineUrlState = {
   kindFilter: [],
   grouping: DEFAULT_GROUPING,
   sort: DEFAULT_SORT,
-  selectedEventId: null,
+  selectedEventKey: null,
 };
 
 export function parseTimelineUrlState(
@@ -85,7 +85,7 @@ export function parseTimelineUrlState(
     kindFilter: parseCsv(searchParams.get("kinds")),
     grouping: parseEnum(searchParams.get("grouping"), GROUPINGS) ?? DEFAULT_GROUPING,
     sort: parseEnum(searchParams.get("sort"), SORTS) ?? DEFAULT_SORT,
-    selectedEventId: nonEmpty(searchParams.get("event")),
+    selectedEventKey: nonEmpty(searchParams.get("event")),
   };
 }
 
@@ -109,7 +109,7 @@ export function writeTimelineSearchParams(
   if (state.search.length > 0) params.set("q", state.search);
   if (state.grouping !== DEFAULT_GROUPING) params.set("grouping", state.grouping);
   if (state.sort !== DEFAULT_SORT) params.set("sort", state.sort);
-  if (state.selectedEventId !== null) params.set("event", state.selectedEventId);
+  if (state.selectedEventKey !== null) params.set("event", state.selectedEventKey);
   return params;
 }
 
