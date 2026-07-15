@@ -23,6 +23,7 @@ from domains.timeline.access import (
     resolve_authorized_timeline_scope,
 )
 from domains.timeline.cursor import TimelineCursorBinding
+from domains.timeline.pins import timeline_pin_membership, visible_timeline_pin_set
 from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import TimelineLedgerReadScope
 from domains.timeline.settings import (
@@ -35,6 +36,14 @@ from packages.contracts.parity import ClusterScope, Freshness
 from packages.contracts.timeline import (
     RealtimePolicy,
     TimelineCapabilityDescriptor,
+    TimelinePinApplicationTarget,
+    TimelinePinMutation,
+    TimelinePinnedApplicationSubject,
+    TimelinePinnedResourceSubject,
+    TimelinePinResourceTarget,
+    TimelinePinSet,
+    TimelinePinTarget,
+    TimelinePinUpsertRequest,
     TimelineQuery,
 )
 
@@ -42,6 +51,8 @@ INVALID_WINDOW_DETAIL = "timeline window exceeds the server read limit"
 INVALID_CONTROL_SELECTION_DETAIL = "timeline control selection is unavailable"
 SCOPE_NOT_FOUND_DETAIL = "timeline scope not found"
 FRESHNESS_UNAVAILABLE_DETAIL = "timeline freshness is unavailable"
+PINS_UNAVAILABLE_DETAIL = "timeline pins are unavailable"
+PIN_TARGET_NOT_FOUND_DETAIL = "timeline pin target not found"
 
 
 @dataclass(frozen=True)
@@ -58,6 +69,7 @@ class TimelineReadResolution:
     cursor_binding: TimelineCursorBinding
     policy: RealtimePolicy
     capabilities: TimelineCapabilityDescriptor
+    pin_set: TimelinePinSet | None = None
 
 
 async def resolve_timeline_capabilities(
@@ -100,11 +112,22 @@ async def resolve_timeline_read(
         application_workflow_ids=authorized.deployment_application_ids,
         gitops_application_ids=authorized.application_ids,
     )
-    evidence_predicate = TimelineEvidencePredicate.from_query(read_scope, requested_query)
+    pin_set = (
+        await read_visible_timeline_pin_set(db, authorized)
+        if requested_query.filters.pinned_only
+        else None
+    )
+    pin_membership = None if pin_set is None else timeline_pin_membership(pin_set)
+    evidence_predicate = TimelineEvidencePredicate.from_query(
+        read_scope,
+        requested_query,
+        pin_membership=pin_membership,
+    )
     binding = TimelineCursorBinding.from_query(
         user_id=authorized.user_id,
         authorization_revision=authorized.authorization_revision,
         query=requested_query,
+        pin_set_revision=None if pin_set is None else pin_set.revision,
     )
     return TimelineReadResolution(
         authorized=authorized,
@@ -113,6 +136,7 @@ async def resolve_timeline_read(
         read_scope=read_scope,
         evidence_predicate=evidence_predicate,
         cursor_binding=binding,
+        pin_set=pin_set,
         policy=timeline_realtime_policy(),
         capabilities=timeline_capability_descriptor(),
     )
@@ -127,6 +151,135 @@ def _validate_control_selection(query: TimelineQuery) -> None:
     """Reject controls that are absent or unavailable in this deployment."""
     if not timeline_control_selection_is_valid(query):
         raise HTTPException(status_code=422, detail=INVALID_CONTROL_SELECTION_DETAIL)
+
+
+async def read_timeline_pins(db: Any, current: Any) -> TimelinePinSet:
+    """Read current-user/workspace pins only, projecting revoked rows away from the response."""
+    authorized = await resolve_authorized_timeline_scope(db, current)
+    return await read_visible_timeline_pin_set(db, authorized)
+
+
+async def read_visible_timeline_pin_set(
+    db: Any,
+    authorized: AuthorizedTimelineScope,
+) -> TimelinePinSet:
+    reader = getattr(db, "read_timeline_pin_set", None)
+    if not callable(reader):
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+    try:
+        pin_set = await asyncio.to_thread(
+            reader,
+            authorized.workspace_id,
+            authorized.user_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL) from exc
+    if not isinstance(pin_set, TimelinePinSet):
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+    return visible_timeline_pin_set(pin_set, authorized)
+
+
+async def put_timeline_pin(
+    db: Any,
+    current: Any,
+    request: TimelinePinUpsertRequest,
+) -> TimelinePinMutation:
+    """Add only a currently readable target after server-side identity materialization."""
+    authorized = await resolve_authorized_timeline_scope(db, current)
+    subject = await _resolve_pin_target(db, authorized, request.target)
+    writer = getattr(db, "put_timeline_pin", None)
+    if not callable(writer):
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+    try:
+        mutation = await asyncio.to_thread(
+            writer,
+            workspace_id=authorized.workspace_id,
+            user_id=authorized.user_id,
+            expected_revision=request.expected_revision,
+            subject=subject,
+        )
+    except ValueError:
+        raise
+    if not isinstance(mutation, TimelinePinMutation):
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+    return mutation.model_copy(
+        update={"pin_set": visible_timeline_pin_set(mutation.pin_set, authorized)}
+    )
+
+
+async def delete_timeline_pin(
+    db: Any,
+    current: Any,
+    *,
+    pin_id: str,
+    expected_revision: int,
+) -> TimelinePinMutation:
+    """Idempotently remove an owner's pin even when it is currently hidden by revoked access."""
+    authorized = await resolve_authorized_timeline_scope(db, current)
+    writer = getattr(db, "delete_timeline_pin", None)
+    if not callable(writer):
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+    try:
+        mutation = await asyncio.to_thread(
+            writer,
+            workspace_id=authorized.workspace_id,
+            user_id=authorized.user_id,
+            pin_id=pin_id,
+            expected_revision=expected_revision,
+        )
+    except ValueError:
+        raise
+    if not isinstance(mutation, TimelinePinMutation):
+        raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+    return mutation.model_copy(
+        update={"pin_set": visible_timeline_pin_set(mutation.pin_set, authorized)}
+    )
+
+
+async def _resolve_pin_target(
+    db: Any,
+    authorized: AuthorizedTimelineScope,
+    target: TimelinePinTarget,
+) -> TimelinePinnedResourceSubject | TimelinePinnedApplicationSubject:
+    if isinstance(target, TimelinePinResourceTarget):
+        if (
+            target.scope.workspace_id != authorized.workspace_id
+            or target.scope.cluster_id not in authorized.cluster_ids
+        ):
+            raise HTTPException(status_code=404, detail=PIN_TARGET_NOT_FOUND_DETAIL)
+        resolver = getattr(db, "resolve_timeline_pin_resource", None)
+        if not callable(resolver):
+            raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+        resolved = await asyncio.to_thread(
+            resolver,
+            workspace_id=authorized.workspace_id,
+            cluster_id=target.scope.cluster_id,
+            uid=target.resource.uid,
+        )
+        if (
+            not isinstance(resolved, TimelinePinnedResourceSubject)
+            or resolved.resource != target.resource
+        ):
+            raise HTTPException(status_code=404, detail=PIN_TARGET_NOT_FOUND_DETAIL)
+        return resolved
+    if isinstance(target, TimelinePinApplicationTarget):
+        if target.application_id not in authorized.application_ids:
+            raise HTTPException(status_code=404, detail=PIN_TARGET_NOT_FOUND_DETAIL)
+        resolver = getattr(db, "resolve_timeline_pin_application", None)
+        if not callable(resolver):
+            raise HTTPException(status_code=503, detail=PINS_UNAVAILABLE_DETAIL)
+        resolved = await asyncio.to_thread(
+            resolver,
+            workspace_id=authorized.workspace_id,
+            application_id=target.application_id,
+        )
+        if (
+            not isinstance(resolved, TimelinePinnedApplicationSubject)
+            or resolved.application_id != target.application_id
+        ):
+            raise HTTPException(status_code=404, detail=PIN_TARGET_NOT_FOUND_DETAIL)
+        return resolved
+    raise HTTPException(status_code=404, detail=PIN_TARGET_NOT_FOUND_DETAIL)
 
 
 async def _observed_scopes(

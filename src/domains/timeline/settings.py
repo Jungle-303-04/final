@@ -246,7 +246,13 @@ def timeline_control_surface() -> TimelineControlSurface:
                 TimelineControlOption(id="unhealthy", label="Unhealthy"),
             ),
         ),
-        pins=TimelinePinsControl(label="Pinned lanes", availability="unavailable"),
+        pins=TimelinePinsControl(
+            label="Pinned lanes",
+            availability="available",
+            storage="server",
+            revision="pin_set",
+            subject_kinds=("resource", "application"),
+        ),
     )
 
 
@@ -288,7 +294,7 @@ def timeline_control_selection_is_valid(query: object) -> bool:
         return False
     if query.lens_zoom_rung not in {option.id for option in controls.lens_zoom_rungs}:
         return False
-    if query.filters.pinned_only:
+    if query.filters.pinned_only and controls.pins.availability != "available":
         return False
     allowed_activity_selections = {option.activity for option in controls.activity} | {
         option.problems_activity for option in controls.activity

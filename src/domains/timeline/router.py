@@ -10,7 +10,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import ValidationError
 
@@ -23,9 +23,16 @@ from domains.timeline.coverage import (
 )
 from domains.timeline.cursor import TimelineReplayCursorCodec
 from domains.timeline.fanout import TimelineFanoutClosed, TimelineFanoutOverflow
-from domains.timeline.repository import TimelineOverviewAggregate, TimelineSnapshotLimitExceeded
+from domains.timeline.repository import (
+    TimelineOverviewAggregate,
+    TimelinePinRevisionConflict,
+    TimelineSnapshotLimitExceeded,
+)
 from domains.timeline.service import (
     TimelineReadResolution,
+    delete_timeline_pin,
+    put_timeline_pin,
+    read_timeline_pins,
     resolve_timeline_capabilities,
     resolve_timeline_read,
 )
@@ -47,6 +54,9 @@ from packages.contracts.timeline import (
     TimelineOverviewFacets,
     TimelineOverviewKindFacet,
     TimelineOverviewRequest,
+    TimelinePinMutation,
+    TimelinePinSet,
+    TimelinePinUpsertRequest,
     TimelineSnapshotRequest,
     TimelineStreamFrame,
     TimelineStreamRequest,
@@ -63,6 +73,7 @@ REPLAY_CURSOR_CONFLICT_DETAIL = "timeline replay cursor conflicts with Last-Even
 STREAM_UNAVAILABLE_DETAIL = "timeline stream is unavailable"
 COVERAGE_UNAVAILABLE_DETAIL = "timeline coverage is unavailable"
 OVERVIEW_UNAVAILABLE_DETAIL = "timeline overview is unavailable"
+PIN_REVISION_CONFLICT_DETAIL = "timeline pins revision conflicts with the current set"
 
 router = APIRouter()
 
@@ -79,6 +90,62 @@ async def read_timeline_capabilities(
     """Return server-owned Timeline limits before a browser constructs a query."""
     response.headers["Cache-Control"] = "no-store"
     return await resolve_timeline_capabilities(db, current)
+
+
+@router.get(
+    gateway_routes.TIMELINE_PINS_PATH,
+    response_model=TimelinePinSet,
+)
+async def read_persistent_timeline_pins(
+    response: Response,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> TimelinePinSet:
+    """Return only the authenticated user's currently readable pins in this workspace."""
+    response.headers["Cache-Control"] = "no-store"
+    return await read_timeline_pins(db, current)
+
+
+@router.put(
+    gateway_routes.TIMELINE_PINS_PATH,
+    response_model=TimelinePinMutation,
+)
+async def upsert_persistent_timeline_pin(
+    body: TimelinePinUpsertRequest,
+    response: Response,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> TimelinePinMutation:
+    """Idempotently add one server-materialized, currently readable pin subject."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return await put_timeline_pin(db, current, body)
+    except TimelinePinRevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=PIN_REVISION_CONFLICT_DETAIL) from exc
+
+
+@router.delete(
+    gateway_routes.TIMELINE_PIN_PATH,
+    response_model=TimelinePinMutation,
+)
+async def remove_persistent_timeline_pin(
+    pin_id: str,
+    response: Response,
+    expected_revision: int = Query(ge=0),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> TimelinePinMutation:
+    """Idempotently remove an owner row, including a pin currently hidden by revoked access."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return await delete_timeline_pin(
+            db,
+            current,
+            pin_id=pin_id,
+            expected_revision=expected_revision,
+        )
+    except TimelinePinRevisionConflict as exc:
+        raise HTTPException(status_code=409, detail=PIN_REVISION_CONFLICT_DETAIL) from exc
 
 
 @router.post(
@@ -169,6 +236,7 @@ async def read_timeline_snapshot(
             scopes=resolution.scopes,
             policy=resolution.policy,
             capabilities=resolution.capabilities,
+            pin_set_revision=None if resolution.pin_set is None else resolution.pin_set.revision,
             events=tuple(
                 record.event
                 for record in snapshot.records
@@ -451,6 +519,7 @@ def _timeline_overview_response(
             ),
         ),
         new_evidence_count=aggregate.new_evidence_count,
+        pin_set_revision=None if resolution.pin_set is None else resolution.pin_set.revision,
     )
 
 

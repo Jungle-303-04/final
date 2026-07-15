@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy.dialects import postgresql
 
 from domains.inventory_filter.cursor import FilterCursorCodec
 from domains.timeline.cursor import TimelineCursorBinding, TimelineReplayCursorCodec
-from domains.timeline.predicate import TimelineEvidencePredicate
+from domains.timeline.predicate import TimelineEvidencePredicate, TimelinePinMembership
 from domains.timeline.repository import TimelineLedgerReadScope, _timeline_events_statement
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
+    TimelineApplicationWorkflowSubject,
     TimelineEvent,
     TimelineQuery,
     TimelineResourceSubject,
@@ -38,7 +40,7 @@ def test_evidence_predicate_keeps_only_the_same_scope_window_and_requested_filte
     ] == ["matching"]
 
 
-def test_replay_identity_ignores_client_grouping_sort_and_pin_preferences() -> None:
+def test_replay_identity_ignores_presentation_but_binds_a_pinned_query_to_its_revision() -> None:
     query = _query()
     changed_presentation = query.model_copy(
         update={
@@ -55,27 +57,75 @@ def test_replay_identity_ignores_client_grouping_sort_and_pin_preferences() -> N
         authorization_revision="revision-a",
         query=query,
     )
-    cursor = codec.encode(binding, sequence=7)
-
     assert (
-        TimelineCursorBinding.from_query(
+        binding.replay_identity
+        == TimelineCursorBinding.from_query(
             user_id="user-a",
             authorization_revision="revision-a",
-            query=changed_presentation,
+            query=query.model_copy(update={"grouping": "flat", "sort": "name"}),
         ).replay_identity
-        == binding.replay_identity
     )
-    assert (
+    pinned_binding = TimelineCursorBinding.from_query(
+        user_id="user-a",
+        authorization_revision="revision-a",
+        query=changed_presentation,
+        pin_set_revision=3,
+    )
+    pinned_cursor = codec.encode(pinned_binding, sequence=7)
+    assert codec.decode(pinned_cursor, binding=pinned_binding) == 7
+    with pytest.raises(ValueError):
         codec.decode(
-            cursor,
+            pinned_cursor,
             binding=TimelineCursorBinding.from_query(
                 user_id="user-a",
                 authorization_revision="revision-a",
                 query=changed_presentation,
+                pin_set_revision=4,
             ),
         )
-        == 7
+
+
+def test_pinned_predicate_and_sql_match_exact_resource_or_application_membership() -> None:
+    query = _query().model_copy(
+        update={
+            "scopes": (ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
+            "filters": _query().filters.model_copy(
+                update={"pinned_only": True, "query": "", "kinds": ()}
+            ),
+        }
     )
+    predicate = TimelineEvidencePredicate.from_query(
+        _read_scope(),
+        query,
+        pin_membership=TimelinePinMembership(
+            revision=2,
+            resource_identities=frozenset({("cluster-a", "resource-match-uid")}),
+            application_ids=frozenset({"application-match"}),
+        ),
+    )
+    assert predicate.matches(_event("resource-match")) is True
+    assert predicate.matches(_event("resource-hidden")) is False
+    assert predicate.matches(_application_event("application-match")) is True
+    assert predicate.matches(_application_event("application-hidden")) is False
+
+    statement = _timeline_events_statement(
+        _read_scope(),
+        predicate=predicate,
+        after_sequence=0,
+        through_sequence=12,
+        phase="snapshot",
+        limit=20,
+        replay_order=True,
+    )
+    sql = " ".join(
+        str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        .casefold()
+        .split()
+    )
+    assert "resource ->> 'uid'" in sql
+    assert "resource-match-uid" in sql
+    assert "subject ->> 'application_id'" in sql
+    assert "application-match" in sql
 
 
 def test_repository_sql_uses_the_evidence_predicate_for_snapshot_and_replay() -> None:
@@ -151,6 +201,7 @@ def _read_scope() -> TimelineLedgerReadScope:
         workspace_id="workspace-a",
         scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
         inventory_cluster_ids=frozenset({"cluster-a"}),
+        application_workflow_ids=frozenset({"application-match"}),
     )
 
 
@@ -184,4 +235,24 @@ def _event(
         event_type=event_type,  # type: ignore[arg-type]
         severity="info",
         title=title,
+    )
+
+
+def _application_event(application_id: str) -> TimelineEvent:
+    return TimelineEvent(
+        event_id=f"workflow-{application_id}",
+        source="application_workflow",
+        source_key=f"workflow:{application_id}",
+        native_id=f"workflow-{application_id}",
+        activity="change",
+        occurred_at=datetime(1970, 1, 1, 0, 0, 1, 500_000, tzinfo=UTC),
+        scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
+        subject=TimelineApplicationWorkflowSubject(
+            application_id=application_id,
+            binding_id="binding-a",
+            workflow_run_id="run-a",
+        ),
+        event_type="deployment",
+        severity="info",
+        title="Application deployment observed",
     )

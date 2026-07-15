@@ -75,7 +75,10 @@ def test_timeline_capabilities_is_an_authenticated_read_only_server_contract(
     assert controls["pins"] == {
         "key": "pins",
         "label": "Pinned lanes",
-        "availability": "unavailable",
+        "availability": "available",
+        "storage": "server",
+        "revision": "pin_set",
+        "subject_kinds": ["resource", "application"],
     }
     assert controls["default_time_range_id"] == "1h"
     assert db.authorization_calls == [

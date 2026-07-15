@@ -6,26 +6,55 @@ facts returned after this repository's transaction has committed.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import Integer, and_, cast, func, select, update
+from sqlalchemy import Integer, and_, cast, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from domains.timeline.models import TimelineLedgerCursor, TimelineLedgerEvent
+from domains.gitops.models import Application
+from domains.inventory.models import ClusterInventoryResourceRecord
+from domains.timeline.models import (
+    TimelineLedgerCursor,
+    TimelineLedgerEvent,
+    TimelinePinRecord,
+    TimelinePinSetRecord,
+)
 from domains.timeline.predicate import (
     TimelineEvidencePredicate,
     timeline_evidence_sql_predicate,
     timeline_resource_kind_sql,
 )
-from packages.contracts.parity import ClusterScope
-from packages.contracts.timeline import RealtimePolicy, TimelineEvent, TimelineFilters
+from packages.contracts.parity import ClusterScope, ResourceRef
+from packages.contracts.timeline import (
+    RealtimePolicy,
+    TimelineApplicationPinSnapshot,
+    TimelineEvent,
+    TimelineFilters,
+    TimelinePin,
+    TimelinePinMutation,
+    TimelinePinnedApplicationSubject,
+    TimelinePinnedResourceSubject,
+    TimelinePinSet,
+    TimelinePinSubject,
+)
 from packages.storage.engine import DatabaseConnection
 
 TimelineReplayStatus = Literal["available", "resync_required"]
 TimelineResyncReason = Literal["retention_boundary"]
 MAX_TIMELINE_EVENTS = 10_000
+
+
+class TimelinePinRevisionConflict(ValueError):
+    """The browser attempted a pin mutation from an obsolete pin-set revision."""
+
+    def __init__(self, revision: int) -> None:
+        self.revision = revision
+        super().__init__(f"timeline pins revision conflict (current={revision})")
 
 
 class TimelineSnapshotLimitExceeded(ValueError):
@@ -161,6 +190,165 @@ class TimelineEventFanout(Protocol):
 
 class TimelineLedgerRepository(DatabaseConnection):
     """Persist and replay immutable source evidence in workspace-local sequence order."""
+
+    def read_timeline_pin_set(self, workspace_id: str, user_id: str) -> TimelinePinSet:
+        """Read the owner's complete stored set; callers remove currently unreadable rows."""
+        with self.connection() as conn:
+            return _read_timeline_pin_set(conn, workspace_id=workspace_id, user_id=user_id)
+
+    def resolve_timeline_pin_resource(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        uid: str,
+    ) -> TimelinePinnedResourceSubject | None:
+        """Materialize one exact inventory UID without trusting browser display fields."""
+        resource = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(
+                resource.c.api_version,
+                resource.c.kind,
+                resource.c.namespace,
+                resource.c.name,
+                resource.c.uid,
+            )
+            .where(
+                resource.c.workspace_id == workspace_id,
+                resource.c.cluster_id == cluster_id,
+                resource.c.uid == uid,
+            )
+            .order_by(resource.c.last_seen_at.desc(), resource.c.inventory_key.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one_or_none()
+        if row is None or not isinstance(row["uid"], str) or not row["uid"].strip():
+            return None
+        api_group, version = _split_api_version(str(row["api_version"] or ""))
+        return TimelinePinnedResourceSubject(
+            scope=ClusterScope(workspace_id=workspace_id, cluster_id=cluster_id),
+            resource=ResourceRef(
+                api_group=api_group,
+                version=version,
+                kind=str(row["kind"]),
+                namespace=str(row["namespace"]) if row["namespace"] is not None else None,
+                name=str(row["name"]),
+                uid=str(row["uid"]),
+            ),
+        )
+
+    def resolve_timeline_pin_application(
+        self,
+        *,
+        workspace_id: str,
+        application_id: str,
+    ) -> TimelinePinnedApplicationSubject | None:
+        """Materialize immutable application display facts from the authorized workspace row."""
+        application = Application.__table__
+        statement = (
+            select(
+                application.c.application_id,
+                application.c.name,
+                application.c.repository_id,
+                application.c.manifest_path,
+            )
+            .where(
+                application.c.workspace_id == workspace_id,
+                application.c.application_id == application_id,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one_or_none()
+        if row is None:
+            return None
+        return TimelinePinnedApplicationSubject(
+            application_id=str(row["application_id"]),
+            snapshot=TimelineApplicationPinSnapshot(
+                name=str(row["name"]),
+                repository_id=str(row["repository_id"]),
+                manifest_path=str(row["manifest_path"]),
+            ),
+        )
+
+    def put_timeline_pin(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        expected_revision: int,
+        subject: TimelinePinSubject,
+    ) -> TimelinePinMutation:
+        """Add one materialized subject once, guarded by a row lock and optimistic revision."""
+        if expected_revision < 0:
+            raise ValueError("timeline pin revision must be non-negative")
+        pins = TimelinePinRecord.__table__
+        subject_key = _timeline_pin_subject_key(subject)
+        with self.unit_of_work():
+            with self.connection() as conn:
+                revision = _lock_timeline_pin_set(conn, workspace_id=workspace_id, user_id=user_id)
+                if revision != expected_revision:
+                    raise TimelinePinRevisionConflict(revision)
+                existing = conn.execute(
+                    select(pins.c.pin_id).where(
+                        pins.c.workspace_id == workspace_id,
+                        pins.c.user_id == user_id,
+                        pins.c.subject_key == subject_key,
+                    )
+                ).scalar_one_or_none()
+                action: Literal["added", "unchanged"] = "unchanged"
+                if existing is None:
+                    conn.execute(
+                        pg_insert(pins).values(
+                            workspace_id=workspace_id,
+                            user_id=user_id,
+                            pin_id=uuid.uuid4().hex,
+                            subject_key=subject_key,
+                            subject=subject.model_dump(mode="json"),
+                        )
+                    )
+                    revision = _increment_timeline_pin_revision(
+                        conn, workspace_id=workspace_id, user_id=user_id
+                    )
+                    action = "added"
+                pin_set = _read_timeline_pin_set(conn, workspace_id=workspace_id, user_id=user_id)
+        return TimelinePinMutation(action=action, pin_set=pin_set)
+
+    def delete_timeline_pin(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        pin_id: str,
+        expected_revision: int,
+    ) -> TimelinePinMutation:
+        """Idempotently delete only the caller's row; an absent ID intentionally keeps revision."""
+        if expected_revision < 0:
+            raise ValueError("timeline pin revision must be non-negative")
+        pins = TimelinePinRecord.__table__
+        with self.unit_of_work():
+            with self.connection() as conn:
+                revision = _lock_timeline_pin_set(conn, workspace_id=workspace_id, user_id=user_id)
+                if revision != expected_revision:
+                    raise TimelinePinRevisionConflict(revision)
+                deleted = conn.execute(
+                    delete(pins)
+                    .where(
+                        pins.c.workspace_id == workspace_id,
+                        pins.c.user_id == user_id,
+                        pins.c.pin_id == pin_id,
+                    )
+                    .returning(pins.c.pin_id)
+                ).scalar_one_or_none()
+                action: Literal["deleted", "absent"] = "absent"
+                if deleted is not None:
+                    _increment_timeline_pin_revision(
+                        conn, workspace_id=workspace_id, user_id=user_id
+                    )
+                    action = "deleted"
+                pin_set = _read_timeline_pin_set(conn, workspace_id=workspace_id, user_id=user_id)
+        return TimelinePinMutation(action=action, pin_set=pin_set)
 
     def append_timeline_event(self, event: TimelineEvent) -> TimelineLedgerAppend:
         """Append once by immutable ``source_key`` under a workspace cursor row lock."""
@@ -440,6 +628,98 @@ class TimelineLedgerRepository(DatabaseConnection):
     def _overview_count(self, statement: Any) -> int:
         with self.connection() as conn:
             return int(conn.execute(statement).scalar_one())
+
+
+def _lock_timeline_pin_set(conn: Any, *, workspace_id: str, user_id: str) -> int:
+    """Create then lock an owner's revision row, so every mutation serializes exactly once."""
+    pin_sets = TimelinePinSetRecord.__table__
+    conn.execute(
+        pg_insert(pin_sets)
+        .values(workspace_id=workspace_id, user_id=user_id, revision=0)
+        .on_conflict_do_nothing(index_elements=[pin_sets.c.workspace_id, pin_sets.c.user_id])
+    )
+    return int(
+        conn.execute(
+            select(pin_sets.c.revision)
+            .where(
+                pin_sets.c.workspace_id == workspace_id,
+                pin_sets.c.user_id == user_id,
+            )
+            .with_for_update()
+        ).scalar_one()
+    )
+
+
+def _increment_timeline_pin_revision(conn: Any, *, workspace_id: str, user_id: str) -> int:
+    pin_sets = TimelinePinSetRecord.__table__
+    return int(
+        conn.execute(
+            update(pin_sets)
+            .where(
+                pin_sets.c.workspace_id == workspace_id,
+                pin_sets.c.user_id == user_id,
+            )
+            .values(revision=pin_sets.c.revision + 1, updated_at=func.now())
+            .returning(pin_sets.c.revision)
+        ).scalar_one()
+    )
+
+
+def _read_timeline_pin_set(conn: Any, *, workspace_id: str, user_id: str) -> TimelinePinSet:
+    """Read without creating a revision row: a never-pinned user is revision zero."""
+    pin_sets = TimelinePinSetRecord.__table__
+    pins = TimelinePinRecord.__table__
+    revision = conn.execute(
+        select(pin_sets.c.revision).where(
+            pin_sets.c.workspace_id == workspace_id,
+            pin_sets.c.user_id == user_id,
+        )
+    ).scalar_one_or_none()
+    rows = conn.execute(
+        select(pins.c.pin_id, pins.c.subject, pins.c.created_at)
+        .where(pins.c.workspace_id == workspace_id, pins.c.user_id == user_id)
+        .order_by(pins.c.created_at.asc(), pins.c.pin_id.asc())
+    ).mappings()
+    return TimelinePinSet(
+        revision=int(revision or 0),
+        pins=tuple(
+            TimelinePin(
+                pin_id=str(row["pin_id"]),
+                subject=_timeline_pin_subject_from_row(row["subject"]),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ),
+    )
+
+
+def _timeline_pin_subject_from_row(value: object) -> TimelinePinSubject:
+    if not isinstance(value, dict):
+        raise ValueError("timeline pin subject is invalid")
+    kind = value.get("kind")
+    if kind == "resource":
+        return TimelinePinnedResourceSubject.model_validate(value)
+    if kind == "application":
+        return TimelinePinnedApplicationSubject.model_validate(value)
+    raise ValueError("timeline pin subject kind is invalid")
+
+
+def _timeline_pin_subject_key(subject: TimelinePinSubject) -> str:
+    payload = json.dumps(
+        subject.model_dump(mode="json"),
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _split_api_version(api_version: str) -> tuple[str, str]:
+    normalized = api_version.strip()
+    if "/" not in normalized:
+        return "", normalized
+    group, version = normalized.rsplit("/", 1)
+    return group, version
 
 
 def _timeline_events_statement(

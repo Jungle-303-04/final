@@ -19,6 +19,7 @@ from packages.contracts.timeline import (
     TimelineOverviewActivityFacet,
     TimelineOverviewBucket,
     TimelineOverviewFacets,
+    TimelineStreamFrame,
     TimelineWindow,
 )
 
@@ -45,7 +46,14 @@ def test_timeline_capability_and_overview_examples_are_strict_json_contracts() -
         "legend",
         "pins",
     }
-    assert descriptor_payload["control_surface"]["pins"]["availability"] == "unavailable"
+    assert descriptor_payload["control_surface"]["pins"] == {
+        "key": "pins",
+        "label": "Pinned lanes",
+        "availability": "available",
+        "storage": "server",
+        "revision": "pin_set",
+        "subject_kinds": ["resource", "application"],
+    }
 
     overview = TimelineOverview(
         window=TimelineWindow(from_ms=1_000, to_ms=2_000),
@@ -93,6 +101,7 @@ def test_timeline_capability_and_overview_examples_are_strict_json_contracts() -
             "kinds": [],
         },
         "new_evidence_count": None,
+        "pin_set_revision": None,
     }
     with pytest.raises(ValidationError):
         TimelineCapabilityDescriptor.model_validate({**descriptor_payload, "ui_fallback": "local"})
@@ -112,6 +121,22 @@ def test_timeline_openapi_exposes_shared_capabilities_and_overview_models() -> N
     assert overview_operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/TimelineOverview"
     }
+    pin_get = document["paths"]["/timeline/pins"]["get"]
+    pin_put = document["paths"]["/timeline/pins"]["put"]
+    pin_delete = document["paths"]["/timeline/pins/{pin_id}"]["delete"]
+    assert pin_get["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/TimelinePinSet"
+    }
+    assert pin_put["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/TimelinePinUpsertRequest"
+    }
+    assert pin_put["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/TimelinePinMutation"
+    }
+    assert pin_delete["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/TimelinePinMutation"
+    }
+    assert any(parameter["name"] == "expected_revision" for parameter in pin_delete["parameters"])
     capability_schema = document["components"]["schemas"]["TimelineCapabilityDescriptor"]
     overview_schema = document["components"]["schemas"]["TimelineOverview"]
     assert capability_schema["additionalProperties"] is False
@@ -125,4 +150,10 @@ def test_timeline_openapi_exposes_shared_capabilities_and_overview_models() -> N
         "coverage_sources",
         "facets",
         "new_evidence_count",
+        "pin_set_revision",
     }
+    frame_schema = TimelineStreamFrame.model_json_schema()
+    assert frame_schema["properties"]["pin_set_revision"]["anyOf"] == [
+        {"type": "integer", "minimum": 0},
+        {"type": "null"},
+    ]
