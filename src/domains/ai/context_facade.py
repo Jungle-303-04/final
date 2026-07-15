@@ -95,7 +95,11 @@ async def answer_from_context(
             stream_id=context.log_stream_id,
         )
         if not evidence:
-            return AiChatResponse(answer=AI_NO_DATA_ANSWER, evidence=[])
+            return _chat_response(
+                default_answer=AI_NO_DATA_ANSWER,
+                action_decision=action_decision,
+                evidence=[],
+            )
         lines = [
             f"{item.event.observed_at.isoformat()} "
             f"{item.event.pod}/{item.event.container}: {item.event.line[:300]}"
@@ -127,7 +131,11 @@ async def answer_from_context(
         limit=MAX_AI_EVIDENCE,
     )
     if not resources:
-        return AiChatResponse(answer=AI_NO_DATA_ANSWER, evidence=[])
+        return _chat_response(
+            default_answer=AI_NO_DATA_ANSWER,
+            action_decision=action_decision,
+            evidence=[],
+        )
 
     facts = "; ".join(
         f"{item.kind} {_display_name(item)} — status {item.status}, health {item.health}"

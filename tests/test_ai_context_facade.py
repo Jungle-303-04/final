@@ -63,7 +63,7 @@ def inventory_row(**overrides: Any) -> dict[str, Any]:
 
 class StubAiDb:
     def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
-        self.rows = rows or [inventory_row()]
+        self.rows = [inventory_row()] if rows is None else rows
         self.allowed = {"cluster-1"}
         self.access_calls: list[tuple[str, str, str, str]] = []
         self.alert_rule_create_calls: list[dict[str, Any]] = []
@@ -257,6 +257,44 @@ def test_context_chat_uses_canonical_no_data_for_unmaterialized_context() -> Non
 
     assert response.status_code == 200
     assert response.json() == {"answer": AI_NO_DATA_ANSWER, "evidence": []}
+
+
+def test_context_chat_proposes_alert_action_even_without_evidence() -> None:
+    db = StubAiDb()
+    historical = deepcopy(CONTEXT)
+    historical["time"] = "2026-07-13T08:00:00+09:00"
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": historical, "message": "CPU가 70% 넘으면 알려줘"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"] == []
+    assert body["action"]["type"] == "create_alert_rule"
+    assert body["action"]["payload"]["threshold"] == 70
+    assert db.alert_rule_create_calls == []
+
+
+def test_context_chat_can_offer_alert_action_without_inventory_evidence() -> None:
+    db = StubAiDb(rows=[])
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={
+            "context": CONTEXT,
+            "message": "이 필터에서 파드 CPU가 70% 넘으면 알람 걸어줘",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "현재 화면 범위로 알림 규칙 초안을 제안합니다. 내용을 확인해 주세요."
+    assert body["evidence"] == []
+    assert body["action"]["type"] == "create_alert_rule"
+    assert body["action"]["payload"]["threshold"] == 70.0
+    assert db.alert_rule_create_calls == []
 
 
 def test_context_chat_rejects_extra_fields_and_naive_time() -> None:
