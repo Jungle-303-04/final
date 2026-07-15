@@ -1,22 +1,14 @@
-import { z } from "zod";
-
 import { ApiError, apiStreamResponse, type ApiPath } from "./client";
+import {
+  commandOperationEventSchema,
+  type CommandOperationEventEndpoint,
+} from "./operation-events-schemas";
 import { encodePathSegment } from "./url";
 import { parseSseFrames } from "../shared/streaming/sse";
 
 const SSE_MEDIA_TYPE = "text/event-stream";
 const RECONNECT_BASE_DELAY_MS = 250;
 const RECONNECT_MAX_DELAY_MS = 5_000;
-
-export const commandOperationEventSchema = z.strictObject({
-  command_id: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  kind: z.enum(["progress", "log", "completed", "failed"]),
-  payload: z.record(z.string(), z.unknown()),
-  occurred_at: z.string().datetime({ offset: true }),
-});
-
-export type CommandOperationEventEndpoint = z.infer<typeof commandOperationEventSchema>;
 
 /** Reconnecting SSE reader for one audited command. It never falls back to status polling. */
 export async function* subscribeCommandOperationEvents(

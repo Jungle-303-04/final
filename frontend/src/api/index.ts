@@ -107,10 +107,16 @@ export {
 } from "./resource-capabilities";
 export { executeResourceCapability } from "./resource-capability-actions";
 export {
-  commandOperationEventSchema,
+  resourceActionAcceptedSchema,
+  type ResourceActionAccepted,
+} from "./resource-capability-actions-schemas";
+export {
   subscribeCommandOperationEvents,
-  type CommandOperationEventEndpoint,
 } from "./operation-events";
+export {
+  commandOperationEventSchema,
+  type CommandOperationEventEndpoint,
+} from "./operation-events-schemas";
 export {
   resourceActionCapabilityIdSchema,
   resourceActionCapabilitySchema,
