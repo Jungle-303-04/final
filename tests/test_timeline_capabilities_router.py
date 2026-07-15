@@ -66,12 +66,15 @@ def test_timeline_capabilities_is_an_authenticated_read_only_server_contract(
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
     controls = payload.pop("control_surface")
+    query_bounds = payload.pop("query_bounds")
     assert payload == {
         "selected_source_mode": "retained",
         "available_source_modes": ["retained"],
         "max_retained_range_ms": 7_200_000,
         "namespace_filter_policy": "not_required",
     }
+    assert query_bounds["max_window_ms"] == 7_200_000
+    assert query_bounds["earliest_queryable_ms"] == (query_bounds["server_now_ms"] - 86_400_000)
     assert controls["pins"] == {
         "key": "pins",
         "label": "Pinned lanes",

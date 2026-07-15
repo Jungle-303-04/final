@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from domains.timeline.settings import (
@@ -13,6 +15,7 @@ from domains.timeline.settings import (
     TIMELINE_RETENTION_SECONDS_ENV,
     timeline_capability_descriptor,
     timeline_max_window_ms,
+    timeline_query_bounds,
     timeline_realtime_policy,
     timeline_replay_poll_seconds,
 )
@@ -49,13 +52,20 @@ def test_timeline_realtime_policy_is_server_owned_and_bounded(
         },
     }
     assert timeline_max_window_ms() == 7_200_000
-    descriptor = timeline_capability_descriptor()
-    assert descriptor.model_dump(exclude={"control_surface"}) == {
+    bounds = timeline_query_bounds(now=datetime.fromtimestamp(10_000, tz=UTC))
+    assert bounds.model_dump() == {
+        "server_now_ms": 10_000_000,
+        "earliest_queryable_ms": 6_400_000,
+        "max_window_ms": 7_200_000,
+    }
+    descriptor = timeline_capability_descriptor(query_bounds=bounds)
+    assert descriptor.model_dump(exclude={"control_surface", "query_bounds"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 7_200_000,
         "namespace_filter_policy": "not_required",
     }
+    assert descriptor.query_bounds == bounds
     controls = descriptor.control_surface
     assert [(item.id, item.label) for item in controls.views] == [
         ("list", "List"),

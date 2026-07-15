@@ -151,6 +151,9 @@ async def remove_persistent_timeline_pin(
 @router.post(
     gateway_routes.TIMELINE_OVERVIEW_PATH,
     response_model=TimelineOverview,
+    responses={
+        422: {"description": "Timeline overview window is outside server-authoritative bounds."}
+    },
 )
 async def read_timeline_overview(
     body: TimelineOverviewRequest,
@@ -159,7 +162,12 @@ async def read_timeline_overview(
     db: Any = Depends(get_db),
 ) -> TimelineOverview:
     """Return a bounded retained-strip aggregate without opening a replay cursor."""
-    resolution = await resolve_timeline_read(db, current, body.query)
+    resolution = await resolve_timeline_read(
+        db,
+        current,
+        body.query,
+        enforce_server_time_bounds=True,
+    )
     overview_reader = getattr(db, "timeline_overview", None)
     coverage_reader = getattr(db, "snapshot_timeline_coverage", None)
     if not callable(overview_reader):
@@ -498,6 +506,7 @@ def _timeline_overview_response(
         raise ValueError("frozen overview requires later evidence count")
     return TimelineOverview(
         window=window,
+        query_bounds=resolution.capabilities.query_bounds,
         bucket_width_ms=bucket_width_ms,
         buckets=buckets,
         coverage=coverage,

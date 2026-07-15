@@ -8,11 +8,16 @@ import pytest
 from fastapi import HTTPException
 
 from domains.target.connectivity import AGENT_ONLINE_WINDOW_SECONDS_ENV
-from domains.timeline.service import resolve_timeline_capabilities, resolve_timeline_read
+from domains.timeline.service import (
+    BEFORE_RETAINED_HISTORY_DETAIL,
+    FUTURE_WINDOW_DETAIL,
+    resolve_timeline_capabilities,
+    resolve_timeline_read,
+)
 from domains.timeline.settings import TIMELINE_MAX_WINDOW_SECONDS_ENV
 from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope
-from packages.contracts.timeline import TimelineQuery, TimelineWindow
+from packages.contracts.timeline import TimelineQuery, TimelineQueryBounds, TimelineWindow
 
 
 class TimelineServiceDb:
@@ -88,7 +93,7 @@ def test_timeline_read_derives_server_freshness_and_preserves_source_grants(
     assert resolution.read_scope.incident_cluster_ids == {"cluster-incident"}
     assert resolution.read_scope.application_workflow_ids == {"application-workflow"}
     assert resolution.read_scope.gitops_application_ids == {"application-gitops"}
-    assert resolution.capabilities.model_dump(exclude={"control_surface"}) == {
+    assert resolution.capabilities.model_dump(exclude={"control_surface", "query_bounds"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 2_592_000_000,
@@ -144,6 +149,43 @@ def test_timeline_read_enforces_server_window_limit(monkeypatch: pytest.MonkeyPa
     assert error.value.status_code == 422
 
 
+@pytest.mark.parametrize(
+    ("window", "mode", "detail"),
+    (
+        (TimelineWindow(from_ms=999, to_ms=2_000), "frozen", BEFORE_RETAINED_HISTORY_DETAIL),
+        (TimelineWindow(from_ms=1_000, to_ms=2_001), "live", FUTURE_WINDOW_DETAIL),
+    ),
+)
+def test_timeline_overview_resolution_uses_server_time_not_a_client_clock(
+    monkeypatch: pytest.MonkeyPatch,
+    window: TimelineWindow,
+    mode: str,
+    detail: str,
+) -> None:
+    monkeypatch.setattr(
+        "domains.timeline.service.timeline_query_bounds",
+        lambda: TimelineQueryBounds(
+            server_now_ms=2_000,
+            earliest_queryable_ms=1_000,
+            max_window_ms=10_000,
+        ),
+    )
+    query = _query("cluster-inventory").model_copy(update={"window": window, "mode": mode})
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            resolve_timeline_read(
+                TimelineServiceDb(),
+                _current(),
+                query,
+                enforce_server_time_bounds=True,
+            )
+        )
+
+    assert error.value.status_code == 422
+    assert error.value.detail == detail
+
+
 def test_timeline_capabilities_reuse_the_server_descriptor_without_a_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -156,7 +198,7 @@ def test_timeline_capabilities_reuse_the_server_descriptor_without_a_query(
     monkeypatch.setenv(TIMELINE_MAX_WINDOW_SECONDS_ENV, "7200")
     capabilities = asyncio.run(resolve_timeline_capabilities(CapabilitiesOnlyDb(), _current()))
 
-    assert capabilities.model_dump(exclude={"control_surface"}) == {
+    assert capabilities.model_dump(exclude={"control_surface", "query_bounds"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 7_200_000,

@@ -140,6 +140,7 @@ def _resolution(*, mode: str = "live", event_access: bool = False) -> TimelineRe
             selected_source_mode="retained",
             available_source_modes=("retained",),
             max_retained_range_ms=2_592_000_000,
+            query_bounds=timeline_capability_descriptor().query_bounds,
             namespace_filter_policy="not_required",
             control_surface=timeline_capability_descriptor().control_surface,
         ),
