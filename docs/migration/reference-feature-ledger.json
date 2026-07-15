@@ -15,7 +15,7 @@
       "line": 30,
       "cells": [
         "`runtime+source`",
-        "`:9280`에서 직접 관찰했고 v1.8.1 소스로 의미를 확정"
+        "`:9280`에서 직접 관찰했고 관찰 당시 v1.8.1 소스로 의미를 확정한 과거 runtime evidence"
       ],
       "endpoints": [],
       "streaming": false,
@@ -48,7 +48,7 @@
       "line": 31,
       "cells": [
         "`source-confirmed`",
-        "runtime에서 해당 screen·control·gated/empty/capability 상태를 관찰하고, 데이터·권한·안전 제한으로 끝까지 실행하지 않은 계약을 v1.8.1 call-chain으로 확정"
+        "runtime에서 해당 screen·control·gated/empty/capability 상태를 관찰하고, 데이터·권한·안전 제한으로 끝까지 실행하지 않은 계약을 관찰 당시 v1.8.1 call-chain으로 확정한 과거 evidence"
       ],
       "endpoints": [],
       "streaming": false,
@@ -179,9 +179,9 @@
       "section": "1. 조사 기준선",
       "line": 40,
       "cells": [
-        "source",
-        "tag `v1.8.1`, commit `3ff2b1095151c690bf536e8e6ca685c2703fcd70`",
-        "공식 저장소 tag와 실행 version 대조"
+        "source rebaseline target",
+        "upstream HEAD, commit `cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc`",
+        "`references/provenance/source.json`과 동결 source ledger"
       ],
       "endpoints": [],
       "streaming": false,
