@@ -95,29 +95,25 @@ make clean
 `make clean`은 Python/Playwright 캐시와 프론트 빌드 산출물만 삭제한다. `.env*`,
 `outputs/`, `node_modules/`, `.venv/`, Terraform state는 보존한다.
 
-## Radar Kubernetes UI
+## Opsia 사용자 인터페이스
 
-[Radar](https://github.com/skyhook-io/radar)를 사용해 프로젝트 클러스터의 토폴로지, 리소스, 이벤트 타임라인, Helm 상태를 브라우저에서 확인할 수 있다.
-
-Opsia의 일부 UI는 Apache-2.0으로 배포되는 Skyhook Radar의 컴포넌트와 상호작용을
-상당한 수정을 거쳐 재작성한다. `packages/k8s-ui/src` 492파일이 확인된 고정 소스
-`10461f40bcfaf6dd578b24262c8f8fb84ae20766`을 `references/upstream/`에 보존한다.
-귀속과 상표 고지는 루트 `NOTICE`, 라이선스 전문은 `LICENSE-APACHE-2.0.txt`를 따른다.
+운영 경로는 Python 서비스, React 웹, Tauri 데스크톱 셸로만 구성한다. 고정 원본은
+`references/upstream/`에서만 추적하며, 출처·라이선스 고지는 루트 `NOTICE`를 따른다.
 
 ```bash
-# 프로젝트의 target(cluster-1) + management(mgmt) 클러스터 열기
-make radar
+# 웹 개발 서버
+cd frontend && npm run dev
 
-# management 클러스터만 열기
-RADAR_CONTEXT=mgmt make radar
+# 데스크톱 개발 셸
+cd desktop && cargo tauri dev
 
-# 표시할 클러스터 목록을 직접 지정
-RADAR_CONTEXTS=cluster-1,mgmt make radar
+# 로컬 management/target 테스트 환경
+make local-test-env && make local-up
 ```
 
-기본값은 안전을 위해 exec, Helm 쓰기, 로컬 터미널을 비활성화한다. 이 제한을 해제하려면 `RADAR_RESTRICTED=0 make radar`로 실행한다. 스케일·재시작 등 다른 리소스 변경 권한은 현재 kubeconfig의 Kubernetes RBAC을 따르므로, 완전한 조회 전용 계정이 필요하면 별도의 read-only RBAC 자격 증명을 사용해야 한다. 기본 주소는 `http://localhost:9280`이며 `RADAR_PORT`로 바꿀 수 있다.
-
-타임라인은 기본적으로 SQLite(`~/.radar/kubeheal-timeline.db`, 최대 1GiB)에 저장해 Radar 재시작 후에도 이벤트 이력을 유지한다. 일회성 메모리 모드가 필요하면 `RADAR_TIMELINE_STORAGE=memory make radar`로 실행한다.
+직접 실행은 사용자·클러스터·리소스별 Capability와 Kubernetes RBAC을 먼저 검증하고,
+대상·영향·차이를 한 번 확인한 뒤 감사 ID 및 실시간 결과를 남긴다. 브라우저와
+서버는 데스크톱 기기의 로컬 셸·파일 경로·자격 증명을 보유하지 않는다.
 
 ## 서비스 역할
 
