@@ -321,8 +321,31 @@ jobs:
             delete job management-database-migration --ignore-not-found --wait=true
           kubectl --context "${MGMT_CONTEXT}" apply \
             --filename "${RUNNER_TEMP}/migration-job.yaml"
-          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            wait --for=condition=complete job/management-database-migration --timeout=900s
+          deadline=$((SECONDS + 900))
+          while (( SECONDS < deadline )); do
+            succeeded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get job management-database-migration \
+              -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
+            failed="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get job management-database-migration \
+              -o jsonpath='{.status.failed}' 2>/dev/null || true)"
+            if [[ "${succeeded}" == "1" ]]; then
+              break
+            fi
+            if [[ -n "${failed}" && "${failed}" != "0" ]]; then
+              kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+                logs job/management-database-migration --all-containers --tail=300 || true
+              kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+                describe job management-database-migration || true
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "${succeeded:-}" != "1" ]]; then
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs job/management-database-migration --all-containers --tail=300 || true
+            exit 1
+          fi
 
       - name: Bootstrap fixed dev administrator
         if: env.DEPLOYMENT_SCOPE == 'FULL'
