@@ -82,7 +82,12 @@ from packages.runtime.operation_events import RedisOperationEventBroker
 from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
-from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig, SessionStore
+from packages.storage.sessions import (
+    RedisSessionStore,
+    RedisSessionStoreConfig,
+    SessionStore,
+    SessionStoreUnavailable,
+)
 from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 LOGGER = get_logger(__name__)
@@ -125,6 +130,7 @@ class ApiGateway:
         self.bus = event_bus or NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = session_store or RedisSessionStore(self._session_store_config())
+        self._session_store_started = False
         self.operation_events = RedisOperationEventBroker(
             env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL),
             self.db,
@@ -273,7 +279,7 @@ class ApiGateway:
         assert_trusted_proxy_config_safe()
         validate_test_scenario_catalog()
         await wait_for_database(self.db)
-        await self.sessions.connect()
+        await self._start_session_store()
         await self.bus.connect()
         await self.operation_events.start()
         # 명령 롱폴 웨이크업 — 직결 URL 이 설정된 경우에만 LISTEN 시작.
@@ -290,6 +296,23 @@ class ApiGateway:
             await self.sessions.close()
             await self.db.dispose_async()
             self.db.dispose()
+
+    async def _start_session_store(self) -> None:
+        """Keep gateway live when Redis sessions are down, without changing auth authority."""
+        start_degraded = getattr(self.sessions, "start_degraded", None)
+        try:
+            if callable(start_degraded):
+                await start_degraded()
+                return
+            await self.sessions.connect()
+        finally:
+            self._session_store_started = True
+
+    def _session_store_available(self) -> bool:
+        if not self._session_store_started:
+            return True
+        available = getattr(self.sessions, "available", None)
+        return True if available is None else bool(available)
 
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
@@ -497,6 +520,11 @@ class ApiGateway:
         )
         async def readyz() -> HealthResponse:
             # 가벼운 연결 확인만(스키마 보장은 시작 시 lifespan 에서 1회). DDL 실행 없음.
+            if not self._session_store_available():
+                raise HTTPException(
+                    status_code=Settings.SESSION_STORAGE_UNAVAILABLE_STATUS_CODE,
+                    detail=Settings.SESSION_STORAGE_UNAVAILABLE_MESSAGE,
+                )
             self.db.check_ready()
             return HealthResponse(status=Gateway.STATUS_READY)
 
@@ -690,6 +718,16 @@ class ApiGateway:
             return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 
     def _register_error_handler(self, app: FastAPI) -> None:
+        @app.exception_handler(SessionStoreUnavailable)
+        async def session_store_unavailable(
+            _request: Request, _exc: SessionStoreUnavailable
+        ) -> JSONResponse:
+            return JSONResponse(
+                status_code=Settings.SESSION_STORAGE_UNAVAILABLE_STATUS_CODE,
+                content={"detail": Settings.SESSION_STORAGE_UNAVAILABLE_MESSAGE},
+                headers={"Retry-After": "1"},
+            )
+
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             LOGGER.error(
