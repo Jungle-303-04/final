@@ -1,26 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, type KeyboardEvent } from "react";
 import { useI18n, type I18nController } from "../../shared/i18n";
+import type { MessageKey } from "../../shared/i18n/types";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Button } from "../../shared/ui/primitives/button";
 import type {
-  TimelineFailure,
+  TimelineEvent,
   TimelinePort,
   TimelineQuery,
+  TimelineSeverity,
+  TimelineSource,
+  TimelineStreamLifecycle,
+  TimelineViewMode,
+  TimelineEventType,
 } from "../../features/timeline/timelineContract";
-import { TimelineFailure as TimelinePortFailure } from "../../features/timeline/timelineContract";
 import { DEFAULT_MAX_RANGE_DAYS } from "../../features/timeline/timelineUrlState";
 import { useTimelineUrlState } from "../../features/timeline/useTimelineUrlState";
 import type { ClusterScope } from "../../shared/parity/referenceParity";
+import { useTimelineDataFrame, type TimelineDataFrame } from "./useTimelineDataFrame";
 
-type TimelineLoadState =
-  | { phase: "loading" }
-  | { phase: "ready"; eventCount: number }
-  | { phase: "failed"; failure: TimelineFailure };
+const VIEW_MODES: readonly TimelineViewMode[] = ["list", "swimlane"];
 
-interface TimelineResolution {
-  requestSignature: string;
-  state: Exclude<TimelineLoadState, { phase: "loading" }>;
-}
+const SOURCE_LABEL: Record<TimelineSource, MessageKey> = {
+  inventory: "timeline.source.inventory",
+  incident: "timeline.source.incident",
+  application_workflow: "timeline.source.applicationWorkflow",
+  kubernetes_event: "timeline.source.kubernetesEvent",
+  gitops: "timeline.source.gitops",
+};
+
+const TYPE_LABEL: Record<TimelineEventType, MessageKey> = {
+  add: "timeline.type.add",
+  update: "timeline.type.update",
+  delete: "timeline.type.delete",
+  k8s_event: "timeline.type.k8sEvent",
+  incident: "timeline.type.incident",
+  deployment: "timeline.type.deployment",
+  gitops_change: "timeline.type.gitopsChange",
+};
+
+const SEVERITY_LABEL: Record<TimelineSeverity, MessageKey> = {
+  info: "timeline.severity.info",
+  warning: "timeline.severity.warning",
+  critical: "timeline.severity.critical",
+  unknown: "timeline.severity.unknown",
+};
 
 export function TimelineSurface({
   port,
@@ -49,41 +72,36 @@ export function TimelineSurface({
       selectedEventId: url.state.selectedEventId,
     },
   }), [scopes, url.state]);
-  const [reloadToken, setReloadToken] = useState(0);
-  const requestSignature = useMemo(
-    () => JSON.stringify({ query, reloadToken }),
-    [query, reloadToken],
-  );
-  const [resolution, setResolution] = useState<TimelineResolution | null>(null);
-  const loadState: TimelineLoadState = resolution?.requestSignature === requestSignature
-    ? resolution.state
-    : { phase: "loading" };
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void port.readTimeline(query, controller.signal)
-      .then((snapshot) => {
-        if (controller.signal.aborted) return;
-        if (!Number.isSafeInteger(snapshot.eventCount) || snapshot.eventCount < 0) {
-          setResolution({
-            requestSignature,
-            state: { phase: "failed", failure: new TimelinePortFailure("invalid-response") },
-          });
-          return;
-        }
-        setResolution({ requestSignature, state: { phase: "ready", eventCount: snapshot.eventCount } });
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        setResolution({
-          requestSignature,
-          state: { phase: "failed", failure: toTimelineFailure(error) },
-        });
-      });
-    return () => controller.abort();
-  }, [port, query, requestSignature]);
-
+  const timeline = useTimelineDataFrame(port, query);
+  const viewGroupRef = useRef<HTMLDivElement>(null);
   const namespaceLocked = port.capabilities.requiresNamespaceFilter;
+
+  const setViewMode = (viewMode: TimelineViewMode) => {
+    if (namespaceLocked && viewMode !== "list") return;
+    url.setViewMode(viewMode);
+  };
+  const navigateViewMode = (event: KeyboardEvent<HTMLDivElement>) => {
+    const available = namespaceLocked ? ["list"] as const : VIEW_MODES;
+    const currentIndex = available.indexOf(url.state.viewMode);
+    const key = event.key;
+    const nextIndex = key === "Home"
+      ? 0
+      : key === "End"
+        ? available.length - 1
+        : key === "ArrowRight" || key === "ArrowDown"
+          ? (currentIndex + 1) % available.length
+          : key === "ArrowLeft" || key === "ArrowUp"
+            ? (currentIndex - 1 + available.length) % available.length
+            : null;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const next = available[nextIndex] ?? "list";
+    setViewMode(next);
+    viewGroupRef.current
+      ?.querySelector<HTMLButtonElement>(`[data-timeline-view="${next}"]`)
+      ?.focus();
+  };
+
   return (
     <ProductPageFrame>
       <header className="grid min-w-0 gap-1">
@@ -103,12 +121,20 @@ export function TimelineSurface({
             value={url.state.search}
           />
         </label>
-        <div aria-label={t("timeline.view")} className="flex items-center gap-1" role="radiogroup">
+        <div
+          aria-label={t("timeline.view")}
+          className="flex items-center gap-1"
+          onKeyDown={navigateViewMode}
+          ref={viewGroupRef}
+          role="radiogroup"
+        >
           <Button
             aria-checked={url.state.viewMode === "list"}
-            onClick={() => url.setViewMode("list")}
+            data-timeline-view="list"
+            onClick={() => setViewMode("list")}
             role="radio"
             size="sm"
+            tabIndex={url.state.viewMode === "list" ? 0 : -1}
             type="button"
             variant={url.state.viewMode === "list" ? "secondary" : "ghost"}
           >
@@ -117,10 +143,12 @@ export function TimelineSurface({
           <Button
             aria-checked={url.state.viewMode === "swimlane"}
             aria-disabled={namespaceLocked}
+            data-timeline-view="swimlane"
             disabled={namespaceLocked}
-            onClick={() => url.setViewMode("swimlane")}
+            onClick={() => setViewMode("swimlane")}
             role="radio"
             size="sm"
+            tabIndex={url.state.viewMode === "swimlane" && !namespaceLocked ? 0 : -1}
             type="button"
             variant={url.state.viewMode === "swimlane" ? "secondary" : "ghost"}
           >
@@ -128,31 +156,37 @@ export function TimelineSurface({
           </Button>
         </div>
       </div>
-      <TimelineLoadBoundary
+      <TimelineDataBoundary
         formatNumber={formatNumber}
-        loadState={loadState}
-        onRetry={() => setReloadToken((token) => token + 1)}
+        frame={timeline.frame}
+        onRetry={timeline.retry}
+        selectedEventId={url.state.selectedEventId}
         t={t}
+        viewMode={url.state.viewMode}
       />
     </ProductPageFrame>
   );
 }
 
-function TimelineLoadBoundary({
-  loadState,
-  onRetry,
+function TimelineDataBoundary({
   formatNumber,
+  frame,
+  onRetry,
+  selectedEventId,
   t,
+  viewMode,
 }: {
-  loadState: TimelineLoadState;
-  onRetry: () => void;
   formatNumber: I18nController["formatNumber"];
+  frame: TimelineDataFrame;
+  onRetry: () => void;
+  selectedEventId: string | null;
   t: I18nController["t"];
+  viewMode: TimelineViewMode;
 }) {
-  if (loadState.phase === "loading") {
+  if (frame.phase === "loading") {
     return <p aria-live="polite" className="rounded-xl border bg-card p-6 text-sm text-muted-foreground" role="status">{t("timeline.loading")}</p>;
   }
-  if (loadState.phase === "failed") {
+  if (frame.phase === "failed") {
     return (
       <section className="grid gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-6" role="alert">
         <div>
@@ -163,19 +197,105 @@ function TimelineLoadBoundary({
       </section>
     );
   }
-  if (loadState.eventCount === 0) {
-    return <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t("timeline.empty")}</p>;
-  }
+  const snapshot = frame.snapshot;
   return (
-    <p aria-live="polite" className="rounded-xl border bg-card p-6 text-sm" role="status">
-      {t(
-        loadState.eventCount === 1 ? "timeline.count.one" : "timeline.count.other",
-        { count: formatNumber(loadState.eventCount) },
+    <section className="grid min-w-0 gap-3" data-timeline-view={viewMode}>
+      <p aria-live="polite" className="text-sm text-muted-foreground" role="status">
+        {t(
+          snapshot.events.length === 1 ? "timeline.count.one" : "timeline.count.other",
+          { count: formatNumber(snapshot.events.length) },
+        )}
+      </p>
+      {frame.phase === "resyncing" ? (
+        <p aria-live="polite" className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground" role="status">
+          {t("timeline.stream.resyncing")}
+        </p>
+      ) : <TimelineStreamStatus stream={frame.stream} t={t} />}
+      {snapshot.coverage.length > 0 ? (
+        <aside className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted-foreground" role="status">
+          {t("timeline.coverage")}
+        </aside>
+      ) : null}
+      {snapshot.events.length === 0 ? (
+        <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t("timeline.empty")}</p>
+      ) : (
+        <TimelineEventList events={snapshot.events} selectedEventId={selectedEventId} t={t} />
       )}
+    </section>
+  );
+}
+
+function TimelineStreamStatus({
+  stream,
+  t,
+}: {
+  stream: TimelineStreamLifecycle;
+  t: I18nController["t"];
+}) {
+  const key: MessageKey = stream.state === "connecting"
+    ? "timeline.stream.connecting"
+    : stream.state === "connected"
+      ? "timeline.stream.connected"
+      : stream.state === "reconnecting"
+        ? "timeline.stream.reconnecting"
+        : stream.state === "closed"
+          ? "timeline.stream.closed"
+          : "timeline.stream.failed";
+  return (
+    <p
+      aria-live="polite"
+      className={stream.state === "failed"
+        ? "rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-muted-foreground"
+        : "text-sm text-muted-foreground"}
+      role={stream.state === "failed" ? "alert" : "status"}
+    >
+      {t(key)}
     </p>
   );
 }
 
-function toTimelineFailure(error: unknown): TimelineFailure {
-  return error instanceof TimelinePortFailure ? error : new TimelinePortFailure("unknown");
+function TimelineEventList({
+  events,
+  selectedEventId,
+  t,
+}: {
+  events: readonly TimelineEvent[];
+  selectedEventId: string | null;
+  t: I18nController["t"];
+}) {
+  const { formatDate } = useI18n();
+  return (
+    <ol aria-label={t("timeline.list.label")} className="grid min-w-0 gap-2">
+      {events.map((event) => {
+        const selected = event.id === selectedEventId;
+        return (
+          <li
+            aria-current={selected ? "true" : undefined}
+            className="grid min-w-0 gap-2 rounded-xl border bg-card p-4 shadow-sm"
+            data-selected={selected || undefined}
+            key={`${event.source}:${event.id}`}
+          >
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <h3 className="min-w-0 break-words font-medium">{event.title}</h3>
+              <time className="shrink-0 text-xs text-muted-foreground" dateTime={event.occurredAt}>
+                {formatDate(new Date(event.occurredAt), { dateStyle: "medium", timeStyle: "medium" })}
+              </time>
+            </div>
+            <div className="flex min-w-0 flex-wrap gap-1.5 text-xs text-muted-foreground">
+              <span className="rounded-md border px-2 py-0.5">{t(SOURCE_LABEL[event.source])}</span>
+              <span className="rounded-md border px-2 py-0.5">{t(TYPE_LABEL[event.type])}</span>
+              <span className={severityClass(event.severity)}>{t(SEVERITY_LABEL[event.severity])}</span>
+              <span className="min-w-0 break-words py-0.5">{event.scope.clusterId}</span>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function severityClass(severity: TimelineSeverity): string {
+  if (severity === "critical") return "rounded-md border border-destructive/40 bg-destructive/5 px-2 py-0.5 text-destructive";
+  if (severity === "warning") return "rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-amber-700 dark:text-amber-300";
+  return "rounded-md border px-2 py-0.5";
 }

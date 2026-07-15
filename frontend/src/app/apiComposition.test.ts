@@ -11,10 +11,11 @@ const APPROVED_SURFACE_IDS = new Set<ProductSurfaceId>([
   "issues",
   "resources",
   "settings",
+  "timeline",
 ]);
 
 describe("API composition root", () => {
-  it("registers approved read surfaces without making network requests before mount", () => {
+  it("registers Timeline as a released read surface without making network requests before mount", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
     const composition = createApiComposition();
@@ -24,6 +25,7 @@ describe("API composition root", () => {
 
     expect(composition.surfaces.map((surface) => surface.id)).toEqual(expectedSurfaceIds);
     expect([...composition.releasedSurfaceIds]).toEqual(expectedSurfaceIds);
+    expect(composition.releasedSurfaceIds.has("timeline")).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });

@@ -195,6 +195,23 @@ describe("createRafStreamCoalescer", () => {
     expect(received).toEqual([["opaque:AbC", "opaque:next"]]);
   });
 
+  it("flushes pending durable records at an explicit terminal protocol boundary", () => {
+    const runtime = new FakeRuntime();
+    const received: number[][] = [];
+    const coalescer = createRafStreamCoalescer<StreamEvent>({
+      cursorOf: (event) => event.cursor,
+      onFlush: (events) => received.push(events.map(({ cursor }) => cursor)),
+      policy: { hiddenTab: "coalesce", maxFramesPerSecond: 1 },
+      runtime,
+    });
+
+    coalescer.enqueue(event(1));
+    coalescer.flush();
+
+    expect(received).toEqual([[1]]);
+    expect(coalescer.pendingCount()).toBe(0);
+  });
+
   it("keeps semantic event order identical when a consumer requests reduced motion", () => {
     const full = flushWithMotionPreference(false);
     const reduced = flushWithMotionPreference(true);
