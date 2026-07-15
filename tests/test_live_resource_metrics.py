@@ -65,6 +65,8 @@ def test_kubelet_stats_join_actual_usage_with_complete_request_and_limit_totals(
     module = load_resource_metrics_module()
 
     async def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/proxy/metrics/cadvisor"):
+            return httpx.Response(404)
         assert request.url.path == "/api/v1/nodes/node-a/proxy/stats/summary"
         return httpx.Response(
             200,
@@ -116,6 +118,119 @@ def test_kubelet_stats_join_actual_usage_with_complete_request_and_limit_totals(
     }
 
 
+def test_kubelet_cumulative_cpu_delta_reacts_before_cached_nano_cores_changes() -> None:
+    module = load_resource_metrics_module()
+    responses = iter(
+        [
+            ("2026-07-15T03:00:00Z", 1_000_000_000),
+            ("2026-07-15T03:00:01Z", 1_800_000_000),
+        ]
+    )
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/proxy/metrics/cadvisor"):
+            return httpx.Response(404)
+        observed_at, cumulative = next(responses)
+        return httpx.Response(
+            200,
+            json={
+                "pods": [
+                    {
+                        "podRef": {
+                            "name": "checkout-0",
+                            "namespace": "shop",
+                            "uid": "pod-uid-1",
+                        },
+                        "cpu": {
+                            "time": observed_at,
+                            # kubelet 캐시 비율은 그대로여도 누적 실측치는 증가한다.
+                            "usageNanoCores": 100_000_000,
+                            "usageCoreNanoSeconds": cumulative,
+                        },
+                        "memory": {"workingSetBytes": 201_326_592},
+                    }
+                ]
+            },
+        )
+
+    async def collect_twice() -> tuple[dict[str, Any], dict[str, Any]]:
+        collector = module.PodResourceMetricsCollector()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            first = await collector.collect(
+                client,
+                base_url="https://kubernetes.default.svc",
+                headers={},
+                pods=[pod()],
+                actual_interval_seconds=1.0,
+            )
+            second = await collector.collect(
+                client,
+                base_url="https://kubernetes.default.svc",
+                headers={},
+                pods=[pod()],
+                actual_interval_seconds=1.0,
+            )
+        return first["shop/checkout-0"], second["shop/checkout-0"]
+
+    first, second = asyncio.run(collect_twice())
+
+    assert first["cpu_mcores"] == 100.0
+    assert second["cpu_mcores"] == 800.0
+    assert second["cpu_request_pct"] == pytest.approx(800 / 150 * 100)
+
+
+def test_cadvisor_pod_cumulative_cpu_updates_at_one_second_resolution() -> None:
+    module = load_resource_metrics_module()
+    responses = iter(
+        [
+            ("10.0", "1784098629776"),
+            ("10.8", "1784098630776"),
+        ]
+    )
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/nodes/node-a/proxy/metrics/cadvisor"
+        cumulative, timestamp = next(responses)
+        labels = (
+            'container="",cpu="total",id="/kubepods/pod-uid-1",image="",name="",'
+            'namespace="shop",pod="checkout-0"'
+        )
+        memory_labels = labels.replace(',cpu="total"', "")
+        return httpx.Response(
+            200,
+            text=(
+                f"container_cpu_usage_seconds_total{{{labels}}} {cumulative} {timestamp}\n"
+                f"container_memory_working_set_bytes{{{memory_labels}}} 201326592 {timestamp}\n"
+            ),
+        )
+
+    async def collect_twice() -> tuple[dict[str, Any], dict[str, Any]]:
+        collector = module.PodResourceMetricsCollector()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+            first = await collector.collect(
+                client,
+                base_url="https://kubernetes.default.svc",
+                headers={},
+                pods=[pod()],
+                actual_interval_seconds=1.0,
+            )
+            second = await collector.collect(
+                client,
+                base_url="https://kubernetes.default.svc",
+                headers={},
+                pods=[pod()],
+                actual_interval_seconds=1.0,
+            )
+        return first["shop/checkout-0"], second["shop/checkout-0"]
+
+    first, second = asyncio.run(collect_twice())
+
+    assert first["cpu_mcores"] is None
+    assert first["mem_mib"] == 192.0
+    assert second["cpu_mcores"] == pytest.approx(800.0)
+    assert second["cpu_request_pct"] == pytest.approx(800 / 150 * 100)
+
+
 def test_partial_kubelet_measurement_and_denominator_remain_none() -> None:
     module = load_resource_metrics_module()
     partial_pod = pod(
@@ -138,6 +253,8 @@ def test_partial_kubelet_measurement_and_denominator_remain_none() -> None:
     )
 
     async def handle(_request: httpx.Request) -> httpx.Response:
+        if _request.url.path.endswith("/proxy/metrics/cadvisor"):
+            return httpx.Response(404)
         return httpx.Response(
             200,
             json={
@@ -184,7 +301,7 @@ def test_kubelet_access_failure_uses_real_metrics_server_values_and_keeps_reason
 
     async def handle(request: httpx.Request) -> httpx.Response:
         requested_paths.append(request.url.path)
-        if "/proxy/stats/summary" in request.url.path:
+        if "/proxy/metrics/cadvisor" in request.url.path:
             return httpx.Response(403, json={"message": "forbidden"})
         if request.url.path == "/apis/metrics.k8s.io/v1beta1/namespaces/shop/pods":
             return httpx.Response(
@@ -230,10 +347,10 @@ def test_kubelet_access_failure_uses_real_metrics_server_values_and_keeps_reason
     assert measured["metrics_metadata"] == {
         "source": "metrics_server_fallback",
         "actual_interval_seconds": 1.0,
-        "degraded_reason": "kubelet_stats_forbidden",
+        "degraded_reason": "kubelet_cadvisor_forbidden",
     }
     assert requested_paths == [
-        "/api/v1/nodes/node-a/proxy/stats/summary",
+        "/api/v1/nodes/node-a/proxy/metrics/cadvisor",
         "/apis/metrics.k8s.io/v1beta1/namespaces/shop/pods",
     ]
 

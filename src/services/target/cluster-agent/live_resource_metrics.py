@@ -1,15 +1,18 @@
-"""Kubelet stats 기반 실시간 Pod 자원 측정.
+"""Kubelet cAdvisor 기반 실시간 Pod 자원 측정.
 
-기존 15초 evidence 수집 경로와 상태를 공유하지 않는다. Kubelet 접근이 실패한
-노드만 metrics.k8s.io의 실측값으로 폴백하며, 누락값은 추정하지 않고 ``None``으로
-유지한다.
+기존 15초 evidence 수집 경로와 상태를 공유하지 않는다. 1초마다 갱신되는 cAdvisor
+누적 실측값을 우선 사용하고 stats summary, metrics.k8s.io 순서로 폴백한다. 누락값은
+추정하지 않고 ``None``으로 유지한다.
 """
 
 from __future__ import annotations
 
 import asyncio
 import math
+import re
 from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -21,6 +24,18 @@ FALLBACK_SOURCE = "metrics_server_fallback"
 UNAVAILABLE_SOURCE = "unavailable"
 DEFAULT_NODE_CONCURRENCY = 8
 MIB = 1024 * 1024
+CADVISOR_CPU_METRIC = "container_cpu_usage_seconds_total"
+CADVISOR_MEMORY_METRIC = "container_memory_working_set_bytes"
+PROMETHEUS_SAMPLE_PATTERN = re.compile(
+    r"^(?P<metric>[a-zA-Z_:][a-zA-Z0-9_:]*)\{(?P<labels>[^}]*)\}"
+    r"\s+(?P<value>[^\s]+)(?:\s+(?P<timestamp>\d+))?$"
+)
+
+
+@dataclass(frozen=True)
+class CpuCumulativeSample:
+    usage_core_nanoseconds: float
+    observed_at_seconds: float
 
 
 def collection_interval_for_pods(pod_count: int) -> float:
@@ -82,10 +97,13 @@ def _joined_reason(*reasons: str | None) -> str | None:
 
 
 class PodResourceMetricsCollector:
-    """노드별 kubelet summary를 제한된 병렬도로 수집하고 Pod spec과 결합한다."""
+    """노드별 kubelet 실측값을 제한된 병렬도로 수집하고 Pod spec과 결합한다."""
 
     def __init__(self, node_concurrency: int = DEFAULT_NODE_CONCURRENCY) -> None:
         self.node_concurrency = max(1, min(int(node_concurrency), 32))
+        # kubelet의 usageNanoCores는 내부 housekeeping 주기 동안 같은 값이 반복될 수 있다.
+        # 누적 실측치의 인접 관측 차분으로 1초 수집 해상도를 보존한다.
+        self._cpu_cumulative_samples: dict[tuple[str, str, str], CpuCumulativeSample] = {}
 
     async def collect(
         self,
@@ -141,6 +159,7 @@ class PodResourceMetricsCollector:
                 fallback_failures[namespace] = reason
 
         result: dict[str, dict[str, Any]] = {}
+        active_cpu_keys: set[tuple[str, str, str]] = set()
         for display_key, pod in desired.items():
             metadata = pod.get("metadata", {})
             namespace = str(metadata.get("namespace") or "")
@@ -177,6 +196,13 @@ class PodResourceMetricsCollector:
                     reason = "kubelet_pod_uid_mismatch"
                     raw = None
 
+            cpu_key = (namespace, name, str(metadata.get("uid") or ""))
+            active_cpu_keys.add(cpu_key)
+            if source == KUBELET_SOURCE and raw is not None:
+                cpu_mcores = self._cpu_mcores_from_cumulative(cpu_key, raw)
+                if cpu_mcores is not None:
+                    raw["cpu_mcores"] = cpu_mcores
+
             measurement = self._measurement(
                 pod,
                 raw,
@@ -185,9 +211,101 @@ class PodResourceMetricsCollector:
                 degraded_reason=reason,
             )
             result[display_key] = measurement
+        self._cpu_cumulative_samples = {
+            key: sample
+            for key, sample in self._cpu_cumulative_samples.items()
+            if key in active_cpu_keys
+        }
         return result
 
     async def _fetch_node_stats(
+        self,
+        client: Any,
+        base_url: str,
+        headers: dict[str, str],
+        node_name: str,
+    ) -> tuple[dict[tuple[str, str], dict[str, Any]], str | None]:
+        measured, reason = await self._fetch_node_cadvisor(client, base_url, headers, node_name)
+        if reason is None:
+            return measured, None
+        # 같은 nodes/proxy 권한 경계에서 거부된 경우 느린 endpoint를 한 번 더 찌르지 않는다.
+        if reason in {"kubelet_cadvisor_unauthorized", "kubelet_cadvisor_forbidden"}:
+            return {}, reason
+        summary, summary_reason = await self._fetch_node_stats_summary(
+            client, base_url, headers, node_name
+        )
+        if summary_reason is None:
+            return summary, None
+        return {}, _joined_reason(reason, summary_reason)
+
+    async def _fetch_node_cadvisor(
+        self,
+        client: Any,
+        base_url: str,
+        headers: dict[str, str],
+        node_name: str,
+    ) -> tuple[dict[tuple[str, str], dict[str, Any]], str | None]:
+        url = f"{base_url.rstrip('/')}/api/v1/nodes/{quote(node_name, safe='')}/proxy/metrics/cadvisor"
+        try:
+            response = await client.get(url, headers=headers)
+        except httpx.HTTPError:
+            return {}, "kubelet_cadvisor_request_failed"
+        if response.status_code == 401:
+            return {}, "kubelet_cadvisor_unauthorized"
+        if response.status_code == 403:
+            return {}, "kubelet_cadvisor_forbidden"
+        if response.status_code == 404:
+            return {}, "kubelet_cadvisor_not_found"
+        if response.is_error:
+            return {}, f"kubelet_cadvisor_http_{response.status_code}"
+        measured = self._parse_cadvisor(response.text)
+        if not measured:
+            return {}, "kubelet_cadvisor_measurement_missing"
+        return measured, None
+
+    @classmethod
+    def _parse_cadvisor(cls, payload: str) -> dict[tuple[str, str], dict[str, Any]]:
+        measured: dict[tuple[str, str], dict[str, Any]] = {}
+        for line in payload.splitlines():
+            match = PROMETHEUS_SAMPLE_PATTERN.match(line)
+            if match is None or match.group("metric") not in {
+                CADVISOR_CPU_METRIC,
+                CADVISOR_MEMORY_METRIC,
+            }:
+                continue
+            labels = match.group("labels")
+            if any(cls._prometheus_label(labels, name) for name in ("container", "image", "name")):
+                continue
+            if (
+                match.group("metric") == CADVISOR_CPU_METRIC
+                and cls._prometheus_label(labels, "cpu") != "total"
+            ):
+                continue
+            namespace = cls._prometheus_label(labels, "namespace")
+            pod = cls._prometheus_label(labels, "pod")
+            value = _finite_nonnegative(match.group("value"))
+            if not namespace or not pod or value is None:
+                continue
+            key = (namespace, pod)
+            entry = measured.setdefault(key, {"uid": ""})
+            timestamp = _finite_nonnegative(match.group("timestamp"))
+            if timestamp is not None:
+                entry["observed_at"] = datetime.fromtimestamp(
+                    timestamp / 1000,
+                    tz=UTC,
+                ).isoformat()
+            if match.group("metric") == CADVISOR_CPU_METRIC:
+                entry["cpu_usage_core_nanoseconds"] = value * 1_000_000_000
+            else:
+                entry["mem_bytes"] = int(value)
+        return measured
+
+    @staticmethod
+    def _prometheus_label(labels: str, name: str) -> str:
+        match = re.search(rf'(?:^|,){re.escape(name)}="([^"]*)"', labels)
+        return match.group(1) if match is not None else ""
+
+    async def _fetch_node_stats_summary(
         self,
         client: Any,
         base_url: str,
@@ -230,10 +348,43 @@ class PodResourceMetricsCollector:
             measured[(namespace, name)] = {
                 "uid": str(ref.get("uid") or ""),
                 "cpu_mcores": nano_cores / 1_000_000 if nano_cores is not None else None,
+                "cpu_usage_core_nanoseconds": _finite_nonnegative(cpu.get("usageCoreNanoSeconds")),
                 "mem_bytes": int(working_set) if working_set is not None else None,
                 "observed_at": cpu.get("time") or memory.get("time"),
             }
         return measured, None
+
+    def _cpu_mcores_from_cumulative(
+        self,
+        key: tuple[str, str, str],
+        raw: dict[str, Any],
+    ) -> float | None:
+        cumulative = _finite_nonnegative(raw.get("cpu_usage_core_nanoseconds"))
+        observed_at = self._timestamp_seconds(raw.get("observed_at"))
+        if cumulative is None or observed_at is None:
+            return None
+        current = CpuCumulativeSample(cumulative, observed_at)
+        previous = self._cpu_cumulative_samples.get(key)
+        self._cpu_cumulative_samples[key] = current
+        if previous is None:
+            return None
+        elapsed = current.observed_at_seconds - previous.observed_at_seconds
+        consumed = current.usage_core_nanoseconds - previous.usage_core_nanoseconds
+        if elapsed <= 0 or consumed < 0:
+            return None
+        return consumed / elapsed / 1_000_000
+
+    @staticmethod
+    def _timestamp_seconds(value: Any) -> float | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.timestamp()
 
     async def _fetch_metrics_namespace(
         self,
