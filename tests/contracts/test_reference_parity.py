@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+import pytest
+from packages.contracts.parity import (
+    CapabilitySet,
+    ClusterScope,
+    CommandReceipt,
+    CommandRequest,
+    OperationEvent,
+    ResourceRef,
+)
+from pydantic import ValidationError
+
+
+def test_parity_contract_preserves_canonical_scope_resource_and_direct_receipt() -> None:
+    scope = ClusterScope(
+        workspace_id="workspace-1",
+        cluster_id="cluster-1",
+        namespaces=["payments", "default", "payments"],
+        freshness="live",
+    )
+    resource = ResourceRef(
+        api_group="apps",
+        version="v1",
+        kind="Deployment",
+        namespace="payments",
+        name="checkout",
+        uid="uid-1",
+    )
+    capabilities = CapabilitySet(
+        scope=scope,
+        resource=resource,
+        revision="cap-1",
+        actions=["deployment.scale", "deployment.restart"],
+    )
+    request = CommandRequest(
+        scope=scope,
+        resource=resource,
+        action="deployment.scale",
+        diff={"replicas": {"before": 2, "after": 3}},
+        confirmation=True,
+        reason="scale checkout",
+    )
+    receipt = CommandReceipt(
+        accepted=True,
+        command_id="cmd-1",
+        audit_id="audit-1",
+        status="queued",
+    )
+    event = OperationEvent(
+        command_id=receipt.command_id,
+        sequence=3,
+        kind="progress",
+        payload={"message": "agent leased command"},
+    )
+
+    assert scope.namespaces == ("default", "payments")
+    assert capabilities.actions == ("deployment.restart", "deployment.scale")
+    assert request.confirmation is True
+    assert event.command_id == receipt.command_id
+
+
+def test_direct_command_requires_confirmation_and_capabilities_are_unique() -> None:
+    scope = ClusterScope(workspace_id="workspace-1", cluster_id="cluster-1")
+    resource = ResourceRef(kind="Pod", namespace="default", name="api", uid="uid-1")
+
+    with pytest.raises(ValidationError, match="confirmation"):
+        CommandRequest(
+            scope=scope,
+            resource=resource,
+            action="pod.exec",
+            diff={},
+            confirmation=False,
+            reason="open shell",
+        )
+    with pytest.raises(ValidationError, match="unique"):
+        CapabilitySet(
+            scope=scope,
+            resource=resource,
+            revision="cap-1",
+            actions=["pod.exec", "pod.exec"],
+        )
