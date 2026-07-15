@@ -138,6 +138,8 @@ class TimelineStreamFrame(StrictModel):
 
     kind: TimelineFrameKind
     cursor: int = Field(ge=0)
+    scopes: tuple[ClusterScope, ...] = ()
+    policy: RealtimePolicy | None = None
     event: TimelineEvent | None = None
     events: tuple[TimelineEvent, ...] = ()
     coverage: tuple[TimelineCoverage, ...] = ()
@@ -146,13 +148,25 @@ class TimelineStreamFrame(StrictModel):
     @model_validator(mode="after")
     def validate_shape(self) -> TimelineStreamFrame:
         if self.kind == "snapshot":
+            if not self.scopes:
+                raise ValueError("snapshot frame requires scopes")
+            if self.policy is None:
+                raise ValueError("snapshot frame requires policy")
             if self.event is not None or self.reason is not None:
-                raise ValueError("snapshot frame may only carry events and coverage")
+                raise ValueError(
+                    "snapshot frame may only carry scopes, policy, events, and coverage"
+                )
             return self
         if self.kind == "event":
             if self.event is None:
                 raise ValueError("event frame requires event")
-            if self.events or self.coverage or self.reason is not None:
+            if (
+                self.scopes
+                or self.policy is not None
+                or self.events
+                or self.coverage
+                or self.reason is not None
+            ):
                 raise ValueError("event frame may only carry one event")
             if self.event.cursor != self.cursor:
                 raise ValueError("event frame cursor must match event cursor")
@@ -160,6 +174,8 @@ class TimelineStreamFrame(StrictModel):
         if self.kind == "coverage":
             if (
                 not self.coverage
+                or self.scopes
+                or self.policy is not None
                 or self.event is not None
                 or self.events
                 or self.reason is not None
@@ -167,10 +183,23 @@ class TimelineStreamFrame(StrictModel):
                 raise ValueError("coverage frame requires coverage only")
             return self
         if self.kind == "resync_required":
-            if not self.reason or self.event is not None or self.events or self.coverage:
+            if (
+                not self.reason
+                or self.scopes
+                or self.policy is not None
+                or self.event is not None
+                or self.events
+                or self.coverage
+            ):
                 raise ValueError("resync frame requires reason only")
             return self
-        if self.event is not None or self.events or self.coverage:
+        if (
+            self.scopes
+            or self.policy is not None
+            or self.event is not None
+            or self.events
+            or self.coverage
+        ):
             raise ValueError("terminal frame must not carry timeline records")
         if self.kind == "error" and not self.reason:
             raise ValueError("error frame requires reason")
