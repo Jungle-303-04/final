@@ -87,8 +87,9 @@ metrics 요청의 `503`은 명시적인 미설정 상태로 통과한다.
 기본 Runner는 실제 `cluster-1` 대신 실행마다 `bruno-<시각>-<pid>` 형식의 격리
 cluster를 등록해 성공 경로를 검증하고 종료 trap에서 해제한다. CLI Runner는 Bruno의
 client certificate config가 필요하며 기본 경로는 `~/.kubeheal/bruno-client-cert-config.json`이다.
-Bruno 앱 전체 실행은 `cluster_purge: false`로 빠른 soft unregister를 사용하고, CLI Runner만
-고유한 test fixture에 `cluster_purge=true`를 주입해 물리 삭제한다.
+Bruno 앱 전체 실행은 `cluster_purge: false`로 202 등록 해제 receipt를 확인한다. agent가
+온라인이면 해제 command가 queue되고, 오프라인이면 응답의 `uninstall_command`를 사람이 실행해야
+한다. CLI Runner만 고유한 test fixture에 `cluster_purge=true`를 주입해 물리 삭제한다.
 다른 경로는 `BRUNO_CLIENT_CERT_CONFIG`로 지정한다. 기존 DLQ replay, 임의 목록 항목 삭제, 실제 cluster
 scale/restart, 외부 webhook 전송은 기본 Runner에서 제외하고 해당 요청을 명시적으로
 선택했을 때만 실행한다.

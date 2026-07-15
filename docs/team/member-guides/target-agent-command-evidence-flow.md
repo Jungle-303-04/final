@@ -179,7 +179,11 @@ class CommandResultRequest(StrictModel):
     resources: list[dict[str, Any]] = []
     stdout: str = ""
     stderr: str = ""
+    cleanup_completed: bool = False
+    residual_resources: list[str] = []
 ```
+
+`cleanup_completed`와 `residual_resources`는 `cluster.agent.uninstall` result에서만 등록 해제 근거로 쓴다. 일반 command는 기본값 그대로 둔다.
 
 결과 예시:
 

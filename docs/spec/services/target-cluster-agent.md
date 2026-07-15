@@ -153,6 +153,7 @@ def approval_exempt_for_environment(self, action: str, command: CommandRecord) -
 def has_approval_evidence(self, command: CommandRecord) -> bool
 async def run_query_command(self, ctx: CommandContext[TelemetryQueryCommandPayload]) -> JsonObject      # @command.handler(QUERY_RUN_ACTION, payload_model=TelemetryQueryCommandPayload)
 async def catalog_helm_install_command(self, ctx: CommandContext[CatalogHelmInstallPayload]) -> JsonObject  # @command.handler(Command.CATALOG_HELM_INSTALL_ACTION, ...)
+async def schedule_agent_uninstall_command(self, ctx: CommandContext[ClusterAgentUninstallPayload]) -> JsonObject  # @command.handler(Command.CLUSTER_AGENT_UNINSTALL_ACTION, payload_model=ClusterAgentUninstallPayload)
 async def patch_deployment_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_PATCH_ACTION, api_group="apps", version="v1", resource="deployments", verb="patch", payload_model=KubernetesPatchPayload)
 async def scale_deployment_command(self, ctx: CommandContext[KubernetesScalePayload]) -> JsonObject      # @command.k8s(KUBERNETES_DEPLOYMENT_SCALE_ACTION, ..., resource="deployments", verb="patch", payload_model=KubernetesScalePayload)
 async def patch_configmap_command(self, ctx: CommandContext[KubernetesPatchPayload]) -> JsonObject       # @command.k8s(KUBERNETES_CONFIGMAP_PATCH_ACTION, api_group="core", version="v1", resource="configmaps", verb="patch", payload_model=KubernetesPatchPayload)
@@ -564,7 +565,7 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
 | 에이전트 등록 | `POST /agent/connect` | `{cluster_id, agent_id, capabilities: ["collector", "command_receiver"]}` |
 | 커맨드 시작 | `POST /agent/commands/{command_id}/start` | `{cluster_id, workspace_id, agent_id, lease_id}` |
 | 커맨드 하트비트 | `POST /agent/commands/{command_id}/heartbeat` | `{cluster_id, workspace_id, agent_id, lease_id}` — 실행 중 `COMMAND_HEARTBEAT_INTERVAL_SECONDS`(20s)마다 |
-| 커맨드 결과 | `POST /agent/commands/{command_id}/result` | 커맨드 결과 dict + `{workspace_id, agent_id, lease_id}` 병합. 결과 스키마(`TargetClusterAgent.command_result` / `CommandResult.completed/failed`): `status: "completed"\|"failed"`, `cluster_id`, `applied: bool`, `message: str`, `retryable: bool`, `resources: [{resource, status, applied, message}]`, `stdout`(sanitize 적용), `stderr`(sanitize 적용), `rollout: JsonObject`(k8s 데코레이터 핸들러는 `rollout` 대신 `applied/result` 등 `**fields`) |
+| 커맨드 결과 | `POST /agent/commands/{command_id}/result` | 커맨드 결과 dict + `{workspace_id, agent_id, lease_id}` 병합. 결과 스키마(`TargetClusterAgent.command_result` / `CommandResult.completed/failed`): `status: "completed"\|"failed"`, `cluster_id`, `applied: bool`, `message: str`, `retryable: bool`, `resources: [{resource, status, applied, message}]`, `stdout`(sanitize 적용), `stderr`(sanitize 적용), `cleanup_completed: bool = false`, `residual_resources: list[str] = []`, `rollout: JsonObject`(k8s 데코레이터 핸들러는 `rollout` 대신 `applied/result` 등 `**fields`) |
 | evidence job 스케줄 | `POST /agent/evidence/jobs` | `{source_id: "cluster-snapshot", window_start: <UTC ISO>, provider_keys: [str]}` → 응답에서 `evidence_key` 읽음 |
 | evidence job 결과 | `POST /agent/evidence/jobs/{job_id}/result` | `{agent_id, lease_id, status: "completed"\|"failed", result: JsonObject, error: str}` — result는 `{<evidence_key>: ProviderResult}` 형태 |
 | 정책 적용 상태 | `POST /agent/policy/status` | `{cluster_id, generation, status: "applied"\|"failed"\|"unchanged", message, details}` — details는 `apply_policy` 반환값 `{generation, cluster_role, bootstrap_mode, enabled_providers, evidence_worker_counts, registered_queries}` |
@@ -584,6 +585,7 @@ metadata provider는 evidence job result의 1MiB JSON 제한을 넘길 위험을
 | `k8s.core.v1.configmaps.patch` | `KubernetesPatchPayload{namespace, name, patch?, body?}` | `patch_configmap_command` |
 | `apply_manifest` | raw payload의 `diff: {namespace?, desired_manifest?: dict, resource?: "deployment/<name>" / "pod/<deployment-hash-suffix>" / "replicaset/<deployment-hash>" / bare name, desired_image?}`. Deployment 이름을 추정할 수 없는 kind는 대상 없음으로 실패한다. | `apply_manifest_command` |
 | `rollout_restart` | raw payload의 `diff: {namespace?, resource: "deployment/<name>" / "pod/<deployment-hash-suffix>" / "replicaset/<deployment-hash>" / bare name}`. Deployment 이름을 추정할 수 없는 kind는 대상 없음으로 실패한다. | `rollout_restart_command` |
+| `cluster.agent.uninstall` | `ClusterAgentUninstallPayload{cluster_id, contract_version}`. target role만 허용하며 cluster_id와 contract version이 agent identity와 맞아야 한다. exact-name allowlist resource를 삭제한 뒤 `cleanup_completed=true`, `residual_resources`를 result에 담는다. Gateway ACK가 durable하게 전송된 뒤에만 agent Deployment 삭제를 시도한다. | `schedule_agent_uninstall_command` |
 | 그 외 | — | `apply_default_command` → `fail("unsupported action: {action}")` |
 
 ## 동작 (Behavior)
@@ -723,6 +725,7 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 4. **reconcile 정책**: `user-workload` scope 금지, `system` scope의 Deployment 금지, namespace는 role 고정, ConfigMap은 `target-agent-policy`·target-agent Deployment는 `cluster-agent`만 (`DesiredStateReconciler.ensure_allowed`, `PermissionError`).
 5. **정책 정합성**: `apply_policy`는 정책의 `cluster_id`/`cluster_role`이 에이전트와 다르면 `ValueError`. `AgentPolicy` 등 요청 모델은 전부 `StrictModel(extra="forbid")` — 계약 밖 필드는 검증 실패.
 6. **커맨드 결과는 반드시 outbox 경유**: 실행 결과는 SQLite에 먼저 기록되고 전송 성공 시에만 삭제된다(재시작에도 결과 보존). 전송 5회 실패 시 `abandoned`로 봉인되어 무한 재시도를 막는다. `enqueue_result`는 `command_id` UPSERT라 중복 실행에 멱등.
+6-1. **agent uninstall은 ACK 이후 자기 삭제**: `cluster.agent.uninstall`은 `PRE_ACK_*` allowlist resource를 먼저 지우고 `cleanup_completed=true` result가 Gateway에 저장된 뒤에만 running agent Deployment 삭제를 시도한다. self-cleanup으로 지울 수 없는 service account와 uninstall RBAC pair는 `SELF_CLEANUP_RESIDUALS`로 남겨 수동 fallback에 포함한다.
 7. **루프는 죽지 않는다**: 등록/폴링/정책/스케줄/워커/reconcile/live summary 루프는 예외를 잡아 경고 로그 + 백오프로 계속 돈다. 커맨드 실행 예외는 실패 결과로 변환된다.
 8. **evidence 수집은 부분 실패 허용**: `allow_partial`에서는 같은 provider 안의 일부 쿼리가 실패해도 성공한 쿼리 결과를 버리지 않는다. 실패한 쿼리는 `{source}.fallback_used=true`와 `query_name`이 포함된 경고로 남고, 성공 결과가 없을 때만 해당 provider의 `empty_results()` 응답이 전송된다. `strict`에서는 쿼리 실패를 전파해 job을 `failed`로 보고한다.
 9. **레지스트리 fail-fast**: 커맨드 action 중복 등록·텔레메트리 소스 상이 계약 재등록·미등록 소스/쿼리 참조는 즉시 `ValueError`.

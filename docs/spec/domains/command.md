@@ -197,9 +197,9 @@ management 클러스터(role=`management`)는 제어 불가다. `commands`와 sc
 | `GET /agent/commands/poll` (`AGENT_COMMAND_POLL_PATH`) | `src/domains/command/router.py :: poll_command` — query `agent_id: str = "target-agent"`, `timeout: int = DEFAULT_POLL_SECONDS` | — | `AgentCommandPollResponse(command=row \| None)` |
 | `POST /agent/commands/{command_id}/start` (`AGENT_COMMAND_START_PATH`) | `src/domains/command/router.py :: command_start` | `CommandStartRequest(lease_id, agent_id)` | `CommandStartedResponse(accepted=True, correlation_id)`; 불일치 시 404 |
 | `POST /agent/commands/{command_id}/heartbeat` (`AGENT_COMMAND_HEARTBEAT_PATH`) | `src/domains/command/router.py :: command_heartbeat` | `CommandHeartbeatRequest(lease_id, agent_id)` | `CommandHeartbeatResponse(accepted=True, correlation_id)`; 불일치 시 404 |
-| `POST /agent/commands/{command_id}/result` (`AGENT_COMMAND_RESULT_PATH`) | `src/domains/command/router.py :: command_result` | `CommandResultRequest` | `EventIdAcceptedResponse(accepted=True, event_id)`; 불일치 시 404 |
+| `POST /agent/commands/{command_id}/result` (`AGENT_COMMAND_RESULT_PATH`) | `src/domains/command/router.py :: command_result` | `CommandResultRequest` | `EventIdAcceptedResponse(accepted=True, event_id)`; 불일치 시 404. `cluster.agent.uninstall` 결과는 target cluster agent만 제출할 수 있고, management registration이면 400으로 거부한다. `status="completed"`와 `cleanup_completed=true`가 함께 온 뒤에만 `unregister_target_cluster`로 등록 토큰을 폐기한다. |
 
-`command_result`는 `payload.model_dump()`에 identity의 workspace_id/cluster_id를 덮어쓴 result로 `complete_agent_command_and_stage_event(..., source="api-gateway")`를 호출한다.
+`command_result`는 먼저 `db.get_agent_command(command_id, identity.workspace_id)`로 command 소유 cluster가 agent token identity와 같은지 확인한다. `cluster.agent.uninstall` 결과는 management registration이면 400으로 막는다. 이후 `payload.model_dump()`에 identity의 workspace_id/cluster_id를 덮어쓴 result로 `complete_agent_command_and_stage_event(..., source="api-gateway")`를 호출한다. uninstall command가 `completed`이고 `cleanup_completed=true`이면 command result event 저장 후 `unregister_target_cluster(identity.workspace_id, identity.cluster_id)`가 성공해야 응답한다.
 
 ## 데이터 모델 (Data Model)
 

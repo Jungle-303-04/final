@@ -39,7 +39,7 @@ v1은 현재 `frontend/`를 "구조적 교정판"으로 평가했으나, 계약 
 | C6 | A | `LiveSnapshot.namespaces` 분기는 BE가 절대 보내지 않는 형태 → hot-pod 강조·라이브 phase 차트 영구 비활성(폴백이 은폐) | `types.ts:135`, `live.ts:169` / `contracts/realtime.py:110-113` |
 | C7 | A | ≤1 값을 ×100하는 percent 휴리스틱, BE는 이미 percent 반환 → 0.8% CPU가 80%로 표시. 같은 지표에 단위 규약 3종 혼재 | `cluster/api.ts:323-327`, `fleet/api.ts:113-116`, `ClusterDetailView.tsx:1085-1087` |
 | C8 | B | 잠재 타입 거짓말: `workloads` array(실제 dict-by-health), `recent_events`(실제 `warning_events`), `connection_status` 리터럴 세트 불일치, `last_seen`(실제 `last_seen_at`, 어댑터로 은폐) | `fleet/api.ts`, `types.ts:5` |
-| C9 | C | DELETE /clusters 204 무본문인데 FE는 응답 본문 타입 선언(하드코딩 kubectl 폴백으로 은폐) | `cluster/api.ts:64-69` / `target/router.py:1198` |
+| C9 | C | 해결됨: 현재 `DELETE /clusters/{cluster_id}`는 202 `ClusterUnregisterResponse`를 반환하고 FE는 `ClusterUnregisterResponse`를 파싱한다. offline target은 `cleanup_required`와 `uninstall_command`를 보여주며, agent cleanup 완료는 command status로 폴링한다. | `frontend/src/api/clusters.ts`, `src/domains/target/router.py :: unregister_cluster` |
 
 ### L군 — 실시간 레이어(live.ts) 논리 오류
 

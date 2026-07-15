@@ -10,8 +10,21 @@ delete {
 }
 
 tests {
-  test("204 or explicit auth/access/readonly/not-found failure", function () {
-    expect([204, 400, 401, 403, 404]).to.include(res.status);
+  test("202 unregister receipt or explicit auth/access/readonly/not-found failure", function () {
+    expect([202, 400, 401, 403, 404]).to.include(res.status);
+  });
+
+  test("202 response is the cluster unregister receipt", function () {
+    if (res.status !== 202) return;
+    const body = res.getBody();
+    expect(body.cluster_id).to.be.a("string").and.not.empty;
+    expect(body.status).to.be.oneOf(["uninstalling", "cleanup_required", "disconnected", "purged"]);
+    expect(body.stage).to.be.oneOf([
+      "agent_cleanup_queued",
+      "manual_cleanup_required",
+      "registration_revoked",
+      "purged"
+    ]);
   });
 
   test("management readonly failure has code", function () {
