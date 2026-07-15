@@ -26,6 +26,7 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
@@ -111,7 +112,7 @@ from packages.contracts.identity import (
 )
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
 from packages.events.envelope import event
-from packages.runtime.dependencies import get_db, get_events
+from packages.runtime.dependencies import get_db, get_events, get_timeline_fanout
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
 
@@ -1921,6 +1922,7 @@ async def evidence_job_result(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    timeline_fanout: Any = Depends(get_timeline_fanout),
 ) -> EvidenceJobResultResponse:
     result = await db_call(
         db.complete_evidence_job,
@@ -1958,8 +1960,8 @@ async def evidence_job_result(
         )
     kubernetes = payload.result.get("kubernetes")
     if payload.status == "completed" and isinstance(kubernetes, dict):
-        await db_call(
-            db.save_inventory_snapshot,
+        await ingest_inventory_snapshot(
+            db=db,
             workspace_id=identity.workspace_id,
             cluster_id=identity.cluster_id,
             agent_id=payload.agent_id,
@@ -1968,6 +1970,7 @@ async def evidence_job_result(
                 cluster_id=identity.cluster_id,
                 agent_id=payload.agent_id,
             ),
+            fanout=timeline_fanout,
         )
 
     evidence_key = str(result["evidence_key"])

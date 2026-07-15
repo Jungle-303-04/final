@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -20,7 +22,9 @@ from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
     sync_inventory_filter_projection,
 )
+from domains.timeline.mapping import inventory_timeline_event
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.timeline import TimelineEvent
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 # 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한.
@@ -41,6 +45,38 @@ FLEET_ROLLUP_RESOURCE_TYPES = (POD_RESOURCE_TYPE, NODE_RESOURCE_TYPE, WORKLOAD_R
 POD_RUNNING_STATUS = "Running"
 NODE_READY_STATUS = "Ready"
 DEGRADED_HEALTH = "degraded"
+
+# 이 필드들은 수집 시점·read-model bookkeeping 이 아니라 실제 inventory resource의
+# 상태를 뜻한다. 스냅샷 ID/관측시각은 매 수집마다 달라질 수 있으므로 timeline 변경 판정에
+# 포함하지 않는다.
+INVENTORY_TIMELINE_SEMANTIC_FIELDS = (
+    "resource_type",
+    "api_version",
+    "kind",
+    "namespace",
+    "name",
+    "uid",
+    "resource_version",
+    "status",
+    "health",
+    "labels",
+    "annotations",
+    "summary",
+    "raw",
+)
+InventoryTimelineChange = Literal["add", "update", "delete"]
+
+
+@dataclass(frozen=True)
+class InventorySnapshotMutation:
+    """수집 저장의 내부 결과.
+
+    ``timeline_events``는 ledger append 전의 도메인 사실이다. HTTP 응답은 ``result``만
+    사용하므로 내부 mutation/ledger sequence가 외부 계약으로 새지 않는다.
+    """
+
+    result: JsonObject
+    timeline_events: tuple[TimelineEvent, ...] = ()
 
 
 def live_inventory_snapshot_clause(table: Any) -> Any:
@@ -217,6 +253,142 @@ def snapshot_summary(payload: JsonObject) -> JsonObject:
     }
 
 
+def inventory_timeline_events(
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    observed_at: datetime,
+    previous_rows: Sequence[Mapping[str, object]],
+    current_rows: Sequence[Mapping[str, object]],
+    resources_complete: bool,
+) -> tuple[TimelineEvent, ...]:
+    """Derive durable inventory changes from one authoritative collection cut.
+
+    An incomplete collection may be missing arbitrary namespaces or resource kinds, so it
+    cannot truthfully establish either an addition or a deletion. The resource read model
+    still accepts it, but the timeline receives no fact until a complete collection has
+    established the comparison boundary.
+    """
+    if not resources_complete:
+        return ()
+
+    previous_by_key = {
+        str(row["inventory_key"]): row
+        for row in previous_rows
+        if is_timeline_inventory_resource(row)
+    }
+    current_by_key = {
+        str(row["inventory_key"]): row
+        for row in current_rows
+        if is_timeline_inventory_resource(row)
+    }
+    changes: list[tuple[InventoryTimelineChange, Mapping[str, object]]] = []
+    for inventory_key in sorted(current_by_key):
+        current = current_by_key[inventory_key]
+        previous = previous_by_key.get(inventory_key)
+        if previous is None:
+            changes.append(("add", current))
+        elif inventory_resource_changed(previous, current):
+            changes.append(("update", current))
+    for inventory_key in sorted(set(previous_by_key) - set(current_by_key)):
+        changes.append(("delete", previous_by_key[inventory_key]))
+
+    return tuple(
+        inventory_change_timeline_event(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            observed_at=observed_at,
+            event_type=event_type,
+            resource=resource,
+        )
+        for event_type, resource in changes
+    )
+
+
+def is_timeline_inventory_resource(resource: Mapping[str, object]) -> bool:
+    """Exclude derived health/usage rollups until they receive their own source contract."""
+    return str(resource.get("resource_type") or "") not in {
+        HEALTH_RESOURCE_TYPE,
+        USAGE_RESOURCE_TYPE,
+    }
+
+
+def inventory_resource_changed(
+    previous: Mapping[str, object], current: Mapping[str, object]
+) -> bool:
+    """Compare persisted resource facts without collection bookkeeping noise."""
+    return any(
+        inventory_timeline_semantic_value(field, previous.get(field))
+        != inventory_timeline_semantic_value(field, current.get(field))
+        for field in INVENTORY_TIMELINE_SEMANTIC_FIELDS
+    )
+
+
+def inventory_timeline_semantic_value(field: str, value: object) -> object:
+    """Strip a known collection-only annotation before comparing source facts."""
+    if field == "summary" and isinstance(value, Mapping):
+        summary = dict(value)
+        summary.pop("collected_at", None)
+        return summary
+    return value
+
+
+def inventory_change_timeline_event(
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    observed_at: datetime,
+    event_type: InventoryTimelineChange,
+    resource: Mapping[str, object],
+) -> TimelineEvent:
+    """Map one resource delta without exposing raw resource data or ledger position."""
+    inventory_key = str(resource["inventory_key"])
+    kind = str(resource.get("kind") or resource.get("resource_type") or "Resource")
+    name = str(resource.get("name") or inventory_key)
+    namespace_value = resource.get("namespace")
+    namespace = str(namespace_value) if namespace_value is not None else None
+    uid_value = resource.get("uid")
+    uid = str(uid_value) if uid_value is not None else None
+    source_key = inventory_timeline_source_key(event_type, resource)
+    verb = {"add": "added", "update": "updated", "delete": "deleted"}[event_type]
+    return inventory_timeline_event(
+        event_id=source_key,
+        source_key=source_key,
+        native_id=inventory_key,
+        occurred_at=observed_at,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        api_version=str(resource.get("api_version") or ""),
+        resource_kind=kind,
+        namespace=namespace,
+        name=name,
+        uid=uid,
+        title=f"{kind} {name} {verb}",
+        event_type=event_type,
+    )
+
+
+def inventory_timeline_source_key(
+    event_type: InventoryTimelineChange,
+    resource: Mapping[str, object],
+) -> str:
+    """Use a fact fingerprint, never a generated snapshot ID, for ledger idempotency."""
+    inventory_key = str(resource["inventory_key"])
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                field: inventory_timeline_semantic_value(field, resource.get(field))
+                for field in INVENTORY_TIMELINE_SEMANTIC_FIELDS
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+    ).hexdigest()
+    return f"inventory:{event_type}:{inventory_key}:{fingerprint}"
+
+
 def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
     """K8s 리소스 raw/summary 에서 첫 컨테이너 이미지를 찾음(workload → pod → summary 순)."""
     for path in (("spec", "template", "spec", "containers"), ("spec", "containers")):
@@ -286,6 +458,27 @@ class InventoryRepository(DatabaseConnection):
         agent_id: str,
         payload: JsonObject,
     ) -> JsonObject:
+        """Compatibility persistence entry point without exposing internal timeline facts.
+
+        The delegated mutation retains the complete-cut replacement boundary
+        (``snapshot_id != current snapshot``); callers of this legacy response-only method
+        cannot observe its internal timeline facts.
+        """
+        return self.save_inventory_snapshot_mutation(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            agent_id=agent_id,
+            payload=payload,
+        ).result
+
+    def save_inventory_snapshot_mutation(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        agent_id: str,
+        payload: JsonObject,
+    ) -> InventorySnapshotMutation:
         snapshot_id = str(uuid.uuid4())
         observed_at = parse_observed_at(payload.get("collected_at"))
         resources = snapshot_resources(payload)
@@ -354,14 +547,43 @@ class InventoryRepository(DatabaseConnection):
                         summary=summary,
                     )
                 )
-                return {
-                    "accepted": False,
-                    "snapshot_id": snapshot_id,
-                    "cluster_id": cluster_id,
-                    "resource_count": len(normalized),
-                    "marked_deleted": 0,
-                    "resource_types": sorted(seen_types),
-                }
+                return InventorySnapshotMutation(
+                    result={
+                        "accepted": False,
+                        "snapshot_id": snapshot_id,
+                        "cluster_id": cluster_id,
+                        "resource_count": len(normalized),
+                        "marked_deleted": 0,
+                        "resource_types": sorted(seen_types),
+                    }
+                )
+            # Read the prior live cut only after taking the same transaction-scoped advisory
+            # lock used by all inventory writers. This makes concurrent collectors observe a
+            # single ordered state transition before either one builds timeline facts.
+            previous_rows = [
+                dict(row)
+                for row in conn.execute(
+                    select(resource_table).where(
+                        resource_table.c.workspace_id == workspace_id,
+                        resource_table.c.cluster_id == cluster_id,
+                        resource_table.c.deleted_at.is_(None),
+                    )
+                )
+                .mappings()
+                .all()
+            ]
+            timeline_events = inventory_timeline_events(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                observed_at=observed_at,
+                previous_rows=previous_rows,
+                current_rows=normalized,
+                resources_complete=resources_complete,
+            )
+            missing_inventory_keys = sorted(
+                {str(row["inventory_key"]) for row in previous_rows}
+                - {str(row["inventory_key"]) for row in normalized}
+            )
             conn.execute(
                 pg_insert(snapshot_table).values(
                     snapshot_id=snapshot_id,
@@ -426,13 +648,14 @@ class InventoryRepository(DatabaseConnection):
                         usage=summary["usage"],
                     )
                 )
-            if resources_complete:
+            if resources_complete and missing_inventory_keys:
                 result = conn.execute(
                     update(resource_table)
                     .where(
                         resource_table.c.workspace_id == workspace_id,
                         resource_table.c.cluster_id == cluster_id,
                         resource_table.c.snapshot_id != snapshot_id,
+                        resource_table.c.inventory_key.in_(missing_inventory_keys),
                         resource_table.c.deleted_at.is_(None),
                     )
                     .values(deleted_at=func.now(), updated_at=func.now())
@@ -450,14 +673,17 @@ class InventoryRepository(DatabaseConnection):
                 partial_reason_codes=partial_reason_codes,
             )
 
-        return {
-            "accepted": True,
-            "snapshot_id": snapshot_id,
-            "cluster_id": cluster_id,
-            "resource_count": len(normalized),
-            "marked_deleted": marked_deleted,
-            "resource_types": sorted(seen_types),
-        }
+        return InventorySnapshotMutation(
+            result={
+                "accepted": True,
+                "snapshot_id": snapshot_id,
+                "cluster_id": cluster_id,
+                "resource_count": len(normalized),
+                "marked_deleted": marked_deleted,
+                "resource_types": sorted(seen_types),
+            },
+            timeline_events=timeline_events,
+        )
 
     def list_inventory_resources(
         self,
