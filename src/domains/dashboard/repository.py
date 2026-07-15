@@ -418,7 +418,13 @@ class DashboardRepository(DatabaseConnection):
         scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
         statement: Select[Any] = (
             select(*_rca_timeline_response_columns())
-            .where(RcaTimeline.workspace_id == workspace_id)
+            .where(
+                RcaTimeline.workspace_id == workspace_id,
+                # Command/approval subjects are shared by incident recovery and
+                # cluster lifecycle workflows.  Only rows that were attached to
+                # an actual incident belong on the operator incident timeline.
+                RcaTimeline.incident_id.is_not(None),
+            )
             .order_by(RcaTimeline.updated_at.desc())
             .limit(scan_limit)
         )
@@ -817,6 +823,11 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     correlation_id = evt.correlation_id or evt.event_id
     cluster_id = _cluster_id(payload)
     incident_id = _incident_id(payload)
+    # Cluster install/uninstall and other lifecycle commands use the same
+    # command subjects as recovery, but they are not incidents.  Persisting
+    # them here creates unexplained incident cards with no RCA evidence.
+    if incident_id is None:
+        return None
     projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
     raw_severity = _first_string(payload, ("severity",))
     severity = raw_severity.casefold() if raw_severity is not None else None
