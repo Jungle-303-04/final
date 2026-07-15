@@ -209,6 +209,16 @@ describe("ProductRouter unified filter cutover", () => {
     });
     expect(currentLocation(router)).toBe(`/home${FILTER_SEARCH}#detail`);
   });
+
+  it("keeps a known but unregistered upstream screen at its URL and explains that it is unavailable", async () => {
+    const { router } = renderProductRouter(
+      `/topology${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Topology is unavailable" })).toBeTruthy();
+    expect(currentLocation(router)).toBe(`/topology${FILTER_SEARCH}#detail`);
+  });
 });
 
 const emptyClusterScope: ClusterScopePort = {
