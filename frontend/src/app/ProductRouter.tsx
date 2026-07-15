@@ -5,6 +5,7 @@ import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
 import { UnifiedFilterProvider, useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
+import { OperationStatusStoreProvider } from "../features/operations/OperationStatusStore";
 import { ProductShell } from "./ProductShell";
 import type { ProductComposition } from "./productComposition";
 import {
@@ -37,12 +38,13 @@ export function ProductRouter({
   );
 
   return (
-    <UnifiedFilterProvider>
-      <ClusterScopeProvider
-        authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
-        port={composition.clusterScope}
-      >
-        <Routes>
+    <OperationStatusStoreProvider store={composition.operationStatusStore}>
+      <UnifiedFilterProvider>
+        <ClusterScopeProvider
+          authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
+          port={composition.clusterScope}
+        >
+          <Routes>
           <Route element={(
             <ProductShell
               auth={auth}
@@ -82,9 +84,10 @@ export function ProductRouter({
               )))}
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
-        </Routes>
-      </ClusterScopeProvider>
-    </UnifiedFilterProvider>
+          </Routes>
+        </ClusterScopeProvider>
+      </UnifiedFilterProvider>
+    </OperationStatusStoreProvider>
   );
 }
 

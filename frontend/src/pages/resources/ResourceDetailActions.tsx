@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import type {
   ResourceActionCapability,
@@ -6,10 +6,9 @@ import type {
   ResourceActionsPort,
 } from "../../features/resources/resourceCapabilitiesContract";
 import {
-  EMPTY_OPERATION_EVENTS_PORT,
-  type OperationEvent,
-  type OperationEventsPort,
-} from "../../features/operations/operationEventsContract";
+  useOptionalOperationStatusStore,
+} from "../../features/operations/OperationStatusStore";
+import { OperationStatusFeedback } from "../../features/operations/OperationStatusFeedback";
 import type { ResourceDetail } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
@@ -30,28 +29,19 @@ export function ResourceDetailActions({
   actionsPort,
   capabilities,
   detail,
-  operationEventsPort = EMPTY_OPERATION_EVENTS_PORT,
 }: {
   actionsPort: ResourceActionsPort;
   capabilities: ResourceCapabilitiesFrame;
   detail: ResourceDetail;
-  operationEventsPort?: OperationEventsPort;
 }) {
   const { t } = useI18n();
+  const operationStatusStore = useOptionalOperationStatusStore();
   const [dialog, setDialog] = useState<ResourceActionCapability | null>(null);
   const [pending, setPending] = useState(false);
   const [receipt, setReceipt] = useState<ResourceActionReceipt | null>(null);
   const [failed, setFailed] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  const [operation, setOperation] = useState<OperationEvent | null>(null);
   const enabled = useMemo(() => enabledActions(capabilities, detail), [capabilities, detail]);
-
-  useEffect(() => {
-    if (!receipt?.commandId) return;
-    const controller = new AbortController();
-    void consumeOperationEvents(operationEventsPort, receipt.commandId, controller.signal, setOperation);
-    return () => controller.abort();
-  }, [operationEventsPort, receipt?.commandId]);
 
   if (enabled.length === 0) return null;
 
@@ -63,7 +53,7 @@ export function ResourceDetailActions({
     try {
       const result = await actionsPort.execute(dialog, actionValues(dialog, values));
       setReceipt(result);
-      setOperation(null);
+      if (result.commandId) operationStatusStore?.start(result.commandId);
       setDialog(null);
     } catch {
       setFailed(true);
@@ -88,10 +78,16 @@ export function ResourceDetailActions({
         ))}
       </div>
       {receipt ? (
-        <output className="text-xs text-muted-foreground">
-          {t("resources.detail.action.accepted", { id: receipt.correlationId })}
-          {operation ? ` · ${String(operation.payload.status ?? operation.kind)}` : ""}
-        </output>
+        receipt.commandId && operationStatusStore ? (
+          <OperationStatusFeedback
+            commandId={receipt.commandId}
+            correlationId={receipt.correlationId}
+          />
+        ) : (
+          <output className="text-xs text-muted-foreground">
+            {t("resources.detail.action.accepted", { id: receipt.correlationId })}
+          </output>
+        )
       ) : null}
       <Dialog onOpenChange={(open) => !open && !pending && setDialog(null)} open={dialog !== null}>
         <DialogContent showCloseButton={!pending}>
@@ -146,7 +142,6 @@ export function ResourceDetailActions({
 
   function open(capability: ResourceActionCapability) {
     setFailed(false);
-    setReceipt(null);
     setValues(defaultInputValues(capability));
     setDialog(capability);
   }
@@ -189,19 +184,4 @@ function actionValues(
     const value = values[input.key] ?? defaultInputValue(input.default);
     return [input.key, input.type === "integer" ? Number(value) : value];
   }));
-}
-
-async function consumeOperationEvents(
-  port: OperationEventsPort,
-  commandId: string,
-  signal: AbortSignal,
-  onEvent: (event: OperationEvent) => void,
-): Promise<void> {
-  try {
-    for await (const event of port.subscribeOperationEvents(commandId, signal)) {
-      onEvent(event);
-    }
-  } catch {
-    // The accepted command remains auditable even when its live transport is unavailable.
-  }
 }

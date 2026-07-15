@@ -14,6 +14,7 @@ describe("operation status store", () => {
         for (let sequence = 1; sequence <= 1_000; sequence += 1) {
           yield event(sequence, "progress");
         }
+        await new Promise(() => undefined);
       },
     };
     const store = createOperationStatusStore(port, undefined, frame.runtime);
@@ -68,16 +69,19 @@ describe("operation status store", () => {
   it("keeps a failed observation visible and reobserves the stream without replaying the command", async () => {
     let subscriptions = 0;
     const port: OperationEventsPort = {
-      async *subscribeOperationEvents() {
+      async *subscribeOperationEvents(_commandId, subscription) {
         subscriptions += 1;
-        if (subscriptions === 1) throw new Error("network unavailable");
+        if (subscriptions === 1) {
+          subscription?.onLifecycle?.({ state: "failed", failure: "forbidden" });
+          throw new Error("permission denied");
+        }
         yield event(1, "completed");
       },
     };
     const store = createOperationStatusStore(port);
 
     store.start("command-1");
-    await eventually(() => expect(store.getSnapshot("command-1").status).toBe("unavailable"));
+    await eventually(() => expect(store.getSnapshot("command-1").status).toBe("forbidden"));
 
     store.reobserve("command-1");
     await eventually(() => expect(store.getSnapshot("command-1").status).toBe("completed"));
@@ -92,6 +96,7 @@ describe("operation status store", () => {
       async *subscribeOperationEvents() {
         yield event(1, "progress");
         yield event(2, "log");
+        await new Promise(() => undefined);
       },
     };
     const store = createOperationStatusStore(port, undefined, visibility.runtime);
@@ -106,6 +111,30 @@ describe("operation status store", () => {
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(store.getSnapshot("command-1")).toMatchObject({ status: "running", sequence: 2 });
+    store.dispose();
+  });
+
+  it("bounds terminal history through the injected retention policy without stopping active observations", async () => {
+    const port: OperationEventsPort = {
+      async *subscribeOperationEvents(commandId) {
+        yield {
+          ...event(1, "completed"),
+          commandId,
+        };
+      },
+    };
+    const store = createOperationStatusStore(port, {
+      maxTerminalCommands: 1,
+      terminalRetentionMs: 60_000,
+    });
+
+    store.start("command-1");
+    await eventually(() => expect(store.getSnapshot("command-1").status).toBe("completed"));
+    store.start("command-2");
+    await eventually(() => expect(store.getSnapshot("command-2").status).toBe("completed"));
+
+    expect(store.getSnapshot("command-1").status).toBe("idle");
+    expect(store.getSnapshot("command-2").status).toBe("completed");
     store.dispose();
   });
 });

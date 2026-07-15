@@ -55,12 +55,37 @@ describe("command operation events API", () => {
     );
   });
 
+  it("publishes an additive structured observation lifecycle around the SSE transport", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse({
+      command_id: "command-1",
+      sequence: 1,
+      kind: "completed",
+      payload: { status: "completed" },
+      occurred_at: "2026-07-15T00:00:00Z",
+    }));
+    const lifecycle: unknown[] = [];
+
+    for await (const _event of subscribeCommandOperationEvents("command-1", {
+      onLifecycle: (state) => lifecycle.push(state),
+    })) {
+      // The lifecycle assertion is independent from the mapped event payload.
+    }
+
+    expect(lifecycle).toEqual([
+      { state: "connecting" },
+      { state: "connected" },
+      { state: "closed" },
+    ]);
+  });
+
   it("rejects an invalid command identifier before making a streaming request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
-    const iterator = subscribeCommandOperationEvents(" ")[Symbol.asyncIterator]();
+    const lifecycle = vi.fn();
+    const iterator = subscribeCommandOperationEvents(" ", { onLifecycle: lifecycle })[Symbol.asyncIterator]();
 
     await expect(iterator.next()).rejects.toThrow(TypeError);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(lifecycle).toHaveBeenCalledWith({ state: "failed", failure: "invalid" });
   });
 
   it("reconnects transiently from the durable cursor and suppresses replay duplicates", async () => {
@@ -114,7 +139,11 @@ describe("command operation events API", () => {
       }),
     );
     const controller = new AbortController();
-    const iterator = subscribeCommandOperationEvents("command-1", controller.signal)[Symbol.asyncIterator]();
+    const lifecycle = vi.fn();
+    const iterator = subscribeCommandOperationEvents("command-1", {
+      onLifecycle: lifecycle,
+      signal: controller.signal,
+    })[Symbol.asyncIterator]();
     const outcome = await Promise.race([
       iterator.next().then(
         () => "resolved",
@@ -126,5 +155,6 @@ describe("command operation events API", () => {
 
     expect(outcome).toMatchObject({ kind: "forbidden", status: 403 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(lifecycle).toHaveBeenCalledWith({ state: "failed", failure: "forbidden" });
   });
 });

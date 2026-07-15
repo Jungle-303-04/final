@@ -16,9 +16,10 @@ describe("operation events adapter", () => {
       };
     });
     const port = createOperationEventsAdapter({ subscribeCommandOperationEvents });
+    const subscription = { signal: controller.signal };
 
     const events: OperationEvent[] = [];
-    for await (const event of port.subscribeOperationEvents("command-1", controller.signal)) {
+    for await (const event of port.subscribeOperationEvents("command-1", subscription)) {
       events.push(event);
     }
 
@@ -29,6 +30,6 @@ describe("operation events adapter", () => {
       payload: { status: "running" },
       occurredAt: "2026-07-15T00:00:00Z",
     }]);
-    expect(subscribeCommandOperationEvents).toHaveBeenCalledWith("command-1", controller.signal);
+    expect(subscribeCommandOperationEvents).toHaveBeenCalledWith("command-1", subscription);
   });
 });

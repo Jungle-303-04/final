@@ -5,8 +5,8 @@ export function createOperationEventsAdapter(
   endpoints: OperationEventsEndpointDependencies,
 ): OperationEventsPort {
   return {
-    async *subscribeOperationEvents(commandId, signal) {
-      for await (const event of endpoints.subscribeCommandOperationEvents(commandId, signal)) {
+    async *subscribeOperationEvents(commandId, subscription) {
+      for await (const event of endpoints.subscribeCommandOperationEvents(commandId, subscription)) {
         yield {
           commandId: event.command_id,
           sequence: event.sequence,

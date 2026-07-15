@@ -1,4 +1,7 @@
-import type { OperationEvent } from "./operationEventsContract";
+import type {
+  OperationEvent,
+  OperationEventsSubscription,
+} from "./operationEventsContract";
 
 export interface OperationEventsEndpointEvent {
   command_id: OperationEvent["commandId"];
@@ -11,6 +14,6 @@ export interface OperationEventsEndpointEvent {
 export interface OperationEventsEndpointDependencies {
   subscribeCommandOperationEvents(
     commandId: string,
-    signal?: AbortSignal,
+    subscription?: OperationEventsSubscription,
   ): AsyncIterable<OperationEventsEndpointEvent>;
 }

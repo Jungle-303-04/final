@@ -4,6 +4,11 @@ import {
   type CommandOperationEventEndpoint,
 } from "./operation-events-schemas";
 import { encodePathSegment } from "./url";
+import type {
+  OperationEventsSubscription,
+  OperationStreamFailure,
+  OperationStreamLifecycle,
+} from "../shared/parity/referenceParity";
 import { parseSseFrames } from "../shared/streaming/sse";
 
 const SSE_MEDIA_TYPE = "text/event-stream";
@@ -13,25 +18,45 @@ const RECONNECT_MAX_DELAY_MS = 5_000;
 /** Reconnecting SSE reader for one audited command. It never falls back to status polling. */
 export async function* subscribeCommandOperationEvents(
   commandId: string,
-  signal?: AbortSignal,
+  subscription: OperationEventsSubscription = {},
 ): AsyncIterable<CommandOperationEventEndpoint> {
-  const path = commandOperationEventsPath(commandId);
-  let cursor = 0;
+  const { onLifecycle, signal } = subscription;
+  let path: ApiPath;
+  try {
+    path = commandOperationEventsPath(commandId);
+  } catch (error) {
+    onLifecycle?.({ state: "failed", failure: "invalid" });
+    throw error;
+  }
+  let cursor: number;
+  try {
+    cursor = normalizeCursor(subscription.afterSequence);
+  } catch (error) {
+    onLifecycle?.({ state: "failed", failure: "invalid" });
+    throw error;
+  }
   let attempt = 0;
   while (!signal?.aborted) {
+    onLifecycle?.({ state: "connecting" });
     try {
-      const result = yield* consume(path, cursor, signal);
+      const result = yield* consume(path, cursor, signal, () => onLifecycle?.({ state: "connected" }));
       cursor = result.cursor;
       attempt = result.progressed ? 0 : attempt + 1;
-      if (result.completed || signal?.aborted) return;
+      if (result.completed || signal?.aborted) {
+        onLifecycle?.({ state: "closed" });
+        return;
+      }
     } catch (error) {
       if (isAbortError(error)) return;
-      if (!isTransientStreamError(error)) throw error;
+      if (!isTransientStreamError(error)) {
+        onLifecycle?.({ state: "failed", failure: streamFailureFor(error) });
+        throw error;
+      }
       attempt += 1;
-      await reconnectDelay(error, attempt, signal);
+      await reconnectDelay(error, attempt, signal, onLifecycle);
       continue;
     }
-    await reconnectDelay(null, attempt, signal);
+    await reconnectDelay(null, attempt, signal, onLifecycle);
   }
 }
 
@@ -45,6 +70,7 @@ async function* consume(
   path: ApiPath,
   startingCursor: number,
   signal?: AbortSignal,
+  onConnected?: () => void,
 ): AsyncGenerator<CommandOperationEventEndpoint, { completed: boolean; cursor: number; progressed: boolean }> {
   const response = await apiStreamResponse(
     path,
@@ -56,6 +82,7 @@ async function* consume(
     throw new ApiError("invalid-payload", "Operation stream did not use text/event-stream.");
   }
   if (!response.body) throw new ApiError("invalid-payload", "Operation stream body was unavailable.");
+  onConnected?.();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -131,18 +158,47 @@ async function reconnectDelay(
   error: unknown,
   attempt: number,
   signal?: AbortSignal,
+  onLifecycle?: (lifecycle: OperationStreamLifecycle) => void,
 ): Promise<void> {
+  const delay = reconnectDelayMs(error, attempt);
+  onLifecycle?.({ state: "reconnecting", attempt, retryAfterMs: delay });
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const complete = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const abort = complete;
+    const timer = setTimeout(complete, delay);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function reconnectDelayMs(error: unknown, attempt: number): number {
   const retryAfter = error instanceof ApiError ? error.retryAfter : null;
   const cappedAttempt = Math.min(attempt, 8);
   const cap = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * 2 ** cappedAttempt);
-  const delay = retryAfter === null ? Math.floor(cap * (0.5 + Math.random() * 0.5)) : retryAfter * 1_000;
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, delay);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
-  });
+  return retryAfter === null
+    ? Math.floor(cap * (0.5 + Math.random() * 0.5))
+    : retryAfter * 1_000;
+}
+
+function normalizeCursor(value: number | undefined): number {
+  if (value === undefined) return 0;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new TypeError("Operation stream cursor must be a non-negative integer.");
+  }
+  return value;
+}
+
+function streamFailureFor(error: unknown): OperationStreamFailure {
+  if (!(error instanceof ApiError)) return "unavailable";
+  if (error.kind === "unauthorized" || error.kind === "forbidden") return "forbidden";
+  if (["not-found", "invalid-request", "invalid-payload"].includes(error.kind)) return "invalid";
+  return "unavailable";
 }
 
 function isAbortError(error: unknown): boolean {

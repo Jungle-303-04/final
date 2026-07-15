@@ -77,6 +77,7 @@ import { createResourceCapabilitiesAdapter } from "../features/resources/createR
 import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
 import { createResourceManifestAdapter } from "../features/resources/createResourceManifestAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
+import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -141,6 +142,7 @@ export function createApiComposition() {
     },
   });
   const operationEventsPort = createOperationEventsAdapter({ subscribeCommandOperationEvents });
+  const operationStatusStore = createOperationStatusStore(operationEventsPort);
   const podTerminalPort = createPodTerminalAdapter({ openPodTerminal });
   const resourceManifestPort = createResourceManifestAdapter({
     approveResourceManifestEdit,
@@ -206,7 +208,6 @@ export function createApiComposition() {
         resourceMetricsHistoryPort,
         resourceCapabilitiesPort,
         resourceActionsPort,
-        operationEventsPort,
         podTerminalPort,
         resourceManifestPort,
       ),
@@ -235,5 +236,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort);
+  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore);
 }

@@ -7,10 +7,6 @@ import type {
   ResourceIdentity,
 } from "../../features/resources/resourcesContract";
 import type { ResourceActionsPort } from "../../features/resources/resourceCapabilitiesContract";
-import {
-  EMPTY_OPERATION_EVENTS_PORT,
-  type OperationEventsPort,
-} from "../../features/operations/operationEventsContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
 import { useI18n } from "../../shared/i18n";
@@ -36,7 +32,6 @@ export function ResourceDetailWorkspace({
   detail,
   identity,
   actionsPort,
-  operationEventsPort = EMPTY_OPERATION_EVENTS_PORT,
   capabilities,
   onClose,
   onFullChange,
@@ -51,7 +46,6 @@ export function ResourceDetailWorkspace({
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
   actionsPort: ResourceActionsPort;
-  operationEventsPort?: OperationEventsPort;
   capabilities: ResourceCapabilitiesFrame;
   onClose: () => void;
   onFullChange: (full: boolean) => void;
@@ -191,7 +185,6 @@ export function ResourceDetailWorkspace({
               actionsPort={actionsPort}
               capabilities={capabilities}
               detail={detail.data}
-              operationEventsPort={operationEventsPort}
             />
             {manifestPort ? (
               <ResourceManifestEditor
