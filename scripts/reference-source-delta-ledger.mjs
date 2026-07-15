@@ -34,7 +34,12 @@ const REVISION = /^[0-9a-f]{40}$/
 const BLOB = /^[0-9a-f]{40}$/
 const SHA256 = /^[0-9a-f]{64}$/
 const BACKEND_CONTRACT = /^(?:domains|packages)\.[a-z0-9_.]+$/
-const PLANNED_TEST_ID = /^timeline\.[a-z0-9][a-z0-9.-]*$/
+// A test plan belongs to a product domain, not to a particular first migration
+// wave.  Keeping this deliberately generic lets the immutable source ledger
+// make the same proof requirement for applications, topology, GitOps, and
+// every later port instead of quietly making Timeline the only classifiable
+// surface.
+const PLANNED_TEST_ID = /^[a-z][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+$/
 const FILE_LEVEL_INTERACTION_EVIDENCE_KEYS = [
   'sourceKey',
   'legacyContractIds',
