@@ -2502,6 +2502,49 @@ def test_operation_event_replay_is_workspace_scoped_and_strictly_ordered() -> No
     assert "cmd-1" in compiled.params.values()
 
 
+def test_completed_command_stages_terminal_operation_event_in_the_same_transaction() -> None:
+    """A stored FAILED/COMPLETED state cannot survive without its terminal SSE fact."""
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def first(self) -> dict[str, object]:
+            return {"correlation_id": "corr-1"}
+
+    class StubConnection:
+        async def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @asynccontextmanager
+    async def transaction():
+        yield StubConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.async_engine = SimpleNamespace(begin=transaction)  # type: ignore[method-assign]
+
+    completed = asyncio.run(
+        repository.complete_agent_command_and_stage_event(
+            "cmd-1",
+            "workspace-1",
+            "cluster-1",
+            {"status": "failed", "message": "agent failed"},
+            "lease-1",
+            "agent-1",
+            "api-gateway",
+        )
+    )
+
+    assert completed is not None
+    sql = "\n".join(str(statement.compile(dialect=postgresql.dialect())) for statement in recorded)
+    assert "command_operation_event_cursors" in sql
+    assert "command_operation_events" in sql
+
+
 def test_agent_commands_by_correlation_is_workspace_scoped_newest_and_bounded() -> None:
     from domains.command.repository import AgentCommandRepository
 
