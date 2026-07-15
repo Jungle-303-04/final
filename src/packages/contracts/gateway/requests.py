@@ -34,9 +34,11 @@ DEFAULT_PROMETHEUS_BASE_URL = "http://prometheus.target.svc:9090"
 DEFAULT_LOKI_BASE_URL = "http://loki-gateway.target.svc"
 DEFAULT_TEMPO_BASE_URL = "http://tempo.target.svc:3200"
 DEFAULT_OTEL_SERVICE_NAME = "target-cluster-agent"
-DEFAULT_OTEL_TRACES_ENDPOINT = (
-    f"http://opentelemetry-collector.{TARGET_NAMESPACE}.svc:4318/v1/traces"
-)
+# The target observability stack always exposes Tempo's OTLP/HTTP receiver on
+# the stable `tempo` Service.  The OpenTelemetry chart runs in agent mode and
+# may not create a Service, so using its chart name here makes fresh installs
+# continuously fail DNS resolution.
+DEFAULT_OTEL_TRACES_ENDPOINT = f"http://tempo.{TARGET_NAMESPACE}.svc:4318/v1/traces"
 MIN_EVIDENCE_INTERVAL_SECONDS = 1
 MAX_EVIDENCE_INTERVAL_SECONDS = 3600
 DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS = 3

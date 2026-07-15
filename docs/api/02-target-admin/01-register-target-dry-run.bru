@@ -28,7 +28,7 @@ body:json {
     "prometheus_base_url": "http://prometheus.target.svc:9090",
     "loki_base_url": "http://loki-gateway.target.svc",
     "tempo_base_url": "http://tempo.target.svc:3200",
-    "otel_traces_endpoint": "http://opentelemetry-collector.target.svc:4318/v1/traces",
+    "otel_traces_endpoint": "http://tempo.target.svc:4318/v1/traces",
     "evidence_interval_seconds": 30,
     "install_node_collector": true,
     "install_sample_workload": false,

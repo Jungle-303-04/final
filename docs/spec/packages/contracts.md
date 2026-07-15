@@ -400,7 +400,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 | `prometheus_base_url` | `str` | `DEFAULT_PROMETHEUS_BASE_URL` |
 | `loki_base_url` | `str` | `DEFAULT_LOKI_BASE_URL` |
 | `tempo_base_url` | `str` | `DEFAULT_TEMPO_BASE_URL` |
-| `otel_traces_endpoint` | `str` | `DEFAULT_OTEL_TRACES_ENDPOINT` |
+| `otel_traces_endpoint` | `str` | `DEFAULT_OTEL_TRACES_ENDPOINT` (`http://tempo.target.svc:4318/v1/traces`) |
 | `evidence_interval_seconds` | `int` | `int(Target.DEFAULT_EVIDENCE_INTERVAL_SECONDS)` (`ge=1, le=3600`) |
 | `control_namespaces` | `str` | `""` — 제어(쓰기) 허용 네임스페이스 CSV. 빈 값이면 agent 기본(sandbox)만. 설치 manifest ConfigMap 의 `CONTROL_ALLOWED_NAMESPACES` 로 주입돼 클러스터별로 다르게 설정 가능 |
 | `install_node_collector` | `bool` | `True` |

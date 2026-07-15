@@ -269,7 +269,7 @@ management 배포 manifest에는 제어 경로용 PriorityClass만 두고, targe
 
 Target 등록 요청의 `prometheus_base_url`, `loki_base_url`, `tempo_base_url`은 target cluster 안에서 agent가 실제로 호출할 관측 스택 주소다.
 이 세 값은 설치 manifest의 `PROMETHEUS_BASE_URL`, `LOKI_BASE_URL`, `TEMPO_BASE_URL`로 그대로 들어가고, metrics/logs/traces provider의 기본 접속 주소가 된다.
-`otel_traces_endpoint`는 provider 조회 주소가 아니라 cluster-agent 자신의 span을 OpenTelemetry collector로 내보낼 endpoint다.
+`otel_traces_endpoint`는 provider 조회 주소가 아니라 cluster-agent 자신의 span을 OTLP/HTTP trace receiver로 내보낼 endpoint다. 기본 등록값은 `http://tempo.target.svc:4318/v1/traces`다.
 
 ### 03-agent-runtime
 

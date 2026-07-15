@@ -450,8 +450,7 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'LOKI_BASE_URL: "http://loki-gateway.target.svc"' in manifest
     assert 'TEMPO_BASE_URL: "http://tempo.target.svc:3200"' in manifest
     assert (
-        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "
-        '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
+        'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://tempo.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
     assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
@@ -770,10 +769,7 @@ def test_target_registration_records_cluster_and_returns_install_manifest() -> N
     assert agent_state["spec"]["prometheus_base_url"] == "http://prometheus.target.svc:9090"
     assert agent_state["spec"]["loki_base_url"] == "http://loki-gateway.target.svc"
     assert agent_state["spec"]["tempo_base_url"] == "http://tempo.target.svc:3200"
-    assert (
-        agent_state["spec"]["otel_traces_endpoint"]
-        == "http://opentelemetry-collector.target.svc:4318/v1/traces"
-    )
+    assert agent_state["spec"]["otel_traces_endpoint"] == "http://tempo.target.svc:4318/v1/traces"
     assert len(events.accepted) == 1
     assert events.accepted[0].cluster_id == "target-cluster-01"
     assert events.accepted[0].requested_by == "local-user"
@@ -819,9 +815,7 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
     assert "http://prometheus.target.svc:9090" not in response.install_manifest
     assert "http://loki-gateway.target.svc" not in response.install_manifest
     assert "http://tempo.target.svc:3200" not in response.install_manifest
-    assert (
-        "http://opentelemetry-collector.target.svc:4318/v1/traces" not in response.install_manifest
-    )
+    assert "http://tempo.target.svc:4318/v1/traces" not in response.install_manifest
     agent_state = next(item for item in db.desired_states if item["component"] == "cluster-agent")
     assert agent_state["spec"]["prometheus_base_url"] == ""
     assert agent_state["spec"]["loki_base_url"] == ""
