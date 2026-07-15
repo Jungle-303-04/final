@@ -7,20 +7,34 @@ the same frames through an initial NDJSON snapshot and a resumable SSE stream.
 
 from packages.contracts.timeline.models import (
     RealtimePolicy,
+    TimelineApplicationWorkflowSubject,
     TimelineCoverage,
+    TimelineCursor,
     TimelineEvent,
     TimelineFilters,
+    TimelineIncidentSubject,
+    TimelineInventoryLocatorSubject,
     TimelineQuery,
+    TimelineResourceSubject,
+    TimelineSource,
     TimelineStreamFrame,
+    TimelineSubject,
     TimelineWindow,
 )
 
 __all__ = [
     "RealtimePolicy",
     "TimelineCoverage",
+    "TimelineCursor",
     "TimelineEvent",
     "TimelineFilters",
+    "TimelineApplicationWorkflowSubject",
+    "TimelineIncidentSubject",
+    "TimelineInventoryLocatorSubject",
     "TimelineQuery",
+    "TimelineResourceSubject",
+    "TimelineSource",
     "TimelineStreamFrame",
+    "TimelineSubject",
     "TimelineWindow",
 ]

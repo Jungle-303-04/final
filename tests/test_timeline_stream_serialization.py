@@ -8,26 +8,41 @@ import pytest
 
 from domains.timeline.streams import TimelineStreamProtocolError, encode_ndjson, encode_sse
 from packages.contracts.parity import ClusterScope, ResourceRef
-from packages.contracts.timeline import RealtimePolicy, TimelineEvent, TimelineStreamFrame
+from packages.contracts.timeline import (
+    RealtimePolicy,
+    TimelineCursor,
+    TimelineEvent,
+    TimelineResourceSubject,
+    TimelineStreamFrame,
+)
 
 
-def _event(cursor: int) -> TimelineEvent:
+def _cursor(sequence: int) -> TimelineCursor:
+    return TimelineCursor(token=f"timeline-cursor-{sequence}")
+
+
+def _event(sequence: int) -> TimelineEvent:
+    resource = ResourceRef(kind="Pod", namespace="default", name="api", uid="uid-a")
     return TimelineEvent(
-        event_id=f"event-{cursor}",
-        cursor=cursor,
+        event_id=f"event-{sequence}",
+        source="inventory",
+        source_key=f"inventory:event-{sequence}",
+        native_id=f"native-{sequence}",
+        activity="change",
         occurred_at=datetime(2026, 7, 15, tzinfo=UTC),
         scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
-        resource=ResourceRef(kind="Pod", namespace="default", name="api", uid="uid-a"),
+        subject=TimelineResourceSubject(resource=resource),
+        resource=resource,
         event_type="update",
         severity="info",
         title="Pod api updated",
     )
 
 
-def _snapshot(cursor: int = 4) -> TimelineStreamFrame:
+def _snapshot(sequence: int = 4) -> TimelineStreamFrame:
     return TimelineStreamFrame(
         kind="snapshot",
-        cursor=cursor,
+        cursor=_cursor(sequence),
         scopes=[ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a")],
         policy=RealtimePolicy(
             max_batch_events=100,
@@ -36,22 +51,24 @@ def _snapshot(cursor: int = 4) -> TimelineStreamFrame:
             resume="cursor",
             hidden_tab="coalesce",
         ),
-        events=[_event(cursor)] if cursor else [],
+        events=[_event(sequence)] if sequence else [],
     )
 
 
 def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
     frames = (
         _snapshot(),
-        TimelineStreamFrame(kind="event", cursor=5, event=_event(5)),
-        TimelineStreamFrame(kind="end", cursor=5),
+        TimelineStreamFrame(kind="event", cursor=_cursor(5), event=_event(5)),
+        TimelineStreamFrame(kind="end", cursor=_cursor(5)),
     )
 
-    assert encode_ndjson(frames).splitlines()[-1] == '{"kind":"end","cursor":5}'
+    assert encode_ndjson(frames).splitlines()[-1] == (
+        '{"kind":"end","cursor":{"token":"timeline-cursor-5"}}'
+    )
     assert encode_sse(frames).split("\n\n")[-2].splitlines() == [
-        "id: 5",
+        "id: timeline-cursor-5",
         "event: end",
-        'data: {"kind":"end","cursor":5}',
+        'data: {"kind":"end","cursor":{"token":"timeline-cursor-5"}}',
     ]
 
 
@@ -62,16 +79,16 @@ def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
         (
             (
                 _snapshot(3),
-                TimelineStreamFrame(kind="event", cursor=3, event=_event(3)),
-                TimelineStreamFrame(kind="end", cursor=3),
+                TimelineStreamFrame(kind="event", cursor=_cursor(3), event=_event(3)),
+                TimelineStreamFrame(kind="end", cursor=_cursor(3)),
             ),
-            "strictly advance",
+            "must advance",
         ),
         (
             (
                 _snapshot(3),
-                TimelineStreamFrame(kind="end", cursor=3),
-                TimelineStreamFrame(kind="event", cursor=4, event=_event(4)),
+                TimelineStreamFrame(kind="end", cursor=_cursor(3)),
+                TimelineStreamFrame(kind="event", cursor=_cursor(4), event=_event(4)),
             ),
             "must be last",
         ),

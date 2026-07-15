@@ -8,7 +8,7 @@ as one authenticated workspace and then authorized by the adapter.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -16,6 +16,13 @@ from packages.contracts.gateway.base import StrictModel
 from packages.contracts.parity import ClusterScope, ResourceRef
 
 TimelineActivity = Literal["change", "k8s_event", "warning", "unhealthy"]
+TimelineSource = Literal[
+    "inventory",
+    "incident",
+    "application_workflow",
+    "kubernetes_event",
+    "gitops",
+]
 TimelineEventType = Literal[
     "add",
     "update",
@@ -108,7 +115,22 @@ class RealtimePolicy(StrictModel):
     hidden_tab: Literal["coalesce"]
 
 
+class TimelineCursor(StrictModel):
+    """Opaque, authorization-bound resume position for one timeline query."""
+
+    token: str = Field(min_length=1, max_length=8_192)
+
+    @field_validator("token")
+    @classmethod
+    def reject_non_opaque_token(cls, token: str) -> str:
+        if token != token.strip() or any(character.isspace() for character in token):
+            raise ValueError("timeline cursor token must be opaque")
+        return token
+
+
 class TimelineCoverage(StrictModel):
+    scope: ClusterScope
+    source: TimelineSource
     from_ms: int = Field(ge=0)
     to_ms: int = Field(gt=0)
     reason: Literal["collection_gap", "retention_boundary", "partial_scope"]
@@ -120,24 +142,84 @@ class TimelineCoverage(StrictModel):
         return self
 
 
+class TimelineResourceSubject(StrictModel):
+    """A subject backed by an inventory record that has a real Kubernetes UID."""
+
+    kind: Literal["resource"] = "resource"
+    resource: ResourceRef
+
+
+class TimelineInventoryLocatorSubject(StrictModel):
+    """Inventory evidence without a UID; it must not masquerade as a ResourceRef."""
+
+    kind: Literal["inventory_locator"] = "inventory_locator"
+    inventory_key: str = Field(min_length=1, max_length=512)
+    api_group: str = ""
+    version: str = ""
+    resource_kind: str = Field(min_length=1, max_length=253)
+    namespace: str | None = Field(default=None, max_length=253)
+    name: str = Field(min_length=1, max_length=253)
+
+
+class TimelineIncidentSubject(StrictModel):
+    """An RCA incident can optionally relate to a resource, but is never one itself."""
+
+    kind: Literal["incident"] = "incident"
+    incident_id: str = Field(min_length=1, max_length=512)
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=512)
+
+
+class TimelineApplicationWorkflowSubject(StrictModel):
+    """A deployment workflow identity independent from an inventory resource UID."""
+
+    kind: Literal["application_workflow"] = "application_workflow"
+    application_id: str = Field(min_length=1, max_length=512)
+    binding_id: str = Field(min_length=1, max_length=512)
+    workflow_run_id: str = Field(min_length=1, max_length=512)
+
+
+TimelineSubject = Annotated[
+    TimelineResourceSubject
+    | TimelineInventoryLocatorSubject
+    | TimelineIncidentSubject
+    | TimelineApplicationWorkflowSubject,
+    Field(discriminator="kind"),
+]
+
+
 class TimelineEvent(StrictModel):
     event_id: str = Field(min_length=1, max_length=512)
-    cursor: int = Field(ge=1)
+    source: TimelineSource
+    source_key: str = Field(min_length=1, max_length=1_024)
+    native_id: str = Field(min_length=1, max_length=1_024)
+    activity: TimelineActivity
     occurred_at: datetime
     scope: ClusterScope
-    resource: ResourceRef
+    subject: TimelineSubject
+    resource: ResourceRef | None = None
     event_type: TimelineEventType
     severity: TimelineSeverity
     title: str = Field(min_length=1, max_length=1_000)
     owner: ResourceRef | None = None
     metadata: dict[str, object] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_exact_resource_relation(self) -> TimelineEvent:
+        if isinstance(self.subject, TimelineResourceSubject):
+            if self.resource is None:
+                raise ValueError("resource subject requires an exact resource relation")
+            if self.resource != self.subject.resource:
+                raise ValueError("resource subject relation must match its exact resource")
+        if isinstance(self.subject, TimelineInventoryLocatorSubject) and self.resource is not None:
+            raise ValueError("uid-less inventory subject cannot carry a resource relation")
+        return self
+
 
 class TimelineStreamFrame(StrictModel):
     """One immutable record in NDJSON or SSE replay order."""
 
     kind: TimelineFrameKind
-    cursor: int = Field(ge=0)
+    cursor: TimelineCursor
     scopes: tuple[ClusterScope, ...] = ()
     policy: RealtimePolicy | None = None
     event: TimelineEvent | None = None
@@ -168,8 +250,6 @@ class TimelineStreamFrame(StrictModel):
                 or self.reason is not None
             ):
                 raise ValueError("event frame may only carry one event")
-            if self.event.cursor != self.cursor:
-                raise ValueError("event frame cursor must match event cursor")
             return self
         if self.kind == "coverage":
             if (
