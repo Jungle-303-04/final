@@ -16,18 +16,16 @@ export function OperationStatusCenter() {
   if (snapshots.length === 0) return null;
 
   return (
-    <section
-      aria-label={t("shell.dock.operationCenter")}
-      className="grid min-h-0 gap-2 overflow-y-auto p-3"
+    <div
+      className="grid min-h-0 min-w-0 max-w-full gap-2 overflow-y-auto p-3"
       data-slot="operation-status-center"
     >
-      <h2 className="text-sm font-medium">{t("shell.dock.operationCenter")}</h2>
-      <ul className="grid gap-2">
+      <ul className="grid min-w-0 max-w-full gap-2">
         {snapshots.map((snapshot) => {
           const statusLabel = t(operationStatusKeys[snapshot.status]);
           return (
             <li
-              className="flex min-w-0 flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2"
+              className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2"
               key={snapshot.commandId}
             >
               <StatusMark label={statusLabel} tone={operationStatusTone(snapshot.status)} />
@@ -40,6 +38,6 @@ export function OperationStatusCenter() {
           );
         })}
       </ul>
-    </section>
+    </div>
   );
 }

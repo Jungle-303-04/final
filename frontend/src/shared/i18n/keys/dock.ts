@@ -5,6 +5,8 @@ export type DockMessageKey =
   | "shell.dock.operationCenter"
   | "shell.dock.openOperationCenter"
   | "shell.dock.openLogs"
+  | "shell.dock.operationSummary"
+  | "shell.dock.reopenOperationCenter"
   | "shell.dock.collapse"
   | "shell.dock.expand"
   | "shell.dock.closeTab"

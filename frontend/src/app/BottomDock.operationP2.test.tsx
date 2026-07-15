@@ -31,13 +31,17 @@ describe("BottomDock operation center P2", () => {
   });
 
   it.each([
-    { language: "ko-KR", reopen: "작업 센터 다시 열기", summary: "작업 1개 추적 중 · 확인 필요 1개" },
-    { language: "en-US", reopen: "Reopen operation center", summary: "1 tracked operations · 1 need attention" },
+    { language: "ko-KR", reopen: "작업 센터 다시 열기", summary: "작업 3개 추적 중 · 확인 필요 2개" },
+    { language: "en-US", reopen: "Reopen operation center", summary: "3 tracked operations · 2 need attention" },
   ])("keeps a collapsed $language dock discoverable and reopens its operation center", async ({ language, reopen, summary }) => {
     const user = userEvent.setup();
-    const store = unavailableStore();
-    store.start("command-1");
-    await waitFor(() => expect(store.getSnapshot("command-1").status).toBe("unavailable"));
+    const store = mixedStatusStore();
+    store.start("command-completed");
+    store.start("command-running");
+    store.start("command-failed");
+    await waitFor(() => expect(store.getSnapshot("command-completed").status).toBe("completed"));
+    await waitFor(() => expect(store.getSnapshot("command-running").status).toBe("running"));
+    await waitFor(() => expect(store.getSnapshot("command-failed").status).toBe("failed"));
 
     renderDock(store, language);
     await user.click(screen.getByRole("button", {
@@ -46,7 +50,8 @@ describe("BottomDock operation center P2", () => {
 
     expect(screen.getByText(summary)).toBeTruthy();
     const reopenAction = screen.getByRole("button", { name: reopen });
-    await user.click(reopenAction);
+    reopenAction.focus();
+    await user.keyboard("{Enter}");
 
     expect(screen.getByRole("region", {
       name: language === "ko-KR" ? "작업 센터" : "Operation center",
@@ -72,7 +77,29 @@ function renderDock(store: ReturnType<typeof createOperationStatusStore>, langua
 function unavailableStore() {
   const port: OperationEventsPort = {
     async *subscribeOperationEvents() {
+      yield* [] as never[];
       throw new Error("network unavailable");
+    },
+  };
+  return createOperationStatusStore(port);
+}
+
+function mixedStatusStore() {
+  const port: OperationEventsPort = {
+    async *subscribeOperationEvents(commandId) {
+      const kind = commandId === "command-completed"
+        ? "completed"
+        : commandId === "command-failed"
+          ? "failed"
+          : "progress";
+      yield {
+        commandId,
+        kind,
+        occurredAt: "2026-07-15T00:00:00Z",
+        payload: {},
+        sequence: 1,
+      };
+      if (kind === "progress") await new Promise(() => undefined);
     },
   };
   return createOperationStatusStore(port);

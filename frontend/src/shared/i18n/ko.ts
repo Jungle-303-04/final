@@ -70,6 +70,8 @@ export const ko = {
   "shell.dock.operationCenter": "작업 센터",
   "shell.dock.openOperationCenter": "작업 센터 열기",
   "shell.dock.openLogs": "로그 열기",
+  "shell.dock.operationSummary": "작업 {count}개 추적 중 · 확인 필요 {attention}개",
+  "shell.dock.reopenOperationCenter": "작업 센터 다시 열기",
   "shell.dock.collapse": "로그 독 접기",
   "shell.dock.expand": "로그 독 펼치기",
   "shell.dock.closeTab": "{name} 로그 닫기",

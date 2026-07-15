@@ -48,8 +48,8 @@ describe("operation status center", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByRole("region", { name: "로그 독" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "작업 센터" })).toBeTruthy();
+    expect(screen.getAllByRole("region")).toHaveLength(1);
     expect(screen.getByText("command-1")).toBeTruthy();
     expect(screen.getByText("완료됨")).toBeTruthy();
     store.dispose();

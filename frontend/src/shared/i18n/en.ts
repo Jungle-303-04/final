@@ -70,6 +70,8 @@ export const en = {
   "shell.dock.operationCenter": "Operation center",
   "shell.dock.openOperationCenter": "Open operation center",
   "shell.dock.openLogs": "Open logs",
+  "shell.dock.operationSummary": "{count} tracked operations · {attention} need attention",
+  "shell.dock.reopenOperationCenter": "Reopen operation center",
   "shell.dock.collapse": "Collapse log dock",
   "shell.dock.expand": "Expand log dock",
   "shell.dock.closeTab": "Close logs for {name}",
