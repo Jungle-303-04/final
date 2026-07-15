@@ -185,6 +185,11 @@
   transition: height var(--motion-dock) var(--ease-spring);
 }
 
+.motion-bottom-dock[data-resizing="true"] {
+  transition: none;
+  will-change: height;
+}
+
 .motion-bottom-dock[data-height="160"] { --dock-height: 160px; }
 .motion-bottom-dock[data-height="180"] { --dock-height: 180px; }
 .motion-bottom-dock[data-height="200"] { --dock-height: 200px; }

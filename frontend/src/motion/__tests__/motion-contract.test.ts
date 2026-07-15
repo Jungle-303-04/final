@@ -45,4 +45,13 @@ describe("motion CSS contract", () => {
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.motion-live-preview-value[\s\S]*?transition: none !important/,
     );
   });
+
+  it("removes dock height interpolation during direct resizing and for reduced-motion users", () => {
+    expect(tokens).toMatch(
+      /\.motion-bottom-dock\[data-resizing="true"\][\s\S]*?transition: none;[\s\S]*?will-change: height;/,
+    );
+    expect(tokens).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition-duration: 1ms !important/,
+    );
+  });
 });

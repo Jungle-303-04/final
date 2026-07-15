@@ -62,6 +62,7 @@ export function AiAssistantPanel({
   const { locale, t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingController = useRef<AbortController | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -160,8 +161,9 @@ export function AiAssistantPanel({
         data-width={width}
         inert={!open}
         onKeyDown={(event) => event.key === "Escape" && onOpenChange(false)}
+        ref={panelRef}
       >
-        <AiAssistantResizeHandle onWidthCommit={commitPanelWidth} width={width} />
+        <AiAssistantResizeHandle hostRef={panelRef} onWidthCommit={commitPanelWidth} width={width} />
         <div
           className="flex h-full min-h-0 max-w-dvw flex-col"
           data-inner-width={width}

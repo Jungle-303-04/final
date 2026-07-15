@@ -22,6 +22,12 @@ export {
   type ScrollIntoViewTarget,
 } from "./scrollIntoView";
 export {
+  clampDimension,
+  useRafDimensionPreview,
+  type DimensionAxis,
+  type DimensionBounds,
+} from "./useRafDimensionPreview";
+export {
   MOTION_DURATION_MS,
   STAGGER_MS,
   podWaveDelay,

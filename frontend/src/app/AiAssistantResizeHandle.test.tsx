@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../shared/i18n";
@@ -67,9 +68,16 @@ describe("AiAssistantResizeHandle", () => {
 function renderHandle(onWidthCommit: (width: number) => void) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-      <div className="motion-ai-panel" data-slot="ai-assistant-panel" data-width="420">
-        <AiAssistantResizeHandle onWidthCommit={onWidthCommit} width={420} />
-      </div>
+      <AiResizeFixture onWidthCommit={onWidthCommit} />
     </I18nProvider>,
+  );
+}
+
+function AiResizeFixture({ onWidthCommit }: { onWidthCommit: (width: number) => void }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  return (
+    <div className="motion-ai-panel" data-slot="ai-assistant-panel" data-width="420" ref={hostRef}>
+      <AiAssistantResizeHandle hostRef={hostRef} onWidthCommit={onWidthCommit} width={420} />
+    </div>
   );
 }
