@@ -64,7 +64,8 @@ describe("ProductShell bottom log dock", () => {
     const stream = streamPort();
     const loadSuggestions = vi.fn().mockResolvedValue([]);
     const ai: AiAssistantPort = {
-      ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [] }),
+      ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [], action: null }),
+      createAlertRule: vi.fn(),
       loadSuggestions,
       createAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     };
