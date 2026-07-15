@@ -55,6 +55,8 @@ import {
   approveResourceManifestEdit,
   getResourceManifestSource,
   previewResourceManifestEdit,
+  getTimelineSnapshot,
+  subscribeTimelineEvents,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -89,6 +91,8 @@ import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAd
 import { createPodTerminalAdapter } from "../features/pod-terminal/createPodTerminalAdapter";
 import { createAlertsSurface } from "../pages/alerts/createAlertsSurface";
 import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
+import { createTimelineAdapter } from "../features/timeline/createTimelineAdapter";
+import { createTimelineSurface } from "../pages/timeline/createTimelineSurface";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -130,6 +134,10 @@ export function createApiComposition() {
   };
   const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
   const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
+  const timelinePort = createTimelineAdapter({
+    getTimelineSnapshot,
+    subscribeTimelineEvents,
+  });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
     getResourceMetricsHistory,
   });
@@ -215,6 +223,10 @@ export function createApiComposition() {
     {
       id: "issues",
       Component: createIssuesSurface(issuesPort),
+    },
+    {
+      id: "timeline",
+      Component: createTimelineSurface(timelinePort),
     },
     {
       id: "alerts",

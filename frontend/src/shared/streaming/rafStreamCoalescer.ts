@@ -57,6 +57,8 @@ export interface RafStreamCoalescer<T> {
   discard(predicate: (event: T) => boolean): number;
   dispose(): void;
   enqueue(event: T): RafStreamEnqueueResult;
+  /** Deliver pending durable records before a terminal protocol boundary. */
+  flush(): void;
   isDisposed(): boolean;
   pendingCount(): number;
 }
@@ -155,6 +157,7 @@ export function createRafStreamCoalescer<T>(
     motionPreference,
     dispose,
     enqueue,
+    flush: flushNow,
     isDisposed: () => disposed,
     pendingCount: () => pending.length,
   };
@@ -197,6 +200,12 @@ export function createRafStreamCoalescer<T>(
     pending.length = 0;
     options.signal?.removeEventListener("abort", onAbort);
     unsubscribeVisibility();
+  }
+
+  function flushNow(): void {
+    if (disposed || pending.length === 0) return;
+    cancelPendingSchedule();
+    flush();
   }
 
   function discard(predicate: (event: T) => boolean): number {

@@ -1,0 +1,153 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { getTimelineSnapshot, subscribeTimelineEvents } from "./timeline";
+
+const request = {
+  query: {
+    scopes: [{
+      workspace_id: "workspace-a",
+      cluster_id: "cluster-a",
+      namespaces: ["payments"],
+      freshness: "live" as const,
+    }],
+    window: { from_ms: 1_000, to_ms: 2_000 },
+    filters: {
+      activity: ["change" as const],
+      kinds: ["Deployment"],
+      include_deleted: true,
+      pinned_only: false,
+      query: "checkout",
+    },
+    grouping: "app" as const,
+    sort: "recent" as const,
+  },
+};
+
+describe("Timeline API transport", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("posts and strictly decodes a retained NDJSON snapshot", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
+      JSON.stringify(snapshotFrame()),
+      JSON.stringify({ kind: "end", cursor: { token: "opaque.snapshot" } }),
+      "",
+    ].join("\n"), {
+      headers: { "content-type": "application/x-ndjson; charset=utf-8" },
+    }));
+
+    const snapshot = await getTimelineSnapshot(request);
+
+    expect(snapshot.snapshot.events[0]?.title).toBe("Deployment checkout changed");
+    expect(snapshot.snapshot.policy.reconnect).toEqual({
+      min_delay_ms: 500,
+      max_delay_ms: 30_000,
+      strategy: "full_jitter_exponential",
+    });
+    const [path, init] = fetchMock.mock.calls[0] ?? [];
+    expect(path).toBe("/api/timeline/snapshots");
+    expect(init).toMatchObject({ credentials: "include", method: "POST" });
+    const headers = new Headers(init?.headers);
+    expect(headers.get("accept")).toBe("application/x-ndjson");
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("x-service-csrf")).toBe("same-origin");
+    expect(JSON.parse(String(init?.body))).toEqual(request);
+  });
+
+  it("fails closed when an NDJSON snapshot has an untrusted terminal shape", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
+      JSON.stringify(snapshotFrame()),
+      JSON.stringify({ kind: "end", cursor: { token: "other-token" } }),
+      "",
+    ].join("\n"), {
+      headers: { "content-type": "application/x-ndjson" },
+    }));
+
+    await expect(getTimelineSnapshot(request)).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
+  it("uses POST Fetch-SSE with matching body and Last-Event-ID opaque cursors", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
+      `id: opaque.next\nevent: event\ndata: ${JSON.stringify(eventFrame("opaque.next"))}`,
+      `id: opaque.next\nevent: error\ndata: ${JSON.stringify({
+        kind: "error",
+        cursor: { token: "opaque.next" },
+        reason: "fanout closed",
+      })}`,
+      "",
+    ].join("\n\n"), {
+      headers: { "content-type": "text/event-stream" },
+    }));
+
+    const frames: unknown[] = [];
+    for await (const frame of subscribeTimelineEvents({ ...request, after: { token: "opaque.snapshot" } })) {
+      frames.push(frame);
+    }
+
+    expect(frames).toHaveLength(2);
+    const [path, init] = fetchMock.mock.calls[0] ?? [];
+    expect(path).toBe("/api/timeline/stream");
+    expect(init).toMatchObject({ credentials: "include", method: "POST" });
+    expect(new Headers(init?.headers).get("last-event-id")).toBe("opaque.snapshot");
+    expect(JSON.parse(String(init?.body))).toEqual({ ...request, after: { token: "opaque.snapshot" } });
+  });
+
+  it("rejects an SSE frame when its event name or opaque ID disagrees with the decoded frame", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      `id: opaque.other\nevent: event\ndata: ${JSON.stringify(eventFrame("opaque.next"))}\n\n`,
+      { headers: { "content-type": "text/event-stream" } },
+    ));
+
+    const iterator = subscribeTimelineEvents({ ...request, after: { token: "opaque.snapshot" } })[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+});
+
+function snapshotFrame() {
+  return {
+    kind: "snapshot",
+    cursor: { token: "opaque.snapshot" },
+    scopes: [{ workspace_id: "workspace-a", cluster_id: "cluster-a" }],
+    policy: {
+      max_batch_events: 100,
+      max_frames_per_second: 30,
+      retention_seconds: 86_400,
+      resume: "cursor",
+      hidden_tab: "coalesce",
+      reconnect: {
+        min_delay_ms: 500,
+        max_delay_ms: 30_000,
+        strategy: "full_jitter_exponential",
+      },
+    },
+    events: [event()],
+  };
+}
+
+function eventFrame(cursor: string) {
+  return { kind: "event", cursor: { token: cursor }, event: event() };
+}
+
+function event() {
+  const resource = {
+    api_group: "apps",
+    version: "v1",
+    kind: "Deployment",
+    namespace: "payments",
+    name: "checkout",
+    uid: "deployment-uid",
+  };
+  return {
+    event_id: "event-1",
+    source: "inventory",
+    source_key: "inventory:event-1",
+    native_id: "event-1",
+    activity: "change",
+    occurred_at: "2026-07-15T00:00:00Z",
+    scope: { workspace_id: "workspace-a", cluster_id: "cluster-a" },
+    subject: { kind: "resource", resource },
+    resource,
+    event_type: "update",
+    severity: "warning",
+    title: "Deployment checkout changed",
+  };
+}

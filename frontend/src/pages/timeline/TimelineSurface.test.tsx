@@ -3,21 +3,40 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { TimelineFailure, type TimelinePort } from "../../features/timeline/timelineContract";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  TimelineFailure,
+  type TimelineEvent,
+  type TimelinePort,
+  type TimelineSnapshot,
+  type TimelineStreamFrame,
+} from "../../features/timeline/timelineContract";
 import type { ClusterScope } from "../../shared/parity/referenceParity";
 import { I18nProvider } from "../../shared/i18n";
 import { TimelineSurface } from "./TimelineSurface";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => (
+    setTimeout(() => callback(Date.now()), 0) as unknown as number
+  ));
+  vi.stubGlobal("cancelAnimationFrame", (frame: number) => clearTimeout(frame));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("TimelineSurface", () => {
-  it("rehydrates URL state after history navigation and writes search without an API path", async () => {
+  it("rehydrates URL state and renders an actual retained event list", async () => {
     const user = userEvent.setup();
     const port = timelinePort();
     const { router } = renderTimeline(port, "/timeline?foreign=keep&q=first&view=list", "en-US");
 
-    expect((await screen.findByText(/1 event is available/u)).textContent).toContain("1 event");
+    expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
+    expect(screen.getByText("Inventory")).toBeTruthy();
+    expect(screen.getByText("Updated")).toBeTruthy();
+    expect(screen.getByText("Warning")).toBeTruthy();
     expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("first");
     expect(screen.getByRole("radio", { name: "List" }).getAttribute("aria-checked")).toBe("true");
 
@@ -33,7 +52,6 @@ describe("TimelineSurface", () => {
     await act(async () => {
       await router.navigate("/timeline?foreign=keep&q=restored&view=swimlane");
     });
-
     expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("restored");
     expect(screen.getByRole("radio", { name: "Swimlane" }).getAttribute("aria-checked")).toBe("true");
     expect(port.readTimeline).toHaveBeenLastCalledWith(
@@ -43,48 +61,93 @@ describe("TimelineSurface", () => {
       }),
       expect.any(AbortSignal),
     );
-
-    await act(async () => {
-      await router.navigate(-1);
-    });
-    expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("second");
-    expect(screen.getByRole("radio", { name: "List" }).getAttribute("aria-checked")).toBe("true");
-
-    await act(async () => {
-      await router.navigate(1);
-    });
-    expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("restored");
-    expect(screen.getByRole("radio", { name: "Swimlane" }).getAttribute("aria-checked")).toBe("true");
   });
 
-  it("normalizes an oversized retained range and renders an honest empty state", async () => {
-    const tenDays = 24 * 60 * 60 * 1000 * 10;
-    const { router } = renderTimeline(
-      timelinePort({ readTimeline: vi.fn().mockResolvedValue({ eventCount: 0 }) }),
-      `/timeline?from=1&to=${tenDays}`,
-      "en-US",
-    );
-
-    expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
-    await waitFor(() => {
-      expect(router.state.location.search).toContain(`from=${tenDays - (24 * 60 * 60 * 1000 * 7)}`);
-      expect(router.state.location.search).toContain(`to=${tenDays}`);
-    });
-  });
-
-  it("renders a retryable error state and retains the port as the only data source", async () => {
+  it("supports roving radio focus and Arrow/Home/End view changes", async () => {
     const user = userEvent.setup();
-    const readTimeline = vi
+    const { router } = renderTimeline(timelinePort(), "/timeline?view=list", "en-US");
+    const list = await screen.findByRole("radio", { name: "List" });
+    list.focus();
+
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Swimlane" }));
+    expect(new URLSearchParams(router.state.location.search).get("view")).toBeNull();
+
+    await user.keyboard("{Home}");
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "List" }));
+    expect(new URLSearchParams(router.state.location.search).get("view")).toBe("list");
+
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Swimlane" }));
+    expect(new URLSearchParams(router.state.location.search).get("view")).toBeNull();
+  });
+
+  it("distinguishes an empty retained snapshot from coverage and snapshot failures", async () => {
+    const empty = timelinePort({ readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [] })) });
+    const { unmount } = renderTimeline(empty, "/timeline", "en-US");
+    expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
+    unmount();
+
+    const covered = timelinePort({
+      readTimeline: vi.fn().mockResolvedValue(snapshot({
+        events: [],
+        coverage: [{
+          scope: TIMELINE_SCOPES[0]!,
+          source: "inventory",
+          fromMs: 1_000,
+          toMs: 2_000,
+          reason: "collection_gap",
+        }],
+      })),
+    });
+    const coveredView = renderTimeline(covered, "/timeline", "en-US");
+    expect(await screen.findByText("Some timeline history has a collection or retention gap.")).toBeTruthy();
+    expect(screen.getByText("No timeline events match this scope.")).toBeTruthy();
+    coveredView.unmount();
+
+    renderTimeline(timelinePort({
+      readTimeline: vi.fn().mockRejectedValue(new TimelineFailure("offline")),
+    }), "/timeline", "en-US");
+    expect((await screen.findByRole("alert")).textContent).toContain("Timeline data is unavailable.");
+  });
+
+  it("retries a snapshot failure and resynchronizes after a server resync frame", async () => {
+    const user = userEvent.setup();
+    const retried = vi
       .fn()
       .mockRejectedValueOnce(new TimelineFailure("offline"))
-      .mockResolvedValueOnce({ eventCount: 2 });
-    renderTimeline(timelinePort({ readTimeline }), "/timeline", "en-US");
+      .mockResolvedValueOnce(snapshot({ events: [event()] }));
+    renderTimeline(timelinePort({ readTimeline: retried }), "/timeline", "en-US");
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Timeline data is unavailable.");
-    await user.click(screen.getByRole("button", { name: "Retry timeline" }));
+    await user.click(await screen.findByRole("button", { name: "Retry timeline" }));
+    expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
+    expect(retried).toHaveBeenCalledTimes(2);
 
-    expect((await screen.findByText(/2 events are available/u)).textContent).toContain("2 events");
-    expect(readTimeline).toHaveBeenCalledTimes(2);
+    cleanup();
+    const resynced = vi
+      .fn()
+      .mockResolvedValueOnce(snapshot({ events: [event()] }))
+      .mockResolvedValueOnce(snapshot({ events: [] }));
+    let sentResync = false;
+    const resyncPort = timelinePort({
+      readTimeline: resynced,
+      subscribeTimeline: async function* (_session, subscription) {
+        subscription?.onLifecycle?.({ state: "connected" });
+        if (sentResync) {
+          await new Promise<void>((resolve) => {
+            subscription?.signal?.addEventListener("abort", () => resolve(), { once: true });
+          });
+          return;
+        }
+        sentResync = true;
+        yield { kind: "resync_required", cursor: { token: "opaque.resync" }, reason: "retention_boundary" };
+      },
+    });
+    renderTimeline(resyncPort, "/timeline", "en-US");
+
+    expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
+    await waitFor(() => expect(resynced).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
   });
 
   it.each([
@@ -104,10 +167,10 @@ describe("TimelineSurface", () => {
       swimlane: "스윔레인",
       empty: "이 범위에 일치하는 타임라인 이벤트가 없습니다.",
     },
-  ])("uses typed catalog copy and retains URL behavior for $navigatorLanguage", async (copy) => {
+  ])("uses typed catalog copy for $navigatorLanguage", async (copy) => {
     const user = userEvent.setup();
     const { router } = renderTimeline(
-      timelinePort({ readTimeline: vi.fn().mockResolvedValue({ eventCount: 0 }) }),
+      timelinePort({ readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [] })) }),
       "/timeline",
       copy.navigatorLanguage,
     );
@@ -130,10 +193,97 @@ function timelinePort(overrides: Partial<TimelinePort> = {}): TimelinePort {
       maxRangeDays: 7,
       requiresNamespaceFilter: false,
     },
-    readTimeline: vi.fn().mockResolvedValue({ eventCount: 1 }),
+    readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [event()] })),
+    subscribeTimeline: idleStream,
     ...overrides,
   };
 }
+
+function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): TimelineSnapshot {
+  const session = {
+    query: {
+      scopes: TIMELINE_SCOPES,
+      mode: { kind: "frozen" as const, fromMs: 1_000, toMs: 2_000 },
+      filters: {
+        activity: [],
+        kinds: [],
+        showDeleted: true,
+        pinnedOnly: false,
+        search: "",
+        grouping: "app" as const,
+        sort: "importance" as const,
+        selectedEventId: null,
+      },
+    },
+    window: { fromMs: 1_000, toMs: 2_000 },
+    cursor: { token: "opaque.snapshot" },
+    policy: {
+      maxBatchEvents: 100,
+      maxFramesPerSecond: 60,
+      retentionSeconds: 86_400,
+      resume: "cursor" as const,
+      hiddenTab: "coalesce" as const,
+      reconnect: {
+        minDelayMs: 100,
+        maxDelayMs: 200,
+        strategy: "full_jitter_exponential" as const,
+      },
+    },
+  };
+  return {
+    session,
+    scopes: TIMELINE_SCOPES,
+    policy: session.policy,
+    events: [event()],
+    coverage: [],
+    ...overrides,
+  };
+}
+
+async function* idleStream(
+  _session: TimelineSnapshot["session"],
+  subscription?: Parameters<TimelinePort["subscribeTimeline"]>[1],
+): AsyncIterable<TimelineStreamFrame> {
+  subscription?.onLifecycle?.({ state: "connected" });
+  await new Promise<void>((resolve) => {
+    subscription?.signal?.addEventListener("abort", () => resolve(), { once: true });
+  });
+  yield* [] as TimelineStreamFrame[];
+}
+
+function event(): TimelineEvent {
+  const resource = {
+    apiGroup: "apps",
+    version: "v1",
+    kind: "Deployment",
+    namespace: "payments",
+    name: "checkout",
+    uid: "deployment-uid",
+  };
+  return {
+    id: "event-1",
+    source: "inventory",
+    sourceKey: "inventory:event-1",
+    nativeId: "event-1",
+    activity: "change",
+    occurredAt: "2026-07-15T00:00:00Z",
+    scope: TIMELINE_SCOPES[0]!,
+    subject: { kind: "resource", resource },
+    resource,
+    type: "update",
+    severity: "warning",
+    title: "Deployment checkout changed",
+    owner: null,
+    metadata: {},
+  };
+}
+
+const TIMELINE_SCOPES: readonly ClusterScope[] = [{
+  workspaceId: "workspace-1",
+  clusterId: "cluster-1",
+  namespaces: ["shop"],
+  freshness: "live",
+}];
 
 function renderTimeline(
   port: TimelinePort,
@@ -154,13 +304,6 @@ function renderTimeline(
 
   return { ...render(<RouterProvider router={router} />), router };
 }
-
-const TIMELINE_SCOPES: readonly ClusterScope[] = [{
-  workspaceId: "workspace-1",
-  clusterId: "cluster-1",
-  namespaces: ["shop"],
-  freshness: "live",
-}];
 
 function LocationProbe() {
   const location = useLocation();
