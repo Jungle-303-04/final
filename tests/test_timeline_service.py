@@ -88,7 +88,7 @@ def test_timeline_read_derives_server_freshness_and_preserves_source_grants(
     assert resolution.read_scope.incident_cluster_ids == {"cluster-incident"}
     assert resolution.read_scope.application_workflow_ids == {"application-workflow"}
     assert resolution.read_scope.gitops_application_ids == {"application-gitops"}
-    assert resolution.capabilities.model_dump() == {
+    assert resolution.capabilities.model_dump(exclude={"control_surface"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 2_592_000_000,
@@ -156,7 +156,7 @@ def test_timeline_capabilities_reuse_the_server_descriptor_without_a_query(
     monkeypatch.setenv(TIMELINE_MAX_WINDOW_SECONDS_ENV, "7200")
     capabilities = asyncio.run(resolve_timeline_capabilities(CapabilitiesOnlyDb(), _current()))
 
-    assert capabilities.model_dump() == {
+    assert capabilities.model_dump(exclude={"control_surface"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 7_200_000,

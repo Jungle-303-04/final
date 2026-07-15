@@ -22,3 +22,9 @@ class TimelineStreamRequest(StrictModel):
 
     query: TimelineQuery
     after: TimelineCursor | None = None
+
+
+class TimelineOverviewRequest(StrictModel):
+    """Read a bounded aggregate for the server-owned retained Timeline strip."""
+
+    query: TimelineQuery

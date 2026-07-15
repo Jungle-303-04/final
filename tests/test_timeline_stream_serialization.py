@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from domains.timeline.settings import timeline_capability_descriptor
 from domains.timeline.streams import (
     TimelineStreamProtocolError,
     encode_ndjson,
@@ -71,6 +72,7 @@ def _snapshot(sequence: int = 4) -> TimelineStreamFrame:
             available_source_modes=("retained",),
             max_retained_range_ms=7_200_000,
             namespace_filter_policy="not_required",
+            control_surface=timeline_capability_descriptor().control_surface,
         ),
         events=[_event(sequence)] if sequence else [],
     )
@@ -115,7 +117,7 @@ def test_snapshot_serializes_the_server_owned_reconnect_budget() -> None:
         "strategy": "replace_with_snapshot",
     }
     assert snapshot.capabilities is not None
-    assert snapshot.capabilities.model_dump() == {
+    assert snapshot.capabilities.model_dump(exclude={"control_surface"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 7_200_000,

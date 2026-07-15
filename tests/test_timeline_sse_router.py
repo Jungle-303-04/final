@@ -18,6 +18,7 @@ from domains.timeline.repository import (
 )
 from domains.timeline.router import _resume_cursor, _timeline_sse_body
 from domains.timeline.service import TimelineReadResolution
+from domains.timeline.settings import timeline_capability_descriptor
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
@@ -140,6 +141,7 @@ def _resolution(*, mode: str = "live", event_access: bool = False) -> TimelineRe
             available_source_modes=("retained",),
             max_retained_range_ms=2_592_000_000,
             namespace_filter_policy="not_required",
+            control_surface=timeline_capability_descriptor().control_surface,
         ),
     )
 

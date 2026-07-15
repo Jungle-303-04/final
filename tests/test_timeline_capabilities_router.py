@@ -64,12 +64,20 @@ def test_timeline_capabilities_is_an_authenticated_read_only_server_contract(
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json() == {
+    payload = response.json()
+    controls = payload.pop("control_surface")
+    assert payload == {
         "selected_source_mode": "retained",
         "available_source_modes": ["retained"],
         "max_retained_range_ms": 7_200_000,
         "namespace_filter_policy": "not_required",
     }
+    assert controls["pins"] == {
+        "key": "pins",
+        "label": "Pinned lanes",
+        "availability": "unavailable",
+    }
+    assert controls["default_time_range_id"] == "1h"
     assert db.authorization_calls == [
         ("cluster", Permission.INVENTORY_READ.value),
         ("application", Permission.APPLICATION_READ.value),

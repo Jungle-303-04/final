@@ -18,8 +18,10 @@ from packages.contracts.parity import ClusterScope
 from packages.contracts.timeline import (
     TimelineApplicationWorkflowSubject,
     TimelineEvent,
+    TimelineFilters,
     TimelineInventoryLocatorSubject,
     TimelineResourceSubject,
+    TimelineWindow,
 )
 
 
@@ -72,6 +74,47 @@ class TimelineEvidencePredicate:
     def matches(self, event: TimelineEvent) -> bool:
         """Compatibility alias for retained snapshot membership."""
         return self.matches_snapshot(event)
+
+    def with_filters(self, filters: TimelineFilters) -> TimelineEvidencePredicate:
+        """Reuse scope/RBAC/window while independently aggregating one facet axis."""
+        return TimelineEvidencePredicate(
+            read_scope=self.read_scope,
+            replay_identity=self.replay_identity.model_copy(
+                update={
+                    "filters": self.replay_identity.filters.model_copy(
+                        update={
+                            "activity": filters.activity,
+                            "kinds": filters.kinds,
+                            "include_deleted": filters.include_deleted,
+                            "search": filters.query.strip(),
+                        }
+                    )
+                }
+            ),
+            now=self._now,
+        )
+
+    def after_frozen_window(self) -> TimelineEvidencePredicate | None:
+        """Count later facts without relaxing the current scope, grants, or filters."""
+        identity = self.replay_identity
+        if identity.mode != "frozen":
+            return None
+        return TimelineEvidencePredicate(
+            read_scope=self.read_scope,
+            replay_identity=identity.model_copy(
+                update={
+                    # ``stream`` membership of a live identity uses this lower
+                    # bound and PostgreSQL's clock; its synthetic upper bound is
+                    # intentionally never observed in that branch.
+                    "window": TimelineWindow(
+                        from_ms=identity.window.to_ms,
+                        to_ms=identity.window.to_ms + 1,
+                    ),
+                    "mode": "live",
+                }
+            ),
+            now=self._now,
+        )
 
 
 def timeline_evidence_sql_predicate(
@@ -268,12 +311,17 @@ def _source_authorization_sql_predicate(ledger: Any, read_scope: Any) -> Any:
     return or_(*predicates) if predicates else false()
 
 
-def _resource_kind_sql(ledger: Any) -> Any:
+def timeline_resource_kind_sql(ledger: Any) -> Any:
     return func.coalesce(
         ledger.c.resource["kind"].astext,
         ledger.c.subject["resource"]["kind"].astext,
         ledger.c.subject["resource_kind"].astext,
     )
+
+
+def _resource_kind_sql(ledger: Any) -> Any:
+    """Compatibility alias for source-local predicate construction."""
+    return timeline_resource_kind_sql(ledger)
 
 
 def _search_columns(ledger: Any) -> tuple[Any, ...]:

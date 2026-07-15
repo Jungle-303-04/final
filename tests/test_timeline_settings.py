@@ -49,12 +49,49 @@ def test_timeline_realtime_policy_is_server_owned_and_bounded(
         },
     }
     assert timeline_max_window_ms() == 7_200_000
-    assert timeline_capability_descriptor().model_dump() == {
+    descriptor = timeline_capability_descriptor()
+    assert descriptor.model_dump(exclude={"control_surface"}) == {
         "selected_source_mode": "retained",
         "available_source_modes": ("retained",),
         "max_retained_range_ms": 7_200_000,
         "namespace_filter_policy": "not_required",
     }
+    controls = descriptor.control_surface
+    assert [(item.id, item.label) for item in controls.views] == [
+        ("list", "List"),
+        ("swimlane", "Swimlane"),
+    ]
+    assert [(item.id, item.label) for item in controls.groupings] == [
+        ("app", "Application"),
+        ("owner", "Workload"),
+        ("flat", "None"),
+    ]
+    assert [item.id for item in controls.sorts] == ["importance", "recent", "name"]
+    assert [item.id for item in controls.activity] == ["all", "changes", "k8s_events"]
+    assert controls.activity[0].problems_activity == ("unhealthy", "warning")
+    assert controls.deleted.model_dump() == {
+        "key": "include_deleted",
+        "label": "Show deleted",
+        "default": True,
+    }
+    assert controls.kinds.model_dump() == {
+        "key": "kinds",
+        "label": "Kinds",
+        "selection": "multi",
+        "empty_selection": "all",
+    }
+    assert [(item.id, item.duration_ms) for item in controls.time_ranges] == [
+        ("1h", 3_600_000),
+    ]
+    assert controls.default_time_range_id == "1h"
+    assert [(item.id, item.duration_ms) for item in controls.lens_zoom_rungs] == [
+        ("15m", 900_000),
+        ("30m", 1_800_000),
+        ("1h", 3_600_000),
+        ("2h", 7_200_000),
+    ]
+    assert controls.default_lens_zoom_rung == "1h"
+    assert controls.pins.availability == "unavailable"
     assert timeline_replay_poll_seconds() == 0.25
 
 
