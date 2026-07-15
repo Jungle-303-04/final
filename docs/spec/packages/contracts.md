@@ -316,7 +316,7 @@ api-gateway([services/gateway/api-gateway](../services/gateway-api-gateway.md))�
 | `DEFAULT_LOKI_BASE_URL` | `"http://loki-gateway.target.svc"` | 〃 |
 | `DEFAULT_TEMPO_BASE_URL` | `"http://tempo.target.svc:3200"` | 〃 |
 | `DEFAULT_OTEL_SERVICE_NAME` | `"target-cluster-agent"` | OTel 서비스 이름 |
-| `DEFAULT_OTEL_TRACES_ENDPOINT` | `f"http://opentelemetry-collector.{TARGET_NAMESPACE}.svc:4318/v1/traces"` | OTel trace 엔드포인트 |
+| `DEFAULT_OTEL_TRACES_ENDPOINT` | `f"http://tempo.{TARGET_NAMESPACE}.svc:4318/v1/traces"` | OTel trace 엔드포인트 |
 | `MIN_EVIDENCE_INTERVAL_SECONDS` / `MAX_EVIDENCE_INTERVAL_SECONDS` | `1` / `3600` | evidence 주기 범위 |
 | `DEFAULT_EVIDENCE_JOB_MAX_ATTEMPTS` / `MAX_EVIDENCE_JOB_MAX_ATTEMPTS` | `3` / `10` | evidence job 재시도 |
 | `DEFAULT_AGENT_POLICY_GENERATION` | `1` | 정책 세대 기본 |
