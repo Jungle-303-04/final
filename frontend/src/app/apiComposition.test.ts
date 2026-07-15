@@ -6,6 +6,7 @@ const APPROVED_SURFACE_IDS = new Set<ProductSurfaceId>([
   "alerts",
   "applications",
   "clusters",
+  "cost",
   "checks",
   "gitops",
   "helm",
@@ -31,6 +32,7 @@ describe("API composition root", () => {
     expect(composition.releasedSurfaceIds.has("timeline")).toBe(true);
     expect(composition.releasedSurfaceIds.has("helm")).toBe(true);
     expect(composition.releasedSurfaceIds.has("traffic")).toBe(true);
+    expect(composition.releasedSurfaceIds.has("cost")).toBe(true);
     expect(composition.releasedSurfaceIds.has("checks")).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();

@@ -63,6 +63,19 @@ export {
   type TrafficOverviewEndpoint,
 } from "./traffic-overview-schemas";
 export {
+  getCostOverview,
+  COST_OVERVIEW_PATH,
+  type CostOverviewQuery,
+} from "./cost-overview";
+export {
+  costClusterScopeSchema,
+  costObservationStatusSchema,
+  costObservationSummarySchema,
+  costOverviewSchema,
+  costScopeCoverageSchema,
+  type CostOverviewEndpoint,
+} from "./cost-overview-schemas";
+export {
   CHECKS_OVERVIEW_PATH,
   checksDetailPath,
   getChecksDetail,

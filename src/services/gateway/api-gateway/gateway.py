@@ -25,6 +25,7 @@ from domains.catalog.router import router as catalog_router
 from domains.changes.router import router as changes_router
 from domains.checks.router import router as checks_router
 from domains.command.router import router as command_router
+from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
 from domains.diagnostics.router import router as diagnostics_router
@@ -342,6 +343,7 @@ class ApiGateway:
         app.include_router(
             traffic_router
         )  # browser Traffic availability (session + inventory RBAC)
+        app.include_router(cost_router)  # browser Cost availability (session + inventory RBAC)
         app.include_router(
             checks_router
         )  # browser Checks availability/detail (session + inventory RBAC)

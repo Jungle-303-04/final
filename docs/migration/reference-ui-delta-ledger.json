@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 220,
+  "pendingCount": 219,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -4468,8 +4468,42 @@
         "blobId": "eebc1aebcd6cc667a6a90d6f001f202921451f94",
         "sha256": "d93dd33d89fe4d849bd126bf29186a6c7d9feeca288a842e351a19ca9044b026"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:overview:availability-scope:v1",
+          "legacyContractIds": [
+            "reference.feature.217"
+          ],
+          "symbol": "CostView availability surface",
+          "interaction": "the scoped Cost read discloses provider-observation availability and inventory freshness before any currency, allocation, or recommendation is rendered",
+          "transport": "poll",
+          "realtime": {
+            "resume": "use the server-provided refresh policy only after a successful scoped response",
+            "backpressure": "share one request for each normalized authorized cluster scope and release it when the view unmounts",
+            "merge": "replace the overview only for the current scope; unavailable monetary fields remain null"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/features/cost/createCostAdapter.ts",
+              "src/domains/cost/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.overview.unavailable",
+              "cost.overview.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The vertical preserves source availability semantics while refusing to fabricate money from inventory or resource metrics."
+          }
+        }
+      ]
     },
     {
       "status": "A",

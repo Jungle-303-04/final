@@ -6209,11 +6209,11 @@
     },
     {
       "contractId": "reference.feature.217",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cost:overview:availability-scope:v1",
       "legacyContractIds": [
         "reference.feature.217"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-217",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -6221,17 +6221,26 @@
       ],
       "streaming": false,
       "area": "cost-settings",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.cost.observations",
+      "frontendContract": "frontend/src/pages/cost",
       "desktopContract": "desktop",
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_cost_router.py",
+        "frontend/src/pages/cost/CostPage.test.tsx",
+        "frontend/src/api/cost-overview.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/cost/router.py#get_cost_overview",
+          "test": "tests/test_cost_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/cost/CostPage.tsx",
+          "test": "frontend/src/pages/cost/CostPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
