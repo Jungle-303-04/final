@@ -197,6 +197,25 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
   });
 
+  it("keeps the narrow header tab order aligned with its visual menu, controls, and filter rows", () => {
+    installMatchMedia(true);
+    const { container } = renderShell();
+    const header = container.querySelector("header");
+    if (!header) throw new Error("Product shell header is required");
+
+    const tabOrder = Array.from(header.querySelectorAll<HTMLElement>("button, input"))
+      .filter((element) => element.tabIndex >= 0 && !element.hasAttribute("disabled"))
+      .map((element) => element.getAttribute("aria-label"));
+
+    expect(tabOrder).toEqual([
+      "모바일 사이드바 열기",
+      "키보드 단축키",
+      "현재 언어: 한국어",
+      "클러스터, 앱, 라벨, 리소스 필터",
+      "클러스터, 앱, 라벨, 리소스 필터",
+    ]);
+  });
+
   it("switches every shell label immediately from the locale control", async () => {
     const user = userEvent.setup();
     renderShell();
