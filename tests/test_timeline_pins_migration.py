@@ -14,6 +14,7 @@ from alembic import command
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "20260716_0400"
 DOWN_REVISION = "20260715_0300"
+COMMAND_CONTROL_REVISION = "20260716_0500"
 
 
 def _config(monkeypatch) -> Config:
@@ -37,8 +38,23 @@ def test_timeline_pins_migration_creates_owner_revision_and_immutable_subject_st
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == REVISION
+    current_head = script.get_current_head()
+    assert tuple(script.get_heads()) == (current_head,)
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
+    assert script.get_revision(COMMAND_CONTROL_REVISION).down_revision == REVISION
+    lineage = tuple(script.iterate_revisions(current_head, DOWN_REVISION))
+    lineage_ids = tuple(revision.revision for revision in lineage)
+    assert REVISION in lineage_ids
+    assert lineage_ids[
+        lineage_ids.index(COMMAND_CONTROL_REVISION) : lineage_ids.index(REVISION) + 1
+    ] == (
+        COMMAND_CONTROL_REVISION,
+        REVISION,
+    )
+    assert all(
+        revision.down_revision == next_revision.revision
+        for revision, next_revision in zip(lineage, lineage[1:], strict=False)
+    )
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
     assert "create table timeline_pin_sets" in sql
     assert "create table timeline_pins" in sql
