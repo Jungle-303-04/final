@@ -6,7 +6,6 @@ from packages.config.realtime import (
 )
 from packages.config.settings import env
 from packages.contracts.gateway import requests as gateway_requests
-from packages.contracts.target import SANDBOX_NAMESPACE, TARGET_NAMESPACE
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
@@ -148,4 +147,3 @@ REALTIME_GATEWAY_URL_ENV = "REALTIME_GATEWAY_URL"  # 미설정 시 MANAGEMENT_BA
 LIVE_SUMMARY_POD_LIST_LIMIT = 500  # API 페이지 크기
 LIVE_SUMMARY_POD_TOTAL_LIMIT = 5000  # 스트림 1회 수집 상한(무제한 목록 금지)
 LIVE_RESOURCE_NODE_CONCURRENCY = 8  # kubelet proxy 동시 요청 상한
-LIVE_SUMMARY_NAMESPACES = (TARGET_NAMESPACE, SANDBOX_NAMESPACE)  # 계약이 단일 출처
