@@ -2,6 +2,18 @@ import { z } from "zod";
 
 const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
 const nullableTextSchema = z.string().min(1).nullable();
+const gitOpsReasonCodeSchema = z.enum([
+  "binding_scope_unavailable",
+  "multiple_target_scopes",
+  "live_observation_not_integrated",
+  "source_revision_unavailable",
+  "workflow_operation_unobserved",
+  "provider_operation_not_integrated",
+  "not_authorized",
+  "operation_in_progress",
+  "provider_refresh_not_integrated",
+  "provider_sync_not_integrated",
+]);
 
 export const gitOpsResourceRefSchema = z.strictObject({
   api_group: z.string(),
@@ -22,7 +34,7 @@ export const gitOpsClusterScopeSchema = z.strictObject({
 export const gitOpsApplicationScopeSchema = z.strictObject({
   availability: availabilitySchema,
   scope: gitOpsClusterScopeSchema.nullable(),
-  reason_code: nullableTextSchema,
+  reason_code: gitOpsReasonCodeSchema.nullable(),
 }).superRefine((value, context) => {
   if (value.availability === "available" && value.scope === null) {
     context.addIssue({ code: "custom", message: "available scope requires a ClusterScope" });
@@ -45,7 +57,7 @@ export const gitOpsDesiredLiveDiffAvailabilitySchema = z.strictObject({
   availability: availabilitySchema,
   source_revision: nullableTextSchema,
   live_observation_revision: nullableTextSchema,
-  reason_code: nullableTextSchema,
+  reason_code: gitOpsReasonCodeSchema.nullable(),
 }).superRefine((value, context) => {
   if (value.availability === "available") {
     context.addIssue({
@@ -64,7 +76,7 @@ export const gitOpsOperationObservationSchema = z.strictObject({
   workflow_run_id: nullableTextSchema,
   status: nullableTextSchema,
   observed_at: nullableTextSchema,
-  reason_code: nullableTextSchema,
+  reason_code: gitOpsReasonCodeSchema.nullable(),
 }).superRefine((value, context) => {
   if (value.availability === "unavailable" && (
     value.in_progress !== null || value.workflow_run_id !== null || value.status !== null || value.observed_at !== null
@@ -83,9 +95,9 @@ export const gitOpsActionCapabilitySchema = z.strictObject({
   action: z.enum(["refresh", "sync"]),
   authorization: z.enum(["allowed", "denied"]),
   availability: availabilitySchema,
-  enabled: z.boolean(),
+  enabled: z.literal(false),
   operation_blocked: z.boolean(),
-  reason_code: nullableTextSchema,
+  reason_code: gitOpsReasonCodeSchema.nullable(),
 }).superRefine((value, context) => {
   if (value.enabled && (value.authorization !== "allowed" || value.availability !== "available")) {
     context.addIssue({ code: "custom", message: "enabled action needs authorization and integration" });

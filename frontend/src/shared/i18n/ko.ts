@@ -138,6 +138,8 @@ export const ko = {
   "settings.policy.approval": "승인 필요",
   "state.empty.body": "현재 범위와 조건에 일치하는 데이터가 없습니다.",
   "state.empty.title": "표시할 데이터가 없습니다",
+  "state.notFound.body": "항목이 삭제되었거나 현재 권한 범위 밖에 있을 수 있습니다.",
+  "state.notFound.title": "항목을 찾을 수 없습니다",
   "state.error.body": "잠시 후 다시 시도해 주세요. 문제가 계속되면 연결 상태를 확인하세요.",
   "state.error.title": "정보를 불러오지 못했습니다",
   "state.forbidden.body": "현재 계정에 필요한 조회 권한이 없습니다.",

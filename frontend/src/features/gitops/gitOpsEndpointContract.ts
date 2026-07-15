@@ -7,6 +7,7 @@ import type {
   ReleaseRunAction,
   ReleaseTargetInput,
   SafePrResult,
+  GitOpsReasonCode,
 } from "./gitOpsContract";
 
 export interface GitOpsApplicationDetailEndpoint {
@@ -29,7 +30,7 @@ export interface GitOpsApplicationDetailEndpoint {
         namespaces: string[];
         freshness: "live" | "stale" | "partial" | "disconnected";
       } | null;
-      reason_code: string | null;
+      reason_code: GitOpsReasonCode | null;
     };
     source: {
       repository_ref: string | null;
@@ -40,7 +41,7 @@ export interface GitOpsApplicationDetailEndpoint {
       availability: "available" | "partial" | "unavailable";
       source_revision: string | null;
       live_observation_revision: string | null;
-      reason_code: string | null;
+      reason_code: GitOpsReasonCode | null;
     };
     operation: {
       availability: "available" | "partial" | "unavailable";
@@ -48,22 +49,22 @@ export interface GitOpsApplicationDetailEndpoint {
       workflow_run_id: string | null;
       status: string | null;
       observed_at: string | null;
-      reason_code: string | null;
+      reason_code: GitOpsReasonCode | null;
     };
     capabilities: [{
       action: "refresh" | "sync";
       authorization: "allowed" | "denied";
       availability: "available" | "partial" | "unavailable";
-      enabled: boolean;
+      enabled: false;
       operation_blocked: boolean;
-      reason_code: string | null;
+      reason_code: GitOpsReasonCode | null;
     }, {
       action: "refresh" | "sync";
       authorization: "allowed" | "denied";
       availability: "available" | "partial" | "unavailable";
-      enabled: boolean;
+      enabled: false;
       operation_blocked: boolean;
-      reason_code: string | null;
+      reason_code: GitOpsReasonCode | null;
     }];
   };
 }

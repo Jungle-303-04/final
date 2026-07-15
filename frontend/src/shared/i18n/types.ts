@@ -97,6 +97,8 @@ type CoreMessageKey =
   | "settings.policy.approval"
   | "state.empty.body"
   | "state.empty.title"
+  | "state.notFound.body"
+  | "state.notFound.title"
   | "state.error.body"
   | "state.error.title"
   | "state.forbidden.body"

@@ -17,6 +17,18 @@ from packages.contracts.parity import ClusterScope, ResourceRef
 GitOpsAvailability = Literal["available", "partial", "unavailable"]
 GitOpsAuthorization = Literal["allowed", "denied"]
 GitOpsAction = Literal["refresh", "sync"]
+GitOpsReasonCode = Literal[
+    "binding_scope_unavailable",
+    "multiple_target_scopes",
+    "live_observation_not_integrated",
+    "source_revision_unavailable",
+    "workflow_operation_unobserved",
+    "provider_operation_not_integrated",
+    "not_authorized",
+    "operation_in_progress",
+    "provider_refresh_not_integrated",
+    "provider_sync_not_integrated",
+]
 
 
 class GitOpsApplicationScope(StrictModel):
@@ -24,7 +36,7 @@ class GitOpsApplicationScope(StrictModel):
 
     availability: GitOpsAvailability
     scope: ClusterScope | None = None
-    reason_code: str | None = None
+    reason_code: GitOpsReasonCode | None = None
 
     @model_validator(mode="after")
     def availability_matches_scope(self) -> GitOpsApplicationScope:
@@ -56,7 +68,7 @@ class GitOpsDesiredLiveDiffAvailability(StrictModel):
     availability: GitOpsAvailability
     source_revision: str | None = None
     live_observation_revision: str | None = None
-    reason_code: str | None = None
+    reason_code: GitOpsReasonCode | None = None
 
     @model_validator(mode="after")
     def availability_has_evidence_or_reason(self) -> GitOpsDesiredLiveDiffAvailability:
@@ -75,7 +87,7 @@ class GitOpsOperationObservation(StrictModel):
     workflow_run_id: str | None = None
     status: str | None = None
     observed_at: str | None = None
-    reason_code: str | None = None
+    reason_code: GitOpsReasonCode | None = None
 
     @model_validator(mode="after")
     def operation_state_is_explicit(self) -> GitOpsOperationObservation:
@@ -97,9 +109,13 @@ class GitOpsActionCapability(StrictModel):
     action: GitOpsAction
     authorization: GitOpsAuthorization
     availability: GitOpsAvailability
-    enabled: bool
+    # This read-only projection intentionally has no command executor.  Keep
+    # the wire contract closed until a CommandRequest/CommandReceipt action
+    # endpoint is introduced; clients must never surface a clickable action
+    # without that audited execution contract.
+    enabled: Literal[False] = False
     operation_blocked: bool = False
-    reason_code: str | None = None
+    reason_code: GitOpsReasonCode | None = None
 
     @model_validator(mode="after")
     def enabled_requires_authorized_available_action(self) -> GitOpsActionCapability:
