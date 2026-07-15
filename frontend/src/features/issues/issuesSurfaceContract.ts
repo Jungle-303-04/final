@@ -16,6 +16,7 @@ export interface IssuesSurfaceCopy {
   listLabel: string;
   listEmpty: string;
   listLoading: string;
+  listCount: (count: number) => string;
   detailLabel: string;
   detailEmpty: string;
   detailLoading: string;
@@ -50,6 +51,11 @@ export interface IssuesSurfaceCopy {
   recoveryUnavailable: string;
   refresh: string;
   status: string;
+  target: string;
+  updated: string;
+  confidence: string;
+  supportingEvidence: string;
+  missingEvidence: string;
   rootCause: string;
   recommended: string;
   approvalRequired: string;
