@@ -109,7 +109,7 @@ describe("ResourcesPage unified-filter detail identity", () => {
     renderEnglishResources(resourcesPort(), canonicalDetailEntry());
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
 
-    expect(screen.getByRole(
+    expect(await screen.findByRole(
       "button",
       { name: "Include inactive resources" },
     )).toBeTruthy();

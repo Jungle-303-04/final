@@ -17,6 +17,11 @@ describe("Clusters adapter", () => {
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
+    await expect(port.reissue("production-a1b2")).resolves.toEqual({
+      clusterId: "production-a1b2",
+      installCommand: "curl rotated-line | kubectl apply -f -",
+      expiresAt: "2026-07-15T07:00:00Z",
+    });
     await expect(port.disconnect("production-a1b2")).resolves.toMatchObject({
       status: "cleanup-required",
       uninstallCommand: "kubectl delete deployment/cluster-agent",
@@ -57,6 +62,11 @@ function dependencies() {
       agents: [{ details: {} }],
       connect_timeout_seconds: 60,
       connect_expires_at: "2026-07-15T01:03:03Z",
+    })),
+    reissueClusterConnectCommand: vi.fn(async () => ({
+      cluster_id: "production-a1b2",
+      install_command: "curl rotated-line | kubectl apply -f -",
+      expires_at: "2026-07-15T07:00:00Z",
     })),
     getCommandStatus: vi.fn(async () => ({
       command_id: "cmd-uninstall-1",

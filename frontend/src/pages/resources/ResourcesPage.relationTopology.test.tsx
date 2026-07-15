@@ -93,6 +93,23 @@ describe("ResourcesPage S9 relationship topology", () => {
     )).toBeNull();
   });
 
+  it("opens detail only through the exact inventory identity shared with the table", async () => {
+    const user = userEvent.setup();
+    renderEnglishResources(
+      "/resources?clusters=cluster-1&resources.types=pod&view=relations",
+      resourcesRelationTopologyPort(),
+    );
+
+    const podNode = await screen.findByRole("button", {
+      name: "Pod checkout-api-0, CrashLoopBackOff",
+    });
+    await user.click(podNode);
+
+    await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
+      .toContain("detail=Pod%2Fshop%2Fcheckout-api-0"));
+    expect(podNode.getAttribute("data-selected")).toBe("true");
+  });
+
   it("keeps the old ready scene until a filter-derived target can run the Pod FLIP", async () => {
     const physicalPending = deferred<typeof PHYSICAL_TOPOLOGY>();
     const relationPending = deferred<RelationTopologySnapshot>();
@@ -121,13 +138,13 @@ describe("ResourcesPage S9 relationship topology", () => {
     );
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
-    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
+    expect(relationPort.loadRelationTopology).not.toHaveBeenCalled();
     await act(async () => {
       await rendered.router.navigate(
         "/resources?clusters=cluster-1&applications=checkout",
       );
     });
-    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(relationPort.loadRelationTopology).toHaveBeenCalledOnce());
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledTimes(2);
     expect(document.querySelector('[data-morph-id="pod:pod:shop/checkout-api-0"]'))
       .toBeTruthy();

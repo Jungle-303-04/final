@@ -27,7 +27,9 @@ describe("ResourcesPage S4 physical topology", () => {
     );
 
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Resource filters" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Resource filters" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Include inactive resources" })
+      .closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
     expect(screen.getByText("Physical placement")).toBeTruthy();
     expect(screen.getByRole("group", { name: "Server placement view" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("Topology");
@@ -40,6 +42,11 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(screen.getByRole("article", { name: "Server worker-a" }).className)
       .toContain("w-full");
     expect(screen.getByText("2 / 18 pods")).toBeTruthy();
+    const legend = screen.getByRole("complementary", { name: "Pod placement legend" });
+    expect(legend.className).toContain("flex-nowrap");
+    expect(within(legend).getByText("Fill · highest CPU / memory request usage")).toBeTruthy();
+    expect(within(legend).getByText("Dashed · metric or request unavailable")).toBeTruthy();
+    expect(within(legend).getByText("Badge · abnormal phase or restarts")).toBeTruthy();
 
     const crashLoop = screen.getByRole("button", {
       name: "Pod checkout-api-0, CrashLoopBackOff, usage 12%",
@@ -54,6 +61,8 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(highLoadNonMatch.getAttribute("disabled")).toBeNull();
     expect(highLoadNonMatch.className).toContain("opacity-45");
     expect(document.querySelectorAll('[data-slot="physical-topology-pod"]')).toHaveLength(3);
+    expect(crashLoop.textContent).toContain("CH");
+    expect(highLoadNonMatch.textContent).toContain("OR");
     expect(document.querySelectorAll('[data-pod-badge="crash-loop"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-pod-badge="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
@@ -175,8 +184,10 @@ describe("ResourcesPage S4 physical topology", () => {
 
     expect(await screen.findByRole("region", { name: "Cluster zoom overview" }))
       .toBeTruthy();
-    expect(document.querySelectorAll('[data-slot="cluster-server-preview"]'))
+    expect(document.querySelectorAll('[data-slot="cluster-provider-icon"]'))
       .toHaveLength(2);
+    expect(document.querySelectorAll('[data-slot="cluster-server-preview"]'))
+      .toHaveLength(0);
     expect(physicalPort.loadPhysicalTopology).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("link", { name: "Open resources for cluster-1" }));

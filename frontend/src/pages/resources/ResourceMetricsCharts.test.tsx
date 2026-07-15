@@ -67,5 +67,7 @@ describe("resource detail metrics", () => {
     await waitFor(() => expect(loadResourceMetricsHistory).toHaveBeenCalled());
     await user.click(within(dialog).getByRole("tab", { name: "개요" }));
     expect(dialog.querySelector('[data-slot="resource-history-unavailable"]')).toBeNull();
+    expect(within(dialog).getByText("CPU 사용량")).toBeTruthy();
+    expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(2);
   });
 });

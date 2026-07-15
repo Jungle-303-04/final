@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PhysicalTopologyPod as PhysicalTopologyPodValue } from "../../features/resources/physicalTopologyContract";
 import { I18nProvider } from "../../shared/i18n";
+import { TooltipProvider } from "../../shared/ui/primitives/tooltip";
 import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
 import { PhysicalTopologyPod } from "./PhysicalTopologyPod";
 import {
@@ -92,11 +93,12 @@ describe("PhysicalTopologyPod", () => {
   });
 
   it("uses a fixed iconless square whose fill only follows usage", () => {
-    const { container } = renderPod(pod({ usagePercent: 72 }));
+    const { container } = renderPod(pod({ name: "checkout-api-0", usagePercent: 72 }));
     const button = screen.getByRole("button");
 
     expect(button.dataset.usageTone).toBe("amber");
     expect(button.className).toContain("size-9");
+    expect(button.textContent).toBe("CH");
     expect(container.querySelector("svg")).toBeNull();
     expect(container.querySelector("[data-pod-badge]")).toBeNull();
     expect(button.className).toContain("transition-[opacity,transform,background-color]");
@@ -195,7 +197,7 @@ describe("PhysicalTopologyPod", () => {
     expect(usageColor(106.2)).toBe(usageColor(100));
   });
 
-  it("keeps the actual over-request value while the tooltip names its denominator", () => {
+  it("keeps the actual over-request value in its accessible name", () => {
     renderPod(pod({
       usagePercent: 106.2,
       cpuMillicores: 531,
@@ -206,9 +208,7 @@ describe("PhysicalTopologyPod", () => {
 
     const button = screen.getByRole("button");
     expect(button.getAttribute("aria-label")).toContain("106.2%");
-    expect(button.getAttribute("title")).toContain(
-      "요청량 대비 106.2% (0.531 / 0.5 코어)",
-    );
+    expect(button.getAttribute("title")).toBeNull();
   });
 });
 
@@ -219,7 +219,9 @@ function renderPod(value: PhysicalTopologyPodValue) {
 function podTree(value: PhysicalTopologyPodValue) {
   return (
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-      <PhysicalTopologyPod nodeIndex={0} onOpen={vi.fn()} pod={value} podIndex={0} />
+      <TooltipProvider delay={0}>
+        <PhysicalTopologyPod nodeIndex={0} onOpen={vi.fn()} pod={value} podIndex={0} />
+      </TooltipProvider>
     </I18nProvider>
   );
 }

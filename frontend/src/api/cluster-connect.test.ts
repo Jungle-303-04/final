@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { connectCluster, getClusterConnectStatus } from "./cluster-connect";
+import {
+  connectCluster,
+  getClusterConnectStatus,
+  reissueClusterConnectCommand,
+} from "./cluster-connect";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -35,6 +39,21 @@ describe("cluster connect API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/clusters/cluster%20%2F%20one/connection",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("reissues a one-time install command for the exact pending registration", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "target / blue",
+      install_command: "curl rotated-command | kubectl apply -f -",
+      expires_at: "2026-07-15T07:00:00Z",
+    }));
+
+    await reissueClusterConnectCommand("target / blue");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/clusters/target%20%2F%20blue/connect-command",
+      expect.objectContaining({ credentials: "include", method: "POST" }),
     );
   });
 });

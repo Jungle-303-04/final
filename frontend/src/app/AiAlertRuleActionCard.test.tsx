@@ -3,8 +3,10 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import type { AiAlertRuleAction } from "../features/ai-assistant/aiAssistantContract";
+import { UnifiedFilterProvider } from "../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../shared/i18n";
 import { AiAlertRuleActionCard } from "./AiAlertRuleActionCard";
 
@@ -32,7 +34,7 @@ describe("AI alert action card", () => {
     const onCreate = vi.fn().mockResolvedValue({ ruleId: "rule-42" });
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-        <AiAlertRuleActionCard action={ACTION} onCreate={onCreate} />
+        <MemoryRouter><UnifiedFilterProvider><AiAlertRuleActionCard action={ACTION} onCreate={onCreate} /></UnifiedFilterProvider></MemoryRouter>
       </I18nProvider>,
     );
 
@@ -42,8 +44,15 @@ describe("AI alert action card", () => {
 
     await user.click(screen.getByRole("button", { name: "알림 만들기" }));
     await waitFor(() => expect(onCreate).toHaveBeenCalledWith(ACTION));
-    expect(await screen.findByText("알림 규칙이 생성되었습니다 · rule-42")).toBeTruthy();
-    expect(screen.getByText("등록 완료")).toBeTruthy();
+    const completed = (await screen.findByText("알림 규칙이 생성되었습니다 · rule-42"))
+      .closest('[data-action-state="completed"]');
+    expect(completed?.className).toContain("max-w-full");
+    expect(completed?.className).toContain("overflow-hidden");
+    const rulesLink = screen.getByRole("link", { name: "알림 규칙 보기" });
+    expect(rulesLink.getAttribute("href")).toContain("tab=rules");
+    expect(rulesLink.getAttribute("href")).toContain("detail=rule-42");
+    expect(rulesLink.className).toContain("whitespace-nowrap");
+    expect(screen.queryByText("등록 완료")).toBeNull();
   });
 
   it("opens prefilled editing and applies a real threshold change", async () => {
@@ -51,7 +60,7 @@ describe("AI alert action card", () => {
     const onCreate = vi.fn().mockResolvedValue({ ruleId: "rule-43" });
     render(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
-        <AiAlertRuleActionCard action={ACTION} onCreate={onCreate} />
+        <MemoryRouter><UnifiedFilterProvider><AiAlertRuleActionCard action={ACTION} onCreate={onCreate} /></UnifiedFilterProvider></MemoryRouter>
       </I18nProvider>,
     );
 

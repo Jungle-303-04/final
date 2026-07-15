@@ -68,6 +68,37 @@ describe("resource metrics history API", () => {
     );
   });
 
+  it("accepts a measured Node series without a namespace", async () => {
+    const payload = {
+      series: [{
+        resource_id: "node-a",
+        cluster_id: "cluster-1",
+        resource_type: "node",
+        namespace: null,
+        name: "worker-a.internal",
+        points: [{
+          observed_at: "2026-07-15T05:00:00Z",
+          cpu_mcores: 640.5,
+          mem_mib: 4096,
+        }],
+        has_sparkline_points: true,
+        completeness: "exact",
+        partial_reason_codes: [],
+      }],
+      completeness: "exact",
+      partial_reason_codes: [],
+      snapshot: SNAPSHOT,
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response(payload));
+
+    await expect(getResourceMetricsHistory({
+      ids: ["node-a"],
+      clusters: ["cluster-1"],
+      resourceTypes: ["node"],
+      snapshotRevision: 42,
+    })).resolves.toEqual(payload);
+  });
+
   it("rejects invalid batches before transport and impossible histories after transport", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     expect(() => getResourceMetricsHistory({ ids: [], snapshotRevision: 42 })).toThrow(RangeError);
