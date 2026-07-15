@@ -54,21 +54,51 @@ class TimelineLedgerAppend:
     sequence: int
     inserted: bool
 
+    @property
+    def record(self) -> TimelineLedgerRecord:
+        return TimelineLedgerRecord(sequence=self.sequence, event=self.event)
+
+
+@dataclass(frozen=True)
+class TimelineLedgerRecord:
+    """One internal replay position paired with its immutable timeline event.
+
+    The sequence is deliberately a domain-storage value, never a transport
+    field.  A gateway converts it to a user/scope-bound opaque cursor.
+    """
+
+    sequence: int
+    event: TimelineEvent
+
+    def __post_init__(self) -> None:
+        if isinstance(self.sequence, bool) or self.sequence < 1:
+            raise ValueError("timeline ledger record sequence must be positive")
+
 
 @dataclass(frozen=True)
 class TimelineLedgerSnapshot:
-    events: tuple[TimelineEvent, ...]
+    records: tuple[TimelineLedgerRecord, ...]
     high_water_sequence: int
     retained_from_sequence: int
+
+    @property
+    def events(self) -> tuple[TimelineEvent, ...]:
+        """Compatibility convenience; cursor issuance must use ``records``."""
+        return tuple(record.event for record in self.records)
 
 
 @dataclass(frozen=True)
 class TimelineReplayResult:
     status: TimelineReplayStatus
-    events: tuple[TimelineEvent, ...]
+    records: tuple[TimelineLedgerRecord, ...]
     high_water_sequence: int
     retained_from_sequence: int
     reason: TimelineResyncReason | None = None
+
+    @property
+    def events(self) -> tuple[TimelineEvent, ...]:
+        """Compatibility convenience; cursor issuance must use ``records``."""
+        return tuple(record.event for record in self.records)
 
 
 class TimelinePolicyProvider(Protocol):
@@ -154,7 +184,7 @@ class TimelineLedgerRepository(DatabaseConnection):
         """Read one scoped history snapshot in stable evidence order."""
         _validate_requested_limit(limit)
         cursor_state = self._cursor_state(read_scope.workspace_id)
-        events = self._read_events(
+        records = self._read_records(
             read_scope,
             after_sequence=cursor_state[1] - 1,
             through_sequence=cursor_state[0],
@@ -162,10 +192,10 @@ class TimelineLedgerRepository(DatabaseConnection):
             limit=limit + 1,
             replay_order=False,
         )
-        if len(events) > limit:
+        if len(records) > limit:
             raise TimelineSnapshotLimitExceeded(limit)
         return TimelineLedgerSnapshot(
-            events=events,
+            records=records,
             high_water_sequence=cursor_state[0],
             retained_from_sequence=cursor_state[1],
         )
@@ -185,14 +215,14 @@ class TimelineLedgerRepository(DatabaseConnection):
         if after_sequence < retained_from - 1:
             return TimelineReplayResult(
                 status="resync_required",
-                events=(),
+                records=(),
                 high_water_sequence=high_water,
                 retained_from_sequence=retained_from,
                 reason="retention_boundary",
             )
         return TimelineReplayResult(
             status="available",
-            events=self._read_events(
+            records=self._read_records(
                 read_scope,
                 after_sequence=after_sequence,
                 through_sequence=high_water,
@@ -254,7 +284,7 @@ class TimelineLedgerRepository(DatabaseConnection):
             else (int(row["last_sequence"]), int(row["retained_from_sequence"]))
         )
 
-    def _read_events(
+    def _read_records(
         self,
         read_scope: TimelineLedgerReadScope,
         *,
@@ -263,7 +293,7 @@ class TimelineLedgerRepository(DatabaseConnection):
         window: TimelineWindow | None,
         limit: int,
         replay_order: bool,
-    ) -> tuple[TimelineEvent, ...]:
+    ) -> tuple[TimelineLedgerRecord, ...]:
         statement = _timeline_events_statement(
             read_scope,
             after_sequence=after_sequence,
@@ -274,7 +304,7 @@ class TimelineLedgerRepository(DatabaseConnection):
         )
         with self.connection() as conn:
             rows = conn.execute(statement).mappings()
-            return tuple(_event_from_row(row) for row in rows)
+            return tuple(_record_from_row(row) for row in rows)
 
 
 def _timeline_events_statement(
@@ -330,7 +360,7 @@ def replay_result(
     after_sequence: int,
     retained_from_sequence: int,
     high_water_sequence: int,
-    events: Iterable[TimelineEvent | tuple[int, TimelineEvent]],
+    events: Iterable[TimelineLedgerRecord | TimelineEvent | tuple[int, TimelineEvent]],
 ) -> TimelineReplayResult:
     """Pure replay folding used by storage adapters and deterministic contract tests."""
     if after_sequence < 0 or retained_from_sequence < 1 or high_water_sequence < 0:
@@ -338,25 +368,30 @@ def replay_result(
     if after_sequence < retained_from_sequence - 1:
         return TimelineReplayResult(
             status="resync_required",
-            events=(),
+            records=(),
             high_water_sequence=high_water_sequence,
             retained_from_sequence=retained_from_sequence,
             reason="retention_boundary",
         )
-    ordered: list[tuple[int, TimelineEvent]] = []
+    ordered: list[TimelineLedgerRecord] = []
     for index, item in enumerate(events, start=1):
-        sequence, event = item if isinstance(item, tuple) else (index, item)
-        if sequence > after_sequence:
-            ordered.append((sequence, event))
-    deduped: list[TimelineEvent] = []
+        if isinstance(item, TimelineLedgerRecord):
+            record = item
+        elif isinstance(item, tuple):
+            record = TimelineLedgerRecord(sequence=item[0], event=item[1])
+        else:
+            record = TimelineLedgerRecord(sequence=index, event=item)
+        if record.sequence > after_sequence:
+            ordered.append(record)
+    deduped: list[TimelineLedgerRecord] = []
     seen_source_keys: set[str] = set()
-    for _sequence, event in sorted(ordered, key=lambda item: item[0]):
-        if event.source_key not in seen_source_keys:
-            seen_source_keys.add(event.source_key)
-            deduped.append(event)
+    for record in sorted(ordered, key=lambda item: item.sequence):
+        if record.event.source_key not in seen_source_keys:
+            seen_source_keys.add(record.event.source_key)
+            deduped.append(record)
     return TimelineReplayResult(
         status="available",
-        events=tuple(deduped),
+        records=tuple(deduped),
         high_water_sequence=high_water_sequence,
         retained_from_sequence=retained_from_sequence,
     )
@@ -415,6 +450,10 @@ def _event_from_row(row: Any) -> TimelineEvent:
             "metadata": row["metadata"],
         }
     )
+
+
+def _record_from_row(row: Any) -> TimelineLedgerRecord:
+    return TimelineLedgerRecord(sequence=int(row["sequence"]), event=_event_from_row(row))
 
 
 def _read_scope_predicate(ledger: Any, scopes: Sequence[ClusterScope]) -> Any:

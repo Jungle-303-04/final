@@ -21,6 +21,7 @@ from domains.timeline.repository import (
     TimelineLedgerReadScope,
     TimelineLedgerRecord,
     TimelineLedgerRepository,
+    TimelineLedgerSnapshot,
     TimelineReplayResult,
     TimelineSnapshotLimitExceeded,
     _timeline_events_statement,
@@ -251,10 +252,17 @@ def test_scoped_replay_keeps_internal_sequences_for_opaque_event_cursors_across_
         snapshot_revision=7,
     )
     cursors = tuple(codec.encode(binding, sequence=record.sequence) for record in replay.records)
+    snapshot = TimelineLedgerSnapshot(
+        records=replay.records,
+        high_water_sequence=replay.high_water_sequence,
+        retained_from_sequence=replay.retained_from_sequence,
+    )
+    snapshot_cursor = codec.encode(binding, sequence=snapshot.high_water_sequence)
 
     assert [record.sequence for record in replay.records] == [2, 5]
     assert [event.event_id for event in replay.events] == ["event-2", "event-5"]
     assert [codec.decode(cursor, binding=binding) for cursor in cursors] == [2, 5]
+    assert codec.decode(snapshot_cursor, binding=binding) == 5
     assert all(not cursor.token.isdigit() for cursor in cursors)
 
 
@@ -354,23 +362,25 @@ def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates()
 
 def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_limit() -> None:
     class Repository:
-        def __init__(self, events: tuple[TimelineEvent, ...]) -> None:
-            self.events = events
+        def __init__(self, records: tuple[TimelineLedgerRecord, ...]) -> None:
+            self.records = records
             self.calls: list[dict[str, object]] = []
 
         def _cursor_state(self, _workspace_id: str) -> tuple[int, int]:
             return 12, 9
 
-        def _read_events(self, _read_scope: object, **kwargs: object) -> tuple[TimelineEvent, ...]:
+        def _read_records(
+            self, _read_scope: object, **kwargs: object
+        ) -> tuple[TimelineLedgerRecord, ...]:
             self.calls.append(kwargs)
-            return self.events
+            return self.records
 
     scope = TimelineLedgerReadScope(
         workspace_id="workspace-a",
         scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
     )
     window = TimelineWindow(from_ms=1_000, to_ms=2_000)
-    full = Repository((_resource_event("inventory:9", "event-9"),))
+    full = Repository((TimelineLedgerRecord(9, _resource_event("inventory:9", "event-9")),))
 
     snapshot = TimelineLedgerRepository.snapshot_timeline_events(
         full,
@@ -380,6 +390,7 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
     )
 
     assert snapshot.events[0].event_id == "event-9"
+    assert snapshot.records[0].sequence == 9
     assert full.calls == [
         {
             "after_sequence": 8,
@@ -392,8 +403,8 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
 
     overflow = Repository(
         (
-            _resource_event("inventory:9", "event-9"),
-            _resource_event("inventory:10", "event-10"),
+            TimelineLedgerRecord(9, _resource_event("inventory:9", "event-9")),
+            TimelineLedgerRecord(10, _resource_event("inventory:10", "event-10")),
         )
     )
     with pytest.raises(TimelineSnapshotLimitExceeded, match="limit exceeded"):
