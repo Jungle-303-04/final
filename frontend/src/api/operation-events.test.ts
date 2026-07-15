@@ -158,13 +158,16 @@ describe("command operation events API", () => {
         payload: { status: "running" },
         occurred_at: "2026-07-15T00:00:00Z",
       }))
-      .mockResolvedValueOnce(sseResponse({
-        command_id: "command-1",
-        sequence: 2,
-        kind: "completed",
-        payload: { status: "completed" },
-        occurred_at: "2026-07-15T00:00:01Z",
-      }));
+      .mockResolvedValueOnce(sseFramesResponse([{
+        id: 2,
+        data: {
+          command_id: "command-1",
+          sequence: 2,
+          kind: "completed",
+          payload: { status: "completed" },
+          occurred_at: "2026-07-15T00:00:01Z",
+        },
+      }]));
 
     const sequences: number[] = [];
     for await (const event of subscribeCommandOperationEvents("command-1")) {
@@ -174,6 +177,23 @@ describe("command operation events API", () => {
     expect(sequences).toEqual([1, 2]);
     const reconnect = fetchMock.mock.calls[1];
     expect(new Headers(reconnect?.[1]?.headers).get("last-event-id")).toBe("1");
+  });
+
+  it("stops a malformed SSE schema contract instead of retrying the stream", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
+      "id: 1",
+      "event: operation",
+      "data: {\"command_id\":\"command-1\",\"sequence\":1}",
+      "",
+      "",
+    ].join("\n"), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }));
+
+    const iterator = subscribeCommandOperationEvents("command-1")[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({ kind: "invalid-payload" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("fails terminally for an authenticated or invalid-request stream error instead of retrying", async () => {

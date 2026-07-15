@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -34,27 +35,33 @@ export interface OperationStatusSnapshot {
 }
 
 export interface OperationStatusRetentionPolicy {
+  maxEmptySnapshots: number;
   maxTerminalCommands: number;
   terminalRetentionMs: number;
 }
 
 export interface OperationStatusStoreRuntime {
   cancelFrame(frame: number): void;
+  clearTimer(timer: number): void;
   isVisible(): boolean;
   now(): number;
   requestFrame(callback: FrameRequestCallback): number;
+  setTimer(callback: () => void, delayMs: number): number;
   subscribeVisibilityChange(listener: () => void): () => void;
 }
 
 export interface OperationStatusStore {
   dispose(): void;
   getSnapshot(commandId: string): OperationStatusSnapshot;
+  getSnapshots(): readonly OperationStatusSnapshot[];
   reobserve(commandId: string): void;
   start(commandId: string): void;
   subscribe(commandId: string, listener: () => void): () => void;
+  subscribeAll(listener: () => void): () => void;
 }
 
 const DEFAULT_RETENTION_POLICY: OperationStatusRetentionPolicy = {
+  maxEmptySnapshots: 64,
   maxTerminalCommands: 64,
   terminalRetentionMs: 30 * 60 * 1_000,
 };
@@ -67,6 +74,9 @@ const browserRuntime: OperationStatusStoreRuntime = {
     }
     clearTimeout(frame);
   },
+  clearTimer(timer) {
+    clearTimeout(timer);
+  },
   isVisible() {
     return typeof document === "undefined" || document.visibilityState !== "hidden";
   },
@@ -76,6 +86,9 @@ const browserRuntime: OperationStatusStoreRuntime = {
       return window.requestAnimationFrame(callback);
     }
     return setTimeout(() => callback(Date.now()), 16) as unknown as number;
+  },
+  setTimer(callback, delayMs) {
+    return setTimeout(callback, delayMs) as unknown as number;
   },
   subscribeVisibilityChange(listener) {
     if (typeof document === "undefined") return () => undefined;
@@ -100,8 +113,12 @@ export function createOperationStatusStore(
   const entries = new Map<string, Entry>();
   const emptySnapshots = new Map<string, OperationStatusSnapshot>();
   const listeners = new Map<string, Set<() => void>>();
+  const allListeners = new Set<() => void>();
   const pendingNotifications = new Set<string>();
   let frame: number | null = null;
+  let retentionTimer: number | null = null;
+  let publishedSnapshots: readonly OperationStatusSnapshot[] = [];
+  let snapshotsDirty = false;
   let disposed = false;
   const unsubscribeVisibility = environment.subscribeVisibilityChange(() => {
     if (!environment.isVisible()) {
@@ -117,16 +134,25 @@ export function createOperationStatusStore(
       if (disposed) return;
       disposed = true;
       if (frame !== null) environment.cancelFrame(frame);
+      if (retentionTimer !== null) environment.clearTimer(retentionTimer);
       frame = null;
+      retentionTimer = null;
       unsubscribeVisibility();
       entries.forEach((entry) => entry.controller?.abort());
       entries.clear();
       listeners.clear();
+      allListeners.clear();
       pendingNotifications.clear();
       emptySnapshots.clear();
+      publishedSnapshots = [];
+      snapshotsDirty = false;
     },
     getSnapshot(commandId) {
-      return entries.get(commandId)?.snapshot ?? emptySnapshot(commandId);
+      const normalized = commandId.trim();
+      return entries.get(normalized)?.snapshot ?? emptySnapshot(normalized);
+    },
+    getSnapshots() {
+      return publishedSnapshots;
     },
     reobserve(commandId) {
       if (disposed) return;
@@ -146,17 +172,22 @@ export function createOperationStatusStore(
       begin(normalized);
     },
     subscribe(commandId, listener) {
-      let commandListeners = listeners.get(commandId);
+      const normalized = commandId.trim();
+      let commandListeners = listeners.get(normalized);
       if (!commandListeners) {
         commandListeners = new Set();
-        listeners.set(commandId, commandListeners);
+        listeners.set(normalized, commandListeners);
       }
       commandListeners.add(listener);
       return () => {
-        const current = listeners.get(commandId);
+        const current = listeners.get(normalized);
         current?.delete(listener);
-        if (current?.size === 0) listeners.delete(commandId);
+        if (current?.size === 0) listeners.delete(normalized);
       };
+    },
+    subscribeAll(listener) {
+      allListeners.add(listener);
+      return () => allListeners.delete(listener);
     },
   };
 
@@ -191,9 +222,9 @@ export function createOperationStatusStore(
       })) {
         if (!isCurrent(entry, generation, controller)) return;
         onEvent(entry, event);
-        if (isTerminal(entry.snapshot.status)) return;
+        if (isFinal(entry.snapshot.status)) return;
       }
-      if (isCurrent(entry, generation, controller) && !isTerminal(entry.snapshot.status)) {
+      if (isCurrent(entry, generation, controller) && !isFinal(entry.snapshot.status)) {
         fail(entry, "unavailable");
       }
     } catch (error) {
@@ -208,7 +239,7 @@ export function createOperationStatusStore(
   }
 
   function onLifecycle(entry: Entry, generation: number, lifecycle: OperationStreamLifecycle): void {
-    if (disposed || entry.generation !== generation || isTerminal(entry.snapshot.status)) return;
+    if (disposed || entry.generation !== generation || isFinal(entry.snapshot.status)) return;
     switch (lifecycle.state) {
       case "connecting":
         update(entry, { failure: null, retry: null, status: "connecting" }, true);
@@ -231,7 +262,7 @@ export function createOperationStatusStore(
   }
 
   function onEvent(entry: Entry, event: OperationEvent): void {
-    if (isTerminal(entry.snapshot.status)) return;
+    if (isFinal(entry.snapshot.status)) return;
     const previousSequence = entry.snapshot.sequence;
     if (
       event.commandId !== entry.snapshot.commandId
@@ -258,10 +289,11 @@ export function createOperationStatusStore(
   }
 
   function fail(entry: Entry, failure: OperationStreamFailure): void {
-    if (isTerminal(entry.snapshot.status) || (
+    if (isFinal(entry.snapshot.status) || (
       entry.snapshot.status === failure && entry.snapshot.failure === failure
     )) return;
     update(entry, { failure, retry: null, status: failure }, true);
+    entry.controller?.abort();
   }
 
   function update(
@@ -274,7 +306,8 @@ export function createOperationStatusStore(
       ...changes,
       updatedAt: environment.now(),
     };
-    if (isTerminal(entry.snapshot.status)) pruneTerminalEntries();
+    snapshotsDirty = true;
+    if (isFinal(entry.snapshot.status)) pruneTerminalEntries();
     scheduleNotification(entry.snapshot.commandId, immediate);
   }
 
@@ -300,6 +333,14 @@ export function createOperationStatusStore(
     if (!environment.isVisible()) return;
     const commandIds = [...pendingNotifications];
     pendingNotifications.clear();
+    if (snapshotsDirty) {
+      publishedSnapshots = [...entries.values()]
+        .map((entry) => entry.snapshot)
+        .filter((snapshot) => snapshot.status !== "idle")
+        .sort((left, right) => right.updatedAt - left.updatedAt);
+      snapshotsDirty = false;
+      allListeners.forEach((listener) => listener());
+    }
     commandIds.forEach((commandId) => {
       listeners.get(commandId)?.forEach((listener) => listener());
     });
@@ -308,15 +349,38 @@ export function createOperationStatusStore(
   function pruneTerminalEntries(): void {
     const now = environment.now();
     const terminalEntries = [...entries.values()]
-      .filter((entry) => isTerminal(entry.snapshot.status))
+      .filter((entry) => isFinal(entry.snapshot.status))
       .sort((left, right) => left.snapshot.updatedAt - right.snapshot.updatedAt);
     const expired = terminalEntries.filter((entry) => (
-      now - entry.snapshot.updatedAt > retention.terminalRetentionMs
+      now - entry.snapshot.updatedAt >= retention.terminalRetentionMs
     ));
-    expired.forEach((entry) => entries.delete(entry.snapshot.commandId));
+    expired.forEach(removeEntry);
     const retained = terminalEntries.filter((entry) => !expired.includes(entry));
     const overflow = Math.max(0, retained.length - retention.maxTerminalCommands);
-    retained.slice(0, overflow).forEach((entry) => entries.delete(entry.snapshot.commandId));
+    retained.slice(0, overflow).forEach(removeEntry);
+    scheduleRetentionPrune();
+  }
+
+  function removeEntry(entry: Entry): void {
+    if (!entries.delete(entry.snapshot.commandId)) return;
+    pendingNotifications.add(entry.snapshot.commandId);
+    snapshotsDirty = true;
+  }
+
+  function scheduleRetentionPrune(): void {
+    if (retentionTimer !== null) environment.clearTimer(retentionTimer);
+    retentionTimer = null;
+    const terminalEntries = [...entries.values()].filter((entry) => isFinal(entry.snapshot.status));
+    if (terminalEntries.length === 0 || disposed) return;
+    const expiresAt = Math.min(...terminalEntries.map((entry) => (
+      entry.snapshot.updatedAt + retention.terminalRetentionMs
+    )));
+    const delay = Math.max(0, expiresAt - environment.now());
+    retentionTimer = environment.setTimer(() => {
+      retentionTimer = null;
+      pruneTerminalEntries();
+      if (pendingNotifications.size > 0 && environment.isVisible()) flushNotifications();
+    }, delay);
   }
 
   function emptySnapshot(commandId: string): OperationStatusSnapshot {
@@ -332,6 +396,11 @@ export function createOperationStatusStore(
       updatedAt: 0,
     };
     emptySnapshots.set(commandId, snapshot);
+    while (emptySnapshots.size > retention.maxEmptySnapshots) {
+      const oldest = emptySnapshots.keys().next().value;
+      if (oldest === undefined) break;
+      emptySnapshots.delete(oldest);
+    }
     return snapshot;
   }
 
@@ -342,6 +411,10 @@ export function createOperationStatusStore(
 
 function isTerminal(status: OperationStatus): boolean {
   return status === "completed" || status === "failed";
+}
+
+function isFinal(status: OperationStatus): boolean {
+  return isTerminal(status) || isObservationFailure(status);
 }
 
 function canReobserve(status: OperationStatus): boolean {
@@ -366,7 +439,21 @@ export function OperationStatusStoreProvider({
   children: ReactNode;
   store: OperationStatusStore;
 }) {
-  useEffect(() => () => store.dispose(), [store]);
+  const [pendingDisposals] = useState(() => new Map<OperationStatusStore, number>());
+  useEffect(() => {
+    const pending = pendingDisposals.get(store);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+      pendingDisposals.delete(store);
+    }
+    return () => {
+      const timer = setTimeout(() => {
+        pendingDisposals.delete(store);
+        store.dispose();
+      }, 0) as unknown as number;
+      pendingDisposals.set(store, timer);
+    };
+  }, [pendingDisposals, store]);
   return (
     <OperationStatusStoreContext.Provider value={store}>
       {children}
@@ -388,5 +475,24 @@ export function useOperationStatus(commandId: string): OperationStatusSnapshot {
   const store = useOperationStatusStore();
   const subscribe = useCallback((listener: () => void) => store.subscribe(commandId, listener), [commandId, store]);
   const getSnapshot = useCallback(() => store.getSnapshot(commandId), [commandId, store]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+export function useOperationStatusSnapshots(): readonly OperationStatusSnapshot[] {
+  const store = useOperationStatusStore();
+  const subscribe = useCallback((listener: () => void) => store.subscribeAll(listener), [store]);
+  return useSyncExternalStore(subscribe, store.getSnapshots, store.getSnapshots);
+}
+
+const EMPTY_OPERATION_STATUS_SNAPSHOTS: readonly OperationStatusSnapshot[] = [];
+
+export function useOptionalOperationStatusSnapshots(): readonly OperationStatusSnapshot[] {
+  const store = useOptionalOperationStatusStore();
+  const subscribe = useCallback((listener: () => void) => (
+    store ? store.subscribeAll(listener) : () => undefined
+  ), [store]);
+  const getSnapshot = useCallback(() => (
+    store?.getSnapshots() ?? EMPTY_OPERATION_STATUS_SNAPSHOTS
+  ), [store]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

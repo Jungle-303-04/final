@@ -1,25 +1,16 @@
 import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
-import { useI18n, type MessageKey } from "../../shared/i18n";
+import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
-import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
-import { Button } from "../../shared/ui/primitives/button";
+import { StatusMark } from "../../shared/ui/StatusMark";
 import {
   useOperationStatus,
-  useOperationStatusStore,
-  type OperationStatus,
 } from "./OperationStatusStore";
-
-const statusKeys: Record<OperationStatus, MessageKey> = {
-  idle: "resources.detail.action.observation.idle",
-  connecting: "resources.detail.action.observation.connecting",
-  running: "resources.detail.action.observation.running",
-  reconnecting: "resources.detail.action.observation.reconnecting",
-  completed: "resources.detail.action.observation.completed",
-  failed: "resources.detail.action.observation.failed",
-  forbidden: "resources.detail.action.observation.forbidden",
-  invalid: "resources.detail.action.observation.invalid",
-  unavailable: "resources.detail.action.observation.unavailable",
-};
+import { OperationReobserveButton } from "./OperationReobserveButton";
+import {
+  canReobserveOperation,
+  operationStatusKeys,
+  operationStatusTone,
+} from "./operationPresentation";
 
 export function OperationStatusFeedback({
   commandId,
@@ -29,13 +20,10 @@ export function OperationStatusFeedback({
   correlationId: string;
 }) {
   const { t } = useI18n();
-  const store = useOperationStatusStore();
   const snapshot = useOperationStatus(commandId);
   const reducedMotion = usePrefersReducedMotion();
-  const statusLabel = t(statusKeys[snapshot.status]);
-  const reobservable = snapshot.status === "forbidden"
-    || snapshot.status === "invalid"
-    || snapshot.status === "unavailable";
+  const statusLabel = t(operationStatusKeys[snapshot.status]);
+  const reobservable = canReobserveOperation(snapshot.status);
   const active = snapshot.status === "connecting" || snapshot.status === "reconnecting";
 
   return (
@@ -51,41 +39,13 @@ export function OperationStatusFeedback({
       data-status={snapshot.status}
       role="status"
     >
-      <StatusMark label={statusLabel} tone={toneFor(snapshot.status)} />
+      <StatusMark label={statusLabel} tone={operationStatusTone(snapshot.status)} />
       <span className="min-w-0 truncate">
         {t("resources.detail.action.accepted", { id: correlationId })}
         {" · "}
         {t("resources.detail.action.observation", { status: statusLabel })}
       </span>
-      {reobservable ? (
-        <Button
-          className="h-7 shrink-0 px-2 text-xs"
-          onClick={() => store.reobserve(commandId)}
-          type="button"
-          variant="outline"
-        >
-          {t("resources.detail.action.reobserve")}
-        </Button>
-      ) : null}
+      <OperationReobserveButton commandId={commandId} enabled={reobservable} />
     </div>
   );
-}
-
-function toneFor(status: OperationStatus): StatusTone {
-  switch (status) {
-    case "completed":
-      return "healthy";
-    case "connecting":
-    case "reconnecting":
-    case "idle":
-      return "unknown";
-    case "running":
-    case "invalid":
-      return "warning";
-    case "unavailable":
-      return "stale";
-    case "failed":
-    case "forbidden":
-      return "critical";
-  }
 }

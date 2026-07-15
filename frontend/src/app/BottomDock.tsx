@@ -1,7 +1,10 @@
 import { ChevronDown, ChevronUp, Sparkles, X } from "lucide-react";
+import { useState } from "react";
 
 import { useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import type { BottomDockTab } from "../features/bottom-dock/bottomDockState";
+import { OperationStatusCenter } from "../features/operations/OperationStatusCenter";
+import { useOptionalOperationStatusSnapshots } from "../features/operations/OperationStatusStore";
 import { useI18n } from "../shared/i18n";
 import { Badge } from "../shared/ui/primitives/badge";
 import { Button } from "../shared/ui/primitives/button";
@@ -16,9 +19,15 @@ import { LogStreamTab } from "./LogStreamTab";
 
 export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
   const dock = useBottomDock();
+  const operations = useOptionalOperationStatusSnapshots();
   const { t } = useI18n();
-  if (dock.tabs.length === 0 || dock.activeTabId === null) return null;
-  const activeTab = dock.tabs.find((tab) => tab.id === dock.activeTabId) ?? dock.tabs[0]!;
+  const hasLogs = dock.tabs.length > 0 && dock.activeTabId !== null;
+  const [operationCenterOpen, setOperationCenterOpen] = useState(!hasLogs);
+  if (!hasLogs && operations.length === 0) return null;
+  const activeTab = hasLogs
+    ? dock.tabs.find((tab) => tab.id === dock.activeTabId) ?? dock.tabs[0]!
+    : null;
+  const showingOperations = operations.length > 0 && (!hasLogs || operationCenterOpen);
   return (
     <section
       aria-label={t("shell.dock.title")}
@@ -32,26 +41,43 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
       ) : null}
       <Tabs
         className="h-full min-h-0 gap-0"
-        onValueChange={(value) => value && dock.selectTab(value)}
-        value={dock.activeTabId}
+        onValueChange={(value) => {
+          if (!value) return;
+          setOperationCenterOpen(false);
+          dock.selectTab(value);
+        }}
+        value={activeTab?.id ?? "operations"}
       >
         <header className="flex min-w-0 items-center gap-2 border-b px-2 py-1">
-          <TabsList
-            aria-label={t("shell.dock.tabs")}
-            className="min-w-0 flex-1 justify-start overflow-x-auto"
-            variant="line"
-          >
-            {dock.tabs.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id}>
-                <span className="max-w-40 truncate">
-                  {t("shell.dock.tab", { name: tab.target.name })}
-                </span>
-                {tab.unseen > 0 ? <Badge variant="secondary">{tab.unseen}</Badge> : null}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <Badge variant="outline">{t(statusLabel(activeTab))}</Badge>
-          {activeTab.streamId ? (
+          {hasLogs ? (
+            <TabsList
+              aria-label={t("shell.dock.tabs")}
+              className="min-w-0 flex-1 justify-start overflow-x-auto"
+              variant="line"
+            >
+              {dock.tabs.map((tab) => (
+                <TabsTrigger key={tab.id} value={tab.id}>
+                  <span className="max-w-40 truncate">
+                    {t("shell.dock.tab", { name: tab.target.name })}
+                  </span>
+                  {tab.unseen > 0 ? <Badge variant="secondary">{tab.unseen}</Badge> : null}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          ) : <h2 className="min-w-0 flex-1 text-sm font-medium">{t("shell.dock.operationCenter")}</h2>}
+          {operations.length > 0 && hasLogs ? (
+            <Button
+              aria-label={operationCenterOpen ? t("shell.dock.openLogs") : t("shell.dock.openOperationCenter")}
+              onClick={() => setOperationCenterOpen((open) => !open)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              {operationCenterOpen ? t("shell.dock.openLogs") : t("shell.dock.operationCenter")}
+            </Button>
+          ) : null}
+          {activeTab ? <Badge variant="outline">{t(statusLabel(activeTab))}</Badge> : null}
+          {activeTab?.streamId ? (
             <Button
               aria-label={t("shell.dock.askAi")}
               onClick={onAskAi}
@@ -71,19 +97,20 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
           >
             {dock.collapsed ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
           </Button>
-          <Button
-            aria-label={t("shell.dock.closeTab", {
-              name: activeTab.target.name,
-            })}
-            onClick={() => dock.closeTab(dock.activeTabId!)}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <X aria-hidden="true" />
-          </Button>
+          {activeTab ? (
+            <Button
+              aria-label={t("shell.dock.closeTab", { name: activeTab.target.name })}
+              onClick={() => dock.closeTab(activeTab.id)}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          ) : null}
         </header>
-        {!dock.collapsed ? dock.tabs.map((tab) => (
+        {!dock.collapsed && showingOperations ? <OperationStatusCenter /> : null}
+        {!dock.collapsed && !showingOperations ? dock.tabs.map((tab) => (
           <TabsContent className="min-h-0 overflow-hidden" key={tab.id} value={tab.id}>
             <LogStreamTab onRetry={() => dock.retryTab(tab.id)} tab={tab} />
           </TabsContent>
