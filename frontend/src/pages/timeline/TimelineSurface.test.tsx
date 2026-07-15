@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TimelineFailure, type TimelinePort } from "../../features/timeline/timelineContract";
+import type { ClusterScope } from "../../shared/parity/referenceParity";
+import { I18nProvider } from "../../shared/i18n";
 import { TimelineSurface } from "./TimelineSurface";
 
 afterEach(cleanup);
@@ -13,9 +15,9 @@ describe("TimelineSurface", () => {
   it("rehydrates URL state after history navigation and writes search without an API path", async () => {
     const user = userEvent.setup();
     const port = timelinePort();
-    const { router } = renderTimeline(port, "/timeline?foreign=keep&q=first&view=list");
+    const { router } = renderTimeline(port, "/timeline?foreign=keep&q=first&view=list", "en-US");
 
-    expect((await screen.findByText(/1 event are available/u)).textContent).toContain("1 event");
+    expect((await screen.findByText(/1 event is available/u)).textContent).toContain("1 event");
     expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("first");
     expect(screen.getByRole("radio", { name: "List" }).getAttribute("aria-checked")).toBe("true");
 
@@ -59,6 +61,7 @@ describe("TimelineSurface", () => {
     const { router } = renderTimeline(
       timelinePort({ readTimeline: vi.fn().mockResolvedValue({ eventCount: 0 }) }),
       `/timeline?from=1&to=${tenDays}`,
+      "en-US",
     );
 
     expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
@@ -74,13 +77,42 @@ describe("TimelineSurface", () => {
       .fn()
       .mockRejectedValueOnce(new TimelineFailure("offline"))
       .mockResolvedValueOnce({ eventCount: 2 });
-    renderTimeline(timelinePort({ readTimeline }));
+    renderTimeline(timelinePort({ readTimeline }), "/timeline", "en-US");
 
     expect((await screen.findByRole("alert")).textContent).toContain("Timeline data is unavailable.");
     await user.click(screen.getByRole("button", { name: "Retry timeline" }));
 
     expect((await screen.findByText(/2 events are available/u)).textContent).toContain("2 events");
     expect(readTimeline).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      navigatorLanguage: "en-US",
+      title: "Timeline",
+      search: "Timeline search",
+      empty: "No timeline events match this scope.",
+    },
+    {
+      navigatorLanguage: "ko-KR",
+      title: "타임라인",
+      search: "타임라인 검색",
+      empty: "이 범위에 일치하는 타임라인 이벤트가 없습니다.",
+    },
+  ])("uses typed catalog copy and retains URL behavior for $navigatorLanguage", async (copy) => {
+    const user = userEvent.setup();
+    const { router } = renderTimeline(
+      timelinePort({ readTimeline: vi.fn().mockResolvedValue({ eventCount: 0 }) }),
+      "/timeline",
+      copy.navigatorLanguage,
+    );
+
+    expect(await screen.findByRole("heading", { name: copy.title })).toBeTruthy();
+    expect(await screen.findByText(copy.empty)).toBeTruthy();
+    await user.type(screen.getByRole("searchbox", { name: copy.search }), "scope-check");
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("q")).toBe("scope-check");
+    });
   });
 });
 
@@ -96,20 +128,18 @@ function timelinePort(overrides: Partial<TimelinePort> = {}): TimelinePort {
   };
 }
 
-function renderTimeline(port: TimelinePort, initialEntry = "/timeline") {
+function renderTimeline(
+  port: TimelinePort,
+  initialEntry = "/timeline",
+  navigatorLanguage = "en-US",
+) {
   const router = createMemoryRouter([{
     path: "/timeline",
     element: (
       <>
-        <TimelineSurface
-          port={port}
-          scope={{
-            workspaceId: "workspace-1",
-            clusterIds: ["cluster-1"],
-            namespaces: ["shop"],
-            freshness: "live",
-          }}
-        />
+        <I18nProvider navigatorLanguage={navigatorLanguage} storage={null}>
+          <TimelineSurface port={port} scopes={TIMELINE_SCOPES} />
+        </I18nProvider>
         <LocationProbe />
       </>
     ),
@@ -117,6 +147,13 @@ function renderTimeline(port: TimelinePort, initialEntry = "/timeline") {
 
   return { ...render(<RouterProvider router={router} />), router };
 }
+
+const TIMELINE_SCOPES: readonly ClusterScope[] = [{
+  workspaceId: "workspace-1",
+  clusterId: "cluster-1",
+  namespaces: ["shop"],
+  freshness: "live",
+}];
 
 function LocationProbe() {
   const location = useLocation();
