@@ -66,6 +66,7 @@ import {
   getHelmRelease,
   listHelmReleases,
   getTrafficOverview,
+  getCostOverview,
   getChecksDetail,
   getChecksOverview,
 } from "../api";
@@ -108,6 +109,8 @@ import { createHelmAdapter } from "../features/helm/createHelmAdapter";
 import { createHelmSurface } from "../pages/helm/createHelmSurface";
 import { createTrafficAdapter } from "../features/traffic/createTrafficAdapter";
 import { createTrafficSurface } from "../pages/traffic/createTrafficSurface";
+import { createCostAdapter } from "../features/cost/createCostAdapter";
+import { createCostSurface } from "../pages/cost/createCostSurface";
 import { createChecksAdapter } from "../features/checks/createChecksAdapter";
 import { createChecksSurface } from "../pages/checks/createChecksSurface";
 
@@ -205,6 +208,7 @@ export function createApiComposition() {
     listHelmReleases,
   });
   const trafficPort = createTrafficAdapter({ getTrafficOverview });
+  const costPort = createCostAdapter({ getCostOverview });
   const checksPort = createChecksAdapter({ getChecksDetail, getChecksOverview });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
@@ -276,6 +280,10 @@ export function createApiComposition() {
     {
       id: "traffic",
       Component: createTrafficSurface(trafficPort),
+    },
+    {
+      id: "cost",
+      Component: createCostSurface(costPort),
     },
     {
       id: "checks",

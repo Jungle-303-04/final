@@ -215,6 +215,14 @@
       "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
       "rationale": "Namespace, protocol, and status flow filters remain unavailable until collector-backed flow records and filter facets are specified by the server."
     },
+    "cost.overview.unavailable": {
+      "destination": "frontend/src/pages/cost/CostPage.test.tsx",
+      "rationale": "The Cost surface must disclose authorized scope and collector absence without rendering a currency, zero amount, projection, or recommendation."
+    },
+    "cost.overview.contract": {
+      "destination": "tests/test_cost_router.py",
+      "rationale": "The Python boundary applies workspace and inventory-read scope and keeps every monetary field null until a provider-backed observation exists."
+    },
     "topology.graph.contract": {
       "destination": "tests/test_relations_topology_router.py",
       "rationale": "The Python topology boundary must keep the authorized cluster scope, graph evidence, unavailable projection, and server refresh policy explicit."
@@ -2391,6 +2399,44 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The collector is not integrated, so the vertical truthfully returns unavailable status and null counts/edges instead of inferred connections or synthetic zero values."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/CostView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:overview:availability-scope:v1",
+          "legacyContractIds": [
+            "reference.feature.217"
+          ],
+          "symbol": "CostView availability surface",
+          "interaction": "the scoped Cost read discloses provider-observation availability and inventory freshness before any currency, allocation, or recommendation is rendered",
+          "transport": "poll",
+          "realtime": {
+            "resume": "use the server-provided refresh policy only after a successful scoped response",
+            "backpressure": "share one request for each normalized authorized cluster scope and release it when the view unmounts",
+            "merge": "replace the overview only for the current scope; unavailable monetary fields remain null"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/features/cost/createCostAdapter.ts",
+              "src/domains/cost/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.overview.unavailable",
+              "cost.overview.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The vertical preserves source availability semantics while refusing to fabricate money from inventory or resource metrics."
           }
         }
       ]

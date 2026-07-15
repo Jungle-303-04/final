@@ -205,6 +205,28 @@
         }
       }
     }
+    ,"reference.feature.217": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.cost.observations",
+      "frontendContract": "frontend/src/pages/cost",
+      "verification": [
+        "tests/test_cost_router.py",
+        "frontend/src/pages/cost/CostPage.test.tsx",
+        "frontend/src/api/cost-overview.test.ts"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/cost/router.py#get_cost_overview",
+          "test": "tests/test_cost_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/cost/CostPage.tsx",
+          "test": "frontend/src/pages/cost/CostPage.test.tsx"
+        }
+      }
+    }
   },
   "sections": {
     "0. 목적과 사용 금지선": {
