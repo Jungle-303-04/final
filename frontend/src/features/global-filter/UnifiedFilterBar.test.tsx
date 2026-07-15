@@ -33,6 +33,21 @@ afterEach(cleanup);
 afterAll(() => vi.unstubAllGlobals());
 
 describe("UnifiedFilterBar", () => {
+  it("announces a pending search with the shared reduced-motion-safe spinner", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<readonly GlobalFilterSuggestion[]>();
+    renderFilter({ search: vi.fn(() => pending.promise) });
+
+    await user.click(screen.getByRole("button", { name: filterPlaceholder }));
+
+    const status = (await screen.findByText("Loading")).closest<HTMLElement>('[role="status"]');
+    expect(status?.textContent).toContain("Loading");
+    const spinner = status?.querySelector<HTMLElement>('[data-slot="spinner"]');
+    expect(spinner?.className).toContain("motion-safe:animate-spin");
+    expect(spinner?.className).toContain("motion-reduce:animate-none");
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("renders server-defined groups and writes typed selections to the canonical URL", async () => {
     const user = userEvent.setup();
     const search = vi.fn<GlobalFilterPort["search"]>(async (query) =>

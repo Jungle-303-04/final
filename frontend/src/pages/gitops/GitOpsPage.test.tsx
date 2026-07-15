@@ -181,6 +181,33 @@ describe("GitOpsPage workspace navigation", () => {
     expect((screen.getByRole("checkbox", { name: /Inventory API/ }) as HTMLInputElement).checked).toBe(true);
   });
 
+  it("uses the shared reduced-motion-safe spinner while registering a deployment target", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    let resolveCreation!: () => void;
+    vi.mocked(port.connectApplication).mockImplementation(() => new Promise((resolve) => {
+      resolveCreation = () => resolve(null);
+    }));
+    renderGitOps("/gitops", port);
+
+    await user.click(await screen.findByRole("button", { name: "New plan" }));
+    await user.type(screen.getByLabelText("Plan name"), "Target registration plan");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "New deployment target" }));
+    await user.type(screen.getByLabelText("Target name"), "Inventory API");
+    await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
+    await user.click(screen.getByRole("button", { name: "Register target" }));
+
+    const register = screen.getByRole("button", { name: "Registering target" });
+    const spinner = register.querySelector<HTMLElement>('[data-slot="spinner"]');
+    expect(register.getAttribute("aria-busy")).toBe("true");
+    expect(spinner?.className).toContain("motion-safe:animate-spin");
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+
+    resolveCreation();
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Could not register"));
+  });
+
   it("keeps the overview next action in the workspace header", async () => {
     const user = userEvent.setup();
     renderGitOps("/gitops?plan=plan-a&view=overview");
