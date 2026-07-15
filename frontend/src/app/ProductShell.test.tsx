@@ -135,4 +135,28 @@ describe("ProductShell", () => {
     expect(markup).toContain("워크스페이스");
     expect(markup).toContain("언어");
   });
+
+  it("links the product brand to the released declarative landing route", () => {
+    const markup = renderToStaticMarkup(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <MemoryRouter initialEntries={["/issues?clusters=cluster-1"]}>
+          <Routes>
+            <Route
+              element={(
+                <TestShell
+                  auth={testAuth}
+                  releasedSurfaceIds={new Set(["home", "issues"])}
+                />
+              )}
+            >
+              <Route path="/issues" element={<p>Issue content</p>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(markup).toContain('aria-label="Go to Home"');
+    expect(markup).toContain('href="/home?clusters=cluster-1"');
+  });
 });
