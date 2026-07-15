@@ -788,8 +788,21 @@ class AgentCommandRepository(DatabaseConnection):
             )
         )
         with self.connection() as conn:
-            rows = conn.execute(statement).mappings().all()
-        return [row_dict(row) for row in rows]
+            rows = [row_dict(row) for row in conn.execute(statement).mappings().all()]
+            for row in rows:
+                stage_command_operation_event_in_transaction(
+                    conn,
+                    workspace_id=str(row["workspace_id"]),
+                    command_id=str(row["command_id"]),
+                    kind="failed",
+                    payload={
+                        "cluster_id": str(row["cluster_id"]),
+                        "status": CommandStatus.FAILED,
+                        "correlation_id": str(row["correlation_id"]),
+                        "result": dict(row["result"]),
+                    },
+                )
+        return rows
 
     def command_status_counts(self) -> dict[str, int]:
         table = AgentCommand.__table__

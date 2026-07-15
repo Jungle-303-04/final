@@ -40,20 +40,7 @@ async def emit_expired_command_completions(
     for row in expired:
         command_id = str(row["command_id"])
         workspace_id = str(row.get("workspace_id") or "default")
-        cluster_id = str(row.get("cluster_id") or "")
         result = dict(row["result"])
-        append_operation_event = getattr(db, "append_command_operation_event", None)
-        if callable(append_operation_event) and cluster_id:
-            await append_operation_event(
-                workspace_id,
-                command_id,
-                "failed",
-                {
-                    "cluster_id": cluster_id,
-                    "status": "failed",
-                    "result": result,
-                },
-            )
         body = CommandCompletedBody(command_id=command_id, result=result)
         correlation_id = str(row.get("correlation_id") or f"{COMMAND_JANITOR}:{command_id}")
         with event_workspace(workspace_id):
