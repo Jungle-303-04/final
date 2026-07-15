@@ -250,13 +250,16 @@ describe("IssuesSurface", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
     fireEvent.click(await screen.findByRole("button", { name: "Increase memory limit" }));
     expect(await screen.findByText("Selection received · event-1")).toBeTruthy();
-    await waitFor(() => expect(port.loadRecoveryPlan).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(vi.mocked(port.loadRecoveryPlan).mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
     expect(port.selectRecoveryAction).toHaveBeenCalledWith({
       correlationId: "correlation-1",
       planId: "plan-1",
       actionId: "increase-memory",
     }, expect.any(AbortSignal));
     expect(screen.getByText("selection_requested")).toBeTruthy();
+    expect(screen.getByText("Approval received · waiting for agent dispatch")).toBeTruthy();
   });
   it("renders a section failure without removing successful incident content", async () => {
     const port = issuesPort({

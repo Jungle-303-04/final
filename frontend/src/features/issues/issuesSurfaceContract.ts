@@ -79,6 +79,17 @@ export interface IssuesSurfaceCopy {
   narrativeRecurrencePrevention: string;
   narrativeLimitations: string;
   approvalRequired: string;
+  recoveryProgressAccepted: string;
+  recoveryProgressApproval: string;
+  recoveryProgressApprovalWaiting: string;
+  recoveryProgressCompletion: string;
+  recoveryProgressExecution: string;
+  recoveryProgressFailed: string;
+  recoveryProgressLabel: string;
+  recoveryProgressLatest: string;
+  recoveryProgressStopped: string;
+  recoveryProgressSubmission: string;
+  recoveryProgressVerification: string;
   selectionPending: string;
   selectionReceived: (eventId: string) => string;
   genericFailure: string;
@@ -105,6 +116,7 @@ export interface IssuePanelsState {
   reports: SectionState<IssueRcaReportPage>;
   recovery: SectionState<IssueRecoveryPlan>;
   receipt: IssueRecoveryReceipt | null;
+  selectionFailure: IssuesPortFailure | null;
   selectionPendingId: string | null;
 }
 

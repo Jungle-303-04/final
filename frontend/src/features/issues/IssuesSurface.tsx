@@ -27,6 +27,7 @@ import { useIssueAuditPagination } from "./useIssueAuditPagination";
 import { useIssueDetailFocus } from "./useIssueDetailFocus";
 
 const ISSUE_REFRESH_INTERVAL_MS = 10_000;
+const RECOVERY_PROGRESS_REFRESH_INTERVAL_MS = 2_000;
 
 export function IssuesSurface({
   clusterId,
@@ -54,6 +55,10 @@ export function IssuesSurface({
   const mutationRef = useRef<AbortController | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
   const selected = selectedRecord?.scope === clusterId ? selectedRecord.issue : null;
+  const selectedCorrelationId = selected?.correlationId ?? null;
+  const selectedId = selected?.id ?? null;
+  const selectedIncidentId = selected?.incidentId ?? null;
+  const selectedStatus = selected?.status ?? null;
   const auditScope = selected === null
     ? null
     : `${clusterId ?? ""}\u0000${selected.correlationId}`;
@@ -118,11 +123,11 @@ export function IssuesSurface({
   }, [clusterId, port]);
 
   useEffect(() => {
-    if (selected === null) return;
+    if (selectedCorrelationId === null) return;
     abortAuditPage();
     const controller = new AbortController();
-    if (selected.incidentId !== null) {
-      const incidentId = selected.incidentId;
+    if (selectedIncidentId !== null) {
+      const incidentId = selectedIncidentId;
       loadSection(
         () => port.loadIssue(incidentId, clusterId, controller.signal),
         controller.signal,
@@ -135,29 +140,84 @@ export function IssuesSurface({
       );
     }
     loadSection(
-      () => port.loadAuditTimeline(selected.correlationId, {}, controller.signal),
+      () => port.loadAuditTimeline(selectedCorrelationId, {}, controller.signal),
       controller.signal,
       (audit) => setPanels((current) => ({ ...current, audit })),
     );
     loadSection(
-      () => port.loadEvidence(selected.correlationId, {}, controller.signal),
+      () => port.loadEvidence(selectedCorrelationId, {}, controller.signal),
       controller.signal,
       (evidence) => setPanels((current) => ({ ...current, evidence })),
     );
     loadSection(
-      () => port.loadReports(selected.correlationId, {}, controller.signal),
+      () => port.loadReports(selectedCorrelationId, {}, controller.signal),
       controller.signal,
       (reports) => setPanels((current) => ({ ...current, reports })),
     );
     loadSection(
-      () => port.loadRecoveryPlan(selected.correlationId, controller.signal),
+      () => port.loadRecoveryPlan(selectedCorrelationId, controller.signal),
       controller.signal,
       (recovery) => setPanels((current) => ({ ...current, recovery })),
     );
     return () => controller.abort();
-  }, [abortAuditPage, clusterId, port, selected]);
+  }, [abortAuditPage, clusterId, port, selectedCorrelationId, selectedIncidentId]);
 
   useEffect(() => () => mutationRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (
+      selectedCorrelationId === null || selectedId === null || selectedStatus === null ||
+      panels.receipt === null
+    ) return;
+    if (recoveryProgressIsTerminalStatus(selectedStatus)) return;
+    const controller = new AbortController();
+    let refreshing = false;
+    const refreshProgress = async () => {
+      if (refreshing || controller.signal.aborted) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      refreshing = true;
+      try {
+        const [issuesResult, recoveryResult, auditResult] = await Promise.allSettled([
+          port.listIssues(clusterId, 50, controller.signal),
+          port.loadRecoveryPlan(selectedCorrelationId, controller.signal),
+          port.loadAuditTimeline(selectedCorrelationId, {}, controller.signal),
+        ]);
+        if (controller.signal.aborted) return;
+        if (issuesResult.status === "fulfilled") {
+          const latest = issuesResult.value.items.find((issue) => issue.id === selectedId);
+          if (latest !== undefined) {
+            setSelectedRecord({ scope: clusterId, issue: latest });
+          }
+        }
+        setPanels((current) => ({
+          ...current,
+          audit: auditResult.status === "fulfilled"
+            ? { data: auditResult.value, loading: false, failure: null }
+            : {
+                data: current.audit.data,
+                loading: false,
+                failure: portFailure(auditResult.reason),
+              },
+          recovery: recoveryResult.status === "fulfilled"
+            ? { data: recoveryResult.value, loading: false, failure: null }
+            : {
+                data: current.recovery.data,
+                loading: false,
+                failure: portFailure(recoveryResult.reason),
+              },
+        }));
+        setLastRefreshedAt(Date.now());
+      } finally {
+        refreshing = false;
+      }
+    };
+    void refreshProgress();
+    const interval = window.setInterval(refreshProgress, RECOVERY_PROGRESS_REFRESH_INTERVAL_MS);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [clusterId, panels.receipt, port, selectedCorrelationId, selectedId, selectedStatus]);
 
   const selectRecovery = useCallback((actionId: string) => {
     const plan = panels.recovery.data;
@@ -165,7 +225,11 @@ export function IssuesSurface({
     mutationRef.current?.abort();
     const controller = new AbortController();
     mutationRef.current = controller;
-    setPanels((current) => ({ ...current, selectionPendingId: actionId }));
+    setPanels((current) => ({
+      ...current,
+      selectionFailure: null,
+      selectionPendingId: actionId,
+    }));
     void port.selectRecoveryAction({
       correlationId: selected.correlationId,
       planId: plan.id,
@@ -175,6 +239,7 @@ export function IssuesSurface({
         setPanels((current) => ({
           ...current,
           recovery: { data: result.plan, loading: false, failure: null },
+          selectionFailure: null,
           selectionPendingId: null,
         }));
         return;
@@ -182,13 +247,26 @@ export function IssuesSurface({
       setPanels((current) => ({
         ...current,
         receipt: result.receipt,
+        selectionFailure: null,
         selectionPendingId: null,
       }));
-      const refreshed = await port.loadRecoveryPlan(selected.correlationId, controller.signal);
-      setPanels((current) => ({
-        ...current,
-        recovery: { data: refreshed, loading: false, failure: null },
-      }));
+      try {
+        const refreshed = await port.loadRecoveryPlan(selected.correlationId, controller.signal);
+        setPanels((current) => ({
+          ...current,
+          recovery: { data: refreshed, loading: false, failure: null },
+        }));
+      } catch (error: unknown) {
+        if (isAbortError(error)) return;
+        setPanels((current) => ({
+          ...current,
+          recovery: {
+            data: current.recovery.data,
+            loading: false,
+            failure: portFailure(error),
+          },
+        }));
+      }
     }).catch((error: unknown) => {
       if (isAbortError(error)) return;
       setPanels((current) => ({
@@ -196,8 +274,9 @@ export function IssuesSurface({
         recovery: {
           data: current.recovery.data,
           loading: false,
-          failure: portFailure(error),
+          failure: null,
         },
+        selectionFailure: portFailure(error),
         selectionPendingId: null,
       }));
     }).finally(() => {
@@ -331,8 +410,15 @@ function emptyPanels(): IssuePanelsState {
     reports: emptyState<IssueRcaReportPage>(),
     recovery: emptyState<IssueRecoveryPlan>(),
     receipt: null,
+    selectionFailure: null,
     selectionPendingId: null,
   };
+}
+
+function recoveryProgressIsTerminalStatus(status: string): boolean {
+  return ["command_rejected", "incident_resolved", "pr_failed", "resolved"].includes(
+    status.trim().toLowerCase(),
+  );
 }
 
 function loadingPanels(loadIncidentSections: boolean): IssuePanelsState {
