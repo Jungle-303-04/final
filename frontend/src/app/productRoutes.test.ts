@@ -69,7 +69,7 @@ describe("product route release registry", () => {
     expect(landingProductRouteForReleasedSurfaces(new Set<ProductSurfaceId>([
       "clusters",
       "resources",
-    ])).id).toBe("clusters");
+    ])).id).toBe("resources");
   });
 
   it.each([

@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import {
   createShortcutMatcher,
   isProductContextShortcutId,
@@ -7,38 +6,40 @@ import {
   type ProductShortcutEventDetail,
   type ShortcutDefinition,
 } from "./shortcutRegistry";
-import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
+import type { ProductRouteDefinition } from "./productRoutes";
 
 interface ProductShortcutOptions {
   definitions: readonly ShortcutDefinition[];
+  isCommandPaletteOpen: boolean;
   isHelpOpen: boolean;
+  onCommandPaletteOpen: () => void;
   onHelpToggle: () => void;
+  onRouteSelect: (routeDefinition: ProductRouteDefinition) => void;
   onThemeToggle: () => void;
 }
 
-export function useProductShortcuts({
-  definitions,
-  isHelpOpen,
-  onHelpToggle,
-  onThemeToggle,
-}: ProductShortcutOptions) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const filter = useUnifiedFilter();
+/** Installs one shell listener and delegates every route action to its descriptor owner. */
+export function useProductShortcuts(options: ProductShortcutOptions) {
+  const latestOptions = useRef(options);
 
   useEffect(() => {
-    const matcher = createShortcutMatcher(definitions);
+    latestOptions.current = options;
+  });
 
-    const focusMain = () => {
-      queueMicrotask(() => document.getElementById("product-main")?.focus());
-    };
+  useEffect(() => {
+    const matcher = createShortcutMatcher(options.definitions);
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isHelpOpen && event.key !== "?") {
+      const current = latestOptions.current;
+      if (current.isCommandPaletteOpen) {
         matcher.reset();
         return;
       }
-      if (!isHelpOpen && document.querySelector('[role="dialog"]')) {
+      if (current.isHelpOpen && event.key !== "?") {
+        matcher.reset();
+        return;
+      }
+      if (!current.isHelpOpen && document.querySelector('[role="dialog"]')) {
         matcher.reset();
         return;
       }
@@ -46,17 +47,8 @@ export function useProductShortcuts({
       const definition = matcher.handle(event);
       if (!definition) return;
 
-      if (definition.id.startsWith("route:") && definition.targetPath) {
-        const target = filter.navigationHref(definition.targetPath);
-        if (
-          location.pathname !== definition.targetPath ||
-          location.hash !== "" ||
-          filter.needsCanonicalWrite ||
-          hasProductDetail(filter.detail)
-        ) {
-          navigate(target);
-        }
-        focusMain();
+      if (definition.targetRoute) {
+        current.onRouteSelect(definition.targetRoute);
         return;
       }
 
@@ -68,12 +60,15 @@ export function useProductShortcuts({
         return;
       }
 
-      if (definition.id === "theme") {
-        onThemeToggle();
+      if (definition.id === "command") {
+        current.onCommandPaletteOpen();
         return;
       }
-
-      if (definition.id === "help") onHelpToggle();
+      if (definition.id === "theme") {
+        current.onThemeToggle();
+        return;
+      }
+      if (definition.id === "help") current.onHelpToggle();
     };
 
     const handleVisibilityChange = () => {
@@ -90,20 +85,5 @@ export function useProductShortcuts({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       matcher.dispose();
     };
-  }, [
-    definitions,
-    isHelpOpen,
-    location.pathname,
-    location.hash,
-    filter,
-    navigate,
-    onHelpToggle,
-    onThemeToggle,
-  ]);
-}
-
-function hasProductDetail(detail: ReturnType<typeof useUnifiedFilter>["detail"]): boolean {
-  return detail.detail !== null || detail.resource !== null ||
-    detail.resourceKind !== null || detail.tab !== null ||
-    detail.full || detail.node !== null;
+  }, [options.definitions]);
 }

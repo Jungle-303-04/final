@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProductStateScreen } from "../shared/ui/ProductStateScreen";
+import { useI18n } from "../shared/i18n";
 import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
@@ -8,8 +9,12 @@ import { ProductShell } from "./ProductShell";
 import type { ProductComposition } from "./productComposition";
 import {
   landingProductRouteForReleasedSurfaces,
+  PRODUCT_ROUTE_CATALOG,
+  productRoutePaths,
   routeDefinitionForSurface,
+  type ProductRouteDefinition,
 } from "./productRoutes";
+import { navLabelKeys } from "./ProductShellNavigation";
 
 export function ProductRouter({
   auth,
@@ -49,22 +54,66 @@ export function ProductRouter({
             />
           )}>
             <Route index element={<ProductFallbackRedirect path={landingRoute.path} />} />
-            {composition.surfaces.map(({ id, Component }) => {
+            {composition.surfaces.flatMap(({ id, Component }) => {
               const routeDefinition = routeDefinitionForSurface(id);
-              const routePath = routeDefinition.match === "prefix"
-                ? `${routeDefinition.path}/*`
-                : routeDefinition.path;
-              return <Route key={id} path={routePath} element={<Component />} />;
+              return [
+                <Route
+                  element={<Component />}
+                  key={id}
+                  path={routePathForDefinition(routeDefinition, routeDefinition.path)}
+                />,
+                ...routeDefinition.aliases.map((routePath) => (
+                  <Route
+                    element={<ProductFallbackRedirect path={routeDefinition.path} />}
+                    key={`alias:${id}:${routePath}`}
+                    path={routePathForDefinition(routeDefinition, routePath)}
+                  />
+                )),
+              ];
             })}
-            {composition.releasedSurfaceIds.has("gitops") ? (
-              <Route path="/workflows/*" element={<ProductFallbackRedirect path="/gitops" />} />
-            ) : null}
+            {PRODUCT_ROUTE_CATALOG
+              .filter((routeDefinition) => !composition.releasedSurfaceIds.has(routeDefinition.id))
+              .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
+                <Route
+                  element={<ProductUnavailableRoute routeDefinition={routeDefinition} />}
+                  key={`unavailable:${routeDefinition.id}:${routePath}`}
+                  path={routePathForDefinition(routeDefinition, routePath)}
+                />
+              )))}
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
         </Routes>
       </ClusterScopeProvider>
     </UnifiedFilterProvider>
   );
+}
+
+function ProductUnavailableRoute({ routeDefinition }: { routeDefinition: ProductRouteDefinition }) {
+  const { t } = useI18n();
+  const label = t(navLabelKeys[routeDefinition.id]);
+  return (
+    <section
+      aria-labelledby="unavailable-product-route-title"
+      className="grid min-h-full place-items-center bg-background p-6 text-foreground"
+    >
+      <div className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-sm">
+        <p className="text-sm font-medium text-muted-foreground">{t("shell.command.unavailable")}</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight" id="unavailable-product-route-title">
+          {t("shell.route.unavailable.title", { route: label })}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {t("shell.route.unavailable.description", { route: label })}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function routePathForDefinition(
+  routeDefinition: ProductRouteDefinition,
+  path: `/${string}`,
+): string {
+  return routeDefinition.match === "prefix" ? `${path}/*` : path;
 }
 
 function ProductFallbackRedirect({ path }: { path: `/${string}` }) {

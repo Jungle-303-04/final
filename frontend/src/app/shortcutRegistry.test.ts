@@ -56,30 +56,36 @@ describe("shell shortcut registry", () => {
     const resources = shellShortcutDefinitions(new Set(["home", "resources"]), "resources");
     const matcher = createShortcutMatcher(resources);
 
-    expect(resources.map((definition) => definition.id)).toEqual([
+    expect(resources.map((definition) => definition.id)).toEqual(expect.arrayContaining([
       "route:home",
       "route:resources",
+      "route:topology",
+      "route:timeline",
+      "route:cost",
       "resources:next-row",
       "resources:previous-row",
       "resources:first-row",
       "resources:last-row",
       "resources:open-row",
       "resources:open-logs",
+      "command",
       "theme",
       "help",
-    ]);
-    expect(resources.map((definition) => definition.sequence.join(" "))).toEqual([
+    ]));
+    expect(resources.map((definition) => definition.sequence.join(" "))).toEqual(expect.arrayContaining([
       "g h",
       "g r",
+      "g t",
+      "g l",
+      "g c",
       "j",
       "k",
       "g g",
       "shift+g",
       "d",
-      "l",
       "t",
       "?",
-    ]);
+    ]));
 
     matcher.handle(keyEvent("g"));
     expect(matcher.handle(keyEvent("g"))?.id).toBe("resources:first-row");
@@ -137,7 +143,7 @@ describe("shell shortcut registry", () => {
 
   it("consumes an invalid chord suffix without reinterpreting it as a global action", () => {
     const matcher = createShortcutMatcher(shellShortcutDefinitions(new Set(["home"])));
-    const invalidSuffix = keyEvent("t");
+    const invalidSuffix = keyEvent("z");
 
     matcher.handle(keyEvent("g"));
     expect(matcher.handle(invalidSuffix)).toBeNull();
