@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import {
@@ -89,7 +89,7 @@ describe("ProductApp root recovery", () => {
     expect(screen.queryByRole("navigation")).toBeNull();
   }, 15_000);
 
-  it("redirects the retired Home route to the real cluster inventory", async () => {
+  it("keeps the explicit Home route on the declarative Home landing", async () => {
     window.history.replaceState({}, "", "/home?cluster=cluster-1");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -107,7 +107,7 @@ describe("ProductApp root recovery", () => {
     expect(
       await screen.findByRole(
         "heading",
-        { name: "Clusters", level: 2 },
+        { name: "Cluster status", level: 2 },
         { timeout: 5_000 },
       ),
     ).toBeTruthy();
@@ -119,9 +119,12 @@ describe("ProductApp root recovery", () => {
     expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
-    expect(window.location.pathname).toBe("/clusters");
-    expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(0);
-    expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(0);
+    expect(window.location.pathname).toBe("/home");
+    expect(window.location.search).toBe("?cluster=cluster-1");
+    await waitFor(() => {
+      expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(1);
+      expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(1);
+    });
   }, 15_000);
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {
