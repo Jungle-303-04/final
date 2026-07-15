@@ -328,6 +328,7 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     ]
     collection_scopes = _items(kubernetes, "collection_scopes")
     live_inventory = all(not _text(scope.get("label_selector")) for scope in collection_scopes)
+    event_capture = _kubernetes_event_capture(kubernetes)
     summary: JsonObject = {
         "namespaces": namespaces,
         "nodes": [
@@ -344,10 +345,11 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
         "labels_complete": resources_complete
         and all(item.get("labels_complete") is True for item in label_sources),
         "resources_complete": resources_complete,
-        # Existing evidence queries are namespace/label scoped. They never prove a
-        # complete Event collection, so a Timeline Event producer must fail closed
-        # until an authoritative cluster-wide collector supplies this contract.
-        "kubernetes_event_capture": _kubernetes_event_capture(kubernetes),
+        # The all-namespace Event capture is intentionally separate from user-scoped
+        # resources. Its facts are stored only for the Timeline producer; coverage/gap
+        # remains on this snapshot until a dedicated Timeline coverage projection exists.
+        "kubernetes_event_capture": event_capture,
+        "kubernetes_event_facts": _kubernetes_event_facts(kubernetes, event_capture),
         # RCA test/label-selector snapshots are evidence, not authoritative fleet liveness.
         # Legacy payloads have no scope list and are treated as normal inventory.
         "live_inventory": live_inventory,
@@ -370,10 +372,77 @@ def _resources_complete(_kubernetes: JsonObject) -> bool:
 
 
 def _kubernetes_event_capture(kubernetes: JsonObject) -> JsonObject:
+    source_capture = _mapping(kubernetes.get("event_capture"))
+    if source_capture:
+        freshness = _mapping(source_capture.get("freshness"))
+        coverage = _mapping(source_capture.get("coverage"))
+        return {
+            "complete": source_capture.get("complete") is True,
+            "truncated": source_capture.get("truncated") is True,
+            "reason": _text(source_capture.get("reason"), "invalid_capture_contract"),
+            "freshness": {
+                "observed_at": freshness.get("observed_at"),
+                "max_age_seconds": freshness.get("max_age_seconds"),
+            },
+            "coverage": {
+                key: coverage[key]
+                for key in (
+                    "scope",
+                    "pagination",
+                    "page_count",
+                    "event_count",
+                    "resource_version",
+                    "gap",
+                )
+                if key in coverage
+            },
+        }
     collection_limits = _mapping(kubernetes.get("collection_limits"))
     limits = _mapping(collection_limits.get("lists"))
     event_limit = _mapping(limits.get("events"))
     return {
         "complete": False,
         "truncated": event_limit.get("truncated") is True,
+        "reason": "not_requested",
+        "freshness": {},
+        "coverage": {
+            "scope": "all_namespaces",
+            "pagination": "continue",
+            "gap": "not_requested",
+        },
     }
+
+
+def _kubernetes_event_facts(kubernetes: JsonObject, capture: JsonObject) -> list[JsonObject]:
+    """Persist only a complete global Event fact list; partial lists never cross this boundary."""
+    if (
+        capture.get("complete") is not True
+        or capture.get("truncated") is True
+        or capture.get("reason") != "complete"
+    ):
+        return []
+    source_capture = _mapping(kubernetes.get("event_capture"))
+    source_facts = source_capture.get("events")
+    if not isinstance(source_facts, list):
+        return []
+    facts: list[JsonObject] = []
+    for fact in source_facts:
+        if not isinstance(fact, dict):
+            return []
+        safe_fact = {
+            key: fact[key]
+            for key in (
+                "uid",
+                "api_version",
+                "namespace",
+                "name",
+                "type",
+                "count",
+                "last_occurrence_at",
+            )
+            if key in fact
+        }
+        if not safe_fact.get("uid") or not safe_fact.get("name"):
+            return []
+        facts.append(safe_fact)
+    return facts

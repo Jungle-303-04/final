@@ -25,3 +25,10 @@ CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-fast-lane"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
 FAST_LANE_NODE_LABEL_VALUE = "fast-lane"
+
+# Kubernetes evidence query contract. Namespace snapshots remain the default;
+# the cluster-events scope is an explicit, separately authorized all-namespace
+# Event collection and must never be inferred from a namespace query.
+KUBERNETES_QUERY_SCOPE_NAMESPACE = "namespace"
+KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS = "cluster_events"
+KUBERNETES_ALL_NAMESPACES_QUERY = "*"

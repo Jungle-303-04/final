@@ -14,7 +14,14 @@ from kubernetes_api import (
 from queries import KubernetesSnapshotQuery
 from telemetry_registry import telemetry
 
-from config import KUBERNETES_API_TIMEOUT_SECONDS, TARGET_CLUSTER_ID_ENV
+from config import (
+    KUBERNETES_API_TIMEOUT_SECONDS,
+    KUBERNETES_EVENT_CAPTURE_FRESHNESS_SECONDS,
+    KUBERNETES_EVENT_CAPTURE_MAX_ITEMS,
+    KUBERNETES_EVENT_CAPTURE_MAX_PAGES,
+    KUBERNETES_EVENT_CAPTURE_PAGE_SIZE,
+    TARGET_CLUSTER_ID_ENV,
+)
 from packages.config.constants import Target
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.target import TARGET_NAMESPACE
@@ -43,6 +50,8 @@ from providers.kubernetes_utils import (
 
 K8S_SNAPSHOT_ENDPOINTS_KEY = "endpoints"
 K8S_SNAPSHOT_EVENTS_KEY = "events"
+K8S_EVENT_CAPTURE_KEY = "event_capture"
+K8S_EVENT_CAPTURE_EVENTS_KEY = "events"
 K8S_SNAPSHOT_NODES_KEY = "nodes"
 K8S_SNAPSHOT_WORKLOADS_KEY = "workloads"
 K8S_STATEFULSETS_KEY = "statefulsets"
@@ -69,6 +78,17 @@ KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_RESOURCE_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY,
 }
+
+EVENT_CAPTURE_REASON_COMPLETE = "complete"
+EVENT_CAPTURE_REASON_ITEM_LIMIT = "item_limit_exceeded"
+EVENT_CAPTURE_REASON_PAGE_LIMIT = "page_limit_exceeded"
+EVENT_CAPTURE_REASON_INVALID_RESPONSE = "invalid_response"
+EVENT_CAPTURE_REASON_INVALID_EVENT = "invalid_event_contract"
+EVENT_CAPTURE_REASON_NETWORK = "network_error"
+EVENT_CAPTURE_REASON_NOT_CONFIGURED = "not_configured"
+EVENT_CAPTURE_REASON_NOT_REQUESTED = "not_requested"
+EVENT_CAPTURE_REASON_RBAC_DENIED = "rbac_denied"
+EVENT_CAPTURE_REASON_TIMEOUT = "timeout"
 
 EVENT_REASON_BACK_OFF = "BackOff"
 EVENT_REASON_FAILED = "Failed"
@@ -153,6 +173,13 @@ class KubernetesSnapshotProvider:
         """
         base_url = kubernetes_api_base_url()
         token = service_account_token()
+        if telemetry_query.is_cluster_wide_event_capture:
+            async with kubernetes_client(self.transport) as client:
+                return await self.query_cluster_wide_event_capture(
+                    base_url=base_url,
+                    token=token,
+                    client=client,
+                )
         namespace = telemetry_query.namespace or TARGET_NAMESPACE
         if not base_url or not token:
             return {
@@ -243,6 +270,159 @@ class KubernetesSnapshotProvider:
                 ),
             }
 
+    async def query_cluster_wide_event_capture(
+        self,
+        *,
+        base_url: str,
+        token: str,
+        client: httpx.AsyncClient,
+    ) -> JsonObject:
+        """List every Event through continuation tokens and return explicit coverage proof.
+
+        This path is deliberately isolated from normal namespace snapshots. It returns
+        only narrow Timeline facts and never raises a collection error into the generic
+        evidence loop: a denied, timed-out, or bounded list must become visible gap
+        evidence while remaining unsafe for Timeline append.
+        """
+        collected_at = datetime.now(UTC).isoformat()
+        if not base_url or not token:
+            return event_capture_query_result(
+                cluster_id=self.cluster_id,
+                collected_at=collected_at,
+                capture=event_capture_failure(EVENT_CAPTURE_REASON_NOT_CONFIGURED),
+            )
+
+        headers = kubernetes_headers(token)
+        continuation: str | None = None
+        page_count = 0
+        resource_version: str | None = None
+        facts: dict[str, JsonObject] = {}
+        while True:
+            if page_count >= KUBERNETES_EVENT_CAPTURE_MAX_PAGES:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        EVENT_CAPTURE_REASON_PAGE_LIMIT,
+                        truncated=True,
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            params: dict[str, str | int] = {"limit": KUBERNETES_EVENT_CAPTURE_PAGE_SIZE}
+            if continuation:
+                params["continue"] = continuation
+            try:
+                response = await client.get(
+                    f"{base_url}/api/v1/events",
+                    headers=headers,
+                    params=params,
+                )
+            except httpx.TimeoutException:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        EVENT_CAPTURE_REASON_TIMEOUT,
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            except httpx.NetworkError:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        EVENT_CAPTURE_REASON_NETWORK,
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            if response.status_code in {401, 403}:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        EVENT_CAPTURE_REASON_RBAC_DENIED,
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            if response.is_error:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        f"http_{response.status_code}",
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            try:
+                page = response.json()
+            except ValueError:
+                page = None
+            if not isinstance(page, dict):
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        EVENT_CAPTURE_REASON_INVALID_RESPONSE,
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            page_items = items(page)
+            if len(facts) + len(page_items) > KUBERNETES_EVENT_CAPTURE_MAX_ITEMS:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_failure(
+                        EVENT_CAPTURE_REASON_ITEM_LIMIT,
+                        truncated=True,
+                        page_count=page_count,
+                        event_count=len(facts),
+                        resource_version=resource_version,
+                    ),
+                )
+            page_metadata = metadata(page)
+            current_resource_version = as_text(page_metadata.get("resourceVersion"))
+            if current_resource_version:
+                resource_version = current_resource_version
+            for item in page_items:
+                fact = event_timeline_fact(item)
+                if fact is None:
+                    return event_capture_query_result(
+                        cluster_id=self.cluster_id,
+                        collected_at=collected_at,
+                        capture=event_capture_failure(
+                            EVENT_CAPTURE_REASON_INVALID_EVENT,
+                            page_count=page_count,
+                            event_count=len(facts),
+                            resource_version=resource_version,
+                        ),
+                    )
+                facts[str(fact["uid"])] = fact
+            page_count += 1
+            next_continuation = page_metadata.get("continue")
+            continuation = str(next_continuation) if next_continuation else None
+            if continuation is None:
+                return event_capture_query_result(
+                    cluster_id=self.cluster_id,
+                    collected_at=collected_at,
+                    capture=event_capture_complete(
+                        facts=tuple(facts[uid] for uid in sorted(facts)),
+                        page_count=page_count,
+                        resource_version=resource_version,
+                    ),
+                )
+
     async def get_json(
         self,
         client: httpx.AsyncClient,
@@ -289,6 +469,8 @@ class KubernetesSnapshotProvider:
         telemetry_query: KubernetesSnapshotQuery,
     ) -> JsonObject:
         """Turn raw Kubernetes API lists into small evidence summaries."""
+        if telemetry_query.is_cluster_wide_event_capture:
+            return self.normalize_cluster_wide_event_capture(payload, telemetry_query)
         snapshot = empty_snapshot(self.cluster_id)
         status = str(payload.get("status") or "success")
         namespace = str(payload.get("namespace") or telemetry_query.namespace or TARGET_NAMESPACE)
@@ -398,6 +580,29 @@ class KubernetesSnapshotProvider:
         }
         return snapshot
 
+    def normalize_cluster_wide_event_capture(
+        self,
+        payload: JsonObject,
+        telemetry_query: KubernetesSnapshotQuery,
+    ) -> JsonObject:
+        """Keep all-namespace Event coverage separate from user-scoped inventory lists."""
+        snapshot = empty_snapshot(self.cluster_id)
+        collected_at = str(payload.get("collected_at") or datetime.now(UTC).isoformat())
+        capture = event_capture_from_payload(payload.get(K8S_EVENT_CAPTURE_KEY))
+        snapshot["cluster"] = {
+            "cluster_id": str(payload.get("cluster_id") or self.cluster_id),
+            "collected_at": collected_at,
+        }
+        snapshot[K8S_EVENT_CAPTURE_KEY] = capture
+        snapshot["provider_status"] = {
+            telemetry_query.query_name: {
+                "status": str(payload.get("status") or "success"),
+                "reason": capture["reason"],
+                "event_capture": capture["coverage"],
+            }
+        }
+        return snapshot
+
 
 def empty_snapshot(cluster_id: str) -> JsonObject:
     """Build the empty shape used by Kubernetes evidence."""
@@ -410,6 +615,9 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
         K8S_SNAPSHOT_NODES_KEY: [],
         K8S_RESOURCE_SERVICES: [],
         K8S_SNAPSHOT_ENDPOINTS_KEY: [],
+        # A missing global collector is an explicit coverage gap, not an empty
+        # all-namespace Event list. Timeline must therefore fail closed.
+        K8S_EVENT_CAPTURE_KEY: event_capture_failure(EVENT_CAPTURE_REASON_NOT_REQUESTED),
         "provider_status": {},
     }
 
@@ -421,6 +629,11 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     target["collection_scopes"].extend(source.get("collection_scopes", []))
     if "detected_provider" not in target and source.get("detected_provider"):
         target["detected_provider"] = source["detected_provider"]
+    source_event_capture = source.get(K8S_EVENT_CAPTURE_KEY)
+    if isinstance(source_event_capture, dict) and source_event_capture.get("reason") != (
+        EVENT_CAPTURE_REASON_NOT_REQUESTED
+    ):
+        target[K8S_EVENT_CAPTURE_KEY] = dict(source_event_capture)
     for key in (
         K8S_SNAPSHOT_WORKLOADS_KEY,
         K8S_RESOURCE_PODS,
@@ -433,6 +646,137 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     merge_cluster_scoped_nodes(target, source)
     target.setdefault("provider_status", {})
     target["provider_status"].update(source.get("provider_status", {}))
+
+
+def event_capture_query_result(
+    *,
+    cluster_id: str,
+    collected_at: str,
+    capture: JsonObject,
+) -> JsonObject:
+    """Build the isolated raw result for the all-namespace Event collector."""
+    normalized_capture = dict(capture)
+    freshness = dict(normalized_capture.get("freshness") or {})
+    freshness["observed_at"] = collected_at
+    normalized_capture["freshness"] = freshness
+    return {
+        "status": "success" if normalized_capture.get("complete") is True else "partial",
+        "cluster_id": cluster_id,
+        "collected_at": collected_at,
+        K8S_EVENT_CAPTURE_KEY: normalized_capture,
+    }
+
+
+def event_capture_complete(
+    *,
+    facts: tuple[JsonObject, ...],
+    page_count: int,
+    resource_version: str | None,
+) -> JsonObject:
+    """Return the only capture shape Timeline is permitted to consume."""
+    coverage: JsonObject = {
+        "scope": "all_namespaces",
+        "pagination": "continue",
+        "page_count": page_count,
+        "event_count": len(facts),
+    }
+    if resource_version:
+        coverage["resource_version"] = resource_version
+    return {
+        "complete": True,
+        "truncated": False,
+        "reason": EVENT_CAPTURE_REASON_COMPLETE,
+        "freshness": event_capture_freshness(),
+        "coverage": coverage,
+        K8S_EVENT_CAPTURE_EVENTS_KEY: list(facts),
+    }
+
+
+def event_capture_failure(
+    reason: str,
+    *,
+    truncated: bool = False,
+    page_count: int = 0,
+    event_count: int = 0,
+    resource_version: str | None = None,
+) -> JsonObject:
+    """Return safe coverage/gap evidence without a partial fact list."""
+    coverage: JsonObject = {
+        "scope": "all_namespaces",
+        "pagination": "continue",
+        "page_count": page_count,
+        "event_count": event_count,
+        "gap": reason,
+    }
+    if resource_version:
+        coverage["resource_version"] = resource_version
+    return {
+        "complete": False,
+        "truncated": truncated,
+        "reason": reason,
+        "freshness": event_capture_freshness(),
+        "coverage": coverage,
+        K8S_EVENT_CAPTURE_EVENTS_KEY: [],
+    }
+
+
+def event_capture_freshness() -> JsonObject:
+    """State the maximum safe age explicitly instead of assuming a polling cadence."""
+    return {
+        "observed_at": datetime.now(UTC).isoformat(),
+        "max_age_seconds": KUBERNETES_EVENT_CAPTURE_FRESHNESS_SECONDS,
+    }
+
+
+def event_capture_from_payload(value: object) -> JsonObject:
+    """Copy only the declared capture fields when creating evidence output."""
+    if not isinstance(value, dict):
+        return event_capture_failure(EVENT_CAPTURE_REASON_INVALID_RESPONSE)
+    capture = dict(value)
+    facts = capture.get(K8S_EVENT_CAPTURE_EVENTS_KEY)
+    capture[K8S_EVENT_CAPTURE_EVENTS_KEY] = list(facts) if isinstance(facts, list) else []
+    return capture
+
+
+def event_timeline_fact(item: JsonObject) -> JsonObject | None:
+    """Reduce one Kubernetes Event to the safe UID/count/occurrence fact contract."""
+    event_metadata = metadata(item)
+    uid = as_text(event_metadata.get("uid"))
+    name = as_text(event_metadata.get("name"))
+    namespace = as_text(event_metadata.get("namespace"))
+    series = item.get("series")
+    series_body = series if isinstance(series, dict) else {}
+    last_occurrence_at = (
+        as_text(series_body.get("lastObservedTime"))
+        or as_text(item.get("lastTimestamp"))
+        or as_text(item.get("eventTime"))
+        or as_text(event_metadata.get("creationTimestamp"))
+    )
+    if not uid or not name or not last_occurrence_at:
+        return None
+    return compact_dict(
+        {
+            "uid": uid,
+            "api_version": as_text(item.get("apiVersion")) or "v1",
+            "namespace": namespace,
+            "name": name,
+            "resource_version": as_text(event_metadata.get("resourceVersion")),
+            "type": as_text(item.get("type")),
+            "count": event_occurrence_count(series_body.get("count") or item.get("count")),
+            "last_occurrence_at": last_occurrence_at,
+        }
+    )
+
+
+def event_occurrence_count(value: object) -> int:
+    """Use the Kubernetes Event's count when valid, otherwise its first occurrence."""
+    if isinstance(value, bool):
+        return 1
+    try:
+        count = int(value) if value is not None else 1
+    except (TypeError, ValueError):
+        return 1
+    return count if count >= 1 else 1
 
 
 def merge_cluster_scoped_nodes(target: JsonObject, source: JsonObject) -> None:

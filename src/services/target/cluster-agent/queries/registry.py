@@ -5,6 +5,12 @@ from typing import Any, Self
 
 from telemetry_registry import ensure_sources_loaded, telemetry
 
+from packages.contracts.target import (
+    KUBERNETES_ALL_NAMESPACES_QUERY,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+    KUBERNETES_QUERY_SCOPE_NAMESPACE,
+)
+
 # 소스 목록은 @telemetry.source 로 등록된 provider 가 단일 출처.
 TelemetrySource = str
 
@@ -22,6 +28,7 @@ class TelemetryQueryDefinition:
     range_seconds: int | None = None
     step_seconds: int | None = None
     label_selector: str | None = None
+    collection_scope: str | None = None
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> Self:
@@ -38,6 +45,7 @@ class TelemetryQueryDefinition:
             range_seconds=_optional_positive_int(payload, "range_seconds"),
             step_seconds=_optional_positive_int(payload, "step_seconds"),
             label_selector=_optional_text(payload, "label_selector"),
+            collection_scope=_optional_text(payload, "collection_scope"),
         )
 
     def to_provider_query(self) -> Any:
@@ -61,6 +69,7 @@ class TelemetryQueryDefinition:
                 self.description,
                 self.query,
                 self.label_selector,
+                self.collection_scope or KUBERNETES_QUERY_SCOPE_NAMESPACE,
             )
         return query_type(self.name, self.description, self.query)
 
@@ -192,12 +201,31 @@ class OpenTelemetrySpanQuery:
 
 @dataclass(frozen=True)
 class KubernetesSnapshotQuery:
-    """Describe one Kubernetes namespace snapshot query."""
+    """Describe one Kubernetes namespace or all-namespace Event capture query."""
 
     query_name: str
     description: str
     namespace: str
     label_selector: str | None = None
+    collection_scope: str = KUBERNETES_QUERY_SCOPE_NAMESPACE
+
+    def __post_init__(self) -> None:
+        if self.collection_scope not in {
+            KUBERNETES_QUERY_SCOPE_NAMESPACE,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+        }:
+            raise ValueError(f"unsupported Kubernetes collection scope: {self.collection_scope}")
+        if (
+            self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
+            and self.namespace != KUBERNETES_ALL_NAMESPACES_QUERY
+        ):
+            raise ValueError("cluster_events collection scope requires the all-namespaces query")
+        if self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS and self.label_selector:
+            raise ValueError("cluster_events collection scope does not allow a label selector")
+
+    @property
+    def is_cluster_wide_event_capture(self) -> bool:
+        return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS
 
 
 @dataclass(frozen=True)

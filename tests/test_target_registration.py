@@ -854,7 +854,13 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
                 "in the management namespace."
             ),
             "query": "management",
-        }
+        },
+        {
+            "name": "cluster_wide_event_capture",
+            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
+            "query": "*",
+            "collection_scope": "cluster_events",
+        },
     ]
     assert all(
         provider_key == "kubernetes" or provider["enabled"] is False

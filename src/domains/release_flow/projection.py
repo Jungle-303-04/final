@@ -421,6 +421,8 @@ def release_failure_query_for_namespace(
 ) -> JsonObject:
     payload = dict(query)
     if provider_key == "kubernetes":
+        if payload.get("collection_scope") == "cluster_events":
+            return payload
         payload["query"] = namespace
         for key in ("resource_kind", "resource_name", "label_selector"):
             value = mapping_value(release_context).get(key)
