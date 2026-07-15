@@ -545,6 +545,7 @@ async def command_events(
     # the query result or this live queue; no status polling recovery exists.
     subscription = await subscribe(command_id, workspace_id=workspace_id)
     list_events = getattr(db, "list_command_operation_events", None)
+    event_context = getattr(db, "get_command_operation_event_context", None)
 
     async def replay(starting_after: int) -> list[OperationEvent]:
         if callable(list_events):
@@ -565,14 +566,35 @@ async def command_events(
                 )
             require_cluster_read_access(db, current, workspace_id, cluster_id)
         else:
-            # Existing commands predating the append-only ledger are materialized
-            # as one compatibility snapshot only. New receipts always have an
-            # accepted event and therefore never take this delayed-row path.
-            row = await db.get_agent_command(command_id, workspace_id)
-            if row is None:
-                raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-            require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
-            initial = [command_snapshot_event(dict(row))]
+            # A receipt is written ahead of the asynchronous agent_commands
+            # projection.  Reconnecting from that receipt is valid: authorize
+            # from the immutable operation ledger and keep the SSE subscription
+            # open until a later lifecycle event is committed.
+            context = (
+                await event_context(workspace_id, command_id) if callable(event_context) else None
+            )
+            if context is not None:
+                last_sequence = int(context.get("last_sequence") or 0)
+                cluster_id = str(context.get("cluster_id") or "")
+                if not cluster_id:
+                    raise HTTPException(
+                        status_code=500, detail="operation event missing cluster identity"
+                    )
+                if cursor > last_sequence:
+                    raise HTTPException(
+                        status_code=UNPROCESSABLE_CODE,
+                        detail="operation event cursor is ahead of durable history",
+                    )
+                require_cluster_read_access(db, current, workspace_id, cluster_id)
+            else:
+                # Existing commands predating the append-only ledger are materialized
+                # as one compatibility snapshot only. New receipts always have an
+                # accepted event and therefore never take this delayed-row path.
+                row = await db.get_agent_command(command_id, workspace_id)
+                if row is None:
+                    raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+                require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
+                initial = [command_snapshot_event(dict(row))]
     except BaseException:
         await subscription.close()
         raise

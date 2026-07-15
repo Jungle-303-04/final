@@ -224,6 +224,40 @@ class AgentCommandRepository(DatabaseConnection):
             for row in rows
         ]
 
+    async def get_command_operation_event_context(
+        self, workspace_id: str, command_id: str
+    ) -> JsonObject | None:
+        """Return durable stream authority even before ``agent_commands`` is projected.
+
+        The receipt event is intentionally written before the asynchronous command
+        projection.  A browser reconnecting from that receipt must therefore
+        authorize against the immutable operation stream instead of treating the
+        still-pending projection as a missing command.
+        """
+        cursor = CommandOperationEventCursor.__table__
+        events = CommandOperationEvent.__table__
+        latest_cluster = (
+            select(events.c.cluster_id)
+            .where(
+                events.c.workspace_id == workspace_id,
+                events.c.command_id == command_id,
+            )
+            .order_by(events.c.sequence.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        statement = select(
+            cursor.c.last_sequence,
+            cursor.c.terminal_sequence,
+            latest_cluster.label("cluster_id"),
+        ).where(
+            cursor.c.workspace_id == workspace_id,
+            cursor.c.command_id == command_id,
+        )
+        async with self.async_connection() as conn:
+            row = (await conn.execute(statement)).mappings().first()
+        return row_dict(row) if row else None
+
     def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
         if plan.get("action") == Command.RCA_TEST_SCENARIO_INJECT_ACTION:
             raise ValueError("RCA test inject commands require the atomic reservation guard")

@@ -9,6 +9,7 @@ using this live fan-out, so a reconnect or a Pub/Sub gap cannot invent state.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -22,6 +23,7 @@ from packages.contracts.parity import OperationEvent, OperationEventKind
 OPERATION_EVENT_CHANNEL_PREFIX = "opsia:operation-events:"
 OPERATION_EVENT_QUEUE_MAX = 64
 RedisFactory = Callable[[str], AsyncRedis]
+LOGGER = logging.getLogger(__name__)
 
 
 class OperationEventStore(Protocol):
@@ -275,15 +277,22 @@ class RedisOperationEventBroker(DurableOperationEventBroker):
         )
         if event is None:
             return None
-        client = self._require_client()
+        # Local browser clients observe the committed event even while Redis is
+        # unavailable. Cross-replica delivery is only an acceleration; SSE
+        # replay remains authoritative and heals the missed wake-up.
+        await self.deliver(event, workspace_id=workspace_id)
+        client = self._client
+        if client is None:
+            LOGGER.warning("operation_event_redis_unavailable", extra={"command_id": command_id})
+            return event
         envelope = {
             "workspace_id": workspace_id,
             "event": event.model_dump(mode="json"),
         }
-        await client.publish(_channel(workspace_id, command_id), _json(envelope))
-        # The local gateway must not wait for its own Pub/Sub round trip. The
-        # SSE cursor removes this duplicate when the listener receives it back.
-        await self.deliver(event, workspace_id=workspace_id)
+        try:
+            await client.publish(_channel(workspace_id, command_id), _json(envelope))
+        except (ConnectionError, OSError):
+            LOGGER.warning("operation_event_redis_publish_failed", exc_info=True)
         return event
 
     async def _listen(self) -> None:
