@@ -15,16 +15,26 @@ const DEFAULT_REPOSITORY = '/tmp/opsia-upstream-verify'
 const DEFAULT_INVENTORY = path.join(REPOSITORY_ROOT, 'docs', 'spec', 'frontend', 'reference-feature-inventory.md')
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-ui-delta-ledger.json')
 const DEFAULT_FEATURE_LEDGER = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-feature-ledger.json')
+const DEFAULT_CLASSIFICATION_INPUT = path.join(
+  REPOSITORY_ROOT,
+  'docs',
+  'migration',
+  'reference-ui-delta-classifications.json',
+)
 const DEFAULT_SOURCE_REPOSITORY = 'https://github.com/skyhook-io/radar.git'
 const DEFAULT_SCOPE = ['web', 'packages/k8s-ui']
 
+const DELTA_LEDGER_SCHEMA_VERSION = 3
 const CHANGE_STATUSES = new Set(['A', 'M', 'D', 'R'])
 const TRANSPORTS = new Set(['sse', 'ws', 'ndjson', 'fetch_sse', 'poll', 'none'])
 const CLASSIFICATIONS = new Set(['pending', 'classified'])
+const IMPLEMENTATION_STATES = new Set(['in_progress', 'blocked'])
 const SOURCE_KEY = /^upstream-ui:[a-z0-9-]+:[a-z0-9-]+:[a-z0-9-]+:v[1-9][0-9]*$/
 const REVISION = /^[0-9a-f]{40}$/
 const BLOB = /^[0-9a-f]{40}$/
 const SHA256 = /^[0-9a-f]{64}$/
+const BACKEND_CONTRACT = /^(?:domains|packages)\.[a-z0-9_.]+$/
+const PLANNED_TEST_ID = /^timeline\.[a-z0-9][a-z0-9.-]*$/
 const FILE_LEVEL_INTERACTION_EVIDENCE_KEYS = [
   'sourceKey',
   'legacyContractIds',
@@ -34,6 +44,10 @@ const FILE_LEVEL_INTERACTION_EVIDENCE_KEYS = [
   'realtime',
   'motion',
 ]
+
+function cloned(value) {
+  return JSON.parse(JSON.stringify(value))
+}
 
 function normalizedPath(value) {
   return String(value).split(path.sep).join('/')
@@ -81,13 +95,28 @@ export function resolveDeltaLedgerOptions(options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new Error('source delta options must be an object')
   }
+  const repository = options.repository ?? DEFAULT_REPOSITORY
   return {
     ...options,
-    repository: options.repository ?? DEFAULT_REPOSITORY,
+    repository,
     baseRevision: options.baseRevision ?? DEFAULT_BASE_REVISION,
     targetRevision: options.targetRevision ?? DEFAULT_TARGET_REVISION,
     sourceRepository: options.sourceRepository ?? DEFAULT_SOURCE_REPOSITORY,
     scope: options.scope ?? DEFAULT_SCOPE,
+    classificationInput: options.classificationInput ?? (
+      repository === DEFAULT_REPOSITORY ? DEFAULT_CLASSIFICATION_INPUT : null
+    ),
+  }
+}
+
+function applyClassifications(files, classifications) {
+  if (!classifications) return
+  const rowsByPath = new Map(files.map((row) => [row.path, row]))
+  for (const [filePath, classification] of Object.entries(classifications)) {
+    const row = rowsByPath.get(filePath)
+    if (!row) throw new Error(`classification input references a source path absent from the git delta: ${filePath}`)
+    row.classification = classification.classification
+    row.interactions = cloned(classification.interactions)
   }
 }
 
@@ -99,20 +128,22 @@ export function buildDeltaLedger({
   changes,
   baseFiles,
   targetFiles,
+  classifications = null,
 }) {
   if (!REVISION.test(baseRevision ?? '')) throw new Error('baseRevision must be a 40-character lowercase hexadecimal revision')
   if (!REVISION.test(targetRevision ?? '')) throw new Error('targetRevision must be a 40-character lowercase hexadecimal revision')
   if (!Array.isArray(changes)) throw new Error('changes must be an array')
   const files = changes.map((change) => blankDeltaRow(change, baseFiles, targetFiles)).sort(sortRows)
+  applyClassifications(files, classifications)
   const statusCounts = Object.fromEntries([...CHANGE_STATUSES].map((status) => [status, files.filter((row) => row.status === status).length]))
   const ledger = {
-    schemaVersion: 2,
+    schemaVersion: DELTA_LEDGER_SCHEMA_VERSION,
     sourceRepository,
     baseRevision,
     targetRevision,
     scope: [...scope].map(normalizedPath),
     fileCount: files.length,
-    pendingCount: files.length,
+    pendingCount: files.filter((row) => row.classification === 'pending').length,
     statusCounts,
     files,
   }
@@ -136,7 +167,87 @@ function validatePath(value, label, errors) {
   }
 }
 
-function validateClassifiedInteraction(interaction, label, errors, { knownLegacyContractIds, seenLegacyContractIds }) {
+function validateUniqueStrings(values, label, errors, { pattern = null, minimum = 0 } = {}) {
+  if (!Array.isArray(values) || values.length < minimum) {
+    errors.push(`${label}: must contain at least ${minimum} item${minimum === 1 ? '' : 's'}`)
+    return
+  }
+  const seen = new Set()
+  values.forEach((value, index) => {
+    if (typeof value !== 'string' || !value.trim() || (pattern && !pattern.test(value))) {
+      errors.push(`${label}[${index}]: is invalid`)
+      return
+    }
+    if (seen.has(value)) errors.push(`${label}[${index}]: is duplicated: ${value}`)
+    else seen.add(value)
+  })
+}
+
+function validateOpsiaPort(port, label, errors, { knownOpsiaDestinations = null, knownPlannedTestIds = null } = {}) {
+  if (!port || typeof port !== 'object' || Array.isArray(port)) {
+    errors.push(`${label}: opsiaPort is required`)
+    return
+  }
+  const expectedKeys = new Set([
+    'destinations',
+    'requiredBackendContracts',
+    'plannedTestIds',
+    'state',
+    'blockedReason',
+    'rationale',
+  ])
+  for (const key of Object.keys(port)) {
+    if (!expectedKeys.has(key)) errors.push(`${label}: opsiaPort.${key} is not supported`)
+  }
+  validateUniqueStrings(port.destinations, `${label}: opsiaPort.destinations`, errors, { minimum: 1 })
+  if (Array.isArray(port.destinations)) {
+    port.destinations.forEach((destination, index) => {
+      validatePath(destination, `${label}: opsiaPort.destinations[${index}]`, errors)
+      if (!/^(?:frontend|src|tests)\//.test(destination ?? '')) {
+        errors.push(`${label}: opsiaPort.destinations[${index}]: must target a current Opsia product or test path`)
+      }
+      if (knownOpsiaDestinations && !knownOpsiaDestinations.has(destination)) {
+        errors.push(`${label}: opsiaPort.destinations[${index}]: is not a known Opsia destination`)
+      }
+    })
+  }
+  validateUniqueStrings(port.requiredBackendContracts, `${label}: opsiaPort.requiredBackendContracts`, errors, { minimum: 1 })
+  if (Array.isArray(port.requiredBackendContracts)) {
+    port.requiredBackendContracts.forEach((contract, index) => {
+      if (!BACKEND_CONTRACT.test(contract ?? '')) {
+        errors.push(`${label}: opsiaPort.requiredBackendContracts[${index}]: is not a known contract namespace`)
+      }
+    })
+  }
+  validateUniqueStrings(port.plannedTestIds, `${label}: opsiaPort.plannedTestIds`, errors, { pattern: PLANNED_TEST_ID, minimum: 1 })
+  if (knownPlannedTestIds && Array.isArray(port.plannedTestIds)) {
+    port.plannedTestIds.forEach((testId, index) => {
+      if (!knownPlannedTestIds.has(testId)) {
+        errors.push(`${label}: opsiaPort.plannedTestIds[${index}]: is not declared by classification input`)
+      }
+    })
+  }
+  if (!IMPLEMENTATION_STATES.has(port.state)) {
+    errors.push(`${label}: opsiaPort.state must be in_progress or blocked`)
+  }
+  if (typeof port.rationale !== 'string' || !port.rationale.trim()) {
+    errors.push(`${label}: opsiaPort.rationale is required`)
+  }
+  if (port.state === 'blocked') {
+    if (typeof port.blockedReason !== 'string' || !port.blockedReason.trim()) {
+      errors.push(`${label}: blocked opsiaPort requires blockedReason`)
+    }
+  } else if (port.blockedReason !== null) {
+    errors.push(`${label}: in_progress opsiaPort requires blockedReason null`)
+  }
+}
+
+function validateClassifiedInteraction(interaction, label, errors, {
+  knownLegacyContractIds,
+  seenLegacyContractIds,
+  knownOpsiaDestinations,
+  knownPlannedTestIds,
+}) {
   if (!interaction || typeof interaction !== 'object' || Array.isArray(interaction)) {
     errors.push(`${label}: interaction must be an object`)
     return
@@ -160,6 +271,7 @@ function validateClassifiedInteraction(interaction, label, errors, { knownLegacy
   }
   validateRealtime(interaction, label, errors)
   validateMotion(interaction, label, errors)
+  validateOpsiaPort(interaction.opsiaPort, label, errors, { knownOpsiaDestinations, knownPlannedTestIds })
 }
 
 function validateRealtime(interaction, label, errors) {
@@ -227,10 +339,110 @@ function assertImmutableDeltaEvidenceMatches(current, generated, output) {
   }
 }
 
-export function validateDeltaLedger(ledger, { knownLegacyContractIds = null } = {}) {
+function classificationEvidence(ledger) {
+  return {
+    schemaVersion: ledger?.schemaVersion,
+    pendingCount: ledger?.pendingCount,
+    files: ledger?.files?.map(({ path: filePath, classification, interactions }) => ({
+      path: filePath,
+      classification,
+      interactions,
+    })),
+  }
+}
+
+function assertClassificationEvidenceMatches(current, generated, output) {
+  if (JSON.stringify(classificationEvidence(current)) !== JSON.stringify(classificationEvidence(generated))) {
+    throw new Error(`source UI delta ledger does not match generated classification input: ${output}`)
+  }
+}
+
+export function validateClassificationInput(input, { sourceRepository, targetRevision } = {}) {
+  const errors = []
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return ['classification input must be an object']
+  if (input.schemaVersion !== 1) errors.push('classification input schemaVersion must equal 1')
+  if (typeof input.sourceRepository !== 'string' || !input.sourceRepository.startsWith('https://')) {
+    errors.push('classification input sourceRepository must be an HTTPS URL')
+  }
+  if (!REVISION.test(input.targetRevision ?? '')) {
+    errors.push('classification input targetRevision must be a 40-character lowercase hexadecimal revision')
+  }
+  if (sourceRepository && input.sourceRepository !== sourceRepository) {
+    errors.push('classification input sourceRepository must match the generated ledger')
+  }
+  if (targetRevision && input.targetRevision !== targetRevision) {
+    errors.push('classification input targetRevision must match the generated ledger')
+  }
+  if (!input.testPlans || typeof input.testPlans !== 'object' || Array.isArray(input.testPlans)) {
+    errors.push('classification input testPlans must be an object')
+  }
+  const knownPlannedTestIds = new Set(Object.keys(input.testPlans ?? {}))
+  for (const [testId, testPlan] of Object.entries(input.testPlans ?? {})) {
+    if (!PLANNED_TEST_ID.test(testId)) {
+      errors.push(`classification input test plan ${testId}: id is invalid`)
+    }
+    if (!testPlan || typeof testPlan !== 'object' || Array.isArray(testPlan)) {
+      errors.push(`classification input test plan ${testId}: must be an object`)
+      continue
+    }
+    const expectedKeys = new Set(['destination', 'rationale'])
+    for (const key of Object.keys(testPlan)) {
+      if (!expectedKeys.has(key)) errors.push(`classification input test plan ${testId}: ${key} is not supported`)
+    }
+    validatePath(testPlan.destination, `classification input test plan ${testId}: destination`, errors)
+    if (!/^frontend\/.*\.test\.[tj]sx?$|^tests\/.*\.py$/.test(testPlan.destination ?? '')) {
+      errors.push(`classification input test plan ${testId}: destination must be a current test path`)
+    }
+    if (typeof testPlan.rationale !== 'string' || !testPlan.rationale.trim()) {
+      errors.push(`classification input test plan ${testId}: rationale is required`)
+    }
+  }
+  if (!input.classifications || typeof input.classifications !== 'object' || Array.isArray(input.classifications)) {
+    return [...errors, 'classification input classifications must be an object']
+  }
+  for (const [filePath, classification] of Object.entries(input.classifications)) {
+    validatePath(filePath, `classification input ${filePath}`, errors)
+    if (!classification || typeof classification !== 'object' || Array.isArray(classification)) {
+      errors.push(`classification input ${filePath}: must be an object`)
+      continue
+    }
+    if (classification.classification !== 'classified') {
+      errors.push(`classification input ${filePath}: classification must equal classified`)
+    }
+    if (!Array.isArray(classification.interactions) || classification.interactions.length === 0) {
+      errors.push(`classification input ${filePath}: interactions are required`)
+      continue
+    }
+    classification.interactions.forEach((interaction, index) => {
+      validateOpsiaPort(interaction?.opsiaPort, `classification input ${filePath}: interactions[${index}]`, errors, {
+        knownPlannedTestIds,
+      })
+    })
+  }
+  return errors
+}
+
+async function readClassificationInput(classificationInput, { sourceRepository, targetRevision }) {
+  if (!classificationInput) return null
+  let parsed
+  try {
+    parsed = JSON.parse(await readFile(classificationInput, 'utf8'))
+  } catch (error) {
+    throw new Error(`classification input is not valid JSON: ${classificationInput} (${error instanceof Error ? error.message : String(error)})`)
+  }
+  const errors = validateClassificationInput(parsed, { sourceRepository, targetRevision })
+  if (errors.length > 0) throw new Error(`classification input validation failed:\n${errors.join('\n')}`)
+  return parsed
+}
+
+export function validateDeltaLedger(ledger, {
+  knownLegacyContractIds = null,
+  knownOpsiaDestinations = null,
+  knownPlannedTestIds = null,
+} = {}) {
   const errors = []
   if (!ledger || typeof ledger !== 'object') return ['ledger must be an object']
-  if (ledger.schemaVersion !== 2) errors.push('schemaVersion must equal 2')
+  if (ledger.schemaVersion !== DELTA_LEDGER_SCHEMA_VERSION) errors.push(`schemaVersion must equal ${DELTA_LEDGER_SCHEMA_VERSION}`)
   if (!REVISION.test(ledger.baseRevision ?? '')) errors.push('baseRevision must be a 40-character lowercase hexadecimal revision')
   if (!REVISION.test(ledger.targetRevision ?? '')) errors.push('targetRevision must be a 40-character lowercase hexadecimal revision')
   if (typeof ledger.sourceRepository !== 'string' || !ledger.sourceRepository.startsWith('https://')) errors.push('sourceRepository must be an HTTPS URL')
@@ -296,6 +508,8 @@ export function validateDeltaLedger(ledger, { knownLegacyContractIds = null } = 
       validateClassifiedInteraction(interaction, interactionLabel, errors, {
         knownLegacyContractIds,
         seenLegacyContractIds,
+        knownOpsiaDestinations,
+        knownPlannedTestIds,
       })
       if (SOURCE_KEY.test(interaction?.sourceKey ?? '')) {
         if (seenSourceKeys.has(interaction.sourceKey)) errors.push(`${interactionLabel}: sourceKey is duplicated`)
@@ -347,6 +561,19 @@ function runGit(repository, args, input = null) {
     if (input) child.stdin.end(input)
     else child.stdin.end()
   })
+}
+
+async function readKnownOpsiaDestinations() {
+  const output = await runGit(REPOSITORY_ROOT, ['ls-files', '-z', '--', 'frontend', 'src', 'tests'])
+  return new Set(output.toString('utf8').split('\0').filter(Boolean).map(normalizedPath))
+}
+
+async function classificationValidationContext(classificationInput) {
+  if (!classificationInput) return {}
+  return {
+    knownOpsiaDestinations: await readKnownOpsiaDestinations(),
+    knownPlannedTestIds: new Set(Object.keys(classificationInput.testPlans)),
+  }
 }
 
 function parseNameStatus(buffer) {
@@ -422,8 +649,18 @@ export async function collectGitDelta({
 
 export async function createDeltaLedger(options = {}) {
   const resolved = resolveDeltaLedgerOptions(options)
-  const source = await collectGitDelta(resolved)
-  return buildDeltaLedger({ ...resolved, ...source })
+  const [source, classificationInput] = await Promise.all([
+    collectGitDelta(resolved),
+    readClassificationInput(resolved.classificationInput, resolved),
+  ])
+  const ledger = buildDeltaLedger({
+    ...resolved,
+    ...source,
+    classifications: classificationInput?.classifications ?? null,
+  })
+  const validationErrors = validateDeltaLedger(ledger, await classificationValidationContext(classificationInput))
+  if (validationErrors.length > 0) throw new Error(`source delta ledger validation failed:\n${validationErrors.join('\n')}`)
+  return ledger
 }
 
 function parseArguments(argv) {
@@ -434,6 +671,7 @@ function parseArguments(argv) {
     inventory: DEFAULT_INVENTORY,
     output: DEFAULT_OUTPUT,
     featureLedger: DEFAULT_FEATURE_LEDGER,
+    classificationInput: DEFAULT_CLASSIFICATION_INPUT,
     check: false,
     requireClassified: false,
     requireRebased: false,
@@ -452,12 +690,14 @@ function parseArguments(argv) {
       values.requireRebased = true
       continue
     }
-    if (!['--repository', '--base', '--target', '--inventory', '--output', '--feature-ledger'].includes(flag) || !argv[index + 1]) {
+    if (!['--repository', '--base', '--target', '--inventory', '--output', '--feature-ledger', '--classification-input'].includes(flag) || !argv[index + 1]) {
       throw new Error(`unsupported argument: ${flag}`)
     }
     const value = argv[index + 1]
     if (flag === '--base') values.baseRevision = value
     else if (flag === '--target') values.targetRevision = value
+    else if (flag === '--feature-ledger') values.featureLedger = path.resolve(value)
+    else if (flag === '--classification-input') values.classificationInput = path.resolve(value)
     else values[flag.slice(2)] = path.resolve(value)
     index += 1
   }
@@ -494,11 +734,12 @@ export async function writeDeltaLedger({
   inventory,
   output,
   featureLedger = DEFAULT_FEATURE_LEDGER,
+  classificationInput = null,
   check = false,
   requireClassified = false,
   requireRebased = false,
 }) {
-  const generated = await createDeltaLedger({ repository, baseRevision, targetRevision })
+  const generated = await createDeltaLedger({ repository, baseRevision, targetRevision, classificationInput })
   let ledger = generated
   let validationContext
   if (check) {
@@ -510,12 +751,20 @@ export async function writeDeltaLedger({
     } catch {
       throw new Error(`source UI delta ledger is not valid JSON: ${output}`)
     }
-    validationContext = { knownLegacyContractIds: await readKnownLegacyContractIds(featureLedger) }
+    const parsedClassificationInput = await readClassificationInput(classificationInput, {
+      sourceRepository: DEFAULT_SOURCE_REPOSITORY,
+      targetRevision,
+    })
+    validationContext = {
+      knownLegacyContractIds: await readKnownLegacyContractIds(featureLedger),
+      ...(await classificationValidationContext(parsedClassificationInput)),
+    }
     const validationErrors = validateDeltaLedger(currentLedger, validationContext)
     if (validationErrors.length > 0) {
       throw new Error(`source delta ledger validation failed:\n${validationErrors.join('\n')}`)
     }
     assertImmutableDeltaEvidenceMatches(currentLedger, generated, output)
+    if (classificationInput) assertClassificationEvidenceMatches(currentLedger, generated, output)
     ledger = currentLedger
   } else {
     const serialized = `${JSON.stringify(generated, null, 2)}\n`

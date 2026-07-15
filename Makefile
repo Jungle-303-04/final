@@ -101,13 +101,13 @@ reference-upstream-prepare: ## strict UI delta 검증용 승인 원본 Git objec
 	git -C "$(REFERENCE_UPSTREAM_GIT)" cat-file -e "$(REFERENCE_REVISION)^{tree}"
 
 reference-ui-delta-ledger: ## 최신 원본 UI delta를 pending 상태로 결정적으로 생성
-	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --output docs/migration/reference-ui-delta-ledger.json
+	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --classification-input docs/migration/reference-ui-delta-classifications.json --output docs/migration/reference-ui-delta-ledger.json
 
 reference-ui-delta-ledger-check: ## UI delta의 path·blob·SHA-256 결정성 확인(분류 완료는 요구하지 않음)
-	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --output docs/migration/reference-ui-delta-ledger.json --check
+	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --classification-input docs/migration/reference-ui-delta-classifications.json --output docs/migration/reference-ui-delta-ledger.json --check
 
 reference-ui-delta-rebaseline-check: ## 출하/재기준화용: revision 일치와 UI delta 전수 분류를 모두 요구
-	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --output docs/migration/reference-ui-delta-ledger.json --check --require-rebased --require-classified
+	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --classification-input docs/migration/reference-ui-delta-classifications.json --output docs/migration/reference-ui-delta-ledger.json --check --require-rebased --require-classified
 
 reference-feature-parity-check: reference-ui-delta-rebaseline-check ## 출하용: UI delta와 모든 제품 기능이 실제 구현 상태인지 확인
 	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check --require-complete

@@ -1,0 +1,972 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "https://github.com/skyhook-io/radar.git",
+  "targetRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
+  "testPlans": {
+    "timeline.public-api.surface": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Timeline public exports remain consumable by the route surface."
+    },
+    "timeline.strip.math": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Range URL transitions preserve server-owned millisecond bounds."
+    },
+    "timeline.shared.presentation": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Shared event markers retain their semantic presentation."
+    },
+    "timeline.filters.url": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Toolbar filters serialize canonically and restore with browser history."
+    },
+    "timeline.lanes.presentation": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Lane grouping and order are rendered from the authorized projection."
+    },
+    "timeline.live.stream": {
+      "destination": "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+      "rationale": "Live frame merging preserves bounded snapshot identity and ordering."
+    },
+    "timeline.list.detail": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "List events open the detail sheet without losing selected-event URL state."
+    },
+    "timeline.strip.controls": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Range picker, lens controls, keyboard navigation, and reduced motion are exercised at the route surface."
+    },
+    "timeline.swimlanes.grouping": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Swimlane grouping, sorting, and pin affordances remain capability-gated."
+    },
+    "timeline.toolbar.controls": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Toolbar controls expose only server-described choices and preserve focus behavior."
+    },
+    "timeline.toolbar.state": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Activity and problem projections map to stable URL filter state."
+    },
+    "timeline.adapter.source": {
+      "destination": "frontend/src/features/timeline/createTimelineAdapter.test.ts",
+      "rationale": "The adapter maps authenticated snapshot, overview, and stream contracts without source-runtime imports."
+    },
+    "timeline.local-scrubber": {
+      "destination": "frontend/src/pages/timeline/createTimelineSurface.test.tsx",
+      "rationale": "Local source selection remains route-capability gated."
+    },
+    "timeline.retained-overview": {
+      "destination": "tests/test_timeline_coverage_projection.py",
+      "rationale": "Retained overview buckets and coverage are created from an authorized server aggregation."
+    },
+    "timeline.view.integration": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Timeline view controls compose through the product surface rather than the upstream runtime."
+    },
+    "timeline.url.history": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Back, forward, replace-history, and deep-link state use one URL state model."
+    },
+    "timeline.source-context": {
+      "destination": "frontend/src/features/timeline/createTimelineAdapter.test.ts",
+      "rationale": "Source selection and transport composition remain isolated in the product adapter."
+    },
+    "timeline.source-contract": {
+      "destination": "frontend/src/api/timeline.test.ts",
+      "rationale": "HTTP capability, snapshot, overview, and stream request shapes are validated at the product boundary."
+    }
+  },
+  "classifications": {
+    "packages/k8s-ui/src/components/timeline/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline/index.ts",
+          "interaction": "public timeline primitives compose through one product-owned route surface",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route already owns the shell and contract boundary; the upstream barrel is reference-only."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/scrubber-math.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:scrubber-math:range-invariants-test:v1",
+          "legacyContractIds": [],
+          "symbol": "scrubber-math.test.ts",
+          "interaction": "range, lens, and zoom-rung calculations keep a positive bounded selection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "frontend/src/features/timeline/timelineUrlState.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.math"
+            ],
+            "state": "blocked",
+            "blockedReason": "TimelineCapabilityDescriptor does not yet describe lens minimums or server-approved zoom rungs.",
+            "rationale": "The browser must not invent range limits or a day-based zoom ladder."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/scrubber-math.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:scrubber-math:range-invariants:v1",
+          "legacyContractIds": [],
+          "symbol": "scrubber-math",
+          "interaction": "pointer and keyboard lens changes clamp within the selected query range",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "range changes expose their final value without animated movement",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/scrubber-math.ts",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "frontend/src/pages/timeline/TimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.math",
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "Server capability data for minimum lens window, keyboard step, and zoom rungs is absent.",
+            "rationale": "The retained strip must use descriptor values rather than hardcoded range arithmetic."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/shared.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:shared:marker-semantics-test:v1",
+          "legacyContractIds": [],
+          "symbol": "shared.test.tsx",
+          "interaction": "timeline marker and severity presentation remains semantically stable",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.shared.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Current event cards already consume typed activity, event type, and severity values."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/shared.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:shared:marker-semantics:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline shared renderers",
+          "interaction": "semantic event identity drives consistent list and lane markers",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/timelineLabels.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.shared.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Typed event labels and views are product-owned and do not import upstream renderers."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-filters.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:filters:canonical-url-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-filters.test.ts",
+          "interaction": "activity, kinds, deletion, search, and selected-event filters round-trip through URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.test.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.requests",
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.filters.url"
+            ],
+            "state": "blocked",
+            "blockedReason": "The server has no facet response to drive filter availability and independent counts.",
+            "rationale": "URL parsing exists, but dynamic toolbar choices must come from an authorized aggregation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-filters.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:filters:canonical-url:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-filters",
+          "interaction": "filter predicates use canonical activity and kind selections without client fixture data",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineContract.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "src/domains/timeline/predicate.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.requests",
+              "domains.timeline.predicate",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.filters.url",
+              "timeline.toolbar.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "Facet aggregation and the server control catalog are not yet defined.",
+            "rationale": "Existing predicates accept filters, but the UI cannot safely infer selectable values or counts."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-lane-sort.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:lane-sort:projection-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-lane-sort.test.ts",
+          "interaction": "importance, recency, and name lane ordering is deterministic for one authorized projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+              "frontend/src/features/timeline/timelinePresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.lanes.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The snapshot has events but no server lane aggregation or sort projection for large timelines.",
+            "rationale": "Client-only grouping would duplicate data logic and exceed smooth-update limits."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-lane-sort.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:lane-sort:projection:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-lane-sort",
+          "interaction": "lane order follows a server-defined grouping and sort projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelinePresentation.ts",
+              "frontend/src/pages/timeline/TimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.lanes.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "Grouping and sort enum values exist, but the backend does not emit a bounded lane projection.",
+            "rationale": "The product must not hardcode upstream lane ordering heuristics."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-live.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:live:window-state-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-live.test.ts",
+          "interaction": "live and frozen range state preserves its cursor and reports unseen events",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "bounded snapshot reducer keyed by source event identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.streams"
+            ],
+            "plannedTestIds": [
+              "timeline.live.stream"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current stream has no overview-derived frozen-window unseen-event count.",
+            "rationale": "Snapshot and SSE behavior exist, while the Go-live affordance needs a truthful server count."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-live.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:live:window-state:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-live",
+          "interaction": "live selection advances through server sessions while frozen selection remains stable until Go live",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "replace expired live sessions with a fresh bounded snapshot"
+          },
+          "motion": {
+            "reducedMotion": "live return updates selection without smooth scrolling",
+            "evidence": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.streams",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.live.stream",
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "The live default window and frozen-window update counter are not server-described.",
+            "rationale": "The client already follows a negotiated stream policy and must extend that policy rather than poll."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineList.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:list:event-detail:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineList",
+          "interaction": "ordered events open a detail view using a ledger-unique selected event key",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.list.detail"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product list and detail sheet already use the typed sourceKey selection model."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineStrip.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:strip:controls-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineStrip.test.tsx",
+          "interaction": "query-range controls, histogram lens interaction, escape handling, and Go live are verified together",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "No overview response or control descriptor exists to supply range presets, bucket data, and lens constraints.",
+            "rationale": "The strip cannot be tested honestly until its input data is server-owned."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineStrip.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:strip:controls:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineStrip",
+          "interaction": "range picker refetches selection while drag, resize, draw, and keyboard controls change a local lens",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "lens, live return, and calendar selection do not animate under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/TimelineStrip.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "packages.contracts.timeline.models",
+              "domains.timeline.coverage"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.controls",
+              "timeline.strip.math"
+            ],
+            "state": "blocked",
+            "blockedReason": "TimelineCapabilityDescriptor and snapshot contracts do not yet contain retained overview, preset, or lens descriptor fields.",
+            "rationale": "Selection and lens must be structurally separate and driven by server limits."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineSwimlanes.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:swimlanes:grouping-pins-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineSwimlanes.test.tsx",
+          "interaction": "grouped lanes, pinned lanes, and pinned-only filtering honor capability and persisted user state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+              "frontend/src/features/timeline/timelinePresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.pins",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.swimlanes.grouping"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no persisted pin contract and pinned_only is intentionally absent from server predicate and replay identity.",
+            "rationale": "A localStorage copy would be a false multi-workspace and multi-device implementation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineSwimlanes.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:swimlanes:grouping-pins:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineSwimlanes",
+          "interaction": "lane grouping, sorting, and pins present one stable timeline projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "lane updates retain final order without layout animation",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/TimelineSwimlanes.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelinePresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "domains.timeline.aggregation",
+              "packages.contracts.timeline.pins"
+            ],
+            "plannedTestIds": [
+              "timeline.swimlanes.grouping",
+              "timeline.lanes.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The service has no lane aggregation or authenticated user pin projection.",
+            "rationale": "Current swimlanes may show typed events, but cannot implement upstream pin semantics truthfully."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineToolbar.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:toolbar:controls-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineToolbar.test.tsx",
+          "interaction": "search, activity, kinds, deletion, view, sort, and overlay controls are keyboard and focus tested",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.toolbar.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "The server does not describe the control catalog or return facet counts for the toolbar.",
+            "rationale": "A hardcoded menu would diverge from the authorized data source."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineToolbar.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:toolbar:controls:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineToolbar",
+          "interaction": "slash search, escape, activity and problem chips, kinds picker, deleted filter, view menu, legend, and view toggle write canonical state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "popover state and filter result changes remain legible without animated transitions",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/TimelineToolbar.tsx",
+              "frontend/src/shared/ui/primitives.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "frontend/src/features/timeline/useTimelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.toolbar.controls",
+              "timeline.filters.url"
+            ],
+            "state": "blocked",
+            "blockedReason": "Control availability, kind facets, activity counts, and pin capability are not server-described.",
+            "rationale": "The current URL state is reusable, but its controls must consume a strict descriptor and aggregation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineToolbarState.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:toolbar:state-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineToolbarState.test.tsx",
+          "interaction": "activity and problem controls project to canonical backend activity filters",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.test.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.requests",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.toolbar.state"
+            ],
+            "state": "blocked",
+            "blockedReason": "Activity source and problem projection availability are not part of the existing capability descriptor.",
+            "rationale": "The mapping must be verified against backend-defined activity semantics, not display text."
+          }
+        }
+      ]
+    },
+    "web/src/api/timelineSource.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:source-api:contract-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timelineSource.test.ts",
+          "interaction": "timeline source API requests preserve selected mode and retained-range behavior",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated max frames per second",
+            "merge": "snapshot then ordered stream frames"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.test.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.requests",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.source-contract",
+              "timeline.adapter.source"
+            ],
+            "state": "blocked",
+            "blockedReason": "The overview endpoint and expanded control descriptor are not yet available at the Python API boundary.",
+            "rationale": "Existing adapter tests cover snapshot and stream; expanded requests require one typed API contract."
+          }
+        }
+      ]
+    },
+    "web/src/api/timelineSource.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:source-api:contract:v1",
+          "legacyContractIds": [],
+          "symbol": "timelineSource",
+          "interaction": "source transport reads retained history and live events without importing the upstream runtime",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated max frames per second",
+            "merge": "snapshot then ordered stream frames"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.requests",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.source-contract",
+              "timeline.adapter.source"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product already isolates HTTP and SSE behind a typed TimelinePort adapter."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/LocalTimelineScrubber.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:local-scrubber:source-range:v1",
+          "legacyContractIds": [],
+          "symbol": "LocalTimelineScrubber",
+          "interaction": "local timeline source selects an explicit range without bypassing route capabilities",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/createTimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.local-scrubber"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Local versus retained source mode is already authenticated and capability-gated before route render."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/RetainedTimelineScrubber.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:retained-scrubber:overview-lens:v1",
+          "legacyContractIds": [],
+          "symbol": "RetainedTimelineScrubber",
+          "interaction": "retained-history overview renders bucketed evidence, coverage gaps, lens selection, and frozen-window new-event count",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "lens changes are direct and do not smooth-scroll under reduced motion",
+            "evidence": [
+              "references/upstream/web/src/components/timeline/RetainedTimelineScrubber.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/pages/timeline/TimelineCoverageNotice.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "domains.timeline.coverage",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.retained-overview",
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "Python currently returns coverage intervals but no retained overview buckets, facets, or frozen-window counter.",
+            "rationale": "The histogram must be rendered from authoritative aggregation, never synthesized from a capped event list."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/TimelineList.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:web-list:event-detail:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineList",
+          "interaction": "web list rendering preserves selection and event navigation through URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.list.detail"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The current surface already restores event focus and uses the non-colliding source key."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/TimelineView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:web-view:route-state:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineView",
+          "interaction": "timeline route composes source mode, URL state, filters, list or lanes, retained range, and live stream lifecycle",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "bounded snapshot reducer with resync on invalid cursor"
+          },
+          "motion": {
+            "reducedMotion": "status and selection changes retain feedback without smooth scroll or layout motion",
+            "evidence": [
+              "references/upstream/web/src/components/timeline/TimelineView.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts",
+              "frontend/src/features/timeline/useTimelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview",
+              "domains.timeline.streams",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.view.integration",
+              "timeline.url.history",
+              "timeline.live.stream"
+            ],
+            "state": "blocked",
+            "blockedReason": "The route lacks the server-described toolbar and retained overview contracts required for full parity.",
+            "rationale": "The existing route is the migration destination, but must retain its Python/SSE architecture rather than execute upstream code."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/TimelineView.urlparams.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:web-view:url-history-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineView.urlparams.test.ts",
+          "interaction": "view, range, activity, kinds, deletion, pin, grouping, sort, and event keys restore through deep links and history",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.test.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.pins"
+            ],
+            "plannedTestIds": [
+              "timeline.url.history"
+            ],
+            "state": "blocked",
+            "blockedReason": "pinnedOnly is currently inert because no authenticated pin contract or replay-identity revision exists.",
+            "rationale": "All other URL keys can remain reusable; pin state must not be claimed until it has server semantics."
+          }
+        }
+      ]
+    },
+    "web/src/context/TimelineSource.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:source-context:composition:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineSourceProvider",
+          "interaction": "source selection and transport are composed outside individual timeline controls",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "single TimelinePort stream ownership per read session"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/createTimelineAdapter.ts",
+              "frontend/src/pages/timeline/createTimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.source-context",
+              "timeline.adapter.source"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Composition already occurs through TimelinePort and the capability-gated route factory."
+          }
+        }
+      ]
+    }
+  }
+}
