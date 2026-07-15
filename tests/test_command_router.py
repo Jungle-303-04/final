@@ -11,6 +11,7 @@ from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     agent_debug_query,
     command_heartbeat,
+    command_result,
     command_start,
     command_status,
     commands,
@@ -24,6 +25,7 @@ from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
     CommandHeartbeatRequest,
     CommandRequest,
+    CommandResultRequest,
     CommandStartRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
@@ -124,6 +126,56 @@ class SpyCommandLeaseDb:
         return self.correlation_id
 
 
+class SpyUninstallResultDb:
+    def __init__(self, *, action: str, cluster_role: str = "target") -> None:
+        self.action = action
+        self.cluster_role = cluster_role
+        self.completed: list[dict[str, object]] = []
+        self.unregistered: list[tuple[str, str]] = []
+
+    async def get_agent_command(self, command_id: str, workspace_id: str) -> dict[str, object]:
+        return {
+            "command_id": command_id,
+            "workspace_id": workspace_id,
+            "cluster_id": "trusted-cluster",
+            "action": self.action,
+        }
+
+    async def complete_agent_command_and_stage_event(
+        self,
+        command_id: str,
+        workspace_id: str,
+        cluster_id: str,
+        result: dict[str, object],
+        lease_id: str,
+        agent_id: str,
+        source: str,
+    ) -> SimpleNamespace:
+        self.completed.append(
+            {
+                "command_id": command_id,
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "result": result,
+                "lease_id": lease_id,
+                "agent_id": agent_id,
+                "source": source,
+            }
+        )
+        return SimpleNamespace(event_id="evt-uninstall")
+
+    def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, object]:
+        return {
+            "workspace_id": workspace_id,
+            "cluster_id": cluster_id,
+            "settings": {"cluster_role": self.cluster_role},
+        }
+
+    def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
+        self.unregistered.append((workspace_id, cluster_id))
+        return True
+
+
 def manual_diff() -> dict[str, str]:
     return {
         "resource": "deployment/checkout-api",
@@ -132,6 +184,68 @@ def manual_diff() -> dict[str, str]:
         "actual_image": "img:old",
         "risk": "sandbox-only",
     }
+
+
+def test_uninstall_completed_ack_revokes_registration() -> None:
+    async def run() -> None:
+        db = SpyUninstallResultDb(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
+        response = await command_result(
+            "cmd-uninstall-1",
+            CommandResultRequest(
+                status="completed",
+                agent_id="agent-1",
+                lease_id="lease-1",
+                cleanup_completed=True,
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert response.accepted is True
+        assert db.unregistered == [("trusted-workspace", "trusted-cluster")]
+
+    asyncio.run(run())
+
+
+def test_uninstall_failed_result_keeps_registration() -> None:
+    async def run() -> None:
+        db = SpyUninstallResultDb(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
+        response = await command_result(
+            "cmd-uninstall-1",
+            CommandResultRequest(
+                status="failed",
+                agent_id="agent-1",
+                lease_id="lease-1",
+                message="delete forbidden",
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert response.accepted is True
+        assert db.unregistered == []
+
+    asyncio.run(run())
+
+
+def test_uninstall_scheduled_without_completed_cleanup_keeps_registration() -> None:
+    async def run() -> None:
+        db = SpyUninstallResultDb(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
+        await command_result(
+            "cmd-uninstall-1",
+            CommandResultRequest(
+                status="completed",
+                agent_id="agent-1",
+                lease_id="lease-1",
+                cleanup_scheduled=True,
+            ),
+            identity=AGENT_IDENTITY,
+            db=db,
+        )
+
+        assert db.unregistered == []
+
+    asyncio.run(run())
 
 
 def test_accepted_response_accepts_legacy_payload_without_command_id() -> None:

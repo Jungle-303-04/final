@@ -87,6 +87,8 @@ def load_agent_module():
 class StubKubernetesClient:
     def __init__(self) -> None:
         self.patches: list[dict[str, object]] = []
+        self.namespaced_deletes: list[dict[str, object]] = []
+        self.cluster_deletes: list[dict[str, object]] = []
 
     async def get_namespaced_resource(self, **_kwargs: object) -> dict[str, object]:
         return {}
@@ -94,6 +96,14 @@ class StubKubernetesClient:
     async def patch_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.patches.append(kwargs)
         return {"patched": True}
+
+    async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.namespaced_deletes.append(kwargs)
+        return {"deleted": True}
+
+    async def delete_cluster_resource(self, **kwargs: object) -> dict[str, object]:
+        self.cluster_deletes.append(kwargs)
+        return {"deleted": True}
 
 
 class StubCommandResultClient:
@@ -121,6 +131,26 @@ class StubCommandResultClient:
                 "result": result,
             }
         )
+
+
+class FailingDeleteKubernetesClient(StubKubernetesClient):
+    async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        if kwargs.get("name") == "target-runtime-config":
+            raise RuntimeError("delete forbidden")
+        return await super().delete_namespaced_resource(**kwargs)
+
+
+class RetryingDeploymentDeleteClient(StubKubernetesClient):
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+        self.attempts = 0
+
+    async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.attempts += 1
+        if self.attempts <= self.failures:
+            raise RuntimeError("temporary Kubernetes API failure")
+        return await super().delete_namespaced_resource(**kwargs)
 
 
 def register_agent_commands(module: object, agent: object) -> None:
@@ -1371,6 +1401,109 @@ def test_agent_routes_unknown_command_to_default_handler() -> None:
 
     assert result["status"] == "failed"
     assert result["applied"] is False
+
+
+def test_agent_uninstall_cleans_allowlist_before_completed_ack() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CLUSTER_AGENT_UNINSTALL_ACTION,
+                "payload": {"cluster_id": "cluster-1", "contract_version": 1},
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["cleanup_completed"] is True
+    assert agent.kubernetes.namespaced_deletes
+    assert agent.kubernetes.cluster_deletes
+    assert all(
+        item.get("name") != "cluster-agent" or item.get("resource") != "deployments"
+        for item in agent.kubernetes.namespaced_deletes
+    )
+
+
+def test_agent_cleanup_never_deletes_namespaces_or_user_workloads() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.kubernetes = StubKubernetesClient()
+
+    asyncio.run(agent.prepare_agent_installation_cleanup())
+
+    deletes = [*agent.kubernetes.namespaced_deletes, *agent.kubernetes.cluster_deletes]
+    assert all(item["resource"] != "namespaces" for item in deletes)
+    assert all(
+        item.get("name") not in {"color-turf-server", "report-generator"} for item in deletes
+    )
+    assert all(item["resource"] != "deployments" for item in agent.kubernetes.namespaced_deletes)
+
+
+def test_agent_deletes_own_deployment_only_after_ack_path() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.kubernetes = StubKubernetesClient()
+
+    asyncio.run(agent.delete_agent_deployment_after_ack())
+
+    assert agent.kubernetes.namespaced_deletes == [
+        {
+            "api_group": "apps",
+            "version": "v1",
+            "namespace": "target",
+            "resource": "deployments",
+            "name": "cluster-agent",
+        }
+    ]
+
+
+def test_agent_final_deployment_delete_retries_bounded_failures(monkeypatch) -> None:
+    module = load_agent_module()
+    monkeypatch.setattr(module, "AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS", (0, 0, 0))
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.kubernetes = RetryingDeploymentDeleteClient(failures=2)
+
+    deleted = asyncio.run(agent.delete_agent_deployment_after_ack())
+
+    assert deleted is True
+    assert agent.kubernetes.attempts == 3
+    assert agent.kubernetes.namespaced_deletes[-1]["name"] == "cluster-agent"
+
+
+def test_agent_uninstall_cleanup_failure_returns_failed_and_keeps_deployment() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.kubernetes = FailingDeleteKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.CLUSTER_AGENT_UNINSTALL_ACTION,
+                "payload": {"cluster_id": "cluster-1", "contract_version": 1},
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "cleanup_completed" not in result
+    assert all(
+        item.get("name") != "cluster-agent" or item.get("resource") != "deployments"
+        for item in agent.kubernetes.namespaced_deletes
+    )
 
 
 def test_kubernetes_command_uses_typed_payload_and_client() -> None:
