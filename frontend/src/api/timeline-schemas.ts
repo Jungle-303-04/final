@@ -4,6 +4,115 @@ const nonEmptyString = z.string().min(1);
 const nonNegativeInteger = z.number().int().nonnegative();
 const timestampMilliseconds = nonNegativeInteger.max(8_640_000_000_000_000);
 const timelineSourceModeSchema = z.enum(["retained", "local"]);
+const timelineActivitySchema = z.enum(["change", "k8s_event", "warning", "unhealthy"]);
+const timelineSourceSchema = z.enum([
+  "inventory",
+  "incident",
+  "application_workflow",
+  "kubernetes_event",
+  "gitops",
+]);
+
+const timelineControlOptionSchema = z.strictObject({
+  id: nonEmptyString.max(100),
+  label: nonEmptyString.max(200),
+  description: z.string().min(1).max(500).nullable(),
+});
+
+const timelineActivityControlOptionSchema = timelineControlOptionSchema.extend({
+  activity: z.array(timelineActivitySchema),
+  problems_activity: z.array(timelineActivitySchema),
+});
+
+const timelineTimeRangeOptionSchema = timelineControlOptionSchema.extend({
+  duration_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
+});
+
+const timelineLensZoomRungSchema = timelineControlOptionSchema.extend({
+  duration_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
+});
+
+function uniqueControlIds(
+  options: readonly { id: string }[],
+  path: (string | number)[],
+  context: z.RefinementCtx,
+): void {
+  if (new Set(options.map((option) => option.id)).size !== options.length) {
+    context.addIssue({
+      code: "custom",
+      message: "timeline control IDs must be unique",
+      path,
+    });
+  }
+}
+
+const timelineControlSurfaceSchema = z.strictObject({
+  views: z.array(timelineControlOptionSchema).min(1),
+  groupings: z.array(timelineControlOptionSchema).min(1),
+  sorts: z.array(timelineControlOptionSchema).min(1),
+  activity: z.array(timelineActivityControlOptionSchema).min(1),
+  deleted: z.strictObject({
+    key: nonEmptyString.max(100),
+    label: nonEmptyString.max(200),
+    default: z.boolean(),
+  }),
+  kinds: z.strictObject({
+    key: nonEmptyString.max(100),
+    label: nonEmptyString.max(200),
+    selection: z.literal("multi"),
+    empty_selection: z.literal("all"),
+  }),
+  time_ranges: z.array(timelineTimeRangeOptionSchema).min(1),
+  default_time_range_id: nonEmptyString.max(100),
+  custom_time_range_id: z.literal("custom"),
+  lens_zoom_rungs: z.array(timelineLensZoomRungSchema).min(1),
+  default_lens_zoom_rung: nonEmptyString.max(100),
+  legend: z.strictObject({
+    key: z.literal("legend"),
+    label: nonEmptyString.max(200),
+    availability: z.literal("available"),
+    items: z.array(timelineControlOptionSchema).min(1),
+  }),
+  pins: z.discriminatedUnion("availability", [
+    z.strictObject({
+      key: z.literal("pins"),
+      label: nonEmptyString.max(200),
+      availability: z.literal("available"),
+      storage: z.literal("server"),
+      revision: z.literal("pin_set"),
+      subject_kinds: z.tuple([z.literal("resource"), z.literal("application")]),
+    }),
+    z.strictObject({
+      key: z.literal("pins"),
+      label: nonEmptyString.max(200),
+      availability: z.literal("unavailable"),
+      storage: z.null(),
+      revision: z.null(),
+      subject_kinds: z.tuple([]),
+    }),
+  ]),
+}).superRefine((surface, context) => {
+  uniqueControlIds(surface.views, ["views"], context);
+  uniqueControlIds(surface.groupings, ["groupings"], context);
+  uniqueControlIds(surface.sorts, ["sorts"], context);
+  uniqueControlIds(surface.activity, ["activity"], context);
+  uniqueControlIds(surface.time_ranges, ["time_ranges"], context);
+  uniqueControlIds(surface.lens_zoom_rungs, ["lens_zoom_rungs"], context);
+  if (!surface.time_ranges.some((range) => range.id === surface.default_time_range_id)) {
+    context.addIssue({
+      code: "custom",
+      message: "timeline default time range must be available",
+      path: ["default_time_range_id"],
+    });
+  }
+  if (!surface.lens_zoom_rungs.some((rung) => rung.id === surface.default_lens_zoom_rung)) {
+    context.addIssue({
+      code: "custom",
+      message: "timeline default lens zoom rung must be available",
+      path: ["default_lens_zoom_rung"],
+    });
+  }
+});
 
 /** Server-owned source and query constraints shared by bootstrap and snapshots. */
 export const timelineCapabilityDescriptorSchema = z.strictObject({
@@ -11,6 +120,7 @@ export const timelineCapabilityDescriptorSchema = z.strictObject({
   available_source_modes: z.array(timelineSourceModeSchema).min(1),
   max_retained_range_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
   namespace_filter_policy: z.enum(["not_required", "required"]),
+  control_surface: timelineControlSurfaceSchema,
 }).superRefine((descriptor, context) => {
   const modes = new Set(descriptor.available_source_modes);
   if (modes.size !== descriptor.available_source_modes.length) {
@@ -82,16 +192,10 @@ export const timelineSubjectSchema = z.discriminatedUnion("kind", [
 
 export const timelineEventSchema = z.strictObject({
   event_id: nonEmptyString,
-  source: z.enum([
-    "inventory",
-    "incident",
-    "application_workflow",
-    "kubernetes_event",
-    "gitops",
-  ]),
+  source: timelineSourceSchema,
   source_key: nonEmptyString,
   native_id: nonEmptyString,
-  activity: z.enum(["change", "k8s_event", "warning", "unhealthy"]),
+  activity: timelineActivitySchema,
   occurred_at: z.string().datetime({ offset: true }),
   scope: timelineScopeSchema,
   subject: timelineSubjectSchema,
@@ -178,7 +282,7 @@ export const timelineWindowSchema = z.strictObject({
 });
 
 export const timelineFiltersSchema = z.strictObject({
-  activity: z.array(z.enum(["change", "k8s_event", "warning", "unhealthy"])).default([]),
+  activity: z.array(timelineActivitySchema).default([]),
   kinds: z.array(z.string()).default([]),
   include_deleted: z.boolean().default(true),
   pinned_only: z.boolean().default(false),
@@ -190,8 +294,11 @@ export const timelineQuerySchema = z.strictObject({
   window: timelineWindowSchema,
   filters: timelineFiltersSchema,
   mode: z.enum(["live", "frozen"]),
-  grouping: z.enum(["app", "owner", "flat"]),
-  sort: z.enum(["importance", "recent", "name"]),
+  grouping: nonEmptyString.max(100),
+  sort: nonEmptyString.max(100),
+  view: nonEmptyString.max(100),
+  range_id: nonEmptyString.max(100),
+  lens_zoom_rung: nonEmptyString.max(100),
 });
 
 export const timelineSnapshotRequestSchema = z.strictObject({
@@ -205,18 +312,127 @@ export const timelineStreamRequestSchema = z.strictObject({
 
 export const timelineCoverageSchema = z.strictObject({
   scope: timelineScopeSchema,
-  source: z.enum([
-    "inventory",
-    "incident",
-    "application_workflow",
-    "kubernetes_event",
-    "gitops",
-  ]),
+  source: timelineSourceSchema,
   from_ms: timestampMilliseconds,
   to_ms: timestampMilliseconds.positive(),
   reason: z.enum(["collection_gap", "retention_boundary", "partial_scope"]),
 }).refine((coverage) => coverage.from_ms < coverage.to_ms, {
   message: "timeline coverage must have positive width",
+});
+
+const timelineOverviewBucketSchema = z.strictObject({
+  from_ms: timestampMilliseconds,
+  to_ms: timestampMilliseconds.positive(),
+  event_count: nonNegativeInteger,
+  problem_count: nonNegativeInteger,
+}).superRefine((bucket, context) => {
+  if (bucket.from_ms >= bucket.to_ms) {
+    context.addIssue({ code: "custom", message: "timeline overview bucket must have positive width", path: ["to_ms"] });
+  }
+  if (bucket.problem_count > bucket.event_count) {
+    context.addIssue({ code: "custom", message: "timeline overview problem count cannot exceed event count", path: ["problem_count"] });
+  }
+});
+
+const timelineOverviewFacetsSchema = z.strictObject({
+  activity: z.array(z.strictObject({ activity: timelineActivitySchema, count: nonNegativeInteger })),
+  kinds: z.array(z.strictObject({ kind: nonEmptyString.max(253), count: nonNegativeInteger })),
+});
+
+export const timelineOverviewSchema = z.strictObject({
+  window: timelineWindowSchema,
+  bucket_width_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
+  buckets: z.array(timelineOverviewBucketSchema).min(1).max(256),
+  coverage: z.array(timelineCoverageSchema),
+  coverage_sources: z.array(z.strictObject({
+    source: timelineSourceSchema,
+    availability: z.enum(["observed", "unavailable"]),
+  })).min(1),
+  facets: timelineOverviewFacetsSchema,
+  new_evidence_count: nonNegativeInteger.nullable(),
+  pin_set_revision: nonNegativeInteger.nullable(),
+}).superRefine((overview, context) => {
+  const [first] = overview.buckets;
+  const last = overview.buckets[overview.buckets.length - 1];
+  if (first?.from_ms !== overview.window.from_ms) {
+    context.addIssue({ code: "custom", message: "timeline overview buckets must start at the requested window", path: ["buckets", 0, "from_ms"] });
+  }
+  if (last?.to_ms !== overview.window.to_ms) {
+    context.addIssue({ code: "custom", message: "timeline overview buckets must end at the requested window", path: ["buckets", overview.buckets.length - 1, "to_ms"] });
+  }
+  for (let index = 1; index < overview.buckets.length; index += 1) {
+    if (overview.buckets[index - 1]?.to_ms !== overview.buckets[index]?.from_ms) {
+      context.addIssue({ code: "custom", message: "timeline overview buckets must be contiguous", path: ["buckets", index] });
+    }
+  }
+  const sources = overview.coverage_sources.map((source) => source.source);
+  if (new Set(sources).size !== sources.length) {
+    context.addIssue({ code: "custom", message: "timeline overview coverage sources must be unique", path: ["coverage_sources"] });
+  }
+});
+
+export const timelineOverviewRequestSchema = z.strictObject({
+  query: timelineQuerySchema,
+});
+
+const timelinePinResourceTargetSchema = z.strictObject({
+  kind: z.literal("resource"),
+  scope: timelineScopeSchema,
+  resource: timelineResourceRefSchema,
+});
+
+const timelinePinApplicationTargetSchema = z.strictObject({
+  kind: z.literal("application"),
+  application_id: nonEmptyString.max(512),
+});
+
+export const timelinePinTargetSchema = z.discriminatedUnion("kind", [
+  timelinePinResourceTargetSchema,
+  timelinePinApplicationTargetSchema,
+]);
+
+const timelineApplicationPinSnapshotSchema = z.strictObject({
+  name: nonEmptyString.max(512),
+  repository_id: nonEmptyString.max(512),
+  manifest_path: nonEmptyString.max(2_048),
+});
+
+const timelinePinnedResourceSubjectSchema = timelinePinResourceTargetSchema;
+const timelinePinnedApplicationSubjectSchema = timelinePinApplicationTargetSchema.extend({
+  snapshot: timelineApplicationPinSnapshotSchema,
+});
+
+const timelinePinSubjectSchema = z.discriminatedUnion("kind", [
+  timelinePinnedResourceSubjectSchema,
+  timelinePinnedApplicationSubjectSchema,
+]);
+
+export const timelinePinIdSchema = nonEmptyString.max(128);
+
+const timelinePinSchema = z.strictObject({
+  pin_id: timelinePinIdSchema,
+  subject: timelinePinSubjectSchema,
+  created_at: z.string().datetime({ offset: true }),
+});
+
+export const timelinePinSetSchema = z.strictObject({
+  revision: nonNegativeInteger,
+  pins: z.array(timelinePinSchema),
+});
+
+export const timelinePinMutationSchema = z.strictObject({
+  action: z.enum(["added", "unchanged", "deleted", "absent"]),
+  pin_set: timelinePinSetSchema,
+});
+
+export const timelinePinUpsertRequestSchema = z.strictObject({
+  expected_revision: nonNegativeInteger,
+  target: timelinePinTargetSchema,
+});
+
+export const timelinePinDeleteRequestSchema = z.strictObject({
+  pin_id: timelinePinIdSchema,
+  expected_revision: nonNegativeInteger,
 });
 
 const snapshotFrameSchema = z.strictObject({
@@ -227,35 +443,41 @@ const snapshotFrameSchema = z.strictObject({
   capabilities: timelineCapabilityDescriptorSchema,
   events: z.array(timelineEventSchema).default([]),
   coverage: z.array(timelineCoverageSchema).default([]),
+  pin_set_revision: nonNegativeInteger.nullable(),
 });
 
 const eventFrameSchema = z.strictObject({
   kind: z.literal("event"),
   cursor: timelineCursorSchema,
   event: timelineEventSchema,
+  pin_set_revision: z.null(),
 });
 
 const coverageFrameSchema = z.strictObject({
   kind: z.literal("coverage"),
   cursor: timelineCursorSchema,
   coverage: z.array(timelineCoverageSchema).min(1),
+  pin_set_revision: z.null(),
 });
 
 const resyncFrameSchema = z.strictObject({
   kind: z.literal("resync_required"),
   cursor: timelineCursorSchema,
   reason: nonEmptyString.max(500),
+  pin_set_revision: z.null(),
 });
 
 const endFrameSchema = z.strictObject({
   kind: z.literal("end"),
   cursor: timelineCursorSchema,
+  pin_set_revision: z.null(),
 });
 
 const errorFrameSchema = z.strictObject({
   kind: z.literal("error"),
   cursor: timelineCursorSchema,
   reason: nonEmptyString.max(500),
+  pin_set_revision: z.null(),
 });
 
 export const timelineStreamFrameSchema = z.discriminatedUnion("kind", [
@@ -272,8 +494,14 @@ export type TimelineEndpointCapabilityDescriptor = z.infer<typeof timelineCapabi
 export type TimelineEndpointCursor = z.infer<typeof timelineCursorSchema>;
 export type TimelineEndpointEvent = z.infer<typeof timelineEventSchema>;
 export type TimelineEndpointCoverage = z.infer<typeof timelineCoverageSchema>;
+export type TimelineEndpointOverview = z.infer<typeof timelineOverviewSchema>;
+export type TimelineEndpointPinMutation = z.infer<typeof timelinePinMutationSchema>;
+export type TimelineEndpointPinSet = z.infer<typeof timelinePinSetSchema>;
+export type TimelineEndpointPinUpsert = z.output<typeof timelinePinUpsertRequestSchema>;
+export type TimelinePinDeleteRequest = z.output<typeof timelinePinDeleteRequestSchema>;
 export type TimelineEndpointRealtimePolicy = z.infer<typeof timelineRealtimePolicySchema>;
 export type TimelineEndpointStreamFrame = z.infer<typeof timelineStreamFrameSchema>;
 export type TimelineEndpointQuery = z.infer<typeof timelineQuerySchema>;
 export type TimelineSnapshotRequest = z.output<typeof timelineSnapshotRequestSchema>;
 export type TimelineStreamRequest = z.output<typeof timelineStreamRequestSchema>;
+export type TimelineOverviewRequest = z.output<typeof timelineOverviewRequestSchema>;

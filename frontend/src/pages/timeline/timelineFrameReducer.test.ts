@@ -91,6 +91,7 @@ function snapshot(
     policy,
     events,
     coverage,
+    pinSetRevision: null,
   };
 }
 
@@ -112,6 +113,7 @@ function timelineQuery(): TimelineQuery {
   return {
     scopes: [{ workspaceId: "workspace-a", clusterId: "cluster-a", namespaces: [], freshness: "live" }],
     mode: { kind: "live", widthMs: 1_000 },
+    control: { view: "swimlane", rangeId: "1h", lensZoomRung: "1h" },
     filters: {
       activity: [],
       kinds: [],

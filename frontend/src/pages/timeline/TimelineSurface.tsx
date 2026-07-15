@@ -13,6 +13,8 @@ import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatu
 import { Button } from "../../shared/ui/primitives/button";
 import type {
   TimelineEvent,
+  TimelineCapabilities,
+  TimelineControlSelection,
   TimelineGrouping,
   TimelinePort,
   TimelineQuery,
@@ -51,6 +53,7 @@ export function TimelineSurface({
   const query = useMemo<TimelineQuery>(() => ({
     scopes,
     mode: url.state.mode,
+    control: timelineControlSelection(capabilities, url.state.viewMode, url.state.mode),
     filters: {
       activity: url.state.activityFilter,
       kinds: url.state.kindFilter,
@@ -61,7 +64,7 @@ export function TimelineSurface({
       sort: url.state.sort,
       selectedEventKey: url.state.selectedEventKey,
     },
-  }), [scopes, url.state]);
+  }), [capabilities, scopes, url.state]);
   const timeline = useTimelineDataFrame(port, query);
   const viewGroupRef = useRef<HTMLDivElement>(null);
   const namespaceLocked = capabilities.namespaceFilterPolicy === "required";
@@ -162,6 +165,22 @@ export function TimelineSurface({
       </ProductFloatingActionAvoidance>
     </ProductPageFrame>
   );
+}
+
+/** Range and lens IDs always originate in the preflight descriptor, never a UI constant. */
+function timelineControlSelection(
+  capabilities: TimelineCapabilities,
+  view: TimelineViewMode,
+  mode: TimelineQuery["mode"],
+): TimelineControlSelection {
+  const selectedRange = mode.kind === "live"
+    ? capabilities.controlSurface.timeRanges.find((range) => range.durationMs === mode.widthMs)
+    : undefined;
+  return {
+    view,
+    rangeId: selectedRange?.id ?? capabilities.controlSurface.customTimeRangeId,
+    lensZoomRung: capabilities.controlSurface.defaultLensZoomRung,
+  };
 }
 
 function TimelineDataBoundary({
