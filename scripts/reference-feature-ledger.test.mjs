@@ -145,6 +145,12 @@ test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태
     frontendContract: "frontend/src/app",
     desktopContract: "desktop",
     verification: ["tests/test_feature_contract_router.py"],
+    coverage: {
+      backend: null,
+      frontend: null,
+      desktop: null,
+      realtime: "not_required",
+    },
   });
 });
 
@@ -180,6 +186,39 @@ test("출하 게이트는 진행 중인 제품 기능을 완료로 처리하지 
   assert.throws(
     () => assertFeatureDeliveryComplete(ledger),
     /reference.feature.001: in_progress/,
+  );
+});
+
+test("출하 게이트는 구현 상태여도 행별 backend/frontend 증거 없이는 통과시키지 않는다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 단축키 |",
+    ].join("\n"),
+    REVISION,
+    {
+      ...PORT_MAP,
+      sections: {
+        ...PORT_MAP.sections,
+        "전역 셸": {
+          ...PORT_MAP.sections["전역 셸"],
+          deliveryStatus: "implemented",
+        },
+      },
+    },
+  );
+
+  assert.deepEqual(ledger.features[0].coverage, {
+    backend: null,
+    frontend: null,
+    desktop: null,
+    realtime: "not_required",
+  });
+  assert.throws(
+    () => assertFeatureDeliveryComplete(ledger),
+    /reference.feature.001: missing backend coverage/,
   );
 });
 
