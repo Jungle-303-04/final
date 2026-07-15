@@ -6,7 +6,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from domains.timeline.streams import TimelineStreamProtocolError, encode_ndjson, encode_sse
+from domains.timeline.streams import (
+    TimelineStreamProtocolError,
+    encode_ndjson,
+    encode_sse,
+    encode_sse_frame,
+)
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
@@ -77,6 +82,16 @@ def test_serialized_timeline_events_keep_their_discriminated_subject_kind() -> N
     snapshot = TimelineStreamFrame.model_validate_json(encoded.splitlines()[0])
 
     assert snapshot.events[0].subject.kind == "resource"
+
+
+def test_live_sse_frame_keeps_opaque_cursor_without_claiming_a_terminal() -> None:
+    frame = TimelineStreamFrame(kind="event", cursor=_cursor(5), event=_event(5))
+
+    assert encode_sse_frame(frame).splitlines()[:-1] == [
+        "id: timeline-cursor-5",
+        "event: event",
+        'data: {"kind":"event","cursor":{"token":"timeline-cursor-5"},"event":{"event_id":"event-5","source":"inventory","source_key":"inventory:event-5","native_id":"native-5","activity":"change","occurred_at":"2026-07-15T00:00:00Z","scope":{"workspace_id":"workspace-a","cluster_id":"cluster-a"},"subject":{"resource":{"kind":"Pod","namespace":"default","name":"api","uid":"uid-a"},"kind":"resource"},"resource":{"kind":"Pod","namespace":"default","name":"api","uid":"uid-a"},"event_type":"update","severity":"info","title":"Pod api updated"}}',
+    ]
 
 
 @pytest.mark.parametrize(

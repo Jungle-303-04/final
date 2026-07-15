@@ -54,6 +54,7 @@ from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
+from domains.timeline.fanout import InMemoryTimelineEventFanout
 from domains.timeline.router import router as timeline_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
@@ -138,6 +139,7 @@ class ApiGateway:
             env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL),
             self.db,
         )
+        self.timeline_fanout = InMemoryTimelineEventFanout()
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
@@ -153,6 +155,7 @@ class ApiGateway:
         self.app.state.db = self.db
         self.app.state.events = self.events
         self.app.state.operation_events = self.operation_events
+        self.app.state.timeline_fanout = self.timeline_fanout
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
@@ -293,6 +296,7 @@ class ApiGateway:
         try:
             yield
         finally:
+            await self.timeline_fanout.close()
             await self.operation_events.close()
             await WAKEUP.stop()
             await self.bus.close()

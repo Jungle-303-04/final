@@ -13,11 +13,13 @@ TIMELINE_MAX_BATCH_EVENTS_ENV = "TIMELINE_MAX_BATCH_EVENTS"
 TIMELINE_MAX_FRAMES_PER_SECOND_ENV = "TIMELINE_MAX_FRAMES_PER_SECOND"
 TIMELINE_RETENTION_SECONDS_ENV = "TIMELINE_RETENTION_SECONDS"
 TIMELINE_MAX_WINDOW_SECONDS_ENV = "TIMELINE_MAX_WINDOW_SECONDS"
+TIMELINE_REPLAY_POLL_SECONDS_ENV = "TIMELINE_REPLAY_POLL_SECONDS"
 
 DEFAULT_MAX_BATCH_EVENTS = 1_000
 DEFAULT_MAX_FRAMES_PER_SECOND = 60
 DEFAULT_RETENTION_SECONDS = 86_400
 DEFAULT_MAX_WINDOW_SECONDS = 2_592_000
+DEFAULT_REPLAY_POLL_SECONDS = 1.0
 
 
 def timeline_realtime_policy() -> RealtimePolicy:
@@ -53,6 +55,14 @@ def timeline_max_window_ms() -> int:
         )
         * 1_000
     )
+
+
+def timeline_replay_poll_seconds() -> float:
+    """Bound server-side durable replay repair; browsers never poll Timeline."""
+    value = float(env(TIMELINE_REPLAY_POLL_SECONDS_ENV, str(DEFAULT_REPLAY_POLL_SECONDS)))
+    if not 0.1 <= value <= 60:
+        raise ValueError(f"{TIMELINE_REPLAY_POLL_SECONDS_ENV} must be between 0.1 and 60")
+    return value
 
 
 def _positive_int(name: str, *, default: int, maximum: int) -> int:

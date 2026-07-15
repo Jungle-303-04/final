@@ -31,6 +31,16 @@ def encode_sse(frames: Iterable[TimelineStreamFrame]) -> str:
     return "\n\n".join(encoded) + "\n\n"
 
 
+def encode_sse_frame(frame: TimelineStreamFrame) -> str:
+    """Encode one already-validated live SSE frame without inventing a terminal.
+
+    A retained snapshot has its own required terminal frame.  A live response
+    stays open, so it emits individual event/resync/error frames through this
+    narrow encoder instead of pretending an unfinished subscription ended.
+    """
+    return f"id: {frame.cursor.token}\nevent: {frame.kind}\ndata: {_encode(frame)}\n\n"
+
+
 def _encoded_frames(frames: Iterable[TimelineStreamFrame]) -> tuple[str, ...]:
     return tuple(_encode(frame) for frame in _validated(frames))
 
