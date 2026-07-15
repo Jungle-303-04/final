@@ -18,12 +18,12 @@ from packages.contracts.timeline import (
 )
 
 
-def _scope(cluster_id: str = "cluster-a") -> ClusterScope:
+def _scope(cluster_id: str = "cluster-a", freshness: str = "live") -> ClusterScope:
     return ClusterScope(
         workspace_id="workspace-a",
         cluster_id=cluster_id,
         namespaces=("payments",),
-        freshness="live",
+        freshness=freshness,
     )
 
 
@@ -68,7 +68,11 @@ def _policy() -> RealtimePolicy:
 
 def test_timeline_query_canonicalizes_scopes_and_carries_server_realtime_policy() -> None:
     query = TimelineQuery(
-        scopes=[_scope("cluster-b"), _scope("cluster-a"), _scope("cluster-b")],
+        scopes=[
+            _scope("cluster-b"),
+            _scope("cluster-a"),
+            _scope("cluster-b", freshness="stale"),
+        ],
         window=TimelineWindow(from_ms=1_000, to_ms=2_000),
         filters={"activity": ["warning", "change"], "kinds": ["Deployment", "Pod"]},
         grouping="app",
@@ -77,6 +81,7 @@ def test_timeline_query_canonicalizes_scopes_and_carries_server_realtime_policy(
     policy = _policy()
 
     assert [scope.cluster_id for scope in query.scopes] == ["cluster-a", "cluster-b"]
+    assert [scope.freshness for scope in query.scopes] == ["live", "live"]
     assert query.filters.activity == ("change", "warning")
     assert policy.max_batch_events == 200
     assert policy.hidden_tab == "coalesce"
