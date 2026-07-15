@@ -10,6 +10,9 @@
 - 두 revision의 tree 차이는 523개 파일이며, 화면·settings·timeline·workload·
   connection·event source·navigation과 공용 style을 포함한다. 따라서 기존 240개
   feature 행은 최신 원본의 완전한 동등성 증거로 판정할 수 없다.
+- UI 범위(`web`, `packages/k8s-ui`)의 최신 delta ledger는 A 94, M 182, D 0,
+  R 0, 총 276개 경로를 source blob ID와 SHA-256으로 동결했다. 모든 항목은
+  분석 전 `pending`이며, 현재 target 기능이나 제품 구현으로 승격하지 않는다.
 
 ## 상태 규칙
 
@@ -33,6 +36,25 @@ deliveryStatus를 임의로 `implemented`로 바꾸거나, inventory frontmatter
    `implemented`로 바꾼다.
 5. 이후 `reference-feature-ledger --check --require-complete`와 원본 hash 검증,
    contract/E2E/visual/stream 검증을 함께 통과시켜야 기준 동등성 단계를 종료한다.
+
+## Source-governance gate
+
+`reference-ui-delta-ledger.json`의 path 순서는 결정적이지만, `contractId`의
+순번은 source identity가 아니다. 재기준화 중 source identity는 다음 semantic
+tuple로만 발급한다.
+
+`upstream-ui:<surface>:<subject>:<capability>:vN`
+
+해당 key는 source path나 줄번호를 포함하지 않는다. 경로 이동에도 identity를
+보존하기 위해서다. 각 row의 증거에는 target commit, path, symbol, Git blob ID,
+SHA-256을 별도로 기록한다. 의미가 바뀌면 같은 key를 수정하지 않고 `vN+1`을
+새로 발급한다.
+
+`--check`은 approved upstream Git tree와 delta ledger의 path/blob/SHA-256
+결정성만 확인한다. `--require-classified`는 남은 pending row가 하나라도 있으면
+실패한다. `--require-rebased`는 inventory에 선언된 source revision과 target이
+다르면 실패한다. release target은 두 조건을 모두 사용한다. 따라서 현재는
+일반 hash check는 통과하지만 rebaseline/release check는 의도적으로 실패한다.
 
 ## 감독관 차단 조건
 

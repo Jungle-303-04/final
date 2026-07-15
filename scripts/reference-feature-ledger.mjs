@@ -28,6 +28,12 @@ const DEFAULT_PORT_MAP = path.join(
   "migration",
   "reference-feature-port-map.json",
 );
+const DEFAULT_SOURCE_KEY_ALIASES = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-feature-source-aliases.json",
+);
 const DEFAULT_REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
 const DELIVERY_STATUSES = new Set([
   "implemented",
@@ -37,6 +43,7 @@ const DELIVERY_STATUSES = new Set([
   "not_applicable",
 ]);
 const NON_PRODUCT_DELIVERY_STATUSES = new Set(["reference_only", "not_applicable"]);
+const SOURCE_KEY = /^upstream-ui:[a-z0-9-]+:[a-z0-9-]+:[a-z0-9-]+:v[1-9][0-9]*$/;
 
 function tableCells(line) {
   return line
@@ -59,7 +66,7 @@ function endpointsFor(cells) {
 }
 
 function isStreamingEndpoint(endpoint) {
-  return /^(SSE|WS)\s/.test(endpoint) || /\/stream(?:[/?}]|$)/.test(endpoint);
+  return /^(SSE|WS)\s/.test(endpoint) || /(?:\/|-)stream(?:[/?}]|$)/.test(endpoint);
 }
 
 function sectionPortMap(portMap, section) {
@@ -109,7 +116,34 @@ function featureCoverage(port, streaming) {
   };
 }
 
-export function parseReferenceInventory(markdown, sourceRevision, portMap) {
+function sourceKeyFor(sourceKeyAliases, contractId) {
+  const sourceKey = sourceKeyAliases?.[contractId];
+  if (sourceKey === undefined) return null;
+  if (typeof sourceKey !== "string" || !SOURCE_KEY.test(sourceKey)) {
+    throw new Error(`sourceKey alias is invalid: ${contractId}`);
+  }
+  return sourceKey;
+}
+
+function validateSourceKeyAliases(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.schemaVersion !== 1) {
+    throw new Error("sourceKey alias manifest의 schemaVersion은 1이어야 합니다");
+  }
+  if (!/^[0-9a-f]{40}$/.test(value.sourceRevision ?? "")) {
+    throw new Error("sourceKey alias manifest의 sourceRevision은 40자리 SHA여야 합니다");
+  }
+  if (!value.aliases || typeof value.aliases !== "object" || Array.isArray(value.aliases)) {
+    throw new Error("sourceKey alias manifest의 aliases는 객체여야 합니다");
+  }
+  for (const [contractId, sourceKey] of Object.entries(value.aliases)) {
+    if (!/^reference\.feature\.\d{3}$/.test(contractId) || typeof sourceKey !== "string" || !SOURCE_KEY.test(sourceKey)) {
+      throw new Error(`sourceKey alias가 유효하지 않습니다: ${contractId}`);
+    }
+  }
+  return value.aliases;
+}
+
+export function parseReferenceInventory(markdown, sourceRevision, portMap, sourceKeyAliases = {}) {
   if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
     throw new Error("sourceRevision must be a 40-character lowercase hexadecimal revision");
   }
@@ -128,11 +162,15 @@ export function parseReferenceInventory(markdown, sourceRevision, portMap) {
     const endpoints = endpointsFor(cells);
     const number = String(features.length + 1).padStart(3, "0");
     const contractId = `reference.feature.${number}`;
+    const sourceKey = sourceKeyFor(sourceKeyAliases, contractId);
     const streaming = endpoints.some(isStreamingEndpoint);
     const port = featurePortMap(portMap, section, contractId);
     features.push({
       id: `reference-feature-${number}`,
       contractId,
+      sourceKey,
+      legacyContractIds: [contractId],
+      identityStatus: sourceKey ? "source-key" : "legacy-unmapped",
       section,
       line: index + 1,
       cells,
@@ -177,6 +215,16 @@ export function validateFeatureLedger(ledger) {
     }
     if (!feature.section) errors.push(`${id}: section is required`);
     if (!feature.contractId) errors.push(`${id}: contractId is required`);
+    if (feature.sourceKey !== null && (typeof feature.sourceKey !== "string" || !SOURCE_KEY.test(feature.sourceKey))) {
+      errors.push(`${id}: sourceKey must be null or an immutable sourceKey`);
+    }
+    if (!Array.isArray(feature.legacyContractIds) || feature.legacyContractIds.length === 0 || feature.legacyContractIds.some((value) => !/^reference\.feature\.\d{3}$/.test(value))) {
+      errors.push(`${id}: legacyContractIds must contain reference feature aliases`);
+    }
+    const expectedIdentityStatus = feature.sourceKey ? "source-key" : "legacy-unmapped";
+    if (feature.identityStatus !== expectedIdentityStatus) {
+      errors.push(`${id}: identityStatus must match sourceKey presence`);
+    }
     if (!Number.isInteger(feature.line) || feature.line < 1) errors.push(`${id}: line must be positive`);
     if (!Array.isArray(feature.cells) || feature.cells.length === 0) {
       errors.push(`${id}: cells are required`);
@@ -240,6 +288,9 @@ export function assertFeatureDeliveryComplete(ledger) {
     if (feature.streaming && !coverage.realtime) {
       incomplete.push(`${feature.contractId}: missing realtime coverage`);
     }
+    if (!feature.sourceKey) {
+      incomplete.push(`${feature.contractId}: missing immutable sourceKey`);
+    }
   }
   if (incomplete.length > 0) {
     throw new Error(
@@ -254,6 +305,7 @@ function parseArguments(argv) {
     output: DEFAULT_OUTPUT,
     contractsOutput: DEFAULT_CONTRACTS_OUTPUT,
     portMap: DEFAULT_PORT_MAP,
+    sourceKeyAliases: DEFAULT_SOURCE_KEY_ALIASES,
     sourceRevision: DEFAULT_REVISION,
     check: false,
     requireComplete: false,
@@ -269,7 +321,7 @@ function parseArguments(argv) {
       continue;
     }
     if (
-      !["--source", "--output", "--contracts-output", "--port-map", "--revision"].includes(flag)
+      !["--source", "--output", "--contracts-output", "--port-map", "--source-key-aliases", "--revision"].includes(flag)
       || !argv[index + 1]
     ) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`);
@@ -278,6 +330,7 @@ function parseArguments(argv) {
     if (flag === "--revision") values.sourceRevision = value;
     else if (flag === "--contracts-output") values.contractsOutput = path.resolve(value);
     else if (flag === "--port-map") values.portMap = path.resolve(value);
+    else if (flag === "--source-key-aliases") values.sourceKeyAliases = path.resolve(value);
     else values[flag.slice(2)] = path.resolve(value);
     index += 1;
   }
@@ -292,6 +345,9 @@ function contractCatalog(ledger) {
     features: ledger.features.map(
       ({
         contractId,
+        sourceKey,
+        legacyContractIds,
+        identityStatus,
         id,
         section,
         endpoints,
@@ -305,6 +361,9 @@ function contractCatalog(ledger) {
         coverage,
       }) => ({
         contractId,
+        sourceKey,
+        legacyContractIds,
+        identityStatus,
         id,
         section,
         endpoints,
@@ -326,6 +385,7 @@ export async function writeFeatureLedger({
   output,
   contractsOutput = DEFAULT_CONTRACTS_OUTPUT,
   portMap = DEFAULT_PORT_MAP,
+  sourceKeyAliases = DEFAULT_SOURCE_KEY_ALIASES,
   sourceRevision,
   check = false,
   requireComplete = false,
@@ -335,7 +395,11 @@ export async function writeFeatureLedger({
     typeof portMap === "string"
       ? JSON.parse(await readFile(portMap, "utf8"))
       : portMap;
-  const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap);
+  const loadedSourceKeyAliases =
+    typeof sourceKeyAliases === "string"
+      ? validateSourceKeyAliases(JSON.parse(await readFile(sourceKeyAliases, "utf8")))
+      : sourceKeyAliases;
+  const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap, loadedSourceKeyAliases);
   if (requireComplete) assertFeatureDeliveryComplete(ledger);
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`;
   const serializedContracts = `${JSON.stringify(contractCatalog(ledger), null, 2)}\n`;

@@ -119,6 +119,22 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
   assert.deepEqual(validateFeatureLedger(ledger), []);
 });
 
+test("경로 접미사의 fetch progress stream도 실시간 계약으로 분류한다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## API",
+      "| Method·path | 요청 |",
+      "|---|---|",
+      "| `POST /helm/releases/install-stream` | fetch stream의 `data:` progress frame |",
+    ].join("\n"),
+    REVISION,
+    PORT_MAP,
+  );
+
+  assert.equal(ledger.features[0].streaming, true);
+  assert.equal(ledger.features[0].coverage.realtime, null);
+});
+
 test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태를 생성한다", () => {
   const ledger = parseReferenceInventory(
     [
@@ -134,6 +150,9 @@ test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태
   assert.deepEqual(ledger.features[0], {
     id: "reference-feature-001",
     contractId: "reference.feature.001",
+    sourceKey: null,
+    legacyContractIds: ["reference.feature.001"],
+    identityStatus: "legacy-unmapped",
     section: "전역 셸",
     line: 4,
     cells: ["명령 팔레트", "단축키"],
@@ -265,6 +284,9 @@ test("출하 게이트는 구현 상태여도 행별 backend/frontend 증거 없
         },
       },
     },
+    {
+      "reference.feature.001": "upstream-ui:shell:command-palette:open:v1",
+    },
   );
 
   assert.deepEqual(ledger.features[0].coverage, {
@@ -318,6 +340,9 @@ test("행별 증거 override가 있는 구현 기능만 출하 게이트를 통�
         },
       },
     },
+    {
+      "reference.feature.001": "upstream-ui:shell:command-palette:open:v1",
+    },
   );
 
   assert.doesNotThrow(() => assertFeatureDeliveryComplete(ledger));
@@ -332,6 +357,9 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
       {
         id: "reference-feature-001",
         contractId: "reference.feature.001",
+        sourceKey: null,
+        legacyContractIds: ["reference.feature.001"],
+        identityStatus: "legacy-unmapped",
         section: "API",
         line: 1,
         cells: ["`GET /health`"],
@@ -353,6 +381,9 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
       {
         id: "reference-feature-001",
         contractId: "reference.feature.002",
+        sourceKey: null,
+        legacyContractIds: ["reference.feature.002"],
+        identityStatus: "legacy-unmapped",
         section: "API",
         line: 2,
         cells: ["`GET /readyz`"],
@@ -425,6 +456,9 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
       features: [
         {
           contractId: "reference.feature.001",
+          sourceKey: null,
+          legacyContractIds: ["reference.feature.001"],
+          identityStatus: "legacy-unmapped",
           id: "reference-feature-001",
           section: "API",
           endpoints: ["SSE /events/stream"],
