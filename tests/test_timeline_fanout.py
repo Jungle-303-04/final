@@ -6,12 +6,12 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
+
 from domains.timeline.fanout import (
     InMemoryTimelineEventFanout,
     TimelineFanoutClosed,
     TimelineFanoutOverflow,
 )
-
 from domains.timeline.repository import TimelineLedgerAppend, fanout_committed_timeline_append
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import TimelineEvent, TimelineResourceSubject
