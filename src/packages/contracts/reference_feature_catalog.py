@@ -29,6 +29,24 @@ class ReferenceFeatureCoverage(StrictModel):
 
 class ReferenceFeatureContract(StrictModel):
     contract_id: str = Field(min_length=1, validation_alias="contractId")
+    # The generator is the identity authority.  Keep these aliases explicit so
+    # its camelCase JSON remains strict rather than being silently discarded.
+    source_key: str | None = Field(
+        default=None,
+        min_length=1,
+        pattern=r"^upstream-ui:[a-z0-9-]+:[a-z0-9-]+:[a-z0-9-]+:v[1-9][0-9]*$",
+        validation_alias="sourceKey",
+        serialization_alias="sourceKey",
+    )
+    legacy_contract_ids: tuple[str, ...] = Field(
+        min_length=1,
+        validation_alias="legacyContractIds",
+        serialization_alias="legacyContractIds",
+    )
+    identity_status: Literal["source-key", "legacy-unmapped"] = Field(
+        validation_alias="identityStatus",
+        serialization_alias="identityStatus",
+    )
     id: str = Field(min_length=1)
     section: str = Field(min_length=1)
     endpoints: tuple[str, ...] = ()
@@ -46,6 +64,15 @@ class ReferenceFeatureContract(StrictModel):
     desktop_contract: str | None = Field(validation_alias="desktopContract")
     verification: tuple[str, ...] = Field(min_length=1)
     coverage: ReferenceFeatureCoverage
+
+    @model_validator(mode="after")
+    def validate_identity_lineage(self) -> Self:
+        expected_status = "source-key" if self.source_key is not None else "legacy-unmapped"
+        if self.identity_status != expected_status:
+            raise ValueError("identityStatus must match sourceKey presence")
+        if self.contract_id not in self.legacy_contract_ids:
+            raise ValueError("legacyContractIds must include contractId")
+        return self
 
 
 class ReferenceFeatureContractCatalog(StrictModel):
