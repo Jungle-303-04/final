@@ -5,6 +5,7 @@ import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/primitives/tabs";
 import type { UnifiedFilterController } from "../filters/filterContract";
 import { ApplicationDeploymentsPanel } from "./ApplicationDeploymentsPanel";
@@ -71,7 +72,9 @@ export function ApplicationDetailWorkspace({
               <h2 className="truncate text-2xl font-semibold tracking-tight">{application.name}</h2>
               {application.environments.map((environment) => <Badge key={environment} variant="outline">{environment}</Badge>)}
             </div>
-            <p className="truncate text-sm text-muted-foreground">{application.id}</p>
+            <p className="min-w-0 text-sm text-muted-foreground">
+              <OverflowIdentity value={application.id} />
+            </p>
           </div>
         </div>
         <Button aria-label={copy.refresh} disabled={detail.refreshing} onClick={refreshDetail} size="icon" type="button" variant="outline">

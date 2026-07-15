@@ -14,6 +14,7 @@ import { Button, buttonVariants } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { cn } from "../../shared/lib/cn";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 
 export function AlertsPage() {
   const alerts = useAlertEvents();
@@ -155,10 +156,12 @@ function AlertEventCard({
             </Badge>
             <span className="text-xs text-muted-foreground">{sourceLabel(event.source, t)}</span>
           </div>
-          <CardTitle className="truncate" title={event.rule_name ?? t("alerts.event.external")}>
-            {event.rule_name ?? t("alerts.event.external")}
+          <CardTitle className="min-w-0">
+            <OverflowIdentity value={event.rule_name ?? t("alerts.event.external")} />
           </CardTitle>
-          <p className="mt-1 truncate text-sm text-muted-foreground" title={target}>{target}</p>
+          <p className="mt-1 min-w-0 text-sm text-muted-foreground">
+            <OverflowIdentity value={target} />
+          </p>
         </div>
         <time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={event.fired_at}>
           {formatTimestamp(event.fired_at, formatDate)}
