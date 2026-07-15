@@ -117,6 +117,7 @@ describe("TimelineSurface", () => {
     const coveredView = renderTimeline(covered, "/timeline", "en-US");
     const notice = await screen.findByRole("region", { name: "Timeline coverage gaps" });
     expect(notice.getAttribute("aria-live")).toBe("polite");
+    expect(notice.closest('[data-slot="product-floating-action-avoidance"]')).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Historical collection gaps" })).toBeTruthy();
     expect(notice.textContent).toContain("Kubernetes event");
     expect(notice.textContent).toContain("Collection gap");
