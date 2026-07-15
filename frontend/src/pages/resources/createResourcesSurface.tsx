@@ -12,6 +12,10 @@ import type {
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
+import {
+  EMPTY_OPERATION_EVENTS_PORT,
+  type OperationEventsPort,
+} from "../../features/operations/operationEventsContract";
 import { ResourcesPage } from "./ResourcesPage";
 import {
   EMPTY_POD_TERMINAL_PORT,
@@ -29,6 +33,7 @@ export function createResourcesSurface(
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
   resourceCapabilitiesPort: ResourceCapabilitiesPort,
   resourceActionsPort: ResourceActionsPort,
+  operationEventsPort: OperationEventsPort = EMPTY_OPERATION_EVENTS_PORT,
   podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort?: ResourceManifestPort,
 ): ComponentType {
@@ -44,6 +49,7 @@ export function createResourcesSurface(
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}
         resourceCapabilitiesPort={resourceCapabilitiesPort}
         resourceActionsPort={resourceActionsPort}
+        operationEventsPort={operationEventsPort}
         podTerminalPort={podTerminalPort}
         resourceManifestPort={resourceManifestPort}
         port={port}

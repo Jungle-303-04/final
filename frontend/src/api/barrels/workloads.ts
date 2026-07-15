@@ -26,7 +26,6 @@ export {
 export {
   openPodLogStream,
   openWorkloadLogStream,
-  parseFrames,
   type LogStreamEndpointHandlers,
 } from "../log-stream";
 export {
