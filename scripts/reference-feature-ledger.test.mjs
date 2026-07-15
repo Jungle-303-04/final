@@ -171,6 +171,63 @@ test("기능 ledger는 이식 경계가 지정되지 않은 원본 섹션을 거
   );
 });
 
+test("순번 contractId는 legacy alias로만 보존하고 sourceKey가 제공될 때만 authoritative identity를 기록한다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 단축키 |",
+    ].join("\n"),
+    REVISION,
+    PORT_MAP,
+    {
+      "reference.feature.001": "upstream-ui:shell:command-palette:open:v1",
+    },
+  );
+
+  assert.deepEqual(
+    {
+      contractId: ledger.features[0].contractId,
+      sourceKey: ledger.features[0].sourceKey,
+      legacyContractIds: ledger.features[0].legacyContractIds,
+      identityStatus: ledger.features[0].identityStatus,
+    },
+    {
+      contractId: "reference.feature.001",
+      sourceKey: "upstream-ui:shell:command-palette:open:v1",
+      legacyContractIds: ["reference.feature.001"],
+      identityStatus: "source-key",
+    },
+  );
+});
+
+test("sourceKey가 없는 기존 행은 완료 증거가 아니라 legacy-unmapped 상태로 남는다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 단축키 |",
+    ].join("\n"),
+    REVISION,
+    PORT_MAP,
+  );
+
+  assert.deepEqual(
+    {
+      sourceKey: ledger.features[0].sourceKey,
+      legacyContractIds: ledger.features[0].legacyContractIds,
+      identityStatus: ledger.features[0].identityStatus,
+    },
+    {
+      sourceKey: null,
+      legacyContractIds: ["reference.feature.001"],
+      identityStatus: "legacy-unmapped",
+    },
+  );
+});
+
 test("출하 게이트는 진행 중인 제품 기능을 완료로 처리하지 않는다", () => {
   const ledger = parseReferenceInventory(
     [
