@@ -55,6 +55,7 @@ import {
   approveResourceManifestEdit,
   getResourceManifestSource,
   previewResourceManifestEdit,
+  getTimelineCapabilities,
   getTimelineSnapshot,
   subscribeTimelineEvents,
 } from "../api";
@@ -135,6 +136,7 @@ export function createApiComposition() {
   const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
   const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
   const timelinePort = createTimelineAdapter({
+    getTimelineCapabilities,
     getTimelineSnapshot,
     subscribeTimelineEvents,
   });

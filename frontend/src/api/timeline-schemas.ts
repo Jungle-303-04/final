@@ -3,6 +3,31 @@ import { z } from "zod";
 const nonEmptyString = z.string().min(1);
 const nonNegativeInteger = z.number().int().nonnegative();
 const timestampMilliseconds = nonNegativeInteger.max(8_640_000_000_000_000);
+const timelineSourceModeSchema = z.enum(["retained", "local"]);
+
+/** Server-owned source and query constraints shared by bootstrap and snapshots. */
+export const timelineCapabilityDescriptorSchema = z.strictObject({
+  selected_source_mode: timelineSourceModeSchema,
+  available_source_modes: z.array(timelineSourceModeSchema).min(1),
+  max_retained_range_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
+  namespace_filter_policy: z.enum(["not_required", "required"]),
+}).superRefine((descriptor, context) => {
+  const modes = new Set(descriptor.available_source_modes);
+  if (modes.size !== descriptor.available_source_modes.length) {
+    context.addIssue({
+      code: "custom",
+      message: "timeline capability source modes must be unique",
+      path: ["available_source_modes"],
+    });
+  }
+  if (!modes.has(descriptor.selected_source_mode)) {
+    context.addIssue({
+      code: "custom",
+      message: "timeline capability selected source mode must be available",
+      path: ["selected_source_mode"],
+    });
+  }
+});
 
 export const timelineScopeSchema = z.strictObject({
   workspace_id: nonEmptyString,
@@ -199,6 +224,7 @@ const snapshotFrameSchema = z.strictObject({
   cursor: timelineCursorSchema,
   scopes: z.array(timelineScopeSchema).min(1),
   policy: timelineRealtimePolicySchema,
+  capabilities: timelineCapabilityDescriptorSchema,
   events: z.array(timelineEventSchema).default([]),
   coverage: z.array(timelineCoverageSchema).default([]),
 });
@@ -242,6 +268,7 @@ export const timelineStreamFrameSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type TimelineEndpointScope = z.infer<typeof timelineScopeSchema>;
+export type TimelineEndpointCapabilityDescriptor = z.infer<typeof timelineCapabilityDescriptorSchema>;
 export type TimelineEndpointCursor = z.infer<typeof timelineCursorSchema>;
 export type TimelineEndpointEvent = z.infer<typeof timelineEventSchema>;
 export type TimelineEndpointCoverage = z.infer<typeof timelineCoverageSchema>;

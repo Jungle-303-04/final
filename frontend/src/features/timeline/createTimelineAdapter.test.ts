@@ -3,15 +3,79 @@ import { describe, expect, it, vi } from "vitest";
 import { createTimelineAdapter } from "./createTimelineAdapter";
 import type {
   TimelineEndpointDependencies,
+  TimelineEndpointCapabilityDescriptor,
   TimelineEndpointSnapshot,
   TimelineEndpointStreamFrame,
 } from "./timelineEndpointContract";
 import type { TimelineQuery } from "./timelineContract";
 
 describe("Timeline adapter", () => {
+  it("does not publish a synchronous retained/local fallback before preflight", () => {
+    const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
+      subscribeTimelineEvents: async function* () {},
+    });
+
+    expect(() => adapter.capabilities).toThrowError(expect.objectContaining({
+      code: "invalid-response",
+      reason: "Timeline capabilities have not been bootstrapped.",
+    }));
+  });
+
+  it("preflights one server capability descriptor before its first snapshot", async () => {
+    const order: string[] = [];
+    const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => {
+        order.push("capabilities");
+        return capabilities();
+      },
+      getTimelineSnapshot: async () => {
+        order.push("snapshot");
+        return snapshot("opaque.snapshot");
+      },
+      subscribeTimelineEvents: async function* () {},
+      now: () => 10_000,
+    });
+
+    await adapter.readTimeline(timelineQuery());
+    const readCapabilities = adapter.readCapabilities;
+    if (readCapabilities === undefined) throw new Error("Timeline adapter must expose capability preflight");
+
+    expect(order).toEqual(["capabilities", "snapshot"]);
+    await expect(readCapabilities()).resolves.toEqual({
+      selectedSourceMode: "retained",
+      availableSourceModes: ["retained"],
+      maxRetainedRangeMs: 7_200_000,
+      namespaceFilterPolicy: "not_required",
+    });
+    expect(adapter.capabilities).toEqual({
+      sourceMode: "retained",
+      maxRangeDays: 7_200_000 / 86_400_000,
+      requiresNamespaceFilter: false,
+    });
+  });
+
+  it("fails closed when a snapshot descriptor differs from its preflight", async () => {
+    const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot", [], {
+        ...capabilities(),
+        namespace_filter_policy: "required",
+      }),
+      subscribeTimelineEvents: async function* () {},
+      now: () => 10_000,
+    });
+
+    await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
+      code: "invalid-response",
+    });
+  });
+
   it("maps URL activity keys, common scope fields, filters, and a finite live window", async () => {
     const getTimelineSnapshot = vi.fn().mockResolvedValue(snapshot("opaque.snapshot"));
     const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot,
       subscribeTimelineEvents: async function* () {},
       now: () => 10_000,
@@ -72,6 +136,7 @@ describe("Timeline adapter", () => {
       return streams.shift() ?? streamOf(errorFrame("opaque.second"));
     });
     const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents,
       now: () => 10_000,
@@ -98,6 +163,7 @@ describe("Timeline adapter", () => {
 
   it("keeps a frozen URL window unchanged for the snapshot and every cursor resume", async () => {
     const dependencies: TimelineEndpointDependencies = {
+      getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents: async function* () {
         yield errorFrame("opaque.snapshot");
@@ -117,6 +183,7 @@ describe("Timeline adapter", () => {
   it("keeps the opaque cursor when only presentation preferences change", async () => {
     const subscribeTimelineEvents = vi.fn(() => streamOf(errorFrame("opaque.snapshot")));
     const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents,
       now: () => 10_000,
@@ -152,6 +219,7 @@ describe("Timeline adapter", () => {
 
   it("maps server-authorized snapshot coverage without reapplying client filters", async () => {
     const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot", [coverageFrame("opaque.coverage").coverage[0]!]),
       subscribeTimelineEvents: async function* () {},
       now: () => 10_000,
@@ -191,6 +259,7 @@ describe("Timeline adapter", () => {
       return streams.shift() ?? streamOf(errorFrame("opaque.coverage"));
     });
     const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents,
       now: () => 10_000,
@@ -233,6 +302,7 @@ function timelineQuery(overrides: Partial<TimelineQuery> = {}): TimelineQuery {
 function snapshot(
   cursor: string,
   coverage: TimelineEndpointSnapshot["snapshot"]["coverage"] = [],
+  descriptor = capabilities(),
 ): TimelineEndpointSnapshot {
   return {
     snapshot: {
@@ -262,8 +332,18 @@ function snapshot(
       },
       events: [event()],
       coverage,
+      capabilities: descriptor,
     },
     end: { kind: "end", cursor: { token: cursor } },
+  };
+}
+
+function capabilities(): TimelineEndpointCapabilityDescriptor {
+  return {
+    selected_source_mode: "retained",
+    available_source_modes: ["retained"],
+    max_retained_range_ms: 7_200_000,
+    namespace_filter_policy: "not_required",
   };
 }
 

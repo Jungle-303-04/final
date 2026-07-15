@@ -22,6 +22,18 @@ export class TimelineFailure extends Error {
 
 export type TimelineSourceMode = "local" | "retained";
 
+/** The exact, server-owned descriptor used to bootstrap one Timeline read. */
+export interface TimelineCapabilityDescriptor {
+  selectedSourceMode: TimelineSourceMode;
+  availableSourceModes: readonly TimelineSourceMode[];
+  maxRetainedRangeMs: number;
+  namespaceFilterPolicy: "not_required" | "required";
+}
+
+/**
+ * Existing synchronous surface projection. The API adapter exposes it only
+ * after capability bootstrap has completed; it never supplies a fallback.
+ */
 export interface TimelineCapabilities {
   sourceMode: TimelineSourceMode;
   maxRangeDays: number | null;
@@ -187,6 +199,8 @@ export interface TimelineStreamSubscription {
  */
 export interface TimelinePort {
   capabilities: TimelineCapabilities;
+  /** Product adapters provide this; static injected ports remain compatible during the route-gate migration. */
+  readCapabilities?(signal?: AbortSignal): Promise<TimelineCapabilityDescriptor>;
   readTimeline(query: TimelineQuery, signal?: AbortSignal): Promise<TimelineSnapshot>;
   subscribeTimeline(
     session: TimelineReadSession,

@@ -1,8 +1,10 @@
-import { ApiError, apiStreamRequest, type ApiPath } from "./client";
+import { ApiError, apiRequest, apiStreamRequest, type ApiPath } from "./client";
 import {
+  timelineCapabilityDescriptorSchema,
   timelineSnapshotRequestSchema,
   timelineStreamFrameSchema,
   timelineStreamRequestSchema,
+  type TimelineEndpointCapabilityDescriptor,
   type TimelineEndpointStreamFrame,
   type TimelineSnapshotRequest,
   type TimelineStreamRequest,
@@ -11,6 +13,7 @@ import { parseSseFrames } from "../shared/streaming/sse";
 
 export const TIMELINE_SNAPSHOTS_PATH: ApiPath = "/api/timeline/snapshots";
 export const TIMELINE_STREAM_PATH: ApiPath = "/api/timeline/stream";
+export const TIMELINE_CAPABILITIES_PATH: ApiPath = "/api/timeline/capabilities";
 
 const NDJSON_MEDIA_TYPE = "application/x-ndjson";
 const SSE_MEDIA_TYPE = "text/event-stream";
@@ -18,6 +21,13 @@ const SSE_MEDIA_TYPE = "text/event-stream";
 export interface TimelineSnapshotEndpoint {
   readonly snapshot: Extract<TimelineEndpointStreamFrame, { kind: "snapshot" }>;
   readonly end: Extract<TimelineEndpointStreamFrame, { kind: "end" }>;
+}
+
+/** Reads the server-owned Timeline constraints before any browser query exists. */
+export function getTimelineCapabilities(
+  signal?: AbortSignal,
+): Promise<TimelineEndpointCapabilityDescriptor> {
+  return apiRequest(TIMELINE_CAPABILITIES_PATH, timelineCapabilityDescriptorSchema, { signal });
 }
 
 export type TimelineLiveEndpointStreamFrame = Extract<

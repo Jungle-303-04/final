@@ -71,6 +71,13 @@ export interface TimelineEndpointPolicy {
   };
 }
 
+export interface TimelineEndpointCapabilityDescriptor {
+  selected_source_mode: "retained" | "local";
+  available_source_modes: readonly ("retained" | "local")[];
+  max_retained_range_ms: number;
+  namespace_filter_policy: "not_required" | "required";
+}
+
 export interface TimelineEndpointCoverage {
   scope: TimelineEndpointScope;
   source: TimelineEndpointEvent["source"];
@@ -100,6 +107,7 @@ export interface TimelineEndpointSnapshot {
     cursor: TimelineEndpointCursor;
     scopes: readonly TimelineEndpointScope[];
     policy: TimelineEndpointPolicy;
+    capabilities: TimelineEndpointCapabilityDescriptor;
     events: readonly TimelineEndpointEvent[];
     coverage: readonly TimelineEndpointCoverage[];
   };
@@ -128,6 +136,9 @@ export interface TimelineEndpointStreamSubscription {
 }
 
 export interface TimelineEndpointDependencies {
+  getTimelineCapabilities(
+    signal?: AbortSignal,
+  ): Promise<TimelineEndpointCapabilityDescriptor>;
   getTimelineSnapshot(
     input: { query: TimelineEndpointQuery },
     signal?: AbortSignal,
