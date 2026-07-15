@@ -781,16 +781,24 @@ def event_summary(item: JsonObject) -> JsonObject:
     source = item.get("source", {})
     if not isinstance(source, dict):
         source = {}
+    series = item.get("series", {})
+    if not isinstance(series, dict):
+        series = {}
+    last_occurrence_at = (
+        series.get("lastObservedTime") or item.get("lastTimestamp") or item.get("eventTime")
+    )
     summary = {
         "uid": meta.get("uid"),
         "name": meta.get("name"),
         "namespace": meta.get("namespace"),
+        "resource_version": meta.get("resourceVersion"),
         "type": item.get("type"),
         "reason": item.get("reason"),
         "message": item.get("message"),
-        "count": item.get("count"),
+        "count": series.get("count") or item.get("count"),
         "first_timestamp": item.get("firstTimestamp") or item.get("eventTime"),
-        "last_timestamp": item.get("lastTimestamp") or item.get("eventTime"),
+        "last_timestamp": last_occurrence_at,
+        "last_occurrence_at": last_occurrence_at,
         "reporting_component": item.get("reportingComponent") or source.get("component"),
         "involved_kind": involved.get("kind"),
         "involved_name": involved.get("name"),
