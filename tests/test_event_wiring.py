@@ -23,6 +23,11 @@ TERMINAL_SUBJECTS = {
     EventSubject.AGENT_CONNECTED,
     EventSubject.CLUSTER_INVENTORY_SNAPSHOT_RECORDED,
     EventSubject.COMMAND_DISPATCHED,
+    # Cancel/retry are immutable control intents.  Their API acceptance UoW
+    # atomically persists the control/audit row and operation event; no worker
+    # is allowed to replay the intent as a second state transition.
+    EventSubject.COMMAND_CANCEL_REQUESTED,
+    EventSubject.COMMAND_RETRY_REQUESTED,
     EventSubject.CLUSTER_RECONCILE_STARTED,
     EventSubject.CLUSTER_DRIFT_DETECTED,
     EventSubject.CLUSTER_RECONCILE_COMPLETED,

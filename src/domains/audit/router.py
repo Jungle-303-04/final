@@ -130,6 +130,8 @@ _AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSub
                 EventSubject.COMMAND_REJECTED,
                 EventSubject.COMMAND_DISPATCHED,
                 EventSubject.COMMAND_QUEUED_FOR_AGENT,
+                EventSubject.COMMAND_CANCEL_REQUESTED,
+                EventSubject.COMMAND_RETRY_REQUESTED,
                 EventSubject.COMMAND_COMPLETED,
             }
         ),
