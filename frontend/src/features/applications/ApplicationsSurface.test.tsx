@@ -41,15 +41,25 @@ describe("S10 Applications surface", () => {
   });
 
   it("routes an empty catalog to the real GitOps connection flow", async () => {
+    const user = userEvent.setup();
     const port = applicationsPort({
       listApplications: vi.fn().mockResolvedValue([]),
     });
     renderApplications(port, "/applications?clusters=cluster-1");
 
     expect(await screen.findByText("No applications to show.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Connect an application in GitOps" })
-      .getAttribute("href"))
-      .toBe("/gitops?clusters=cluster-1&mode=new");
+    const connectLink = screen.getByRole("link", { name: "Connect an application in GitOps" });
+    expect(connectLink.tagName).toBe("A");
+    expect(connectLink.getAttribute("href")).toBe("/gitops?clusters=cluster-1&mode=new");
+
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement).toBe(connectLink);
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("location").textContent)
+      .toBe("/gitops?clusters=cluster-1&mode=new"));
   });
 
   it("opens URL-backed detail and keeps overview evidence honest", async () => {

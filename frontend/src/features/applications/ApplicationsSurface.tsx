@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { Button } from "../../shared/ui/primitives/button";
+import { Button, buttonVariants } from "../../shared/ui/primitives/button";
 import {
   Empty,
   EmptyContent,
@@ -102,10 +102,10 @@ function ApplicationsEmptyState({ href }: { href: string }) {
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button render={<Link to={href} />}>
+        <Link className={buttonVariants()} to={href}>
           <GitBranch aria-hidden="true" />
           {copy.connectInGitOps}
-        </Button>
+        </Link>
       </EmptyContent>
     </Empty>
   );

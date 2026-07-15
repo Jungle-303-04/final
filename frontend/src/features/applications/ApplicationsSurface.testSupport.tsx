@@ -202,17 +202,20 @@ export function renderApplications(
   port: ApplicationsPort,
   initialEntry = "/applications",
 ) {
-  const router = createMemoryRouter([{
-    path: "/applications/*",
-    element: (
-      <I18nProvider navigatorLanguage="en-US" storage={null}>
-        <UnifiedFilterProvider>
-          <ApplicationsSurface port={port} />
-          <LocationProbe />
-        </UnifiedFilterProvider>
-      </I18nProvider>
-    ),
-  }], { initialEntries: [initialEntry] });
+  const router = createMemoryRouter([
+    {
+      path: "/applications/*",
+      element: (
+        <I18nProvider navigatorLanguage="en-US" storage={null}>
+          <UnifiedFilterProvider>
+            <ApplicationsSurface port={port} />
+            <LocationProbe />
+          </UnifiedFilterProvider>
+        </I18nProvider>
+      ),
+    },
+    { path: "/gitops", element: <LocationProbe /> },
+  ], { initialEntries: [initialEntry] });
   return { ...render(<RouterProvider router={router} />), router };
 }
 
