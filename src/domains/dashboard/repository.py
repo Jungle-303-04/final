@@ -823,11 +823,6 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     correlation_id = evt.correlation_id or evt.event_id
     cluster_id = _cluster_id(payload)
     incident_id = _incident_id(payload)
-    # Cluster install/uninstall and other lifecycle commands use the same
-    # command subjects as recovery, but they are not incidents.  Persisting
-    # them here creates unexplained incident cards with no RCA evidence.
-    if incident_id is None:
-        return None
     projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
     raw_severity = _first_string(payload, ("severity",))
     severity = raw_severity.casefold() if raw_severity is not None else None
