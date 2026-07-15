@@ -381,6 +381,48 @@ test('분류 interaction은 등록되지 않은 Opsia 목적지와 테스트 ID�
   assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.plannedTestIds[0]: is not declared by classification input'))
 })
 
+test('분류 입력은 Timeline에 한정하지 않고 제품 도메인별 테스트 계획을 허용한다', () => {
+  const input = {
+    schemaVersion: 1,
+    sourceRepository: 'https://example.invalid/upstream.git',
+    targetRevision: TARGET,
+    testPlans: {
+      'applications.surface.contract': {
+        destination: 'frontend/src/features/applications/applicationsContract.test.ts',
+        rationale: 'Applications ports retain one contract test at the product boundary.',
+      },
+    },
+    classifications: {
+      'packages/k8s-ui/src/components/applications/ApplicationsView.tsx': {
+        classification: 'classified',
+        interactions: [
+          classifiedInteraction({
+            sourceKey: 'upstream-ui:applications:overview:surface:v1',
+            symbol: 'ApplicationsView',
+            interaction: 'application rows are projected through the authorized product contract',
+            opsiaPort: {
+              destinations: ['frontend/src/features/applications/applicationsContract.test.ts'],
+              requiredBackendContracts: ['packages.contracts.applications.models'],
+              plannedTestIds: ['applications.surface.contract'],
+              state: 'blocked',
+              blockedReason: 'The application route contract has not been implemented yet.',
+              rationale: 'A domain-owned contract will replace the source runtime dependency.',
+            },
+          }),
+        ],
+      },
+    },
+  }
+
+  assert.deepEqual(
+    sourceDeltaLedger.validateClassificationInput(input, {
+      sourceRepository: input.sourceRepository,
+      targetRevision: TARGET,
+    }),
+    [],
+  )
+})
+
 test('inventory 선언 revision과 target revision 불일치는 rebaseline gate에서 숨기지 않는다', () => {
   const oldInventory = '| source | tag `v1.8.1`, commit `3ff2b1095151c690bf536e8e6ca685c2703fcd70` | evidence |'
   assert.throws(
