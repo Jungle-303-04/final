@@ -1,4 +1,7 @@
-import type { PhysicalTopologyPod } from "../resources/physicalTopologyContract";
+import type {
+  PhysicalTopologyPod,
+  PhysicalTopologyServer,
+} from "../resources/physicalTopologyContract";
 import type {
   ResourceHealthTone,
   ResourceSummary,
@@ -201,10 +204,24 @@ interface UpsertResult {
   replaced: boolean;
 }
 
+interface ServerTopologySnapshot {
+  readonly clusterId: string;
+  readonly observedAt: string;
+  readonly observedAtMs: number;
+  readonly ingestOrdinal: number;
+  readonly servers: readonly PhysicalTopologyServer[];
+}
+
+export interface SelectedServerTopology {
+  readonly observedAt: string | null;
+  readonly servers: PhysicalTopologyServer[];
+}
+
 export class ResourceTimelineModel {
   private readonly buffers = new Map<string, PodSampleBuffer>();
   private readonly liveSamples = new Map<string, PodTimelineSample>();
   private readonly livePodIdentities = new Set<string>();
+  private readonly serverSnapshots: ServerTopologySnapshot[] = [];
   private readonly maxEstimatedBytes: number;
   private readonly maxSamplesPerPod: number;
   private cursor: ResourceTimelineCursor = { mode: "live" };
@@ -401,6 +418,8 @@ export class ResourceTimelineModel {
     clusterId: string,
     pods: readonly PhysicalTopologyPod[],
     rows: readonly ResourceSummary[],
+    servers: readonly PhysicalTopologyServer[] = [],
+    metricsObservedAt: string | null = null,
   ): number {
     const graphPods = new Map(pods
       .filter((pod) => pod.namespace !== null)
@@ -432,7 +451,36 @@ export class ResourceTimelineModel {
       this.buffers.get(identity)?.replaceIngestOrdinal(next);
       captured += 1;
     }
+    if (this.captureServerTopology(clusterId, servers, metricsObservedAt)) captured += 1;
     return captured;
+  }
+
+  selectServerTopology(
+    clusterId: string,
+    currentServers: readonly PhysicalTopologyServer[],
+    currentObservedAt: string | null,
+  ): SelectedServerTopology {
+    if (this.cursor.mode === "live") {
+      return {
+        observedAt: currentObservedAt,
+        servers: currentServers.map((server) => structuredClone(server)),
+      };
+    }
+    for (let index = this.serverSnapshots.length - 1; index >= 0; index -= 1) {
+      const snapshot = this.serverSnapshots[index];
+      if (
+        snapshot !== undefined &&
+        snapshot.clusterId === clusterId &&
+        snapshot.observedAtMs <= this.cursor.atMs &&
+        snapshot.ingestOrdinal <= this.cursor.maxIngestOrdinal
+      ) {
+        return {
+          observedAt: snapshot.observedAt,
+          servers: snapshot.servers.map((server) => structuredClone(server)),
+        };
+      }
+    }
+    return { observedAt: null, servers: [] };
   }
 
   selectGraphPods(
@@ -604,6 +652,7 @@ export class ResourceTimelineModel {
     this.buffers.clear();
     this.liveSamples.clear();
     this.livePodIdentities.clear();
+    this.serverSnapshots.splice(0);
     this.sampleCount = 0;
     this.latestObservedAtMs = Number.NEGATIVE_INFINITY;
     this.latestObservedAt = null;
@@ -626,6 +675,51 @@ export class ResourceTimelineModel {
       receivedSequence,
       skippedSequenceCount,
     };
+  }
+
+  private captureServerTopology(
+    clusterId: string,
+    servers: readonly PhysicalTopologyServer[],
+    metricsObservedAt: string | null,
+  ): boolean {
+    if (servers.length === 0 || metricsObservedAt === null) return false;
+    const observedAtMs = Date.parse(metricsObservedAt);
+    if (!Number.isFinite(observedAtMs)) return false;
+    const observedAt = new Date(observedAtMs).toISOString();
+    const snapshot: ServerTopologySnapshot = {
+      clusterId,
+      observedAt,
+      observedAtMs,
+      ingestOrdinal: this.nextIngestOrdinal,
+      servers: servers.map((server) => structuredClone(server)),
+    };
+    const currentIndex = this.serverSnapshots.findIndex((candidate) =>
+      candidate.clusterId === clusterId && candidate.observedAtMs === observedAtMs);
+    if (currentIndex >= 0) {
+      const current = this.serverSnapshots[currentIndex];
+      if (current !== undefined && serverSnapshotEqual(current.servers, snapshot.servers)) {
+        return false;
+      }
+      this.serverSnapshots[currentIndex] = snapshot;
+    } else {
+      this.serverSnapshots.push(snapshot);
+      this.serverSnapshots.sort((left, right) =>
+        left.observedAtMs - right.observedAtMs || left.ingestOrdinal - right.ingestOrdinal);
+    }
+    const cutoff = observedAtMs - RESOURCE_TIMELINE_RETENTION_MS;
+    let removeCount = 0;
+    while (
+      removeCount < this.serverSnapshots.length &&
+      (this.serverSnapshots[removeCount]?.observedAtMs ?? Number.POSITIVE_INFINITY) < cutoff
+    ) removeCount += 1;
+    if (removeCount > 0) this.serverSnapshots.splice(0, removeCount);
+    if (this.serverSnapshots.length > RESOURCE_TIMELINE_MAX_SAMPLES_PER_POD) {
+      this.serverSnapshots.splice(
+        0,
+        this.serverSnapshots.length - RESOURCE_TIMELINE_MAX_SAMPLES_PER_POD,
+      );
+    }
+    return true;
   }
 
   private storePodMeasurement(
@@ -990,6 +1084,24 @@ function projectGraphPod(
     ...(sample.health === undefined ? {} : { health: sample.health }),
     ...(sample.restartCount === undefined ? {} : { restartCount: sample.restartCount }),
   };
+}
+
+function serverSnapshotEqual(
+  left: readonly PhysicalTopologyServer[],
+  right: readonly PhysicalTopologyServer[],
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((server, index) => {
+    const candidate = right[index];
+    return candidate !== undefined &&
+      server.id === candidate.id &&
+      server.name === candidate.name &&
+      server.cpuPercent === candidate.cpuPercent &&
+      server.memoryPercent === candidate.memoryPercent &&
+      server.status === candidate.status &&
+      server.matchedPodCount === candidate.matchedPodCount &&
+      server.totalPodCount === candidate.totalPodCount;
+  });
 }
 
 function projectTableRow(

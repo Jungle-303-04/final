@@ -305,6 +305,73 @@ describe("physical topology realtime overlay", () => {
     expect(harness.port.connect).toHaveBeenCalledOnce();
   });
 
+  it("keeps node CPU and memory aligned with the replayed graph and table time", async () => {
+    const harness = realtimeHarness();
+    const rows = [tablePodFixture()];
+    const rendered = renderHook(
+      (props: { frame: PhysicalTopologyFrame; replayAtMs: number | undefined }) =>
+        usePhysicalTopologyRealtime({
+          active: true,
+          clusterId: "cluster-1",
+          frame: props.frame,
+          port: harness.port,
+          replayAtMs: props.replayAtMs,
+          rows,
+          workspaceId: "default",
+        }),
+      {
+        initialProps: {
+          frame: frameWithServerMetrics(24, 41, "2026-07-15T04:00:00.000Z"),
+          replayAtMs: undefined as number | undefined,
+        },
+      },
+    );
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
+
+    act(() => harness.latestHandlers().onMessage({
+      type: "snapshot",
+      seq: 1,
+      state: {
+        resources: {
+          "cluster-1/shop/pod/checkout-api-0": livePodValue(30, 15, {
+            cpuMillicores: 180,
+            observedAt: "2026-07-15T04:00:00.000Z",
+          }),
+        },
+      },
+    }));
+    rendered.rerender({
+      frame: frameWithServerMetrics(83, 67, "2026-07-15T04:00:02.000Z"),
+      replayAtMs: undefined,
+    });
+    act(() => harness.latestHandlers().onMessage({
+      type: "resource.delta",
+      seq: 2,
+      op: "replace",
+      key: "cluster-1/shop/pod/checkout-api-0",
+      value: livePodValue(80, 40, {
+        cpuMillicores: 480,
+        observedAt: "2026-07-15T04:00:02.000Z",
+      }),
+    }));
+
+    rendered.rerender({
+      frame: frameWithServerMetrics(83, 67, "2026-07-15T04:00:02.000Z"),
+      replayAtMs: Date.parse("2026-07-15T04:00:00.500Z"),
+    });
+    await waitFor(() => expect(rendered.result.current.replay.status).toBe("ready"));
+    if (rendered.result.current.frame.phase !== "ready") throw new Error("expected frame");
+    expect(rendered.result.current.frame.data.servers[0]).toMatchObject({
+      cpuPercent: 24,
+      memoryPercent: 41,
+    });
+    expect(rendered.result.current.frame.data.metricsObservedAt)
+      .toBe("2026-07-15T04:00:00.000Z");
+    expect(livePod(rendered.result.current).cpuMillicores).toBe(180);
+    const replayRow = rendered.result.current.selectTableRows(rows)[0];
+    expect(replayRow?.facts).toMatchObject({ type: "pod", cpuMillicores: 180 });
+  });
+
   it("restores historical pod membership in both graph and table while hiding newer pods", async () => {
     const harness = realtimeHarness();
     const podA = graphPodNamed("checkout-api-a");
@@ -479,6 +546,25 @@ function frameWithPods(
   return {
     ...base,
     data: { ...PHYSICAL_TOPOLOGY, pods },
+  };
+}
+
+function frameWithServerMetrics(
+  cpuPercent: number,
+  memoryPercent: number,
+  metricsObservedAt: string,
+): PhysicalTopologyFrame {
+  const base = readyFrame();
+  if (base.phase !== "ready") throw new Error("expected ready frame fixture");
+  return {
+    ...base,
+    data: {
+      ...base.data,
+      metricsObservedAt,
+      servers: base.data.servers.map((server, index) => index === 0
+        ? { ...server, cpuPercent, memoryPercent }
+        : server),
+    },
   };
 }
 

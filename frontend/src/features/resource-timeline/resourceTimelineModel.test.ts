@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { PhysicalTopologyPod } from "../resources/physicalTopologyContract";
+import type {
+  PhysicalTopologyPod,
+  PhysicalTopologyServer,
+} from "../resources/physicalTopologyContract";
 import type { ResourceSummary } from "../resources/resourcesContract";
 import {
   RESOURCE_TIMELINE_ESTIMATED_POD_BYTES,
@@ -305,6 +308,41 @@ describe("resource timeline model", () => {
     });
   });
 
+  it("replays measured server CPU and memory from the same selected time", () => {
+    const timeline = new ResourceTimelineModel();
+    const oldServer = serverFixture(24, 41);
+    const newServer = serverFixture(83, 67);
+    timeline.ingest(snapshot(1, podValue("2026-07-15T04:00:00.000Z", 30, 150)));
+    timeline.captureActualView(
+      CLUSTER,
+      [graphPodFixture()],
+      [tableRowFixture()],
+      [oldServer],
+      "2026-07-15T04:00:00.000Z",
+    );
+    timeline.ingest(delta(2, podValue("2026-07-15T04:00:02.000Z", 80, 400)));
+    timeline.captureActualView(
+      CLUSTER,
+      [graphPodFixture()],
+      [tableRowFixture()],
+      [newServer],
+      "2026-07-15T04:00:02.000Z",
+    );
+
+    timeline.setReplayCursor("2026-07-15T04:00:00.500Z");
+    expect(timeline.selectServerTopology(CLUSTER, [newServer], null)).toEqual({
+      observedAt: "2026-07-15T04:00:00.000Z",
+      servers: [oldServer],
+    });
+
+    timeline.setLiveCursor();
+    expect(timeline.selectServerTopology(CLUSTER, [newServer], "2026-07-15T04:00:02.000Z"))
+      .toEqual({
+        observedAt: "2026-07-15T04:00:02.000Z",
+        servers: [newServer],
+      });
+  });
+
   it("requires a snapshot before accepting deltas and lets a later snapshot reset sequence authority", () => {
     const timeline = new ResourceTimelineModel();
     expect(timeline.ingest(delta(3, podValue("2026-07-15T04:00:00.000Z", 30, 150))))
@@ -465,6 +503,20 @@ function graphPodFixture(name = POD): PhysicalTopologyPod {
     health: "unknown",
     restartCount: 0,
     matchesFilter: true,
+  };
+}
+
+function serverFixture(cpuPercent: number, memoryPercent: number): PhysicalTopologyServer {
+  return {
+    id: "node-1",
+    name: "worker-1",
+    cpuPercent,
+    memoryPercent,
+    status: "Ready",
+    matchedPodCount: 1,
+    totalPodCount: 1,
+    matchedPodCountCompleteness: "exact",
+    totalPodCountCompleteness: "exact",
   };
 }
 

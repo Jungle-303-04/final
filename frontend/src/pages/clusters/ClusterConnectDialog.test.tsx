@@ -42,7 +42,7 @@ describe("ClusterConnectDialog", () => {
     ));
   });
 
-  it("keeps the copy action outside the one-line command scroller and acknowledges it immediately", async () => {
+  it("wraps the command without a horizontal scroller, keeps copy visible, and acknowledges it immediately", async () => {
     const user = userEvent.setup();
     let resolveClipboard: (() => void) | undefined;
     const writeText = vi.fn(() => new Promise<void>((resolve) => {
@@ -61,9 +61,10 @@ describe("ClusterConnectDialog", () => {
     const commandSurface = commandRegion.closest('[data-command-surface="true"]');
     const copyButton = screen.getByRole("button", { name: "Copy command" });
     expect(commandSurface).not.toBeNull();
-    expect(commandRegion.className).toContain("overflow-x-auto");
-    expect(commandRegion.className).toContain("overflow-y-hidden");
-    expect(commandRegion.querySelector("pre")?.className).toContain("whitespace-pre");
+    expect(commandRegion.className).toContain("overflow-hidden");
+    expect(commandRegion.className).not.toContain("overflow-x-auto");
+    expect(commandRegion.querySelector("pre")?.className).toContain("whitespace-pre-wrap");
+    expect(commandRegion.querySelector("pre")?.className).toContain("break-all");
     expect(commandRegion.contains(copyButton)).toBe(false);
     expect(commandSurface?.contains(copyButton)).toBe(true);
     expect(copyButton.className).toContain("shrink-0");

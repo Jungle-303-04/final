@@ -23,6 +23,7 @@ import {
 } from "../../features/issues/issueEvidencePresentation";
 import { useI18n } from "../../shared/i18n";
 import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
+import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 
@@ -36,6 +37,52 @@ const FAILURE_MESSAGE: Record<IssuesFailureCode, MessageKey> = {
   "rate-limited": "issues.surface.failure.rateLimited",
   unavailable: "issues.surface.failure.unavailable",
   error: "issues.surface.failure.error",
+};
+
+const STATUS_MESSAGE: Record<string, MessageKey> = {
+  investigating: "issues.status.investigating",
+  incident_detected: "issues.status.incidentDetected",
+  evidence_bundled: "issues.status.incidentDetected",
+  rule_missing: "issues.status.analysisRequired",
+  backlog_created: "issues.status.analysisRequired",
+  ai_fallback_requested: "issues.status.analysisRequired",
+  followup_required: "issues.status.analysisRequired",
+  action_required: "issues.status.analysisRequired",
+  rca_planned: "issues.status.analysisInProgress",
+  rca_evaluated: "issues.status.analysisInProgress",
+  rca_completed: "issues.status.rcaCompleted",
+  recovery_planned: "issues.status.recoveryPlanned",
+  selection_required: "issues.status.selectionRequested",
+  selection_requested: "issues.status.selectionRequested",
+  recovery_selected: "issues.status.approvalRecommended",
+  approval_recommended: "issues.status.approvalRecommended",
+  command_requested: "issues.status.recoveryInProgress",
+  command_dispatched: "issues.status.recoveryInProgress",
+  command_queued: "issues.status.recoveryInProgress",
+  command_completed: "issues.status.recoveryCompleted",
+  command_rejected: "issues.status.commandRejected",
+  pr_requested: "issues.status.changeInProgress",
+  pr_patch_prepared: "issues.status.changeInProgress",
+  pr_diff_explained: "issues.status.changeInProgress",
+  pr_ready_for_creation: "issues.status.changeInProgress",
+  pr_created: "issues.status.changeCompleted",
+  pr_failed: "issues.status.changeFailed",
+  incident_resolved: "issues.status.resolved",
+  resolved: "issues.status.resolved",
+};
+
+const CAUSE_MESSAGE: Record<string, MessageKey> = {
+  oom_killed: "issues.cause.oomKilled",
+  memory_limit_too_low: "issues.cause.oomKilled",
+  node_affinity_or_taint_mismatch: "issues.cause.nodePlacementMismatch",
+  node_selector_mismatch: "issues.cause.nodePlacementMismatch",
+  untolerated_taint: "issues.cause.nodePlacementMismatch",
+  upstream_unavailable: "issues.cause.ingressUnavailable",
+  backend_readiness_failure: "issues.cause.ingressUnavailable",
+  insufficient_evidence: "issues.cause.insufficientEvidence",
+  wrong_image_tag: "issues.cause.wrongImageTag",
+  bad_image_rollout: "issues.cause.wrongImageTag",
+  registry_unavailable: "issues.cause.registryUnavailable",
 };
 
 export function IssuesPage({ port }: { port: IssuesPort }) {
@@ -150,6 +197,7 @@ function createIssuesCopy(
       formatNumber,
     ),
     reportsLabel: t("issues.surface.reports"),
+    reportsEmpty: t("issues.surface.reportsEmpty"),
     recoveryLabel: t("issues.surface.recovery"),
     sectionLoading: t("issues.surface.sectionLoading"),
     sectionEmpty: t("issues.surface.sectionEmpty"),
@@ -158,6 +206,8 @@ function createIssuesCopy(
     recoveryUnavailable: t("issues.surface.recoveryUnavailable"),
     refresh: t("common.action.refresh"),
     status: t("issues.surface.status"),
+    statusLabel: (status) => translateOperationalValue(status, STATUS_MESSAGE, t),
+    causeLabel: (cause) => translateOperationalValue(cause, CAUSE_MESSAGE, t),
     target: t("issues.table.target"),
     updated: t("issues.table.updated"),
     confidence: t("issues.detail.meta.confidence"),
@@ -182,6 +232,16 @@ function createIssuesCopy(
       count: formatNumber(excludedCount),
     }),
   };
+}
+
+function translateOperationalValue(
+  raw: string,
+  messages: Readonly<Record<string, MessageKey>>,
+  t: TranslationFunction,
+): string {
+  const normalized = raw.trim().toLowerCase().replace(/[.\s-]+/g, "_");
+  const message = messages[normalized];
+  return message === undefined ? humanizeFilterValue(raw) : t(message);
 }
 
 const EVIDENCE_COUNT_MESSAGE: Record<EvidenceCountKind, MessageKey> = {

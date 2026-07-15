@@ -158,6 +158,29 @@ describe("IssuesSurface", () => {
     expect(await screen.findByText("Increase the memory limit after approval")).toBeTruthy();
     expect(screen.queryByText("AI-authored analysis")).toBeNull();
   });
+  it("explains when the backend has not generated an RCA report yet", async () => {
+    const port = issuesPort({
+      loadReports: vi.fn().mockResolvedValue({
+        correlationId: "correlation-1",
+        items: [],
+        limit: 50,
+        offset: 0,
+        hasMore: false,
+        nextCursor: null,
+      }),
+    });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    expect(await screen.findByText("Analysis is still being generated")).toBeTruthy();
+  });
   it("shows concise localized evidence while preserving raw technical values as titles", async () => {
     const rawSummary = "entries=5, queries=color_turf_runtime_failures,node_collector_runtime_saturation";
     const port = issuesPort({

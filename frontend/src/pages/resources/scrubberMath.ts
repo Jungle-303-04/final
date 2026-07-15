@@ -67,5 +67,8 @@ export function timelinePlaybackStart(timeline: ChangeTimelineSnapshot): number 
 }
 
 export function timelinePlaybackStep(timeline: ChangeTimelineSnapshot): number {
-  return Math.max(timeline.bucketMs, Math.ceil((timeline.toMs - timeline.fromMs) / 48));
+  // Change-event histogram buckets may be minutes wide, while measured resource
+  // samples arrive every second. Playback follows the measured clock instead of
+  // jumping one histogram bucket at a time.
+  return Math.min(1_000, timeline.bucketMs);
 }
