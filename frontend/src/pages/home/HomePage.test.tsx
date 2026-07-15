@@ -65,6 +65,33 @@ describe("HomePage", () => {
     expect(port.loadNodes).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
   }, 15_000);
 
+  it("keeps an internal Node hostname on one identifiable label while preserving its full identity", async () => {
+    const port = homePort({
+      loadNodes: vi.fn().mockResolvedValue({
+        clusterId: "cluster-1",
+        completeness: "unknown",
+        nodes: [{
+          id: "node:cluster-1/ip-192-168-51-161.ap-northeast-2.compute.internal",
+          identityStability: "ephemeral",
+          name: "ip-192-168-51-161.ap-northeast-2.compute.internal",
+          ready: true,
+          health: "healthy",
+          podsRunning: 18,
+          podsCapacity: 29,
+          cpuPercent: 11.4,
+          memoryPercent: 32.3,
+          restartCount: 1,
+          conditions: [],
+        }],
+      }),
+    });
+    renderHome(port);
+
+    const node = await screen.findByRole("button", { name: /ip-192-168-51-161/u });
+    expect(node.textContent).toContain("ip-192-168-51-161");
+    expect(node.textContent).not.toContain(".ap-northeast-2.compute.internal");
+  });
+
   it("keeps an unknown URL cluster explicit instead of selecting the first cluster", async () => {
     const port = homePort();
     renderHome(port, ["/?clusters=missing"]);
