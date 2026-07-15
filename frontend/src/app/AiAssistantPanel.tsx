@@ -17,6 +17,7 @@ import {
 } from "react";
 
 import { useAuthSessionGate } from "../features/auth/AuthSessionGate";
+import { useOptionalProductSession } from "../features/auth/ProductSessionContext";
 import {
   AiAssistantPortFailure,
   type AiAlertRulePayload,
@@ -32,6 +33,7 @@ import { Badge } from "../shared/ui/primitives/badge";
 import { Button } from "../shared/ui/primitives/button";
 import { aiAssistantContextChips } from "./aiAssistantContext";
 import { AiAssistantResizeHandle } from "./AiAssistantResizeHandle";
+import { AiAlertRuleActionCard } from "./AiAlertRuleActionCard";
 
 const DEFAULT_WIDTH = 420;
 
@@ -60,6 +62,7 @@ export function AiAssistantPanel({
 }) {
   const { locale, t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
+  const session = useOptionalProductSession();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingController = useRef<AbortController | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -82,6 +85,7 @@ export function AiAssistantPanel({
   const visibleSuggestions = suggestions.contextKey === contextKey ? suggestions.items : [];
   const chips = aiAssistantContextChips(context);
   const stopLabel = locale === "ko" ? "중단" : "Stop";
+  const canCreateAlertRule = session?.roles.includes("service_admin") ?? false;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -149,11 +153,13 @@ export function AiAssistantPanel({
     <>
       <aside
         aria-label={t("shell.ai.title")}
+        aria-hidden={!open}
         className="motion-ai-panel relative min-h-0 max-w-dvw shrink-0 overflow-hidden border-l bg-background"
         data-open={open || undefined}
         data-side="right"
         data-slot="ai-assistant-panel"
         data-width={width}
+        inert={!open}
         onKeyDown={(event) => event.key === "Escape" && onOpenChange(false)}
       >
         <AiAssistantResizeHandle onWidthChange={setWidth} width={width} />
@@ -245,6 +251,12 @@ export function AiAssistantPanel({
                     <div className="mr-auto grid w-fit max-w-[92%] gap-3 rounded-2xl rounded-bl-sm border bg-card px-3 py-3">
                       <p className="text-sm leading-relaxed">{entry.response.answer}</p>
                       <EvidenceLinks evidence={entry.response.evidence} />
+                      {entry.response.action && canCreateAlertRule ? (
+                        <AiAlertRuleActionCard
+                          action={entry.response.action}
+                          onCreate={port.createAlertRule}
+                        />
+                      ) : null}
                     </div>
                   )}
                 </article>

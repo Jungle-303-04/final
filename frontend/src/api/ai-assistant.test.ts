@@ -55,6 +55,30 @@ describe("AI assistant API", () => {
     expect(fetchMock).toHaveBeenCalledWith(expected, expect.objectContaining({ method: "GET" }));
   });
 
+  it("accepts only the allowlisted, fully validated alert action payload", async () => {
+    const response = {
+      answer: "Review the alert rule proposal.",
+      evidence: [{ type: "inventory-resource", id: "pod-1", label: "Pod", link: "/resources" }],
+      action: {
+        type: "create_alert_rule",
+        rationale: "Current cluster scope",
+        payload: {
+          name: "CPU 70%",
+          scope: { clusters: ["cluster-1"], namespaces: [], applications: [], labels: [] },
+          metric: "cpu_pct",
+          comparator: ">",
+          threshold: 70,
+          for_seconds: 20,
+          severity: "high",
+          channels: [],
+          enabled: true,
+        },
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(response));
+    await expect(postAiChat(CONTEXT, "CPU 70% alert")).resolves.toEqual(response);
+  });
+
   it("rejects unsafe evidence links and malformed context", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       answer: "Open this link",

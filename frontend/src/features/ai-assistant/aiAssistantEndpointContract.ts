@@ -14,20 +14,26 @@ export interface AiAssistantContextEndpoint {
   log_stream_id: string | null;
 }
 
+export interface AiChatEndpointResponse {
+  answer: string;
+  evidence: Array<{ type: string; id: string; label: string; link: string }>;
+  action?: AiChatActionEndpoint | null;
+}
+
 export interface AiAlertRulePayloadEndpoint {
   name: string;
-  metric: string;
-  comparator: string;
+  scope: {
+    clusters?: readonly string[];
+    namespaces?: readonly string[];
+    applications?: readonly string[];
+    labels?: readonly string[];
+  };
+  metric: "cpu_pct" | "mem_pct" | "restart_count" | "pod_not_ready";
+  comparator: ">" | ">=" | "<" | "<=";
   threshold: number;
   for_seconds: number;
-  severity: string;
-  scope: {
-    clusters: string[];
-    namespaces: string[];
-    applications: string[];
-    labels: string[];
-  };
-  channels: string[];
+  severity: "critical" | "high" | "medium" | "low";
+  channels: readonly string[];
   enabled: boolean;
 }
 
@@ -35,12 +41,6 @@ export interface AiChatActionEndpoint {
   type: "create_alert_rule";
   payload: AiAlertRulePayloadEndpoint;
   rationale: string;
-}
-
-export interface AiChatEndpointResponse {
-  answer: string;
-  evidence: Array<{ type: string; id: string; label: string; link: string }>;
-  action?: AiChatActionEndpoint | null;
 }
 
 export interface AiSuggestionsEndpointResponse {
@@ -57,8 +57,8 @@ export interface AiAssistantEndpointDependencies {
     context: AiAssistantContextEndpoint,
     signal?: AbortSignal,
   ): Promise<AiSuggestionsEndpointResponse>;
-  postAlertRule(
-    payload: AiAlertRulePayloadEndpoint,
+  createAlertRule(
+    input: AiAlertRulePayloadEndpoint,
     signal?: AbortSignal,
-  ): Promise<{ ruleId: string }>;
+  ): Promise<{ rule_id: string }>;
 }

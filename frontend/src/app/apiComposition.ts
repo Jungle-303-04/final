@@ -145,13 +145,9 @@ export function createApiComposition() {
     listApplicationDeployments,
   });
   const aiAssistantPort = createAiAssistantAdapter({
+    createAlertRule,
     getAiSuggestions,
     postAiChat,
-    postAlertRule: async (payload, signal) => ({
-      ruleId: (
-        await createAlertRule(payload as Parameters<typeof createAlertRule>[0], signal)
-      ).rule_id,
-    }),
   });
   const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   const alertEventsPort = createAlertEventsAdapter({
