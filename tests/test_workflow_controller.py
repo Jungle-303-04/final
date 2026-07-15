@@ -28,23 +28,39 @@ from domains.gitops.repository import (
     derive_workflow_run_id,
 )
 from domains.scm.events import SafePrFailedBody
+from domains.timeline.repository import TimelineLedgerAppend
 from packages.config.constants import CommandStatus, Sandbox, Target
-from packages.contracts.gitops import DEFAULT_DEPLOYMENT_BINDING_ID
+from packages.contracts.gitops import DEFAULT_DEPLOYMENT_BINDING_ID, WorkflowMutation
+
+
+class WorkflowDb(SpyDb):
+    """Workflow persistence fixture with an explicit durable Timeline ledger."""
+
+    async def append_timeline_event(self, event):
+        self.calls.append(("append_timeline_event", (event,)))
+        return TimelineLedgerAppend(event=event, sequence=len(self.calls), inserted=True)
+
+
+class DuplicateTimelineDb(WorkflowDb):
+    """A redelivered source key must not create a second workflow event."""
+
+    async def append_timeline_event(self, event):
+        self.calls.append(("append_timeline_event", (event,)))
+        return TimelineLedgerAppend(event=event, sequence=1, inserted=False)
 
 
 def workflow_db(**returns):
-    return SpyDb(
-        record_workflow_step={
-            "workflow_run_id": "workflow-1",
-            "step_id": "step-1",
-            "name": "git",
-        },
-        request_workflow_approval={
+    defaults = {
+        "start_workflow_run": WorkflowMutation(applied=True),
+        "update_workflow_run": WorkflowMutation(applied=True),
+        "record_workflow_step": WorkflowMutation(applied=True),
+        "update_workflow_run_for_command": WorkflowMutation(applied=True),
+        "request_workflow_approval": {
             "workflow_run_id": "workflow-1",
             "approval_id": "approval-1",
         },
-        **returns,
-    )
+    }
+    return WorkflowDb(**{**defaults, **returns})
 
 
 def workflow_diff(risk: str = Sandbox.RISK_TAG) -> Diff:
@@ -96,6 +112,93 @@ def test_workflow_controller_starts_run_from_git_webhook() -> None:
     assert db.called("record_workflow_step")
     assert outs[1].workflow_run_id == "workflow-1"
     assert outs[2].step == "git"
+
+
+def test_workflow_controller_does_not_publish_rejected_or_duplicate_run_mutations() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(start_workflow_run=WorkflowMutation(applied=False))
+
+    outs = run_handler(
+        workflow.on_git_webhook,
+        GitWebhookReceivedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            watch_target_id="watch-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert not db.called("record_workflow_step")
+    assert not db.called("append_timeline_event")
+
+
+def test_workflow_controller_does_not_publish_when_timeline_source_key_already_exists() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = DuplicateTimelineDb(
+        start_workflow_run=WorkflowMutation(applied=True),
+        record_workflow_step=WorkflowMutation(applied=True),
+    )
+
+    outs = run_handler(
+        workflow.on_git_webhook,
+        GitWebhookReceivedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            watch_target_id="watch-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert not db.called("record_workflow_step")
+    assert len([call for call in db.calls if call[0] == "append_timeline_event"]) == 1
+
+
+def test_workflow_controller_appends_only_safe_application_workflow_timeline_fields() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db()
+
+    run_handler(
+        workflow.on_git_webhook,
+        GitWebhookReceivedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            watch_target_id="watch-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+        ),
+        db,
+    )
+
+    events = [args[0] for name, args in db.calls if name == "append_timeline_event"]
+    assert [event.source for event in events] == [
+        "application_workflow",
+        "application_workflow",
+    ]
+    assert {event.subject.kind for event in events} == {"application_workflow"}
+    assert all("raw" not in event.metadata for event in events)
+    assert all("details" not in event.metadata for event in events)
+    assert all("summary" not in event.metadata for event in events)
 
 
 def test_workflow_controller_emits_workspace_scoped_default_ids() -> None:

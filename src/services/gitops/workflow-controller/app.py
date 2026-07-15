@@ -39,9 +39,11 @@ from domains.gitops.repository import (
     derive_watch_target_id,
     derive_workflow_run_id,
 )
+from domains.gitops.timeline import workflow_run_timeline_event, workflow_step_timeline_event
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.target.events import ClusterDesiredStateChangedBody
 from domains.target.management_guard import is_management_registration
+from domains.timeline.repository import TimelineLedgerAppend
 from packages.config.constants import Sandbox, Target
 from packages.config.logs import get_logger
 from packages.contracts.event_bus.bodies import EventBody
@@ -49,6 +51,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
     DEFAULT_ENVIRONMENT,
     ApprovalStatus,
+    WorkflowMutation,
     WorkflowRunStatus,
     WorkflowStepName,
     WorkflowStepStatus,
@@ -56,6 +59,7 @@ from packages.contracts.gitops import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, ResourceRole
 from packages.contracts.stores import WorkflowStore
+from packages.contracts.timeline import TimelineEvent
 from packages.runtime.app import App, EventContext
 
 app = App("workflow-controller")
@@ -140,7 +144,7 @@ async def ensure_run(
     current_step: str,
     summary: str,
     metadata: JsonObject | None = None,
-) -> JsonObject:
+) -> JsonObject | None:
     run = normalize_payload(payload)
     saved_application = await ctx.db.upsert_application(
         {
@@ -164,7 +168,7 @@ async def ensure_run(
                 "application_id": canonical_application_id,
                 "workflow_run_id": derive_workflow_run_id(workflow_seed),
             }
-    await ctx.db.start_workflow_run(
+    mutation = await ctx.db.start_workflow_run(
         {
             **run,
             "status": status,
@@ -173,6 +177,15 @@ async def ensure_run(
             "metadata": metadata or {},
         }
     )
+    if not workflow_mutation_applied(mutation):
+        return None
+    if not await append_workflow_run_timeline(
+        ctx,
+        run,
+        status=status,
+        current_step=current_step,
+    ):
+        return None
     return run
 
 
@@ -183,9 +196,9 @@ async def transition_run(
     current_step: str,
     summary: str,
     metadata: JsonObject | None = None,
-) -> JsonObject:
+) -> JsonObject | None:
     run = normalize_payload(payload)
-    await ctx.db.update_workflow_run(
+    mutation = await ctx.db.update_workflow_run(
         {
             **run,
             "status": status,
@@ -194,6 +207,15 @@ async def transition_run(
             "metadata": metadata or {},
         }
     )
+    if not workflow_mutation_applied(mutation):
+        return None
+    if not await append_workflow_run_timeline(
+        ctx,
+        run,
+        status=status,
+        current_step=current_step,
+    ):
+        return None
     return run
 
 
@@ -204,7 +226,7 @@ async def record_step(
     status: str,
     message: str | None = None,
     details: JsonObject | None = None,
-) -> WorkflowStepRecordedBody:
+) -> WorkflowStepRecordedBody | None:
     run = normalize_payload(payload)
     saved = await ctx.db.record_workflow_step(
         {
@@ -215,8 +237,17 @@ async def record_step(
             "details": details or {},
         }
     )
+    if not workflow_mutation_applied(saved):
+        return None
+    if not await append_workflow_step_timeline(
+        ctx,
+        run,
+        step=step,
+        status=status,
+    ):
+        return None
     return WorkflowStepRecordedBody(
-        workflow_run_id=str(saved["workflow_run_id"]),
+        workflow_run_id=str(run["workflow_run_id"]),
         application_id=str(run["application_id"]),
         step=step,
         status=status,
@@ -226,6 +257,64 @@ async def record_step(
         message=message,
         details=details or {},
     )
+
+
+def workflow_mutation_applied(result: object) -> bool:
+    """Fail closed unless the repository confirms a real guarded write."""
+    return isinstance(result, WorkflowMutation) and result.applied
+
+
+async def append_workflow_run_timeline(
+    ctx: EventContext[WorkflowStore],
+    run: JsonObject,
+    *,
+    status: str,
+    current_step: str,
+) -> bool:
+    event = workflow_run_timeline_event(
+        source_event_id=ctx.event_id,
+        source_created_at=ctx.created_at,
+        workspace_id=str(run["workspace_id"]),
+        cluster_id=str(run["cluster_id"]),
+        application_id=str(run["application_id"]),
+        binding_id=str(run["binding_id"]),
+        workflow_run_id=str(run["workflow_run_id"]),
+        status=status,
+        current_step=current_step,
+    )
+    return await append_workflow_timeline_event(ctx, event)
+
+
+async def append_workflow_step_timeline(
+    ctx: EventContext[WorkflowStore],
+    run: JsonObject,
+    *,
+    step: str,
+    status: str,
+) -> bool:
+    event = workflow_step_timeline_event(
+        source_event_id=ctx.event_id,
+        source_created_at=ctx.created_at,
+        workspace_id=str(run["workspace_id"]),
+        cluster_id=str(run["cluster_id"]),
+        application_id=str(run["application_id"]),
+        binding_id=str(run["binding_id"]),
+        workflow_run_id=str(run["workflow_run_id"]),
+        step=step,
+        status=status,
+    )
+    return await append_workflow_timeline_event(ctx, event)
+
+
+async def append_workflow_timeline_event(
+    ctx: EventContext[WorkflowStore],
+    event: TimelineEvent,
+) -> bool:
+    """Append in the worker UoW; output bodies follow only a new durable fact."""
+    append = await ctx.db.append_timeline_event(event)
+    if not isinstance(append, TimelineLedgerAppend):
+        raise TypeError("workflow timeline ledger append returned an invalid result")
+    return append.inserted
 
 
 def approval_payload(payload: JsonObject, reason: str, status: str) -> JsonObject:
@@ -260,6 +349,8 @@ async def on_git_webhook(
         "git webhook received",
         {"commit_sha": evt.commit_sha, "repo_ref": evt.repo_ref},
     )
+    if run is None:
+        return
     yield WorkflowCreatedBody(**workflow_created_fields(run))
     yield WorkflowRunStartedBody(
         workflow_run_id=str(run["workflow_run_id"]),
@@ -275,7 +366,7 @@ async def on_git_webhook(
         status=WorkflowRunStatus.STARTED.value,
         current_step=WorkflowStepName.GIT.value,
     )
-    yield await record_step(
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.GIT.value,
@@ -283,6 +374,8 @@ async def on_git_webhook(
         "webhook accepted",
         {"commit_sha": evt.commit_sha, "branch": evt.branch},
     )
+    if step is not None:
+        yield step
     # 글로벌 서비스 — 같은 repo 의 global 바인딩에도 이 변경을 전개한다.
     async for fanout_body in fanout_global_bindings(evt, ctx):
         yield fanout_body
@@ -300,7 +393,9 @@ async def on_git_changed(
         "git change confirmed; rendering manifest",
         {"commit_sha": evt.commit_sha, "branch": evt.branch},
     )
-    yield await record_step(
+    if run is None:
+        return
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.GIT.value,
@@ -308,6 +403,8 @@ async def on_git_changed(
         "git change confirmed",
         {"commit_sha": evt.commit_sha},
     )
+    if step is not None:
+        yield step
 
 
 @app.on(ManifestRenderedBody)
@@ -325,7 +422,9 @@ async def on_manifest_rendered(
         "manifest rendered; calculating desired diff",
         {"kind": evt.rendered_manifest.kind, "resource": evt.rendered_manifest.metadata.name},
     )
-    yield await record_step(
+    if run is None:
+        return
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.RENDER.value,
@@ -333,6 +432,8 @@ async def on_manifest_rendered(
         "manifest rendered",
         evt.rendered_manifest.to_body(),
     )
+    if step is not None:
+        yield step
 
 
 @app.on(ManifestInvalidBody)
@@ -347,6 +448,8 @@ async def on_manifest_invalid(
         "manifest render failed",
         {"reason": evt.reason},
     )
+    if run is None:
+        return
     step = await record_step(
         ctx,
         run,
@@ -355,7 +458,8 @@ async def on_manifest_invalid(
         evt.reason,
         {"manifest_path": evt.manifest_path},
     )
-    yield step
+    if step is not None:
+        yield step
     yield WorkflowRunFailedBody(
         workflow_run_id=str(run["workflow_run_id"]),
         application_id=str(run["application_id"]),
@@ -379,7 +483,9 @@ async def on_diff_detected(
         "desired diff detected; checking policy",
         {"resource": evt.diff.resource},
     )
-    yield await record_step(
+    if run is None:
+        return
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.DIFF.value,
@@ -387,6 +493,8 @@ async def on_diff_detected(
         "desired diff detected",
         evt.diff.to_body(),
     )
+    if step is not None:
+        yield step
 
 
 @app.on(DiffAnalyzedBody)
@@ -394,7 +502,7 @@ async def on_diff_analyzed(
     evt: DiffAnalyzedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
     run = diff_payload(evt)
-    yield await record_step(
+    policy_step = await record_step(
         ctx,
         run,
         WorkflowStepName.POLICY.value,
@@ -402,9 +510,11 @@ async def on_diff_analyzed(
         evt.reason,
         {"safe": evt.safe, "risk": evt.risk},
     )
+    if policy_step is not None:
+        yield policy_step
 
     if evt.diff.is_image_only_noop():
-        await transition_run(
+        completed_run = await transition_run(
             ctx,
             run,
             WorkflowRunStatus.SUCCEEDED.value,
@@ -412,7 +522,9 @@ async def on_diff_analyzed(
             Sandbox.NO_DIFF_REASON,
             {"resource": evt.diff.resource},
         )
-        yield await record_step(
+        if completed_run is None:
+            return
+        apply_step = await record_step(
             ctx,
             run,
             WorkflowStepName.APPLY.value,
@@ -420,6 +532,8 @@ async def on_diff_analyzed(
             Sandbox.NO_DIFF_REASON,
             evt.diff.to_body(),
         )
+        if apply_step is not None:
+            yield apply_step
         yield WorkflowRunCompletedBody(
             workflow_run_id=str(run["workflow_run_id"]),
             application_id=str(run["application_id"]),
@@ -442,7 +556,7 @@ async def on_diff_analyzed(
             "approval_ref": approval_ref,
             "diff": evt.diff.to_body(),
         }
-        await transition_run(
+        applying_run = await transition_run(
             ctx,
             run,
             WorkflowRunStatus.APPLYING.value,
@@ -450,7 +564,9 @@ async def on_diff_analyzed(
             "policy auto-approved; creating safe PR",
             {"risk": evt.risk},
         )
-        yield await record_step(
+        if applying_run is None:
+            return
+        approval_step = await record_step(
             ctx,
             run,
             WorkflowStepName.APPROVAL.value,
@@ -458,6 +574,8 @@ async def on_diff_analyzed(
             "approval not required by sandbox policy",
             details,
         )
+        if approval_step is not None:
+            yield approval_step
         return
 
     approval = approval_payload(run, evt.reason, ApprovalStatus.REQUESTED.value)
@@ -470,7 +588,7 @@ async def on_diff_analyzed(
         "approval_ref": approval_ref,
         "diff": evt.diff.to_body(),
     }
-    await transition_run(
+    waiting_run = await transition_run(
         ctx,
         run,
         WorkflowRunStatus.WAITING_FOR_APPROVAL.value,
@@ -478,7 +596,9 @@ async def on_diff_analyzed(
         "approval required before write",
         details,
     )
-    yield await record_step(
+    if waiting_run is None:
+        return
+    approval_step = await record_step(
         ctx,
         run,
         WorkflowStepName.APPROVAL.value,
@@ -486,6 +606,8 @@ async def on_diff_analyzed(
         evt.reason,
         details,
     )
+    if approval_step is not None:
+        yield approval_step
     yield ApprovalRequestedBody(
         approval_id=approval_ref,
         workflow_run_id=str(run["workflow_run_id"]),
@@ -503,7 +625,7 @@ async def on_diff_analyzed(
 async def on_safe_pr_created(
     evt: SafePrCreatedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
-    yield await record_step(
+    step = await record_step(
         ctx,
         gitops_payload(evt),
         WorkflowStepName.SAFE_PR.value,
@@ -511,6 +633,8 @@ async def on_safe_pr_created(
         "safe PR created",
         {"pr_url": evt.pr_url, "provider": evt.provider, "mode": evt.mode},
     )
+    if step is not None:
+        yield step
 
 
 @app.on(SafePrFailedBody)
@@ -525,7 +649,9 @@ async def on_safe_pr_failed(
         evt.reason,
         {"provider": evt.provider, "title": evt.title},
     )
-    yield await record_step(
+    if run is None:
+        return
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.SAFE_PR.value,
@@ -533,6 +659,8 @@ async def on_safe_pr_failed(
         evt.reason,
         {"provider": evt.provider, "title": evt.title},
     )
+    if step is not None:
+        yield step
     yield WorkflowRunFailedBody(
         workflow_run_id=str(run["workflow_run_id"]),
         application_id=str(run["application_id"]),
@@ -559,7 +687,7 @@ async def on_approval_granted(
             "details": evt.details,
         }
     )
-    await transition_run(
+    applying_run = await transition_run(
         ctx,
         run,
         WorkflowRunStatus.APPLYING.value,
@@ -567,7 +695,9 @@ async def on_approval_granted(
         "approval granted; waiting for command execution",
         evt.details,
     )
-    yield await record_step(
+    if applying_run is None:
+        return
+    approval_step = await record_step(
         ctx,
         run,
         WorkflowStepName.APPROVAL.value,
@@ -575,6 +705,8 @@ async def on_approval_granted(
         evt.decision,
         evt.details,
     )
+    if approval_step is not None:
+        yield approval_step
     command_payload = evt.details.get("command_requested")
     if isinstance(command_payload, Mapping):
         yield CommandRequestedBody.from_body(command_payload)
@@ -595,7 +727,7 @@ async def on_approval_rejected(
             "details": evt.details,
         }
     )
-    await transition_run(
+    failed_run = await transition_run(
         ctx,
         run,
         WorkflowRunStatus.FAILED.value,
@@ -603,7 +735,9 @@ async def on_approval_rejected(
         evt.reason,
         evt.details,
     )
-    yield await record_step(
+    if failed_run is None:
+        return
+    approval_step = await record_step(
         ctx,
         run,
         WorkflowStepName.APPROVAL.value,
@@ -611,6 +745,8 @@ async def on_approval_rejected(
         evt.reason,
         evt.details,
     )
+    if approval_step is not None:
+        yield approval_step
     yield WorkflowRunFailedBody(
         workflow_run_id=str(run["workflow_run_id"]),
         application_id=str(run["application_id"]),
@@ -634,8 +770,10 @@ async def on_command_queued(
         "command queued for outbound agent",
         {"command_id": evt.command_id},
     )
+    if run is None:
+        return
     await ctx.db.attach_workflow_command(str(run["workflow_run_id"]), evt.command_id)
-    yield await record_step(
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.APPLY.value,
@@ -643,6 +781,8 @@ async def on_command_queued(
         "command queued for agent",
         {"command_id": evt.command_id, "cluster_id": evt.cluster_id},
     )
+    if step is not None:
+        yield step
 
 
 @app.on(CommandRejectedBody)
@@ -650,7 +790,7 @@ async def on_command_rejected(
     evt: CommandRejectedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
     run = normalize_payload(evt.requested)
-    await transition_run(
+    failed_run = await transition_run(
         ctx,
         run,
         WorkflowRunStatus.FAILED.value,
@@ -658,7 +798,9 @@ async def on_command_rejected(
         evt.reason,
         {"requested": evt.requested},
     )
-    yield await record_step(
+    if failed_run is None:
+        return
+    step = await record_step(
         ctx,
         run,
         WorkflowStepName.APPLY.value,
@@ -666,6 +808,8 @@ async def on_command_rejected(
         evt.reason,
         {"requested": evt.requested},
     )
+    if step is not None:
+        yield step
     yield WorkflowRunFailedBody(
         workflow_run_id=str(run["workflow_run_id"]),
         application_id=str(run["application_id"]),
@@ -693,7 +837,7 @@ async def on_command_completed(
     message = str(evt.result.get("message") or evt.result.get("status") or "")
     rollout_details = rollout_result_details(evt.command_id, evt.result)
     await ctx.db.attach_workflow_command(str(run["workflow_run_id"]), evt.command_id)
-    await ctx.db.update_workflow_run_for_command(
+    mutation = await ctx.db.update_workflow_run_for_command(
         {
             **run,
             "command_id": evt.command_id,
@@ -703,7 +847,16 @@ async def on_command_completed(
             "metadata": rollout_details,
         }
     )
-    yield await record_step(
+    if not workflow_mutation_applied(mutation):
+        return
+    if not await append_workflow_run_timeline(
+        ctx,
+        run,
+        status=run_status,
+        current_step=WorkflowStepName.HEALTH.value,
+    ):
+        return
+    apply_step = await record_step(
         ctx,
         run,
         WorkflowStepName.APPLY.value,
@@ -711,8 +864,10 @@ async def on_command_completed(
         message or run_status,
         rollout_details,
     )
+    if apply_step is not None:
+        yield apply_step
     if succeeded:
-        yield await record_step(
+        health_step = await record_step(
             ctx,
             run,
             WorkflowStepName.HEALTH.value,
@@ -720,6 +875,8 @@ async def on_command_completed(
             "rollout health completed",
             rollout_details,
         )
+        if health_step is not None:
+            yield health_step
         yield WorkflowRunCompletedBody(
             workflow_run_id=str(run["workflow_run_id"]),
             application_id=str(run["application_id"]),

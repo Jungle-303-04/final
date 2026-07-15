@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy import and_, bindparam, case, func, or_, select
@@ -46,6 +47,7 @@ from packages.contracts.gitops import (
     RepositoryStatus,
     ResourceClass,
     WatchTargetStatus,
+    WorkflowMutation,
     WorkflowRunStatus,
     WorkflowStepName,
     WorkflowStepStatus,
@@ -101,6 +103,27 @@ TERMINAL_WORKFLOW_STEP_STATUSES = (
     WorkflowStepStatus.SKIPPED.value,
 )
 
+WORKFLOW_MUTATION_FIELDS = (
+    "workflow_run_id",
+    "workspace_id",
+    "application_id",
+    "binding_id",
+    "environment",
+    "cluster_id",
+    "commit_sha",
+    "status",
+    "current_step",
+)
+WORKFLOW_STEP_MUTATION_FIELDS = (
+    "workflow_run_id",
+    "workspace_id",
+    "application_id",
+    "binding_id",
+    "environment",
+    "name",
+    "status",
+)
+
 
 def workflow_status_rank(column: Any) -> Any:
     """상태 컬럼을 전이 순위로 바꾸는 CASE 식 — guarded UPDATE 의 비교 기준."""
@@ -144,6 +167,29 @@ def workflow_step_transition_guard(table: Any, new_status: Any) -> Any:
     return and_(
         table.c.status.not_in(TERMINAL_WORKFLOW_STEP_STATUSES),
         workflow_step_status_rank(table.c.status) <= new_rank,
+    )
+
+
+def workflow_mutation_from_result(
+    result: object,
+    *,
+    fields: tuple[str, ...],
+) -> WorkflowMutation:
+    """Return a safe identity only when PostgreSQL actually changed a row.
+
+    Guarded ``UPDATE`` and ``ON CONFLICT ... WHERE`` return no row for a
+    rejected or replayed state.  Callers use this exact outcome to suppress
+    outbox bodies and Timeline facts rather than inferring success from input.
+    """
+    mappings = getattr(result, "mappings", None)
+    if not callable(mappings):
+        return WorkflowMutation(applied=False)
+    row = mappings().one_or_none()
+    if not isinstance(row, Mapping):
+        return WorkflowMutation(applied=False)
+    return WorkflowMutation(
+        applied=True,
+        values={field: str(row[field]) for field in fields if row.get(field) is not None},
     )
 
 
@@ -1094,7 +1140,7 @@ class RepoChangeRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return serialize_workflow_run(dict(row)) if row else None
 
-    def start_workflow_run(self, payload: JsonObject) -> JsonObject:
+    def start_workflow_run(self, payload: JsonObject) -> WorkflowMutation:
         workflow_run_id = derive_workflow_run_id(payload)
         workspace_id = str(payload.get("workspace_id", DEFAULT_WORKSPACE_ID))
         application_id = derive_application_id(payload)
@@ -1115,7 +1161,8 @@ class RepoChangeRepository(DatabaseConnection):
             metadata=dict(payload.get("metadata", {})),
             updated_at=func.now(),
         )
-        # 생성은 무조건, 기존 행 갱신은 허용 전이일 때만(종결 회귀·역행 차단)
+        # 생성은 무조건, 기존 행 갱신은 실제로 앞으로 가는 전이일 때만 허용한다.
+        # 같은 상태의 재전달은 row를 반환하지 않아 후속 outbox/Timeline이 생기지 않는다.
         statement = insert.on_conflict_do_update(
             index_elements=[table.c.workflow_run_id],
             set_={
@@ -1126,19 +1173,16 @@ class RepoChangeRepository(DatabaseConnection):
                 "metadata": insert.excluded.metadata,
                 "updated_at": func.now(),
             },
-            where=workflow_transition_guard(table, insert.excluded.status),
-        )
+            where=and_(
+                workflow_transition_guard(table, insert.excluded.status),
+                table.c.status != insert.excluded.status,
+            ),
+        ).returning(*(table.c[field] for field in WORKFLOW_MUTATION_FIELDS))
         with self.connection() as conn:
-            conn.execute(statement)
-        return {
-            **payload,
-            "workspace_id": workspace_id,
-            "application_id": application_id,
-            "binding_id": binding_id,
-            "workflow_run_id": workflow_run_id,
-        }
+            result = conn.execute(statement)
+        return workflow_mutation_from_result(result, fields=WORKFLOW_MUTATION_FIELDS)
 
-    def update_workflow_run(self, payload: JsonObject) -> JsonObject:
+    def update_workflow_run(self, payload: JsonObject) -> WorkflowMutation:
         workflow_run_id = derive_workflow_run_id(payload)
         values: JsonObject = {"updated_at": func.now()}
         for key in ("status", "current_step", "summary", "command_id"):
@@ -1149,14 +1193,19 @@ class RepoChangeRepository(DatabaseConnection):
         table = WorkflowRun.__table__
         statement = table.update().where(table.c.workflow_run_id == workflow_run_id)
         if "status" in values:
-            # 상태 변경은 허용 전이일 때만 반영 — 재배달 이벤트의 상태 회귀 차단
-            statement = statement.where(workflow_transition_guard(table, str(values["status"])))
-        statement = statement.values(**values)
+            # 상태 변경은 실제 앞으로의 전이일 때만 반영 — 재배달과 회귀를 모두 차단.
+            statement = statement.where(
+                workflow_transition_guard(table, str(values["status"])),
+                table.c.status != str(values["status"]),
+            )
+        statement = statement.values(**values).returning(
+            *(table.c[field] for field in WORKFLOW_MUTATION_FIELDS)
+        )
         with self.connection() as conn:
-            conn.execute(statement)
-        return {**payload, "workflow_run_id": workflow_run_id}
+            result = conn.execute(statement)
+        return workflow_mutation_from_result(result, fields=WORKFLOW_MUTATION_FIELDS)
 
-    def record_workflow_step(self, payload: JsonObject) -> JsonObject:
+    def record_workflow_step(self, payload: JsonObject) -> WorkflowMutation:
         workflow_run_id = derive_workflow_run_id(payload)
         step_name = str(payload.get("name") or payload.get("step") or WorkflowStepName.GIT.value)
         step_id = str(payload.get("step_id") or derive_workflow_step_id(workflow_run_id, step_name))
@@ -1182,16 +1231,14 @@ class RepoChangeRepository(DatabaseConnection):
                 "details": insert.excluded.details,
                 "updated_at": func.now(),
             },
-            where=workflow_step_transition_guard(table, insert.excluded.status),
-        )
+            where=and_(
+                workflow_step_transition_guard(table, insert.excluded.status),
+                table.c.status != insert.excluded.status,
+            ),
+        ).returning(*(table.c[field] for field in WORKFLOW_STEP_MUTATION_FIELDS))
         with self.connection() as conn:
-            conn.execute(statement)
-        return {
-            **payload,
-            "workflow_run_id": workflow_run_id,
-            "step_id": step_id,
-            "name": step_name,
-        }
+            result = conn.execute(statement)
+        return workflow_mutation_from_result(result, fields=WORKFLOW_STEP_MUTATION_FIELDS)
 
     def request_workflow_approval(self, payload: JsonObject) -> JsonObject:
         workflow_run_id = derive_workflow_run_id(payload)
@@ -1377,7 +1424,7 @@ class RepoChangeRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
-    def update_workflow_run_for_command(self, payload: JsonObject) -> JsonObject:
+    def update_workflow_run_for_command(self, payload: JsonObject) -> WorkflowMutation:
         command_id = str(payload["command_id"])
         values: JsonObject = {"updated_at": func.now()}
         for key in ("status", "current_step", "summary"):
@@ -1388,12 +1435,17 @@ class RepoChangeRepository(DatabaseConnection):
         table = WorkflowRun.__table__
         statement = table.update().where(table.c.command_id == command_id)
         if "status" in values:
-            # 상태 변경은 허용 전이일 때만 반영 — 재배달 완료 이벤트의 상태 회귀 차단
-            statement = statement.where(workflow_transition_guard(table, str(values["status"])))
-        statement = statement.values(**values)
+            # 상태 변경은 실제 앞으로의 전이일 때만 반영 — 재배달과 회귀를 모두 차단.
+            statement = statement.where(
+                workflow_transition_guard(table, str(values["status"])),
+                table.c.status != str(values["status"]),
+            )
+        statement = statement.values(**values).returning(
+            *(table.c[field] for field in WORKFLOW_MUTATION_FIELDS)
+        )
         with self.connection() as conn:
-            conn.execute(statement)
-        return payload
+            result = conn.execute(statement)
+        return workflow_mutation_from_result(result, fields=WORKFLOW_MUTATION_FIELDS)
 
     def get_workflow_identity_for_command(self, command_id: str) -> JsonObject | None:
         table = WorkflowRun.__table__
