@@ -21,6 +21,7 @@ from packages.contracts.timeline.models import (
     TimelineSubject,
     TimelineWindow,
 )
+from packages.contracts.timeline.requests import TimelineSnapshotRequest
 
 __all__ = [
     "RealtimePolicy",
@@ -34,6 +35,7 @@ __all__ = [
     "TimelineQuery",
     "TimelineResourceSubject",
     "TimelineSource",
+    "TimelineSnapshotRequest",
     "TimelineStreamFrame",
     "TimelineSubject",
     "TimelineWindow",

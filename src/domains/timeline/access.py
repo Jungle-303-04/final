@@ -9,6 +9,8 @@ inventory grant as an RCA or deployment grant.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,16 +31,39 @@ class AuthorizedTimelineScope:
     """Grants kept separate until a source is actually queried."""
 
     workspace_id: str
+    user_id: str
+    roles: tuple[str, ...]
     cluster_ids: frozenset[str]
     application_ids: frozenset[str]
     incident_cluster_ids: frozenset[str]
     deployment_application_ids: frozenset[str]
+
+    @property
+    def readable_cluster_ids(self) -> frozenset[str]:
+        """All cluster identities that a source-specific reader may select."""
+        return self.cluster_ids | self.incident_cluster_ids
+
+    @property
+    def authorization_revision(self) -> str:
+        """Invalidate timeline cursors whenever any source grant changes."""
+        payload = {
+            "user_id": self.user_id,
+            "workspace_id": self.workspace_id,
+            "roles": sorted(set(self.roles)),
+            "inventory_clusters": sorted(self.cluster_ids),
+            "application_ids": sorted(self.application_ids),
+            "incident_clusters": sorted(self.incident_cluster_ids),
+            "deployment_application_ids": sorted(self.deployment_application_ids),
+        }
+        encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 async def resolve_authorized_timeline_scope(db: Any, current: Any) -> AuthorizedTimelineScope:
     """Resolve all source grants without widening one source through another."""
     workspace_id = str(getattr(current, "workspace_id", "") or "").strip()
     user_id = str(getattr(current, "user_id", "") or "").strip()
+    roles = tuple(str(role) for role in (getattr(current, "roles", ()) or ()))
     if not workspace_id or not user_id:
         raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
 
@@ -75,6 +100,8 @@ async def resolve_authorized_timeline_scope(db: Any, current: Any) -> Authorized
     )
     return AuthorizedTimelineScope(
         workspace_id=workspace_id,
+        user_id=user_id,
+        roles=roles,
         cluster_ids=frozenset(clusters),
         application_ids=frozenset(applications),
         incident_cluster_ids=frozenset(incident_clusters),
@@ -103,3 +130,19 @@ def selected_timeline_cluster_ids(
     """Return the selected inventory-visible clusters after authorization."""
     selected = set(filters.clusters) | {cluster_id for cluster_id, _namespace in filters.namespaces}
     return selected if selected else set(authorized.cluster_ids)
+
+
+def require_timeline_cluster_ids(
+    authorized: AuthorizedTimelineScope,
+    requested_cluster_ids: set[str],
+) -> set[str]:
+    """Fail closed before a full Timeline query reads any durable evidence.
+
+    The selected identity may be readable through inventory or incident
+    authority.  Application-only authority is intentionally not treated as a
+    blanket cluster grant; application events carry their own identity and are
+    filtered separately by the ledger adapter.
+    """
+    if not requested_cluster_ids.issubset(authorized.readable_cluster_ids):
+        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+    return requested_cluster_ids
