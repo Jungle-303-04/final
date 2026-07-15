@@ -22,6 +22,7 @@ fn main_window_grants_only_the_registered_local_pty_commands() {
         "desktop_local_terminal_input",
         "desktop_local_terminal_resize",
         "desktop_local_terminal_close",
+        "desktop_local_terminal_ack_output",
     ] {
         assert!(build_manifest.contains(command), "{command} must be registered");
         assert!(
@@ -38,4 +39,13 @@ fn desktop_build_uses_the_shared_frontend_from_the_desktop_working_directory() {
     assert!(config.contains("\"beforeDevCommand\": \"npm --prefix ../frontend run dev\""));
     assert!(config.contains("\"beforeBuildCommand\": \"npm --prefix ../frontend run build\""));
     assert!(config.contains("\"active\": true"));
+    assert!(config.contains("\"create\": false"));
+}
+
+#[test]
+fn desktop_capabilities_do_not_grant_a_wildcard_remote_origin() {
+    let capability = include_str!("../capabilities/default.json");
+
+    assert!(capability.contains("http://localhost:5173/*"));
+    assert!(!capability.contains("https://*"));
 }

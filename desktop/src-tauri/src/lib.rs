@@ -2,7 +2,7 @@ mod bridge;
 mod local_terminal;
 mod menu;
 
-use tauri::Manager;
+use tauri::{webview::NewWindowResponse, App, Manager, Url, WebviewWindowBuilder};
 
 pub use bridge::{desktop_capabilities, desktop_system_theme, format_window_title, SafeFileRegistry};
 pub use local_terminal::LocalTerminalRegistry;
@@ -12,8 +12,8 @@ use bridge::{
     desktop_save_file, desktop_set_active_cluster_title,
 };
 use local_terminal::{
-    desktop_local_terminal_close, desktop_local_terminal_input, desktop_local_terminal_resize,
-    desktop_local_terminal_start,
+    desktop_local_terminal_ack_output, desktop_local_terminal_close, desktop_local_terminal_input,
+    desktop_local_terminal_resize, desktop_local_terminal_start,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,6 +26,7 @@ pub fn run() {
         .manage(SafeFileRegistry::default())
         .manage(LocalTerminalRegistry::default())
         .setup(|app| {
+            install_main_webview(app)?;
             menu::install_native_menu(app)?;
             Ok(())
         })
@@ -41,6 +42,7 @@ pub fn run() {
             desktop_local_terminal_input,
             desktop_local_terminal_resize,
             desktop_local_terminal_close,
+            desktop_local_terminal_ack_output,
         ])
         .build(tauri::generate_context!())
         .expect("Opsia desktop shell failed to build");
@@ -49,4 +51,59 @@ pub fn run() {
             app_handle.state::<LocalTerminalRegistry>().close_all();
         }
     });
+}
+
+fn install_main_webview(app: &App) -> tauri::Result<()> {
+    let main_window_config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .ok_or_else(|| std::io::Error::other("main desktop webview configuration is missing"))?;
+    WebviewWindowBuilder::from_config(app.handle(), main_window_config)?
+        .on_navigation(is_allowed_main_navigation)
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .build()?;
+    Ok(())
+}
+
+fn is_allowed_main_navigation(url: &Url) -> bool {
+    is_allowed_main_navigation_for_environment(url, cfg!(debug_assertions))
+}
+
+fn is_allowed_main_navigation_for_environment(url: &Url, is_development: bool) -> bool {
+    matches!(
+        url,
+        url if matches!(url.scheme(), "tauri" | "asset")
+            || (url.scheme() == "http" && url.host_str() == Some("tauri.localhost"))
+    ) || (is_development
+        && url.scheme() == "http"
+        && url.host_str() == Some("localhost")
+        && url.port_or_known_default() == Some(5173))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn main_webview_navigation_allows_only_bundled_or_exact_development_origins() {
+        assert!(is_allowed_main_navigation_for_environment(
+            &"tauri://localhost/index.html".parse().expect("valid bundled URL"),
+            false,
+        ));
+        assert!(is_allowed_main_navigation_for_environment(
+            &"http://localhost:5173/".parse().expect("valid Vite URL"),
+            true,
+        ));
+        assert!(!is_allowed_main_navigation_for_environment(
+            &"https://example.test/".parse().expect("valid external URL"),
+            true,
+        ));
+        assert!(!is_allowed_main_navigation_for_environment(
+            &"http://localhost:4173/".parse().expect("valid wrong-port URL"),
+            true,
+        ));
+    }
 }
