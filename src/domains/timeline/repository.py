@@ -21,6 +21,15 @@ from packages.storage.engine import DatabaseConnection
 
 TimelineReplayStatus = Literal["available", "resync_required"]
 TimelineResyncReason = Literal["retention_boundary"]
+MAX_TIMELINE_EVENTS = 10_000
+
+
+class TimelineSnapshotLimitExceeded(ValueError):
+    """A snapshot cannot be represented safely within the negotiated event limit."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        super().__init__(f"timeline snapshot limit exceeded ({limit}); narrow the window")
 
 
 @dataclass(frozen=True)
@@ -143,15 +152,18 @@ class TimelineLedgerRepository(DatabaseConnection):
         limit: int = 1_000,
     ) -> TimelineLedgerSnapshot:
         """Read one scoped history snapshot in stable evidence order."""
+        _validate_requested_limit(limit)
         cursor_state = self._cursor_state(read_scope.workspace_id)
         events = self._read_events(
             read_scope,
-            after_sequence=0,
+            after_sequence=cursor_state[1] - 1,
             through_sequence=cursor_state[0],
             window=window,
-            limit=limit,
+            limit=limit + 1,
             replay_order=False,
         )
+        if len(events) > limit:
+            raise TimelineSnapshotLimitExceeded(limit)
         return TimelineLedgerSnapshot(
             events=events,
             high_water_sequence=cursor_state[0],
@@ -168,6 +180,7 @@ class TimelineLedgerRepository(DatabaseConnection):
         """Return a scoped suffix, or an explicit resync result after retention expiry."""
         if isinstance(after_sequence, bool) or after_sequence < 0:
             raise ValueError("timeline replay sequence must be non-negative")
+        _validate_requested_limit(limit)
         high_water, retained_from = self._cursor_state(read_scope.workspace_id)
         if after_sequence < retained_from - 1:
             return TimelineReplayResult(
@@ -251,31 +264,51 @@ class TimelineLedgerRepository(DatabaseConnection):
         limit: int,
         replay_order: bool,
     ) -> tuple[TimelineEvent, ...]:
-        if limit < 1 or limit > 10_000:
-            raise ValueError("timeline ledger limit must be between 1 and 10000")
-        ledger = TimelineLedgerEvent.__table__
-        conditions: list[Any] = [
-            ledger.c.workspace_id == read_scope.workspace_id,
-            ledger.c.sequence > after_sequence,
-            ledger.c.sequence <= through_sequence,
-            _read_scope_predicate(ledger, read_scope.scopes),
-        ]
-        if window is not None:
-            conditions.extend(
-                (
-                    ledger.c.occurred_at >= _from_datetime(window.from_ms),
-                    ledger.c.occurred_at <= _to_datetime(window.to_ms),
-                )
-            )
-        order_by = (
-            (ledger.c.sequence.asc(),)
-            if replay_order
-            else (ledger.c.occurred_at.asc(), ledger.c.sequence.asc())
+        statement = _timeline_events_statement(
+            read_scope,
+            after_sequence=after_sequence,
+            through_sequence=through_sequence,
+            window=window,
+            limit=limit,
+            replay_order=replay_order,
         )
-        statement = select(ledger).where(and_(*conditions)).order_by(*order_by).limit(limit)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings()
             return tuple(_event_from_row(row) for row in rows)
+
+
+def _timeline_events_statement(
+    read_scope: TimelineLedgerReadScope,
+    *,
+    after_sequence: int,
+    through_sequence: int,
+    window: TimelineWindow | None,
+    limit: int,
+    replay_order: bool,
+) -> Any:
+    """Build the one bounded SQL read used for snapshots and sequence replay."""
+    if limit < 1 or limit > MAX_TIMELINE_EVENTS + 1:
+        raise ValueError("timeline ledger internal limit is invalid")
+    ledger = TimelineLedgerEvent.__table__
+    conditions: list[Any] = [
+        ledger.c.workspace_id == read_scope.workspace_id,
+        ledger.c.sequence > after_sequence,
+        ledger.c.sequence <= through_sequence,
+        _read_scope_predicate(ledger, read_scope.scopes),
+    ]
+    if window is not None:
+        conditions.extend(
+            (
+                ledger.c.occurred_at >= _from_datetime(window.from_ms),
+                ledger.c.occurred_at < _to_datetime(window.to_ms),
+            )
+        )
+    order_by = (
+        (ledger.c.sequence.asc(),)
+        if replay_order
+        else (ledger.c.occurred_at.asc(), ledger.c.sequence.asc())
+    )
+    return select(ledger).where(and_(*conditions)).order_by(*order_by).limit(limit)
 
 
 def fanout_committed_timeline_append(
@@ -400,3 +433,8 @@ def _from_datetime(milliseconds: int) -> datetime:
 
 def _to_datetime(milliseconds: int) -> datetime:
     return datetime.fromtimestamp(milliseconds / 1_000, tz=UTC)
+
+
+def _validate_requested_limit(limit: int) -> None:
+    if isinstance(limit, bool) or limit < 1 or limit > MAX_TIMELINE_EVENTS:
+        raise ValueError(f"timeline ledger limit must be between 1 and {MAX_TIMELINE_EVENTS}")
