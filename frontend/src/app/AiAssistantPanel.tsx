@@ -318,7 +318,7 @@ export function AiAssistantPanel({
       {!open ? <Button
         aria-expanded={open}
         aria-label={t("shell.ai.open")}
-        className="fixed right-6 bottom-6 z-50 size-14 rounded-full shadow-lg"
+        className="fixed right-[var(--product-floating-action-inline-inset)] bottom-[var(--product-floating-action-block-end)] z-50 size-[var(--product-floating-action-size)] rounded-full shadow-lg"
         data-slot="ai-assistant-trigger"
         onClick={() => onOpenChange(!open)}
         type="button"
