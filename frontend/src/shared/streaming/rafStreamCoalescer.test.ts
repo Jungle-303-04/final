@@ -174,6 +174,27 @@ describe("createRafStreamCoalescer", () => {
     ]);
   });
 
+  it("uses the caller's opaque equality strategy for duplicate frames", () => {
+    const runtime = new FakeRuntime();
+    const received: string[][] = [];
+    const coalescer = createRafStreamCoalescer<OpaqueTimelineFrame>({
+      opaqueCursor: {
+        keyOf: (frame) => frame.cursor.token,
+        equals: (left, right) => left.toLowerCase() === right.toLowerCase(),
+      },
+      onFlush: (frames) => received.push(frames.map((frame) => frame.cursor.token)),
+      policy: { hiddenTab: "coalesce", maxFramesPerSecond: 60 },
+      runtime,
+    });
+
+    expect(coalescer.enqueue(opaqueFrame("opaque:AbC"))).toBe("queued");
+    expect(coalescer.enqueue(opaqueFrame("opaque:abc"))).toBe("duplicate");
+    expect(coalescer.enqueue(opaqueFrame("opaque:next"))).toBe("queued");
+    runtime.fireFrame();
+
+    expect(received).toEqual([["opaque:AbC", "opaque:next"]]);
+  });
+
   it("keeps semantic event order identical when a consumer requests reduced motion", () => {
     const full = flushWithMotionPreference(false);
     const reduced = flushWithMotionPreference(true);
