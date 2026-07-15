@@ -1,10 +1,28 @@
 import { z } from "zod";
 
-export const resourceActionCapabilityIdSchema = z.enum([
-  "deployment.restart",
-  "deployment.scale",
-  "pod.exec",
-]);
+export const resourceActionCapabilityIdSchema = z.string()
+  .regex(/^[a-z][a-z0-9._-]*$/u)
+  .max(160);
+
+export const resourceCapabilityInputSchema = z.strictObject({
+  key: z.string().regex(/^[a-z][a-z0-9_]*$/u).max(120),
+  label: z.string().min(1).max(120),
+  type: z.enum(["integer", "string"]),
+  required: z.boolean(),
+  minimum: z.number().int().nullable(),
+  maximum: z.number().int().nullable(),
+  default: z.union([z.number().int(), z.string(), z.null()]),
+}).superRefine((input, context) => {
+  if (input.minimum !== null && input.maximum !== null && input.minimum > input.maximum) {
+    context.addIssue({ code: "custom", message: "minimum must not exceed maximum" });
+  }
+  if (input.type === "integer" && typeof input.default === "string") {
+    context.addIssue({ code: "custom", message: "integer default must be an integer" });
+  }
+  if (input.type === "string" && typeof input.default === "number") {
+    context.addIssue({ code: "custom", message: "string default must be a string" });
+  }
+});
 
 export const resourceCapabilitySubjectSchema = z.strictObject({
   resource_id: z.string().min(1),
@@ -18,8 +36,14 @@ export const resourceCapabilitySubjectSchema = z.strictObject({
 
 export const resourceActionCapabilitySchema = z.strictObject({
   capability_id: resourceActionCapabilityIdSchema,
+  label: z.string().min(1).max(120),
+  description: z.string().min(1).max(500),
+  execution: z.enum(["command", "terminal"]),
+  confirmation_required: z.boolean(),
+  realtime: z.boolean(),
+  input_schema: z.array(resourceCapabilityInputSchema),
   method: z.enum(["POST", "WEBSOCKET"]),
-  path: z.string().regex(/^\/(?:clusters\/[^?]+|live\/terminal)$/u),
+  path: z.string().regex(/^\/(?!\/)[^?\s]+$/u),
 });
 
 export const resourceCapabilitiesSchema = z.strictObject({
@@ -46,3 +70,4 @@ export const resourceCapabilitiesSchema = z.strictObject({
 
 export type ResourceCapabilitiesEndpoint = z.infer<typeof resourceCapabilitiesSchema>;
 export type ResourceActionCapabilityId = z.infer<typeof resourceActionCapabilityIdSchema>;
+export type ResourceCapabilityInputEndpoint = z.infer<typeof resourceCapabilityInputSchema>;

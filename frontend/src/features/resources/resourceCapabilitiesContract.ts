@@ -1,7 +1,14 @@
-export type ResourceActionCapabilityId =
-  | "deployment.restart"
-  | "deployment.scale"
-  | "pod.exec";
+export type ResourceActionCapabilityId = string;
+
+export interface ResourceCapabilityInput {
+  key: string;
+  label: string;
+  type: "integer" | "string";
+  required: boolean;
+  minimum: number | null;
+  maximum: number | null;
+  default: number | string | null;
+}
 
 export interface ResourceCapabilitySubject {
   resourceId: string;
@@ -15,6 +22,12 @@ export interface ResourceCapabilitySubject {
 
 export interface ResourceActionCapability {
   capabilityId: ResourceActionCapabilityId;
+  label: string;
+  description: string;
+  execution: "command" | "terminal";
+  confirmationRequired: boolean;
+  realtime: boolean;
+  inputSchema: ResourceCapabilityInput[];
   method: "POST" | "WEBSOCKET";
   path: string;
 }
@@ -36,20 +49,13 @@ export interface ResourceActionReceipt {
   accepted: boolean;
   eventId: string;
   correlationId: string;
+  commandId: string | null;
 }
 
 export interface ResourceActionsPort {
-  restartDeployment(
-    clusterId: string,
-    namespace: string,
-    deployment: string,
-    signal?: AbortSignal,
-  ): Promise<ResourceActionReceipt>;
-  scaleDeployment(
-    clusterId: string,
-    namespace: string,
-    deployment: string,
-    replicas: number,
+  execute(
+    capability: ResourceActionCapability,
+    values: Readonly<Record<string, unknown>>,
     signal?: AbortSignal,
   ): Promise<ResourceActionReceipt>;
 }

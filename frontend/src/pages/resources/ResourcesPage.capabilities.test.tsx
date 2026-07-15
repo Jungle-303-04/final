@@ -67,6 +67,12 @@ describe("resource detail capabilities", () => {
         revision: "a".repeat(64),
         capabilities: [{
           capabilityId: "deployment.restart",
+          label: "Restart",
+          description: "Restart this deployment and stream the operation result.",
+          execution: "command",
+          confirmationRequired: true,
+          realtime: true,
+          inputSchema: [],
           method: "POST",
           path: "/clusters/cluster-1/namespaces/shop/deployments/checkout-api/restart",
         }],
@@ -76,10 +82,10 @@ describe("resource detail capabilities", () => {
 
     const restart = await screen.findByRole(
       "button",
-      { name: "재시작" },
+      { name: "Restart" },
       { timeout: 5_000 },
     );
-    expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scale" })).toBeNull();
     const actionBar = document.querySelector('[data-slot="resource-detail-actions"]');
     expect(actionBar).toBeTruthy();
     expect(within(actionBar as HTMLElement).queryAllByRole("button")
@@ -88,10 +94,9 @@ describe("resource detail capabilities", () => {
 
     await user.click(restart);
     await user.click(screen.getByRole("button", { name: "확인" }));
-    await waitFor(() => expect(actions.restartDeployment).toHaveBeenCalledWith(
-      "cluster-1",
-      "shop",
-      "checkout-api",
+    await waitFor(() => expect(actions.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ capabilityId: "deployment.restart" }),
+      {},
     ));
     expect(await screen.findByText(/correlation correlation-1/u)).toBeTruthy();
   });
@@ -108,8 +113,8 @@ describe("resource detail capabilities", () => {
       { timeout: 5_000 },
     )).toBeTruthy();
     await waitFor(() => expect(capabilities.loadResourceCapabilities).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "재시작" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restart" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Scale" })).toBeNull();
   });
 });
 

@@ -34,9 +34,7 @@ const DETAIL: ResourceDetail = {
   },
 };
 
-const CAPABILITIES: ResourceCapabilitiesFrame = {
-  phase: "ready",
-  data: {
+const CAPABILITY_DATA = {
     subject: {
       resourceId: DETAIL.resource.inventoryKey,
       snapshotId: "snapshot-42",
@@ -47,8 +45,22 @@ const CAPABILITIES: ResourceCapabilitiesFrame = {
       name: "checkout-api-0",
     },
     revision: "a".repeat(64),
-    capabilities: [{ capabilityId: "pod.exec", method: "WEBSOCKET", path: "/live/terminal" }],
-  },
+    capabilities: [{
+      capabilityId: "pod.exec",
+      label: "Terminal",
+      description: "Open an audited terminal session and stream its output.",
+      execution: "terminal" as const,
+      confirmationRequired: true,
+      realtime: true,
+      inputSchema: [],
+      method: "WEBSOCKET" as const,
+      path: "/live/terminal",
+    }],
+  };
+
+const CAPABILITIES: ResourceCapabilitiesFrame = {
+  phase: "ready",
+  data: CAPABILITY_DATA,
   failure: null,
 };
 
@@ -115,8 +127,8 @@ describe("PodTerminalDialog", () => {
     const mismatched: ResourceCapabilitiesFrame = {
       ...CAPABILITIES,
       data: {
-        ...CAPABILITIES.data,
-        subject: { ...CAPABILITIES.data.subject, name: "another-pod" },
+        ...CAPABILITY_DATA,
+        subject: { ...CAPABILITY_DATA.subject, name: "another-pod" },
       },
     };
     renderTerminal(mismatched, { open: vi.fn() });

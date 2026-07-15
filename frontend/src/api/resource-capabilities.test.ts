@@ -16,11 +16,31 @@ const RESPONSE = {
   capabilities: [
     {
       capability_id: "deployment.restart",
+      label: "Restart",
+      description: "Restart this deployment and stream the operation result.",
+      execution: "command",
+      confirmation_required: true,
+      realtime: true,
+      input_schema: [],
       method: "POST",
       path: "/clusters/cluster-a/namespaces/shop/deployments/checkout-api/restart",
     },
     {
       capability_id: "deployment.scale",
+      label: "Scale",
+      description: "Change the desired replica count and stream the operation result.",
+      execution: "command",
+      confirmation_required: true,
+      realtime: true,
+      input_schema: [{
+        key: "replicas",
+        label: "Replicas",
+        type: "integer",
+        required: true,
+        minimum: 0,
+        maximum: 100,
+        default: 1,
+      }],
       method: "POST",
       path: "/clusters/cluster-a/namespaces/shop/deployments/checkout-api/scale",
     },
@@ -44,10 +64,10 @@ describe("resource capabilities API", () => {
     );
   });
 
-  it("rejects empty identities, unknown actions, duplicates, and unsorted actions", async () => {
+  it("rejects empty identities, malformed descriptors, duplicates, and unsorted actions", async () => {
     expect(() => getResourceCapabilities("  ")).toThrow(TypeError);
     for (const capabilities of [
-      [{ ...RESPONSE.capabilities[0], capability_id: "deployment.delete" }],
+      [{ ...RESPONSE.capabilities[0], path: "https://invalid.example/action" }],
       [RESPONSE.capabilities[0], RESPONSE.capabilities[0]],
       [...RESPONSE.capabilities].reverse(),
     ]) {

@@ -11,14 +11,12 @@ export function createResourceActionsAdapter(
   endpoints: ResourceActionsEndpointDependencies,
 ): ResourceActionsPort {
   return {
-    async restartDeployment(clusterId, namespace, deployment, signal) {
+    async execute(capability, values, signal) {
+      if (capability.execution !== "command" || capability.method !== "POST") {
+        throw new ResourcesPortFailure("invalid-request");
+      }
       return withActionFailure(async () => toResourceActionReceipt(
-        await endpoints.restartDeployment(clusterId, namespace, deployment, { signal }),
-      ));
-    },
-    async scaleDeployment(clusterId, namespace, deployment, replicas, signal) {
-      return withActionFailure(async () => toResourceActionReceipt(
-        await endpoints.scaleDeployment(clusterId, namespace, deployment, { replicas, signal }),
+        await endpoints.executeResourceCapability(capability, values, signal),
       ));
     },
   };

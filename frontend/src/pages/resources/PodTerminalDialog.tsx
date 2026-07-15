@@ -42,7 +42,11 @@ export function PodTerminalDialog({
     : [];
   const authorized = capabilities.phase === "ready"
     && exactCapabilitySubject(capabilities.data, detail)
-    && capabilities.data.capabilities.some(({ capabilityId }) => capabilityId === "pod.exec");
+    && capabilities.data.capabilities.some((capability) => (
+      capability.execution === "terminal"
+      && capability.method === "WEBSOCKET"
+      && capability.realtime
+    ));
   const [open, setOpen] = useState(false);
   const [container, setContainer] = useState(containers[0] ?? "");
   const [command, setCommand] = useState("");

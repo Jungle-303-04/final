@@ -34,8 +34,7 @@ import {
   listApplicationDeploymentHistory,
   login,
   logout,
-  restartDeployment,
-  scaleDeployment,
+  executeResourceCapability,
   selectRecoveryAction,
   createReleaseFlowClient,
   getAiSuggestions,
@@ -135,8 +134,9 @@ export function createApiComposition() {
     getResourceCapabilities,
   });
   const resourceActionsPort = createResourceActionsAdapter({
-    restartDeployment,
-    scaleDeployment,
+    executeResourceCapability(capability, values, signal) {
+      return executeResourceCapability(capability.path, values, signal);
+    },
   });
   const podTerminalPort = createPodTerminalAdapter({ openPodTerminal });
   const resourceManifestPort = createResourceManifestAdapter({
