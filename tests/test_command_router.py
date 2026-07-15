@@ -85,10 +85,12 @@ class SpyEvents:
     def __init__(self) -> None:
         self.body: object | None = None
         self.actor: object | None = None
+        self.accept_kwargs: dict[str, object] = {}
 
-    async def accept_body(self, body: object, actor: object) -> object:
+    async def accept_body(self, body: object, actor: object, **kwargs: object) -> object:
         self.body = body
         self.actor = actor
+        self.accept_kwargs = kwargs
         event = SimpleNamespace(event_id="evt-1", correlation_id="corr-1")
         return SimpleNamespace(event=event)
 
@@ -276,6 +278,21 @@ def test_non_approval_command_receipt_matches_worker_command_id() -> None:
         assert isinstance(events.body, CommandRequestedBody)
         worker_plan = build_plan(events.body, response.correlation_id)
         assert response.command_id == worker_plan.command_id
+
+    asyncio.run(run())
+
+
+def test_command_receipt_requests_outbox_transactional_operation_staging() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        await commands(
+            CommandRequest(cluster_id="cluster-1", diff=manual_diff()),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+        )
+
+        assert callable(events.accept_kwargs.get("transactional_stage"))
 
     asyncio.run(run())
 
