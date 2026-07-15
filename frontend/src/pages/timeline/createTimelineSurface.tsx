@@ -75,7 +75,7 @@ interface TimelineCapabilityRecord {
  * Keep a descriptor through cluster changes in one workspace, while a
  * workspace transition receives a separate preflight/cache entry.
  */
-function TimelineCapabilityGate({
+export function TimelineCapabilityGate({
   children,
   enabled,
   port,
@@ -97,8 +97,14 @@ function TimelineCapabilityGate({
   });
   const recordRef = useRef(record);
   const mountedRef = useRef(true);
-  useEffect(() => () => {
-    mountedRef.current = false;
+  useEffect(() => {
+    // React StrictMode performs a setup → cleanup → setup cycle. Re-arm the
+    // component lifecycle on every setup, while request-local cancellation
+    // below continues to reject stale completions from the previous cycle.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -108,7 +114,7 @@ function TimelineCapabilityGate({
       current.port === port
       && current.attempt === attempt
       && current.workspaceCacheKey === workspaceCacheKey
-      && current.state.phase !== "idle"
+      && current.state.phase === "ready"
     ) return;
 
     const readCapabilities = port.readCapabilities;
@@ -126,17 +132,19 @@ function TimelineCapabilityGate({
       return;
     }
 
+    const controller = new AbortController();
+    let activeRequest = true;
     setCapabilityRecord(
       { port, attempt, state: { phase: "loading" }, workspaceCacheKey },
       recordRef,
       setRecord,
     );
     void Promise.resolve()
-      .then(() => readCapabilities(undefined, workspaceCacheKey))
+      .then(() => readCapabilities(controller.signal, workspaceCacheKey))
       .then((descriptor) => readCapabilityProjection(port, descriptor))
       .then(
         (capabilities) => {
-          if (!mountedRef.current) return;
+          if (!activeRequest || !mountedRef.current) return;
           const latest = recordRef.current;
           if (
             latest.port !== port
@@ -150,7 +158,7 @@ function TimelineCapabilityGate({
           );
         },
         (error: unknown) => {
-          if (!mountedRef.current) return;
+          if (!activeRequest || !mountedRef.current) return;
           const latest = recordRef.current;
           if (
             latest.port !== port
@@ -169,6 +177,10 @@ function TimelineCapabilityGate({
           );
         },
       );
+    return () => {
+      activeRequest = false;
+      controller.abort();
+    };
   }, [attempt, enabled, port, workspaceCacheKey]);
 
   const retry = useCallback(() => {

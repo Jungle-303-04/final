@@ -44,9 +44,9 @@ export function resolveTimelineActivitySelection(
 ): TimelineActivitySelection {
   const requested = timelineActivitiesFromUrlKeys(activityFilter);
   const options = capabilities.controlSurface.activity;
-  const exactActivity = options.find((option) => sameActivities(option.activity, requested));
+  const exactActivity = options.find((option) => sameActivitySet(option.activity, requested));
   if (exactActivity !== undefined) return { option: exactActivity, problemsOnly: false };
-  const exactProblems = options.find((option) => sameActivities(option.problemsActivity, requested));
+  const exactProblems = options.find((option) => sameActivitySet(option.problemsActivity, requested));
   if (exactProblems !== undefined) return { option: exactProblems, problemsOnly: true };
   return { option: requiredControl(options), problemsOnly: false };
 }
@@ -56,7 +56,10 @@ export function validateTimelineKinds(
   kinds: TimelineUrlState["kindFilter"],
   overview: TimelineOverview | null,
 ): readonly string[] {
-  if (overview === null) return [];
+  // A missing overview is unknown, not an empty kind catalog. Keeping the
+  // raw selection prevents a loading or failed facet request from widening a
+  // snapshot to every kind.
+  if (overview === null) return kinds;
   const available = new Set(overview.facets.kinds.map((facet) => facet.kind));
   return [...new Set(kinds)].filter((kind) => available.has(kind));
 }
@@ -69,8 +72,8 @@ export function isSameTimelineUrlState(left: TimelineUrlState, right: TimelineUr
     left.grouping === right.grouping &&
     left.sort === right.sort &&
     left.selectedEventKey === right.selectedEventKey &&
-    sameActivities(left.activityFilter, right.activityFilter) &&
-    sameActivities(left.kindFilter, right.kindFilter) &&
+    sameStrings(left.activityFilter, right.activityFilter) &&
+    sameStrings(left.kindFilter, right.kindFilter) &&
     sameMode(left.mode, right.mode)
   );
 }
@@ -91,7 +94,14 @@ function requiredControl<T extends TimelineControlOption>(options: readonly T[])
   return option;
 }
 
-function sameActivities(left: readonly string[], right: readonly string[]): boolean {
+/** Descriptor activity order is canonical, but URL order is only semantic. */
+function sameActivitySet(left: readonly string[], right: readonly string[]): boolean {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return leftSet.size === rightSet.size && [...leftSet].every((activity) => rightSet.has(activity));
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
