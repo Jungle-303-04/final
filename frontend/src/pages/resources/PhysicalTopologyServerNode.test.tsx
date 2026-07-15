@@ -24,7 +24,10 @@ describe("PhysicalTopologyServerCard usage color", () => {
     const card = screen.getByRole("article", { name: "서버 worker-a" });
     expect(card.dataset.morphId).toBe("server:cluster-1:node:worker-a");
     expect(card.className).toContain("transition-transform");
+    expect(card.className).toContain("motion-reduce:hover:translate-y-0");
     expect(card.className).not.toContain("transition-[border-color,box-shadow,transform]");
+    expect(document.querySelector('[data-slot="physical-topology-pods"]')?.className)
+      .toContain("grid-cols-6");
   });
 
   it("updates measured values, smooths color, and removes bars without usage evidence", () => {
@@ -42,7 +45,7 @@ describe("PhysicalTopologyServerCard usage color", () => {
 
     expect(screen.getByText("90%")).toBeTruthy();
     expect(cpu.dataset.usageValue).toBe("68.000");
-    expect(withinMetric(cpu)?.style.width).toBe("100%");
+    expect(withinMetric(cpu)?.className).toContain("w-full");
     expect(withinMetric(cpu)?.style.transform).toBe("scaleX(0.68)");
 
     act(() => frames.advance(0));

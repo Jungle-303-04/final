@@ -16,20 +16,24 @@ import { auditTimelineResponseSchema } from "./audit-timeline-schemas";
 const AUDIT_TIMELINE = {
   items: [
     {
+      event_id: "event-incident-1",
       subject: "incident.detected",
       source: "dashboard-projection",
       created_at: "2026-07-13T04:00:00+00:00",
       causation_id: null,
+      journey_stage: "alert" as const,
       payload_summary: {
         incident_id: "incident-1",
         severity: "critical",
       },
     },
     {
+      event_id: "event-rca-1",
       subject: "rca.completed",
       source: "rca-worker",
       created_at: "2026-07-13T04:00:01+00:00",
       causation_id: "event-parent-1",
+      journey_stage: "rca" as const,
       payload_summary: {
         root_cause: "ImagePullBackOff",
         evidence: ["event://cluster-1/default/pod-1"],

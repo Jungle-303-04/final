@@ -29,7 +29,10 @@ const CLUSTER: HomeClusterChoice = {
   incidentCount: 0,
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("ClusterDisconnectDialog", () => {
   it("requires the exact cluster name and shows the real submit and refresh handoff states", async () => {
@@ -59,7 +62,8 @@ describe("ClusterDisconnectDialog", () => {
 
     expect(disconnect).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
     expect(screen.getByRole("status").textContent).toContain("연결 해제를 요청하는 중");
-    expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
+    expect(screen.getByRole("button", { name: "백그라운드에서 계속" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
 
     resolveDisconnect?.();
     expect(await screen.findByText("에이전트 실행이 중단되었습니다")).toBeTruthy();
@@ -129,9 +133,35 @@ describe("ClusterDisconnectDialog", () => {
 
     expect(await screen.findByText("클러스터에서 정리 명령을 실행하세요")).toBeTruthy();
     expect(onDisconnected).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "정리 완료 확인" }));
+    await user.click(screen.getByRole("button", { name: "DB 등록 강제 제거" }));
     expect(confirmManualCleanup).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
     expect(await screen.findByText("연결이 해제되었습니다")).toBeTruthy();
+  });
+
+  it("stops indefinite command polling and offers honest DB-only cleanup", async () => {
+    const user = userEvent.setup();
+    const startedAt = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(startedAt);
+    const loadDisconnect = vi.fn().mockImplementation(async () => {
+      now.mockReturnValue(startedAt + 9_000);
+      return {
+        status: "running" as const,
+        cleanupCompleted: false,
+        failureReason: null,
+      };
+    });
+    renderDialog({
+      confirmManualCleanup: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(uninstallingReceipt()),
+      loadDisconnect,
+    });
+
+    await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
+    await user.click(screen.getByRole("button", { name: "연결 해제" }));
+
+    expect(await screen.findByText("클러스터에서 정리 명령을 실행하세요")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "DB 등록 강제 제거" })).toBeTruthy();
+    expect(loadDisconnect).toHaveBeenCalledOnce();
   });
 });
 

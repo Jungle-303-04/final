@@ -46,6 +46,22 @@ describe("ResourcesPhysicalTopologyScene motion identity", () => {
     expect(reorderedWorkerA).toBe(workerA);
     expect(reorderedWorkerA.dataset.morphId).toBe("server:cluster-1:node:worker-a");
   });
+
+  it("keeps the same pod element while realtime evidence changes", () => {
+    const view = render(scene(readyFrame()));
+    const firstPod = screen.getByRole("button", { name: /checkout-api-0/u });
+
+    view.rerender(scene(readyFrame({
+      ...PHYSICAL_TOPOLOGY,
+      pods: PHYSICAL_TOPOLOGY.pods.map((pod) => pod.name === "checkout-api-0"
+        ? { ...pod, usagePercent: 44, cpuMillicores: 44 }
+        : pod),
+    })));
+
+    const updatedPod = screen.getByRole("button", { name: /checkout-api-0/u });
+    expect(updatedPod).toBe(firstPod);
+    expect(updatedPod.getAttribute("aria-label")).toContain("44%");
+  });
 });
 
 function scene(frame: PhysicalTopologyFrame) {

@@ -141,9 +141,9 @@ describe("ProductRouter unified filter cutover", () => {
     await user.keyboard("gh");
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
     });
-    expect(router.state.historyAction).toBe("PUSH");
+    expect(router.state.historyAction).toBe("REPLACE");
   });
 
   it("drops detail when a route shortcut targets the already active surface", async () => {
@@ -168,7 +168,7 @@ describe("ProductRouter unified filter cutover", () => {
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
@@ -186,14 +186,14 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
-  it("uses the populated Home screen as the landing screen", async () => {
+  it("uses the cluster operating screen as the temporary landing screen", async () => {
     const { router } = renderProductRouter(
       `/${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });

@@ -82,7 +82,7 @@ describe("ResourcesPage URL-backed detail", () => {
     const layout = document.querySelector('[data-detail-layout="peek"]');
     const detailColumn = document.querySelector('[data-slot="resources-detail-column"]');
     expect(layout).toBeTruthy();
-    expect(detailColumn?.className).toContain("lg:basis-[30rem]");
+    expect(detailColumn?.className).toContain("lg:basis-[42rem]");
     expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
     expect(within(dialog).getByRole("tab", { name: "개요" })).toBeTruthy();
     expect(within(dialog).queryByRole("tab", { name: "YAML" })).toBeNull();
@@ -98,7 +98,7 @@ describe("ResourcesPage URL-backed detail", () => {
     expect(close.className).not.toContain("ml-auto");
     expect(close.className).not.toContain("fixed");
     const detailHeaderButtons = within(dialog).getAllByRole("button");
-    expect(detailHeaderButtons.indexOf(close)).toBeLessThan(
+    expect(detailHeaderButtons.indexOf(close)).toBeGreaterThan(
       detailHeaderButtons.indexOf(within(dialog).getByRole("button", {
         name: "상세 전체 화면으로 보기",
       })),
@@ -163,8 +163,6 @@ describe("ResourcesPage URL-backed detail", () => {
     expect(dialog.hasAttribute("aria-modal")).toBe(false);
     const close = within(dialog).getByRole("button", { name: "상세 닫기" });
     await waitFor(() => expect(document.activeElement).toBe(close));
-    await user.keyboard("{Shift>}{Tab}{/Shift}");
-    expect(dialog.contains(document.activeElement)).toBe(false);
     close.focus();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

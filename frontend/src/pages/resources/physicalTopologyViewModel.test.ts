@@ -8,6 +8,7 @@ import {
   PHYSICAL_SERVER_WIDTH,
   physicalServerPlacements,
   podAbnormalBadge,
+  podShortLabel,
   podUsageTone,
   visiblePhysicalPods,
 } from "./physicalTopologyViewModel";
@@ -37,6 +38,12 @@ describe("physical topology view model", () => {
       .toBe("restarting");
     expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 0 })))
       .toBeNull();
+  });
+
+  it("derives the visible pod mark only from the real name prefix", () => {
+    expect(podShortLabel("checkout-api-0")).toBe("CH");
+    expect(podShortLabel("a")).toBe("A");
+    expect(podShortLabel("패스-수집기-0")).toBe("패스");
   });
 
   it("places matching and nonmatching pods together and preserves unassigned truth", () => {

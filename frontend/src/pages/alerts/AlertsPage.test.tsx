@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AlertEventsProvider } from "../../features/alerts/AlertEventsProvider";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import type {
   AlertEvent,
   AlertEventsPort,
@@ -104,9 +105,11 @@ function renderPage(alertEvents: AlertEventsPort) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <MemoryRouter initialEntries={["/alerts"]}>
-        <AlertEventsProvider port={alertEvents}>
-          <AlertsPage />
-        </AlertEventsProvider>
+        <UnifiedFilterProvider>
+          <AlertEventsProvider port={alertEvents}>
+            <AlertsPage />
+          </AlertEventsProvider>
+        </UnifiedFilterProvider>
       </MemoryRouter>
     </I18nProvider>,
   );

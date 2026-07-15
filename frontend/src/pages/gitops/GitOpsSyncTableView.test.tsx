@@ -43,14 +43,14 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.queryByLabelText("Checkout API Details")).toBeNull();
   });
 
-  it("keeps the no-target state informative without offering an unavailable action", async () => {
+  it("keeps the no-target state informative and offers the real registration action", async () => {
     const port = gitOpsPort();
     vi.mocked(port.listSyncTargets).mockResolvedValue([]);
     renderView(port);
 
     expect(await screen.findByText("No deployment targets")).toBeTruthy();
     expect(screen.getByText("Register an application deployment target to see its sync status here.")).toBeTruthy();
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "New deployment target" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
   });
 });
