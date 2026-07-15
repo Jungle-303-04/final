@@ -12,6 +12,7 @@ import type { ReleaseRun, ReleaseRunAction } from "../../features/gitops/gitOpsC
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 
 export function RunActions({
   run,
@@ -73,7 +74,9 @@ export function RunFact({ icon, label, value }: { icon: ReactNode; label: string
     <div className="flex min-w-0 items-center gap-2 overflow-hidden bg-card p-3">
       <span className="shrink-0 text-muted-foreground [&_svg]:size-3.5">{icon}</span>
       <dt className="shrink-0 text-[0.6875rem] text-muted-foreground">{label}</dt>
-      <dd className="m-0 min-w-0 flex-1 truncate border-l pl-2 text-xs font-medium" title={value}>{value}</dd>
+      <dd className="m-0 min-w-0 flex-1 border-l pl-2 text-xs font-medium">
+        <OverflowIdentity value={value} />
+      </dd>
     </div>
   );
 }

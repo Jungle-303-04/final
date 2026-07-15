@@ -3,6 +3,7 @@ import type {
   ResourceSummary,
 } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import type { ResourceTableColumnKey } from "./resourceTableModel";
 
@@ -52,7 +53,11 @@ function podCell(
   if (column === "cpu") return metric(facts.cpuMillicores, "mCPU", formatNumber);
   if (column === "memory") return metric(facts.memoryMebibytes, "MiB", formatNumber);
   if (column === "restarts") return numberOrNull(facts.restartCount, formatNumber);
-  if (column === "node") return facts.nodeName;
+  if (column === "node") {
+    return facts.nodeName
+      ? <OverflowIdentity className="max-w-40" value={facts.nodeName} />
+      : null;
+  }
   return null;
 }
 
@@ -87,16 +92,19 @@ function serviceCell(
 ) {
   if (column === "serviceType") return facts.serviceType;
   if (column === "selector") {
-    return facts.selector.length === 0
-      ? null
-      : <span className="block max-w-56 truncate" title={pairs(facts.selector)}>{pairs(facts.selector)}</span>;
+    return facts.selector.length === 0 ? null : (
+      <OverflowIdentity className="max-w-56" value={pairs(facts.selector)} />
+    );
   }
   if (column === "ports") {
     if (facts.ports.length === 0) return null;
     const value = facts.ports.map((port) => [port.port, port.protocol].filter(Boolean).join("/")).join(", ");
-    return <span className="block max-w-44 truncate" title={value}>{value}</span>;
+    return <OverflowIdentity className="max-w-44" value={value} />;
   }
-  if (column === "external") return facts.externalUrl ?? facts.externalHosts[0] ?? null;
+  if (column === "external") {
+    const value = facts.externalUrl ?? facts.externalHosts[0] ?? null;
+    return value ? <OverflowIdentity className="max-w-56" value={value} /> : null;
+  }
   if (column === "count") return formatNumber(facts.ports.length);
   return null;
 }
@@ -110,7 +118,9 @@ function eventCell(
   if (column === "reason") return facts.reason;
   if (column === "object") {
     const involved = facts.involvedResource;
-    return involved ? `${involved.kind}/${involved.name}` : null;
+    return involved ? (
+      <OverflowIdentity className="max-w-56" value={`${involved.kind}/${involved.name}`} />
+    ) : null;
   }
   if (column === "count") return numberOrNull(facts.occurrenceCount, formatNumber);
   if (column === "lastSeen") return formatTime(facts.lastSeenAt, formatDate, null);

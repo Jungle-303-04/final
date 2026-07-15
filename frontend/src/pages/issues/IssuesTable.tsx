@@ -2,6 +2,7 @@ import type { IssueSummary } from "../../features/issues/issuesContract";
 import { useI18n } from "../../shared/i18n";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import {
   Table,
   TableBody,
@@ -92,7 +93,9 @@ function IssueRow({
       <TableCell>
         <StatusMark label={displayText(issue.status, t("common.state.unknown"))} tone="unknown" />
       </TableCell>
-      <TableCell>{resourceLabel(issue, t("issues.target.unavailable"))}</TableCell>
+      <TableCell className="max-w-72">
+        <OverflowIdentity value={resourceLabel(issue, t("issues.target.unavailable"))} />
+      </TableCell>
       <TableCell className="text-muted-foreground">
         {formatTimestamp(
           issue.updatedAt,

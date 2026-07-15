@@ -28,7 +28,7 @@ describe("GitOpsSyncTableView", () => {
     renderView(port);
 
     expect(await screen.findByText("Checkout API")).toBeTruthy();
-    expect(screen.getByText("f0123456789a…")).toBeTruthy();
+    expect(screen.getByText("f012345678…89abcdef")).toBeTruthy();
     expect(screen.getByText("Needs sync")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Details: Checkout API" }));

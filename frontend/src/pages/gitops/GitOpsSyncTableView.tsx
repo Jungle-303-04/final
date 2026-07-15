@@ -10,6 +10,7 @@ import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import {
   Table,
   TableBody,
@@ -124,7 +125,7 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
                       <TableCell>
                         <span className="grid min-w-40 gap-0.5">
                           <span className="font-medium">{row.applicationName}</span>
-                          <span className="font-mono text-xs text-muted-foreground">{row.applicationId}</span>
+                          <OverflowIdentity className="font-mono text-xs text-muted-foreground" value={row.applicationId} />
                         </span>
                       </TableCell>
                       <TableCell>
@@ -139,8 +140,10 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
                       <TableCell title={status.raw ?? undefined}>
                         <StatusMark label={status.label} tone={status.tone} />
                       </TableCell>
-                      <TableCell className="font-mono text-xs" title={row.revision ?? undefined}>
-                        {compactRevision(row.revision, t("common.value.unavailable"))}
+                      <TableCell className="max-w-48 font-mono text-xs">
+                        {row.revision ? (
+                          <OverflowIdentity value={row.revision} />
+                        ) : t("common.value.unavailable")}
                       </TableCell>
                       <TableCell>
                         {formatObserved(row.observedAt, formatDate, t("common.value.unavailable"))}
@@ -241,11 +244,6 @@ function formatObserved(
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) return unavailable;
   return formatDate(timestamp, { dateStyle: "medium", timeStyle: "short" });
-}
-
-function compactRevision(value: string | null, unavailable: string): string {
-  if (value === null) return unavailable;
-  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
 function isAbortError(error: unknown): boolean {
