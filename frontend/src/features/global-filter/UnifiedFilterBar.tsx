@@ -160,7 +160,13 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   };
 
   return (
-    <div className="min-w-0 flex-1 sm:max-w-xl" data-slot="unified-filter-bar">
+    <div
+      className="min-w-0 flex-1 sm:max-w-xl"
+      data-slot="unified-filter-bar"
+      onKeyDownCapture={(event) => {
+        if (event.key === "Tab") setOpen(false);
+      }}
+    >
       <Popover onOpenChange={changePopoverOpen} open={open}>
         <SearchPillInput
           aria-label={t("shell.filter.placeholder")}
