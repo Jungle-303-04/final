@@ -1,7 +1,19 @@
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
+import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
 import type { I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
+import { Button } from "../../shared/ui/primitives/button";
 import type {
   TimelineEvent,
   TimelineGrouping,
@@ -122,7 +134,7 @@ export function TimelineSwimlane({
       data-timeline-sort={sort}
       role="region"
     >
-      <div className="overflow-x-auto pb-1">
+      <TimelineAxisScroller groups={groups} t={t}>
         <div className="grid min-w-[32rem] gap-3">
           {groups.map((group) => (
             <TimelineSwimlaneRow
@@ -135,9 +147,166 @@ export function TimelineSwimlane({
             />
           ))}
         </div>
-      </div>
+      </TimelineAxisScroller>
     </section>
   );
+}
+
+const SCROLL_EDGE_TOLERANCE = 1;
+
+interface TimelineAxisScrollState {
+  hasOverflow: boolean;
+  canScrollBackward: boolean;
+  canScrollForward: boolean;
+}
+
+const EMPTY_AXIS_SCROLL_STATE: TimelineAxisScrollState = {
+  hasOverflow: false,
+  canScrollBackward: false,
+  canScrollForward: false,
+};
+
+function TimelineAxisScroller({
+  children,
+  groups,
+  t,
+}: {
+  children: ReactNode;
+  groups: readonly TimelineEventGroup[];
+  t: I18nController["t"];
+}) {
+  const reducedMotion = usePrefersReducedMotion();
+  const viewportId = useId();
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [scrollState, setScrollState] = useState<TimelineAxisScrollState>(EMPTY_AXIS_SCROLL_STATE);
+  const syncScrollState = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (viewport === null) return;
+    const next = timelineAxisScrollState(viewport);
+    setScrollState((current) => (
+      current.hasOverflow === next.hasOverflow
+      && current.canScrollBackward === next.canScrollBackward
+      && current.canScrollForward === next.canScrollForward
+        ? current
+        : next
+    ));
+  }, []);
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport === null) return;
+    syncScrollState();
+    viewport.addEventListener("scroll", syncScrollState, { passive: true });
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(syncScrollState);
+    resizeObserver?.observe(viewport);
+    return () => {
+      viewport.removeEventListener("scroll", syncScrollState);
+      resizeObserver?.disconnect();
+    };
+  }, [groups, syncScrollState]);
+
+  const scrollTo = useCallback((left: number) => {
+    const viewport = viewportRef.current;
+    if (viewport === null) return;
+    viewport.scrollTo({
+      left,
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+    syncScrollState();
+  }, [reducedMotion, syncScrollState]);
+  const scrollByPage = useCallback((direction: -1 | 1) => {
+    const viewport = viewportRef.current;
+    if (viewport === null) return;
+    scrollTo(viewport.scrollLeft + direction * viewport.clientWidth);
+  }, [scrollTo]);
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.currentTarget !== event.target || !scrollState.hasOverflow) return;
+    if (event.key === "ArrowLeft" || event.key === "PageUp") {
+      event.preventDefault();
+      scrollByPage(-1);
+    } else if (event.key === "ArrowRight" || event.key === "PageDown") {
+      event.preventDefault();
+      scrollByPage(1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      scrollTo(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      const viewport = viewportRef.current;
+      if (viewport !== null) scrollTo(viewport.scrollWidth - viewport.clientWidth);
+    }
+  };
+  const hint = timelineAxisScrollHint(scrollState, t);
+
+  return (
+    <div className="grid min-w-0 gap-2">
+      {hint === null ? null : (
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground" id={`${viewportId}-hint`} role="status">
+            {hint}
+          </p>
+          <div aria-label={t("timeline.swimlane.axis")} className="flex shrink-0 items-center gap-1" role="group">
+            <Button
+              aria-controls={viewportId}
+              aria-label={t("timeline.swimlane.scroll.previous")}
+              disabled={!scrollState.canScrollBackward}
+              onClick={() => scrollByPage(-1)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <ChevronLeft aria-hidden="true" />
+            </Button>
+            <Button
+              aria-controls={viewportId}
+              aria-label={t("timeline.swimlane.scroll.next")}
+              disabled={!scrollState.canScrollForward}
+              onClick={() => scrollByPage(1)}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+      )}
+      <div
+        aria-describedby={hint === null ? undefined : `${viewportId}-hint`}
+        aria-label={t("timeline.swimlane.axis")}
+        className="overflow-x-auto overscroll-x-contain rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+        data-slot="timeline-axis-scroll"
+        id={viewportId}
+        onKeyDown={handleKeyDown}
+        ref={viewportRef}
+        role="group"
+        tabIndex={scrollState.hasOverflow ? 0 : -1}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function timelineAxisScrollState(viewport: HTMLDivElement): TimelineAxisScrollState {
+  const maximumScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+  const hasOverflow = maximumScrollLeft > SCROLL_EDGE_TOLERANCE;
+  return {
+    hasOverflow,
+    canScrollBackward: hasOverflow && viewport.scrollLeft > SCROLL_EDGE_TOLERANCE,
+    canScrollForward: hasOverflow && viewport.scrollLeft < maximumScrollLeft - SCROLL_EDGE_TOLERANCE,
+  };
+}
+
+function timelineAxisScrollHint(
+  state: TimelineAxisScrollState,
+  t: I18nController["t"],
+): string | null {
+  if (!state.hasOverflow) return null;
+  if (state.canScrollBackward && state.canScrollForward) return t("timeline.swimlane.scroll.moreBoth");
+  if (state.canScrollBackward) return t("timeline.swimlane.scroll.moreLeft");
+  return t("timeline.swimlane.scroll.moreRight");
 }
 
 function TimelineEventListItem({
@@ -203,13 +372,17 @@ function TimelineSwimlaneRow({
         {events.map((event, index) => (
           <EventControl
             ariaLabel={event.title}
-            className={`absolute z-10 size-4 -translate-x-1/2 rounded-full border-2 border-background ${markerClass(event.severity)} ${index % 2 === 0 ? "top-3" : "top-9"}`}
+            className={`absolute z-10 size-6 -translate-x-1/2 rounded-full focus-visible:ring-3 focus-visible:ring-ring/40 ${index % 2 === 0 ? "top-3" : "top-9"}`}
             dataTimelineMarker
             event={event}
             interaction={interaction}
             key={event.sourceKey}
             style={{ left: `clamp(0.75rem, ${timelinePositionPercent(event, allEvents)}%, calc(100% - 0.75rem))` }}
           >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-1 rounded-full border-2 border-background ${markerClass(event.severity)}`}
+            />
             <span className="sr-only">{event.title}</span>
             <span aria-hidden="true" className="sr-only">
               {formatDate(new Date(event.occurredAt), { dateStyle: "medium", timeStyle: "medium" })}

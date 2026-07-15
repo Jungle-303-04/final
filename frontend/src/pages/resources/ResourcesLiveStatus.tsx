@@ -1,5 +1,5 @@
 import { useI18n } from "../../shared/i18n";
-import { cn } from "../../shared/lib/cn";
+import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import type { PhysicalTopologyLiveState } from "./usePhysicalTopologyRealtime";
 
 export function ResourcesLiveStatus({
@@ -29,17 +29,7 @@ export function ResourcesLiveStatus({
       role="status"
     >
       <span className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "size-1.5 rounded-full",
-            connected && degraded === null && "bg-success",
-            connected && degraded !== null && "bg-warning",
-            (state.status === "connecting" || state.status === "reconnecting") &&
-              "animate-pulse bg-warning motion-reduce:animate-none",
-            state.status === "disconnected" && "bg-destructive",
-          )}
-        />
+        <LiveStatusDot state={state.status} tone={liveStatusTone(state.status, degraded !== null)} />
         <span className="tabular-nums">{label}</span>
       </span>
       {degraded === null ? null : (
@@ -61,6 +51,16 @@ export function ResourcesLiveStatus({
       ) : null}
     </div>
   );
+}
+
+function liveStatusTone(
+  state: PhysicalTopologyLiveState["status"],
+  degraded: boolean,
+): LiveStatusDotTone {
+  if (state === "connected") return degraded ? "warning" : "healthy";
+  if (state === "connecting" || state === "reconnecting") return "warning";
+  if (state === "disconnected") return "critical";
+  return "unknown";
 }
 
 function displayInterval(seconds: number): number {
