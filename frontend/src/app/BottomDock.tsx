@@ -55,7 +55,11 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
       tabIndex={-1}
     >
       {!dock.collapsed ? (
-        <BottomDockResizeHandle height={dock.height} onHeightChange={dock.setHeight} />
+        <BottomDockResizeHandle
+          height={dock.height}
+          hostRef={operationCenterRef}
+          onHeightChange={dock.setHeight}
+        />
       ) : null}
       <Tabs
         className="h-full min-h-0 gap-0"
