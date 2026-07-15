@@ -1,0 +1,2493 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
+  "featureCount": 240,
+  "features": [
+    {
+      "contractId": "reference.feature.001",
+      "id": "reference-feature-001",
+      "section": "0. 목적과 사용 금지선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.002",
+      "id": "reference-feature-002",
+      "section": "0. 목적과 사용 금지선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.003",
+      "id": "reference-feature-003",
+      "section": "0. 목적과 사용 금지선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.004",
+      "id": "reference-feature-004",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.005",
+      "id": "reference-feature-005",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.006",
+      "id": "reference-feature-006",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.007",
+      "id": "reference-feature-007",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.008",
+      "id": "reference-feature-008",
+      "section": "1. 조사 기준선",
+      "endpoints": [
+        "GET /api/contexts"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.009",
+      "id": "reference-feature-009",
+      "section": "1. 조사 기준선",
+      "endpoints": [
+        "GET /api/auth/me"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.010",
+      "id": "reference-feature-010",
+      "section": "1. 조사 기준선",
+      "endpoints": [
+        "GET /api/capabilities"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.011",
+      "id": "reference-feature-011",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.012",
+      "id": "reference-feature-012",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.013",
+      "id": "reference-feature-013",
+      "section": "1. 조사 기준선",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.014",
+      "id": "reference-feature-014",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.015",
+      "id": "reference-feature-015",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.016",
+      "id": "reference-feature-016",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.017",
+      "id": "reference-feature-017",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.018",
+      "id": "reference-feature-018",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.019",
+      "id": "reference-feature-019",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.020",
+      "id": "reference-feature-020",
+      "section": "2.1 레이아웃",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.021",
+      "id": "reference-feature-021",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.022",
+      "id": "reference-feature-022",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.023",
+      "id": "reference-feature-023",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.024",
+      "id": "reference-feature-024",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.025",
+      "id": "reference-feature-025",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.026",
+      "id": "reference-feature-026",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.027",
+      "id": "reference-feature-027",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.028",
+      "id": "reference-feature-028",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.029",
+      "id": "reference-feature-029",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.030",
+      "id": "reference-feature-030",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.031",
+      "id": "reference-feature-031",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.032",
+      "id": "reference-feature-032",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.033",
+      "id": "reference-feature-033",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.034",
+      "id": "reference-feature-034",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.035",
+      "id": "reference-feature-035",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.036",
+      "id": "reference-feature-036",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.037",
+      "id": "reference-feature-037",
+      "section": "3. Route 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.038",
+      "id": "reference-feature-038",
+      "section": "4.1 Home",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.039",
+      "id": "reference-feature-039",
+      "section": "4.1 Home",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.040",
+      "id": "reference-feature-040",
+      "section": "4.1 Home",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.041",
+      "id": "reference-feature-041",
+      "section": "4.1 Home",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.042",
+      "id": "reference-feature-042",
+      "section": "4.1 Home",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.043",
+      "id": "reference-feature-043",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.044",
+      "id": "reference-feature-044",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.045",
+      "id": "reference-feature-045",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.046",
+      "id": "reference-feature-046",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.047",
+      "id": "reference-feature-047",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.048",
+      "id": "reference-feature-048",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.049",
+      "id": "reference-feature-049",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.050",
+      "id": "reference-feature-050",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.051",
+      "id": "reference-feature-051",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.052",
+      "id": "reference-feature-052",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.053",
+      "id": "reference-feature-053",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.054",
+      "id": "reference-feature-054",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.055",
+      "id": "reference-feature-055",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.056",
+      "id": "reference-feature-056",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.057",
+      "id": "reference-feature-057",
+      "section": "5. Keyboard 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.058",
+      "id": "reference-feature-058",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.059",
+      "id": "reference-feature-059",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.060",
+      "id": "reference-feature-060",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.061",
+      "id": "reference-feature-061",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.062",
+      "id": "reference-feature-062",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.063",
+      "id": "reference-feature-063",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.064",
+      "id": "reference-feature-064",
+      "section": "6.1 SSE",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.065",
+      "id": "reference-feature-065",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.066",
+      "id": "reference-feature-066",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.067",
+      "id": "reference-feature-067",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.068",
+      "id": "reference-feature-068",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.069",
+      "id": "reference-feature-069",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.070",
+      "id": "reference-feature-070",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.071",
+      "id": "reference-feature-071",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.072",
+      "id": "reference-feature-072",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.073",
+      "id": "reference-feature-073",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.074",
+      "id": "reference-feature-074",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.075",
+      "id": "reference-feature-075",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.076",
+      "id": "reference-feature-076",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.077",
+      "id": "reference-feature-077",
+      "section": "6.2 주요 REST 갱신 주기",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.078",
+      "id": "reference-feature-078",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.079",
+      "id": "reference-feature-079",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.080",
+      "id": "reference-feature-080",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.081",
+      "id": "reference-feature-081",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.082",
+      "id": "reference-feature-082",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.083",
+      "id": "reference-feature-083",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.084",
+      "id": "reference-feature-084",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.085",
+      "id": "reference-feature-085",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.086",
+      "id": "reference-feature-086",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.087",
+      "id": "reference-feature-087",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.088",
+      "id": "reference-feature-088",
+      "section": "7. API 전수표",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.089",
+      "id": "reference-feature-089",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /health"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.090",
+      "id": "reference-feature-090",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /diagnostics"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.091",
+      "id": "reference-feature-091",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /auth/me"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.092",
+      "id": "reference-feature-092",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /version-check"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.093",
+      "id": "reference-feature-093",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /connection"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.094",
+      "id": "reference-feature-094",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /connection/retry"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.095",
+      "id": "reference-feature-095",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /cluster-info"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.096",
+      "id": "reference-feature-096",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /capabilities"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.097",
+      "id": "reference-feature-097",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /namespaces"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.098",
+      "id": "reference-feature-098",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /api-resources"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.099",
+      "id": "reference-feature-099",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /contexts"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.100",
+      "id": "reference-feature-100",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /sessions"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.101",
+      "id": "reference-feature-101",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /contexts/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.102",
+      "id": "reference-feature-102",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /cluster/namespace-scope"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.103",
+      "id": "reference-feature-103",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /cluster/namespace"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.104",
+      "id": "reference-feature-104",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /search"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.105",
+      "id": "reference-feature-105",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /settings"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.106",
+      "id": "reference-feature-106",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "PUT /settings"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.107",
+      "id": "reference-feature-107",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "GET /github/starred"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.108",
+      "id": "reference-feature-108",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /github/star",
+        "POST /github/dismiss"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.109",
+      "id": "reference-feature-109",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /desktop/open-url"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.110",
+      "id": "reference-feature-110",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /desktop/open-file",
+        "POST /desktop/open-folder"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.111",
+      "id": "reference-feature-111",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /desktop/save-file"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.112",
+      "id": "reference-feature-112",
+      "section": "7.2 Bootstrap·전역 셸·desktop",
+      "endpoints": [
+        "POST /desktop/update",
+        "GET /desktop/update/status",
+        "POST /desktop/update/apply"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.113",
+      "id": "reference-feature-113",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /dashboard"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.114",
+      "id": "reference-feature-114",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /dashboard/crds"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.115",
+      "id": "reference-feature-115",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /dashboard/helm"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.116",
+      "id": "reference-feature-116",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /issues"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.117",
+      "id": "reference-feature-117",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /applications"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.118",
+      "id": "reference-feature-118",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /topology"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.119",
+      "id": "reference-feature-119",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /changes"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.120",
+      "id": "reference-feature-120",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /audit"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.121",
+      "id": "reference-feature-121",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /settings/audit"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.122",
+      "id": "reference-feature-122",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "PUT /settings/audit"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.123",
+      "id": "reference-feature-123",
+      "section": "7.3 Home·Issues·Applications·Topology·Timeline",
+      "endpoints": [
+        "GET /secrets/certificate-expiry"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.124",
+      "id": "reference-feature-124",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /resource-counts"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.125",
+      "id": "reference-feature-125",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /resources/{kind}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.126",
+      "id": "reference-feature-126",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /resources/{kind}/{ns-or-_}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.127",
+      "id": "reference-feature-127",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /resources/{kind}/{ns-or-_}/{name}/cascade-preview"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.128",
+      "id": "reference-feature-128",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /issues/resource/{kind}/{ns-or-_}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.129",
+      "id": "reference-feature-129",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /audit/resource/{kind}/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.130",
+      "id": "reference-feature-130",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /rbac/subject/{kind}/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.131",
+      "id": "reference-feature-131",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /rbac/subject/{kind}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.132",
+      "id": "reference-feature-132",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /rbac/role/{kind}/{ns-or-_}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.133",
+      "id": "reference-feature-133",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /rbac/namespace/{namespace}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.134",
+      "id": "reference-feature-134",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /rbac/whoami"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.135",
+      "id": "reference-feature-135",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /resources/resourcequotas"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.136",
+      "id": "reference-feature-136",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /images/metadata"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.137",
+      "id": "reference-feature-137",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /images/inspect"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.138",
+      "id": "reference-feature-138",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /images/file"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.139",
+      "id": "reference-feature-139",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /pods/{ns}/{name}/files"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.140",
+      "id": "reference-feature-140",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /pods/{ns}/{name}/files/download"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.141",
+      "id": "reference-feature-141",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "GET /capi/clusters/{ns}/{name}/kubeconfig"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.142",
+      "id": "reference-feature-142",
+      "section": "7.4 Resource browser·detail·RBAC·compare",
+      "endpoints": [
+        "POST /capi/clusters/{ns}/{name}/connect"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.143",
+      "id": "reference-feature-143",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /metrics/pods/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.144",
+      "id": "reference-feature-144",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /metrics/nodes/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.145",
+      "id": "reference-feature-145",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /metrics/pods/{ns}/{name}/history"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.146",
+      "id": "reference-feature-146",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /metrics/nodes/{name}/history"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.147",
+      "id": "reference-feature-147",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /metrics/top/pods"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.148",
+      "id": "reference-feature-148",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /metrics/top/nodes"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.149",
+      "id": "reference-feature-149",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /prometheus/status"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.150",
+      "id": "reference-feature-150",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "POST /prometheus/connect"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.151",
+      "id": "reference-feature-151",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /prometheus/resources/{kind}/{ns}/{name}",
+        "GET /prometheus/resources/{kind}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.152",
+      "id": "reference-feature-152",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /prometheus/query"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.153",
+      "id": "reference-feature-153",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /prometheus/pvc/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.154",
+      "id": "reference-feature-154",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /prometheus/rightsizing/{kind}/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.155",
+      "id": "reference-feature-155",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /pods/{ns}/{name}/logs"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.156",
+      "id": "reference-feature-156",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "SSE /pods/{ns}/{name}/logs/stream"
+      ],
+      "streaming": true,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.157",
+      "id": "reference-feature-157",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "SSE /workloads/{kind}/{ns}/{name}/logs/stream"
+      ],
+      "streaming": true,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.158",
+      "id": "reference-feature-158",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "WS /pods/{ns}/{name}/exec"
+      ],
+      "streaming": true,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.159",
+      "id": "reference-feature-159",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "WS /local-terminal"
+      ],
+      "streaming": true,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.160",
+      "id": "reference-feature-160",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /portforwards"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.161",
+      "id": "reference-feature-161",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "GET /portforwards/available/{type}/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.162",
+      "id": "reference-feature-162",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "POST /portforwards"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.163",
+      "id": "reference-feature-163",
+      "section": "7.5 Metrics·logs·dock",
+      "endpoints": [
+        "DELETE /portforwards/{id}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.164",
+      "id": "reference-feature-164",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /resources/apply"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.165",
+      "id": "reference-feature-165",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "PUT /resources/{kind}/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.166",
+      "id": "reference-feature-166",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "DELETE /resources/{kind}/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.167",
+      "id": "reference-feature-167",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /workloads/{kind}/{ns}/{name}/restart"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.168",
+      "id": "reference-feature-168",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /workloads/{kind}/{ns}/{name}/scale"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.169",
+      "id": "reference-feature-169",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "GET /workloads/{kind}/{ns}/{name}/revisions"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.170",
+      "id": "reference-feature-170",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /workloads/{kind}/{ns}/{name}/rollback"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.171",
+      "id": "reference-feature-171",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /cronjobs/{ns}/{name}/trigger"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.172",
+      "id": "reference-feature-172",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /cronjobs/{ns}/{name}/suspend",
+        "POST /cronjobs/{ns}/{name}/resume"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.173",
+      "id": "reference-feature-173",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /nodes/{name}/cordon",
+        "POST /nodes/{name}/uncordon"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.174",
+      "id": "reference-feature-174",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /nodes/{name}/drain"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.175",
+      "id": "reference-feature-175",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /pods/{ns}/{name}/debug"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.176",
+      "id": "reference-feature-176",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /nodes/{name}/debug",
+        "DELETE /nodes/{name}/debug"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.177",
+      "id": "reference-feature-177",
+      "section": "7.6 Resource·workload mutation",
+      "endpoints": [
+        "POST /curl/service"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.178",
+      "id": "reference-feature-178",
+      "section": "7.7 Live Traffic",
+      "endpoints": [
+        "GET /traffic/sources"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.179",
+      "id": "reference-feature-179",
+      "section": "7.7 Live Traffic",
+      "endpoints": [
+        "POST /traffic/source"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.180",
+      "id": "reference-feature-180",
+      "section": "7.7 Live Traffic",
+      "endpoints": [
+        "POST /traffic/connect"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.181",
+      "id": "reference-feature-181",
+      "section": "7.7 Live Traffic",
+      "endpoints": [
+        "GET /traffic/flows"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.182",
+      "id": "reference-feature-182",
+      "section": "7.7 Live Traffic",
+      "endpoints": [
+        "GET /network-policies/evaluate"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.183",
+      "id": "reference-feature-183",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.184",
+      "id": "reference-feature-184",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.185",
+      "id": "reference-feature-185",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}/manifest"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.186",
+      "id": "reference-feature-186",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}/values"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.187",
+      "id": "reference-feature-187",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}/diff",
+        "GET /helm/releases/{ns}/{name}/values/diff"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.188",
+      "id": "reference-feature-188",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}/notes/diff",
+        "GET /helm/releases/{ns}/{name}/hooks/diff",
+        "GET /helm/releases/{ns}/{name}/resources/diff"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.189",
+      "id": "reference-feature-189",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}/upgrade-info"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.190",
+      "id": "reference-feature-190",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/releases/{ns}/{name}/versions"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.191",
+      "id": "reference-feature-191",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/upgrade-check"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.192",
+      "id": "reference-feature-192",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/repositories"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.193",
+      "id": "reference-feature-193",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "POST /helm/repositories/{name}/update"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.194",
+      "id": "reference-feature-194",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/oci-sources"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.195",
+      "id": "reference-feature-195",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "POST /helm/oci-sources",
+        "DELETE /helm/oci-sources"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.196",
+      "id": "reference-feature-196",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/charts"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.197",
+      "id": "reference-feature-197",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/charts/{repo}/{chart}",
+        "GET /helm/charts/{repo}/{chart}/{version}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.198",
+      "id": "reference-feature-198",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/artifacthub/search"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.199",
+      "id": "reference-feature-199",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "GET /helm/artifacthub/charts/{repo}/{chart}",
+        "GET /helm/artifacthub/charts/{repo}/{chart}/{version}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.200",
+      "id": "reference-feature-200",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "POST /helm/releases/install-stream"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.201",
+      "id": "reference-feature-201",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "POST /helm/releases/{ns}/{name}/upgrade-stream"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.202",
+      "id": "reference-feature-202",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "POST /helm/releases/{ns}/{name}/rollback-stream"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.203",
+      "id": "reference-feature-203",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "POST /helm/releases/{ns}/{name}/values/preview"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.204",
+      "id": "reference-feature-204",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "PUT /helm/releases/{ns}/{name}/values"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.205",
+      "id": "reference-feature-205",
+      "section": "7.8 Helm",
+      "endpoints": [
+        "DELETE /helm/releases/{ns}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.206",
+      "id": "reference-feature-206",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "GET /api-resources",
+        "GET /resource-counts",
+        "GET /resources/{kind}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.207",
+      "id": "reference-feature-207",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "GET /gitops/tree/{kind}/{ns-or-_}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.208",
+      "id": "reference-feature-208",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "GET /gitops/insights/{kind}/{ns-or-_}/{name}"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.209",
+      "id": "reference-feature-209",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/{kind}/{ns}/{name}/reconcile"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.210",
+      "id": "reference-feature-210",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/{kind}/{ns}/{name}/sync-with-source"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.211",
+      "id": "reference-feature-211",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/{kind}/{ns}/{name}/suspend",
+        "POST /gitops/{kind}/{ns}/{name}/resume"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.212",
+      "id": "reference-feature-212",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/applications/{ns}/{name}/sync"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.213",
+      "id": "reference-feature-213",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/applications/{ns}/{name}/refresh"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.214",
+      "id": "reference-feature-214",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/applications/{ns}/{name}/rollback"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.215",
+      "id": "reference-feature-215",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/applications/{ns}/{name}/terminate"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.216",
+      "id": "reference-feature-216",
+      "section": "7.9 GitOps",
+      "endpoints": [
+        "POST /gitops/applications/{ns}/{name}/suspend",
+        "POST /gitops/applications/{ns}/{name}/resume"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.217",
+      "id": "reference-feature-217",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "GET /opencost/summary"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.218",
+      "id": "reference-feature-218",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "GET /opencost/workloads"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.219",
+      "id": "reference-feature-219",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "GET /opencost/trend"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.220",
+      "id": "reference-feature-220",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "GET /opencost/nodes"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.221",
+      "id": "reference-feature-221",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "GET /config"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.222",
+      "id": "reference-feature-222",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "PUT /config"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.223",
+      "id": "reference-feature-223",
+      "section": "7.10 Cost·Settings·기타 overlay",
+      "endpoints": [
+        "PUT /integrations/prometheus"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.224",
+      "id": "reference-feature-224",
+      "section": "7.11 실시간 event 계약",
+      "endpoints": [
+        "SSE /events/stream"
+      ],
+      "streaming": true,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.225",
+      "id": "reference-feature-225",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /events",
+        "GET /certificates",
+        "GET /packages",
+        "GET /metrics/top/resources"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.226",
+      "id": "reference-feature-226",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /gitops/managed-resources",
+        "GET /argo/destinations"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.227",
+      "id": "reference-feature-227",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /traffic/flows/stream"
+      ],
+      "streaming": true,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.228",
+      "id": "reference-feature-228",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /traffic/source",
+        "GET /traffic/connection"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.229",
+      "id": "reference-feature-229",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /changes/{kind}/{ns}/{name}/children"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.230",
+      "id": "reference-feature-230",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /prometheus/namespace/{ns}",
+        "GET /prometheus/cluster"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.231",
+      "id": "reference-feature-231",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /workloads/{kind}/{ns}/{name}/pods",
+        "GET /workloads/{kind}/{ns}/{name}/logs"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.232",
+      "id": "reference-feature-232",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "POST /helm/releases",
+        "POST /helm/releases/{ns}/{name}/rollback",
+        "POST /helm/releases/{ns}/{name}/upgrade"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.233",
+      "id": "reference-feature-233",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "GET /ai/**",
+        "GET /debug/**"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.234",
+      "id": "reference-feature-234",
+      "section": "7.12 server 등록 경로 중 standalone browser 비소비",
+      "endpoints": [
+        "POST /agent/self-upgrade"
+      ],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.235",
+      "id": "reference-feature-235",
+      "section": "9. RCA 후속 삽입 후보",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.236",
+      "id": "reference-feature-236",
+      "section": "9. RCA 후속 삽입 후보",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.237",
+      "id": "reference-feature-237",
+      "section": "9. RCA 후속 삽입 후보",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.238",
+      "id": "reference-feature-238",
+      "section": "9. RCA 후속 삽입 후보",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.239",
+      "id": "reference-feature-239",
+      "section": "9. RCA 후속 삽입 후보",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    },
+    {
+      "contractId": "reference.feature.240",
+      "id": "reference-feature-240",
+      "section": "9. RCA 후속 삽입 후보",
+      "endpoints": [],
+      "streaming": false,
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+    }
+  ]
+}

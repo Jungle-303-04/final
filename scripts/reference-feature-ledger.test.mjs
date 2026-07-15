@@ -30,8 +30,9 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
   );
 
   assert.deepEqual(
-    ledger.features.map(({ id, section, endpoints, streaming, backendContract, frontendContract }) => ({
+    ledger.features.map(({ id, contractId, section, endpoints, streaming, backendContract, frontendContract }) => ({
       id,
+      contractId,
       section,
       endpoints,
       streaming,
@@ -41,6 +42,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
     [
       {
         id: "reference-feature-001",
+        contractId: "reference.feature.001",
         section: "전역 셸",
         endpoints: [],
         streaming: false,
@@ -49,6 +51,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
       },
       {
         id: "reference-feature-002",
+        contractId: "reference.feature.002",
         section: "API",
         endpoints: ["GET /resources"],
         streaming: false,
@@ -57,6 +60,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
       },
       {
         id: "reference-feature-003",
+        contractId: "reference.feature.003",
         section: "API",
         endpoints: ["SSE /events/stream", "WS /pods/{name}/exec"],
         streaming: true,
@@ -76,6 +80,7 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
     features: [
       {
         id: "reference-feature-001",
+        contractId: "reference.feature.001",
         section: "API",
         line: 1,
         cells: ["`GET /health`"],
@@ -87,6 +92,7 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
       },
       {
         id: "reference-feature-001",
+        contractId: "reference.feature.002",
         section: "API",
         line: 2,
         cells: ["`GET /readyz`"],
@@ -141,6 +147,8 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
           section: "API",
           endpoints: ["SSE /events/stream"],
           streaming: true,
+          backendContract: "packages.contracts.parity",
+          frontendContract: "frontend/src/shared/parity/referenceParity.ts",
         },
       ],
     });

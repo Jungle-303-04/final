@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from packages.contracts.reference_feature_catalog import (
     feature_contract,
     load_feature_contract_catalog,
