@@ -9,8 +9,10 @@ from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
     TimelineCoverage,
+    TimelineCursor,
     TimelineEvent,
     TimelineQuery,
+    TimelineResourceSubject,
     TimelineStreamFrame,
     TimelineWindow,
 )
@@ -25,20 +27,29 @@ def _scope(cluster_id: str = "cluster-a") -> ClusterScope:
     )
 
 
-def _event(event_id: str = "event-1", cursor: int = 1) -> TimelineEvent:
+def _cursor(sequence: int) -> TimelineCursor:
+    return TimelineCursor(token=f"timeline-cursor-{sequence}")
+
+
+def _event(event_id: str = "event-1") -> TimelineEvent:
+    resource = ResourceRef(
+        api_group="apps",
+        version="v1",
+        kind="Deployment",
+        namespace="payments",
+        name="checkout",
+        uid="deployment-uid",
+    )
     return TimelineEvent(
         event_id=event_id,
-        cursor=cursor,
+        source="inventory",
+        source_key=f"inventory:{event_id}",
+        native_id=event_id,
+        activity="change",
         occurred_at="2026-07-15T12:00:00Z",
         scope=_scope(),
-        resource=ResourceRef(
-            api_group="apps",
-            version="v1",
-            kind="Deployment",
-            namespace="payments",
-            name="checkout",
-            uid="deployment-uid",
-        ),
+        subject=TimelineResourceSubject(resource=resource),
+        resource=resource,
         event_type="update",
         severity="warning",
         title="Deployment checkout changed",
@@ -73,19 +84,25 @@ def test_timeline_query_canonicalizes_scopes_and_carries_server_realtime_policy(
 
 def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
     event = _event()
-    coverage = TimelineCoverage(from_ms=1_250, to_ms=1_500, reason="collection_gap")
+    coverage = TimelineCoverage(
+        scope=_scope(),
+        source="inventory",
+        from_ms=1_250,
+        to_ms=1_500,
+        reason="collection_gap",
+    )
 
     snapshot = TimelineStreamFrame(
         kind="snapshot",
-        cursor=0,
+        cursor=_cursor(0),
         scopes=[_scope()],
         policy=_policy(),
         events=[event],
         coverage=[coverage],
     )
-    update = TimelineStreamFrame(kind="event", cursor=1, event=event)
-    resync = TimelineStreamFrame(kind="resync_required", cursor=8, reason="cursor_expired")
-    end = TimelineStreamFrame(kind="end", cursor=8)
+    update = TimelineStreamFrame(kind="event", cursor=_cursor(1), event=event)
+    resync = TimelineStreamFrame(kind="resync_required", cursor=_cursor(8), reason="cursor_expired")
+    end = TimelineStreamFrame(kind="end", cursor=_cursor(8))
 
     assert snapshot.events == (event,)
     assert snapshot.policy == _policy()
@@ -94,11 +111,11 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
     assert end.is_terminal is True
 
     with pytest.raises(ValidationError, match="event frame requires event"):
-        TimelineStreamFrame(kind="event", cursor=2)
+        TimelineStreamFrame(kind="event", cursor=_cursor(2))
     with pytest.raises(ValidationError, match="snapshot frame requires policy"):
-        TimelineStreamFrame(kind="snapshot", cursor=0, scopes=[_scope()])
+        TimelineStreamFrame(kind="snapshot", cursor=_cursor(0), scopes=[_scope()])
     with pytest.raises(ValidationError, match="terminal frame"):
-        TimelineStreamFrame(kind="end", cursor=2, event=event)
+        TimelineStreamFrame(kind="end", cursor=_cursor(2), event=event)
     with pytest.raises(ValidationError, match="same workspace"):
         TimelineQuery(
             scopes=[

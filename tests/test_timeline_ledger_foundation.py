@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
-from domains.timeline.cursor import TimelineCursorBinding, TimelineReplayCursorCodec
-from domains.timeline.mapping import inventory_timeline_event
-from domains.timeline.repository import TimelineReplayResult, replay_result
 
 from domains.inventory_filter.cursor import FilterCursorCodec
+from domains.timeline.cursor import TimelineCursorBinding, TimelineReplayCursorCodec
+from domains.timeline.mapping import inventory_timeline_event
+from domains.timeline.repository import (
+    TimelineLedgerRepository,
+    TimelineReplayResult,
+    replay_result,
+)
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     TimelineEvent,
@@ -108,6 +115,28 @@ def test_timeline_cursor_is_bound_to_user_workspace_query_and_authorization_revi
         )
 
 
+def test_expired_timeline_cursor_is_rejected_before_replay_and_retention_requires_resync() -> None:
+    now = [1_000]
+    codec = TimelineReplayCursorCodec(
+        FilterCursorCodec(
+            "timeline-cursor-test-secret-32-bytes!!",
+            ttl_seconds=10,
+            now=lambda: now[0],
+        )
+    )
+    binding = TimelineCursorBinding(
+        user_id="user-a",
+        authorization_revision="auth-revision-a",
+        query=_query(),
+        snapshot_revision=7,
+    )
+    cursor = codec.encode(binding, sequence=7)
+    now[0] = 1_010
+
+    with pytest.raises(ValueError, match="cursor expired"):
+        codec.decode(cursor, binding=binding)
+
+
 def test_replay_reports_resync_when_the_cursor_precedes_the_retention_boundary() -> None:
     result = replay_result(
         after_sequence=7,
@@ -135,3 +164,74 @@ def test_replay_records_preserve_ledger_order_and_dedupe_uses_source_key() -> No
 
     assert result.status == "available"
     assert [event.event_id for event in result.events] == ["event-1", "event-2"]
+
+
+def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_cursor_lock() -> None:
+    class Result:
+        def __init__(self, row: dict[str, Any] | None = None, scalar: int | None = None) -> None:
+            self.row = row
+            self.scalar = scalar
+
+        def mappings(self) -> Result:
+            return self
+
+        def one(self) -> dict[str, Any]:
+            assert self.row is not None
+            return self.row
+
+        def one_or_none(self) -> dict[str, Any] | None:
+            return self.row
+
+        def scalar_one(self) -> int:
+            assert self.scalar is not None
+            return self.scalar
+
+    class DurableConnection:
+        def __init__(self) -> None:
+            self.last_sequence = 0
+            self.rows: dict[str, dict[str, Any]] = {}
+            self.lock_count = 0
+
+        def execute(self, statement: Any) -> Result:
+            table = getattr(statement, "table", None)
+            table_name = getattr(table, "name", None)
+            params = statement.compile().params
+            if table_name == "timeline_event_cursors" and statement.is_insert:
+                return Result()
+            if table_name == "timeline_event_cursors" and statement.is_update:
+                self.last_sequence = int(params["last_sequence"])
+                return Result(scalar=self.last_sequence)
+            if table_name == "timeline_events" and statement.is_insert:
+                row = dict(params)
+                self.rows[str(row["source_key"])] = row
+                return Result(row=row)
+
+            columns = statement.selected_columns.keys()
+            if "source_key" in columns:
+                source_key = str(params["source_key_1"])
+                return Result(row=self.rows.get(source_key))
+            self.lock_count += 1
+            return Result(row={"last_sequence": self.last_sequence, "retained_from_sequence": 1})
+
+    connection = DurableConnection()
+
+    @contextmanager
+    def transaction() -> Iterator[DurableConnection]:
+        yield connection
+
+    repository = object.__new__(TimelineLedgerRepository)
+    repository.connection = transaction
+
+    first = repository.append_timeline_event(_resource_event("inventory:1", "event-1"))
+    duplicate = repository.append_timeline_event(
+        _resource_event("inventory:1", "event-1-reported-again")
+    )
+
+    assert first.inserted is True
+    assert first.sequence == 1
+    assert duplicate.inserted is False
+    assert duplicate.sequence == 1
+    assert duplicate.event.event_id == "event-1"
+    assert connection.last_sequence == 1
+    assert len(connection.rows) == 1
+    assert connection.lock_count == 2
