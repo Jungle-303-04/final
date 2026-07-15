@@ -1,4 +1,4 @@
-import { Check, LoaderCircle, ServerCog } from "lucide-react";
+import { Check, LoaderCircle } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -40,7 +40,6 @@ const providers: readonly {
   { id: "aws", logo: "eks", labelKey: "clusters.connect.provider.aws" },
   { id: "gcp", logo: "gke", labelKey: "clusters.connect.provider.gcp" },
   { id: "azure", logo: "aks", labelKey: "clusters.connect.provider.azure" },
-  { id: "onprem", logo: ServerCog, labelKey: "clusters.connect.provider.onprem" },
 ];
 
 type WizardStep = 1 | 2 | 3;
@@ -66,7 +65,7 @@ export function ClusterConnectDialog({
   const { formatDate, t } = useI18n();
   const [step, setStep] = useState<WizardStep>(1);
   const [name, setName] = useState("");
-  const [provider, setProvider] = useState<ClusterConnectProvider>("onprem");
+  const [provider, setProvider] = useState<ClusterConnectProvider>("aws");
   const [phase, setPhase] = useState<ConnectPhase>("idle");
   const [receipt, setReceipt] = useState<ClusterConnectReceipt | null>(null);
   const [connectionStage, setConnectionStage] = useState<ClusterConnectStage>("awaiting_install");
@@ -129,7 +128,7 @@ export function ClusterConnectDialog({
   const reset = () => {
     setStep(1);
     setName("");
-    setProvider("onprem");
+    setProvider("aws");
     setPhase("idle");
     setReceipt(null);
     setConnectionStage("awaiting_install");
