@@ -772,6 +772,29 @@ def candidate_with_approval(
     )
 
 
+def candidate_with_approval_identity(
+    candidate: RecoveryActionCandidate,
+    approval_record: object,
+) -> RecoveryActionCandidate:
+    """Persisted approval identity must be identical to the dispatched command identity."""
+    if not isinstance(approval_record, dict):
+        return candidate
+    workflow_run_id = str(approval_record.get("workflow_run_id") or "")
+    if not workflow_run_id:
+        return candidate
+    draft = candidate.draft
+    return replace(
+        candidate,
+        draft=replace(
+            draft,
+            params={
+                **draft.params,
+                "workflow_run_id": workflow_run_id,
+            },
+        ),
+    )
+
+
 def recovery_approval_payload(
     plan: RecoveryPlan,
     selected: RecoveryActionCandidate,
@@ -849,7 +872,7 @@ async def _select_recovery_action_from_record(
         )
         if selected_record is None:
             raise HTTPException(status_code=HTTP_CONFLICT, detail=RECOVERY_PLAN_ALREADY_RESOLVED)
-        db.request_workflow_approval(
+        approval_record = db.request_workflow_approval(
             recovery_approval_payload(
                 plan,
                 selected,
@@ -860,6 +883,7 @@ async def _select_recovery_action_from_record(
                 reason=reason,
             )
         )
+        selected = candidate_with_approval_identity(selected, approval_record)
         accepted = await events.accept_body(
             RecoveryActionSelectedBody(
                 plan=plan,
