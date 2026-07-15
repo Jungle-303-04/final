@@ -705,7 +705,8 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
-ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale", "pod.exec"]
+ResourceCapabilityExecution = Literal["command", "terminal"]
+ResourceCapabilityInputType = Literal["integer", "string"]
 
 
 class ResourceCapabilitySubject(StrictModel):
@@ -720,10 +721,43 @@ class ResourceCapabilitySubject(StrictModel):
     name: str = Field(min_length=1)
 
 
-class ResourceActionCapability(StrictModel):
-    """현재 actor가 바로 진입할 수 있는 실제 gateway action."""
+class ResourceCapabilityInput(StrictModel):
+    """Server-owned field definition for one executable resource capability."""
 
-    capability_id: ResourceActionCapabilityId
+    key: str = Field(min_length=1, max_length=120, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=120)
+    type: ResourceCapabilityInputType
+    required: bool = True
+    minimum: int | None = None
+    maximum: int | None = None
+    default: int | str | None = None
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("capability input minimum must not exceed maximum")
+        if self.type == "integer" and isinstance(self.default, str):
+            raise ValueError("integer capability input default must be an integer")
+        if self.type == "string" and isinstance(self.default, int):
+            raise ValueError("string capability input default must be a string")
+        if isinstance(self.default, int):
+            if self.minimum is not None and self.default < self.minimum:
+                raise ValueError("capability input default is below minimum")
+            if self.maximum is not None and self.default > self.maximum:
+                raise ValueError("capability input default is above maximum")
+        return self
+
+
+class ResourceActionCapability(StrictModel):
+    """A server-owned, immediately executable action for the exact resource."""
+
+    capability_id: str = Field(min_length=1, max_length=160, pattern=r"^[a-z][a-z0-9._-]*$")
+    label: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+    execution: ResourceCapabilityExecution
+    confirmation_required: bool = True
+    realtime: bool = True
+    input_schema: list[ResourceCapabilityInput] = Field(default_factory=list)
     method: Literal["POST", "WEBSOCKET"] = "POST"
     path: str = Field(min_length=1, pattern=r"^/")
 

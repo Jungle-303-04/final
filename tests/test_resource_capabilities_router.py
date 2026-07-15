@@ -153,11 +153,33 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
     assert body["capabilities"] == [
         {
             "capability_id": "deployment.restart",
+            "label": "Restart",
+            "description": "Restart this deployment and stream the operation result.",
+            "execution": "command",
+            "confirmation_required": True,
+            "realtime": True,
+            "input_schema": [],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/restart",
         },
         {
             "capability_id": "deployment.scale",
+            "label": "Scale",
+            "description": "Change the desired replica count and stream the operation result.",
+            "execution": "command",
+            "confirmation_required": True,
+            "realtime": True,
+            "input_schema": [
+                {
+                    "key": "replicas",
+                    "label": "Replicas",
+                    "type": "integer",
+                    "required": True,
+                    "minimum": 0,
+                    "maximum": 100,
+                    "default": 1,
+                }
+            ],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/scale",
         },
@@ -250,6 +272,12 @@ def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod()
     assert response.json()["capabilities"] == [
         {
             "capability_id": "pod.exec",
+            "label": "Terminal",
+            "description": "Open an audited terminal session and stream its output.",
+            "execution": "terminal",
+            "confirmation_required": True,
+            "realtime": True,
+            "input_schema": [],
             "method": "WEBSOCKET",
             "path": "/live/terminal",
         }
