@@ -59,6 +59,77 @@ def _card() -> dict[str, object]:
     }
 
 
+def _detail_evidence() -> dict[str, object]:
+    return {
+        "topology": {
+            "availability": "available",
+            "completeness": "exact",
+            "observed_at": "2026-07-14T10:00:00Z",
+            "nodes": [
+                {
+                    "id": "workload-a",
+                    "cluster_id": "cluster-a",
+                    "resource_type": "workload",
+                    "kind": "Deployment",
+                    "namespace": "shop",
+                    "name": "checkout",
+                    "status": "Ready",
+                    "health": "healthy",
+                    "observed_at": "2026-07-14T10:00:00Z",
+                },
+                {
+                    "id": "pod-a",
+                    "cluster_id": "cluster-a",
+                    "resource_type": "pod",
+                    "kind": "Pod",
+                    "namespace": "shop",
+                    "name": "checkout-a",
+                    "status": "Running",
+                    "health": "healthy",
+                    "observed_at": "2026-07-14T10:00:00Z",
+                },
+            ],
+            "edges": [
+                {
+                    "id": "edge-a",
+                    "from_id": "workload-a",
+                    "to_id": "pod-a",
+                    "type": "owns",
+                    "evidence_type": "owner_reference",
+                    "authority": "authoritative",
+                    "observed_at": "2026-07-14T10:00:00Z",
+                }
+            ],
+            "partial_reason_codes": [],
+        },
+        "history": {
+            "availability": "available",
+            "completeness": "partial",
+            "entries": [
+                {
+                    "id": "delivery:run-1",
+                    "type": "delivery",
+                    "status": "succeeded",
+                    "summary": "checkout deployed",
+                    "occurred_at": "2026-07-14T10:00:00Z",
+                    "workflow_run_id": "run-1",
+                    "gitops_change_id": None,
+                }
+            ],
+            "partial_reason_codes": ["bounded_workflow_history"],
+        },
+        "source": {
+            "availability": "available",
+            "completeness": "exact",
+            "conflict": "unknown",
+            "repository_ref": "org/checkout",
+            "default_branch": "main",
+            "manifest_path": "deploy/checkout.yaml",
+            "partial_reason_codes": [],
+        },
+    }
+
+
 def test_application_product_contracts_are_strict_and_provider_neutral() -> None:
     response = ApplicationProductListResponse.model_validate({"applications": [_card()]})
 
@@ -88,6 +159,7 @@ def test_application_detail_requires_honest_completeness_and_bounded_activity() 
                 "endpoints_completeness": "exact",
                 "recent_incidents": [],
                 "recent_activity": [],
+                **_detail_evidence(),
             }
         }
     )
@@ -102,6 +174,7 @@ def test_application_detail_requires_honest_completeness_and_bounded_activity() 
                     "endpoints_completeness": "unavailable",
                     "recent_incidents": [],
                     "recent_activity": [],
+                    **_detail_evidence(),
                 }
             }
         )
@@ -144,6 +217,33 @@ def test_application_runtime_delivery_and_batch_contracts_require_honest_availab
     for card in invalid_cards:
         with pytest.raises(ValidationError):
             ApplicationProductListResponse.model_validate({"applications": [card]})
+
+
+def test_application_detail_topology_history_and_source_require_authorized_evidence() -> None:
+    detail = _card() | {
+        "endpoints": [],
+        "endpoints_completeness": "exact",
+        "recent_incidents": [],
+        "recent_activity": [],
+        **_detail_evidence(),
+    }
+    invalid_details = [
+        detail
+        | {
+            "topology": detail["topology"]
+            | {"edges": [detail["topology"]["edges"][0] | {"to_id": "missing"}]}
+        },
+        detail
+        | {
+            "history": detail["history"]
+            | {"entries": [detail["history"]["entries"][0] | {"workflow_run_id": None}]}
+        },
+        detail | {"source": detail["source"] | {"availability": "unavailable"}},
+    ]
+
+    for invalid_detail in invalid_details:
+        with pytest.raises(ValidationError):
+            ApplicationProductDetailResponse.model_validate({"application": invalid_detail})
 
 
 def test_deployment_and_drift_contracts_reject_raw_or_complex_values() -> None:

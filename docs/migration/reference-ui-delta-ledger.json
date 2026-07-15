@@ -91,9 +91,9 @@
               "applications.catalog.batch-runtime",
               "applications.detail.overview-projection"
             ],
-            "state": "blocked",
-            "blockedReason": "ApplicationProductCard and ApplicationProductDetail expose only aggregate pod health; they do not carry a provider-neutral batch signal, retained-run outcome, or signal explanation.",
-            "rationale": "Current cards have deployment, drift, incident, and readiness channels, but cannot truthfully render the new batch badge without a Python-owned projection."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python-owned batch runtime projection and shared catalog/detail channel now carry availability, completeness, status, and retained-run counters without browser inference; source-equivalent grouping and explanatory tooltip coverage remain in progress."
           }
         }
       ]
@@ -159,9 +159,9 @@
               "applications.detail.overview-projection",
               "applications.detail.history"
             ],
-            "state": "blocked",
-            "blockedReason": "The existing strict product response deliberately contains bounded generic activity and incidents only; it lacks runtime-versus-delivery, source conflict, batch, workload, and partial-history fields needed to assert these semantics.",
-            "rationale": "Existing adapter and Python contract tests are the correct proof locations, but currently validate the smaller generic projection rather than source-equivalent evidence."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Strict Python and Zod contracts now distinguish runtime, delivery, batch, source conflict, and bounded partial history; focused router, contract, adapter, and surface tests prove the implemented evidence while remaining source-specific interactions are tracked separately."
           }
         }
       ]
@@ -237,9 +237,9 @@
               "applications.detail.overview-projection",
               "applications.catalog.delivery-status"
             ],
-            "state": "blocked",
-            "blockedReason": "Current detail data has aggregate health, endpoints, counts, three activity records, and three incidents, but has no workload matrix, delivery-source status, batch activity, source provenance/conflict, or relationship references.",
-            "rationale": "The existing overview is a safe generic projection; it is a partial destination, not evidence that the richer source behavior has been ported."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail projection now supplies independent runtime, delivery, batch, source provenance/conflict, and server-authorized relationship evidence to the existing overview; workload-matrix and full source-specific navigation parity remain in progress."
           }
         },
         {
@@ -269,9 +269,9 @@
             "plannedTestIds": [
               "applications.detail.topology"
             ],
-            "state": "blocked",
-            "blockedReason": "ApplicationsPort has no application-topology, ownership, relationship edge, deployment-inventory, generated-run, or topology freshness projection; the current Resources link is only a count drilldown.",
-            "rationale": "The product must request an authorized Python projection and compose its own topology route, not reuse the upstream React graph or infer edges from displayed counts."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail contract now renders server-authorized inventory graph nodes and ownership, scheduling, selector, or routing edges with completeness and freshness evidence; interactive graph focus, ReplicaSet expansion, and source-equivalent drilldowns remain in progress."
           }
         },
         {
@@ -297,9 +297,9 @@
             "plannedTestIds": [
               "applications.detail.history"
             ],
-            "state": "blocked",
-            "blockedReason": "GET /applications/{id}/deployments exposes workflow-run deployment rows but no retained source anchors, partial-source status, source references, incident-to-workload identity, or history summary required for this behavior.",
-            "rationale": "The existing deployments and incident tabs are reusable destinations only after a dedicated authorized history contract separates source evidence from current incident evidence."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail contract now supplies ordered, bounded deployment and incident history with explicit partial-source reason codes and source provenance/conflict evidence; direct workload and source-view navigation remain in progress."
           }
         },
         {
@@ -374,9 +374,9 @@
               "applications.catalog.delivery-status",
               "applications.detail.overview-projection"
             ],
-            "state": "blocked",
-            "blockedReason": "Current application health is a three-state aggregate and does not expose the independent runtime, delivery, or retained batch evidence needed to verify precedence rules.",
-            "rationale": "Existing adapter tests prove provider-neutral basic health mapping; the new parity test belongs across the Python contract and adapter after those evidence fields are introduced."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Python contract and projection tests plus adapter and surface tests now cover independent runtime, delivery, and retained batch evidence; the remaining source-specific aggregation precedence is still in progress."
           }
         }
       ]
@@ -418,9 +418,9 @@
               "applications.catalog.batch-runtime",
               "applications.catalog.delivery-status"
             ],
-            "state": "blocked",
-            "blockedReason": "The current list projection has no workload class, batch runtime, retained run, mixed-group member, or source delivery fields, so the browser cannot perform this status and sort policy without hardcoding or guessing.",
-            "rationale": "ApplicationsSurface currently supports grid/table switching and attention sorting, but its aggregate readiness must remain separate from batch execution semantics."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Catalog cards and table rows now consume server-projected runtime, delivery, and batch-runtime evidence without browser inference; source-equivalent workload-class grouping and sort precedence remain in progress."
           }
         },
         {
@@ -444,9 +444,9 @@
             "plannedTestIds": [
               "applications.catalog.batch-runtime"
             ],
-            "state": "blocked",
-            "blockedReason": "No current product field identifies batch signals, severity ordering, source detail, or the application members over which a group signal would be selected.",
-            "rationale": "ApplicationCard and ApplicationsTable are shared destinations, but must consume one server-supplied signal model rather than independently rank raw workloads."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Shared catalog surfaces now render one server-supplied batch-runtime channel with availability and completeness rather than deriving raw workload state; source-equivalent grouped highest-severity selection remains in progress."
           }
         }
       ]

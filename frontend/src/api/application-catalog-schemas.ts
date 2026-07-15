@@ -218,11 +218,167 @@ export const applicationIncidentPreviewSchema = z.strictObject({
   started_at: nullableTimestampSchema,
 });
 
+const applicationPartialReasonCodesSchema = z.array(z.string().min(1));
+
+export const applicationTopologyNodeSchema = z.strictObject({
+  id: z.string().min(1),
+  cluster_id: z.string().min(1),
+  resource_type: z.string().min(1),
+  kind: z.string().min(1),
+  namespace: nullableTextSchema,
+  name: z.string().min(1),
+  status: z.string().min(1),
+  health: z.string().min(1),
+  observed_at: nullableTimestampSchema,
+});
+
+export const applicationTopologyEdgeSchema = z.strictObject({
+  id: z.string().min(1),
+  from_id: z.string().min(1),
+  to_id: z.string().min(1),
+  type: z.enum(["owns", "runs_on", "selects", "routes_to"]),
+  evidence_type: z.string().min(1),
+  authority: z.enum(["authoritative", "derived"]),
+  observed_at: nullableTimestampSchema,
+});
+
+export const applicationTopologySchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  completeness: filterCountCompletenessSchema,
+  observed_at: nullableTimestampSchema,
+  nodes: z.array(applicationTopologyNodeSchema).max(200).nullable(),
+  edges: z.array(applicationTopologyEdgeSchema).max(1000).nullable(),
+  partial_reason_codes: applicationPartialReasonCodesSchema,
+}).superRefine((topology, context) => {
+  if (
+    topology.availability === "unavailable" &&
+    (topology.completeness !== "unavailable" ||
+      topology.observed_at !== null ||
+      topology.nodes !== null ||
+      topology.edges !== null ||
+      topology.partial_reason_codes.length > 0)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable topology cannot claim topology evidence",
+      path: ["availability"],
+    });
+  }
+  if (
+    topology.availability === "available" &&
+    (topology.completeness === "unavailable" || topology.nodes === null || topology.edges === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "available topology requires node and edge collections",
+      path: ["availability"],
+    });
+  }
+  if (topology.completeness === "exact" && topology.partial_reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "exact topology has no partial reasons", path: ["partial_reason_codes"] });
+  }
+  if (topology.completeness === "partial" && topology.partial_reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial topology requires source reasons", path: ["partial_reason_codes"] });
+  }
+  const nodeIds = new Set(topology.nodes?.map((node) => node.id) ?? []);
+  if (nodeIds.size !== (topology.nodes?.length ?? 0)) {
+    context.addIssue({ code: "custom", message: "topology node identities must be unique", path: ["nodes"] });
+  }
+  if ((topology.edges ?? []).some((edge) => !nodeIds.has(edge.from_id) || !nodeIds.has(edge.to_id))) {
+    context.addIssue({ code: "custom", message: "topology edges must reference returned nodes", path: ["edges"] });
+  }
+});
+
+export const applicationHistoryEntrySchema = z.strictObject({
+  id: z.string().min(1),
+  type: z.enum(["delivery", "incident"]),
+  status: z.string().min(1),
+  summary: nullableTextSchema,
+  occurred_at: nullableTimestampSchema,
+  workflow_run_id: nullableTextSchema,
+  gitops_change_id: nullableTextSchema,
+}).superRefine((entry, context) => {
+  if (entry.type === "delivery" && entry.workflow_run_id === null) {
+    context.addIssue({ code: "custom", message: "delivery history requires a workflow run anchor", path: ["workflow_run_id"] });
+  }
+  if (entry.type === "incident" && (entry.workflow_run_id !== null || entry.gitops_change_id !== null)) {
+    context.addIssue({ code: "custom", message: "incident history cannot claim deployment anchors", path: ["type"] });
+  }
+});
+
+export const applicationHistorySchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  completeness: filterCountCompletenessSchema,
+  entries: z.array(applicationHistoryEntrySchema).max(6).nullable(),
+  partial_reason_codes: applicationPartialReasonCodesSchema,
+}).superRefine((history, context) => {
+  if (
+    history.availability === "unavailable" &&
+    (history.completeness !== "unavailable" ||
+      history.entries !== null ||
+      history.partial_reason_codes.length > 0)
+  ) {
+    context.addIssue({ code: "custom", message: "unavailable history cannot claim history evidence", path: ["availability"] });
+  }
+  if (
+    history.availability === "available" &&
+    (history.completeness === "unavailable" || history.entries === null)
+  ) {
+    context.addIssue({ code: "custom", message: "available history requires entry collection", path: ["availability"] });
+  }
+  if (history.completeness === "exact" && history.partial_reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "exact history has no partial reasons", path: ["partial_reason_codes"] });
+  }
+  if (history.completeness === "partial" && history.partial_reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial history requires source reasons", path: ["partial_reason_codes"] });
+  }
+});
+
+export const applicationSourceEvidenceSchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  completeness: filterCountCompletenessSchema,
+  conflict: z.enum(["aligned", "conflict", "unknown"]).nullable(),
+  repository_ref: nullableTextSchema,
+  default_branch: nullableTextSchema,
+  manifest_path: nullableTextSchema,
+  partial_reason_codes: applicationPartialReasonCodesSchema,
+}).superRefine((source, context) => {
+  if (
+    source.availability === "unavailable" &&
+    (source.completeness !== "unavailable" ||
+      source.conflict !== null ||
+      source.repository_ref !== null ||
+      source.default_branch !== null ||
+      source.manifest_path !== null ||
+      source.partial_reason_codes.length > 0)
+  ) {
+    context.addIssue({ code: "custom", message: "unavailable source cannot claim source evidence", path: ["availability"] });
+  }
+  if (
+    source.availability === "available" &&
+    (source.completeness === "unavailable" || source.conflict === null || source.repository_ref === null)
+  ) {
+    context.addIssue({ code: "custom", message: "available source requires repository provenance", path: ["availability"] });
+  }
+  if (
+    source.completeness === "exact" &&
+    (source.default_branch === null || source.manifest_path === null || source.partial_reason_codes.length > 0)
+  ) {
+    context.addIssue({ code: "custom", message: "exact source requires branch and manifest", path: ["completeness"] });
+  }
+  if (source.completeness === "partial" && source.partial_reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial source requires source reasons", path: ["partial_reason_codes"] });
+  }
+});
+
 export const applicationDetailItemSchema = applicationCatalogItemSchema.extend({
   endpoints: z.array(applicationEndpointSchema).nullable(),
   endpoints_completeness: filterCountCompletenessSchema,
   recent_activity: z.array(applicationActivitySchema).max(3),
   recent_incidents: z.array(applicationIncidentPreviewSchema).max(3),
+  topology: applicationTopologySchema,
+  history: applicationHistorySchema,
+  source: applicationSourceEvidenceSchema,
 }).superRefine((item, context) => {
   if (item.endpoints_completeness === "unavailable" && item.endpoints !== null) {
     context.addIssue({ code: "custom", message: "unavailable endpoints must be null", path: ["endpoints"] });

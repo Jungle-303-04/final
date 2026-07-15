@@ -257,6 +257,11 @@ def test_product_application_reads_are_strict_allowlisted_and_linkable() -> None
         "open_incidents",
     }
     assert detail.json()["application"]["recent_incidents"][0]["id"] == "incident-a"
+    assert detail.json()["application"]["topology"]["availability"] == "available"
+    assert detail.json()["application"]["history"]["partial_reason_codes"] == [
+        "bounded_workflow_history"
+    ]
+    assert detail.json()["application"]["source"]["repository_ref"] == "org/checkout"
     assert deployments.json()["deployments"][0]["id"] == "run-a"
     assert drift.json()["differences"][0]["field_path"] == "spec.replicas"
     assert "must-not-leak" not in " ".join((listed.text, detail.text, deployments.text, drift.text))
@@ -297,6 +302,9 @@ def test_product_application_openapi_exposes_four_strict_bq_contracts() -> None:
     assert schema["paths"]["/applications/{application_id}"]["get"]["responses"]["200"]["content"][
         "application/json"
     ]["schema"]["$ref"].endswith("ApplicationProductDetailResponse")
+    assert {"topology", "history", "source"}.issubset(
+        schema["components"]["schemas"]["ApplicationProductDetail"]["properties"]
+    )
     assert schema["paths"]["/applications/{application_id}/deployments"]["get"]["responses"]["200"][
         "content"
     ]["application/json"]["schema"]["$ref"].endswith("ApplicationDeploymentHistoryResponse")

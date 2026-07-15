@@ -2090,6 +2090,10 @@ ApplicationBatchRuntimeStatus = Literal[
     "suspended",
     "unknown",
 ]
+ApplicationTopologyEdgeType = Literal["owns", "runs_on", "selects", "routes_to"]
+ApplicationTopologyAuthority = Literal["authoritative", "derived"]
+ApplicationHistoryEntryType = Literal["delivery", "incident"]
+ApplicationSourceConflict = Literal["aligned", "conflict", "unknown"]
 ApplicationDriftStatus = Literal["in_sync", "drifted", "unknown"]
 ApplicationActivityType = Literal["deployment", "incident", "change"]
 ApplicationDriftScalar = str | int | float | bool | None
@@ -2251,11 +2255,155 @@ class ApplicationRecentActivity(StrictModel):
     occurred_at: str | None = None
 
 
+class ApplicationTopologyNode(StrictModel):
+    id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    health: str = Field(min_length=1)
+    observed_at: str | None = None
+
+
+class ApplicationTopologyEdge(StrictModel):
+    id: str = Field(min_length=1)
+    from_id: str = Field(min_length=1)
+    to_id: str = Field(min_length=1)
+    type: ApplicationTopologyEdgeType
+    evidence_type: str = Field(min_length=1)
+    authority: ApplicationTopologyAuthority
+    observed_at: str | None = None
+
+
+class ApplicationTopology(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    observed_at: str | None = None
+    nodes: list[ApplicationTopologyNode] | None = Field(default=None, max_length=200)
+    edges: list[ApplicationTopologyEdge] | None = Field(default=None, max_length=1000)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_topology(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.observed_at is not None
+            or self.nodes is not None
+            or self.edges is not None
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable topology must not claim topology evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or self.nodes is None or self.edges is None
+        ):
+            raise ValueError("available topology requires node and edge collections")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact topology cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial topology requires source reasons")
+        nodes = self.nodes or []
+        node_ids = {node.id for node in nodes}
+        if len(node_ids) != len(nodes):
+            raise ValueError("topology node identities must be unique")
+        edges = self.edges or []
+        if len({edge.id for edge in edges}) != len(edges):
+            raise ValueError("topology edge identities must be unique")
+        if any(edge.from_id not in node_ids or edge.to_id not in node_ids for edge in edges):
+            raise ValueError("topology edges must reference returned nodes")
+        return self
+
+
+class ApplicationHistoryEntry(StrictModel):
+    id: str = Field(min_length=1)
+    type: ApplicationHistoryEntryType
+    status: str = Field(min_length=1)
+    summary: str | None = None
+    occurred_at: str | None = None
+    workflow_run_id: str | None = None
+    gitops_change_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_history_reference(self) -> Self:
+        if self.type == "delivery" and self.workflow_run_id is None:
+            raise ValueError("delivery history requires a workflow run anchor")
+        if self.type == "incident" and (
+            self.workflow_run_id is not None or self.gitops_change_id is not None
+        ):
+            raise ValueError("incident history cannot claim deployment anchors")
+        return self
+
+
+class ApplicationHistory(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    entries: list[ApplicationHistoryEntry] | None = Field(default=None, max_length=6)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_history(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.entries is not None
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable history must not claim history evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or self.entries is None
+        ):
+            raise ValueError("available history requires entry collection")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact history cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial history requires source reasons")
+        entries = self.entries or []
+        if len({entry.id for entry in entries}) != len(entries):
+            raise ValueError("history entry identities must be unique")
+        return self
+
+
+class ApplicationSourceEvidence(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    conflict: ApplicationSourceConflict | None = None
+    repository_ref: str | None = None
+    default_branch: str | None = None
+    manifest_path: str | None = None
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_source_evidence(self) -> Self:
+        values = (self.conflict, self.repository_ref, self.default_branch, self.manifest_path)
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or any(value is not None for value in values)
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable source must not claim source evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable"
+            or self.conflict is None
+            or self.repository_ref is None
+        ):
+            raise ValueError("available source requires repository provenance")
+        if self.completeness == "exact" and (
+            self.default_branch is None or self.manifest_path is None or self.partial_reason_codes
+        ):
+            raise ValueError("exact source requires branch, manifest, and no partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial source requires source reasons")
+        return self
+
+
 class ApplicationProductDetail(ApplicationProductCard):
     endpoints: list[ApplicationEndpointSummary] | None = None
     endpoints_completeness: ApplicationProjectionCompleteness
     recent_incidents: list[ApplicationRecentIncident] = Field(default_factory=list, max_length=3)
     recent_activity: list[ApplicationRecentActivity] = Field(default_factory=list, max_length=3)
+    topology: ApplicationTopology
+    history: ApplicationHistory
+    source: ApplicationSourceEvidence
 
     @model_validator(mode="after")
     def validate_detail_semantics(self) -> Self:

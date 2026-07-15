@@ -52,6 +52,71 @@ const APPLICATION = {
   manifest_path: "deploy/prod",
 } as const;
 
+const DETAIL_EVIDENCE = {
+  topology: {
+    availability: "available",
+    completeness: "exact",
+    observed_at: "2026-07-14T09:00:00+00:00",
+    nodes: [
+      {
+        id: "deployment-1",
+        cluster_id: "cluster-1",
+        resource_type: "workload",
+        kind: "Deployment",
+        namespace: "prod",
+        name: "checkout",
+        status: "Ready",
+        health: "healthy",
+        observed_at: "2026-07-14T09:00:00+00:00",
+      },
+      {
+        id: "pod-1",
+        cluster_id: "cluster-1",
+        resource_type: "pod",
+        kind: "Pod",
+        namespace: "prod",
+        name: "checkout-1",
+        status: "Running",
+        health: "healthy",
+        observed_at: "2026-07-14T09:00:00+00:00",
+      },
+    ],
+    edges: [{
+      id: "edge-1",
+      from_id: "deployment-1",
+      to_id: "pod-1",
+      type: "owns",
+      evidence_type: "owner_reference",
+      authority: "authoritative",
+      observed_at: "2026-07-14T09:00:00+00:00",
+    }],
+    partial_reason_codes: [],
+  },
+  history: {
+    availability: "available",
+    completeness: "partial",
+    entries: [{
+      id: "delivery:run-1",
+      type: "delivery",
+      status: "succeeded",
+      summary: "v2.4.1 deployed",
+      occurred_at: "2026-07-14T09:00:00+00:00",
+      workflow_run_id: "run-1",
+      gitops_change_id: "change-42",
+    }],
+    partial_reason_codes: ["bounded_workflow_history"],
+  },
+  source: {
+    availability: "available",
+    completeness: "exact",
+    conflict: "aligned",
+    repository_ref: "opsia/checkout",
+    default_branch: "main",
+    manifest_path: "deploy/prod",
+    partial_reason_codes: [],
+  },
+} as const;
+
 function jsonResponse(payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
     status: 200,
@@ -92,6 +157,7 @@ describe("BQ-039~042 Application product API", () => {
           endpoints_completeness: "exact",
           recent_activity: [{ id: "activity-1", type: "deployment", summary: "v2.4.1 deployed", occurred_at: "2026-07-14T09:00:00+00:00" }],
           recent_incidents: [{ id: "incident-1", title: "Checkout latency", status: "open", started_at: "2026-07-14T09:10:00+00:00" }],
+          ...DETAIL_EVIDENCE,
         },
       }))
       .mockResolvedValueOnce(jsonResponse({ deployments: [{
@@ -152,6 +218,23 @@ describe("BQ-039~042 Application product API", () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse(payload));
       await expect(listApplicationCatalog()).rejects.toMatchObject({ kind: "invalid-payload" });
     }
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      application: {
+        ...APPLICATION,
+        endpoints: [],
+        endpoints_completeness: "exact",
+        recent_activity: [],
+        recent_incidents: [],
+        ...DETAIL_EVIDENCE,
+        topology: {
+          ...DETAIL_EVIDENCE.topology,
+          edges: [{ ...DETAIL_EVIDENCE.topology.edges[0], to_id: "missing-node" }],
+        },
+      },
+    }));
+    await expect(getApplicationOverview("app-checkout"))
+      .rejects.toMatchObject({ kind: "invalid-payload" });
 
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
       status: "drifted",
