@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -2396,6 +2396,68 @@ class ApplicationSourceEvidence(StrictModel):
         return self
 
 
+class ApplicationClusterScope(StrictModel):
+    """Wire-safe scope evidence for an authorized application instance.
+
+    This stays in the gateway response module so importing the public HTTP
+    response catalog never creates a cycle through the command parity models.
+    Its JSON shape is intentionally compatible with the shared cluster scope.
+    """
+
+    workspace_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    namespaces: tuple[str, ...] = ()
+    freshness: Literal["live", "stale", "partial", "disconnected"] = "live"
+
+    @field_validator("namespaces")
+    @classmethod
+    def canonicalize_namespaces(cls, namespaces: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(sorted({namespace.strip() for namespace in namespaces if namespace.strip()}))
+
+
+class ApplicationInstanceScope(StrictModel):
+    """One immutable deployment binding the caller may select in detail."""
+
+    id: str = Field(min_length=1)
+    environment: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    scope: ApplicationClusterScope
+
+
+class ApplicationDetailScope(StrictModel):
+    """Server-authorized environment and instance choices for one application."""
+
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    selected_instance_id: str | None = None
+    instances: list[ApplicationInstanceScope] = Field(default_factory=list, max_length=500)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_instance_scope(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.selected_instance_id is not None
+            or self.instances
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable instance scope must not claim scope evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or not self.instances
+        ):
+            raise ValueError("available instance scope requires selectable instances")
+        instance_ids = [instance.id for instance in self.instances]
+        if len(instance_ids) != len(set(instance_ids)):
+            raise ValueError("instance scope identities must be unique")
+        if self.availability == "available" and self.selected_instance_id not in instance_ids:
+            raise ValueError("available instance scope requires a selected allowed instance")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact instance scope cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial instance scope requires source reasons")
+        return self
+
+
 class ApplicationProductDetail(ApplicationProductCard):
     endpoints: list[ApplicationEndpointSummary] | None = None
     endpoints_completeness: ApplicationProjectionCompleteness
@@ -2404,6 +2466,7 @@ class ApplicationProductDetail(ApplicationProductCard):
     topology: ApplicationTopology
     history: ApplicationHistory
     source: ApplicationSourceEvidence
+    scope: ApplicationDetailScope
 
     @model_validator(mode="after")
     def validate_detail_semantics(self) -> Self:

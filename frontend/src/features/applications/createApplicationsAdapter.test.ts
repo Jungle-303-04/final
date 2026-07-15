@@ -55,6 +55,23 @@ function endpointItem(overrides: Record<string, unknown> = {}) {
 function detailEndpointItem(overrides: Record<string, unknown> = {}) {
   return {
     ...endpointItem(),
+    scope: {
+      availability: "available" as const,
+      completeness: "exact" as const,
+      selected_instance_id: "binding-prod",
+      instances: [{
+        id: "binding-prod",
+        environment: "prod",
+        status: "active",
+        scope: {
+          workspace_id: "workspace-a",
+          cluster_id: "cluster-1",
+          namespaces: ["prod"],
+          freshness: "live" as const,
+        },
+      }],
+      partial_reason_codes: [],
+    },
     endpoints: [],
     endpoints_completeness: "exact" as const,
     recent_activity: [],
@@ -176,11 +193,20 @@ describe("Applications product adapter", () => {
 
     await expect(adapter.getApplication("app-healthy")).resolves.toMatchObject({
       endpoints: null,
+      scope: {
+        selectedInstanceId: "binding-prod",
+        instances: [{ scope: { workspaceId: "workspace-a", freshness: "live" } }],
+      },
       recentActivity: [{ id: "activity-1", occurredAt: null }],
       topology: { nodes: [{ id: "deployment-1" }] },
       history: { partialReasonCodes: ["bounded_workflow_history"] },
       source: { conflict: "aligned" },
     });
+    expect(dependencies.getApplicationOverview).toHaveBeenCalledWith(
+      "app-healthy",
+      undefined,
+      undefined,
+    );
     await expect(adapter.listDeployments("app-healthy")).resolves.toMatchObject([
       { id: "deployment-1", gitOpsChangeId: "change-42", deployedAt: null },
     ]);

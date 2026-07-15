@@ -57,6 +57,36 @@ export const APPLICATION_CARD: ApplicationCardModel = {
 
 export const APPLICATION_DETAIL: ApplicationDetailModel = {
   ...APPLICATION_CARD,
+  scope: {
+    availability: "available",
+    completeness: "exact",
+    selectedInstanceId: "binding-prod",
+    instances: [
+      {
+        id: "binding-prod",
+        environment: "prod",
+        status: "active",
+        scope: {
+          workspaceId: "workspace-a",
+          clusterId: "cluster-1",
+          namespaces: ["prod"],
+          freshness: "live",
+        },
+      },
+      {
+        id: "binding-stage",
+        environment: "stage",
+        status: "active",
+        scope: {
+          workspaceId: "workspace-a",
+          clusterId: "cluster-2",
+          namespaces: ["stage"],
+          freshness: "stale",
+        },
+      },
+    ],
+    partialReasonCodes: [],
+  },
   endpoints: [{ id: "ingress:checkout", kind: "Ingress", name: "checkout", address: "https://checkout.test" }],
   endpointsCompleteness: "exact",
   recentActivity: [{

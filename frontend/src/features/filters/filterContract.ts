@@ -62,6 +62,7 @@ export const COMMON_FILTER_AXIS_OPERATORS = {
 export interface ProductDetailQuery {
   detail: string | null;
   application?: string | null;
+  applicationInstance?: string | null;
   resource: string | null;
   resourceKind: string | null;
   tab: string | null;
@@ -125,6 +126,8 @@ export type DetailMutationIntent =
   | "detail-open"
   | "detail-close"
   | "detail-tab"
+  | "detail-instance"
+  | "detail-instance-default"
   | "detail-expand"
   | "topology-view"
   | "topology-view-reset"

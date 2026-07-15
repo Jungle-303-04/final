@@ -220,6 +220,76 @@ export const applicationIncidentPreviewSchema = z.strictObject({
 
 const applicationPartialReasonCodesSchema = z.array(z.string().min(1));
 
+const applicationClusterScopeSchema = z.strictObject({
+  workspace_id: z.string().min(1),
+  cluster_id: z.string().min(1),
+  namespaces: z.array(z.string().min(1)),
+  freshness: z.enum(["live", "stale", "partial", "disconnected"]),
+});
+
+const applicationInstanceScopeSchema = z.strictObject({
+  id: z.string().min(1),
+  environment: z.string().min(1),
+  status: z.string().min(1),
+  scope: applicationClusterScopeSchema,
+});
+
+export const applicationDetailScopeSchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  completeness: filterCountCompletenessSchema,
+  selected_instance_id: nullableTextSchema,
+  instances: z.array(applicationInstanceScopeSchema).max(500),
+  partial_reason_codes: applicationPartialReasonCodesSchema,
+}).superRefine((scope, context) => {
+  if (
+    scope.availability === "unavailable" &&
+    (scope.completeness !== "unavailable" ||
+      scope.selected_instance_id !== null ||
+      scope.instances.length > 0 ||
+      scope.partial_reason_codes.length > 0)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable instance scope cannot claim scope evidence",
+      path: ["availability"],
+    });
+  }
+  if (
+    scope.availability === "available" &&
+    (scope.completeness === "unavailable" || scope.instances.length === 0)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "available instance scope requires selectable instances",
+      path: ["availability"],
+    });
+  }
+  const ids = scope.instances.map((instance) => instance.id);
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: "custom", message: "instance identities must be unique", path: ["instances"] });
+  }
+  if (scope.selected_instance_id !== null && !ids.includes(scope.selected_instance_id)) {
+    context.addIssue({
+      code: "custom",
+      message: "selected instance must be among server-authorized instances",
+      path: ["selected_instance_id"],
+    });
+  }
+  if (scope.availability === "available" && scope.selected_instance_id === null) {
+    context.addIssue({
+      code: "custom",
+      message: "available instance scope requires a selected instance",
+      path: ["selected_instance_id"],
+    });
+  }
+  if (scope.completeness === "exact" && scope.partial_reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "exact scope has no partial reasons", path: ["partial_reason_codes"] });
+  }
+  if (scope.completeness === "partial" && scope.partial_reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial scope requires source reasons", path: ["partial_reason_codes"] });
+  }
+});
+
 export const applicationTopologyNodeSchema = z.strictObject({
   id: z.string().min(1),
   cluster_id: z.string().min(1),
@@ -372,6 +442,7 @@ export const applicationSourceEvidenceSchema = z.strictObject({
 });
 
 export const applicationDetailItemSchema = applicationCatalogItemSchema.extend({
+  scope: applicationDetailScopeSchema,
   endpoints: z.array(applicationEndpointSchema).nullable(),
   endpoints_completeness: filterCountCompletenessSchema,
   recent_activity: z.array(applicationActivitySchema).max(3),

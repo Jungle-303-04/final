@@ -17,13 +17,15 @@ export function createApplicationsAdapter(
       const response = await api.listApplicationCatalog(filter, signal);
       return sortApplicationsByAttention(response.applications.map(toCard));
     }),
-    getApplication: (applicationId, signal) => withFailure(async () => {
+    getApplication: (applicationId, signal, instanceId) => withFailure(async () => {
       assertApplicationId(applicationId);
-      return toDetail((await api.getApplicationOverview(applicationId, signal)).application);
+      assertInstanceId(instanceId);
+      return toDetail((await api.getApplicationOverview(applicationId, signal, instanceId)).application);
     }),
-    listDeployments: (applicationId, signal) => withFailure(async () => {
+    listDeployments: (applicationId, signal, instanceId) => withFailure(async () => {
       assertApplicationId(applicationId);
-      const response = await api.listApplicationDeploymentHistory(applicationId, signal);
+      assertInstanceId(instanceId);
+      const response = await api.listApplicationDeploymentHistory(applicationId, signal, instanceId);
       return response.deployments.map((deployment) => ({
         id: deployment.id,
         environment: deployment.environment,
@@ -36,9 +38,10 @@ export function createApplicationsAdapter(
         gitOpsChangeId: deployment.gitops_change_id,
       }));
     }),
-    getDrift: (applicationId, signal) => withFailure(async () => {
+    getDrift: (applicationId, signal, instanceId) => withFailure(async () => {
       assertApplicationId(applicationId);
-      const response = await api.getApplicationDrift(applicationId, signal);
+      assertInstanceId(instanceId);
+      const response = await api.getApplicationDrift(applicationId, signal, instanceId);
       return {
         status: response.status,
         summary: response.summary,
@@ -122,6 +125,23 @@ function toCard(item: ApplicationCatalogEndpointItem): ApplicationCardModel {
 function toDetail(item: ApplicationDetailEndpointItem): ApplicationDetailModel {
   return {
     ...toCard(item),
+    scope: {
+      availability: item.scope.availability,
+      completeness: item.scope.completeness,
+      selectedInstanceId: item.scope.selected_instance_id,
+      instances: item.scope.instances.map((instance) => ({
+        id: instance.id,
+        environment: instance.environment,
+        status: instance.status,
+        scope: {
+          workspaceId: instance.scope.workspace_id,
+          clusterId: instance.scope.cluster_id,
+          namespaces: [...instance.scope.namespaces],
+          freshness: instance.scope.freshness,
+        },
+      })),
+      partialReasonCodes: [...item.scope.partial_reason_codes],
+    },
     endpoints: item.endpoints?.map((endpoint) => ({
       id: endpoint.id,
       kind: endpoint.kind,
@@ -191,6 +211,12 @@ function toDetail(item: ApplicationDetailEndpointItem): ApplicationDetailModel {
       partialReasonCodes: [...item.source.partial_reason_codes],
     },
   };
+}
+
+function assertInstanceId(instanceId: string | null | undefined): void {
+  if (instanceId !== null && instanceId !== undefined && instanceId.trim() === "") {
+    throw new ApplicationsFailure("invalid-response");
+  }
 }
 
 function attentionRank(application: ApplicationCardModel): number {

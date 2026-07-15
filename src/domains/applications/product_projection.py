@@ -81,6 +81,7 @@ def application_detail(
     inventory_rows: Sequence[Mapping[str, Any]],
     inventory_context: Mapping[str, Any],
     incident_evidence: Mapping[str, Any],
+    scope: Mapping[str, Any],
 ) -> JsonObject:
     card = application_card(
         application,
@@ -114,6 +115,7 @@ def application_detail(
         ),
         "history": history_projection(runs, incidents, incident_evidence=incident_evidence),
         "source": source_evidence_projection(application, drift=drift),
+        "scope": dict(scope),
     }
 
 
@@ -403,6 +405,82 @@ def topology_projection(
     }
 
 
+def detail_scope_projection(
+    application: Mapping[str, Any],
+    bindings: Sequence[Mapping[str, Any]],
+    *,
+    requested_instance_id: str | None,
+    freshness_by_cluster: Mapping[str, str],
+) -> JsonObject:
+    """Project only immutable, authorized deployment-binding instances.
+
+    The instance ID is the stored binding identity.  Names, environments, and
+    clusters are display evidence only; callers cannot reconstruct an instance
+    address from them.
+    """
+
+    workspace_id = _optional_text(application.get("workspace_id"))
+    items: list[JsonObject] = []
+    reasons: set[str] = set()
+    for binding in bindings:
+        binding_id = _optional_text(binding.get("binding_id"))
+        cluster_id = _optional_text(binding.get("cluster_id"))
+        environment = _optional_text(binding.get("environment"))
+        if binding_id is None or cluster_id is None or environment is None or workspace_id is None:
+            reasons.add("deployment_binding_identity_incomplete")
+            continue
+        namespace = _optional_text(binding.get("namespace"))
+        items.append(
+            {
+                "id": binding_id,
+                "environment": environment,
+                "status": _optional_text(binding.get("status")) or "unknown",
+                "scope": {
+                    "workspace_id": workspace_id,
+                    "cluster_id": cluster_id,
+                    "namespaces": [namespace] if namespace is not None else [],
+                    "freshness": str(freshness_by_cluster.get(cluster_id) or "partial"),
+                },
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            str(item["environment"]).casefold(),
+            str(_mapping(item["scope"]).get("cluster_id")).casefold(),
+            str((_mapping(item["scope"]).get("namespaces") or [""])[0]).casefold(),
+            str(item["id"]),
+        )
+    )
+    if not items:
+        return {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "selected_instance_id": None,
+            "instances": [],
+            "partial_reason_codes": [],
+        }
+    selected = next(
+        (item for item in items if item["id"] == requested_instance_id),
+        None,
+    )
+    if requested_instance_id is not None and selected is None:
+        return {
+            "availability": "available",
+            "completeness": "partial",
+            "selected_instance_id": None,
+            "instances": items,
+            "partial_reason_codes": ["requested_instance_not_authorized"],
+        }
+    selected = selected or items[0]
+    return {
+        "availability": "available",
+        "completeness": "partial" if reasons else "exact",
+        "selected_instance_id": str(selected["id"]),
+        "instances": items,
+        "partial_reason_codes": sorted(reasons),
+    }
+
+
 def history_projection(
     runs: Sequence[Mapping[str, Any]],
     incidents: Sequence[Mapping[str, Any]],
@@ -448,6 +526,11 @@ def history_projection(
     reasons = {"bounded_workflow_history"}
     if incident_evidence.get("complete") is not True:
         reasons.add("incident_source_incomplete")
+    reasons.update(
+        reason
+        for value in incident_evidence.get("scope_partial_reason_codes") or []
+        if (reason := _optional_text(value)) is not None
+    )
     return {
         "availability": "available",
         "completeness": "partial",
