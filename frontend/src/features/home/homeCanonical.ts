@@ -144,7 +144,6 @@ function toNode(clusterId: string, wire: HomeEndpointNode): HomeNodeSummary {
   const name = canonicalIdentity(wire.name);
   const podsRunning = nonNegativeInteger(wire.pods_running);
   const podsCapacity = nonNegativeInteger(wire.pods_capacity);
-  if (podsCapacity > 0 && podsRunning > podsCapacity) invalidResponse();
   const conditions = wire.conditions.map(canonicalIdentity);
   assertUnique(conditions);
   return {
