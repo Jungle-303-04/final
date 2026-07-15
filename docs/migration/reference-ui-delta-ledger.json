@@ -595,21 +595,22 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
               "frontend/src/features/gitops/gitOpsContract.ts",
-              "src/domains/gitops/router.py"
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops",
-              "domains.gitops.router",
-              "domains.command.router"
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
             ],
             "plannedTestIds": [
               "gitops.detail.operation-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "GitOpsPage only executes release-plan workflow actions; it has no typed Argo Application identity, operation state, capability set, or command receipt stream for an application sync.",
-            "rationale": "The existing command stream can be reused only after a GitOps detail projection maps the exact application resource and capability to an audited command."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The provider-neutral detail projection now carries a typed GitOpsApplication ResourceRef, observed Opsia workflow gate, and separate authorized refresh/sync capability reasons. Both commands remain disabled until a provider-neutral audited CommandReceipt executor and event stream exist."
           }
         },
         {
@@ -622,20 +623,22 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
               "frontend/src/features/gitops/createGitOpsAdapter.ts",
-              "src/domains/gitops/router.py"
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops",
-              "domains.gitops.router"
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
             ],
             "plannedTestIds": [
               "gitops.detail.revision-meta"
             ],
-            "state": "blocked",
-            "blockedReason": "The current GitOps contracts expose repository and release-plan branch strings only; they do not project an authorized controller revision, commit provenance, or signature evidence for a resource.",
-            "rationale": "Commit metadata must remain server-resolved and revision-bound rather than being inferred from a browser repository URL."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail projection now carries only an observed source revision, bound to the application detail response. Commit author, signature, and controller provenance remain unavailable rather than inferred in the browser."
           }
         }
       ]
@@ -939,21 +942,23 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
               "frontend/src/features/gitops/createGitOpsAdapter.ts",
-              "src/domains/gitops/router.py"
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gitops",
-              "domains.gitops.router"
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
             ],
             "plannedTestIds": [
               "gitops.insights.availability",
               "gitops.insights.resource-diff"
             ],
-            "state": "blocked",
-            "blockedReason": "The backend exposes neither GitOps detail capabilities nor controller connection, comparison coverage, ignore-rule, or diff-availability evidence.",
-            "rationale": "The UI must not promise a full diff or describe ignored fields without server evidence for the selected controller and resource."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The application-detail contract now reports revision-bound desired/live comparison availability and reason codes, and the UI renders the unavailable state without a browser diff. Controller connection guidance, ignored-difference coverage, and resource diff content remain a later provider integration."
           }
         },
         {

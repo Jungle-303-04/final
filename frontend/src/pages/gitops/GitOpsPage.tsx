@@ -17,12 +17,19 @@ import { WorkflowOverview } from "./WorkflowOverview";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowPlanPicker } from "./WorkflowPlanPicker";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
+import { GitOpsApplicationDetailPage } from "./GitOpsApplicationDetailPage";
+import { useMatch } from "react-router-dom";
 
 type GitOpsSection = "changes" | "sync";
 
 export function GitOpsPage({ port }: { port: GitOpsPort }) {
   const { t } = useI18n();
+  const detailMatch = useMatch("/gitops/detail/:applicationId");
   const [section, setSection] = useState<GitOpsSection>("changes");
+
+  if (detailMatch?.params.applicationId) {
+    return <GitOpsApplicationDetailPage applicationId={detailMatch.params.applicationId} port={port} />;
+  }
 
   return (
     <ProductPageFrame className="gap-4">
