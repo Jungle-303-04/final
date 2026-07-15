@@ -6,6 +6,7 @@ import type { WorkflowsMessageKey } from "./keys/workflows";
 import type { DockMessageKey } from "./keys/dock";
 import type { ShellMessageKey } from "./keys/shell";
 import type { AlertsMessageKey } from "./keys/alerts";
+import type { TimelineMessageKey } from "./keys/timeline";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -238,6 +239,7 @@ export type MessageKey =
   | IssuesMessageKey
   | MetricsMessageKey
   | ResourcesMessageKey
+  | TimelineMessageKey
   | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;

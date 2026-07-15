@@ -1,3 +1,5 @@
+import type { ClusterScope } from "../../shared/parity/referenceParity";
+
 export type TimelineFailureCode =
   | "forbidden"
   | "invalid-response"
@@ -23,13 +25,6 @@ export interface TimelineCapabilities {
   requiresNamespaceFilter: boolean;
 }
 
-export interface TimelineScope {
-  workspaceId: string;
-  clusterIds: readonly string[];
-  namespaces: readonly string[];
-  freshness: "cached" | "live";
-}
-
 export type TimelineMode =
   | { kind: "live"; widthMs: number; all?: true }
   | { kind: "frozen"; fromMs: number; toMs: number };
@@ -51,7 +46,7 @@ export interface TimelineFilters {
 }
 
 export interface TimelineQuery {
-  scope: TimelineScope;
+  scopes: readonly ClusterScope[];
   mode: TimelineMode;
   filters: TimelineFilters;
 }

@@ -6,6 +6,7 @@ import { resourcesEn } from "./catalogs/en/resources";
 import { workflowsEn } from "./catalogs/en/workflows";
 import { shellEn } from "./catalogs/en/shell";
 import { alertsEn } from "./catalogs/en/alerts";
+import { timelineEn } from "./catalogs/en/timeline";
 
 export const en = {
   "product.name": "Opsia",
@@ -271,6 +272,7 @@ export const en = {
   "home.status.connected": "Connected",
   ...shellEn,
   ...alertsEn,
+  ...timelineEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,
