@@ -458,6 +458,85 @@ describe("TimelineSurface", () => {
     expect(screen.queryByText(/Pinned lanes/i)).toBeNull();
   });
 
+  it("replaces the server snapshot for a range but keeps lens changes local to the rendered view", async () => {
+    const user = userEvent.setup();
+    const controls = timelineControlSurface();
+    const controlSurface = {
+      ...controls,
+      timeRanges: [
+        { ...controlOption("range-default", "Default range"), durationMs: 1_000 },
+        { ...controlOption("range-wide", "Wide range"), durationMs: 1_800 },
+      ],
+      defaultTimeRangeId: "range-default",
+      lensZoomRungs: [
+        { ...controlOption("lens-near", "Near lens"), durationMs: 100 },
+        { ...controlOption("lens-wide", "Wide lens"), durationMs: 1_000 },
+      ],
+      defaultLensZoomRung: "lens-wide",
+    };
+    const baseSnapshot = lensSnapshot();
+    const readTimeline = vi.fn(async (query) => ({
+      ...baseSnapshot,
+      session: { ...baseSnapshot.session, query },
+    }));
+    const subscribeTimeline = vi.fn(idleStream);
+    const port = timelinePort({
+      capabilities: { ...timelinePort().capabilities, controlSurface },
+      readTimeline,
+      subscribeTimeline,
+    });
+    const { router } = renderTimeline(port, "/timeline?zoom=lens-wide", "en-US");
+
+    expect(await screen.findByText("Early event")).toBeTruthy();
+    expect(screen.getByText("Late event")).toBeTruthy();
+    const snapshotRequests = readTimeline.mock.calls.length;
+    const streamSessions = subscribeTimeline.mock.calls.length;
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Lens zoom" }), "lens-near");
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("zoom")).toBe("lens-near"));
+    expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests);
+    expect(subscribeTimeline).toHaveBeenCalledTimes(streamSessions);
+    expect(screen.queryByText("Early event")).toBeNull();
+    expect(screen.getByText("Late event")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Wide range" }));
+    await waitFor(() => expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests + 1));
+    expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: { kind: "live", widthMs: 1_800 },
+        control: expect.objectContaining({ rangeId: "range-wide", lensZoomRung: "lens-near" }),
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(new URLSearchParams(router.state.location.search).get("window")).toBe("1800");
+    expect(new URLSearchParams(router.state.location.search).get("range")).toBe("range-wide");
+
+    await act(async () => { await router.navigate(-1); });
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("window")).toBeNull();
+      expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests + 2);
+      expect(readTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mode: { kind: "live", widthMs: 1_000 },
+          control: expect.objectContaining({ rangeId: "range-default", lensZoomRung: "lens-near" }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+    await act(async () => { await router.navigate(1); });
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("window")).toBe("1800");
+      expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests + 3);
+      expect(readTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mode: { kind: "live", widthMs: 1_800 },
+          control: expect.objectContaining({ rangeId: "range-wide", lensZoomRung: "lens-near" }),
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it("normalizes unavailable URL controls before either Timeline request and omits their UI", async () => {
     const controls = timelineControlSurface();
     const port = timelinePort({
@@ -725,6 +804,27 @@ function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): T
     coverage: [],
     ...overrides,
     pinSetRevision: overrides.pinSetRevision ?? null,
+  };
+}
+
+function lensSnapshot(): TimelineSnapshot {
+  const retained = snapshot({
+    events: [
+      event({ id: "early", sourceKey: "inventory:early", title: "Early event", occurredAt: "1970-01-01T00:00:01.200Z" }),
+      event({ id: "late", sourceKey: "inventory:late", title: "Late event", occurredAt: "1970-01-01T00:00:01.900Z" }),
+    ],
+  });
+  return {
+    ...retained,
+    session: {
+      ...retained.session,
+      window: { fromMs: 1_000, toMs: 2_000 },
+      query: {
+        ...retained.session.query,
+        mode: { kind: "live", widthMs: 1_000 },
+        control: { ...retained.session.query.control, rangeId: "range-default", lensZoomRung: "lens-wide" },
+      },
+    },
   };
 }
 

@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type {
   TimelineActivityKey,
   TimelineGrouping,
+  TimelineMode,
   TimelineSort,
   TimelineViewMode,
 } from "./timelineContract";
@@ -24,6 +25,9 @@ export interface TimelineUrlStateController {
   setSort: (sort: TimelineSort) => void;
   setSelectedEventKey: (sourceKey: string | null) => void;
   setViewMode: (viewMode: TimelineViewMode) => void;
+  setMode: (mode: TimelineMode) => void;
+  setLensZoomRung: (lensZoomRung: string) => void;
+  setRange: (rangeId: string, mode: TimelineMode) => void;
   /** Capability and facet reconciliation must never create a browser history entry. */
   replaceState: (state: TimelineUrlState) => void;
 }
@@ -42,6 +46,9 @@ export function useTimelineUrlState(
     defaultActivityFilter: options.defaultActivityFilter,
     defaultGrouping: options.defaultGrouping,
     defaultSort: options.defaultSort,
+    defaultLensZoomRung: options.defaultLensZoomRung,
+    defaultLiveWindowMs: options.defaultLiveWindowMs,
+    defaultTimeRangeId: options.defaultTimeRangeId,
   }), [
     options.isRetained,
     options.maxRetainedRangeMs,
@@ -51,6 +58,9 @@ export function useTimelineUrlState(
     options.defaultActivityFilter,
     options.defaultGrouping,
     options.defaultSort,
+    options.defaultLensZoomRung,
+    options.defaultLiveWindowMs,
+    options.defaultTimeRangeId,
   ]);
   const state = useMemo(
     () => parseTimelineUrlState(new URLSearchParams(currentSearch), urlOptions),
@@ -101,6 +111,15 @@ export function useTimelineUrlState(
     [state, update],
   );
   const setViewMode = useCallback((viewMode: TimelineViewMode) => update({ ...state, viewMode }), [state, update]);
+  const setMode = useCallback((mode: TimelineMode) => update({ ...state, mode }), [state, update]);
+  const setLensZoomRung = useCallback(
+    (lensZoomRung: string) => update({ ...state, lensZoomRung }),
+    [state, update],
+  );
+  const setRange = useCallback(
+    (rangeId: string, mode: TimelineMode) => update({ ...state, rangeId, mode }),
+    [state, update],
+  );
   const replaceState = useCallback(
     (next: TimelineUrlState) => update(next, true),
     [update],
@@ -116,6 +135,9 @@ export function useTimelineUrlState(
     setSort,
     setSelectedEventKey,
     setViewMode,
+    setMode,
+    setLensZoomRung,
+    setRange,
     replaceState,
   };
 }

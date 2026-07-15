@@ -15,12 +15,14 @@ const DEFAULT_GROUPING: TimelineGrouping = "app";
 const DEFAULT_SORT: TimelineSort = "importance";
 const GROUPINGS: readonly TimelineGrouping[] = ["app", "owner", "flat"];
 const SORTS: readonly TimelineSort[] = ["importance", "recent", "name"];
-const HIGH_FREQUENCY_KEYS = new Set(["q", "from", "to", "window", "event"]);
+const HIGH_FREQUENCY_KEYS = new Set(["q", "from", "to", "window", "event", "zoom"]);
 const MANAGED_KEYS = [
   "view",
   "from",
   "to",
   "window",
+  "range",
+  "zoom",
   "activity",
   "kinds",
   "deleted",
@@ -41,6 +43,10 @@ export interface TimelineUrlOptions {
   defaultActivityFilter?: readonly TimelineActivityKey[];
   defaultGrouping?: TimelineGrouping;
   defaultSort?: TimelineSort;
+  defaultLensZoomRung?: string;
+  /** Supplied by the server's default time-range descriptor. */
+  defaultLiveWindowMs?: number;
+  defaultTimeRangeId?: string;
 }
 
 export interface TimelineUrlState {
@@ -53,6 +59,10 @@ export interface TimelineUrlState {
   grouping: TimelineGrouping;
   sort: TimelineSort;
   selectedEventKey: string | null;
+  /** Null is reconciled through the server descriptor after capability bootstrap. */
+  lensZoomRung: string | null;
+  /** The server range ID is retained independently from its duration. */
+  rangeId: string | null;
 }
 
 export const DEFAULT_TIMELINE_URL_STATE: TimelineUrlState = {
@@ -65,6 +75,8 @@ export const DEFAULT_TIMELINE_URL_STATE: TimelineUrlState = {
   grouping: DEFAULT_GROUPING,
   sort: DEFAULT_SORT,
   selectedEventKey: null,
+  lensZoomRung: null,
+  rangeId: null,
 };
 
 export function parseTimelineUrlState(
@@ -86,6 +98,8 @@ export function parseTimelineUrlState(
     grouping: parseEnum(searchParams.get("grouping"), GROUPINGS) ?? options.defaultGrouping ?? DEFAULT_GROUPING,
     sort: parseEnum(searchParams.get("sort"), SORTS) ?? options.defaultSort ?? DEFAULT_SORT,
     selectedEventKey: nonEmpty(searchParams.get("event")),
+    lensZoomRung: nonEmpty(searchParams.get("zoom")) ?? options.defaultLensZoomRung ?? null,
+    rangeId: nonEmpty(searchParams.get("range")) ?? options.defaultTimeRangeId ?? null,
   };
 }
 
@@ -113,6 +127,10 @@ export function writeTimelineSearchParams(
   if (state.grouping !== (options.defaultGrouping ?? DEFAULT_GROUPING)) params.set("grouping", state.grouping);
   if (state.sort !== (options.defaultSort ?? DEFAULT_SORT)) params.set("sort", state.sort);
   if (state.selectedEventKey !== null) params.set("event", state.selectedEventKey);
+  if (state.lensZoomRung !== null) params.set("zoom", state.lensZoomRung);
+  if (state.mode.kind === "live" && state.rangeId !== null && state.rangeId !== options.defaultTimeRangeId) {
+    params.set("range", state.rangeId);
+  }
   return params;
 }
 
@@ -126,7 +144,7 @@ export function isTimelineHighFrequencyOnlyChange(
 }
 
 function parseTimelineMode(searchParams: URLSearchParams, options: TimelineUrlOptions): TimelineMode {
-  if (!options.isRetained) return defaultLiveMode();
+  if (!options.isRetained) return defaultLiveMode(options);
   const fromMs = parseSafeInteger(searchParams.get("from"));
   const toMs = parseSafeInteger(searchParams.get("to"));
   if (fromMs !== null && toMs !== null && fromMs > 0 && fromMs < toMs) {
@@ -137,13 +155,13 @@ function parseTimelineMode(searchParams: URLSearchParams, options: TimelineUrlOp
     };
   }
   if (searchParams.get("window") === "all") {
-    return { kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS, all: true };
+    return { kind: "live", widthMs: defaultLiveMode(options).widthMs, all: true };
   }
   const widthMs = Number(searchParams.get("window"));
   if (Number.isFinite(widthMs) && widthMs > 0) {
     return { kind: "live", widthMs: Math.round(widthMs) };
   }
-  return defaultLiveMode();
+  return defaultLiveMode(options);
 }
 
 function writeTimelineMode(
@@ -161,7 +179,7 @@ function writeTimelineMode(
     params.set("window", "all");
     return;
   }
-  if (mode.widthMs !== DEFAULT_LIVE_WINDOW_MILLISECONDS) {
+  if (mode.widthMs !== defaultLiveMode(options).widthMs) {
     params.set("window", String(mode.widthMs));
   }
 }
@@ -187,8 +205,15 @@ function parseSafeInteger(value: string | null): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function defaultLiveMode(): TimelineMode {
-  return { kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS };
+function defaultLiveMode(options: TimelineUrlOptions): Extract<TimelineMode, { kind: "live" }> {
+  const candidate = options.defaultLiveWindowMs;
+  const widthMs = typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0
+    ? candidate
+    : DEFAULT_LIVE_WINDOW_MILLISECONDS;
+  return {
+    kind: "live",
+    widthMs,
+  };
 }
 
 function nonEmpty(value: string | null): string | null {

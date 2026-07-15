@@ -32,6 +32,8 @@ describe("Timeline URL state", () => {
       grouping: "owner",
       sort: "recent",
       selectedEventKey: "inventory:checkout:7",
+      lensZoomRung: null,
+      rangeId: null,
     });
 
     const written = writeTimelineSearchParams(
@@ -134,5 +136,28 @@ describe("Timeline URL state", () => {
       new URLSearchParams("q=one&foreign=old"),
       new URLSearchParams("q=two&foreign=new"),
     )).toBe(false);
+    expect(isTimelineHighFrequencyOnlyChange(
+      new URLSearchParams("zoom=wide&view=list"),
+      new URLSearchParams("zoom=near&view=list"),
+    )).toBe(true);
+  });
+
+  it("round-trips a descriptor-owned lens ID without changing the retained mode", () => {
+    const state = parseTimelineUrlState(
+      new URLSearchParams("window=12345&zoom=server-rung"),
+      retainedOptions,
+    );
+
+    expect(state.mode).toEqual({ kind: "live", widthMs: 12_345 });
+    expect(state.lensZoomRung).toBe("server-rung");
+    expect(writeTimelineSearchParams(new URLSearchParams(), state, retainedOptions).get("zoom")).toBe("server-rung");
+  });
+
+  it("uses a supplied server default range instead of a browser time constant", () => {
+    const options = { ...retainedOptions, defaultLiveWindowMs: 91_337 };
+    const state = parseTimelineUrlState(new URLSearchParams(), options);
+
+    expect(state.mode).toEqual({ kind: "live", widthMs: 91_337 });
+    expect(writeTimelineSearchParams(new URLSearchParams(), state, options).get("window")).toBeNull();
   });
 });
