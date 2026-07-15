@@ -1,6 +1,6 @@
-# 외부 GitOps controller + Radar 학습용 실습 환경
+# 외부 GitOps controller + 기준 원본 학습용 실습 환경
 
-이 문서는 `cluster-1` EKS 클러스터에 연결해 둔 외부 GitOps controller 학습 앱과 Radar Timeline/Live Traffic을 다시 실행하고 살펴보기 위한 안내서다.
+이 문서는 `cluster-1` EKS 클러스터에 연결해 둔 외부 GitOps controller 학습 앱과 기준 원본 Timeline/Live Traffic을 다시 실행하고 살펴보기 위한 안내서다.
 
 ## 현재 구성
 
@@ -10,11 +10,11 @@
 | 공식 예제 저장소 | `https://github.com/argoproj/argocd-example-apps.git` | Plain YAML, Helm, Kustomize, Jsonnet, Hook, Sync Wave, Multi-source 예제 |
 | 학습용 Application | 11개 | 10개 자동 동기화, 1개 수동 동기화 실습 |
 | traffic flow collector 0.0.16 | `caretta` 네임스페이스에서 실행 중 | eBPF 기반 서비스 간 네트워크 흐름 수집 |
-| Radar Timeline | SQLite 영속 저장 | Kubernetes 리소스 변경과 이벤트를 시간축으로 확인 |
+| 기준 원본 Timeline | SQLite 영속 저장 | Kubernetes 리소스 변경과 이벤트를 시간축으로 확인 |
 
 ## 접속
 
-### Radar
+### 기준 원본
 
 - GitOps: <http://127.0.0.1:9280/gitops>
 - Live Traffic: 왼쪽 메뉴의 **Live Traffic**
@@ -66,7 +66,7 @@ kubectl --context cluster-1 -n argocd get secret argocd-initial-admin-secret \
 - **Settings > Appearance**: 테마와 표시 설정을 변경한다.
 - **User Info**: 현재 계정, 토큰, 비밀번호를 관리한다.
 
-## Radar 메뉴 읽는 법
+## 기준 원본 메뉴 읽는 법
 
 - **Home**: 클러스터 상태와 주요 요약 지표를 본다.
 - **Resources**: Kubernetes 원본 리소스를 종류/네임스페이스별로 탐색한다.
@@ -90,7 +90,7 @@ Timeline은 “어떤 리소스가 언제 어떤 상태로 바뀌었는가”를
 - **Deleted**는 이미 삭제된 Job/Pod 같은 리소스도 포함한다.
 - Timeline 보기는 변화 시점을 시간축으로, List 보기는 이벤트를 행 단위로 보여준다.
 - 색상과 아이콘으로 생성, 변경, 삭제, Warning/Normal 이벤트를 구분한다.
-- 현재 구성은 `/Users/woonyong/.radar/kubeheal-timeline.db`에 최대 1GiB SQLite 데이터로 기록한다.
+- 현재 구성은 `/Users/woonyong/.reference/kubeheal-timeline.db`에 최대 1GiB SQLite 데이터로 기록한다.
 
 설치 직후 검증 시점에는 최근 1시간에 134개 리소스와 2,545개 이벤트가 표시됐다. 이 수치는 클러스터 활동에 따라 계속 변한다. traffic flow collector DaemonSet 교체, 외부 GitOps Application/ApplicationSet 생성, Hook Job 실행 순서를 이 화면에서 확인할 수 있다.
 
@@ -104,7 +104,7 @@ Live Traffic은 traffic flow collector의 eBPF 관측 결과를 Prometheus에서
 - system/external 트래픽 숨김, 인터넷 노드 접기, 포트 식별 옵션으로 그래프 밀도를 조절한다.
 - 아래 Flow 표에서 source, destination, namespace, port와 트래픽을 행 단위로 확인한다.
 
-검증 시점에는 traffic flow collector 원본 흐름 180개가 수집됐고 Radar에서 107개 흐름으로 집계됐다. 이 값도 실시간 트래픽에 따라 달라진다.
+검증 시점에는 traffic flow collector 원본 흐름 180개가 수집됐고 기준 원본에서 107개 흐름으로 집계됐다. 이 값도 실시간 트래픽에 따라 달라진다.
 
 traffic flow collector Pod에는 다음 scrape annotation을 적용해 기존 `target/prometheus`가 `:7117/metrics`를 수집하도록 연결했다.
 

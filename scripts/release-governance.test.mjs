@@ -12,7 +12,7 @@ test('PR 진단 gate와 strict release-governance를 분리하고 dev deploy는 
     readFile(path.join(repositoryRoot, '.github', 'workflows', 'dev-deploy.yml'), 'utf8'),
   ])
 
-  assert.match(makefile, /^gate: reference-ledger-check reference-feature-ledger-check ## PR 진단용/m)
+  assert.match(makefile, /^gate: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## PR 진단용/m)
   assert.match(
     makefile,
     /^release-governance: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check ## 출하 차단용/m,

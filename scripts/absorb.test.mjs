@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { findManualReviewItems, normalizeRelativePath, transformText } from './absorb.mjs'
+import { referenceProvenance } from './reference-provenance.mjs'
+
+const [legacyProduct, legacyOrganization] = referenceProvenance.legacyProductTerms
+const titleCase = (value) => `${value[0].toUpperCase()}${value.slice(1)}`
 
 test('명시한 투명도를 기본 투명도보다 우선한다', () => {
   const { output } = transformText(
@@ -29,7 +33,7 @@ test('상태 팔레트를 시맨틱 토큰으로 바꾼다', () => {
 
 test('브랜드 토큰과 이름을 제품 소유 표현으로 바꾼다', () => {
   const { output } = transformText(
-    'bg-skyhook-500/30 var(--color-radar-accent) Radar radar Skyhook skyhook',
+    `bg-${legacyOrganization}-500/30 var(--color-${legacyProduct}-accent) ${titleCase(legacyProduct)} ${legacyProduct} ${titleCase(legacyOrganization)} ${legacyOrganization}`,
   )
   assert.equal(output, 'bg-primary/30 var(--primary) Opsia opsia Opsia opsia')
 })
@@ -40,7 +44,10 @@ test('clsx import와 호출을 cn으로 바꾼다', () => {
 })
 
 test('출력 경로에서 원본 이름과 테마 폴더를 제거한다', () => {
-  assert.equal(normalizeRelativePath('assets/radar/radar-icon-loading.svg'), 'assets/product/loading-icon.svg')
+  assert.equal(
+    normalizeRelativePath(`assets/${legacyProduct}/${legacyProduct}-icon-loading.svg`),
+    'assets/product/loading-icon.svg',
+  )
   assert.equal(normalizeRelativePath('theme/tailwind-theme.css'), 'styles/tailwind-semantic.css')
 })
 

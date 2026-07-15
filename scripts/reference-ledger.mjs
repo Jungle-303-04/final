@@ -6,12 +6,14 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { PROVENANCE_PATH, referenceProvenance } from './reference-provenance.mjs'
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '..')
 const DEFAULT_SOURCE = path.join(REPOSITORY_ROOT, 'references', 'upstream')
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-source-ledger.json')
-const DEFAULT_REVISION = 'cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc'
-const DEFAULT_SOURCE_REPOSITORY = 'https://github.com/skyhook-io/radar.git'
+const DEFAULT_REVISION = referenceProvenance.revision
+const PROVENANCE_REFERENCE = path.relative(REPOSITORY_ROOT, PROVENANCE_PATH).split(path.sep).join('/')
 
 const DISPOSITIONS = new Set([
   'frozen',
@@ -161,8 +163,8 @@ export function validateLedger(ledger) {
   if (!/^[0-9a-f]{40}$/.test(ledger.sourceRevision ?? '')) {
     errors.push('sourceRevision must be a 40-character lowercase hexadecimal revision')
   }
-  if (typeof ledger.sourceRepository !== 'string' || !/^https:\/\//.test(ledger.sourceRepository)) {
-    errors.push('sourceRepository must be an HTTPS URL')
+  if (ledger.sourceProvenance !== PROVENANCE_REFERENCE) {
+    errors.push(`sourceProvenance must equal ${PROVENANCE_REFERENCE}`)
   }
   if (!Array.isArray(ledger.files)) return [...errors, 'files must be an array']
 
@@ -226,14 +228,13 @@ async function walkSourceFiles(root) {
 export async function createLedger({
   source = DEFAULT_SOURCE,
   sourceRevision = DEFAULT_REVISION,
-  sourceRepository = DEFAULT_SOURCE_REPOSITORY,
 } = {}) {
   await access(source)
   const files = await walkSourceFiles(source)
   const ledger = {
     schemaVersion: 2,
     sourceRevision,
-    sourceRepository,
+    sourceProvenance: PROVENANCE_REFERENCE,
     fileCount: files.length,
     files: buildLedgerRows(files, sourceRevision),
   }
@@ -247,7 +248,6 @@ function parseArguments(argv) {
     source: DEFAULT_SOURCE,
     output: DEFAULT_OUTPUT,
     sourceRevision: DEFAULT_REVISION,
-    sourceRepository: DEFAULT_SOURCE_REPOSITORY,
     check: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -256,20 +256,19 @@ function parseArguments(argv) {
       values.check = true
       continue
     }
-    if (!['--source', '--output', '--revision', '--repository'].includes(flag) || !argv[index + 1]) {
+    if (!['--source', '--output', '--revision'].includes(flag) || !argv[index + 1]) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`)
     }
     const value = argv[index + 1]
     if (flag === '--revision') values.sourceRevision = value
-    else if (flag === '--repository') values.sourceRepository = value
     else values[flag.slice(2)] = path.resolve(value)
     index += 1
   }
   return values
 }
 
-export async function writeLedger({ source, output, sourceRevision, sourceRepository, check = false }) {
-  const ledger = await createLedger({ source, sourceRevision, sourceRepository })
+export async function writeLedger({ source, output, sourceRevision, check = false }) {
+  const ledger = await createLedger({ source, sourceRevision })
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`
   if (check) {
     const current = await readFile(output, 'utf8').catch(() => null)

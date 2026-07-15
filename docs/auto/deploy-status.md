@@ -30,7 +30,7 @@ URL      : https://k8s.woonyong.org
 
 ## 선행 조건 (이게 끝나야 S1을 시작한다)
 
-- [x] P1  기획 문서 dev 착륙 (VP-014~017, radar-parity-map) — `a4ae8a04b`
+- [x] P1  기획 문서 dev 착륙 (VP-014~017, reference-parity-map) — `a4ae8a04b`
 - [x] P2  `AWS_DEV_DEPLOY_ENABLED=1` — 자동 FULL run `29305760596` 실행 확인
 - [x] P3  백엔드 FULL 배포 — run `29302233623`, 모든 서비스 동일 backend digest
 - [x] P4  에이전트 재등록 — cluster-1/2 `ready`, agent 1/1, 클러스터 2개·리소스 read 확인

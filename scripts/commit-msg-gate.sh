@@ -20,6 +20,7 @@ set -euo pipefail
 TYPES='feat|fix|refactor|docs|test|chore|style|perf|build|ci|revert'
 VAGUE='수정|작업|변경|업데이트'
 DENYLIST="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/commit-denylist.txt"
+PROVENANCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/reference-provenance.mjs"
 
 fail() {
   echo "커밋 메시지 컨벤션 위반: $1" >&2
@@ -73,8 +74,15 @@ check_subject() {
     fail "'${BASH_REMATCH[1]}' 같은 모호한 단어로 끝내지 않는다. 변경의 결과를 서술한다" "$subject" || rc=1
   fi
 
-  # 금지어 — 오픈소스 공개를 앞두고 커밋 제목에 남기지 않기로 한 단어들.
-  # 목록은 scripts/commit-denylist.txt 에 있다. 한 줄에 하나, '#' 은 주석.
+  # 금지어 — provenance의 이전 제품명과 일반 denylist를 제목에 남기지 않는다.
+  # provenance는 제품 표면 밖의 격리 경계이고, denylist는 한 줄에 하나다.
+  while IFS= read -r word; do
+    [[ -z "$word" ]] && continue
+    if printf '%s' "$subject" | grep -qiE -- "$word"; then
+      fail "커밋 제목에 provenance 금지어를 남기지 않는다" "$subject" || rc=1
+    fi
+  done < <(node "$PROVENANCE" legacy-product-terms)
+
   if [[ -f "$DENYLIST" ]]; then
     while IFS= read -r word; do
       word="${word%%#*}"
@@ -82,7 +90,7 @@ check_subject() {
       word="$(printf '%s' "$word" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
       [[ -z "$word" ]] && continue
       if printf '%s' "$subject" | grep -qiE -- "$word"; then
-        fail "커밋 제목에 '$word' 를 남기지 않는다 (scripts/commit-denylist.txt)" "$subject" || rc=1
+        fail "커밋 제목에 denylist 금지어를 남기지 않는다" "$subject" || rc=1
       fi
     done < "$DENYLIST"
   fi

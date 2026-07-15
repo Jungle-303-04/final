@@ -8,10 +8,11 @@ TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
 LOCAL_TEST_ENV ?= .env.local-test
 FAST_TESTS ?= tests/test_dev_gate_contract.py
-REFERENCE_REVISION ?= cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc
-REFERENCE_UI_BASE_REVISION ?= 3ff2b1095151c690bf536e8e6ca685c2703fcd70
+REFERENCE_PROVENANCE ?= references/provenance/source.json
+REFERENCE_REVISION ?= $(shell node scripts/reference-provenance.mjs revision)
+REFERENCE_UI_BASE_REVISION ?= $(shell node scripts/reference-provenance.mjs ui-base-revision)
 REFERENCE_UPSTREAM_GIT ?= /tmp/opsia-upstream-verify
-REFERENCE_UPSTREAM_REPOSITORY ?= https://github.com/skyhook-io/radar.git
+REFERENCE_UPSTREAM_REPOSITORY ?= $(shell node scripts/reference-provenance.mjs repository)
 
 export IMAGE_NAME
 export MGMT_CLUSTER
@@ -21,7 +22,7 @@ export REFERENCE_UI_BASE_REVISION
 export REFERENCE_UPSTREAM_GIT
 export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check release-governance gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check release-governance gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -72,6 +73,9 @@ test: ## 린트와 테스트 실행
 manifest-check: ## Kubernetes manifest 렌더/파싱 확인
 	bash scripts/manifest-check.sh
 
+product-brand-boundary-check: ## 제품 표면의 이전 제품명·조직명 경계 확인
+	node scripts/verify-product-brand-boundary.mjs
+
 reference-ledger: ## 고정 원본의 해시·이식 상태 ledger 생성
 	node scripts/reference-ledger.mjs --source references/upstream --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-source-ledger.json
 
@@ -114,7 +118,7 @@ reference-feature-parity-check: reference-ui-delta-rebaseline-check ## 출하용
 
 release-governance: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check ## 출하 차단용 최신 원본 동등성 gate
 
-gate: reference-ledger-check reference-feature-ledger-check ## PR 진단용 백엔드·manifest·프론트 전체 gate
+gate: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## PR 진단용 백엔드·manifest·프론트 전체 gate
 	bash scripts/test.sh
 	bash scripts/manifest-check.sh
 	cd frontend && npm ci --include=dev --no-audit --no-fund

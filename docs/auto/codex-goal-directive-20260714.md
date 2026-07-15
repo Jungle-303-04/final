@@ -25,7 +25,7 @@ S9~S17은 그 뒤에 이어서 계속한다. **목표에 도달할 때까지 멈
 2. docs/spec/frontend/vp-015-global-shell.md   ★ 화면 골격의 최상위 정본
 3. docs/spec/frontend/vp-017-motion-spec.md    ★ 모션 규격. 수치가 계약이다
 4. docs/spec/frontend/vp-016-delivery-plan.md  ★ 실행 계획. 슬라이스 순서
-5. docs/spec/frontend/radar-parity-map.md      레퍼런스 대조 (skyhook-io/radar)
+5. docs/spec/frontend/reference-parity-map.md      레퍼런스 대조 (references/provenance/source.json)
 6. docs/spec/frontend/vp-010~014               개별 화면
 ```
 
@@ -40,15 +40,15 @@ VP-010~014 중 VP-015 §13 표에 "갱신"이라고 적힌 항목은 **VP-015가
 
 | # | 항목 | 확인 방법 | 안 되면 |
 |---|---|---|---|
-| P1 | **기획 문서를 dev에 착륙** | `git ls-tree origin/dev docs/spec/frontend/` 에 vp-014~017, radar-parity-map | 아래 §2.1 |
+| P1 | **기획 문서를 dev에 착륙** | `git ls-tree origin/dev docs/spec/frontend/` 에 vp-014~017, reference-parity-map | 아래 §2.1 |
 | P2 | **`AWS_DEV_DEPLOY_ENABLED=1`** | GitHub Actions dev-deploy 워크플로가 실제로 도는가 | 이게 0이면 이 계획 **전체가 무의미**하다. 최우선 |
 | P3 | **백엔드 FULL 배포** | live 백엔드가 07-13 구버전. 계약을 만들어도 배포가 안 된다 | FULL 배포를 먼저 |
 | P4 | **에이전트 재등록** | DB 재생성으로 agent token이 날아갔다. 클러스터 데이터가 0이면 S1을 만들 수 없다 | 에이전트 재등록 절차 실행 |
-| P5 | **Radar 서브트리 + NOTICE** | Apache-2.0. **이식 전에** 반드시 | §2.2 |
+| P5 | **기준 원본 서브트리 + NOTICE** | Apache-2.0. **이식 전에** 반드시 | §2.2 |
 
 ### 2.1 기획 문서 착륙
 
-VP-014·radar-parity-map·VP-015·VP-016·VP-017은 현재 워크트리 브랜치
+VP-014·reference-parity-map·VP-015·VP-016·VP-017은 현재 워크트리 브랜치
 **`woonyong/ui-layer-lab`** 에 커밋되어 있다 (마지막 커밋 `40a49bb95`).
 이 브랜치는 dev보다 160 커밋 뒤처져 있으므로 **머지하지 말 것.**
 
@@ -57,24 +57,24 @@ VP-014·radar-parity-map·VP-015·VP-016·VP-017은 현재 워크트리 브랜�
 git switch dev && git pull
 git checkout woonyong/ui-layer-lab -- \
   docs/spec/frontend/vp-014-remaining-surfaces.md \
-  docs/spec/frontend/radar-parity-map.md \
+  docs/spec/frontend/reference-parity-map.md \
   docs/spec/frontend/vp-015-global-shell.md \
   docs/spec/frontend/vp-016-delivery-plan.md \
   docs/spec/frontend/vp-017-motion-spec.md
-git add -A && git commit -m "docs(spec): VP-014~017 + radar 패리티 맵 착륙"
+git add -A && git commit -m "docs(spec): VP-014~017 + reference 패리티 맵 착륙"
 git push origin dev
 ```
 
-### 2.2 Radar 라이선스 준수 (이식 전 필수)
+### 2.2 기준 원본 라이선스 준수 (이식 전 필수)
 
-Radar는 **Apache-2.0**이고 **우리 저장소는 공개다.** 안 하면 라이선스 위반이다.
+기준 원본는 **Apache-2.0**이고 **우리 저장소는 공개다.** 안 하면 라이선스 위반이다.
 
 1. `references/upstream/` 에 **고정 커밋** 서브트리로 추가
-2. 루트 `NOTICE` — 원저작자(Skyhook) · Apache-2.0 · 출처 URL
+2. 루트 `NOTICE` — 원저작자(원본 제공자) · Apache-2.0 · 출처 URL
 3. 파일별 헤더는 추가하지 않고 루트 `NOTICE`에 상당한 수정·재작성 사실 표기
 4. `README.md`에 명시
 
-**`scripts/radar.sh`는 삭제하지 않는다.** (레퍼런스 실행용. 과거 삭제 지시는 취소됨)
+**`scripts/reference.sh`는 삭제하지 않는다.** (레퍼런스 실행용. 과거 삭제 지시는 취소됨)
 
 ---
 
@@ -194,8 +194,8 @@ AI 내부 콘텐츠는 **고정 420px** (여는 동안 텍스트 리플로우 �
 ### 5-5. 디자인
 
 - **shadcn 단일 primitive.** 정본은 `components/ui/` 한 곳뿐.
-- Radar 컴포넌트는 가져오되 **우리 shadcn 토큰으로 다시 칠한다.**
-  Radar의 색·간격·모서리·duration을 **하드코딩으로 가져오면 FAIL.**
+- 기준 원본 컴포넌트는 가져오되 **우리 shadcn 토큰으로 다시 칠한다.**
+  기준 원본의 색·간격·모서리·duration을 **하드코딩으로 가져오면 FAIL.**
 - 차트는 **recharts 단일화.** 아이콘은 **lucide 단일화.**
 - **애니메이션은 `web/src/motion/` 에서만 나온다.** 컴포넌트 인라인 `@keyframes` 금지.
 

@@ -384,7 +384,7 @@ test('분류 interaction은 등록되지 않은 Opsia 목적지와 테스트 ID�
 test('분류 입력은 Timeline에 한정하지 않고 제품 도메인별 테스트 계획을 허용한다', () => {
   const input = {
     schemaVersion: 1,
-    sourceRepository: 'https://example.invalid/upstream.git',
+    sourceProvenance: 'references/provenance/source.json',
     targetRevision: TARGET,
     testPlans: {
       'applications.surface.contract': {
@@ -416,7 +416,7 @@ test('분류 입력은 Timeline에 한정하지 않고 제품 도메인별 테�
 
   assert.deepEqual(
     sourceDeltaLedger.validateClassificationInput(input, {
-      sourceRepository: input.sourceRepository,
+      sourceProvenance: input.sourceProvenance,
       targetRevision: TARGET,
     }),
     [],
