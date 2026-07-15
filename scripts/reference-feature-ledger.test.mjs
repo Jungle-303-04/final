@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  assertFeatureDeliveryComplete,
   parseReferenceInventory,
   validateFeatureLedger,
   writeFeatureLedger,
@@ -161,6 +162,24 @@ test("기능 ledger는 이식 경계가 지정되지 않은 원본 섹션을 거
         PORT_MAP,
       ),
     /이식 경계가 없습니다: 누락된 섹션/,
+  );
+});
+
+test("출하 게이트는 진행 중인 제품 기능을 완료로 처리하지 않는다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 단축키 |",
+    ].join("\n"),
+    REVISION,
+    PORT_MAP,
+  );
+
+  assert.throws(
+    () => assertFeatureDeliveryComplete(ledger),
+    /reference.feature.001: in_progress/,
   );
 });
 
