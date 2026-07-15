@@ -1,6 +1,8 @@
 import {
   ClustersPortFailure,
   type ClusterConnectProvider,
+  type ClusterConnectStage,
+  type ClusterDisconnectPort,
   type ClusterConnectionSnapshot,
   type ClustersFailureCode,
   type ClustersPort,
@@ -13,9 +15,14 @@ interface ClusterConnectWire {
 }
 
 interface ClusterConnectionWire {
-  status: "waiting" | "connected" | "expired";
-  agent_version: string | null;
-  connected_at: string | null;
+  cluster_id: string;
+  connection_status: string;
+  connection_stage?: ClusterConnectStage;
+  last_agent_id: string | null;
+  last_seen_at: string | null;
+  agents: Array<{ details: Record<string, unknown> }>;
+  connect_timeout_seconds: number | null;
+  connect_expires_at: string | null;
 }
 
 export interface ClustersEndpointDependencies {
@@ -23,13 +30,16 @@ export interface ClustersEndpointDependencies {
     input: { name: string; provider: ClusterConnectProvider },
     signal?: AbortSignal,
   ): Promise<ClusterConnectWire>;
-  getClusterConnectStatus(
+  getClusterConnectionStatus(
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<ClusterConnectionWire>;
+  unregisterCluster(clusterId: string, signal?: AbortSignal): Promise<void>;
 }
 
-export function createClustersAdapter(endpoints: ClustersEndpointDependencies): ClustersPort {
+export function createClustersAdapter(
+  endpoints: ClustersEndpointDependencies,
+): ClustersPort & ClusterDisconnectPort {
   return {
     async connect(input, signal) {
       return withFailure(async () => {
@@ -46,14 +56,26 @@ export function createClustersAdapter(endpoints: ClustersEndpointDependencies): 
     },
     async loadConnection(clusterId, signal) {
       return withFailure(async () => {
-        const response = await endpoints.getClusterConnectStatus(clusterId, signal);
-        canonicalNullableTimestamp(response.connected_at);
+        const response = await endpoints.getClusterConnectionStatus(clusterId, signal);
+        canonicalNullableTimestamp(response.last_seen_at);
+        const stage = response.connection_stage ?? "awaiting_install";
+        const agentVersion = response.agents
+          .map((agent) => agent.details.version)
+          .find((version): version is string => typeof version === "string") ?? null;
         return {
-          status: response.status,
-          agentVersion: response.agent_version,
-          connectedAt: response.connected_at,
+          status: stage === "ready"
+            ? "connected"
+            : stage === "expired" || response.connection_status === "install_expired"
+              ? "expired"
+              : "waiting",
+          stage,
+          agentVersion,
+          lastSeenAt: response.last_seen_at,
         } satisfies ClusterConnectionSnapshot;
       });
+    },
+    async disconnect(clusterId, signal) {
+      await withFailure(() => endpoints.unregisterCluster(clusterId, signal));
     },
   };
 }

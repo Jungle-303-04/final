@@ -1,5 +1,13 @@
 export type ClusterConnectProvider = "aws" | "gcp" | "azure" | "onprem";
 export type ClusterConnectState = "waiting" | "connected" | "expired";
+export type ClusterConnectStage =
+  | "token_issued"
+  | "awaiting_install"
+  | "agent_connected"
+  | "snapshot_received"
+  | "ready"
+  | "expired"
+  | "error";
 
 export interface ClusterConnectReceipt {
   clusterId: string;
@@ -9,8 +17,9 @@ export interface ClusterConnectReceipt {
 
 export interface ClusterConnectionSnapshot {
   status: ClusterConnectState;
+  stage: ClusterConnectStage;
   agentVersion: string | null;
-  connectedAt: string | null;
+  lastSeenAt: string | null;
 }
 
 export type ClustersFailureCode =
@@ -40,4 +49,8 @@ export interface ClustersPort {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<ClusterConnectionSnapshot>;
+}
+
+export interface ClusterDisconnectPort {
+  disconnect(clusterId: string, signal?: AbortSignal): Promise<void>;
 }

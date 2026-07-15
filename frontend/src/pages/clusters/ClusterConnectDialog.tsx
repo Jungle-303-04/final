@@ -11,6 +11,7 @@ import {
   ClustersPortFailure,
   type ClusterConnectProvider,
   type ClusterConnectReceipt,
+  type ClusterConnectStage,
   type ClustersPort,
 } from "../../features/clusters/clustersContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
@@ -68,6 +69,8 @@ export function ClusterConnectDialog({
   const [provider, setProvider] = useState<ClusterConnectProvider>("onprem");
   const [phase, setPhase] = useState<ConnectPhase>("idle");
   const [receipt, setReceipt] = useState<ClusterConnectReceipt | null>(null);
+  const [connectionStage, setConnectionStage] = useState<ClusterConnectStage>("awaiting_install");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const connectAbort = useRef<AbortController | null>(null);
 
@@ -79,11 +82,14 @@ export function ClusterConnectDialog({
       try {
         const connection = await port.loadConnection(receipt.clusterId, controller.signal);
         if (!active) return;
+        setConnectionStage(connection.stage);
         if (connection.status === "connected") {
           setStep(3);
           onConnected();
         } else if (connection.status === "expired") {
           setPhase("expired");
+        } else if (connection.stage === "error") {
+          setPhase("failed");
         }
       } catch (error) {
         if (!active || isAbortError(error)) return;
@@ -103,6 +109,16 @@ export function ClusterConnectDialog({
     };
   }, [onConnected, open, phase, port, receipt, reportUnauthorized, step]);
 
+  useEffect(() => {
+    if (!open || step !== 2 || phase !== "waiting") return;
+    const startedAt = Date.now();
+    setElapsedSeconds(0);
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [open, phase, step]);
+
   const changeOpen = (nextOpen: boolean) => {
     if (!nextOpen) {
       connectAbort.current?.abort();
@@ -116,6 +132,8 @@ export function ClusterConnectDialog({
     setProvider("onprem");
     setPhase("idle");
     setReceipt(null);
+    setConnectionStage("awaiting_install");
+    setElapsedSeconds(0);
     setCopyState("idle");
   };
   const register = async () => {
@@ -126,6 +144,7 @@ export function ClusterConnectDialog({
     try {
       const nextReceipt = await port.connect({ name: name.trim(), provider }, controller.signal);
       setReceipt(nextReceipt);
+      setConnectionStage("awaiting_install");
       setPhase("waiting");
       setStep(2);
     } catch (error) {
@@ -205,6 +224,8 @@ export function ClusterConnectDialog({
           <div className={STEP_MOTION}>
             <ConnectionCommandStep
               copyState={copyState}
+              connectionStage={connectionStage}
+              elapsedSeconds={elapsedSeconds}
               expiresAt={receipt?.expiresAt ?? null}
               formatDate={formatDate}
               installCommand={receipt?.installCommand ?? null}
