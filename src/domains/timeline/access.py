@@ -59,6 +59,21 @@ class AuthorizedTimelineScope:
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def require_timeline_capability_access(authorized: AuthorizedTimelineScope) -> None:
+    """Hide Timeline capability metadata when no retained source is readable.
+
+    The descriptor carries no grants itself.  This guard keeps the first
+    browser read in the same authenticated workspace/source boundary as later
+    Timeline snapshots without requiring a query, scope, or cursor.
+    """
+    if not (
+        authorized.readable_cluster_ids
+        or authorized.application_ids
+        or authorized.deployment_application_ids
+    ):
+        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+
+
 async def resolve_authorized_timeline_scope(db: Any, current: Any) -> AuthorizedTimelineScope:
     """Resolve all source grants without widening one source through another."""
     workspace_id = str(getattr(current, "workspace_id", "") or "").strip()

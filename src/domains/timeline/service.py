@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from domains.target.connectivity import cluster_connection_status
 from domains.timeline.access import (
     AuthorizedTimelineScope,
+    require_timeline_capability_access,
     require_timeline_cluster_ids,
     resolve_authorized_timeline_scope,
 )
@@ -55,6 +56,21 @@ class TimelineReadResolution:
     cursor_binding: TimelineCursorBinding
     policy: RealtimePolicy
     capabilities: TimelineCapabilityDescriptor
+
+
+async def resolve_timeline_capabilities(
+    db: Any,
+    current: Any,
+) -> TimelineCapabilityDescriptor:
+    """Return the one server-owned descriptor without creating a read session.
+
+    No query, freshness observation, evidence predicate, replay cursor, or
+    subscription is necessary for this first-render bootstrap read.  It still
+    resolves all source-specific workspace grants before exposing metadata.
+    """
+    authorized = await resolve_authorized_timeline_scope(db, current)
+    require_timeline_capability_access(authorized)
+    return timeline_capability_descriptor()
 
 
 async def resolve_timeline_read(
