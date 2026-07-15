@@ -1,6 +1,85 @@
 {
   "schemaVersion": 1,
-  "features": {},
+  "features": {
+    "reference.feature.109": {
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
+      ],
+      "coverage": {
+        "desktop": {
+          "state": "in_progress",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_open_external_url",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#openExternalUrl",
+          "test": "frontend/src/desktop/desktopBridge.test.ts"
+        }
+      }
+    },
+    "reference.feature.110": {
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
+      ],
+      "coverage": {
+        "desktop": {
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_open_saved_file",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#openSavedFile",
+          "reason": "The foundation permits only opaque handles issued by native save; arbitrary workstation paths from a server response are intentionally prohibited.",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        }
+      }
+    },
+    "reference.feature.111": {
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
+      ],
+      "coverage": {
+        "desktop": {
+          "state": "in_progress",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_save_file",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#saveFile",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        }
+      }
+    },
+    "reference.feature.112": {
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
+      ],
+      "coverage": {
+        "desktop": {
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "reason": "No signed desktop release manifest, updater keys or updater command are configured; the visible native menu item is disabled.",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        }
+      }
+    },
+    "reference.feature.159": {
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
+      ],
+      "coverage": {
+        "desktop": {
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "reason": "The local PTY protocol is intentionally absent. It must be implemented only in Tauri and must never be proxied through the Python gateway or target agent.",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        }
+      }
+    }
+  },
   "sections": {
     "0. 목적과 사용 금지선": {
       "area": "migration-governance",
