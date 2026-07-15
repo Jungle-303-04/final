@@ -369,7 +369,9 @@ class ControllerRuntime:
         sessions: MemorySessionStore,
     ) -> Server:
         if loaded.service.name == API_GATEWAY_SERVICE_NAME:
-            app = loaded.module.create_app(event_bus=bus, session_store=sessions)
+            # API 세션 권한은 RedisSessionStore의 fail-closed lifecycle만 사용한다.
+            # controller의 process-local session dict는 realtime test/dev 경로에만 남긴다.
+            app = loaded.module.create_app(event_bus=bus)
             port = int(env("PORT", "8000"))
         elif loaded.service.name == REALTIME_GATEWAY_SERVICE_NAME:
             app = loaded.module.create_app(authenticate_browser=sessions.get_session)

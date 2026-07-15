@@ -126,6 +126,8 @@ class ApiGateway:
         event_bus: EventConsumerBus | None = None,
         session_store: SessionStore | None = None,
     ) -> None:
+        if session_store is not None and not isinstance(session_store, SessionStore):
+            raise TypeError("api gateway requires a fail-closed session lifecycle")
         self.db = Database()
         self.bus = event_bus or NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
@@ -299,20 +301,11 @@ class ApiGateway:
 
     async def _start_session_store(self) -> None:
         """Keep gateway live when Redis sessions are down, without changing auth authority."""
-        start_degraded = getattr(self.sessions, "start_degraded", None)
-        try:
-            if callable(start_degraded):
-                await start_degraded()
-                return
-            await self.sessions.connect()
-        finally:
-            self._session_store_started = True
+        await self.sessions.start_degraded()
+        self._session_store_started = True
 
     def _session_store_available(self) -> bool:
-        if not self._session_store_started:
-            return True
-        available = getattr(self.sessions, "available", None)
-        return True if available is None else bool(available)
+        return self._session_store_started and self.sessions.available
 
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
