@@ -7,6 +7,7 @@ import { workflowsEn } from "./catalogs/en/workflows";
 import { shellEn } from "./catalogs/en/shell";
 import { alertsEn } from "./catalogs/en/alerts";
 import { timelineEn } from "./catalogs/en/timeline";
+import { desktopEn } from "./catalogs/en/desktop";
 
 export const en = {
   "product.name": "Opsia",
@@ -275,6 +276,7 @@ export const en = {
   ...shellEn,
   ...alertsEn,
   ...timelineEn,
+  ...desktopEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

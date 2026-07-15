@@ -7,10 +7,28 @@ fn desktop_foundation_keeps_the_active_cluster_in_the_window_title() {
 }
 
 #[test]
-fn unsupported_native_features_are_honest_capabilities() {
+fn native_local_pty_and_unavailable_updater_are_honest_capabilities() {
     let capabilities = desktop_capabilities();
-    assert_eq!(format!("{:?}", capabilities.local_terminal.state), "Unsupported");
+    assert_eq!(format!("{:?}", capabilities.local_terminal.state), "Available");
     assert_eq!(format!("{:?}", capabilities.updater.state), "Unsupported");
+}
+
+#[test]
+fn main_window_grants_only_the_registered_local_pty_commands() {
+    let build_manifest = include_str!("../build.rs");
+    let capability = include_str!("../capabilities/default.json");
+    for command in [
+        "desktop_local_terminal_start",
+        "desktop_local_terminal_input",
+        "desktop_local_terminal_resize",
+        "desktop_local_terminal_close",
+    ] {
+        assert!(build_manifest.contains(command), "{command} must be registered");
+        assert!(
+            capability.contains(&format!("allow-{}", command.replace('_', "-"))),
+            "{command} must be granted only to the main window"
+        );
+    }
 }
 
 #[test]

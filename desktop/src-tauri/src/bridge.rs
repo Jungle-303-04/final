@@ -18,8 +18,6 @@ use uuid::Uuid;
 const PRODUCT_NAME: &str = "Opsia";
 const MAX_SAVE_FILE_BYTES: usize = 100 * 1024 * 1024;
 
-const LOCAL_TERMINAL_BLOCKER: &str =
-    "Local PTY is not implemented. It must remain inside the local Tauri process and never proxy through Python.";
 const UPDATER_BLOCKER: &str =
     "Updater is not implemented because signed release metadata and platform signing keys are not configured.";
 
@@ -45,7 +43,9 @@ impl DesktopCapabilitySet {
             system_theme: CapabilityAvailability::available(),
             external_url: CapabilityAvailability::available(),
             safe_file: CapabilityAvailability::available(),
-            local_terminal: CapabilityAvailability::unsupported(LOCAL_TERMINAL_BLOCKER),
+            // The PTY is constructed and owned only by the local Tauri process.
+            // It does not traverse the Python gateway or receive server-held credentials.
+            local_terminal: CapabilityAvailability::available(),
             updater: CapabilityAvailability::unsupported(UPDATER_BLOCKER),
         }
     }
@@ -379,11 +379,10 @@ mod tests {
     }
 
     #[test]
-    fn capability_contract_leaves_updater_and_local_pty_unavailable() {
+    fn capability_contract_exposes_only_the_native_local_pty() {
         let capabilities = DesktopCapabilitySet::native();
-        assert_eq!(capabilities.local_terminal.state, CapabilityState::Unsupported);
+        assert_eq!(capabilities.local_terminal.state, CapabilityState::Available);
         assert_eq!(capabilities.updater.state, CapabilityState::Unsupported);
-        assert!(capabilities.local_terminal.reason.is_some());
         assert!(capabilities.updater.reason.is_some());
     }
 
