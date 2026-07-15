@@ -162,6 +162,44 @@ def test_gateway_request_logging_redacts_install_token(
 def test_gateway_readyz_checks_database_readiness(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
     gateway = load_gateway_module()
+    import packages.storage.sessions as session_storage
+
+    class ReadyDb:
+        def __init__(self) -> None:
+            self.ready_checks = 0
+
+        def check_ready(self) -> None:
+            self.ready_checks += 1
+
+    class ReadyRedis:
+        async def ping(self) -> None:
+            return None
+
+        async def aclose(self) -> None:
+            return None
+
+    monkeypatch.setattr(gateway, "Database", ReadyDb)
+    monkeypatch.setattr(
+        session_storage.AsyncRedis,
+        "from_url",
+        staticmethod(lambda *_args, **_kwargs: ReadyRedis()),
+    )
+    session_store = gateway.RedisSessionStore(gateway.ApiGateway._session_store_config())
+    service = gateway.ApiGateway(session_store=session_store)
+    asyncio.run(service._start_session_store())
+    response = TestClient(service.app).get("/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+    assert service._session_store_available() is True
+    assert service.app.state.db.ready_checks == 1
+
+    asyncio.run(session_store.close())
+
+
+def test_gateway_readyz_fails_closed_before_session_store_starts(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
 
     class ReadyDb:
         def __init__(self) -> None:
@@ -171,12 +209,14 @@ def test_gateway_readyz_checks_database_readiness(monkeypatch) -> None:
             self.ready_checks += 1
 
     monkeypatch.setattr(gateway, "Database", ReadyDb)
-    app = gateway.create_app()
-    response = TestClient(app).get("/readyz")
+    service = gateway.ApiGateway()
+    response = TestClient(service.app).get("/readyz")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
-    assert app.state.db.ready_checks == 1
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": gateway.Settings.SESSION_STORAGE_UNAVAILABLE_MESSAGE,
+    }
+    assert service.app.state.db.ready_checks == 0
 
 
 def test_gateway_metrics_uses_bearer_token_guard(monkeypatch) -> None:
