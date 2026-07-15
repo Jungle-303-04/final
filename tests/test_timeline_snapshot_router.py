@@ -10,9 +10,11 @@ from fastapi.testclient import TestClient
 
 from domains.identity.dependencies import require_session
 from domains.inventory_filter.cursor import FilterCursorCodec
+from domains.timeline.fanout import TimelineFanoutClosed
 from domains.timeline.repository import (
     TimelineLedgerRecord,
     TimelineLedgerSnapshot,
+    TimelineReplayResult,
     TimelineSnapshotLimitExceeded,
 )
 from packages.contracts.identity import Permission
@@ -24,7 +26,7 @@ from packages.contracts.timeline import (
     TimelineStreamFrame,
     TimelineWindow,
 )
-from packages.runtime.dependencies import get_db
+from packages.runtime.dependencies import get_db, get_timeline_fanout
 
 
 class TimelineSnapshotDb:
@@ -69,6 +71,29 @@ class TimelineSnapshotDb:
             retained_from_sequence=1,
         )
 
+    def replay_timeline_events(
+        self, _read_scope: object, **_kwargs: object
+    ) -> TimelineReplayResult:
+        return TimelineReplayResult(
+            status="available",
+            records=(TimelineLedgerRecord(sequence=8, event=_event()),),
+            high_water_sequence=8,
+            retained_from_sequence=1,
+        )
+
+
+class ClosedTimelineFanout:
+    async def subscribe(self, _workspace_id: str) -> ClosedTimelineSubscription:
+        return ClosedTimelineSubscription()
+
+
+class ClosedTimelineSubscription:
+    async def next(self) -> None:
+        raise TimelineFanoutClosed("closed")
+
+    async def close(self) -> None:
+        return None
+
 
 def _event() -> TimelineEvent:
     scope = ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a")
@@ -110,7 +135,12 @@ def _query(cluster_id: str = "cluster-a") -> TimelineQuery:
     )
 
 
-def _client(db: TimelineSnapshotDb, *, cursor: bool = True) -> TestClient:
+def _client(
+    db: TimelineSnapshotDb,
+    *,
+    cursor: bool = True,
+    timeline_fanout: object | None = None,
+) -> TestClient:
     module = importlib.import_module("domains.timeline.router")
     app = FastAPI()
     app.include_router(module.router)
@@ -120,6 +150,8 @@ def _client(db: TimelineSnapshotDb, *, cursor: bool = True) -> TestClient:
         roles=("operator",),
     )
     app.dependency_overrides[get_db] = lambda: db
+    if timeline_fanout is not None:
+        app.dependency_overrides[get_timeline_fanout] = lambda: timeline_fanout
     if cursor:
         app.state.timeline_cursor_codec = FilterCursorCodec(
             "timeline-snapshot-router-test-secret!!", now=lambda: 1_000
@@ -168,3 +200,24 @@ def test_timeline_snapshot_reports_server_limit_without_a_partial_success() -> N
 
     assert response.status_code == 422
     assert response.json()["detail"] == "timeline snapshot exceeds the server event limit"
+
+
+def test_timeline_stream_reuses_snapshot_cursor_as_sse_resume_state() -> None:
+    client = _client(TimelineSnapshotDb(), timeline_fanout=ClosedTimelineFanout())
+    snapshot = client.post("/timeline/snapshots", json={"query": _query().model_dump(mode="json")})
+    after = TimelineStreamFrame.model_validate_json(snapshot.text.splitlines()[0]).cursor
+
+    response = client.post(
+        "/timeline/stream",
+        json={"query": _query().model_dump(mode="json"), "after": after.model_dump()},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    frames = [
+        TimelineStreamFrame.model_validate_json(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [frame.kind for frame in frames] == ["event", "error"]
+    assert all("sequence" not in line for line in response.text.splitlines())

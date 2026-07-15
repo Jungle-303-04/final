@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from fastapi import Request
 
 if TYPE_CHECKING:
+    from domains.timeline.fanout import InMemoryTimelineEventFanout
     from packages.runtime.gateway import ApiEventGateway
     from packages.runtime.operation_events import OperationEventBroker
     from packages.storage.database import Database
@@ -26,3 +27,7 @@ def get_events(request: Request) -> ApiEventGateway:
 
 def get_operation_events(request: Request) -> OperationEventBroker:
     return request.app.state.operation_events
+
+
+def get_timeline_fanout(request: Request) -> InMemoryTimelineEventFanout:
+    return request.app.state.timeline_fanout

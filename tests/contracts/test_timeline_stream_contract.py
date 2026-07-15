@@ -14,6 +14,7 @@ from packages.contracts.timeline import (
     TimelineQuery,
     TimelineResourceSubject,
     TimelineStreamFrame,
+    TimelineStreamRequest,
     TimelineWindow,
 )
 
@@ -128,4 +129,21 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
                 _scope("cluster-b").model_copy(update={"workspace_id": "workspace-b"}),
             ],
             window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        )
+
+
+def test_timeline_stream_request_accepts_only_an_opaque_resume_cursor() -> None:
+    request = TimelineStreamRequest(
+        query=TimelineQuery(scopes=[_scope()], window=TimelineWindow(from_ms=1_000, to_ms=2_000)),
+        after=_cursor(4),
+    )
+
+    assert request.after == _cursor(4)
+    with pytest.raises(ValidationError):
+        TimelineStreamRequest.model_validate(
+            {
+                "query": request.query.model_dump(mode="json"),
+                "after": {"token": "opaque"},
+                "sequence": 4,
+            }
         )
