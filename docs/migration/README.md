@@ -18,6 +18,20 @@ feature row and rejects a newly added source section until it has a product
 boundary. This keeps the mapping structured without copying action lists into
 Python or the browser.
 
+`reference-ui-delta-ledger.json` is a separate immutable-evidence ledger for
+the latest UI rebaseline. It enumerates every A/M/D/R path between the observed
+inventory revision and the frozen target revision, including source blob IDs and
+SHA-256 values. A row begins as explicit `pending`; it cannot be counted as
+ported or complete. A classified row must contain an immutable semantic
+`sourceKey`, source symbol, interaction, transport, realtime merge policy, and
+when motion exists, reduced-motion evidence.
+
+`reference-feature-source-aliases.json` is the compatibility bridge for the
+old positional `reference.feature.NNN` IDs. Those IDs remain aliases for
+existing consumers, but are not authoritative source proof. Until an alias is
+bound to a semantic `sourceKey`, the generated feature catalog reports
+`identityStatus: legacy-unmapped`; it does not promote the row to implemented.
+
 When an individual product feature becomes `implemented`, add its contract ID
 to the map's `features` object with independent `coverage` evidence. Backend
 evidence names its route, handler, and test; frontend evidence names its
@@ -34,6 +48,21 @@ The generator also writes
 catalog: every feature receives a unique contract ID, so browser and desktop
 clients discover capabilities from the Python API instead of carrying a copied
 feature list.
+
+The regular deterministic checks intentionally differ from the release
+rebaseline gate:
+
+- `make reference-ui-delta-ledger-check` verifies that the generated A/M/D/R
+  path, blob and hash evidence exactly matches the approved read-only upstream
+  Git tree. It does not require manual classification, so snapshot verification
+  remains deterministic while analysis is underway.
+- `make reference-ui-delta-rebaseline-check` additionally requires the feature
+  inventory's declared source revision to equal the target and requires every
+  delta row to be classified. It currently fails honestly: the inventory still
+  declares `3ff2…` and all 276 UI rows are pending.
+- `make reference-feature-parity-check` depends on that rebaseline gate, so a
+  release cannot claim latest-source parity before the mismatch and pending
+  analysis are resolved.
 
 Regenerate it only after replacing `references/upstream` with the approved
 snapshot:
@@ -60,4 +89,16 @@ node scripts/reference-feature-ledger.mjs \
   --output docs/migration/reference-feature-ledger.json \
   --contracts-output src/packages/contracts/reference_feature_catalog.json \
   --port-map docs/migration/reference-feature-port-map.json
+```
+
+Regenerate the UI delta ledger only from the approved read-only upstream Git
+repository; it is evidence tooling and never a product build dependency:
+
+```bash
+node scripts/reference-source-delta-ledger.mjs \
+  --repository /tmp/opsia-upstream-verify \
+  --base 3ff2b1095151c690bf536e8e6ca685c2703fcd70 \
+  --target cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc \
+  --inventory docs/spec/frontend/reference-feature-inventory.md \
+  --output docs/migration/reference-ui-delta-ledger.json
 ```

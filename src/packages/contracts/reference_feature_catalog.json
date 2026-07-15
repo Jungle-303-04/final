@@ -5,6 +5,11 @@
   "features": [
     {
       "contractId": "reference.feature.001",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.001"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-001",
       "section": "0. 목적과 사용 금지선",
       "endpoints": [],
@@ -28,6 +33,11 @@
     },
     {
       "contractId": "reference.feature.002",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.002"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-002",
       "section": "0. 목적과 사용 금지선",
       "endpoints": [],
@@ -51,6 +61,11 @@
     },
     {
       "contractId": "reference.feature.003",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.003"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-003",
       "section": "0. 목적과 사용 금지선",
       "endpoints": [],
@@ -74,6 +89,11 @@
     },
     {
       "contractId": "reference.feature.004",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.004"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-004",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -96,6 +116,11 @@
     },
     {
       "contractId": "reference.feature.005",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.005"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-005",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -118,6 +143,11 @@
     },
     {
       "contractId": "reference.feature.006",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.006"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-006",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -140,6 +170,11 @@
     },
     {
       "contractId": "reference.feature.007",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.007"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-007",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -162,6 +197,11 @@
     },
     {
       "contractId": "reference.feature.008",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.008"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-008",
       "section": "1. 조사 기준선",
       "endpoints": [
@@ -186,6 +226,11 @@
     },
     {
       "contractId": "reference.feature.009",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.009"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-009",
       "section": "1. 조사 기준선",
       "endpoints": [
@@ -210,6 +255,11 @@
     },
     {
       "contractId": "reference.feature.010",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.010"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-010",
       "section": "1. 조사 기준선",
       "endpoints": [
@@ -234,6 +284,11 @@
     },
     {
       "contractId": "reference.feature.011",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.011"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-011",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -256,6 +311,11 @@
     },
     {
       "contractId": "reference.feature.012",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.012"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-012",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -278,6 +338,11 @@
     },
     {
       "contractId": "reference.feature.013",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.013"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-013",
       "section": "1. 조사 기준선",
       "endpoints": [],
@@ -300,6 +365,11 @@
     },
     {
       "contractId": "reference.feature.014",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.014"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-014",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -322,6 +392,11 @@
     },
     {
       "contractId": "reference.feature.015",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.015"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-015",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -344,6 +419,11 @@
     },
     {
       "contractId": "reference.feature.016",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.016"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-016",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -366,6 +446,11 @@
     },
     {
       "contractId": "reference.feature.017",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.017"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-017",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -388,6 +473,11 @@
     },
     {
       "contractId": "reference.feature.018",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.018"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-018",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -410,6 +500,11 @@
     },
     {
       "contractId": "reference.feature.019",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.019"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-019",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -432,6 +527,11 @@
     },
     {
       "contractId": "reference.feature.020",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.020"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-020",
       "section": "2.1 레이아웃",
       "endpoints": [],
@@ -454,6 +554,11 @@
     },
     {
       "contractId": "reference.feature.021",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.021"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-021",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -476,6 +581,11 @@
     },
     {
       "contractId": "reference.feature.022",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.022"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-022",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -498,6 +608,11 @@
     },
     {
       "contractId": "reference.feature.023",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.023"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-023",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -520,6 +635,11 @@
     },
     {
       "contractId": "reference.feature.024",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.024"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-024",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -542,6 +662,11 @@
     },
     {
       "contractId": "reference.feature.025",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.025"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-025",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -564,6 +689,11 @@
     },
     {
       "contractId": "reference.feature.026",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.026"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-026",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -586,6 +716,11 @@
     },
     {
       "contractId": "reference.feature.027",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.027"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-027",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -608,6 +743,11 @@
     },
     {
       "contractId": "reference.feature.028",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.028"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-028",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -630,6 +770,11 @@
     },
     {
       "contractId": "reference.feature.029",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.029"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-029",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -652,6 +797,11 @@
     },
     {
       "contractId": "reference.feature.030",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.030"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-030",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -674,6 +824,11 @@
     },
     {
       "contractId": "reference.feature.031",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.031"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-031",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -696,6 +851,11 @@
     },
     {
       "contractId": "reference.feature.032",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.032"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-032",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -718,6 +878,11 @@
     },
     {
       "contractId": "reference.feature.033",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.033"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-033",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -740,6 +905,11 @@
     },
     {
       "contractId": "reference.feature.034",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.034"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-034",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -762,6 +932,11 @@
     },
     {
       "contractId": "reference.feature.035",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.035"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-035",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -784,6 +959,11 @@
     },
     {
       "contractId": "reference.feature.036",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.036"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-036",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -806,6 +986,11 @@
     },
     {
       "contractId": "reference.feature.037",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.037"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-037",
       "section": "3. Route 전수표",
       "endpoints": [],
@@ -828,6 +1013,11 @@
     },
     {
       "contractId": "reference.feature.038",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.038"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-038",
       "section": "4.1 Home",
       "endpoints": [],
@@ -850,6 +1040,11 @@
     },
     {
       "contractId": "reference.feature.039",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.039"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-039",
       "section": "4.1 Home",
       "endpoints": [],
@@ -872,6 +1067,11 @@
     },
     {
       "contractId": "reference.feature.040",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.040"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-040",
       "section": "4.1 Home",
       "endpoints": [],
@@ -894,6 +1094,11 @@
     },
     {
       "contractId": "reference.feature.041",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.041"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-041",
       "section": "4.1 Home",
       "endpoints": [],
@@ -916,6 +1121,11 @@
     },
     {
       "contractId": "reference.feature.042",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.042"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-042",
       "section": "4.1 Home",
       "endpoints": [],
@@ -938,6 +1148,11 @@
     },
     {
       "contractId": "reference.feature.043",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.043"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-043",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -960,6 +1175,11 @@
     },
     {
       "contractId": "reference.feature.044",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.044"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-044",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -982,6 +1202,11 @@
     },
     {
       "contractId": "reference.feature.045",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.045"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-045",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1004,6 +1229,11 @@
     },
     {
       "contractId": "reference.feature.046",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.046"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-046",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1026,6 +1256,11 @@
     },
     {
       "contractId": "reference.feature.047",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.047"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-047",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1048,6 +1283,11 @@
     },
     {
       "contractId": "reference.feature.048",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.048"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-048",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1070,6 +1310,11 @@
     },
     {
       "contractId": "reference.feature.049",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.049"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-049",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1092,6 +1337,11 @@
     },
     {
       "contractId": "reference.feature.050",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.050"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-050",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1114,6 +1364,11 @@
     },
     {
       "contractId": "reference.feature.051",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.051"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-051",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1136,6 +1391,11 @@
     },
     {
       "contractId": "reference.feature.052",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.052"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-052",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1158,6 +1418,11 @@
     },
     {
       "contractId": "reference.feature.053",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.053"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-053",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1180,6 +1445,11 @@
     },
     {
       "contractId": "reference.feature.054",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.054"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-054",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1202,6 +1472,11 @@
     },
     {
       "contractId": "reference.feature.055",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.055"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-055",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1224,6 +1499,11 @@
     },
     {
       "contractId": "reference.feature.056",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.056"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-056",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1246,6 +1526,11 @@
     },
     {
       "contractId": "reference.feature.057",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.057"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-057",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
@@ -1268,6 +1553,11 @@
     },
     {
       "contractId": "reference.feature.058",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.058"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-058",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1290,6 +1580,11 @@
     },
     {
       "contractId": "reference.feature.059",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.059"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-059",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1312,6 +1607,11 @@
     },
     {
       "contractId": "reference.feature.060",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.060"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-060",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1334,6 +1634,11 @@
     },
     {
       "contractId": "reference.feature.061",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.061"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-061",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1356,6 +1661,11 @@
     },
     {
       "contractId": "reference.feature.062",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.062"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-062",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1378,6 +1688,11 @@
     },
     {
       "contractId": "reference.feature.063",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.063"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-063",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1400,6 +1715,11 @@
     },
     {
       "contractId": "reference.feature.064",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.064"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-064",
       "section": "6.1 SSE",
       "endpoints": [],
@@ -1422,6 +1742,11 @@
     },
     {
       "contractId": "reference.feature.065",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.065"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-065",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1444,6 +1769,11 @@
     },
     {
       "contractId": "reference.feature.066",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.066"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-066",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1466,6 +1796,11 @@
     },
     {
       "contractId": "reference.feature.067",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.067"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-067",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1488,6 +1823,11 @@
     },
     {
       "contractId": "reference.feature.068",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.068"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-068",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1510,6 +1850,11 @@
     },
     {
       "contractId": "reference.feature.069",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.069"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-069",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1532,6 +1877,11 @@
     },
     {
       "contractId": "reference.feature.070",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.070"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-070",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1554,6 +1904,11 @@
     },
     {
       "contractId": "reference.feature.071",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.071"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-071",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1576,6 +1931,11 @@
     },
     {
       "contractId": "reference.feature.072",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.072"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-072",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1598,6 +1958,11 @@
     },
     {
       "contractId": "reference.feature.073",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.073"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-073",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1620,6 +1985,11 @@
     },
     {
       "contractId": "reference.feature.074",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.074"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-074",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1642,6 +2012,11 @@
     },
     {
       "contractId": "reference.feature.075",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.075"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-075",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1664,6 +2039,11 @@
     },
     {
       "contractId": "reference.feature.076",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.076"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-076",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1686,6 +2066,11 @@
     },
     {
       "contractId": "reference.feature.077",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.077"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-077",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
@@ -1708,6 +2093,11 @@
     },
     {
       "contractId": "reference.feature.078",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.078"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-078",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1730,6 +2120,11 @@
     },
     {
       "contractId": "reference.feature.079",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.079"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-079",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1752,6 +2147,11 @@
     },
     {
       "contractId": "reference.feature.080",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.080"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-080",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1774,6 +2174,11 @@
     },
     {
       "contractId": "reference.feature.081",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.081"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-081",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1796,6 +2201,11 @@
     },
     {
       "contractId": "reference.feature.082",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.082"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-082",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1818,6 +2228,11 @@
     },
     {
       "contractId": "reference.feature.083",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.083"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-083",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1840,6 +2255,11 @@
     },
     {
       "contractId": "reference.feature.084",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.084"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-084",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1862,6 +2282,11 @@
     },
     {
       "contractId": "reference.feature.085",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.085"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-085",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1884,6 +2309,11 @@
     },
     {
       "contractId": "reference.feature.086",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.086"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-086",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1906,6 +2336,11 @@
     },
     {
       "contractId": "reference.feature.087",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.087"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-087",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1928,6 +2363,11 @@
     },
     {
       "contractId": "reference.feature.088",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.088"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-088",
       "section": "7. API 전수표",
       "endpoints": [],
@@ -1950,6 +2390,11 @@
     },
     {
       "contractId": "reference.feature.089",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.089"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-089",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -1974,6 +2419,11 @@
     },
     {
       "contractId": "reference.feature.090",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.090"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-090",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -1998,6 +2448,11 @@
     },
     {
       "contractId": "reference.feature.091",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.091"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-091",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2022,6 +2477,11 @@
     },
     {
       "contractId": "reference.feature.092",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.092"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-092",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2046,6 +2506,11 @@
     },
     {
       "contractId": "reference.feature.093",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.093"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-093",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2070,6 +2535,11 @@
     },
     {
       "contractId": "reference.feature.094",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.094"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-094",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2094,6 +2564,11 @@
     },
     {
       "contractId": "reference.feature.095",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.095"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-095",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2118,6 +2593,11 @@
     },
     {
       "contractId": "reference.feature.096",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.096"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-096",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2142,6 +2622,11 @@
     },
     {
       "contractId": "reference.feature.097",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.097"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-097",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2166,6 +2651,11 @@
     },
     {
       "contractId": "reference.feature.098",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.098"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-098",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2190,6 +2680,11 @@
     },
     {
       "contractId": "reference.feature.099",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.099"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-099",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2214,6 +2709,11 @@
     },
     {
       "contractId": "reference.feature.100",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.100"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-100",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2238,6 +2738,11 @@
     },
     {
       "contractId": "reference.feature.101",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.101"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-101",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2262,6 +2767,11 @@
     },
     {
       "contractId": "reference.feature.102",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.102"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-102",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2286,6 +2796,11 @@
     },
     {
       "contractId": "reference.feature.103",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.103"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-103",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2310,6 +2825,11 @@
     },
     {
       "contractId": "reference.feature.104",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.104"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-104",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2334,6 +2854,11 @@
     },
     {
       "contractId": "reference.feature.105",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.105"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-105",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2358,6 +2883,11 @@
     },
     {
       "contractId": "reference.feature.106",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.106"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-106",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2382,6 +2912,11 @@
     },
     {
       "contractId": "reference.feature.107",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.107"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-107",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2406,6 +2941,11 @@
     },
     {
       "contractId": "reference.feature.108",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.108"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-108",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2431,6 +2971,11 @@
     },
     {
       "contractId": "reference.feature.109",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.109"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-109",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2455,6 +3000,11 @@
     },
     {
       "contractId": "reference.feature.110",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.110"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-110",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2480,6 +3030,11 @@
     },
     {
       "contractId": "reference.feature.111",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.111"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-111",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2504,6 +3059,11 @@
     },
     {
       "contractId": "reference.feature.112",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.112"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-112",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "endpoints": [
@@ -2530,6 +3090,11 @@
     },
     {
       "contractId": "reference.feature.113",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.113"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-113",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2554,6 +3119,11 @@
     },
     {
       "contractId": "reference.feature.114",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.114"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-114",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2578,6 +3148,11 @@
     },
     {
       "contractId": "reference.feature.115",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.115"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-115",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2602,6 +3177,11 @@
     },
     {
       "contractId": "reference.feature.116",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.116"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-116",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2626,6 +3206,11 @@
     },
     {
       "contractId": "reference.feature.117",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.117"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-117",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2650,6 +3235,11 @@
     },
     {
       "contractId": "reference.feature.118",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.118"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-118",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2674,6 +3264,11 @@
     },
     {
       "contractId": "reference.feature.119",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.119"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-119",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2698,6 +3293,11 @@
     },
     {
       "contractId": "reference.feature.120",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.120"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-120",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2722,6 +3322,11 @@
     },
     {
       "contractId": "reference.feature.121",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.121"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-121",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2746,6 +3351,11 @@
     },
     {
       "contractId": "reference.feature.122",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.122"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-122",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2770,6 +3380,11 @@
     },
     {
       "contractId": "reference.feature.123",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.123"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-123",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "endpoints": [
@@ -2794,6 +3409,11 @@
     },
     {
       "contractId": "reference.feature.124",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.124"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-124",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2818,6 +3438,11 @@
     },
     {
       "contractId": "reference.feature.125",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.125"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-125",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2842,6 +3467,11 @@
     },
     {
       "contractId": "reference.feature.126",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.126"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-126",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2866,6 +3496,11 @@
     },
     {
       "contractId": "reference.feature.127",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.127"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-127",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2890,6 +3525,11 @@
     },
     {
       "contractId": "reference.feature.128",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.128"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-128",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2914,6 +3554,11 @@
     },
     {
       "contractId": "reference.feature.129",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.129"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-129",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2938,6 +3583,11 @@
     },
     {
       "contractId": "reference.feature.130",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.130"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-130",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2962,6 +3612,11 @@
     },
     {
       "contractId": "reference.feature.131",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.131"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-131",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -2986,6 +3641,11 @@
     },
     {
       "contractId": "reference.feature.132",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.132"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-132",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3010,6 +3670,11 @@
     },
     {
       "contractId": "reference.feature.133",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.133"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-133",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3034,6 +3699,11 @@
     },
     {
       "contractId": "reference.feature.134",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.134"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-134",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3058,6 +3728,11 @@
     },
     {
       "contractId": "reference.feature.135",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.135"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-135",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3082,6 +3757,11 @@
     },
     {
       "contractId": "reference.feature.136",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.136"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-136",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3106,6 +3786,11 @@
     },
     {
       "contractId": "reference.feature.137",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.137"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-137",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3130,6 +3815,11 @@
     },
     {
       "contractId": "reference.feature.138",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.138"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-138",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3154,6 +3844,11 @@
     },
     {
       "contractId": "reference.feature.139",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.139"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-139",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3178,6 +3873,11 @@
     },
     {
       "contractId": "reference.feature.140",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.140"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-140",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3202,6 +3902,11 @@
     },
     {
       "contractId": "reference.feature.141",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.141"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-141",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3226,6 +3931,11 @@
     },
     {
       "contractId": "reference.feature.142",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.142"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-142",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3250,6 +3960,11 @@
     },
     {
       "contractId": "reference.feature.143",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.143"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-143",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3274,6 +3989,11 @@
     },
     {
       "contractId": "reference.feature.144",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.144"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-144",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3298,6 +4018,11 @@
     },
     {
       "contractId": "reference.feature.145",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.145"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-145",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3322,6 +4047,11 @@
     },
     {
       "contractId": "reference.feature.146",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.146"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-146",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3346,6 +4076,11 @@
     },
     {
       "contractId": "reference.feature.147",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.147"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-147",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3370,6 +4105,11 @@
     },
     {
       "contractId": "reference.feature.148",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.148"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-148",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3394,6 +4134,11 @@
     },
     {
       "contractId": "reference.feature.149",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.149"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-149",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3418,6 +4163,11 @@
     },
     {
       "contractId": "reference.feature.150",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.150"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-150",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3442,6 +4192,11 @@
     },
     {
       "contractId": "reference.feature.151",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.151"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-151",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3467,6 +4222,11 @@
     },
     {
       "contractId": "reference.feature.152",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.152"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-152",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3491,6 +4251,11 @@
     },
     {
       "contractId": "reference.feature.153",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.153"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-153",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3515,6 +4280,11 @@
     },
     {
       "contractId": "reference.feature.154",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.154"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-154",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3539,6 +4309,11 @@
     },
     {
       "contractId": "reference.feature.155",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.155"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-155",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3563,6 +4338,11 @@
     },
     {
       "contractId": "reference.feature.156",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.156"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-156",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3587,6 +4367,11 @@
     },
     {
       "contractId": "reference.feature.157",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.157"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-157",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3611,6 +4396,11 @@
     },
     {
       "contractId": "reference.feature.158",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.158"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-158",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3635,6 +4425,11 @@
     },
     {
       "contractId": "reference.feature.159",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.159"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-159",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3659,6 +4454,11 @@
     },
     {
       "contractId": "reference.feature.160",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.160"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-160",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3683,6 +4483,11 @@
     },
     {
       "contractId": "reference.feature.161",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.161"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-161",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3707,6 +4512,11 @@
     },
     {
       "contractId": "reference.feature.162",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.162"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-162",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3731,6 +4541,11 @@
     },
     {
       "contractId": "reference.feature.163",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.163"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-163",
       "section": "7.5 Metrics·logs·dock",
       "endpoints": [
@@ -3755,6 +4570,11 @@
     },
     {
       "contractId": "reference.feature.164",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.164"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-164",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3779,6 +4599,11 @@
     },
     {
       "contractId": "reference.feature.165",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.165"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-165",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3803,6 +4628,11 @@
     },
     {
       "contractId": "reference.feature.166",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.166"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-166",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3827,6 +4657,11 @@
     },
     {
       "contractId": "reference.feature.167",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.167"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-167",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3851,6 +4686,11 @@
     },
     {
       "contractId": "reference.feature.168",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.168"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-168",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3875,6 +4715,11 @@
     },
     {
       "contractId": "reference.feature.169",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.169"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-169",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3899,6 +4744,11 @@
     },
     {
       "contractId": "reference.feature.170",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.170"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-170",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3923,6 +4773,11 @@
     },
     {
       "contractId": "reference.feature.171",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.171"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-171",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3947,6 +4802,11 @@
     },
     {
       "contractId": "reference.feature.172",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.172"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-172",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3972,6 +4832,11 @@
     },
     {
       "contractId": "reference.feature.173",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.173"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-173",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -3997,6 +4862,11 @@
     },
     {
       "contractId": "reference.feature.174",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.174"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-174",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -4021,6 +4891,11 @@
     },
     {
       "contractId": "reference.feature.175",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.175"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-175",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -4045,6 +4920,11 @@
     },
     {
       "contractId": "reference.feature.176",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.176"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-176",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -4070,6 +4950,11 @@
     },
     {
       "contractId": "reference.feature.177",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.177"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-177",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -4094,6 +4979,11 @@
     },
     {
       "contractId": "reference.feature.178",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.178"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-178",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -4118,6 +5008,11 @@
     },
     {
       "contractId": "reference.feature.179",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.179"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-179",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -4142,6 +5037,11 @@
     },
     {
       "contractId": "reference.feature.180",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.180"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-180",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -4166,6 +5066,11 @@
     },
     {
       "contractId": "reference.feature.181",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.181"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-181",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -4190,6 +5095,11 @@
     },
     {
       "contractId": "reference.feature.182",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.182"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-182",
       "section": "7.7 Live Traffic",
       "endpoints": [
@@ -4214,6 +5124,11 @@
     },
     {
       "contractId": "reference.feature.183",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.183"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-183",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4238,6 +5153,11 @@
     },
     {
       "contractId": "reference.feature.184",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.184"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-184",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4262,6 +5182,11 @@
     },
     {
       "contractId": "reference.feature.185",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.185"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-185",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4286,6 +5211,11 @@
     },
     {
       "contractId": "reference.feature.186",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.186"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-186",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4310,6 +5240,11 @@
     },
     {
       "contractId": "reference.feature.187",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.187"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-187",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4335,6 +5270,11 @@
     },
     {
       "contractId": "reference.feature.188",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.188"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-188",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4361,6 +5301,11 @@
     },
     {
       "contractId": "reference.feature.189",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.189"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-189",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4385,6 +5330,11 @@
     },
     {
       "contractId": "reference.feature.190",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.190"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-190",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4409,6 +5359,11 @@
     },
     {
       "contractId": "reference.feature.191",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.191"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-191",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4433,6 +5388,11 @@
     },
     {
       "contractId": "reference.feature.192",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.192"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-192",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4457,6 +5417,11 @@
     },
     {
       "contractId": "reference.feature.193",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.193"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-193",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4481,6 +5446,11 @@
     },
     {
       "contractId": "reference.feature.194",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.194"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-194",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4505,6 +5475,11 @@
     },
     {
       "contractId": "reference.feature.195",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.195"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-195",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4530,6 +5505,11 @@
     },
     {
       "contractId": "reference.feature.196",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.196"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-196",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4554,6 +5534,11 @@
     },
     {
       "contractId": "reference.feature.197",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.197"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-197",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4579,6 +5564,11 @@
     },
     {
       "contractId": "reference.feature.198",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.198"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-198",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4603,6 +5593,11 @@
     },
     {
       "contractId": "reference.feature.199",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.199"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-199",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4628,12 +5623,17 @@
     },
     {
       "contractId": "reference.feature.200",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.200"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-200",
       "section": "7.8 Helm",
       "endpoints": [
         "POST /helm/releases/install-stream"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
       "backendContract": "domains.helm",
@@ -4647,17 +5647,22 @@
         "backend": null,
         "frontend": null,
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": null
       }
     },
     {
       "contractId": "reference.feature.201",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.201"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-201",
       "section": "7.8 Helm",
       "endpoints": [
         "POST /helm/releases/{ns}/{name}/upgrade-stream"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
       "backendContract": "domains.helm",
@@ -4671,17 +5676,22 @@
         "backend": null,
         "frontend": null,
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": null
       }
     },
     {
       "contractId": "reference.feature.202",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.202"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-202",
       "section": "7.8 Helm",
       "endpoints": [
         "POST /helm/releases/{ns}/{name}/rollback-stream"
       ],
-      "streaming": false,
+      "streaming": true,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
       "backendContract": "domains.helm",
@@ -4695,11 +5705,16 @@
         "backend": null,
         "frontend": null,
         "desktop": null,
-        "realtime": "not_required"
+        "realtime": null
       }
     },
     {
       "contractId": "reference.feature.203",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.203"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-203",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4724,6 +5739,11 @@
     },
     {
       "contractId": "reference.feature.204",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.204"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-204",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4748,6 +5768,11 @@
     },
     {
       "contractId": "reference.feature.205",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.205"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-205",
       "section": "7.8 Helm",
       "endpoints": [
@@ -4772,6 +5797,11 @@
     },
     {
       "contractId": "reference.feature.206",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.206"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-206",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4798,6 +5828,11 @@
     },
     {
       "contractId": "reference.feature.207",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.207"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-207",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4822,6 +5857,11 @@
     },
     {
       "contractId": "reference.feature.208",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.208"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-208",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4846,6 +5886,11 @@
     },
     {
       "contractId": "reference.feature.209",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.209"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-209",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4870,6 +5915,11 @@
     },
     {
       "contractId": "reference.feature.210",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.210"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-210",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4894,6 +5944,11 @@
     },
     {
       "contractId": "reference.feature.211",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.211"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-211",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4919,6 +5974,11 @@
     },
     {
       "contractId": "reference.feature.212",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.212"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-212",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4943,6 +6003,11 @@
     },
     {
       "contractId": "reference.feature.213",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.213"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-213",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4967,6 +6032,11 @@
     },
     {
       "contractId": "reference.feature.214",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.214"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-214",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -4991,6 +6061,11 @@
     },
     {
       "contractId": "reference.feature.215",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.215"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-215",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -5015,6 +6090,11 @@
     },
     {
       "contractId": "reference.feature.216",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.216"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-216",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -5040,6 +6120,11 @@
     },
     {
       "contractId": "reference.feature.217",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.217"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-217",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5064,6 +6149,11 @@
     },
     {
       "contractId": "reference.feature.218",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.218"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-218",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5088,6 +6178,11 @@
     },
     {
       "contractId": "reference.feature.219",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.219"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-219",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5112,6 +6207,11 @@
     },
     {
       "contractId": "reference.feature.220",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.220"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-220",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5136,6 +6236,11 @@
     },
     {
       "contractId": "reference.feature.221",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.221"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-221",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5160,6 +6265,11 @@
     },
     {
       "contractId": "reference.feature.222",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.222"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-222",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5184,6 +6294,11 @@
     },
     {
       "contractId": "reference.feature.223",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.223"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-223",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -5208,6 +6323,11 @@
     },
     {
       "contractId": "reference.feature.224",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.224"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-224",
       "section": "7.11 실시간 event 계약",
       "endpoints": [
@@ -5232,6 +6352,11 @@
     },
     {
       "contractId": "reference.feature.225",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.225"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-225",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5259,6 +6384,11 @@
     },
     {
       "contractId": "reference.feature.226",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.226"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-226",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5284,6 +6414,11 @@
     },
     {
       "contractId": "reference.feature.227",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.227"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-227",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5308,6 +6443,11 @@
     },
     {
       "contractId": "reference.feature.228",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.228"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-228",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5333,6 +6473,11 @@
     },
     {
       "contractId": "reference.feature.229",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.229"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-229",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5357,6 +6502,11 @@
     },
     {
       "contractId": "reference.feature.230",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.230"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-230",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5382,6 +6532,11 @@
     },
     {
       "contractId": "reference.feature.231",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.231"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-231",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5407,6 +6562,11 @@
     },
     {
       "contractId": "reference.feature.232",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.232"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-232",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5433,6 +6593,11 @@
     },
     {
       "contractId": "reference.feature.233",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.233"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-233",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5458,6 +6623,11 @@
     },
     {
       "contractId": "reference.feature.234",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.234"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-234",
       "section": "7.12 server 등록 경로 중 standalone browser 비소비",
       "endpoints": [
@@ -5482,6 +6652,11 @@
     },
     {
       "contractId": "reference.feature.235",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.235"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-235",
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
@@ -5504,6 +6679,11 @@
     },
     {
       "contractId": "reference.feature.236",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.236"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-236",
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
@@ -5526,6 +6706,11 @@
     },
     {
       "contractId": "reference.feature.237",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.237"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-237",
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
@@ -5548,6 +6733,11 @@
     },
     {
       "contractId": "reference.feature.238",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.238"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-238",
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
@@ -5570,6 +6760,11 @@
     },
     {
       "contractId": "reference.feature.239",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.239"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-239",
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
@@ -5592,6 +6787,11 @@
     },
     {
       "contractId": "reference.feature.240",
+      "sourceKey": null,
+      "legacyContractIds": [
+        "reference.feature.240"
+      ],
+      "identityStatus": "legacy-unmapped",
       "id": "reference-feature-240",
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
