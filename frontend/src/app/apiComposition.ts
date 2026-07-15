@@ -63,6 +63,8 @@ import {
   removeTimelinePin,
   subscribeTimelineEvents,
   upsertTimelinePin,
+  getHelmRelease,
+  listHelmReleases,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -99,6 +101,8 @@ import { createAlertsSurface } from "../pages/alerts/createAlertsSurface";
 import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
 import { createTimelineAdapter } from "../features/timeline/createTimelineAdapter";
 import { createTimelineSurface } from "../pages/timeline/createTimelineSurface";
+import { createHelmAdapter } from "../features/helm/createHelmAdapter";
+import { createHelmSurface } from "../pages/helm/createHelmSurface";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -189,6 +193,10 @@ export function createApiComposition() {
     getApplicationDetail: getGitOpsApplicationDetail,
     listApplicationDeployments,
   });
+  const helmPort = createHelmAdapter({
+    getHelmRelease,
+    listHelmReleases,
+  });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,
@@ -251,6 +259,10 @@ export function createApiComposition() {
     {
       id: "gitops",
       Component: createGitOpsSurface(gitOpsPort),
+    },
+    {
+      id: "helm",
+      Component: createHelmSurface(helmPort),
     },
     {
       id: "settings",

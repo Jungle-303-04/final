@@ -190,6 +190,18 @@
     "gitops.tree.icon-and-portal": {
       "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
       "rationale": "Topology node icons must use the shared resource registry and never make the root resource a recursive detail portal."
+    },
+    "helm.release-list.scope": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "The scoped release list must show only inventory-observed Helm storage metadata and must disclose incomplete label coverage."
+    },
+    "helm.release-detail.availability": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "Release detail must keep history metadata separate from unavailable manifest, values, owned-resource, and command integrations."
+    },
+    "helm.release-contract": {
+      "destination": "tests/test_helm_release_router.py",
+      "rationale": "The Python HTTP boundary must apply workspace and inventory-read scope before emitting any storage metadata."
     }
   },
   "classifications": {
@@ -2176,6 +2188,109 @@
             "state": "blocked",
             "blockedReason": "There is no GitOps detail route or typed tree node role in Opsia, so current navigation cannot distinguish a root subject from a managed child portal.",
             "rationale": "This invariant must be encoded in the eventual route model before child GitOps CR navigation is exposed."
+          }
+        }
+      ]
+    },
+    "web/src/components/helm/HelmReleaseDrawer.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-detail:availability-test:v1",
+          "legacyContractIds": [],
+          "symbol": "HelmReleaseDrawer tests",
+          "interaction": "release detail behavior distinguishes observed release metadata from unavailable provider and command integrations",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "tests/test_helm_release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-detail.availability",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product port tests its own typed projection; it never executes or imports the upstream drawer runtime."
+          }
+        }
+      ]
+    },
+    "web/src/components/helm/HelmReleaseDrawer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
+          "legacyContractIds": [
+            "reference.feature.184"
+          ],
+          "symbol": "HelmReleaseDrawer",
+          "interaction": "selecting a release exposes its scoped identity and revision history while manifest, values, owned resources, and mutation availability remain explicit",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-detail.availability",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Only non-secret storage metadata already observed by the inventory is projected; provider reads and Helm execution are unavailable until dedicated integrations exist."
+          }
+        }
+      ]
+    },
+    "web/src/components/helm/HelmView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-list:scope-rbac:v1",
+          "legacyContractIds": [
+            "reference.feature.183"
+          ],
+          "symbol": "HelmView release list",
+          "interaction": "the releases table filters inventory-observed release metadata by the authorized cluster scope and opens a selected release detail",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded 30-second typed release read when the visible scope changes",
+            "backpressure": "coalesce refresh requests while a prior list request remains active",
+            "merge": "replace the list only when the returned authorized scope key still matches the current selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-list.scope",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source uses a stale 30-second release read; this port retains bounded polling and exposes inventory completeness rather than manufacturing release values."
           }
         }
       ]

@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 229,
+  "pendingCount": 227,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -4760,8 +4760,35 @@
         "blobId": "375283319048e3e9bc9c793f561bf2bb4b34abf5",
         "sha256": "41d82900bcdee20488a0dc9433353f0084935f5dc796b7d7e19a254486aa4235"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-detail:availability-test:v1",
+          "legacyContractIds": [],
+          "symbol": "HelmReleaseDrawer tests",
+          "interaction": "release detail behavior distinguishes observed release metadata from unavailable provider and command integrations",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "tests/test_helm_release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-detail.availability",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product port tests its own typed projection; it never executes or imports the upstream drawer runtime."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -4775,8 +4802,38 @@
         "blobId": "054c7f55fed4489abd55c7c2dc9f8a363bb392c6",
         "sha256": "17ca93dbb418217bcacf2e6ef00650b8c792cbbe43055cc724b174a946561935"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
+          "legacyContractIds": [
+            "reference.feature.184"
+          ],
+          "symbol": "HelmReleaseDrawer",
+          "interaction": "selecting a release exposes its scoped identity and revision history while manifest, values, owned resources, and mutation availability remain explicit",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-detail.availability",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Only non-secret storage metadata already observed by the inventory is projected; provider reads and Helm execution are unavailable until dedicated integrations exist."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -4790,8 +4847,42 @@
         "blobId": "f3c7872d62c03c65997ef401e99318d682ec9b22",
         "sha256": "0776b2fd0cc3e4c315d138fc7b32021153c96927201647cad707eff2df4dbb3f"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-list:scope-rbac:v1",
+          "legacyContractIds": [
+            "reference.feature.183"
+          ],
+          "symbol": "HelmView release list",
+          "interaction": "the releases table filters inventory-observed release metadata by the authorized cluster scope and opens a selected release detail",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded 30-second typed release read when the visible scope changes",
+            "backpressure": "coalesce refresh requests while a prior list request remains active",
+            "merge": "replace the list only when the returned authorized scope key still matches the current selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-list.scope",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source uses a stale 30-second release read; this port retains bounded polling and exposes inventory completeness rather than manufacturing release values."
+          }
+        }
+      ]
     },
     {
       "status": "M",

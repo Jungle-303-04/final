@@ -34,6 +34,21 @@ export {
   type TimelineStreamSubscription,
 } from "./timeline";
 export {
+  getHelmRelease,
+  HELM_RELEASE_PATH,
+  HELM_RELEASES_PATH,
+  listHelmReleases,
+  type HelmReleaseListQuery,
+} from "./helm-releases";
+export {
+  helmReleaseDetailSchema,
+  helmReleaseHistoryEntrySchema,
+  helmReleaseListSchema,
+  helmReleaseSchema,
+  type HelmReleaseDetailEndpoint,
+  type HelmReleaseListEndpoint,
+} from "./helm-releases-schemas";
+export {
   timelineCapabilityDescriptorSchema,
   timelineCoverageSchema,
   timelineCursorSchema,

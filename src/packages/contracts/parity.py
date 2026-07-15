@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from packages.contracts.gateway.base import StrictModel
+from packages.contracts.modeling import StrictModel
 
 Freshness = Literal["live", "stale", "partial", "disconnected"]
 CommandStatus = Literal[
