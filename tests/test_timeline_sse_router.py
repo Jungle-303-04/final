@@ -92,6 +92,15 @@ def _resolution() -> TimelineReadResolution:
             retention_seconds=86_400,
             resume="cursor",
             hidden_tab="coalesce",
+            reconnect={
+                "min_delay_ms": 500,
+                "max_delay_ms": 30_000,
+                "strategy": "full_jitter_exponential",
+            },
+            live_session={
+                "max_age_ms": 30_000,
+                "strategy": "replace_with_snapshot",
+            },
         ),
     )
 

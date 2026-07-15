@@ -14,7 +14,9 @@ from packages.contracts.timeline.models import (
     TimelineFilters,
     TimelineIncidentSubject,
     TimelineInventoryLocatorSubject,
+    TimelineLiveSessionPolicy,
     TimelineQuery,
+    TimelineReconnectPolicy,
     TimelineResourceSubject,
     TimelineSource,
     TimelineStreamFrame,
@@ -25,6 +27,8 @@ from packages.contracts.timeline.requests import TimelineSnapshotRequest, Timeli
 
 __all__ = [
     "RealtimePolicy",
+    "TimelineReconnectPolicy",
+    "TimelineLiveSessionPolicy",
     "TimelineCoverage",
     "TimelineCursor",
     "TimelineEvent",

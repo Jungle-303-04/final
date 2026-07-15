@@ -110,6 +110,37 @@ class TimelineQuery(StrictModel):
         return self
 
 
+class TimelineReconnectPolicy(StrictModel):
+    """Server-owned retry budget for one durable Timeline subscription.
+
+    A browser may retry an interrupted SSE response only with this policy.  The
+    cursor itself remains opaque, and a client never supplies a refresh or
+    reconnect cadence of its own.
+    """
+
+    min_delay_ms: int = Field(ge=100, le=60_000)
+    max_delay_ms: int = Field(ge=100, le=300_000)
+    strategy: Literal["full_jitter_exponential"]
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> TimelineReconnectPolicy:
+        if self.min_delay_ms > self.max_delay_ms:
+            raise ValueError("timeline reconnect minimum must not exceed maximum")
+        return self
+
+
+class TimelineLiveSessionPolicy(StrictModel):
+    """Server-owned maximum lifetime for one moving live-window session.
+
+    A live query must periodically replace both its bounded snapshot window and
+    opaque cursor together.  This is not browser polling: the server declares
+    when the current session is no longer authoritative for a moving window.
+    """
+
+    max_age_ms: int = Field(ge=1_000, le=300_000)
+    strategy: Literal["replace_with_snapshot"]
+
+
 class RealtimePolicy(StrictModel):
     """Server-negotiated limits; clients must not invent refresh budgets."""
 
@@ -118,6 +149,8 @@ class RealtimePolicy(StrictModel):
     retention_seconds: int = Field(ge=1, le=31_536_000)
     resume: Literal["cursor"]
     hidden_tab: Literal["coalesce"]
+    reconnect: TimelineReconnectPolicy
+    live_session: TimelineLiveSessionPolicy
 
 
 class TimelineCursor(StrictModel):

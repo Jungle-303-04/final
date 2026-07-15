@@ -7,19 +7,29 @@ invent batch, frame-rate, or retention values locally.
 from __future__ import annotations
 
 from packages.config.settings import env
-from packages.contracts.timeline import RealtimePolicy
+from packages.contracts.timeline import (
+    RealtimePolicy,
+    TimelineLiveSessionPolicy,
+    TimelineReconnectPolicy,
+)
 
 TIMELINE_MAX_BATCH_EVENTS_ENV = "TIMELINE_MAX_BATCH_EVENTS"
 TIMELINE_MAX_FRAMES_PER_SECOND_ENV = "TIMELINE_MAX_FRAMES_PER_SECOND"
 TIMELINE_RETENTION_SECONDS_ENV = "TIMELINE_RETENTION_SECONDS"
 TIMELINE_MAX_WINDOW_SECONDS_ENV = "TIMELINE_MAX_WINDOW_SECONDS"
 TIMELINE_REPLAY_POLL_SECONDS_ENV = "TIMELINE_REPLAY_POLL_SECONDS"
+TIMELINE_RECONNECT_MIN_DELAY_MS_ENV = "TIMELINE_RECONNECT_MIN_DELAY_MS"
+TIMELINE_RECONNECT_MAX_DELAY_MS_ENV = "TIMELINE_RECONNECT_MAX_DELAY_MS"
+TIMELINE_LIVE_SESSION_MAX_AGE_MS_ENV = "TIMELINE_LIVE_SESSION_MAX_AGE_MS"
 
 DEFAULT_MAX_BATCH_EVENTS = 1_000
 DEFAULT_MAX_FRAMES_PER_SECOND = 60
 DEFAULT_RETENTION_SECONDS = 86_400
 DEFAULT_MAX_WINDOW_SECONDS = 2_592_000
 DEFAULT_REPLAY_POLL_SECONDS = 1.0
+DEFAULT_RECONNECT_MIN_DELAY_MS = 500
+DEFAULT_RECONNECT_MAX_DELAY_MS = 30_000
+DEFAULT_LIVE_SESSION_MAX_AGE_MS = 30_000
 
 
 def timeline_realtime_policy() -> RealtimePolicy:
@@ -42,6 +52,27 @@ def timeline_realtime_policy() -> RealtimePolicy:
         ),
         resume="cursor",
         hidden_tab="coalesce",
+        reconnect=TimelineReconnectPolicy(
+            min_delay_ms=_positive_int(
+                TIMELINE_RECONNECT_MIN_DELAY_MS_ENV,
+                default=DEFAULT_RECONNECT_MIN_DELAY_MS,
+                maximum=60_000,
+            ),
+            max_delay_ms=_positive_int(
+                TIMELINE_RECONNECT_MAX_DELAY_MS_ENV,
+                default=DEFAULT_RECONNECT_MAX_DELAY_MS,
+                maximum=300_000,
+            ),
+            strategy="full_jitter_exponential",
+        ),
+        live_session=TimelineLiveSessionPolicy(
+            max_age_ms=_positive_int(
+                TIMELINE_LIVE_SESSION_MAX_AGE_MS_ENV,
+                default=DEFAULT_LIVE_SESSION_MAX_AGE_MS,
+                maximum=300_000,
+            ),
+            strategy="replace_with_snapshot",
+        ),
     )
 
 
