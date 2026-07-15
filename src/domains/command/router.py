@@ -135,6 +135,22 @@ async def publish_operation_event(
     )
 
 
+async def announce_staged_operation_event(
+    operation_events: Any,
+    event: OperationEvent | None,
+    *,
+    workspace_id: str,
+) -> bool:
+    """Fan out an event already committed by a lifecycle transaction exactly once."""
+    if event is None:
+        return False
+    announce = getattr(operation_events, "announce", None)
+    if not callable(announce):
+        return False
+    await announce(event, workspace_id=workspace_id)
+    return True
+
+
 async def publish_accepted_operation(
     operation_events: Any,
     command: CommandRequestedBody,
@@ -777,17 +793,22 @@ async def command_result(
     )
     if completed is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-    await publish_operation_event(
+    if not await announce_staged_operation_event(
         operation_events,
-        command_id=command_id,
+        getattr(completed, "operation_event", None),
         workspace_id=identity.workspace_id,
-        status=payload.status,
-        payload={
-            "cluster_id": identity.cluster_id,
-            "correlation_id": str(command_row.get("correlation_id") or ""),
-            "result": result,
-        },
-    )
+    ):
+        await publish_operation_event(
+            operation_events,
+            command_id=command_id,
+            workspace_id=identity.workspace_id,
+            status=payload.status,
+            payload={
+                "cluster_id": identity.cluster_id,
+                "correlation_id": str(command_row.get("correlation_id") or ""),
+                "result": result,
+            },
+        )
     if (
         uninstall_result
         and payload.status == CommandStatus.COMPLETED
