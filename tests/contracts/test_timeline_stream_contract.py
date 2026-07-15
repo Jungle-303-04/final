@@ -14,10 +14,17 @@ from packages.contracts.timeline import (
     TimelineCursor,
     TimelineEvent,
     TimelineQuery,
+    TimelineQueryBounds,
     TimelineResourceSubject,
     TimelineStreamFrame,
     TimelineStreamRequest,
     TimelineWindow,
+)
+
+_QUERY_BOUNDS = TimelineQueryBounds(
+    server_now_ms=2_000,
+    earliest_queryable_ms=1_000,
+    max_window_ms=7_200_000,
 )
 
 
@@ -83,7 +90,7 @@ def _capabilities() -> TimelineCapabilityDescriptor:
         selected_source_mode="retained",
         available_source_modes=("retained",),
         max_retained_range_ms=7_200_000,
-        query_bounds=timeline_capability_descriptor().query_bounds,
+        query_bounds=_QUERY_BOUNDS,
         namespace_filter_policy="not_required",
         control_surface=timeline_capability_descriptor().control_surface,
     )

@@ -312,6 +312,10 @@ def test_every_known_subject_has_an_explicit_canonical_journey_stage() -> None:
     )
     assert audit_router.audit_journey_stage(EventSubject.RCA_COMPLETED.value) == "rca"
     assert audit_router.audit_journey_stage(EventSubject.RECOVERY_PLANNED.value) == "recovery"
+    assert (
+        audit_router.audit_journey_stage(EventSubject.COMMAND_CANCEL_REQUESTED.value) == "command"
+    )
+    assert audit_router.audit_journey_stage(EventSubject.COMMAND_RETRY_REQUESTED.value) == "command"
     assert audit_router.audit_journey_stage(EventSubject.COMMAND_COMPLETED.value) == "command"
     assert audit_router.audit_journey_stage(EventSubject.SAFE_PR_CREATED.value) == "pr"
     assert audit_router.audit_journey_stage(EventSubject.WORKFLOW_RUN_COMPLETED.value) == "workflow"

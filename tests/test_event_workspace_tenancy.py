@@ -299,14 +299,14 @@ def test_command_completion_uses_authoritative_workspace_for_manual_outbox() -> 
     assert completed.operation_event.command_id == "command-1"
     assert completed.operation_event.sequence == 1
     assert completed.operation_event.kind == "completed"
-    assert len(statements) == 6
+    assert len(statements) == 7
 
     compiled = [statement.compile(dialect=postgresql.dialect()) for statement in statements]
-    # command update, cursor insert/update, operation event, and outbox all use the authority.
-    for statement in (compiled[0], compiled[1], compiled[2], compiled[3], compiled[5]):
+    # Command completion, cursor/event, terminal marker, and outbox all use the authority.
+    for statement in (compiled[0], compiled[1], compiled[2], compiled[3], compiled[4], compiled[6]):
         assert "workspace-authority" in statement.params.values()
 
-    outbox = compiled[5]
+    outbox = compiled[6]
     assert outbox.params["workspace_id"] == "workspace-authority"
 
 
