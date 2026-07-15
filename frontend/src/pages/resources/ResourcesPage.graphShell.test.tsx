@@ -35,7 +35,7 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
     const physicalGrid = document.querySelector('[data-slot="physical-topology-grid"]');
     expect(physicalGrid?.className)
-      .toContain("grid-cols-[repeat(auto-fit,minmax(320px,1fr))]");
+      .toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]");
     expect(document.querySelector(".react-flow")).toBeNull();
     expect(screen.getByRole("article", { name: "Server worker-a" }).className)
       .toContain("w-full");
@@ -186,22 +186,21 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(readResourcesQuery().has("clusters")).toBe(false);
   });
 
-  it("writes node focus and scrolls the existing table for an omitted-pod drill-in", async () => {
+  it("opens the real node pod summary for an omitted-pod drill-in", async () => {
     const user = userEvent.setup();
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(Element.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
-    });
     renderEnglishResources(
       "/resources?clusters=cluster-1&resources.types=pod",
       resourcesPhysicalTopologyPort(),
     );
 
-    await user.click(await screen.findByRole("button", { name: "+16 pods" }));
-    await waitFor(() => expect(readResourcesQuery().get("node")).toBe("node:worker-a"));
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
-    expect(screen.getByRole("table", { name: "Resource list" })).toBeTruthy();
+    await user.click(await screen.findByRole("button", {
+      name: "View every pod on server worker-a",
+    }));
+    const overlay = await screen.findByRole("dialog", { name: "Pods on server worker-a" });
+    expect(within(overlay).getByText("checkout-api-0")).toBeTruthy();
+    expect(within(overlay).getByText("Names for 17 additional pods are unavailable"))
+      .toBeTruthy();
+    expect(readResourcesQuery().has("node")).toBe(false);
   });
 
   it("keeps multi-Cluster scope honest and skips the physical request", async () => {

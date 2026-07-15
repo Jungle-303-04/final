@@ -243,7 +243,7 @@ describe("ResourcesPage scope and collection semantics", () => {
       screen.getByRole("button", { name: "Include inactive resources" })
         .className,
     ).toContain("w-40");
-    expect(screen.queryByText("Types observed in the inventory snapshot")).toBeNull();
+    expect(screen.getByText("Types currently observed in this cluster")).toBeTruthy();
     expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
   });

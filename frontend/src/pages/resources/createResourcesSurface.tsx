@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { HomePort } from "../../features/home/homeContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
 import type { PhysicalTopologyPort } from "../../features/resources/physicalTopologyContract";
@@ -17,6 +18,7 @@ export function createResourcesSurface(
   filterPort: ResourcesFilterPort,
   physicalTopologyPort: PhysicalTopologyPort,
   physicalTopologyRealtimePort: PhysicalTopologyRealtimePort,
+  nodePodsPort: Pick<HomePort, "loadNodePods">,
   relationTopologyPort: RelationTopologyPort,
   changeTimelinePort: ChangeTimelinePort,
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
@@ -29,6 +31,7 @@ export function createResourcesSurface(
         filterPort={filterPort}
         physicalTopologyPort={physicalTopologyPort}
         physicalTopologyRealtimePort={physicalTopologyRealtimePort}
+        nodePodsPort={nodePodsPort}
         relationTopologyPort={relationTopologyPort}
         changeTimelinePort={changeTimelinePort}
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../shared/i18n";
 import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
 import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
+import { resourcesNodePodsPort } from "./ResourcesPage.testSupport";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
 
 afterEach(() => {
@@ -41,12 +42,15 @@ describe("PhysicalTopologyServerCard usage color", () => {
 
     expect(screen.getByText("90%")).toBeTruthy();
     expect(cpu.dataset.usageValue).toBe("68.000");
-    expect(withinMetric(cpu)?.style.width).toBe("90%");
+    expect(withinMetric(cpu)?.style.width).toBe("100%");
+    expect(withinMetric(cpu)?.style.transform).toBe("scaleX(0.68)");
 
     act(() => frames.advance(0));
     act(() => frames.advance(250));
     const stoppedColorValue = Number(cpu.dataset.usageValue);
     expect(stoppedColorValue).toBeCloseTo(81.907, 2);
+    const scale = Number(withinMetric(cpu)?.style.transform.slice(7, -1));
+    expect(scale).toBeCloseTo(stoppedColorValue / 100, 4);
 
     rendered.rerender(cardTree({
       ...updated,
@@ -69,6 +73,8 @@ function cardTree(placement: ReturnType<typeof physicalServerPlacements>[number]
       <PhysicalTopologyServerCard data={{
         clusterId: "cluster-1",
         index: 0,
+        nodePodsPort: resourcesNodePodsPort(),
+        onNodePodsUnauthorized: vi.fn(),
         onOpenPod: vi.fn(),
         onRevealServer: vi.fn(),
         placement,
