@@ -3,7 +3,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  type KeyboardEvent,
 } from "react";
 import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
@@ -11,17 +10,23 @@ import { ProductFloatingActionAvoidance } from "../../shared/ui/ProductFloatingA
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import { Button } from "../../shared/ui/primitives/button";
-import type {
-  TimelineEvent,
-  TimelineCapabilities,
-  TimelineControlSelection,
-  TimelineGrouping,
-  TimelinePort,
-  TimelineQuery,
-  TimelineStreamLifecycle,
-  TimelineSort,
-  TimelineViewMode,
+import {
+  timelineActivityKeysFromActivities,
+  type TimelineEvent,
+  type TimelineCapabilities,
+  type TimelineControlSelection,
+  type TimelineGrouping,
+  type TimelinePort,
+  type TimelineQuery,
+  type TimelineStreamLifecycle,
+  type TimelineSort,
+  type TimelineViewMode,
 } from "../../features/timeline/timelineContract";
+import {
+  isSameTimelineUrlState,
+  normalizeTimelineUrlStateForCapabilities,
+  validateTimelineKinds,
+} from "../../features/timeline/timelineControlState";
 import { groupTimelineEvents } from "../../features/timeline/timelinePresentation";
 import { useTimelineUrlState } from "../../features/timeline/useTimelineUrlState";
 import type { ClusterScope } from "../../shared/parity/referenceParity";
@@ -33,8 +38,8 @@ import {
   type TimelineEventInteraction,
 } from "./TimelineEventViews";
 import { TimelineCoverageNotice } from "./TimelineCoverageNotice";
-
-const VIEW_MODES: readonly TimelineViewMode[] = ["list", "swimlane"];
+import { TimelineToolbar } from "./TimelineToolbar";
+import { useTimelineOverviewFrame } from "./useTimelineOverviewFrame";
 
 export function TimelineSurface({
   port,
@@ -45,55 +50,55 @@ export function TimelineSurface({
 }) {
   const { formatDate, formatNumber, t } = useI18n();
   const capabilities = port.capabilities;
+  const urlOptions = useMemo(() => timelineUrlOptions(capabilities), [capabilities]);
   const url = useTimelineUrlState({
-    isRetained: capabilities.selectedSourceMode === "retained",
-    maxRetainedRangeMs: capabilities.maxRetainedRangeMs,
-    requiresNamespaceFilter: capabilities.namespaceFilterPolicy === "required",
+    ...urlOptions,
   });
-  const query = useMemo<TimelineQuery>(() => ({
-    scopes,
-    mode: url.state.mode,
-    control: timelineControlSelection(capabilities, url.state.viewMode, url.state.mode),
-    filters: {
-      activity: url.state.activityFilter,
-      kinds: url.state.kindFilter,
-      showDeleted: url.state.showDeleted,
-      pinnedOnly: url.state.pinnedOnly,
-      search: url.state.search,
-      grouping: url.state.grouping,
-      sort: url.state.sort,
-      selectedEventKey: url.state.selectedEventKey,
-    },
-  }), [capabilities, scopes, url.state]);
-  const timeline = useTimelineDataFrame(port, query);
-  const viewGroupRef = useRef<HTMLDivElement>(null);
-  const namespaceLocked = capabilities.namespaceFilterPolicy === "required";
+  const normalizedState = useMemo(
+    () => normalizeTimelineUrlStateForCapabilities(url.state, capabilities),
+    [capabilities, url.state],
+  );
+  useEffect(() => {
+    if (!isSameTimelineUrlState(url.state, normalizedState)) {
+      url.replaceState(normalizedState);
+    }
+  }, [normalizedState, url]);
 
-  const setViewMode = (viewMode: TimelineViewMode) => {
-    if (namespaceLocked && viewMode !== "list") return;
-    url.setViewMode(viewMode);
-  };
-  const navigateViewMode = (event: KeyboardEvent<HTMLDivElement>) => {
-    const available = namespaceLocked ? ["list"] as const : VIEW_MODES;
-    const currentIndex = available.indexOf(url.state.viewMode);
-    const key = event.key;
-    const nextIndex = key === "Home"
-      ? 0
-      : key === "End"
-        ? available.length - 1
-        : key === "ArrowRight" || key === "ArrowDown"
-          ? (currentIndex + 1) % available.length
-          : key === "ArrowLeft" || key === "ArrowUp"
-            ? (currentIndex - 1 + available.length) % available.length
-            : null;
-    if (nextIndex === null) return;
-    event.preventDefault();
-    const next = available[nextIndex] ?? "list";
-    setViewMode(next);
-    viewGroupRef.current
-      ?.querySelector<HTMLButtonElement>(`[data-timeline-view="${next}"]`)
-      ?.focus();
-  };
+  const overviewQuery = useMemo<TimelineQuery>(() => ({
+    scopes,
+    mode: normalizedState.mode,
+    control: timelineControlSelection(capabilities, normalizedState.viewMode, normalizedState.mode),
+    filters: {
+      activity: normalizedState.activityFilter,
+      // Kinds are validated only against overview facets. The initial overview
+      // deliberately has no kind filter so a deep link cannot request a
+      // stale or unauthorized dynamic/CRD kind before its catalog arrives.
+      kinds: [],
+      showDeleted: normalizedState.showDeleted,
+      pinnedOnly: false,
+      search: normalizedState.search,
+      grouping: normalizedState.grouping,
+      sort: normalizedState.sort,
+      selectedEventKey: normalizedState.selectedEventKey,
+    },
+  }), [capabilities, normalizedState, scopes]);
+  const overview = useTimelineOverviewFrame(port, overviewQuery);
+  const validatedKinds = useMemo(
+    () => validateTimelineKinds(
+      normalizedState.kindFilter,
+      overview.frame.phase === "ready" ? overview.frame.overview : null,
+    ),
+    [normalizedState.kindFilter, overview.frame],
+  );
+  useEffect(() => {
+    if (overview.frame.phase !== "ready" || sameStrings(normalizedState.kindFilter, validatedKinds)) return;
+    url.replaceState({ ...normalizedState, kindFilter: validatedKinds });
+  }, [normalizedState, overview.frame, url, validatedKinds]);
+  const query = useMemo<TimelineQuery>(() => ({
+    ...overviewQuery,
+    filters: { ...overviewQuery.filters, kinds: validatedKinds },
+  }), [overviewQuery, validatedKinds]);
+  const timeline = useTimelineDataFrame(port, query);
 
   return (
     <ProductPageFrame>
@@ -103,68 +108,63 @@ export function TimelineSurface({
           {t("timeline.description")}
         </p>
       </header>
-      <div className="flex min-w-0 flex-wrap items-end justify-between gap-3 rounded-xl border bg-card p-3 shadow-sm">
-        <label className="grid min-w-48 flex-1 gap-1 text-sm font-medium">
-          <span>{t("timeline.search")}</span>
-          <input
-            aria-label={t("timeline.search")}
-            className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onChange={(event) => url.setSearch(event.currentTarget.value)}
-            type="search"
-            value={url.state.search}
-          />
-        </label>
-        <div
-          aria-label={t("timeline.view")}
-          className="flex items-center gap-1"
-          onKeyDown={navigateViewMode}
-          ref={viewGroupRef}
-          role="radiogroup"
-        >
-          <Button
-            aria-checked={url.state.viewMode === "list"}
-            data-timeline-view="list"
-            onClick={() => setViewMode("list")}
-            role="radio"
-            size="sm"
-            tabIndex={url.state.viewMode === "list" ? 0 : -1}
-            type="button"
-            variant={url.state.viewMode === "list" ? "secondary" : "ghost"}
-          >
-            {t("timeline.view.list")}
-          </Button>
-          <Button
-            aria-checked={url.state.viewMode === "swimlane"}
-            aria-disabled={namespaceLocked}
-            data-timeline-view="swimlane"
-            disabled={namespaceLocked}
-            onClick={() => setViewMode("swimlane")}
-            role="radio"
-            size="sm"
-            tabIndex={url.state.viewMode === "swimlane" && !namespaceLocked ? 0 : -1}
-            type="button"
-            variant={url.state.viewMode === "swimlane" ? "secondary" : "ghost"}
-          >
-            {t("timeline.view.swimlane")}
-          </Button>
-        </div>
-      </div>
+      <TimelineToolbar
+        capabilities={capabilities}
+        onActivityFilterChange={url.setActivityFilter}
+        onGroupingChange={url.setGrouping}
+        onKindFilterChange={url.setKindFilter}
+        onSearchChange={url.setSearch}
+        onShowDeletedChange={url.setShowDeleted}
+        onSortChange={url.setSort}
+        onViewModeChange={url.setViewMode}
+        overview={overview.frame}
+        state={normalizedState}
+        t={t}
+      />
       <ProductFloatingActionAvoidance>
         <TimelineDataBoundary
           formatDate={formatDate}
           formatNumber={formatNumber}
           frame={timeline.frame}
-          grouping={url.state.grouping}
+          grouping={normalizedState.grouping}
           onRetry={timeline.retry}
           onSelectedEventKeyChange={url.setSelectedEventKey}
-          selectedEventKey={url.state.selectedEventKey}
-          sort={url.state.sort}
+          selectedEventKey={normalizedState.selectedEventKey}
+          sort={normalizedState.sort}
           t={t}
-          viewMode={url.state.viewMode}
+          viewMode={normalizedState.viewMode}
         />
       </ProductFloatingActionAvoidance>
     </ProductPageFrame>
   );
+}
+
+function timelineUrlOptions(capabilities: TimelineCapabilities) {
+  const controls = capabilities.controlSurface;
+  return {
+    isRetained: capabilities.selectedSourceMode === "retained",
+    maxRetainedRangeMs: capabilities.maxRetainedRangeMs,
+    requiresNamespaceFilter: capabilities.namespaceFilterPolicy === "required",
+    defaultViewMode: requiredControlId<TimelineViewMode>(controls.views),
+    defaultShowDeleted: controls.deleted.default,
+    defaultActivityFilter: timelineActivityKeysFromActivities(requiredControl(controls.activity).activity),
+    defaultGrouping: requiredControlId<TimelineGrouping>(controls.groupings),
+    defaultSort: requiredControlId<TimelineSort>(controls.sorts),
+  };
+}
+
+function requiredControlId<T extends string>(options: readonly { id: string }[]): T {
+  return requiredControl(options).id as T;
+}
+
+function requiredControl<T>(options: readonly T[]): T {
+  const control = options[0];
+  if (control === undefined) throw new Error("Timeline capability descriptor omitted a required control.");
+  return control;
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 /** Range and lens IDs always originate in the preflight descriptor, never a UI constant. */

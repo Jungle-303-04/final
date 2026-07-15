@@ -1,6 +1,7 @@
 import type { ClusterScope, ResourceRef } from "../../shared/parity/referenceParity";
 import {
   TimelineFailure,
+  timelineActivitiesFromUrlKeys,
   type TimelineCapabilities,
   type TimelineCoverage,
   type TimelineCoverageSourceAvailability,
@@ -37,13 +38,6 @@ import type {
   TimelineEndpointStreamFrame,
   TimelineEndpointSubject,
 } from "./timelineEndpointContract";
-
-const ACTIVITY_BY_URL_KEY = {
-  changes: "change",
-  k8s_events: "k8s_event",
-  unhealthy: "unhealthy",
-  warnings: "warning",
-} as const;
 
 const SESSION_CAPABILITY_CACHE_KEY = "session";
 
@@ -250,7 +244,7 @@ export function createTimelineEndpointQuery(
     window: { from_ms: window.fromMs, to_ms: window.toMs },
     mode: query.mode.kind,
     filters: {
-      activity: [...new Set(query.filters.activity.map((activity) => ACTIVITY_BY_URL_KEY[activity]))].sort(),
+      activity: [...new Set(timelineActivitiesFromUrlKeys(query.filters.activity))].sort(),
       kinds: [...query.filters.kinds],
       include_deleted: query.filters.showDeleted,
       pinned_only: query.filters.pinnedOnly,

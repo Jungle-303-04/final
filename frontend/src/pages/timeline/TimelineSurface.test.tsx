@@ -37,11 +37,11 @@ describe("TimelineSurface", () => {
     const { router } = renderTimeline(port, "/timeline?foreign=keep&q=first&view=list", "en-US");
 
     expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
-    expect(screen.getByText("Inventory")).toBeTruthy();
+    expect(screen.getAllByText("Inventory").length).toBeGreaterThan(0);
     expect(screen.getByText("Updated")).toBeTruthy();
     expect(screen.getByText("Warning")).toBeTruthy();
     expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("first");
-    expect(screen.getByRole("radio", { name: "List" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: "List" })).toHaveProperty("checked", true);
 
     await user.clear(screen.getByRole("searchbox", { name: "Timeline search" }));
     await user.type(screen.getByRole("searchbox", { name: "Timeline search" }), "second");
@@ -49,14 +49,14 @@ describe("TimelineSurface", () => {
       const search = new URLSearchParams(router.state.location.search);
       expect(search.get("foreign")).toBe("keep");
       expect(search.get("q")).toBe("second");
-      expect(search.get("view")).toBe("list");
+      expect(search.get("view")).toBeNull();
     });
 
     await act(async () => {
       await router.navigate("/timeline?foreign=keep&q=restored&view=swimlane");
     });
     expect((screen.getByRole("searchbox", { name: "Timeline search" }) as HTMLInputElement).value).toBe("restored");
-    expect(screen.getByRole("radio", { name: "Swimlane" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: "Swimlane" })).toHaveProperty("checked", true);
     expect(port.readTimeline).toHaveBeenLastCalledWith(
       expect.objectContaining({
         scopes: TIMELINE_SCOPES,
@@ -74,15 +74,15 @@ describe("TimelineSurface", () => {
 
     await user.keyboard("{ArrowRight}");
     expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Swimlane" }));
-    expect(new URLSearchParams(router.state.location.search).get("view")).toBeNull();
+    expect(new URLSearchParams(router.state.location.search).get("view")).toBe("swimlane");
 
     await user.keyboard("{Home}");
     expect(document.activeElement).toBe(screen.getByRole("radio", { name: "List" }));
-    expect(new URLSearchParams(router.state.location.search).get("view")).toBe("list");
+    expect(new URLSearchParams(router.state.location.search).get("view")).toBeNull();
 
     await user.keyboard("{End}");
     expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Swimlane" }));
-    expect(new URLSearchParams(router.state.location.search).get("view")).toBeNull();
+    expect(new URLSearchParams(router.state.location.search).get("view")).toBe("swimlane");
   });
 
   it("distinguishes quiet, filtered, coverage-aware, and snapshot failure states", async () => {
@@ -328,7 +328,7 @@ describe("TimelineSurface", () => {
       .map((control) => control.dataset.eventId)).toEqual(["event-a", "event-z"]);
     unmount();
 
-    renderTimeline(port, "/timeline?grouping=owner&sort=name", "en-US");
+    renderTimeline(port, "/timeline?view=swimlane&grouping=owner&sort=name", "en-US");
     const swimlane = await screen.findByRole("region", { name: "Timeline swimlane" });
     expect(swimlane.dataset.timelineGrouping).toBe("owner");
     expect(swimlane.dataset.timelineSort).toBe("name");
@@ -345,7 +345,7 @@ describe("TimelineSurface", () => {
   it("exposes overflowed swimlane events through named horizontal controls and keyboard focus", async () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
     vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
-    renderTimeline(timelinePort(), "/timeline", "en-US");
+    renderTimeline(timelinePort(), "/timeline?view=swimlane", "en-US");
 
     expect(await screen.findByText("More timeline events are available to the right.")).toBeTruthy();
     const axis = document.querySelector<HTMLElement>('[data-slot="timeline-axis-scroll"]');
@@ -394,8 +394,10 @@ describe("TimelineSurface", () => {
       navigatorLanguage: "ko-KR",
       title: "타임라인",
       search: "타임라인 검색",
-      list: "목록",
-      swimlane: "스윔레인",
+      // Capability labels are server-owned and intentionally do not change
+      // with the local catalog.
+      list: "List",
+      swimlane: "Swimlane",
       empty: "이 범위에 사용할 수 있는 타임라인 사실이 없습니다.",
     },
   ])("uses typed catalog copy for $navigatorLanguage", async (copy) => {
@@ -414,6 +416,120 @@ describe("TimelineSurface", () => {
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get("q")).toBe("scope-check");
     });
+  });
+
+  it("maps descriptor controls and overview facets to URL state with search keyboard shortcuts", async () => {
+    const user = userEvent.setup();
+    const port = timelinePort();
+    const { router } = renderTimeline(port, "/timeline", "en-US");
+    const search = await screen.findByRole("searchbox", { name: "Timeline search" });
+
+    await user.keyboard("/");
+    expect(document.activeElement).toBe(search);
+    await user.type(search, "checkout");
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(document.activeElement).toBe(search);
+      expect(new URLSearchParams(router.state.location.search).get("q")).toBeNull();
+    });
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Activity" }), "changes");
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("activity")).toBe("changes"));
+    expect(port.readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ activity: ["changes"] }) }),
+      expect.any(AbortSignal),
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Show deleted" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Group by" }), "owner");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sort by" }), "name");
+    await user.click(screen.getByText("Kinds"));
+    await user.click(await screen.findByRole("checkbox", { name: /Deployment/ }));
+    await user.click(screen.getByRole("radio", { name: "Swimlane" }));
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("deleted")).toBe("0");
+      expect(params.get("grouping")).toBe("owner");
+      expect(params.get("sort")).toBe("name");
+      expect(params.get("kinds")).toBe("Deployment");
+      expect(params.get("view")).toBe("swimlane");
+    });
+    expect(screen.getByText("0")).toBeTruthy();
+    expect(screen.queryByText(/Pinned lanes/i)).toBeNull();
+  });
+
+  it("normalizes unavailable URL controls before either Timeline request and omits their UI", async () => {
+    const controls = timelineControlSurface();
+    const port = timelinePort({
+      capabilities: {
+        selectedSourceMode: "retained",
+        availableSourceModes: ["retained"],
+        maxRetainedRangeMs: 604_800_000,
+        namespaceFilterPolicy: "not_required",
+        controlSurface: {
+          ...controls,
+          views: [controls.views[0]!],
+          groupings: [controls.groupings[0]!],
+          sorts: [controls.sorts[0]!],
+          activity: [controls.activity[0]!],
+        },
+      },
+    });
+    const { router } = renderTimeline(
+      port,
+      "/timeline?foreign=keep&view=swimlane&activity=changes&grouping=owner&sort=name&pinnedOnly=1",
+      "en-US",
+    );
+
+    await screen.findByText("Deployment checkout changed");
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("foreign")).toBe("keep");
+      expect(params.get("view")).toBeNull();
+      expect(params.get("activity")).toBeNull();
+      expect(params.get("grouping")).toBeNull();
+      expect(params.get("sort")).toBeNull();
+      expect(params.get("pinnedOnly")).toBeNull();
+    });
+    expect(screen.getByRole("radio", { name: "List" })).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Swimlane" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Owner" })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Recent" })).toBeNull();
+    expect(port.readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        control: expect.objectContaining({ view: "list" }),
+        filters: expect.objectContaining({
+          activity: [],
+          grouping: "app",
+          sort: "importance",
+          pinnedOnly: false,
+        }),
+      }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("shows server coverage availability and never substitutes a zero count when overview fails", async () => {
+    const user = userEvent.setup();
+    const unavailableCoverage = timelinePort({
+      readTimelineOverview: vi.fn().mockResolvedValue({
+        ...timelineOverview(),
+        coverageSources: [{ source: "gitops" as const, availability: "unavailable" as const }],
+      }),
+    });
+    const first = renderTimeline(unavailableCoverage, "/timeline", "en-US");
+    await screen.findByText("Deployment checkout changed");
+    await user.click(screen.getByText("Legend"));
+    expect(await screen.findByText("Unavailable")).toBeTruthy();
+    first.unmount();
+
+    renderTimeline(timelinePort({
+      readTimelineOverview: vi.fn().mockRejectedValue(new TimelineFailure("offline")),
+    }), "/timeline", "en-US");
+    await screen.findByText("Deployment checkout changed");
+    await user.click(screen.getByText("Kinds"));
+    expect(await screen.findByText("Available filters are currently unavailable.")).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Deployment/ })).toBeNull();
   });
 });
 
@@ -488,7 +604,10 @@ function timelineControlSurface() {
     views: [controlOption("list", "List"), controlOption("swimlane", "Swimlane")],
     groupings: [controlOption("app", "Application"), controlOption("owner", "Owner"), controlOption("flat", "None")],
     sorts: [controlOption("importance", "Importance"), controlOption("recent", "Recent"), controlOption("name", "Name")],
-    activity: [{ ...controlOption("all", "All"), activity: [], problemsActivity: [] }],
+    activity: [
+      { ...controlOption("all", "All"), activity: [], problemsActivity: ["unhealthy", "warning"] as const },
+      { ...controlOption("changes", "Changes"), activity: ["change"] as const, problemsActivity: [] },
+    ],
     deleted: { key: "include_deleted", label: "Show deleted", default: true },
     kinds: { key: "kinds", label: "Kinds", selection: "multi" as const, emptySelection: "all" as const },
     timeRanges: [{ ...controlOption("1h", "1h"), durationMs: 3_600_000 }],
@@ -524,7 +643,10 @@ function timelineOverview() {
     buckets: [{ fromMs: 1_000, toMs: 2_000, eventCount: 0, problemCount: 0 }],
     coverage: [],
     coverageSources: [{ source: "inventory" as const, availability: "observed" as const }],
-    facets: { activity: [], kinds: [] },
+    facets: {
+      activity: [{ activity: "change" as const, count: 1 }],
+      kinds: [{ kind: "Deployment", count: 1 }, { kind: "Pod", count: 0 }],
+    },
     newEvidenceCount: null,
     pinSetRevision: null,
   };

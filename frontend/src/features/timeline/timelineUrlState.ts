@@ -1,9 +1,10 @@
-import type {
-  TimelineActivityKey,
-  TimelineGrouping,
-  TimelineMode,
-  TimelineSort,
-  TimelineViewMode,
+import {
+  isTimelineActivityKey,
+  type TimelineActivityKey,
+  type TimelineGrouping,
+  type TimelineMode,
+  type TimelineSort,
+  type TimelineViewMode,
 } from "./timelineContract";
 
 export const DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
@@ -12,12 +13,6 @@ export const DEFAULT_LIVE_WINDOW_MILLISECONDS = 60 * 60 * 1000;
 const DEFAULT_VIEW_MODE: TimelineViewMode = "swimlane";
 const DEFAULT_GROUPING: TimelineGrouping = "app";
 const DEFAULT_SORT: TimelineSort = "importance";
-const ACTIVITY_KEYS: readonly TimelineActivityKey[] = [
-  "changes",
-  "k8s_events",
-  "warnings",
-  "unhealthy",
-];
 const GROUPINGS: readonly TimelineGrouping[] = ["app", "owner", "flat"];
 const SORTS: readonly TimelineSort[] = ["importance", "recent", "name"];
 const HIGH_FREQUENCY_KEYS = new Set(["q", "from", "to", "window", "event"]);
@@ -41,13 +36,17 @@ export interface TimelineUrlOptions {
   isRetained: boolean;
   maxRetainedRangeMs: number;
   requiresNamespaceFilter: boolean;
+  defaultViewMode?: TimelineViewMode;
+  defaultShowDeleted?: boolean;
+  defaultActivityFilter?: readonly TimelineActivityKey[];
+  defaultGrouping?: TimelineGrouping;
+  defaultSort?: TimelineSort;
 }
 
 export interface TimelineUrlState {
   viewMode: TimelineViewMode;
   mode: TimelineMode;
   showDeleted: boolean;
-  pinnedOnly: boolean;
   search: string;
   activityFilter: readonly TimelineActivityKey[];
   kindFilter: readonly string[];
@@ -60,7 +59,6 @@ export const DEFAULT_TIMELINE_URL_STATE: TimelineUrlState = {
   viewMode: DEFAULT_VIEW_MODE,
   mode: { kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS },
   showDeleted: true,
-  pinnedOnly: false,
   search: "",
   activityFilter: [],
   kindFilter: [],
@@ -75,15 +73,18 @@ export function parseTimelineUrlState(
 ): TimelineUrlState {
   const requestedView = parseEnum(searchParams.get("view"), ["list", "swimlane"] as const);
   return {
-    viewMode: options.requiresNamespaceFilter ? "list" : requestedView ?? DEFAULT_VIEW_MODE,
+    viewMode: options.requiresNamespaceFilter ? "list" : requestedView ?? options.defaultViewMode ?? DEFAULT_VIEW_MODE,
     mode: parseTimelineMode(searchParams, options),
-    showDeleted: searchParams.get("deleted") !== "0",
-    pinnedOnly: searchParams.get("pinnedOnly") === "1",
+    showDeleted: searchParams.has("deleted")
+      ? searchParams.get("deleted") !== "0"
+      : options.defaultShowDeleted ?? true,
     search: searchParams.get("q") ?? "",
-    activityFilter: parseActivity(searchParams.get("activity")),
+    activityFilter: searchParams.has("activity")
+      ? parseActivity(searchParams.get("activity"))
+      : options.defaultActivityFilter ?? [],
     kindFilter: parseCsv(searchParams.get("kinds")),
-    grouping: parseEnum(searchParams.get("grouping"), GROUPINGS) ?? DEFAULT_GROUPING,
-    sort: parseEnum(searchParams.get("sort"), SORTS) ?? DEFAULT_SORT,
+    grouping: parseEnum(searchParams.get("grouping"), GROUPINGS) ?? options.defaultGrouping ?? DEFAULT_GROUPING,
+    sort: parseEnum(searchParams.get("sort"), SORTS) ?? options.defaultSort ?? DEFAULT_SORT,
     selectedEventKey: nonEmpty(searchParams.get("event")),
   };
 }
@@ -97,17 +98,20 @@ export function writeTimelineSearchParams(
   for (const key of MANAGED_KEYS) params.delete(key);
 
   const viewMode = options.requiresNamespaceFilter ? "list" : state.viewMode;
-  if (!options.requiresNamespaceFilter && viewMode !== DEFAULT_VIEW_MODE) {
+  if (!options.requiresNamespaceFilter && viewMode !== (options.defaultViewMode ?? DEFAULT_VIEW_MODE)) {
     params.set("view", viewMode);
   }
   writeTimelineMode(params, state.mode, options);
-  if (state.activityFilter.length > 0) params.set("activity", state.activityFilter.join(","));
+  if (!sameStrings(state.activityFilter, options.defaultActivityFilter ?? [])) {
+    params.set("activity", state.activityFilter.join(","));
+  }
   if (state.kindFilter.length > 0) params.set("kinds", state.kindFilter.join(","));
-  if (!state.showDeleted) params.set("deleted", "0");
-  if (state.pinnedOnly) params.set("pinnedOnly", "1");
+  if (state.showDeleted !== (options.defaultShowDeleted ?? true)) {
+    params.set("deleted", state.showDeleted ? "1" : "0");
+  }
   if (state.search.length > 0) params.set("q", state.search);
-  if (state.grouping !== DEFAULT_GROUPING) params.set("grouping", state.grouping);
-  if (state.sort !== DEFAULT_SORT) params.set("sort", state.sort);
+  if (state.grouping !== (options.defaultGrouping ?? DEFAULT_GROUPING)) params.set("grouping", state.grouping);
+  if (state.sort !== (options.defaultSort ?? DEFAULT_SORT)) params.set("sort", state.sort);
   if (state.selectedEventKey !== null) params.set("event", state.selectedEventKey);
   return params;
 }
@@ -164,7 +168,7 @@ function writeTimelineMode(
 
 function parseActivity(value: string | null): readonly TimelineActivityKey[] {
   return parseCsv(value).filter((item): item is TimelineActivityKey =>
-    ACTIVITY_KEYS.includes(item as TimelineActivityKey),
+    isTimelineActivityKey(item),
   );
 }
 
@@ -189,4 +193,8 @@ function defaultLiveMode(): TimelineMode {
 
 function nonEmpty(value: string | null): string | null {
   return value === null || value.length === 0 ? null : value;
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
