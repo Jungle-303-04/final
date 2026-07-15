@@ -349,15 +349,13 @@ def build_node_pods_summary(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="node not found")
     pods = [
         pod
-        for pod in observable_workload_pods(
-            db.list_inventory_resources(
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                resource_type="pod",
-                namespace=None,
-                include_deleted=False,
-                limit=POD_LIMIT,
-            )
+        for pod in db.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type="pod",
+            namespace=None,
+            include_deleted=False,
+            limit=POD_LIMIT,
         )
         if pod_node_name(pod) == node_name
     ]

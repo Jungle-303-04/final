@@ -700,7 +700,7 @@ def test_node_pods_summary_filters_node_and_links_incident() -> None:
     }
 
 
-def test_node_pods_summary_hides_agent_and_management_pods() -> None:
+def test_node_pods_summary_lists_every_pod_while_home_summary_stays_workload_only() -> None:
     db = FleetApiDb(
         registrations=[_registration()],
         nodes=[{"name": "node-a", "status": "Ready", "health": "healthy", "summary": {}}],
@@ -742,7 +742,10 @@ def test_node_pods_summary_hides_agent_and_management_pods() -> None:
 
     assert pods_response.status_code == 200
     assert [pod["namespace"] + "/" + pod["name"] for pod in pods_response.json()["pods"]] == [
-        "sandbox/orders-api-7c9d5"
+        "sandbox/orders-api-7c9d5",
+        "target/cluster-agent-6f8c9",
+        "management/api-gateway-5c4d",
+        "kube-system/coredns-abc",
     ]
     assert nodes_response.status_code == 200
     assert nodes_response.json()["nodes"][0]["pods_running"] == 1
