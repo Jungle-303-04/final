@@ -125,7 +125,7 @@ function sourceKeyFor(sourceKeyAliases, contractId) {
   return sourceKey;
 }
 
-function validateSourceKeyAliases(value) {
+function validateSourceKeyAliasManifest(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || value.schemaVersion !== 1) {
     throw new Error("sourceKey alias manifest의 schemaVersion은 1이어야 합니다");
   }
@@ -140,7 +140,22 @@ function validateSourceKeyAliases(value) {
       throw new Error(`sourceKey alias가 유효하지 않습니다: ${contractId}`);
     }
   }
-  return value.aliases;
+  return {
+    sourceRevision: value.sourceRevision,
+    aliases: value.aliases,
+  };
+}
+
+export function assertSourceKeyAliasManifestRevisionMatchesTarget(manifest, targetRevision) {
+  if (!manifest?.sourceRevision) {
+    throw new Error("sourceKey alias manifest revision is required for strict release");
+  }
+  if (manifest.sourceRevision !== targetRevision) {
+    throw new Error(
+      `sourceKey alias manifest revision ${manifest.sourceRevision} does not match target ${targetRevision}`,
+    );
+  }
+  return manifest.sourceRevision;
 }
 
 export function parseReferenceInventory(markdown, sourceRevision, portMap, sourceKeyAliases = {}) {
@@ -395,12 +410,15 @@ export async function writeFeatureLedger({
     typeof portMap === "string"
       ? JSON.parse(await readFile(portMap, "utf8"))
       : portMap;
-  const loadedSourceKeyAliases =
+  const sourceKeyAliasManifest =
     typeof sourceKeyAliases === "string"
-      ? validateSourceKeyAliases(JSON.parse(await readFile(sourceKeyAliases, "utf8")))
-      : sourceKeyAliases;
-  const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap, loadedSourceKeyAliases);
-  if (requireComplete) assertFeatureDeliveryComplete(ledger);
+      ? validateSourceKeyAliasManifest(JSON.parse(await readFile(sourceKeyAliases, "utf8")))
+      : { sourceRevision: null, aliases: sourceKeyAliases };
+  const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap, sourceKeyAliasManifest.aliases);
+  if (requireComplete) {
+    assertSourceKeyAliasManifestRevisionMatchesTarget(sourceKeyAliasManifest, sourceRevision);
+    assertFeatureDeliveryComplete(ledger);
+  }
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`;
   const serializedContracts = `${JSON.stringify(contractCatalog(ledger), null, 2)}\n`;
   if (check) {

@@ -60,6 +60,14 @@ feature list.
 The regular deterministic checks intentionally differ from the release
 rebaseline gate:
 
+- `make gate` is the PR diagnostic gate. It verifies the frozen source and
+  feature ledgers, then runs the repository's Python, manifest, and frontend
+  diagnostics; it deliberately does not claim latest-source release parity.
+- `make release-governance` is the strict deployment prerequisite. It runs the
+  source ledger check, UI delta rebaseline check, and feature parity check. A
+  classified interaction may use no legacy alias when it is new, but any alias
+  it does declare must be a unique known feature contract; the sourceKey alias
+  manifest must also declare the same revision as the release target.
 - `make reference-ui-delta-ledger-check` verifies that the generated A/M/D/R
   path, blob and hash evidence exactly matches the approved read-only upstream
   Git tree. It does not require manual classification, so snapshot verification
@@ -71,6 +79,13 @@ rebaseline gate:
 - `make reference-feature-parity-check` depends on that rebaseline gate, so a
   release cannot claim latest-source parity before the mismatch and pending
   analysis are resolved.
+
+The `Dev Deploy` workflow prepares the approved upstream Git objects and runs
+`make release-governance` before either service or console image build. This is
+intentionally blocking today: the inventory and empty sourceKey alias manifest
+still declare `3ff2…`, and the 276 UI delta files are pending. A successful PR
+diagnostic gate is therefore not authorization to deploy until those latest
+source proofs are complete.
 
 Regenerate it only after replacing `references/upstream` with the approved
 snapshot:

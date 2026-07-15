@@ -14,6 +14,7 @@ export const DEFAULT_TARGET_REVISION = 'cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc
 const DEFAULT_REPOSITORY = '/tmp/opsia-upstream-verify'
 const DEFAULT_INVENTORY = path.join(REPOSITORY_ROOT, 'docs', 'spec', 'frontend', 'reference-feature-inventory.md')
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-ui-delta-ledger.json')
+const DEFAULT_FEATURE_LEDGER = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-feature-ledger.json')
 const DEFAULT_SOURCE_REPOSITORY = 'https://github.com/skyhook-io/radar.git'
 const DEFAULT_SCOPE = ['web', 'packages/k8s-ui']
 
@@ -76,6 +77,20 @@ function blankDeltaRow(change, baseFiles, targetFiles) {
   }
 }
 
+export function resolveDeltaLedgerOptions(options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('source delta options must be an object')
+  }
+  return {
+    ...options,
+    repository: options.repository ?? DEFAULT_REPOSITORY,
+    baseRevision: options.baseRevision ?? DEFAULT_BASE_REVISION,
+    targetRevision: options.targetRevision ?? DEFAULT_TARGET_REVISION,
+    sourceRepository: options.sourceRepository ?? DEFAULT_SOURCE_REPOSITORY,
+    scope: options.scope ?? DEFAULT_SCOPE,
+  }
+}
+
 export function buildDeltaLedger({
   baseRevision,
   targetRevision,
@@ -121,7 +136,7 @@ function validatePath(value, label, errors) {
   }
 }
 
-function validateClassifiedInteraction(interaction, label, errors) {
+function validateClassifiedInteraction(interaction, label, errors, { knownLegacyContractIds, seenLegacyContractIds }) {
   if (!interaction || typeof interaction !== 'object' || Array.isArray(interaction)) {
     errors.push(`${label}: interaction must be an object`)
     return
@@ -131,6 +146,17 @@ function validateClassifiedInteraction(interaction, label, errors) {
   if (typeof interaction.interaction !== 'string' || !interaction.interaction.trim()) errors.push(`${label}: semantic interaction is required`)
   if (!Array.isArray(interaction.legacyContractIds) || interaction.legacyContractIds.some((id) => !/^reference\.feature\.\d{3}$/.test(id))) {
     errors.push(`${label}: legacyContractIds must contain only reference feature aliases`)
+  } else {
+    for (const legacyContractId of interaction.legacyContractIds) {
+      if (seenLegacyContractIds.has(legacyContractId)) {
+        errors.push(`${label}: legacyContractId is duplicated: ${legacyContractId}`)
+      } else {
+        seenLegacyContractIds.add(legacyContractId)
+      }
+      if (knownLegacyContractIds && !knownLegacyContractIds.has(legacyContractId)) {
+        errors.push(`${label}: legacyContractId is unknown: ${legacyContractId}`)
+      }
+    }
   }
   validateRealtime(interaction, label, errors)
   validateMotion(interaction, label, errors)
@@ -167,10 +193,41 @@ function validateMotion(interaction, label, errors) {
   }
   if (!Array.isArray(interaction.motion.evidence) || interaction.motion.evidence.length === 0) {
     errors.push(`${label}: motion.evidence requires at least one item`)
+    return
+  }
+  interaction.motion.evidence.forEach((locator, index) => {
+    if (typeof locator !== 'string' || !locator.trim()) {
+      errors.push(`${label}: motion.evidence[${index}] must be a non-empty locator`)
+    }
+  })
+}
+
+function immutableDeltaEvidence(ledger) {
+  return {
+    schemaVersion: ledger?.schemaVersion,
+    sourceRepository: ledger?.sourceRepository,
+    baseRevision: ledger?.baseRevision,
+    targetRevision: ledger?.targetRevision,
+    scope: ledger?.scope,
+    fileCount: ledger?.fileCount,
+    statusCounts: ledger?.statusCounts,
+    files: ledger?.files?.map(({ status, previousPath, path: filePath, base, target }) => ({
+      status,
+      previousPath,
+      path: filePath,
+      base,
+      target,
+    })),
   }
 }
 
-export function validateDeltaLedger(ledger) {
+function assertImmutableDeltaEvidenceMatches(current, generated, output) {
+  if (JSON.stringify(immutableDeltaEvidence(current)) !== JSON.stringify(immutableDeltaEvidence(generated))) {
+    throw new Error(`source UI delta ledger does not match immutable git evidence: ${output}`)
+  }
+}
+
+export function validateDeltaLedger(ledger, { knownLegacyContractIds = null } = {}) {
   const errors = []
   if (!ledger || typeof ledger !== 'object') return ['ledger must be an object']
   if (ledger.schemaVersion !== 2) errors.push('schemaVersion must equal 2')
@@ -198,6 +255,7 @@ export function validateDeltaLedger(ledger) {
 
   const seenPaths = new Set()
   const seenSourceKeys = new Set()
+  const seenLegacyContractIds = new Set()
   for (const row of ledger.files) {
     const label = String(row?.path ?? '<unknown>')
     validatePath(row?.path, label, errors)
@@ -235,7 +293,10 @@ export function validateDeltaLedger(ledger) {
     }
     row.interactions.forEach((interaction, index) => {
       const interactionLabel = `${label}: interactions[${index}]`
-      validateClassifiedInteraction(interaction, interactionLabel, errors)
+      validateClassifiedInteraction(interaction, interactionLabel, errors, {
+        knownLegacyContractIds,
+        seenLegacyContractIds,
+      })
       if (SOURCE_KEY.test(interaction?.sourceKey ?? '')) {
         if (seenSourceKeys.has(interaction.sourceKey)) errors.push(`${interactionLabel}: sourceKey is duplicated`)
         else seenSourceKeys.add(interaction.sourceKey)
@@ -245,8 +306,8 @@ export function validateDeltaLedger(ledger) {
   return errors
 }
 
-export function assertDeltaLedgerClassified(ledger) {
-  const errors = validateDeltaLedger(ledger)
+export function assertDeltaLedgerClassified(ledger, validationContext = undefined) {
+  const errors = validateDeltaLedger(ledger, validationContext)
   if (errors.length > 0) throw new Error(`source delta ledger validation failed:\n${errors.join('\n')}`)
   const pending = ledger.files.filter((row) => row.classification === 'pending')
   if (pending.length > 0) {
@@ -360,8 +421,9 @@ export async function collectGitDelta({
 }
 
 export async function createDeltaLedger(options = {}) {
-  const source = await collectGitDelta(options)
-  return buildDeltaLedger({ ...options, ...source })
+  const resolved = resolveDeltaLedgerOptions(options)
+  const source = await collectGitDelta(resolved)
+  return buildDeltaLedger({ ...resolved, ...source })
 }
 
 function parseArguments(argv) {
@@ -371,6 +433,7 @@ function parseArguments(argv) {
     targetRevision: DEFAULT_TARGET_REVISION,
     inventory: DEFAULT_INVENTORY,
     output: DEFAULT_OUTPUT,
+    featureLedger: DEFAULT_FEATURE_LEDGER,
     check: false,
     requireClassified: false,
     requireRebased: false,
@@ -389,7 +452,7 @@ function parseArguments(argv) {
       values.requireRebased = true
       continue
     }
-    if (!['--repository', '--base', '--target', '--inventory', '--output'].includes(flag) || !argv[index + 1]) {
+    if (!['--repository', '--base', '--target', '--inventory', '--output', '--feature-ledger'].includes(flag) || !argv[index + 1]) {
       throw new Error(`unsupported argument: ${flag}`)
     }
     const value = argv[index + 1]
@@ -401,22 +464,61 @@ function parseArguments(argv) {
   return values
 }
 
+function knownLegacyContractIdsFromFeatureLedger(ledger) {
+  if (!ledger || typeof ledger !== 'object' || !Array.isArray(ledger.features)) {
+    throw new Error('feature ledger must contain a features array for source interaction alias validation')
+  }
+  const knownLegacyContractIds = new Set()
+  for (const feature of ledger.features) {
+    const contractId = feature?.contractId
+    if (!/^reference\.feature\.\d{3}$/.test(contractId ?? '')) {
+      throw new Error('feature ledger contains an invalid contractId for source interaction alias validation')
+    }
+    if (knownLegacyContractIds.has(contractId)) {
+      throw new Error(`feature ledger contains a duplicate contractId for source interaction alias validation: ${contractId}`)
+    }
+    knownLegacyContractIds.add(contractId)
+  }
+  return knownLegacyContractIds
+}
+
+async function readKnownLegacyContractIds(featureLedger) {
+  const parsed = JSON.parse(await readFile(featureLedger, 'utf8'))
+  return knownLegacyContractIdsFromFeatureLedger(parsed)
+}
+
 export async function writeDeltaLedger({
   repository,
   baseRevision,
   targetRevision,
   inventory,
   output,
+  featureLedger = DEFAULT_FEATURE_LEDGER,
   check = false,
   requireClassified = false,
   requireRebased = false,
 }) {
-  const ledger = await createDeltaLedger({ repository, baseRevision, targetRevision })
-  const serialized = `${JSON.stringify(ledger, null, 2)}\n`
+  const generated = await createDeltaLedger({ repository, baseRevision, targetRevision })
+  let ledger = generated
+  let validationContext
   if (check) {
     const current = await readFile(output, 'utf8').catch(() => null)
-    if (current !== serialized) throw new Error(`source UI delta ledger does not match immutable git evidence: ${output}`)
+    if (current === null) throw new Error(`source UI delta ledger does not match immutable git evidence: ${output}`)
+    let currentLedger
+    try {
+      currentLedger = JSON.parse(current)
+    } catch {
+      throw new Error(`source UI delta ledger is not valid JSON: ${output}`)
+    }
+    validationContext = { knownLegacyContractIds: await readKnownLegacyContractIds(featureLedger) }
+    const validationErrors = validateDeltaLedger(currentLedger, validationContext)
+    if (validationErrors.length > 0) {
+      throw new Error(`source delta ledger validation failed:\n${validationErrors.join('\n')}`)
+    }
+    assertImmutableDeltaEvidenceMatches(currentLedger, generated, output)
+    ledger = currentLedger
   } else {
+    const serialized = `${JSON.stringify(generated, null, 2)}\n`
     await mkdir(path.dirname(output), { recursive: true })
     await writeFile(output, serialized, 'utf8')
   }
@@ -424,7 +526,7 @@ export async function writeDeltaLedger({
     const markdown = await readFile(inventory, 'utf8')
     assertInventoryRevisionMatchesTarget(markdown, targetRevision)
   }
-  if (requireClassified) assertDeltaLedgerClassified(ledger)
+  if (requireClassified) assertDeltaLedgerClassified(ledger, validationContext)
   return ledger
 }
 
