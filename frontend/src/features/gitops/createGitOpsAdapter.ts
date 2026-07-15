@@ -168,7 +168,7 @@ function toCapability(
     action: value.action,
     authorization: value.authorization,
     availability: value.availability,
-    enabled: value.enabled,
+    enabled: false,
     operationBlocked: value.operation_blocked,
     reasonCode: value.reason_code,
   };

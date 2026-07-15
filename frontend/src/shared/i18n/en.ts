@@ -138,6 +138,8 @@ export const en = {
   "settings.policy.approval": "Approval required",
   "state.empty.body": "No data matches the current scope and filters.",
   "state.empty.title": "No data to show",
+  "state.notFound.body": "It may have been removed or is outside your current access.",
+  "state.notFound.title": "We couldn't find that item",
   "state.error.body": "Check server errors or response contract mismatches, then try again.",
   "state.error.title": "Unable to read the verified response",
   "state.forbidden.body": "The current account does not have the required read permission.",

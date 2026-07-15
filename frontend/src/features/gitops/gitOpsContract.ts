@@ -50,6 +50,17 @@ export interface GitOpsSyncTarget {
 
 export type GitOpsAvailability = "available" | "partial" | "unavailable";
 export type GitOpsAuthorization = "allowed" | "denied";
+export type GitOpsReasonCode =
+  | "binding_scope_unavailable"
+  | "multiple_target_scopes"
+  | "live_observation_not_integrated"
+  | "source_revision_unavailable"
+  | "workflow_operation_unobserved"
+  | "provider_operation_not_integrated"
+  | "not_authorized"
+  | "operation_in_progress"
+  | "provider_refresh_not_integrated"
+  | "provider_sync_not_integrated";
 
 export interface GitOpsResourceRef {
   apiGroup: string;
@@ -70,7 +81,7 @@ export interface GitOpsClusterScope {
 export interface GitOpsApplicationScope {
   availability: GitOpsAvailability;
   scope: GitOpsClusterScope | null;
-  reasonCode: string | null;
+  reasonCode: GitOpsReasonCode | null;
 }
 
 export interface GitOpsSource {
@@ -83,7 +94,7 @@ export interface GitOpsDesiredLiveDiffAvailability {
   availability: GitOpsAvailability;
   sourceRevision: string | null;
   liveObservationRevision: string | null;
-  reasonCode: string | null;
+  reasonCode: GitOpsReasonCode | null;
 }
 
 export interface GitOpsOperationObservation {
@@ -92,16 +103,17 @@ export interface GitOpsOperationObservation {
   workflowRunId: string | null;
   status: string | null;
   observedAt: string | null;
-  reasonCode: string | null;
+  reasonCode: GitOpsReasonCode | null;
 }
 
 export interface GitOpsActionCapability {
   action: "refresh" | "sync";
   authorization: GitOpsAuthorization;
   availability: GitOpsAvailability;
-  enabled: boolean;
+  /** This read-only detail projection has no auditable action executor yet. */
+  enabled: false;
   operationBlocked: boolean;
-  reasonCode: string | null;
+  reasonCode: GitOpsReasonCode | null;
 }
 
 export interface GitOpsApplicationDetail {

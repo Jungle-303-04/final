@@ -35,6 +35,25 @@ describe("getGitOpsApplicationDetail", () => {
       kind: "invalid-payload",
     });
   });
+
+  it("rejects a provider action advertised without the audited execution contract", async () => {
+    const fixture = detail();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      application: {
+        ...fixture,
+        capabilities: [{
+          ...fixture.capabilities[0],
+          availability: "available",
+          enabled: true,
+          reason_code: null,
+        }, fixture.capabilities[1]],
+      },
+    }));
+
+    await expect(getGitOpsApplicationDetail("app-storefront")).rejects.toMatchObject({
+      kind: "invalid-payload",
+    });
+  });
 });
 
 function detail() {
