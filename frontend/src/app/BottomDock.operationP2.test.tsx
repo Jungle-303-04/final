@@ -31,9 +31,11 @@ describe("BottomDock operation center P2", () => {
   });
 
   it.each([
-    { language: "ko-KR", reopen: "작업 센터 다시 열기", summary: "작업 3개 추적 중 · 확인 필요 2개" },
-    { language: "en-US", reopen: "Reopen operation center", summary: "3 tracked operations · 2 need attention" },
-  ])("keeps a collapsed $language dock discoverable and reopens its operation center", async ({ language, reopen, summary }) => {
+    { language: "ko-KR", reopen: "작업 센터 다시 열기", summary: "작업 3개 추적 중 · 확인 필요 2개", trigger: "Enter" },
+    { language: "ko-KR", reopen: "작업 센터 다시 열기", summary: "작업 3개 추적 중 · 확인 필요 2개", trigger: "click" },
+    { language: "en-US", reopen: "Reopen operation center", summary: "3 tracked operations · 2 need attention", trigger: "Enter" },
+    { language: "en-US", reopen: "Reopen operation center", summary: "3 tracked operations · 2 need attention", trigger: "click" },
+  ])("keeps a collapsed $language dock discoverable and reopens its operation center with $trigger", async ({ language, reopen, summary, trigger }) => {
     const user = userEvent.setup();
     const store = mixedStatusStore();
     store.start("command-completed");
@@ -50,8 +52,12 @@ describe("BottomDock operation center P2", () => {
 
     expect(screen.getByText(summary)).toBeTruthy();
     const reopenAction = screen.getByRole("button", { name: reopen });
-    reopenAction.focus();
-    await user.keyboard("{Enter}");
+    if (trigger === "Enter") {
+      reopenAction.focus();
+      await user.keyboard("{Enter}");
+    } else {
+      await user.click(reopenAction);
+    }
 
     const operationCenter = screen.getByRole("region", {
       name: language === "ko-KR" ? "작업 센터" : "Operation center",
