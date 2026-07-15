@@ -55,6 +55,55 @@ class DurableRecorder(MemoryRecorder):
         self.staged.extend(events)
 
 
+def test_api_event_gateway_stages_lifecycle_hook_in_the_same_outbox_unit_of_work() -> None:
+    class LifecycleRecorder(DurableRecorder):
+        def __init__(self) -> None:
+            super().__init__()
+            self.order: list[str] = []
+            self.active = False
+
+        @contextmanager
+        def unit_of_work(self):
+            self.active = True
+            self.order.append("begin")
+            try:
+                yield self
+            finally:
+                self.order.append("end")
+                self.active = False
+
+        def record_event(self, evt: EventEnvelope) -> None:
+            assert self.active is True
+            self.order.append("record")
+            super().record_event(evt)
+
+        def stage_events(self, conn: Any, events: list[EventEnvelope]) -> None:
+            assert conn is self and self.active is True
+            self.order.append("outbox")
+            super().stage_events(conn, events)
+
+    async def run() -> None:
+        recorder = LifecycleRecorder()
+        gateway = ApiEventGateway(MemoryPublisher(), recorder, "api-gateway")
+
+        accepted = await gateway.accept_body(
+            AgentConnectedBody(cluster_id="c1", agent_id="a1"),
+            transactional_stage=lambda conn, evt: assert_lifecycle_stage(recorder, conn, evt),
+        )
+
+        assert recorder.events == [accepted.event]
+        assert recorder.staged == [accepted.event]
+        assert recorder.order == ["begin", "record", "outbox", "lifecycle", "end"]
+
+    asyncio.run(run())
+
+
+def assert_lifecycle_stage(recorder: DurableRecorder, conn: Any, _evt: EventEnvelope) -> None:
+    assert conn is recorder
+    assert getattr(recorder, "active", False) is True
+    recorder.order.append("lifecycle")  # type: ignore[attr-defined]
+
+
 class LockTimeoutOrig(Exception):
     sqlstate = "55P03"
 
