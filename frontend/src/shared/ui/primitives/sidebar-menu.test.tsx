@@ -145,7 +145,7 @@ describe("product-owned Sidebar menu", () => {
     )).toThrow("SidebarNavigation accessible name must be non-empty");
   });
 
-  it("protects canonical semantics and provides reduced-motion and forced-color states", () => {
+  it("protects canonical semantics and provides reversible interaction states", () => {
     renderMenu({ active: true });
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
     const link = screen.getByRole("link", { name: "홈" });
@@ -154,9 +154,16 @@ describe("product-owned Sidebar menu", () => {
     expect(link.getAttribute("data-slot")).toBe("sidebar-menu-link");
     expect(link.getAttribute("data-sidebar-state")).toBe("expanded");
     expect(link.getAttribute("data-active")).toBe("");
+    expect(link.className).toContain("duration-150");
+    expect(link.className).toContain("ease-out");
+    expect(link.className).toContain("hover:bg-sidebar-primary/10");
+    expect(link.className).toContain("hover:text-sidebar-foreground");
+    expect(link.className).toContain("focus-visible:bg-sidebar-primary/10");
+    expect(link.className).toContain("focus-visible:text-sidebar-foreground");
     expect(link.className).toContain("motion-reduce:transition-none");
-    expect(link.className).toContain("forced-colors:data-active:bg-[Highlight]");
-    expect(link.className).toContain("forced-colors:data-active:text-[HighlightText]");
+    expect(link.className).toContain("forced-colors:hover:bg-[Highlight]");
+    expect(link.className).not.toContain("data-active:bg-sidebar-accent");
+    expect(link.className).not.toContain("data-active:text-sidebar-accent-foreground");
     expect(link.className).toContain("forced-colors:focus-visible:outline-[CanvasText]");
     expect(link.className).toContain("forced-colors:aria-disabled:text-[GrayText]");
     expect(link.className).toContain("forced-colors:aria-disabled:opacity-100");
