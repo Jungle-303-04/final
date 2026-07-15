@@ -19,6 +19,7 @@ from domains.command.handler import build_plan, command_requires_recorded_approv
 from domains.command.policy import (
     DEFAULT_COMMAND_LEASE_SECONDS,
 )
+from domains.command.repository import stage_command_operation_event_in_transaction
 from domains.gitops.events import Diff
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
@@ -106,6 +107,39 @@ def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> A
         correlation_id=accepted.event.correlation_id,
         command_id=command_id,
     )
+
+
+async def accept_command_with_receipt_stage(
+    events: Any,
+    command: CommandRequestedBody,
+    *,
+    actor: Actor,
+) -> tuple[Any, OperationEvent | None]:
+    """Accept a command and stage its browser receipt in the same event outbox UoW."""
+    staged: list[OperationEvent | None] = []
+
+    def stage(conn: Any, accepted_event: Any) -> None:
+        if command_requires_recorded_approval(command):
+            staged.append(None)
+            return
+        plan = build_plan(command, accepted_event.correlation_id)
+        staged.append(
+            stage_command_operation_event_in_transaction(
+                conn,
+                workspace_id=command.workspace_id,
+                command_id=plan.command_id,
+                kind="progress",
+                payload={
+                    "cluster_id": command.cluster_id,
+                    "status": CommandStatus.QUEUED,
+                    "action": command.action,
+                    "correlation_id": accepted_event.correlation_id,
+                },
+            )
+        )
+
+    accepted = await events.accept_body(command, actor=actor, transactional_stage=stage)
+    return accepted, staged[0] if staged else None
 
 
 async def publish_operation_event(
@@ -336,12 +370,16 @@ async def accept_deployment_control(
         direct_execution=direct_execution,
         direct_execution_confirmed=direct_execution_confirmed,
     )
-    accepted = await events.accept_body(
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
         command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
     response = command_accepted_response(command, accepted)
-    await publish_accepted_operation(operation_events, command, response)
+    if not await announce_staged_operation_event(
+        operation_events, receipt_event, workspace_id=command.workspace_id
+    ):
+        await publish_accepted_operation(operation_events, command, response)
     return response
 
 
@@ -416,12 +454,16 @@ async def commands(
         direct_execution=payload.direct_execution,
         direct_execution_confirmed=payload.direct_execution_confirmed,
     )
-    accepted = await events.accept_body(
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
         command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
     response = command_accepted_response(command, accepted)
-    await publish_accepted_operation(operation_events, command, response)
+    if not await announce_staged_operation_event(
+        operation_events, receipt_event, workspace_id=command.workspace_id
+    ):
+        await publish_accepted_operation(operation_events, command, response)
     return response
 
 
