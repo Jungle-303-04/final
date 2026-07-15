@@ -8,5 +8,10 @@ export type DesktopMessageKey =
   | "desktop.localTerminal.failed"
   | "desktop.localTerminal.reconnect"
   | "desktop.localTerminal.close"
+  | "desktop.localTerminal.closeShortcut"
   | "desktop.localTerminal.shell"
+  | "desktop.localTerminal.failure.start"
+  | "desktop.localTerminal.failure.operation"
+  | "desktop.localTerminal.failure.native"
+  | "desktop.localTerminal.failure.exit"
   | "desktop.localTerminal.unavailable";

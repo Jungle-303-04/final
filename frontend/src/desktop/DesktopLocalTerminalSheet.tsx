@@ -2,8 +2,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { CircleAlert, CircleCheck, LoaderCircle, RotateCcw, TerminalSquare } from "lucide-react";
+import { CircleAlert, CircleCheck, LoaderCircle, RotateCcw, TerminalSquare, X } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -18,7 +19,7 @@ import { usePrefersReducedMotion } from "../motion/usePrefersReducedMotion";
 import { useI18n } from "../shared/i18n";
 import { cn } from "../shared/lib/cn";
 import { Badge } from "../shared/ui/primitives/badge";
-import { Button } from "../shared/ui/primitives/button";
+import { Button, buttonVariants } from "../shared/ui/primitives/button";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +29,9 @@ import {
 } from "../shared/ui/primitives/sheet";
 
 type TerminalPhase = "connecting" | "connected" | "ended" | "failed";
+type TerminalFailure =
+  | { kind: "start" | "operation" | "native" }
+  | { kind: "exit"; exitCode: number };
 
 const DEFAULT_TERMINAL_COLUMNS = 80;
 const DEFAULT_TERMINAL_ROWS = 24;
@@ -41,6 +45,15 @@ export function DesktopLocalTerminalSheet() {
   const { t } = useI18n();
   const [available, setAvailable] = useState(false);
   const [open, setOpen] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const restoreOpenerFocus = useCallback(() => {
+    queueMicrotask(() => opener.current?.focus());
+  }, []);
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) restoreOpenerFocus();
+  }, [restoreOpenerFocus]);
+  const closeSheet = useCallback(() => handleOpenChange(false), [handleOpenChange]);
 
   useEffect(() => {
     if (!desktopBridge.isDesktop) return;
@@ -60,9 +73,10 @@ export function DesktopLocalTerminalSheet() {
   if (!available) return null;
 
   return (
-    <Sheet onOpenChange={setOpen} open={open}>
+    <Sheet onOpenChange={handleOpenChange} open={open}>
       <Button
         aria-label={t("desktop.localTerminal.open")}
+        ref={opener}
         onClick={() => setOpen(true)}
         size="icon-sm"
         title={t("desktop.localTerminal.open")}
@@ -74,30 +88,31 @@ export function DesktopLocalTerminalSheet() {
       <SheetContent
         aria-describedby="desktop-local-terminal-description"
         className="h-[min(72svh,680px)] gap-0 p-0 sm:max-w-none"
-        closeLabel={t("desktop.localTerminal.close")}
         showCloseButton={false}
         side="bottom"
       >
-        <SheetHeader className="shrink-0 border-b pr-14">
+        <SheetHeader className="shrink-0 border-b">
           <SheetTitle>{t("desktop.localTerminal.title")}</SheetTitle>
           <SheetDescription id="desktop-local-terminal-description">
             {t("desktop.localTerminal.description")}
           </SheetDescription>
         </SheetHeader>
-        <DesktopLocalTerminalSurface key={open ? "open" : "closed"} />
+        {open ? (
+          <DesktopLocalTerminalSurface onClose={closeSheet} />
+        ) : null}
       </SheetContent>
     </Sheet>
   );
 }
 
-function DesktopLocalTerminalSurface() {
+function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
   const reducedMotion = usePrefersReducedMotion();
   const host = useRef<HTMLDivElement>(null);
   const [generation, setGeneration] = useState(0);
   const [phase, setPhase] = useState<TerminalPhase>("connecting");
   const [shell, setShell] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<TerminalFailure | null>(null);
 
   useLayoutEffect(() => {
     const container = host.current;
@@ -117,6 +132,24 @@ function DesktopLocalTerminalSurface() {
     terminal.loadAddon(fit);
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(container);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type === "keydown" && event.altKey && event.key === "Escape") {
+        onClose();
+        return false;
+      }
+      return true;
+    });
+
+    const invalidateSession = (): string | null => {
+      const currentSessionId = sessionId;
+      sessionId = null;
+      return currentSessionId;
+    };
+    const fail = (nextFailure: TerminalFailure) => {
+      invalidateSession();
+      setFailure(nextFailure);
+      setPhase("failed");
+    };
 
     const dimensions = () => {
       fit.fit();
@@ -131,12 +164,20 @@ function DesktopLocalTerminalSurface() {
         return;
       }
       if (event.kind === "exit") {
-        setPhase("ended");
-        terminal.write(`\r\n[${t("desktop.localTerminal.ended")}]\r\n`);
+        invalidateSession();
+        if (event.exitCode === 0) {
+          setFailure(null);
+          setPhase("ended");
+          terminal.write(`\r\n[${t("desktop.localTerminal.ended")}]\r\n`);
+        } else {
+          const exitCode = safeExitCode(event.exitCode);
+          setFailure({ kind: "exit", exitCode });
+          setPhase("failed");
+          terminal.write(`\r\n[${t("desktop.localTerminal.failed")}]\r\n`);
+        }
         return;
       }
-      setFailure(event.message);
-      setPhase("failed");
+      fail({ kind: "native" });
     };
     let unlisten: () => void = () => undefined;
     const listen = async () => {
@@ -154,10 +195,9 @@ function DesktopLocalTerminalSurface() {
     };
     const inputDisposable = terminal.onData((data) => {
       if (!sessionId || disposed) return;
-      void desktopBridge.sendLocalTerminalInput({ sessionId, data }).catch((error: unknown) => {
+      void desktopBridge.sendLocalTerminalInput({ sessionId, data }).catch(() => {
         if (!disposed) {
-          setFailure(error instanceof Error ? error.message : String(error));
-          setPhase("failed");
+          fail({ kind: "operation" });
         }
       });
     });
@@ -167,10 +207,9 @@ function DesktopLocalTerminalSurface() {
       if (disposed) return;
       const next = dimensions();
       if (sessionId) {
-        void desktopBridge.resizeLocalTerminal({ sessionId, ...next }).catch((error: unknown) => {
+        void desktopBridge.resizeLocalTerminal({ sessionId, ...next }).catch(() => {
           if (!disposed) {
-            setFailure(error instanceof Error ? error.message : String(error));
-            setPhase("failed");
+            fail({ kind: "operation" });
           }
         });
       }
@@ -198,27 +237,36 @@ function DesktopLocalTerminalSurface() {
           if (event.sessionId === sessionId) writeEvent(event);
         }
         resize();
-      } catch (error) {
+      } catch {
         if (!disposed) {
-          setFailure(error instanceof Error ? error.message : String(error));
+          setFailure({ kind: "start" });
           setPhase("failed");
         }
       }
     };
-    void start();
+    // React StrictMode intentionally replays effects in development. Defer
+    // process creation one task so its preflight cleanup can cancel before a
+    // native PTY is ever spawned.
+    let startTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      startTimer = null;
+      void start();
+    }, 0);
 
     return () => {
       disposed = true;
+      if (startTimer !== null) clearTimeout(startTimer);
       observer.disconnect();
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
       inputDisposable.dispose();
       unlisten();
       terminal.dispose();
-      if (sessionId) void desktopBridge.closeLocalTerminal(sessionId).catch(() => undefined);
+      const activeSessionId = invalidateSession();
+      if (activeSessionId) void desktopBridge.closeLocalTerminal(activeSessionId).catch(() => undefined);
     };
-  }, [generation, reducedMotion, t]);
+  }, [generation, onClose, reducedMotion, t]);
 
   const isFailed = phase === "failed";
+  const failureMessage = failure ? terminalFailureMessage(failure, t) : null;
   return (
     <section aria-label={t("desktop.localTerminal.title")} className="flex min-h-0 flex-1 flex-col bg-background">
       <header className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-2 sm:flex-nowrap">
@@ -226,6 +274,23 @@ function DesktopLocalTerminalSurface() {
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {shell ? t("desktop.localTerminal.shell", { shell }) : t("desktop.localTerminal.connecting")}
         </span>
+        <kbd className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          {t("desktop.localTerminal.closeShortcut")}
+        </kbd>
+        <button
+          aria-label={t("desktop.localTerminal.close")}
+          aria-keyshortcuts="Alt+Escape"
+          className={buttonVariants({ size: "icon-sm", variant: "ghost" })}
+          onClick={onClose}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onClose();
+          }}
+          title={t("desktop.localTerminal.close")}
+          type="button"
+        >
+          <X aria-hidden="true" />
+        </button>
         {(isFailed || phase === "ended") ? (
           <Button
             onClick={() => {
@@ -243,9 +308,9 @@ function DesktopLocalTerminalSurface() {
           </Button>
         ) : null}
       </header>
-      {failure ? (
-        <p className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive">
-          {failure}
+      {failureMessage ? (
+        <p className="shrink-0 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-xs text-destructive" role="alert">
+          {failureMessage}
         </p>
       ) : null}
       <div
@@ -282,9 +347,31 @@ function TerminalPhaseBadge({ phase }: { phase: TerminalPhase }) {
     },
   }[phase];
   return (
-    <Badge className={cn("shrink-0 gap-1", phase === "connecting" && "text-muted-foreground")} variant={presentation.variant}>
+    <Badge
+      aria-live="polite"
+      className={cn("shrink-0 gap-1", phase === "connecting" && "text-muted-foreground")}
+      role="status"
+      variant={presentation.variant}
+    >
       {presentation.icon}
       {presentation.label}
     </Badge>
   );
+}
+
+function terminalFailureMessage(
+  failure: TerminalFailure,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (failure.kind === "start") return t("desktop.localTerminal.failure.start");
+  if (failure.kind === "operation") return t("desktop.localTerminal.failure.operation");
+  if (failure.kind === "native") return t("desktop.localTerminal.failure.native");
+  if (failure.kind === "exit") {
+    return t("desktop.localTerminal.failure.exit", { exitCode: failure.exitCode });
+  }
+  return t("desktop.localTerminal.failure.native");
+}
+
+function safeExitCode(value: number): number {
+  return Number.isInteger(value) && value > 0 && value <= 255 ? value : 1;
 }
