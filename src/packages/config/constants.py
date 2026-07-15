@@ -64,8 +64,11 @@ class CommandStatus:
     QUEUED: Final = "queued"
     LEASED: Final = "leased"
     RUNNING: Final = "running"
+    CANCEL_REQUESTED: Final = "cancel_requested"
+    CANCELLING: Final = "cancelling"
     COMPLETED: Final = "completed"
     FAILED: Final = "failed"
+    CANCELLED: Final = "cancelled"
 
 
 class RiskLevel(StrEnum):
