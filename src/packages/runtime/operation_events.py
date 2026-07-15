@@ -87,6 +87,13 @@ class OperationEventBroker(Protocol):
         workspace_id: str = DEFAULT_WORKSPACE_ID,
     ) -> OperationEventSubscription: ...
 
+    async def announce(
+        self,
+        event: OperationEvent,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> None: ...
+
     async def publish(
         self,
         *,
@@ -167,6 +174,14 @@ class InMemoryOperationEventBroker:
         ):
             _offer(queue, event)
 
+    async def announce(
+        self,
+        event: OperationEvent,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> None:
+        await self.deliver(event, workspace_id=workspace_id)
+
 
 class DurableOperationEventBroker:
     """Persist-before-fanout broker used for deterministic storage contract tests."""
@@ -214,6 +229,14 @@ class DurableOperationEventBroker:
         workspace_id: str = DEFAULT_WORKSPACE_ID,
     ) -> None:
         await self._local.deliver(event, workspace_id=workspace_id)
+
+    async def announce(
+        self,
+        event: OperationEvent,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> None:
+        await self.deliver(event, workspace_id=workspace_id)
 
 
 class RedisOperationEventBroker(DurableOperationEventBroker):
@@ -277,23 +300,33 @@ class RedisOperationEventBroker(DurableOperationEventBroker):
         )
         if event is None:
             return None
+        await self.announce(event, workspace_id=workspace_id)
+        return event
+
+    async def announce(
+        self,
+        event: OperationEvent,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> None:
         # Local browser clients observe the committed event even while Redis is
         # unavailable. Cross-replica delivery is only an acceleration; SSE
         # replay remains authoritative and heals the missed wake-up.
         await self.deliver(event, workspace_id=workspace_id)
         client = self._client
         if client is None:
-            LOGGER.warning("operation_event_redis_unavailable", extra={"command_id": command_id})
-            return event
+            LOGGER.warning(
+                "operation_event_redis_unavailable", extra={"command_id": event.command_id}
+            )
+            return
         envelope = {
             "workspace_id": workspace_id,
             "event": event.model_dump(mode="json"),
         }
         try:
-            await client.publish(_channel(workspace_id, command_id), _json(envelope))
+            await client.publish(_channel(workspace_id, event.command_id), _json(envelope))
         except (ConnectionError, OSError):
             LOGGER.warning("operation_event_redis_publish_failed", exc_info=True)
-        return event
 
     async def _listen(self) -> None:
         assert self._pubsub is not None

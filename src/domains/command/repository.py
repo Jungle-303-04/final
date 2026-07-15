@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -35,6 +36,18 @@ EXPIRED_COMMAND_FAILURE_MESSAGE = "command lease expired; no agent completed the
 QUEUED_COMMAND_TTL_SECONDS = 1800
 QUEUED_COMMAND_FAILURE_MESSAGE = "command queue expired; no connected agent accepted the command"
 COMMAND_PRIORITY_HIGH = 100
+
+
+@dataclass(frozen=True)
+class CompletedAgentCommand:
+    """One database transaction's workflow event and browser operation event."""
+
+    event: EventEnvelope
+    operation_event: OperationEvent | None
+
+    @property
+    def event_id(self) -> str:
+        return self.event.event_id
 
 
 def rca_test_guard_lock_key(
@@ -556,7 +569,7 @@ class AgentCommandRepository(DatabaseConnection):
         lease_id: str,
         agent_id: str,
         source: str,
-    ) -> EventEnvelope | None:
+    ) -> CompletedAgentCommand | None:
         command_table = AgentCommand.__table__
         event_table = EventModel.__table__
         outbox_table = OutboxModel.__table__
@@ -587,7 +600,7 @@ class AgentCommandRepository(DatabaseConnection):
             operation_kind: OperationEventKind = (
                 "completed" if result["status"] == CommandStatus.COMPLETED else "failed"
             )
-            await append_command_operation_event_in_transaction(
+            operation_event = await append_command_operation_event_in_transaction(
                 conn,
                 workspace_id=workspace_id,
                 command_id=command_id,
@@ -634,7 +647,7 @@ class AgentCommandRepository(DatabaseConnection):
                 )
                 .on_conflict_do_nothing(index_elements=[outbox_table.c.event_id])
             )
-        return completed
+        return CompletedAgentCommand(event=completed, operation_event=operation_event)
 
     def fail_expired_agent_commands(
         self,
