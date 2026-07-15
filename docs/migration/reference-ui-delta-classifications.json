@@ -110,6 +110,86 @@
     "applications.public-api": {
       "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
       "rationale": "The route-level application tab and workload-scope contract remains consumable without importing the isolated upstream component barrel."
+    },
+    "gitops.detail.operation-gate": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "An Argo detail action surface must disable only conflicting mutations from the server-owned operation state while retaining authorized refresh controls."
+    },
+    "gitops.detail.revision-meta": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Revision metadata must be rendered only for the exact authorized resource revision returned by the GitOps detail projection."
+    },
+    "gitops.graph-filter.input": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Topology resource filtering must use the shared accessible input boundary and preserve the controlled query across graph updates."
+    },
+    "gitops.list.operation-gate": {
+      "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+      "rationale": "Fleet row actions must make the operation-in-progress reason visible and must not submit a second conflicting Argo sync."
+    },
+    "gitops.list.search-input": {
+      "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+      "rationale": "GitOps list search must remain a controlled, keyboard-accessible query without duplicating raw input behavior."
+    },
+    "gitops.list.labels-input": {
+      "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+      "rationale": "Label search and AND-selection must preserve focus, outside dismissal, and the server-authorized row set."
+    },
+    "gitops.managed-resources.disclosure": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Managed-resource and kind disclosures must retain lazy content, resource navigation, and reduced-motion-safe state changes."
+    },
+    "gitops.sync-countdown.duration": {
+      "destination": "frontend/src/features/gitops/workflowModel.test.ts",
+      "rationale": "A controller-provided duration and observed timestamp must produce a safe countdown without browser-derived controller state."
+    },
+    "gitops.sync-options.payload": {
+      "destination": "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+      "rationale": "Application and resource sync payloads must preserve selective-sync safety invariants and typed command identity at the adapter boundary."
+    },
+    "gitops.sync-options.validation": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Selective dry-run state, validation reset, operation gating, and outcome disclosure must be exercised through the product route."
+    },
+    "gitops.sync-options.feedback": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Dry-run success, failure, inconclusive, and redacted diagnostic feedback must be rendered from a typed server result."
+    },
+    "gitops.insights.resource-diff": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "A revision-bound desired-versus-live diff must handle loading, redaction, errors, fullscreen dismissal, and no-change evidence."
+    },
+    "gitops.insights.resource-filters": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Resources search, OR facets, all-versus-declared inventory, apply order, and status sorting require route-level projection coverage."
+    },
+    "gitops.insights.focus-disclosure": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Issue-to-resource focus must clear incompatible local filters, scroll once, expand diagnostics, and respect reduced-motion preference."
+    },
+    "gitops.insights.resource-actions": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Resource open, missing-source navigation, selective sync eligibility, and inline drift/event disclosure must be capability-gated by the projection."
+    },
+    "gitops.insights.availability": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Diff availability, connection guidance, ignored-difference disclosure, and muted comparison-unavailable state must remain truthful."
+    },
+    "gitops.insights.helpers": {
+      "destination": "frontend/src/features/gitops/workflowModel.test.ts",
+      "rationale": "Typed resource search, facet predicates, eligibility, and severity ordering must be deterministic outside rendering."
+    },
+    "gitops.insights.status-summary": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "A synchronized but degraded resource must remain visible as degraded in the GitOps summary projection."
+    },
+    "gitops.insights.disclosure-motion": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Historical issue, raw-error, compact issue, and resource disclosures must retain semantic expanded state with reduced-motion-safe transitions."
+    },
+    "gitops.tree.icon-and-portal": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Topology node icons must use the shared resource registry and never make the root resource a recursive detail portal."
     }
   },
   "classifications": {
@@ -1374,6 +1454,718 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "Composition already occurs through TimelinePort and the capability-gated route factory."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/GitOpsDetailLayout.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:detail:argo-operation-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsDetailLayout / ArgoActionHandlers",
+          "interaction": "an Argo sync action is disabled with a reason while an operation owns the application slot, while authorized refresh actions remain independently available",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the audited command stream from its durable operation cursor",
+            "backpressure": "coalesce non-terminal progress updates per command attempt",
+            "merge": "accept terminal state only when command, attempt, resource identity, and scope match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.operation-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "GitOpsPage only executes release-plan workflow actions; it has no typed Argo Application identity, operation state, capability set, or command receipt stream for an application sync.",
+            "rationale": "The existing command stream can be reused only after a GitOps detail projection maps the exact application resource and capability to an audited command."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:detail:revision-metadata-slot:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsDetailLayout.renderRevisionMeta",
+          "interaction": "the detail status strip can render host-supplied commit author and signature metadata beside the exact latest revision",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.revision-meta"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current GitOps contracts expose repository and release-plan branch strings only; they do not project an authorized controller revision, commit provenance, or signature evidence for a resource.",
+            "rationale": "Commit metadata must remain server-resolved and revision-bound rather than being inferred from a browser repository URL."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/GitOpsGraphFilterRail.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:topology:controlled-filter-input:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsGraphFilterRail search Input",
+          "interaction": "a shared controlled text input filters an authorized GitOps topology while preset and facet callbacks remain owned by the route",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.graph-filter.input"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia has a reusable accessible input primitive but no GitOps topology route, typed tree projection, or graph filter state to consume it.",
+            "rationale": "The generic Input is not evidence of source-equivalent resource filtering until it is connected to a server-authorized GitOps tree."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/GitOpsTableView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:row-operation-conflict-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "buildRowActionItems",
+          "interaction": "an Argo fleet-row Sync action exposes an operation-in-progress reason and refuses a conflicting second sync while keeping refresh semantics separate",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume each row command from the command receipt cursor",
+            "backpressure": "coalesce progress events by command attempt without losing a terminal event",
+            "merge": "merge only events whose scope and immutable resource reference equal the open row"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.operation-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "GitOpsSyncTableView lists deployment bindings and polling status only; it does not receive Argo operation phase, per-resource capabilities, or row command receipts.",
+            "rationale": "The row must be driven by the same server operation state as the detail action, never by local pending flags alone."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:controlled-search-input:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsTableView search Input",
+          "interaction": "the fleet search field remains a controlled shared input for application, repository, and path filtering",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.search-input"
+            ],
+            "state": "blocked",
+            "blockedReason": "The existing sync table has no application/repository/path query state and its adapter cannot project the controller fields searched by the source view.",
+            "rationale": "Filtering must operate on a typed GitOps catalog projection, not on browser-normalized unknown payloads."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:label-dropdown-input:v1",
+          "legacyContractIds": [],
+          "symbol": "LabelsDropdown search Input",
+          "interaction": "the labels popup autofocuses a controlled search, combines selected labels with AND semantics, clears selection, and dismisses outside the popup",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.labels-input"
+            ],
+            "state": "blocked",
+            "blockedReason": "No GitOps catalog contract exposes authorized labels, label facet counts, or a stable row identity for the current sync table.",
+            "rationale": "A local label dropdown would silently invent a client-only subset and cannot be considered an equivalent fleet filter."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/ManagedResourcesList.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:managed-resources:lazy-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "ManagedResourcesList / ResourceKindGroup",
+          "interaction": "managed-resource and kind disclosures lazily mount grouped inventory, retain show-all state, and expose expanded state with a shared collapse affordance",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "disclosure state remains visible while the port disables nonessential expand and chevron animation under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/ManagedResourcesList.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.managed-resources.disclosure"
+            ],
+            "state": "blocked",
+            "blockedReason": "No GitOps detail inventory projection or managed-resource identity exists in the current Python and React GitOps boundary.",
+            "rationale": "Lazy disclosure must be layered over controller inventory, not reconstructed from release-plan steps."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:managed-resources:resource-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceItem",
+          "interaction": "a managed resource invokes route-owned resource navigation and exposes that affordance only when a destination exists",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "gitops.managed-resources.disclosure"
+            ],
+            "state": "blocked",
+            "blockedReason": "Current GitOps data has no Kubernetes ResourceRef/UID per inventory item and therefore cannot navigate safely to an authorized resource drawer.",
+            "rationale": "Navigation needs immutable resource identity rather than a display name and namespace string."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/SyncCountdown.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:reconciliation:duration-countdown:v1",
+          "legacyContractIds": [],
+          "symbol": "SyncCountdown / parseInterval",
+          "interaction": "a controller-provided reconciliation interval and observed sync time produce a resilient countdown that treats imminent work as a distinct state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the imminent indicator remains distinguishable without pulse animation",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/SyncCountdown.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/workflowModel.ts",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-countdown.duration"
+            ],
+            "state": "blocked",
+            "blockedReason": "GitOpsSyncTarget exposes poll observation time but not controller reconciliation interval, suspended state, or an authoritative next-run value.",
+            "rationale": "The browser must only count down from server-projected controller facts and cannot invent a reconciliation schedule."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/SyncOptionsDialog.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:sync-options:selective-payload-test:v1",
+          "legacyContractIds": [],
+          "symbol": "buildArgoSyncOpts tests",
+          "interaction": "tests prove selective resource sync strips revision, prune, and apply-only fields while retaining typed force and sync-option choices",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+              "frontend/src/features/gitops/gitOpsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.payload"
+            ],
+            "state": "blocked",
+            "blockedReason": "The GitOps port defines release-plan actions only and has no typed Argo application or selective resource-sync command payload.",
+            "rationale": "The safety invariant belongs at the product adapter and Python command contract before a dialog can submit it."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/SyncOptionsDialog.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:sync-options:application-and-resource-payload:v1",
+          "legacyContractIds": [],
+          "symbol": "SyncOptionsDialog / buildArgoSyncOpts",
+          "interaction": "full application sync and selective resource sync expose distinct options, reset stale form state on open, and prevent resource sync from enabling prune, revision, or apply-only semantics",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the resulting command by CommandReceipt audit cursor",
+            "backpressure": "retain each terminal validation or execution state and coalesce intermediate progress",
+            "merge": "apply status only to the dialog whose application and resource ResourceRef match the receipt"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.payload",
+              "gitops.sync-options.validation"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no server endpoint or typed CommandRequest for Argo application/resource sync, no resource identity, and no capability check for selective sync in the current GitOps domain.",
+            "rationale": "The dialog cannot reuse generic release-plan submission because Argo selective sync has materially different safety fields and scope."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:sync-options:selective-dry-run-feedback:v1",
+          "legacyContractIds": [],
+          "symbol": "ValidationResult",
+          "interaction": "a selective dry-run shows pending, succeeded, failed, inconclusive, and server-error states, resets stale validation after option changes, and keeps execution gated while an operation is active",
+          "transport": "sse",
+          "realtime": {
+            "resume": "reconnect a validation or command operation using its durable receipt cursor",
+            "backpressure": "coalesce progress but preserve the final outcome and redacted diagnostic evidence",
+            "merge": "reject events whose receipt, resource identity, or validation generation differs from the open dialog"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.validation",
+              "gitops.sync-options.feedback"
+            ],
+            "state": "blocked",
+            "blockedReason": "Current release-plan readiness is plan-level and has no resource-scoped dry-run receipt, outcome enum, redacted diagnostic payload, or operation conflict state.",
+            "rationale": "A client-side success banner would be false; validation feedback must originate from an audited server/agent operation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/ArgoResourceDiff.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:resource-diff:revision-bound-viewer:v1",
+          "legacyContractIds": [],
+          "symbol": "ArgoResourceDiff / ArgoResourceDiffOverlay",
+          "interaction": "an authorized desired-versus-live resource diff renders loading, error, no-change, secret-masked, inline, and fullscreen states; outside click and Escape close the fullscreen overlay",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the loading skeleton and fullscreen transition render a stable non-animated state when reduced motion is requested",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/insights/ArgoResourceDiff.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "src/domains/gitops/diffing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.diffing",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-diff"
+            ],
+            "state": "blocked",
+            "blockedReason": "domains.gitops.diffing handles repository patch workflows, not an authenticated Argo desired/live resource-diff projection; no frontend GitOps detail surface or immutable resource scope exists.",
+            "rationale": "Diff body, masking, revision, and live-observation provenance must be supplied by Python/agent contracts rather than assembled from browser YAML."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/GitOpsInsightViews.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:revision-health-and-disclosures:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsStatusStrip / GitOpsIssuesBand",
+          "interaction": "revision provenance is rendered beside a health summary that does not mask degraded resources as synchronized, while historical issue and raw-error disclosures retain semantic expanded state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "collapse content and chevrons preserve expanded state without animated transitions under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/insights/GitOpsInsightViews.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.revision-meta",
+              "gitops.insights.status-summary",
+              "gitops.insights.disclosure-motion"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current page has release-plan readiness and feedback, not a GitOps resource summary, controller issue history, health evidence, or revision provenance projection.",
+            "rationale": "Summary normalization and disclosure state must consume one typed detail response so one controller failure is not fabricated as many client-side issues."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-filter-and-sort:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsChangesView / sortChanges",
+          "interaction": "the resources surface switches declared versus all inventory, searches name/kind/namespace/group, OR-filters OutOfSync/Degraded/Missing, resets filters, and sorts by apply order, resource, sync, or health",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/workflowModel.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-filters",
+              "gitops.insights.helpers"
+            ],
+            "state": "blocked",
+            "blockedReason": "No current GitOps contract carries controller-declared resources, generated descendants, apply wave/order, normalized sync/health, drift, or event fields.",
+            "rationale": "Only route-owned local view state may filter a complete server-authorized resource set; the browser may not synthesize inventory from workflow steps."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:issue-focus-and-resource-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsChangesView / ChangeRow",
+          "interaction": "an issue deep-link clears incompatible filters, scrolls once to and expands the matching row, then exposes structured drift, recent events, live-resource navigation, or source navigation for a missing resource",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "focus navigation preserves the selected row and disclosure without smooth scrolling when reduced motion is active",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/insights/GitOpsInsightViews.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.focus-disclosure",
+              "gitops.insights.resource-actions"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia has no GitOps issue-to-ResourceRef relation, per-resource drift/events, or safe source-link projection for a missing live resource.",
+            "rationale": "The focus target must use immutable resource identity and capability-gated destinations, not a name-only browser search."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:diff-availability-and-ignored-differences:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsChangesView diff capability disclosures",
+          "interaction": "the page truthfully distinguishes Argo diff availability, connection/setup guidance, comparison-unavailable sync state, ignored-difference coverage, and a lazily mounted full resource diff",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.availability",
+              "gitops.insights.resource-diff"
+            ],
+            "state": "blocked",
+            "blockedReason": "The backend exposes neither GitOps detail capabilities nor controller connection, comparison coverage, ignore-rule, or diff-availability evidence.",
+            "rationale": "The UI must not promise a full diff or describe ignored fields without server evidence for the selected controller and resource."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:selective-resource-sync:v1",
+          "legacyContractIds": [],
+          "symbol": "ChangeRow.onSyncResource",
+          "interaction": "only declared, non-hook, OutOfSync or Missing Argo resources expose selective sync; disabled reasons are shown without removing the action",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the resource command from its durable receipt cursor",
+            "backpressure": "coalesce non-terminal command updates while preserving cancellation and terminal facts",
+            "merge": "attach an event only when its ResourceRef, application identity, scope, and command attempt match the row"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-actions",
+              "gitops.sync-options.validation"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no GitOps resource eligibility projection, Argo application ownership proof, or resource-scoped command endpoint in the existing Python contracts.",
+            "rationale": "Eligibility and disabled reasons are server authority decisions; they cannot be recreated from browser status strings."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-diff-public-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "insights/index.ts",
+          "interaction": "the GitOps insights boundary exports the resource diff viewer without requiring consumers to import an isolated upstream runtime path",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-diff"
+            ],
+            "state": "blocked",
+            "blockedReason": "No product-owned GitOps insight or diff component boundary exists because the corresponding route and contracts have not been ported.",
+            "rationale": "The eventual export must be product-owned and consume the GitOpsPort, never re-export code from references/upstream."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/insights-helpers.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-predicate-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "insights-helpers tests",
+          "interaction": "tests cover normalized status severity, search and OR-facet predicates, independent resource counts, selective-sync eligibility, and urgency sort order",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/workflowModel.test.ts",
+              "frontend/src/pages/gitops/GitOpsPage.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.helpers",
+              "gitops.insights.resource-filters"
+            ],
+            "state": "blocked",
+            "blockedReason": "No equivalent typed GitOps resource model exists in frontend/src/features/gitops, so these predicates cannot be tested without embedding source-shaped unknown records.",
+            "rationale": "Pure helper tests are added only after the Python projection defines the resource fields they normalize."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/insights-helpers.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-predicates-and-order:v1",
+          "legacyContractIds": [],
+          "symbol": "changeMatchesFacets / resourceStatusCounts / isArgoResourceSyncEligible",
+          "interaction": "resource status normalization keeps sync and health independent, applies OR facets, ranks urgent states first, and excludes generated or hook resources from selective sync",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/workflowModel.ts",
+              "frontend/src/features/gitops/gitOpsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.helpers",
+              "gitops.insights.resource-filters"
+            ],
+            "state": "blocked",
+            "blockedReason": "Release-plan workflow models do not contain controller resource sync, health, hook, generated, or desired/live fields needed for these pure predicates.",
+            "rationale": "The port must normalize a Python-owned GitOps resource projection instead of casting arbitrary controller payloads in the browser."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/tree/GitOpsTreeGraph.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:topology:shared-search-and-icon-registry:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsTreeToolbar / GitOpsResourceNode",
+          "interaction": "topology search uses the shared controlled input and node kind presentation uses a shared resource-icon registry rather than CSS class name construction",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.graph-filter.input",
+              "gitops.tree.icon-and-portal"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current GitOps route has no topology graph, typed node kind registry, or controller-tree query to bind to the existing shared input primitive.",
+            "rationale": "A product tree must use a centralized resource icon registry and typed node kinds, never source CSS selectors or a browser-derived graph."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:topology:root-not-recursive-portal:v1",
+          "legacyContractIds": [],
+          "symbol": "gitopsToolForNode",
+          "interaction": "a GitOps-managed child node may offer a detail portal, but the root node is explicitly excluded so the current detail page cannot recursively navigate to itself",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.tree.icon-and-portal"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no GitOps detail route or typed tree node role in Opsia, so current navigation cannot distinguish a root subject from a managed child portal.",
+            "rationale": "This invariant must be encoded in the eventual route model before child GitOps CR navigation is exposed."
           }
         }
       ]
