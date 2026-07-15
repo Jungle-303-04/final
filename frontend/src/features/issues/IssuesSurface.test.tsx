@@ -71,10 +71,13 @@ describe("IssuesSurface", () => {
       />,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
-    expect(await screen.findAllByText("Memory pressure")).toHaveLength(2);
+    expect(await screen.findByText("Memory pressure")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: /Evidence/u }));
     expect(await screen.findByText("Pod restart and OOMKilled events")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: /Audit timeline/u }));
     expect(await screen.findByText("incident.detected")).toBeTruthy();
     expect(await screen.findByText("Root event")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: /^Incident detail/u }));
     expect(await screen.findByText("Increase the memory limit after approval")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Increase memory limit" })).toBeTruthy();
     expect(port.loadIssue).toHaveBeenCalledWith("incident-1", "cluster-1", expect.any(AbortSignal));
@@ -132,8 +135,10 @@ describe("IssuesSurface", () => {
       />,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
-    expect(await screen.findAllByText("Memory pressure")).toHaveLength(2);
+    expect(await screen.findByText("Memory pressure")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: /Evidence/u }));
     expect(await screen.findByText("Evidence unavailable")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: /^Incident detail/u }));
     expect(await screen.findByText("Increase the memory limit after approval")).toBeTruthy();
   });
   it("appends the next audit page in server order", async () => {
@@ -175,6 +180,7 @@ describe("IssuesSurface", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    fireEvent.click(await screen.findByRole("tab", { name: /Audit timeline/u }));
     fireEvent.click(await screen.findByRole("button", { name: "Load more events" }));
     await screen.findByText("rca.completed");
 

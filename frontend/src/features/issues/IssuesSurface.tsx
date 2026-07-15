@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import { cn } from "@/shared/lib/cn";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
@@ -25,6 +26,8 @@ import type {
 import { useIssueAuditPagination } from "./useIssueAuditPagination";
 import { useIssueDetailFocus } from "./useIssueDetailFocus";
 
+const ISSUE_REFRESH_INTERVAL_MS = 10_000;
+
 export function IssuesSurface({
   clusterId,
   copy,
@@ -47,6 +50,7 @@ export function IssuesSurface({
   const [panels, setPanels] = useState<IssuePanelsState>(emptyPanels());
   const [detailFull, setDetailFull] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const mutationRef = useRef<AbortController | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
   const selected = selectedRecord?.scope === clusterId ? selectedRecord.issue : null;
@@ -67,10 +71,20 @@ export function IssuesSurface({
   useEffect(() => {
     const controller = new AbortController();
     void port.listIssues(clusterId, 50, controller.signal).then(
-      (data) => setListRecord({
-        scope: clusterId,
-        state: { data, loading: false, failure: null },
-      }),
+      (data) => {
+        setListRecord({
+          scope: clusterId,
+          state: { data, loading: false, failure: null },
+        });
+        setLastRefreshedAt(Date.now());
+        setSelectedRecord((current) => {
+          if (current?.scope !== clusterId) return current;
+          const latest = data.items.find((issue) => issue.id === current.issue.id);
+          return latest === undefined || latest === current.issue
+            ? current
+            : { scope: clusterId, issue: latest };
+        });
+      },
       (error: unknown) => {
         if (!isAbortError(error)) {
           setListRecord((current) => ({
@@ -86,6 +100,22 @@ export function IssuesSurface({
     );
     return () => controller.abort();
   }, [clusterId, port, revision]);
+
+  useEffect(() => {
+    const refreshVisibleList = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      setRevision((value) => value + 1);
+    };
+    const interval = window.setInterval(refreshVisibleList, ISSUE_REFRESH_INTERVAL_MS);
+    const refreshAfterVisibility = () => {
+      if (document.visibilityState === "visible") refreshVisibleList();
+    };
+    document.addEventListener("visibilitychange", refreshAfterVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshAfterVisibility);
+    };
+  }, [clusterId, port]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -184,11 +214,26 @@ export function IssuesSurface({
   }, [abortAuditPage, clusterId, requestDetailFocus]);
 
   const closeIssue = useCallback(() => {
+    const trigger = typeof document === "undefined"
+      ? null
+      : document.querySelector<HTMLButtonElement>('[aria-current="true"]');
     abortAuditPage();
     setDetailFull(false);
     setPanels(emptyPanels());
     setSelectedRecord(null);
+    window.requestAnimationFrame(() => trigger?.focus());
   }, [abortAuditPage]);
+
+  useEffect(() => {
+    if (selected === null) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      closeIssue();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [closeIssue, selected]);
 
   const refreshList = useCallback(() => {
     setListRecord((current) => ({
@@ -212,21 +257,30 @@ export function IssuesSurface({
         className={selected === null
           ? "min-w-0 flex-1"
           : detailFull
-            ? "hidden"
-            : "hidden min-w-0 flex-1 lg:block"}
+            ? "hidden min-w-0 lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
+            : "hidden min-w-0 flex-1 lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"}
         role="region"
       >
-        <CardHeader className="border-b">
-          <CardTitle>{copy.listLabel}</CardTitle>
+        <CardHeader className="flex flex-row items-center gap-3 border-b">
+          <div className="min-w-0 flex-1">
+            <CardTitle>{copy.listLabel}</CardTitle>
+            {lastRefreshedAt !== null ? (
+              <time
+                className="mt-0.5 block truncate text-[11px] tabular-nums text-muted-foreground"
+                dateTime={new Date(lastRefreshedAt).toISOString()}
+              >
+                {copy.updated} · {copy.auditTime(new Date(lastRefreshedAt).toISOString())}
+              </time>
+            ) : null}
+          </div>
           <Button
             aria-label={copy.refresh}
-            className="justify-self-end"
             onClick={refreshList}
             size="icon-sm"
             type="button"
             variant="ghost"
           >
-            <RefreshCw aria-hidden="true" />
+            <RefreshCw aria-hidden="true" className={cn(list.loading && "animate-spin")} />
           </Button>
         </CardHeader>
         <CardContent className="lg:min-h-96">
@@ -239,16 +293,11 @@ export function IssuesSurface({
           />
         </CardContent>
       </Card>
-      {selected === null ? (
-        <Card className="hidden min-h-48 min-w-[30rem] lg:block lg:min-h-96" role="status">
-          <CardContent className="grid min-h-48 place-items-center text-muted-foreground lg:min-h-96">
-            {copy.detailEmpty}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className={detailFull
-          ? "min-w-0 flex-1"
-          : "min-w-0 w-full shrink-0 lg:w-[30rem]"}
+      {selected === null ? null : (
+        <div className={cn(
+          "min-w-0 w-full basis-full shrink-0 transition-[flex-basis] duration-300 ease-out motion-reduce:transition-none",
+          detailFull ? "lg:basis-full" : "lg:basis-[30rem]",
+        )}
         >
           <IssuesPanels
             capability={recoverySelection}
