@@ -58,8 +58,9 @@ class SpyAgentCommandStore:
             return self.approval
         return None
 
-    async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
+    async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
         self.calls.append((correlation_id, plan, status))
+        return True
 
 
 class ManagementClusterStore(SpyAgentCommandStore):
@@ -565,6 +566,54 @@ def test_command_handler_queues_manifest_diff_even_when_image_matches() -> None:
         CommandQueuedForAgentBody,
     ]
     assert store.calls[0][1]["diff"]["desired_manifest"]["spec"]["replicas"] == 3
+
+
+def test_command_handler_closes_the_operation_when_queue_persistence_fails() -> None:
+    class QueueFailureStore(SpyAgentCommandStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed: list[tuple[str, str, str, dict[str, object]]] = []
+
+        async def queue_agent_command(
+            self, correlation_id: str, plan: JsonObject, status: str
+        ) -> bool:
+            self.calls.append((correlation_id, plan, status))
+            return False
+
+        async def append_command_operation_event(
+            self,
+            workspace_id: str,
+            command_id: str,
+            kind: str,
+            payload: dict[str, object],
+        ) -> object:
+            self.closed.append((workspace_id, command_id, kind, payload))
+            return object()
+
+    async def run() -> tuple[list[EventBody], QueueFailureStore]:
+        store = QueueFailureStore()
+        events = await collect_events(
+            handle_command_requested(
+                command_request(), SimpleNamespace(correlation_id="corr-1", db=store)
+            )
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [CommandDispatchedBody, CommandRejectedBody]
+    assert store.closed == [
+        (
+            "workspace-1",
+            build_plan(command_request(), "corr-1").command_id,
+            "failed",
+            {
+                "cluster_id": Target.DEFAULT_CLUSTER_ID,
+                "status": "failed",
+                "reason": "agent command could not be queued",
+            },
+        )
+    ]
 
 
 def test_sweep_expired_commands_emits_failed_completion_per_row() -> None:
