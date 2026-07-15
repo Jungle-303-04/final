@@ -616,6 +616,50 @@ def test_command_handler_closes_the_operation_when_queue_persistence_fails() -> 
     ]
 
 
+def test_command_handler_closes_the_operation_when_policy_rejects_a_receipt() -> None:
+    class RejectedStore(SpyAgentCommandStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed: list[tuple[str, str, str, dict[str, object]]] = []
+
+        async def append_command_operation_event(
+            self,
+            workspace_id: str,
+            command_id: str,
+            kind: str,
+            payload: dict[str, object],
+        ) -> object:
+            self.closed.append((workspace_id, command_id, kind, payload))
+            return object()
+
+    request = command_request("unsupported-command")
+
+    async def run() -> tuple[list[EventBody], RejectedStore]:
+        store = RejectedStore()
+        events = await collect_events(
+            handle_command_requested(
+                request, SimpleNamespace(correlation_id="corr-rejected", db=store)
+            )
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [CommandRejectedBody]
+    assert store.closed == [
+        (
+            "workspace-1",
+            build_plan(request, "corr-rejected").command_id,
+            "failed",
+            {
+                "cluster_id": Target.DEFAULT_CLUSTER_ID,
+                "status": "failed",
+                "reason": "unsupported command action",
+            },
+        )
+    ]
+
+
 def test_sweep_expired_commands_emits_failed_completion_per_row() -> None:
     # janitor: lease 만료 방치 명령을 FAILED 종결 이벤트로 흘려 workflow 를 풀어줌(감사 C6)
     failed_result = {
