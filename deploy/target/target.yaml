@@ -52,6 +52,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+  # create on pods/exec cannot be resourceNames-scoped. Gateway + agent both
+  # enforce exact inventory identity, pod.exec, and POD_EXEC_ALLOWED_NAMESPACES.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]

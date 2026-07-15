@@ -10,9 +10,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, suppress
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -42,6 +43,12 @@ from packages.contracts.realtime import (
     LiveSummaryMessage,
     ResourceDelta,
 )
+from packages.contracts.terminal import (
+    TerminalConnected,
+    TerminalEnd,
+    TerminalError,
+    TerminalOutput,
+)
 
 LOGGER = get_logger(__name__)
 
@@ -52,6 +59,14 @@ SummaryCollector = Callable[[], Awaitable[LiveSummary | None]]
 
 class LiveStreamConnection(Protocol):
     async def send(self, message: str) -> None: ...
+
+    async def recv(self) -> str | bytes: ...
+
+
+class TerminalController(Protocol):
+    async def handle(self, payload: object, emit: Callable[..., Awaitable[None]]) -> bool: ...
+
+    async def close_all(self) -> None: ...
 
 
 # (url, headers) → async context manager yielding LiveStreamConnection
@@ -249,6 +264,7 @@ class LiveSummaryPublisher:
         interval_seconds: float,
         collector: SummaryCollector,
         connect: LiveStreamConnector | None = None,
+        terminal_controller: TerminalController | None = None,
         retry_delay_seconds: float = agent_config.LIVE_SUMMARY_RETRY_DELAY_SECONDS,
         enabled: bool = True,
     ) -> None:
@@ -258,6 +274,7 @@ class LiveSummaryPublisher:
         self.interval_seconds = interval_seconds
         self.collector = collector
         self.connect = connect or _websockets_connector
+        self.terminal_controller = terminal_controller
         self.retry_delay_seconds = retry_delay_seconds
         self.enabled = enabled
 
@@ -267,6 +284,7 @@ class LiveSummaryPublisher:
         cluster_id: str,
         management_base_url: str,
         kubernetes_transport: httpx.AsyncBaseTransport | None = None,
+        terminal_controller: TerminalController | None = None,
     ) -> LiveSummaryPublisher:
         enabled = (
             env(
@@ -291,6 +309,7 @@ class LiveSummaryPublisher:
             collector=KubernetesPodSummaryCollector(
                 cluster_id, int(interval * 1000), kubernetes_transport
             ),
+            terminal_controller=terminal_controller,
             enabled=enabled,
         )
 
@@ -325,15 +344,50 @@ class LiveSummaryPublisher:
                 await asyncio.sleep(self.retry_delay_seconds)
 
     async def _stream(self, connection: LiveStreamConnection) -> None:
+        send_lock = asyncio.Lock()
+
+        async def send_model(
+            message: TerminalConnected | TerminalOutput | TerminalEnd | TerminalError,
+        ) -> None:
+            async with send_lock:
+                await connection.send(message.model_dump_json())
+
+        producer = asyncio.create_task(self._publish_loop(connection, send_lock))
+        if self.terminal_controller is None:
+            await producer
+            return
+        try:
+            while True:
+                raw = await connection.recv()
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8")
+                try:
+                    payload = json.loads(raw)
+                except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                await self.terminal_controller.handle(payload, send_model)
+        finally:
+            producer.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer
+            await self.terminal_controller.close_all()
+
+    async def _publish_loop(
+        self,
+        connection: LiveStreamConnection,
+        send_lock: asyncio.Lock,
+    ) -> None:
         while True:
             summary = await self.collector()
             if summary is not None:
                 message = LiveSummaryMessage(cluster_id=self.cluster_id, summary=summary)
-                await connection.send(message.model_dump_json())
+                async with send_lock:
+                    await connection.send(message.model_dump_json())
                 drain = getattr(self.collector, "drain_deltas", None)
                 if callable(drain):
                     for delta in drain():
-                        await connection.send(delta.model_dump_json())
+                        async with send_lock:
+                            await connection.send(delta.model_dump_json())
             next_interval = getattr(self.collector, "next_interval_seconds", None)
             delay = next_interval() if callable(next_interval) else self.interval_seconds
             await asyncio.sleep(delay)

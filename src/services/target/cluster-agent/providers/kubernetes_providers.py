@@ -297,6 +297,12 @@ class KubernetesSnapshotProvider:
             "namespace": namespace,
             "collected_at": str(payload.get("collected_at") or datetime.now(UTC).isoformat()),
         }
+        snapshot["collection_scopes"] = [
+            {
+                "namespace": namespace,
+                "label_selector": telemetry_query.label_selector,
+            }
+        ]
         pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
         node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
         raw_nodes = items(payload.get(K8S_SNAPSHOT_NODES_KEY))
@@ -324,10 +330,12 @@ class KubernetesSnapshotProvider:
         selected_names = {
             str(metadata(item).get("name") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
+            if metadata(item).get("name")
         }
         selected_uids = {
             str(metadata(item).get("uid") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
+            if metadata(item).get("uid")
         }
         snapshot[K8S_RESOURCE_PODS] = [
             pod_summary(
@@ -395,6 +403,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
     """Build the empty shape used by Kubernetes evidence."""
     return {
         "cluster": {"cluster_id": cluster_id},
+        "collection_scopes": [],
         K8S_SNAPSHOT_WORKLOADS_KEY: [],
         K8S_RESOURCE_PODS: [],
         K8S_SNAPSHOT_EVENTS_KEY: [],
@@ -408,6 +417,8 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
+    target.setdefault("collection_scopes", [])
+    target["collection_scopes"].extend(source.get("collection_scopes", []))
     if "detected_provider" not in target and source.get("detected_provider"):
         target["detected_provider"] = source["detected_provider"]
     for key in (
@@ -469,6 +480,7 @@ RCA_TEST_LABEL = "kubeheal.io/rca-test"
 RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
 RCA_TEST_RESOURCE_PREFIX = "rca-test-"
 EVIDENCE_IDENTITY_LABELS = (RCA_TEST_RUN_LABEL, RCA_TEST_LABEL)
+LIVE_SCOPED_EVENT_KINDS = frozenset({"Pod", K8S_KIND_REPLICA_SET})
 
 
 def scoped_items(payload: Any, label_selector: str | None) -> list[JsonObject]:
@@ -520,12 +532,16 @@ def scoped_events(
     for row in rows:
         involved = row.get("involvedObject")
         involved_body = involved if isinstance(involved, dict) else {}
+        kind = str(involved_body.get("kind") or "")
         name = str(involved_body.get("name") or "")
         uid = str(involved_body.get("uid") or "")
+        matches_current_resource = name in selected_names or (uid and uid in selected_uids)
         if label_selector:
-            if name in selected_names or (uid and uid in selected_uids):
+            if matches_current_resource:
                 scoped.append(row)
-        elif not name.startswith(RCA_TEST_RESOURCE_PREFIX):
+        elif not name.startswith(RCA_TEST_RESOURCE_PREFIX) and (
+            kind not in LIVE_SCOPED_EVENT_KINDS or matches_current_resource
+        ):
             scoped.append(row)
     return scoped
 

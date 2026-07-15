@@ -1554,7 +1554,7 @@ def _resource_metric_history_statements(
     window_seconds: int,
     limit: int,
 ) -> tuple[Select[Any], Select[Any]]:
-    """Build pinned resource-resolution and revision-joined usage history statements."""
+    """Build pinned Pod/Node resolution and revision-joined real usage history."""
     current = _current_versions(
         workspace_id,
         cluster_ids,
@@ -1571,13 +1571,17 @@ def _resource_metric_history_statements(
         select(
             filtered.c.inventory_key.label("resource_id"),
             filtered.c.cluster_id,
+            filtered.c.resource_type,
             filtered.c.namespace,
             filtered.c.name,
         )
         .where(
             filtered.c.inventory_key.in_(resource_ids),
-            filtered.c.resource_type == "pod",
-            filtered.c.namespace.is_not(None),
+            filtered.c.resource_type.in_(("pod", "node")),
+            or_(
+                filtered.c.resource_type == "node",
+                filtered.c.namespace.is_not(None),
+            ),
         )
         .order_by(filtered.c.inventory_key)
     )

@@ -16,12 +16,16 @@ def kubernetes_evidence_to_inventory_snapshot(
     agent_id: str,
 ) -> JsonObject:
     cluster = _mapping(kubernetes.get("cluster"))
+    collected_at = cluster.get("collected_at")
     resources = [
         *(_workload_resource(item) for item in _items(kubernetes, "workloads")),
         *(_pod_resource(item) for item in _items(kubernetes, "pods")),
         *(_node_resource(item, _items(kubernetes, "pods")) for item in _items(kubernetes, "nodes")),
         *(_service_resource(item) for item in _items(kubernetes, "services")),
-        *(_event_resource(item) for item in _items(kubernetes, "events")),
+        *(
+            _event_resource(item, collected_at=collected_at)
+            for item in _items(kubernetes, "events")
+        ),
         *(_endpoint_resource(item) for item in _items(kubernetes, "endpoints")),
     ]
     resources_complete = _resources_complete(kubernetes)
@@ -186,6 +190,16 @@ def _pod_resource(item: JsonObject) -> JsonObject:
     phase = _text(item.get("phase"), "Unknown")
     waiting = item.get("waiting_reasons") if isinstance(item.get("waiting_reasons"), list) else []
     containers = item.get("containers") if isinstance(item.get("containers"), list) else []
+    conditions = item.get("conditions") if isinstance(item.get("conditions"), list) else []
+    ready_condition = next(
+        (
+            condition
+            for condition in conditions
+            if isinstance(condition, dict) and condition.get("type") == "Ready"
+        ),
+        None,
+    )
+    ready = ready_condition is None or str(ready_condition.get("status")) == "True"
     return {
         "resource_type": "pod",
         "api_version": "v1",
@@ -195,7 +209,7 @@ def _pod_resource(item: JsonObject) -> JsonObject:
         "uid": item.get("uid"),
         "resource_version": item.get("resource_version"),
         "status": phase,
-        "health": _health(phase == "Running" and not waiting),
+        "health": _health(phase == "Running" and not waiting and ready),
         "labels": _labels(item),
         "summary": {
             **item,
@@ -244,7 +258,7 @@ def _service_resource(item: JsonObject) -> JsonObject:
     }
 
 
-def _event_resource(item: JsonObject) -> JsonObject:
+def _event_resource(item: JsonObject, *, collected_at: object = None) -> JsonObject:
     name = _text(item.get("uid")) or ":".join(
         [
             _text(item.get("namespace"), "default"),
@@ -263,7 +277,7 @@ def _event_resource(item: JsonObject) -> JsonObject:
         "status": event_type,
         "health": "degraded" if event_type.lower() == "warning" else "healthy",
         "labels": _labels(item),
-        "summary": item,
+        "summary": {**item, "collected_at": collected_at},
         "raw": item,
     }
 
@@ -310,6 +324,8 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
         for key in ("pods", "workloads", "nodes", "services", "events", "endpoints")
         for item in _items(kubernetes, key)
     ]
+    collection_scopes = _items(kubernetes, "collection_scopes")
+    live_inventory = all(not _text(scope.get("label_selector")) for scope in collection_scopes)
     summary: JsonObject = {
         "namespaces": namespaces,
         "nodes": [
@@ -326,6 +342,9 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
         "labels_complete": resources_complete
         and all(item.get("labels_complete") is True for item in label_sources),
         "resources_complete": resources_complete,
+        # RCA test/label-selector snapshots are evidence, not authoritative fleet liveness.
+        # Legacy payloads have no scope list and are treated as normal inventory.
+        "live_inventory": live_inventory,
     }
     collection_limits = _mapping(kubernetes.get("collection_limits"))
     if collection_limits:

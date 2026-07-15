@@ -221,7 +221,8 @@ def test_metric_history_sql_rechecks_filter_and_pins_samples_to_revision() -> No
     assert "cluster_id in ('cluster-a')" in resource_sql
     assert "valid_from_revision <= 42" in resource_sql
     assert "valid_to_revision > 42" in resource_sql
-    assert "resource_type = 'pod'" in resource_sql
+    assert "resource_type in ('pod', 'node')" in resource_sql
+    assert "resource_type = 'node' or" in resource_sql
     assert "inventory_key in ('pod-a', 'pod-b')" in resource_sql
     assert "selected_label_0.key = 'team'" in resource_sql
     assert "application_id in ('app-a')" in resource_sql

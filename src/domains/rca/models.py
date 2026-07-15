@@ -38,6 +38,34 @@ class Evidence(Base):
     created_at: Mapped[Any] = created_at_column()
 
 
+class IncidentSignalClaim(Base):
+    """One durable claim for a concrete workload termination signal.
+
+    Evidence snapshots are polled repeatedly, so the same Kubernetes
+    ``lastState.terminated`` remains visible after the container recovers.  This
+    ledger makes incident creation idempotent across workers and process
+    restarts without discarding the evidence snapshots themselves.
+    """
+
+    __tablename__ = "incident_signal_claims"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "cluster_id",
+            "signal_key",
+            name="uq_incident_signal_claim_identity",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = text_column()
+    cluster_id: Mapped[str] = text_column()
+    signal_key: Mapped[str] = text_column()
+    first_correlation_id: Mapped[str] = text_column()
+    payload: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()
+
+
 class RcaReport(Base):
     __tablename__ = "rca_reports"
     __table_args__ = (

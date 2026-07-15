@@ -67,12 +67,14 @@ class RecoverySelector:
 
 
 def requires_approval(candidate: object) -> bool:
-    action_type = getattr(getattr(candidate, "draft", None), "action_type", "")
-    params = getattr(getattr(candidate, "draft", None), "params", {}) or {}
+    draft = getattr(candidate, "draft", None)
+    action_type = getattr(draft, "action_type", "")
+    params = getattr(draft, "params", {}) or {}
+    namespace = str(getattr(draft, "namespace", "") or "")
     requested = str(params.get("command") or action_type)
     action = command_action_for_recovery(requested)
     spec = command_action_spec(action) if action else None
-    return bool(spec is not None and spec.requires_approval)
+    return bool(spec is not None and spec.requires_approval_for(namespace))
 
 
 def selection_reason(candidate: object) -> str:

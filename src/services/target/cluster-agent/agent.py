@@ -49,6 +49,7 @@ from queries import (
 )
 from span import configure_tracing
 from telemetry_registry import telemetry
+from terminal_exec import PodExecController
 
 import config as agent_config
 from config import (
@@ -517,6 +518,7 @@ class TargetClusterAgent:
             cluster_id=self.cluster_id,
             management_base_url=self.base_url,
             kubernetes_transport=kubernetes_transport,
+            terminal_controller=PodExecController(),
         )
         if providers is None:
             providers = (
@@ -992,7 +994,7 @@ class TargetClusterAgent:
             return self.command_result(False, MANAGEMENT_READONLY_CODE)
         approval_error = self.approval_evidence_error(command)
         if (
-            self.write_action_requires_approval(action)
+            self.write_action_requires_approval(action, command)
             and approval_error
             and not self.approval_exempt_for_environment(action, command)
         ):
@@ -1020,9 +1022,13 @@ class TargetClusterAgent:
         except Exception as exc:
             return self.command_result(False, str(exc))
 
-    def write_action_requires_approval(self, action: str) -> bool:
-        # rollout_restart 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용한다
-        # (namespace 정책 가드는 그대로 적용됨). 상태 변경 액션만 승인 증적을 요구한다.
+    def write_action_requires_approval(
+        self,
+        action: str,
+        command: CommandRecord,
+    ) -> bool:
+        if action == AgentConfig.ROLLOUT_RESTART_ACTION:
+            return self.command_namespace_value(command).strip().lower() != Sandbox.NAMESPACE
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,

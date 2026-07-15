@@ -16,6 +16,13 @@ from typing import Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from hub import BrowserClient, RealtimeHub
+from terminal_sessions import (
+    TerminalAuditor,
+    TerminalAuthorizer,
+    TerminalSessionBroker,
+    database_terminal_auditor,
+    database_terminal_authorizer,
+)
 
 from domains.identity.dependencies import (
     AGENT_TOKEN_HEADER,
@@ -43,6 +50,7 @@ from packages.contracts.realtime import (
     delta_key_parts,
     parse_realtime_message,
 )
+from packages.contracts.terminal import BROWSER_TERMINAL_PATH
 from packages.runtime.service import FastApiService
 from packages.security.trusted_proxy import (
     assert_trusted_proxy_config_safe,
@@ -163,6 +171,8 @@ def create_app(
     authenticate_agent: AgentAuthenticator | None = None,
     authenticate_browser: BrowserSessionAuthenticator | None = None,
     authorize_browser_cluster: BrowserClusterAuthorizer | None = None,
+    authorize_browser_terminal: TerminalAuthorizer | None = None,
+    audit_terminal: TerminalAuditor | None = None,
 ) -> FastAPI:
     if db is None and (authenticate_agent is None or authorize_browser_cluster is None):
         db = Database()
@@ -177,8 +187,18 @@ def create_app(
         if db is None:  # pragma: no cover - create_app 위의 DB 생성 불변식 방어
             raise RuntimeError("database is required for browser cluster authorization")
         authorize_browser_cluster = database_browser_cluster_authorizer(db)
+    if authorize_browser_terminal is None:
+        authorize_browser_terminal = (
+            database_terminal_authorizer(db) if db is not None else _deny_terminal
+        )
+    if audit_terminal is None:
+        audit_terminal = database_terminal_auditor(db) if db is not None else _fail_terminal_audit
 
     hub = RealtimeHub()
+    terminal_broker = TerminalSessionBroker(
+        authorize=authorize_browser_terminal,
+        audit=audit_terminal,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -220,18 +240,24 @@ def create_app(
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
 
+        agent_channel = await terminal_broker.register_agent(cluster_id, websocket)
         await websocket.send_json(HelloMessage().model_dump(mode="json"))
         LOGGER.info("agent_stream_connected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}})
         try:
             while True:
                 payload = await websocket.receive_json()
-                if not _ingest(hub, cluster_id, payload):
+                terminal_result = await terminal_broker.handle_agent_payload(cluster_id, payload)
+                if terminal_result is True:
+                    continue
+                if terminal_result is False or not _ingest(hub, cluster_id, payload):
                     await websocket.close(code=CLOSE_PROTOCOL_VIOLATION)
                     return
         except WebSocketDisconnect:
             LOGGER.info(
                 "agent_stream_disconnected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
             )
+        finally:
+            await terminal_broker.unregister_agent(cluster_id, agent_channel)
 
     @app.websocket(BROWSER_LIVE_PATH)
     async def browser_live(websocket: WebSocket) -> None:
@@ -291,7 +317,33 @@ def create_app(
             with suppress(asyncio.CancelledError):
                 await sender
 
+    @app.websocket(BROWSER_TERMINAL_PATH)
+    async def browser_terminal(websocket: WebSocket) -> None:
+        await websocket.accept()
+        proxy_identity = trusted_proxy_identity(websocket.headers)
+        session = (
+            {
+                Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
+                "user_id": proxy_identity.user_id,
+                "roles": [ServiceRole.SERVICE_ADMIN.value],
+            }
+            if proxy_identity is not None
+            else await authenticate_browser(browser_session_token(websocket))
+        )
+        if session is None:
+            await websocket.close(code=CLOSE_UNAUTHORIZED)
+            return
+        await terminal_broker.serve_browser(websocket, session)
+
     return app
+
+
+async def _deny_terminal(*_args: object) -> bool:
+    return False
+
+
+async def _fail_terminal_audit(*_args: object) -> None:
+    raise RuntimeError("terminal audit store is unavailable")
 
 
 def browser_session_token(websocket: WebSocket) -> str | None:

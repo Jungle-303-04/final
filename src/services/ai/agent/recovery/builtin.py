@@ -23,6 +23,7 @@ routes = ActionRoutes()
             validation_checks=("재시작 후 ready replica 회복", "재시작 카운트 증가세 완화"),
             rollback_plan="재시작은 되돌릴 변경이 없으며, 실패 시 수동 조사로 전환합니다.",
             params={"command": "rollout_restart"},
+            approval_required_outside_sandbox=True,
         ),
         RecoveryActionSpec(
             action_type="oom_memory",
@@ -133,6 +134,7 @@ class OomKilledRecoveryActions:
             validation_checks=("5xx/timeout 로그 감소", "Ready replica 유지", "요청 성공률 회복"),
             rollback_plan="재시작은 되돌릴 변경이 없으며, 실패 시 scale 또는 수동 조사로 전환합니다.",
             params={"command": "rollout_restart"},
+            approval_required_outside_sandbox=True,
         ),
     ),
 )
@@ -156,6 +158,7 @@ class Application5xxRecoveryActions:
             validation_checks=("5xx/timeout 로그 감소", "Ready replica 유지", "요청 성공률 회복"),
             rollback_plan="재시작은 되돌릴 변경이 없으며, 실패 시 scale 또는 수동 조사로 전환합니다.",
             params={"command": "rollout_restart"},
+            approval_required_outside_sandbox=True,
         ),
         RecoveryActionSpec(
             action_type="deployment_scale",

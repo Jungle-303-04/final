@@ -411,6 +411,18 @@ class RcaMissingCheckItem(StrictModel):
     reason: str | None = None
 
 
+class RcaNarrativeItem(StrictModel):
+    """Evidence-bounded prose generated after deterministic RCA completion."""
+
+    locale: Literal["ko"]
+    executive_summary: str
+    impact: str
+    reasoning: str
+    recommended_action: str
+    recurrence_prevention: list[str] = Field(min_length=1)
+    limitations: list[str] = Field(min_length=1)
+
+
 class RcaReportSummaryItem(StrictModel):
     """저장된 RCA report 요약 — payload 원문 대신 화이트리스트 필드만 노출(secret 유출 방지)."""
 
@@ -438,6 +450,8 @@ class RcaReportSummaryItem(StrictModel):
     candidates: list[RcaCandidateScoreItem] = Field(default_factory=list)
     supporting_evidence_refs: list[RcaEvidenceRefItem] = Field(default_factory=list)
     missing_evidence_checks: list[RcaMissingCheckItem] = Field(default_factory=list)
+    narrative: RcaNarrativeItem | None = None
+    narrative_status: Literal["generated", "unavailable"] = "unavailable"
 
 
 class RcaReportListResponse(StrictModel):
@@ -691,7 +705,7 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
-ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale"]
+ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale", "pod.exec"]
 
 
 class ResourceCapabilitySubject(StrictModel):
@@ -710,7 +724,7 @@ class ResourceActionCapability(StrictModel):
     """현재 actor가 바로 진입할 수 있는 실제 gateway action."""
 
     capability_id: ResourceActionCapabilityId
-    method: Literal["POST"] = "POST"
+    method: Literal["POST", "WEBSOCKET"] = "POST"
     path: str = Field(min_length=1, pattern=r"^/")
 
 
@@ -729,6 +743,46 @@ class ResourceCapabilitiesResponse(StrictModel):
         if len(capability_ids) != len(set(capability_ids)):
             raise ValueError("resource capabilities must be unique")
         return self
+
+
+class ResourceManifestSourceChoice(StrictModel):
+    application_id: str
+    application_name: str
+    repository_ref: str
+    branch: str
+    manifest_path: str
+    environment: str
+
+
+class ResourceManifestSourceResponse(StrictModel):
+    resource_id: str
+    status: Literal["available", "ambiguous", "unsupported"]
+    choices: list[ResourceManifestSourceChoice] = Field(default_factory=list)
+    selected: ResourceManifestSourceChoice | None = None
+    base_sha: str | None = None
+    source_sha256: str | None = None
+    content: str | None = None
+    reason: str | None = None
+
+
+class ResourceManifestPreviewResponse(StrictModel):
+    valid: bool
+    changed: bool
+    base_sha: str
+    source_sha256: str
+    desired_sha256: str
+    diff: str
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ResourceManifestApproveResponse(StrictModel):
+    accepted: bool
+    event_id: str
+    correlation_id: str
+    workflow_run_id: str
+    approval_id: str
+    sync_state: Literal["awaiting_pr_merge"] = "awaiting_pr_merge"
 
 
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
@@ -866,8 +920,8 @@ class ResourceMetricHistoryPoint(StrictModel):
 class ResourceMetricHistorySeries(StrictModel):
     resource_id: str = Field(min_length=1)
     cluster_id: str = Field(min_length=1)
-    resource_type: Literal["pod"] = "pod"
-    namespace: str = Field(min_length=1)
+    resource_type: Literal["pod", "node"]
+    namespace: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1)
     points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
     has_sparkline_points: bool
@@ -876,6 +930,10 @@ class ResourceMetricHistorySeries(StrictModel):
 
     @model_validator(mode="after")
     def validate_metric_history(self) -> Self:
+        if self.resource_type == "pod" and self.namespace is None:
+            raise ValueError("pod metric history requires a namespace")
+        if self.resource_type == "node" and self.namespace is not None:
+            raise ValueError("node metric history must be cluster scoped")
         observed_at = [point.observed_at for point in self.points]
         if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
             raise ValueError("resource metric history points must be unique and ordered")

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from domains.rca.events import RecoveryPlannedBody, RecoverySelectionRequestedBody
+from domains.rca.events import (
+    RecoveryActionSelectedBody,
+    RecoveryPlannedBody,
+    RecoverySelectionRequestedBody,
+)
 from packages.contracts.event_bus.bodies import EventBody
 from packages.contracts.stores import RecoveryPlanStore
 from packages.runtime.app import App, EventContext
@@ -20,12 +24,23 @@ async def on_recovery_planned(
     ctx: EventContext[RecoveryPlanStore],
 ) -> AsyncIterator[EventBody]:
     body = selector.select_body(evt)
-    if isinstance(body, RecoverySelectionRequestedBody) and ctx.db is not None:
-        await ctx.db.upsert_recovery_selection_request(
-            ctx.correlation_id,
-            body.workspace_id,
-            body.plan.to_body(),
-        )
+    if ctx.db is not None:
+        if isinstance(body, RecoverySelectionRequestedBody):
+            await ctx.db.upsert_recovery_plan(
+                ctx.correlation_id,
+                body.workspace_id,
+                body.plan.to_body(),
+                status="selection_requested",
+            )
+        elif isinstance(body, RecoveryActionSelectedBody):
+            await ctx.db.upsert_recovery_plan(
+                ctx.correlation_id,
+                body.workspace_id,
+                body.plan.to_body(),
+                status="selected",
+                selected_action_id=body.selected.action_id,
+                selected_by=body.selected_by,
+            )
     yield body
 
 

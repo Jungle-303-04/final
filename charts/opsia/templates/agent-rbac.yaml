@@ -15,6 +15,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "nodes", "events", "services", "endpoints", "configmaps", "resourcequotas"]
     verbs: ["get", "list", "watch"]
+  # create on pods/exec cannot be resourceNames-scoped. Runtime authorization
+  # remains namespace-allowlisted and exact Pod/container scoped.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "watch"]

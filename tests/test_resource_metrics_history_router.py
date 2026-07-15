@@ -62,6 +62,7 @@ class ResourceMetricHistoryDb:
             {
                 "resource_id": resource_id,
                 "cluster_id": "cluster-a",
+                "resource_type": "pod",
                 "namespace": "shop",
                 "name": resource_id,
             }
@@ -131,6 +132,71 @@ def test_metric_history_batches_ids_in_authorized_filtered_snapshot() -> None:
     assert history_call["snapshot_revision"] == 42
     assert history_call["window_seconds"] == 900
     assert history_call["limit"] == 30
+
+
+def test_metric_history_returns_measured_node_series() -> None:
+    db = ResourceMetricHistoryDb()
+
+    def node_history(**kwargs: Any) -> dict[str, Any]:
+        db.calls.append(("history", dict(kwargs)))
+        return {
+            "resources": [
+                {
+                    "resource_id": "node-a",
+                    "cluster_id": "cluster-a",
+                    "resource_type": "node",
+                    "namespace": None,
+                    "name": "worker-a.internal",
+                }
+            ],
+            "samples_by_cluster": {
+                "cluster-a": [
+                    {
+                        "sampled_at": "2026-07-15T05:00:00Z",
+                        "usage": {
+                            "nodes": {
+                                "worker-a.internal": {
+                                    "cpu_mcores": 640.5,
+                                    "mem_mib": 4096,
+                                }
+                            }
+                        },
+                    }
+                ]
+            },
+        }
+
+    db.list_resource_metric_history = node_history  # type: ignore[method-assign]
+    response = _client(db).get(
+        "/metrics/history",
+        params={
+            "ids": "node-a",
+            "clusters": "cluster-a",
+            "resources.types": "node",
+            "snapshot_revision": 42,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["series"] == [
+        {
+            "resource_id": "node-a",
+            "cluster_id": "cluster-a",
+            "resource_type": "node",
+            "namespace": None,
+            "name": "worker-a.internal",
+            "points": [
+                {
+                    "observed_at": "2026-07-15T05:00:00Z",
+                    "cpu_mcores": 640.5,
+                    "mem_mib": 4096.0,
+                }
+            ],
+            "has_sparkline_points": True,
+            "completeness": "exact",
+            "partial_reason_codes": [],
+        }
+    ]
 
 
 def test_metric_history_filtered_or_unauthorized_id_fails_closed() -> None:

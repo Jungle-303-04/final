@@ -15,7 +15,13 @@ rules:
       - "ProbeFailed"
       - "ReadinessProbeFailed"
       - "LivenessProbeFailed"
+      - "StartupProbeFailed"
       - "PodNotReady"
+      - "Readiness probe response failure"
+      - "Liveness probe response failure"
+      - "Startup probe response failure"
+      - "Probe response failure"
+      - "Pod readiness failure"
     required_sources: ["kubernetes", "metrics", "logs", "metadata"]
     candidates:
       - candidate_id: "probe_path_wrong"

@@ -333,6 +333,12 @@ def test_open_incident_query_excludes_non_incident_detection_rows() -> None:
     assert "evidence_received" not in sql
     assert "evidence_built" not in sql
     assert "incident_detected" in sql
+    # Pod/ReplicaSet incidents are active only while the same unhealthy object exists in
+    # the latest collected inventory snapshot. Historical timeline rows remain queryable.
+    assert "cluster_inventory_resources" in sql
+    assert "cluster_inventory_snapshots" in sql
+    assert "snapshot_id" in sql
+    assert "health" in sql
 
 
 def test_open_incident_query_returns_sql_aggregate_rows() -> None:

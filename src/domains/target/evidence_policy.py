@@ -45,6 +45,14 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the sandbox namespace.",
             "query": "sandbox",
         },
+        {
+            # 실제 게임 데모는 격리된 color-turf 네임스페이스에서 실행된다. Pod 재시작,
+            # OOMKilled 종료 상태, Kubernetes Event를 같은 실제 evidence 파이프라인으로
+            # 수집해야 장애 버튼부터 incident/RCA까지 단절되지 않는다.
+            "name": "color_turf_namespace_snapshot",
+            "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the color-turf namespace.",
+            "query": "color-turf",
+        },
     ],
     "metrics": [
         {
@@ -61,6 +69,16 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "name": "target_deployment_replicas",
             "description": "Deployment replica counts reported by kube-state-metrics.",
             "query": 'kube_deployment_status_replicas{namespace="target"}',
+        },
+        {
+            "name": "color_turf_pod_restarts",
+            "description": "Container restart counts for the live color-turf game workloads.",
+            "query": 'kube_pod_container_status_restarts_total{namespace="color-turf"}',
+        },
+        {
+            "name": "color_turf_oom_terminated",
+            "description": "Containers in color-turf whose latest termination reason is OOMKilled.",
+            "query": 'kube_pod_container_status_last_terminated_reason{namespace="color-turf",reason="OOMKilled"}',
         },
         {
             "name": "node_cpu_usage_ratio",
@@ -114,6 +132,14 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "name": "sandbox_namespace_errors",
             "description": "Error/fatal logs emitted by workloads in the sandbox namespace.",
             "query": '{k8s_namespace_name="sandbox"} |~ "ERROR|FATAL|panic"',
+        },
+        {
+            "name": "color_turf_runtime_failures",
+            "description": "OOM, fatal, and explicit chaos events emitted by the live color-turf game workloads.",
+            "query": (
+                '{k8s_namespace_name="color-turf"} '
+                '|~ "OOM|out of memory|chaos.oom|ERROR|FATAL|panic"'
+            ),
         },
         {
             "name": "node_collector_runtime_samples",

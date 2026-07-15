@@ -32,7 +32,9 @@ from domains.target.router import (
     get_cluster_scheduling_profiles,
     install_manifest_by_token,
     list_clusters,
+    normalize_target_provider_defaults,
     register_target,
+    reissue_cluster_connect_command,
     router,
     schedule_evidence_jobs,
     target_install_manifest,
@@ -1168,6 +1170,120 @@ def test_cluster_connect_request_rejects_whitespace_only_name() -> None:
         ClusterConnectRequest(name="   ", provider="onprem")
 
 
+def test_cluster_connect_rejects_duplicate_workspace_display_name_before_issuing_token(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com/api")
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+
+    class DuplicateNameDb(StubDb):
+        def list_cluster_registrations(
+            self,
+            workspace_id: str,
+            *,
+            cluster_ids: set[str] | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, object]]:
+            assert workspace_id == "default"
+            assert cluster_ids is None
+            assert limit >= 1
+            return [{"cluster_id": "existing", "name": "  PRODUCTION  ", "status": "registered"}]
+
+    db = DuplicateNameDb()
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            connect_cluster(
+                ClusterConnectRequest(name="Production", provider="aws"),
+                current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+                db=db,
+                events=StubEvents(),
+            )
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "cluster_name_conflict"
+    assert db.registered == []
+
+
+def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_registration(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("PUBLIC_MANAGEMENT_BASE_URL", "https://opsia.example.com/api")
+    monkeypatch.setenv("TARGET_AGENT_IMAGE", "ghcr.io/acme/kubeheal-agent:test")
+
+    class ReissueDb(StubDb):
+        def __init__(self) -> None:
+            super().__init__()
+            self.rotated: list[dict[str, object]] = []
+
+        def get_cluster_registration(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+        ) -> dict[str, object] | None:
+            assert workspace_id == "default"
+            assert cluster_id == "pending-cluster"
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "name": "Production",
+                "environment": "development",
+                "status": "install_expired",
+                "settings": TargetRegisterRequest(
+                    cluster_id=cluster_id,
+                    name="Production",
+                    environment="development",
+                    cloud_provider="existing-k8s",
+                    deploy_provider="manual-manifest",
+                    provider_config={"provider_hint": "eks"},
+                ).model_dump(exclude={"apply", "kube_context"}),
+            }
+
+        def list_cluster_agent_statuses(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+        ) -> list[dict[str, object]]:
+            assert (workspace_id, cluster_id) == ("default", "pending-cluster")
+            return []
+
+        def reissue_target_cluster_install(
+            self,
+            workspace_id: str,
+            cluster_id: str,
+            *,
+            agent_token_hash: str,
+            settings: dict[str, object],
+        ) -> bool:
+            self.rotated.append(
+                {
+                    "workspace_id": workspace_id,
+                    "cluster_id": cluster_id,
+                    "agent_token_hash": agent_token_hash,
+                    "settings": settings,
+                }
+            )
+            return True
+
+    db = ReissueDb()
+    response = asyncio.run(
+        reissue_cluster_connect_command(
+            "pending-cluster",
+            current=SimpleNamespace(user_id="user-1", workspace_id="default"),
+            db=db,
+        )
+    )
+
+    assert response.cluster_id == "pending-cluster"
+    assert response.install_command.startswith("curl -fsSL ")
+    assert response.install_command.endswith(" | kubectl apply -f -")
+    assert response.expires_at
+    assert len(db.rotated) == 1
+    assert db.rotated[0]["agent_token_hash"]
+    assert "connect_expires_at" in db.rotated[0]["settings"]
+
+
 def test_cluster_connect_status_maps_online_agent_without_inventing_metadata() -> None:
     db = StubClusterDb()
 
@@ -2282,8 +2398,18 @@ def test_install_manifest_injects_control_namespaces_when_specified() -> None:
     request = target_request().model_copy(update={"control_namespaces": "sandbox,prod-web"})
     manifest = target_install_manifest(request, "agent-secret")
     assert 'CONTROL_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
+    assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox,prod-web"' in manifest
 
 
 def test_install_manifest_omits_control_namespaces_by_default() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
     assert "CONTROL_ALLOWED_NAMESPACES" not in manifest
+    assert 'POD_EXEC_ALLOWED_NAMESPACES: "sandbox"' in manifest
+
+
+def test_dev_runtime_can_default_target_control_namespaces(monkeypatch) -> None:
+    monkeypatch.setenv("TARGET_DEFAULT_CONTROL_NAMESPACES", "sandbox,color-turf")
+
+    normalized = normalize_target_provider_defaults(target_request())
+
+    assert normalized.control_namespaces == "sandbox,color-turf"

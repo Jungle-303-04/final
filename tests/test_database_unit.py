@@ -188,6 +188,19 @@ def test_schema_defines_expected_tables() -> None:
     assert expected <= set(metadata.tables)
 
 
+def test_cluster_registration_schema_prevents_duplicate_active_display_names() -> None:
+    table = metadata.tables["cluster_registrations"]
+    index = next(
+        candidate
+        for candidate in table.indexes
+        if candidate.name == "ux_cluster_registrations_workspace_active_name"
+    )
+
+    assert index.unique is True
+    assert "lower(btrim(cluster_registrations.name))" in str(index.expressions[1])
+    assert "install_expired" in str(index.dialect_options["postgresql"]["where"])
+
+
 def test_event_schema_preserves_causation_id() -> None:
     assert "causation_id" in set(metadata.tables["events"].c.keys())
 
@@ -2124,10 +2137,12 @@ def test_resolve_recovered_ephemeral_incidents_is_bounded_and_inventory_aware() 
     sql = str(compiled)
     assert "UPDATE rca_timeline" in sql
     assert "cluster_inventory_resources" in sql
+    assert "cluster_inventory_snapshots" in sql
+    assert "snapshot_id" in sql
     assert "recovered_ephemeral_incidents" in sql
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "incident_resolved" in compiled.params.values()
-    assert ["Pod", "ReplicaSet"] in compiled.params.values()
+    assert ["pod", "replicaset"] in compiled.params.values()
 
 
 def test_user_account_schema_supports_password_login() -> None:
@@ -2350,7 +2365,7 @@ def test_rca_query_without_cursor_keeps_offset_compatibility() -> None:
     assert "OFFSET" in sql
 
 
-def test_rca_report_query_omits_payload_from_select_list() -> None:
+def test_rca_report_query_selects_only_bounded_narrative_paths_from_payload() -> None:
     recorded: list[Any] = []
     repository = _repository_with_recorded_sql(RcaRepository, recorded)
 
@@ -2359,7 +2374,9 @@ def test_rca_report_query_omits_payload_from_select_list() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
     select_list = sql.split("\nFROM rca_reports", maxsplit=1)[0]
-    assert "rca_reports.payload" not in select_list
+    assert "rca_reports.payload AS payload" not in select_list
+    assert "AS narrative" in select_list
+    assert "AS narrative_status" in select_list
     assert "rca_reports.candidates" in select_list
     assert "rca_reports.supporting_evidence_refs" in select_list
 

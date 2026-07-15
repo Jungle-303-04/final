@@ -226,6 +226,39 @@ class IdentityAccessRepository(DatabaseConnection):
         with self.connection() as conn:
             conn.execute(statement)
 
+    def reissue_target_cluster_install(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        agent_token_hash: str,
+        settings: JsonObject,
+    ) -> bool:
+        """만료/대기 등록의 설치 자격증명을 원자적으로 회전한다."""
+        table = ClusterRegistration.__table__
+        statement = (
+            update(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status.in_(
+                    (
+                        ClusterRegistrationStatus.PENDING_INSTALL.value,
+                        ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+                    )
+                ),
+            )
+            .values(
+                status=ClusterRegistrationStatus.PENDING_INSTALL.value,
+                agent_token_hash=agent_token_hash,
+                settings=settings,
+                updated_at=func.now(),
+            )
+            .returning(table.c.cluster_id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).first() is not None
+
     def unregister_target_cluster(self, workspace_id: str, cluster_id: str) -> bool:
         """target 등록 해제 — 감사/권한 이력은 남기고 agent 토큰만 폐기한다."""
         table = ClusterRegistration.__table__

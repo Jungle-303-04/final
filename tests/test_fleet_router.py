@@ -81,6 +81,7 @@ class FleetApiDb:
         warning_events: list[dict[str, Any]] | None = None,
         open_incidents: list[dict[str, Any]] | None = None,
         incident_lookup: dict[tuple[str, str], str] | None = None,
+        latest_snapshot: dict[str, Any] | None = None,
         pending_approvals: int = 0,
         running_workflows: int = 0,
         dead_letters: int = 0,
@@ -98,6 +99,10 @@ class FleetApiDb:
         self.warning_events = warning_events or []
         self.open_incidents = open_incidents or []
         self.incident_lookup = incident_lookup or {}
+        self.latest_snapshot = latest_snapshot or {
+            "snapshot_id": "snapshot-current",
+            "collected_at": "2026-07-07T10:00:00+00:00",
+        }
         self.pending_approvals = pending_approvals
         self.running_workflows = running_workflows
         self.dead_letters = dead_letters
@@ -189,6 +194,12 @@ class FleetApiDb:
     ) -> list[dict[str, Any]]:
         self.calls.append(("warning_events", workspace_id, cluster_id, limit))
         return self.warning_events
+
+    def latest_inventory_snapshot(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, Any] | None:
+        self.calls.append(("latest_snapshot", workspace_id, cluster_id))
+        return self.latest_snapshot
 
     def list_open_rca_incidents(
         self, workspace_id: str, cluster_id: str, *, limit: int = 20
@@ -506,6 +517,19 @@ def test_cluster_summary_groups_workloads_and_lists_incidents() -> None:
                 },
             }
         ],
+        pods=[
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "default",
+                "name": "api-1",
+                "uid": "uid-api-1",
+                "summary": {
+                    "namespace": "default",
+                    "owner_kind": "Deployment",
+                    "owner_name": "api",
+                },
+            }
+        ],
         open_incidents=[
             {
                 "incident_id": "incident-1",
@@ -544,7 +568,8 @@ def test_cluster_summary_groups_workloads_and_lists_incidents() -> None:
     }
 
     assert body["warning_events"][0]["reason"] == "BackOff"
-    assert body["warning_events"][0]["involved_name"] == "api-1"
+    assert body["warning_events"][0]["involved_kind"] == "Deployment"
+    assert body["warning_events"][0]["involved_name"] == "api"
     assert body["warning_events"][0]["count"] == 7
 
     assert body["open_incidents"][0]["incident_id"] == "incident-1"
@@ -563,8 +588,117 @@ def test_cluster_summary_groups_workloads_and_lists_incidents() -> None:
         "cpu_pct": None,
         "mem_pct": None,
     }
-    assert ("warning_events", WORKSPACE_ID, CLUSTER_ID, 10) in db.calls
+    assert ("warning_events", WORKSPACE_ID, CLUSTER_ID, 100) in db.calls
     assert ("open_incidents", WORKSPACE_ID, CLUSTER_ID, 20) in db.calls
+
+
+def test_cluster_summary_keeps_only_current_warning_events_and_groups_same_owner_reason() -> None:
+    db = FleetApiDb(
+        registrations=[_registration()],
+        latest_snapshot={
+            "snapshot_id": "snapshot-current",
+            "collected_at": "2026-07-15T03:20:00+00:00",
+        },
+        workloads=[
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "production",
+                "kind": "ReplicaSet",
+                "name": "checkout-api-7f8d9c",
+                "health": "degraded",
+                "status": "1/2",
+                "summary": {
+                    "owner_kind": "Deployment",
+                    "owner_name": "checkout-api",
+                },
+            },
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "production",
+                "kind": "Deployment",
+                "name": "checkout-api",
+                "health": "degraded",
+                "status": "1/2",
+                "summary": {},
+            },
+        ],
+        pods=[
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "production",
+                "name": pod_name,
+                "uid": f"uid-{pod_name}",
+                "summary": {
+                    "namespace": "production",
+                    "owner_kind": "ReplicaSet",
+                    "owner_name": "checkout-api-7f8d9c",
+                },
+            }
+            for pod_name in ("checkout-api-7f8d9c-a", "checkout-api-7f8d9c-b")
+        ],
+        warning_events=[
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "production",
+                "name": "evt-a",
+                "last_seen_at": "2026-07-15T03:20:00+00:00",
+                "summary": {
+                    "reason": "Unhealthy",
+                    "message": "Readiness probe failed: status code 404",
+                    "involved_kind": "Pod",
+                    "involved_name": "checkout-api-7f8d9c-a",
+                    "involved_uid": "uid-checkout-api-7f8d9c-a",
+                    "count": 3,
+                    "last_timestamp": "2026-07-15T03:01:00+00:00",
+                },
+            },
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "production",
+                "name": "evt-b",
+                "last_seen_at": "2026-07-15T03:20:00+00:00",
+                "summary": {
+                    "reason": "Unhealthy",
+                    "message": "Readiness probe failed: status code 404",
+                    "involved_kind": "Pod",
+                    "involved_name": "checkout-api-7f8d9c-b",
+                    "involved_uid": "uid-checkout-api-7f8d9c-b",
+                    "count": 5,
+                    "last_timestamp": "2026-07-15T03:02:00+00:00",
+                },
+            },
+            {
+                "snapshot_id": "snapshot-current",
+                "namespace": "production",
+                "name": "evt-old",
+                "last_seen_at": "2026-07-15T03:20:00+00:00",
+                "summary": {
+                    "reason": "Unhealthy",
+                    "message": "Readiness probe failed: connection refused",
+                    "involved_kind": "Pod",
+                    "involved_name": "checkout-api-old-1",
+                    "involved_uid": "uid-checkout-api-old-1",
+                    "count": 99,
+                    "last_timestamp": "2026-07-15T02:50:00+00:00",
+                },
+            },
+        ],
+    )
+
+    body = make_client(db, session=_session()).get(f"/clusters/{CLUSTER_ID}/summary").json()
+
+    assert body["warning_events"] == [
+        {
+            "namespace": "production",
+            "name": "production:Deployment:checkout-api:Unhealthy:readiness-probe",
+            "reason": "Unhealthy",
+            "message": "Readiness probe failed: status code 404",
+            "involved_kind": "Deployment",
+            "involved_name": "checkout-api",
+            "count": 8,
+            "last_seen_at": "2026-07-15T03:02:00+00:00",
+        }
+    ]
 
 
 def test_nodes_summary_aggregates_node_tiles_from_inventory() -> None:

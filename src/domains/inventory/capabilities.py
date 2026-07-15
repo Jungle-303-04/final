@@ -18,6 +18,7 @@ from domains.target.management_guard import (
 )
 from packages.config.constants import Command
 from packages.config.control import control_namespace_allowed
+from packages.config.terminal import pod_exec_namespace_allowed
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
     ResourceActionCapability,
@@ -27,9 +28,12 @@ from packages.contracts.gateway.responses import (
 from packages.contracts.identity import Permission
 
 COMMAND_RECEIVER_CAPABILITY = "command_receiver"
+POD_EXEC_STREAM_CAPABILITY = "pod_exec_stream"
 CONNECTED_AGENT_STATUS = "connected"
 DEPLOYMENT_KIND = "deployment"
+POD_KIND = "pod"
 WORKLOAD_RESOURCE_TYPE = "workload"
+POD_RESOURCE_TYPE = "pod"
 
 
 def resource_capabilities_response(
@@ -41,31 +45,50 @@ def resource_capabilities_response(
 ) -> ResourceCapabilitiesResponse:
     """실제 route가 수용할 조건을 모두 만족하는 action만 반환한다."""
     subject = _subject(resource)
-    action_applicable = _deployment_action_applicable(subject)
-    deploy_permitted = action_applicable and _has_cluster_permission(
+    deployment_applicable = _deployment_action_applicable(subject)
+    pod_exec_applicable = _pod_exec_applicable(subject)
+    deploy_permitted = deployment_applicable and _has_cluster_permission(
         db,
         current=current,
         workspace_id=workspace_id,
         cluster_id=subject.cluster_id,
         permission=Permission.DEPLOY_RUN.value,
     )
-    command_supported = action_applicable and _agent_supports_commands(
+    pod_exec_permitted = pod_exec_applicable and _has_cluster_permission(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=subject.cluster_id,
+        permission=Permission.POD_EXEC.value,
+    )
+    command_supported = deployment_applicable and _agent_supports_capability(
+        db, workspace_id, subject.cluster_id, COMMAND_RECEIVER_CAPABILITY
+    )
+    pod_exec_supported = pod_exec_applicable and _agent_supports_capability(
+        db, workspace_id, subject.cluster_id, POD_EXEC_STREAM_CAPABILITY
+    )
+    management = (deployment_applicable or pod_exec_applicable) and _is_management_cluster(
         db, workspace_id, subject.cluster_id
     )
-    management = action_applicable and _is_management_cluster(db, workspace_id, subject.cluster_id)
 
     capabilities: list[ResourceActionCapability] = []
-    if deploy_permitted and command_supported and not management and action_applicable:
-        capabilities = _deployment_capabilities(subject)
+    if deploy_permitted and command_supported and not management and deployment_applicable:
+        capabilities.extend(_deployment_capabilities(subject))
+    if pod_exec_permitted and pod_exec_supported and not management and pod_exec_applicable:
+        capabilities.append(_pod_exec_capability())
+    capabilities.sort(key=lambda item: item.capability_id)
 
     revision = _revision(
         workspace_id=workspace_id,
         current=current,
         subject=subject,
         deploy_permitted=deploy_permitted,
+        pod_exec_permitted=pod_exec_permitted,
         command_supported=command_supported,
+        pod_exec_supported=pod_exec_supported,
         management=management,
-        action_applicable=action_applicable,
+        deployment_applicable=deployment_applicable,
+        pod_exec_applicable=pod_exec_applicable,
         capability_ids=[item.capability_id for item in capabilities],
     )
     return ResourceCapabilitiesResponse(
@@ -104,14 +127,16 @@ def _has_cluster_permission(
     return True
 
 
-def _agent_supports_commands(db: Any, workspace_id: str, cluster_id: str) -> bool:
+def _agent_supports_capability(
+    db: Any, workspace_id: str, cluster_id: str, capability: str
+) -> bool:
     statuses_reader = getattr(db, "list_cluster_agent_statuses", None)
     if not callable(statuses_reader):
         return False
     statuses = statuses_reader(workspace_id, cluster_id)
     return any(
         str(item.get("status") or "") == CONNECTED_AGENT_STATUS
-        and COMMAND_RECEIVER_CAPABILITY in tuple(item.get("capabilities") or ())
+        and capability in tuple(item.get("capabilities") or ())
         for item in statuses
         if isinstance(item, dict)
     )
@@ -147,6 +172,15 @@ def _deployment_action_applicable(subject: ResourceCapabilitySubject) -> bool:
     )
 
 
+def _pod_exec_applicable(subject: ResourceCapabilitySubject) -> bool:
+    return (
+        subject.resource_type == POD_RESOURCE_TYPE
+        and subject.kind.strip().lower() == POD_KIND
+        and subject.namespace is not None
+        and pod_exec_namespace_allowed(subject.namespace)
+    )
+
+
 def _deployment_capabilities(
     subject: ResourceCapabilitySubject,
 ) -> list[ResourceActionCapability]:
@@ -168,15 +202,26 @@ def _deployment_capabilities(
     ]
 
 
+def _pod_exec_capability() -> ResourceActionCapability:
+    return ResourceActionCapability(
+        capability_id="pod.exec",
+        method="WEBSOCKET",
+        path="/live/terminal",
+    )
+
+
 def _revision(
     *,
     workspace_id: str,
     current: Any,
     subject: ResourceCapabilitySubject,
     deploy_permitted: bool,
+    pod_exec_permitted: bool,
     command_supported: bool,
+    pod_exec_supported: bool,
     management: bool,
-    action_applicable: bool,
+    deployment_applicable: bool,
+    pod_exec_applicable: bool,
     capability_ids: list[str],
 ) -> str:
     payload = {
@@ -185,9 +230,12 @@ def _revision(
         "roles": sorted(set(str(role) for role in (getattr(current, "roles", ()) or ()))),
         "subject": subject.model_dump(),
         "deploy_permitted": deploy_permitted,
+        "pod_exec_permitted": pod_exec_permitted,
         "command_supported": command_supported,
+        "pod_exec_supported": pod_exec_supported,
         "management": management,
-        "action_applicable": action_applicable,
+        "deployment_applicable": deployment_applicable,
+        "pod_exec_applicable": pod_exec_applicable,
         "capability_ids": capability_ids,
     }
     encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)

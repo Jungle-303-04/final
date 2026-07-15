@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
+from sqlalchemy.exc import IntegrityError
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -128,6 +129,8 @@ CONNECT_PROVIDER_HINTS = {
     "azure": "aks",
     "onprem": "onprem",
 }
+CLUSTER_ACTIVE_NAME_INDEX = "ux_cluster_registrations_workspace_active_name"
+CLUSTER_NAME_CONFLICT_CODE = "cluster_name_conflict"
 TARGET_PROVIDER_INVALID = "target install provider selection is invalid"
 # evidence job 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_EVIDENCE_JOB_POLL_SECONDS_ENV = (
@@ -149,6 +152,7 @@ AGENT_STATUS_NEVER_CONNECTED = "never_connected"
 AGENT_STATUS_ONLINE = "online"
 AGENT_STATUS_STALE = "stale"
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
+TARGET_DEFAULT_CONTROL_NAMESPACES_ENV = "TARGET_DEFAULT_CONTROL_NAMESPACES"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
 PUBLIC_API_BASE_URL_ENV = "PUBLIC_API_BASE_URL"
@@ -343,6 +347,11 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
     if management_base_url:
         updates["management_base_url"] = management_base_url
 
+    if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE and not payload.control_namespaces.strip():
+        default_control_namespaces = env(TARGET_DEFAULT_CONTROL_NAMESPACES_ENV, "").strip()
+        if default_control_namespaces:
+            updates["control_namespaces"] = default_control_namespaces
+
     if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE:
         updates["install_node_collector"] = False
         updates["install_sample_workload"] = False
@@ -369,6 +378,38 @@ def generated_cluster_id(name: str) -> str:
     suffix = f"{secrets.randbelow(10_000):04d}"
     base = slugify_cluster_name(name)[:58].strip("-") or "cluster"
     return f"{base}-{suffix}"
+
+
+def normalized_cluster_display_name(name: object) -> str:
+    return str(name).strip().casefold()
+
+
+def cluster_name_conflict_detail() -> dict[str, str]:
+    return {
+        "code": CLUSTER_NAME_CONFLICT_CODE,
+        "detail": "같은 워크스페이스에 동일한 이름의 활성 클러스터가 이미 있습니다",
+    }
+
+
+def require_unique_cluster_display_name(db: Any, workspace_id: str, name: str) -> None:
+    lister = getattr(db, "list_cluster_registrations", None)
+    if not callable(lister):
+        return
+    normalized = normalized_cluster_display_name(name)
+    for registration in lister(workspace_id, limit=500):
+        if str(registration.get("status") or "") == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
+            continue
+        if normalized_cluster_display_name(registration.get("name")) == normalized:
+            raise HTTPException(status_code=409, detail=cluster_name_conflict_detail())
+
+
+def is_cluster_name_integrity_conflict(error: IntegrityError) -> bool:
+    original = getattr(error, "orig", None)
+    diagnostic = getattr(original, "diag", None)
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    return constraint_name == CLUSTER_ACTIVE_NAME_INDEX or CLUSTER_ACTIVE_NAME_INDEX in str(
+        original
+    )
 
 
 def resolve_target_cluster_id(payload: TargetRegisterRequest, workspace_id: str, db: Any) -> str:
@@ -1152,24 +1193,106 @@ async def connect_cluster(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> ClusterConnectResponse:
-    receipt = await register_target(
-        TargetRegisterRequest(
-            name=payload.name.strip(),
-            environment="development",
-            cloud_provider="existing-k8s",
-            deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
-            provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},
-        ),
-        current=current,
-        db=db,
-        events=events,
-    )
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    display_name = payload.name.strip()
+    require_unique_cluster_display_name(db, workspace_id, display_name)
+    try:
+        receipt = await register_target(
+            TargetRegisterRequest(
+                name=display_name,
+                environment="development",
+                cloud_provider="existing-k8s",
+                deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
+                provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},
+            ),
+            current=current,
+            db=db,
+            events=events,
+        )
+    except IntegrityError as exc:
+        if is_cluster_name_integrity_conflict(exc):
+            raise HTTPException(
+                status_code=409,
+                detail=cluster_name_conflict_detail(),
+            ) from exc
+        raise
     if not receipt.install_command or not receipt.connect_expires_at:
         raise HTTPException(status_code=503, detail="cluster install command is unavailable")
     return ClusterConnectResponse(
         cluster_id=receipt.cluster_id,
         install_command=receipt.install_command,
         expires_at=receipt.connect_expires_at,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CONNECT_COMMAND_PATH,
+    response_model=ClusterConnectResponse,
+)
+async def reissue_cluster_connect_command(
+    cluster_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> ClusterConnectResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    registration = unregisterable_registration(db, workspace_id, cluster_id)
+    status = str(registration.get("status") or "")
+    if status not in {
+        ClusterRegistrationStatus.PENDING_INSTALL.value,
+        ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "cluster_already_connected",
+                "detail": "이미 연결된 클러스터의 설치 명령은 다시 발급할 수 없습니다",
+            },
+        )
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
+    if agents and cluster_connection_status(agents[0]) == AGENT_STATUS_ONLINE:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "cluster_already_connected",
+                "detail": "에이전트가 이미 연결되어 설치 명령을 다시 발급하지 않았습니다",
+            },
+        )
+
+    payload = normalize_target_provider_defaults(
+        target_register_payload_from_settings(registration.get("settings") or {})
+    )
+    agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
+    timeout_seconds = target_registration_connect_timeout_seconds()
+    expires_at = connect_expires_at_from(datetime.now(UTC), timeout_seconds)
+    settings = payload.model_dump(exclude={"apply", "kube_context"})
+    settings["connect_timeout_seconds"] = timeout_seconds
+    settings["connect_expires_at"] = expires_at
+    rotate = getattr(db, "reissue_target_cluster_install", None)
+    if not callable(rotate):
+        raise HTTPException(
+            status_code=503, detail="cluster install command rotation is unavailable"
+        )
+    with unit_of_work_or_null(db):
+        rotated = rotate(
+            workspace_id,
+            cluster_id,
+            agent_token_hash=hash_agent_token(agent_token),
+            settings=settings,
+        )
+        if not rotated:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "cluster_connect_state_changed",
+                    "detail": "연결 상태가 바뀌어 설치 명령을 다시 발급하지 않았습니다",
+                },
+            )
+    return ClusterConnectResponse(
+        cluster_id=cluster_id,
+        install_command=install_command_for(payload, agent_token),
+        expires_at=expires_at,
     )
 
 
