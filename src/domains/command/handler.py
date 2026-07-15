@@ -453,8 +453,8 @@ async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan)
     )
 
 
-async def close_unqueued_operation(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
-    """Persist the terminal lifecycle fact for a command that never reached an agent."""
+async def close_operation(ctx: EventContext[AgentCommandStore], plan: Plan, reason: str) -> None:
+    """Persist a terminal lifecycle fact when the command cannot reach an agent."""
     append = getattr(ctx.db, "append_command_operation_event", None)
     if not callable(append):
         return
@@ -465,9 +465,17 @@ async def close_unqueued_operation(ctx: EventContext[AgentCommandStore], plan: P
         {
             "cluster_id": plan.cluster_id,
             "status": CommandStatus.FAILED,
-            "reason": "agent command could not be queued",
+            "reason": reason,
         },
     )
+
+
+async def reject_operation(
+    ctx: EventContext[AgentCommandStore], command: CommandRequestedBody, reason: str
+) -> CommandRejectedBody:
+    """Close the receipt's immutable operation stream for every worker rejection."""
+    await close_operation(ctx, build_plan(command, ctx.correlation_id), reason)
+    return CommandRejectedBody(reason=reason, requested=command.to_body())
 
 
 async def sweep_expired_agent_commands(
@@ -491,34 +499,30 @@ async def handle_command_requested(
         and evt.actor.get("auto_selected") is True
         and not env_enabled(AUTO_COMMANDS_ENABLED_ENV)
     ):
-        yield CommandRejectedBody(reason=AUTO_COMMANDS_DISABLED_REASON, requested=evt.to_body())
+        yield await reject_operation(ctx, evt, AUTO_COMMANDS_DISABLED_REASON)
         return
     management_result = await evaluate_management_guard(evt, ctx.db)
     if not management_result.allowed:
-        yield CommandRejectedBody(
-            reason=management_result.require_reason(), requested=evt.to_body()
-        )
+        yield await reject_operation(ctx, evt, management_result.require_reason())
         return
     direct_execution_result = evaluate_direct_execution_confirmation(evt)
     if not direct_execution_result.allowed:
-        yield CommandRejectedBody(
-            reason=direct_execution_result.require_reason(), requested=evt.to_body()
-        )
+        yield await reject_operation(ctx, evt, direct_execution_result.require_reason())
         return
     result = evaluate_command_policy(evt)
     if not result.allowed:
-        yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
+        yield await reject_operation(ctx, evt, result.require_reason())
         return
     approval_result, approval_evidence = await evaluate_recorded_approval(evt, ctx.db)
     if not approval_result.allowed:
-        yield CommandRejectedBody(reason=approval_result.require_reason(), requested=evt.to_body())
+        yield await reject_operation(ctx, evt, approval_result.require_reason())
         return
 
     plan = build_plan(evt, ctx.correlation_id, approval_evidence)
     yield CommandDispatchedBody(plan=plan, route=route_for_plan(plan))
     inserted = await queue_plan_for_agent(ctx, plan)
     if not inserted:
-        await close_unqueued_operation(ctx, plan)
+        await close_operation(ctx, plan, "agent command could not be queued")
         yield CommandRejectedBody(
             reason="agent command could not be queued", requested=evt.to_body()
         )
