@@ -126,7 +126,8 @@ class ApiGateway:
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = session_store or RedisSessionStore(self._session_store_config())
         self.operation_events = RedisOperationEventBroker(
-            env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL)
+            env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL),
+            self.db,
         )
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)

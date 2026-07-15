@@ -11,14 +11,13 @@ from sqlalchemy import DateTime, case, cast, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.command.events import CommandCompletedBody
-from domains.command.models import (
-    AgentCommand,
-)
+from domains.command.models import AgentCommand, CommandOperationEvent, CommandOperationEventCursor
 from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
 from packages.config.constants import Command, CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord
+from packages.contracts.parity import OperationEvent, OperationEventKind
 from packages.events.envelope import event
 from packages.runtime.command_wakeup import AGENT_COMMAND_CHANNEL, wakeup_key
 from packages.storage.engine import (
@@ -98,6 +97,133 @@ def notify_agent_command(conn: Any, workspace_id: str, cluster_id: str) -> None:
 
 
 class AgentCommandRepository(DatabaseConnection):
+    async def append_command_operation_event(
+        self,
+        workspace_id: str,
+        command_id: str,
+        kind: OperationEventKind,
+        payload: JsonObject,
+    ) -> OperationEvent | None:
+        """Append one ordered event after its durable command transition commits.
+
+        A cursor row is atomically advanced under PostgreSQL row locking.  Terminal
+        events close the cursor, so duplicate agent completion reports never create
+        a second terminal SSE message.  The returned row is committed before a
+        broker is allowed to announce it.
+        """
+        normalized_workspace = workspace_id.strip()
+        normalized_command = command_id.strip()
+        cluster_id = str(payload.get("cluster_id", "")).strip()
+        if not normalized_workspace or not normalized_command or not cluster_id:
+            raise ValueError("operation events require workspace, command, and cluster identity")
+
+        cursor = CommandOperationEventCursor.__table__
+        event_table = CommandOperationEvent.__table__
+        terminal = kind in {"completed", "failed"}
+        async with self.async_engine.begin() as conn:
+            await conn.execute(
+                pg_insert(cursor)
+                .values(
+                    workspace_id=normalized_workspace,
+                    command_id=normalized_command,
+                    last_sequence=0,
+                    terminal_sequence=None,
+                )
+                .on_conflict_do_nothing(index_elements=[cursor.c.workspace_id, cursor.c.command_id])
+            )
+            values: dict[str, Any] = {
+                "last_sequence": cursor.c.last_sequence + 1,
+                "updated_at": func.now(),
+            }
+            if terminal:
+                values["terminal_sequence"] = cursor.c.last_sequence + 1
+            advanced = (
+                await conn.execute(
+                    update(cursor)
+                    .where(
+                        cursor.c.workspace_id == normalized_workspace,
+                        cursor.c.command_id == normalized_command,
+                        cursor.c.terminal_sequence.is_(None),
+                    )
+                    .values(**values)
+                    .returning(cursor.c.last_sequence)
+                )
+            ).scalar_one_or_none()
+            if advanced is None:
+                return None
+            row = (
+                (
+                    await conn.execute(
+                        pg_insert(event_table)
+                        .values(
+                            workspace_id=normalized_workspace,
+                            command_id=normalized_command,
+                            sequence=int(advanced),
+                            cluster_id=cluster_id,
+                            kind=kind,
+                            payload=dict(payload),
+                        )
+                        .returning(
+                            event_table.c.command_id,
+                            event_table.c.sequence,
+                            event_table.c.kind,
+                            event_table.c.payload,
+                            event_table.c.occurred_at,
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return OperationEvent(
+            command_id=str(row["command_id"]),
+            sequence=int(row["sequence"]),
+            kind=str(row["kind"]),
+            payload=dict(row["payload"]),
+            occurred_at=row["occurred_at"],
+        )
+
+    async def list_command_operation_events(
+        self,
+        workspace_id: str,
+        command_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int = 500,
+    ) -> list[OperationEvent]:
+        """Read a bounded, strictly ordered durable event suffix for SSE replay."""
+        if after_sequence < 0:
+            raise ValueError("operation event cursor must be non-negative")
+        table = CommandOperationEvent.__table__
+        statement = (
+            select(
+                table.c.command_id,
+                table.c.sequence,
+                table.c.kind,
+                table.c.payload,
+                table.c.occurred_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.command_id == command_id,
+                table.c.sequence > after_sequence,
+            )
+            .order_by(table.c.sequence.asc())
+            .limit(max(1, min(limit, 1000)))
+        )
+        async with self.async_connection() as conn:
+            rows = (await conn.execute(statement)).mappings().all()
+        return [
+            OperationEvent(
+                command_id=str(row["command_id"]),
+                sequence=int(row["sequence"]),
+                kind=str(row["kind"]),
+                payload=dict(row["payload"]),
+                occurred_at=row["occurred_at"],
+            )
+            for row in rows
+        ]
+
     def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
         if plan.get("action") == Command.RCA_TEST_SCENARIO_INJECT_ACTION:
             raise ValueError("RCA test inject commands require the atomic reservation guard")

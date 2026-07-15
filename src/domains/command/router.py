@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from domains.command.debug_queries import (
@@ -110,6 +110,7 @@ async def publish_operation_event(
     operation_events: Any,
     *,
     command_id: str | None,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
     status: str,
     payload: dict[str, object],
 ) -> None:
@@ -130,6 +131,7 @@ async def publish_operation_event(
         command_id=command_id,
         kind=kind,
         payload={"status": status, **payload},
+        workspace_id=workspace_id,
     )
 
 
@@ -141,6 +143,7 @@ async def publish_accepted_operation(
     await publish_operation_event(
         operation_events,
         command_id=response.command_id,
+        workspace_id=command.workspace_id,
         status=CommandStatus.QUEUED,
         payload={
             "cluster_id": command.cluster_id,
@@ -161,7 +164,7 @@ def command_snapshot_event(row: dict[str, object]) -> OperationEvent:
     )
     return OperationEvent(
         command_id=str(row["command_id"]),
-        sequence=0,
+        sequence=1,
         kind=kind,
         payload={
             "status": status,
@@ -175,6 +178,23 @@ def command_snapshot_event(row: dict[str, object]) -> OperationEvent:
 
 def sse_operation_event(event: OperationEvent) -> str:
     return f"id: {event.sequence}\nevent: operation\ndata: {event.model_dump_json()}\n\n"
+
+
+def operation_event_cursor(after: int | None, last_event_id: str | None) -> int:
+    """Resolve the equivalent query/header SSE cursors without ambiguity."""
+    if last_event_id is None or not last_event_id.strip():
+        return after or 0
+    try:
+        cursor = int(last_event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=UNPROCESSABLE_CODE, detail="invalid Last-Event-ID") from exc
+    if cursor < 0:
+        raise HTTPException(status_code=UNPROCESSABLE_CODE, detail="invalid Last-Event-ID")
+    if after is not None and after != cursor:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE, detail="conflicting operation event cursor"
+        )
+    return cursor
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
@@ -509,27 +529,89 @@ async def command_status(
 @router.get(gateway_routes.COMMAND_EVENTS_PATH)
 async def command_events(
     command_id: str,
+    after: Annotated[int | None, Query(ge=0)] = None,
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     operation_events: Any = Depends(get_operation_events),
 ) -> StreamingResponse:
-    """SSE operation stream: latest durable snapshot followed by brokered state changes."""
+    """Replay durable events then follow live broker notifications in exact order."""
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
-    row = await db.get_agent_command(command_id, workspace_id)
-    if row is None:
-        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-    require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
+    cursor = operation_event_cursor(after, last_event_id)
     subscribe = getattr(operation_events, "subscribe", None)
     if not callable(subscribe):
         raise HTTPException(status_code=503, detail="operation event stream unavailable")
-    subscription = await subscribe(command_id)
-    snapshot = command_snapshot_event(dict(row))
+    # Subscribe before reading replay so a commit between the two is either in
+    # the query result or this live queue; no status polling recovery exists.
+    subscription = await subscribe(command_id, workspace_id=workspace_id)
+    list_events = getattr(db, "list_command_operation_events", None)
+
+    async def replay(starting_after: int) -> list[OperationEvent]:
+        if callable(list_events):
+            return await list_events(
+                workspace_id,
+                command_id,
+                after_sequence=starting_after,
+            )
+        return []
+
+    try:
+        initial = await replay(cursor)
+        if initial:
+            cluster_id = str(initial[0].payload.get("cluster_id") or "")
+            if not cluster_id:
+                raise HTTPException(
+                    status_code=500, detail="operation event missing cluster identity"
+                )
+            require_cluster_read_access(db, current, workspace_id, cluster_id)
+        else:
+            # Existing commands predating the append-only ledger are materialized
+            # as one compatibility snapshot only. New receipts always have an
+            # accepted event and therefore never take this delayed-row path.
+            row = await db.get_agent_command(command_id, workspace_id)
+            if row is None:
+                raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+            require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
+            initial = [command_snapshot_event(dict(row))]
+    except BaseException:
+        await subscription.close()
+        raise
 
     async def stream():
+        delivered = cursor
+
+        async def emit(events: list[OperationEvent]):
+            nonlocal delivered
+            for event in events:
+                if event.sequence <= delivered:
+                    continue
+                if delivered and event.sequence != delivered + 1:
+                    raise RuntimeError("durable operation events are not contiguous")
+                yield sse_operation_event(event)
+                delivered = event.sequence
+                if event.kind in {"completed", "failed"}:
+                    return
+
         try:
-            yield sse_operation_event(snapshot)
+            async for item in emit(initial):
+                yield item
+            if initial and initial[-1].kind in {"completed", "failed"}:
+                return
             while True:
-                yield sse_operation_event(await subscription.next())
+                live = await subscription.next()
+                if live.sequence <= delivered:
+                    continue
+                if live.sequence != delivered + 1:
+                    async for item in emit(await replay(delivered)):
+                        yield item
+                    if live.sequence <= delivered:
+                        continue
+                if live.sequence != delivered + 1:
+                    raise RuntimeError("durable operation event replay did not close sequence gap")
+                yield sse_operation_event(live)
+                delivered = live.sequence
+                if live.kind in {"completed", "failed"}:
+                    return
         finally:
             await subscription.close()
 
@@ -562,6 +644,7 @@ async def poll_command(
         await publish_operation_event(
             operation_events,
             command_id=str(row["command_id"]),
+            workspace_id=identity.workspace_id,
             status=CommandStatus.LEASED,
             payload={
                 "cluster_id": identity.cluster_id,
@@ -596,6 +679,7 @@ async def command_start(
     await publish_operation_event(
         operation_events,
         command_id=command_id,
+        workspace_id=identity.workspace_id,
         status=CommandStatus.RUNNING,
         payload={"cluster_id": identity.cluster_id, "correlation_id": correlation_id},
     )
@@ -627,6 +711,7 @@ async def command_heartbeat(
     await publish_operation_event(
         operation_events,
         command_id=command_id,
+        workspace_id=identity.workspace_id,
         status=CommandStatus.RUNNING,
         payload={"cluster_id": identity.cluster_id, "correlation_id": correlation_id},
     )
@@ -673,6 +758,7 @@ async def command_result(
     await publish_operation_event(
         operation_events,
         command_id=command_id,
+        workspace_id=identity.workspace_id,
         status=payload.status,
         payload={
             "cluster_id": identity.cluster_id,

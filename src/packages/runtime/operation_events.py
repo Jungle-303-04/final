@@ -1,9 +1,9 @@
-"""Realtime command-operation fan-out with a Redis-backed production broker.
+"""Durable command-operation events with Redis used only as a wake-up channel.
 
-The browser stream is never synthesized from polling. Every command state
-transition publishes an immutable OperationEvent; Redis Pub/Sub forwards it
-to all gateway replicas and each replica fans it out through bounded,
-per-command subscriptions.
+Every browser-visible event is first appended to PostgreSQL.  Redis Pub/Sub
+announces an already committed row across gateway replicas; it never assigns a
+sequence or reconstructs state.  SSE readers replay the database cursor before
+using this live fan-out, so a reconnect or a Pub/Sub gap cannot invent state.
 """
 
 from __future__ import annotations
@@ -16,21 +16,40 @@ from typing import Any, Protocol
 
 from redis.asyncio import Redis as AsyncRedis
 
+from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.parity import OperationEvent, OperationEventKind
 
 OPERATION_EVENT_CHANNEL_PREFIX = "opsia:operation-events:"
-OPERATION_EVENT_SEQUENCE_PREFIX = "opsia:operation-event-sequence:"
 OPERATION_EVENT_QUEUE_MAX = 64
 RedisFactory = Callable[[str], AsyncRedis]
 
 
+class OperationEventStore(Protocol):
+    """Storage authority required by the production event broker."""
+
+    async def append_command_operation_event(
+        self,
+        workspace_id: str,
+        command_id: str,
+        kind: OperationEventKind,
+        payload: dict[str, object],
+    ) -> OperationEvent | None: ...
+
+
+class OperationEventStreamOverflow(RuntimeError):
+    """A live fan-out queue could not preserve ordering; reconnect from cursor."""
+
+
+_SubscriptionItem = OperationEvent | OperationEventStreamOverflow
+
+
 class OperationEventSubscription:
-    """One bounded browser subscription. Slow clients retain the latest event."""
+    """One bounded browser subscription; overflow closes rather than drops order."""
 
     def __init__(
         self,
         command_id: str,
-        queue: asyncio.Queue[OperationEvent],
+        queue: asyncio.Queue[_SubscriptionItem],
         close: Callable[[], Awaitable[None]],
     ) -> None:
         self.command_id = command_id
@@ -39,7 +58,10 @@ class OperationEventSubscription:
         self._closed = False
 
     async def next(self) -> OperationEvent:
-        return await self._queue.get()
+        item = await self._queue.get()
+        if isinstance(item, OperationEventStreamOverflow):
+            raise item
+        return item
 
     def empty(self) -> bool:
         return self._queue.empty()
@@ -56,7 +78,12 @@ class OperationEventBroker(Protocol):
 
     async def close(self) -> None: ...
 
-    async def subscribe(self, command_id: str) -> OperationEventSubscription: ...
+    async def subscribe(
+        self,
+        command_id: str,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEventSubscription: ...
 
     async def publish(
         self,
@@ -64,15 +91,19 @@ class OperationEventBroker(Protocol):
         command_id: str,
         kind: OperationEventKind,
         payload: dict[str, object],
-    ) -> OperationEvent: ...
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEvent | None: ...
 
 
 class InMemoryOperationEventBroker:
-    """Deterministic test/local broker with the same bounded fan-out behavior."""
+    """Deterministic test broker preserving ordering without a persistence fake."""
 
     def __init__(self) -> None:
-        self._sequences: dict[str, int] = defaultdict(int)
-        self._subscriptions: dict[str, set[asyncio.Queue[OperationEvent]]] = defaultdict(set)
+        self._sequences: dict[tuple[str, str], int] = defaultdict(int)
+        self._terminal: set[tuple[str, str]] = set()
+        self._subscriptions: dict[tuple[str, str], set[asyncio.Queue[_SubscriptionItem]]] = (
+            defaultdict(set)
+        )
 
     async def start(self) -> None:
         return None
@@ -80,17 +111,23 @@ class InMemoryOperationEventBroker:
     async def close(self) -> None:
         self._subscriptions.clear()
 
-    async def subscribe(self, command_id: str) -> OperationEventSubscription:
-        queue: asyncio.Queue[OperationEvent] = asyncio.Queue(maxsize=OPERATION_EVENT_QUEUE_MAX)
-        self._subscriptions[command_id].add(queue)
+    async def subscribe(
+        self,
+        command_id: str,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEventSubscription:
+        key = _subscription_key(workspace_id, command_id)
+        queue: asyncio.Queue[_SubscriptionItem] = asyncio.Queue(maxsize=OPERATION_EVENT_QUEUE_MAX)
+        self._subscriptions[key].add(queue)
 
         async def close() -> None:
-            subscribers = self._subscriptions.get(command_id)
+            subscribers = self._subscriptions.get(key)
             if subscribers is None:
                 return
             subscribers.discard(queue)
             if not subscribers:
-                self._subscriptions.pop(command_id, None)
+                self._subscriptions.pop(key, None)
 
         return OperationEventSubscription(command_id, queue, close)
 
@@ -100,32 +137,99 @@ class InMemoryOperationEventBroker:
         command_id: str,
         kind: OperationEventKind,
         payload: dict[str, object],
-    ) -> OperationEvent:
-        self._sequences[command_id] += 1
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEvent | None:
+        key = _subscription_key(workspace_id, command_id)
+        if key in self._terminal:
+            return None
+        self._sequences[key] += 1
         event = OperationEvent(
             command_id=command_id,
-            sequence=self._sequences[command_id],
+            sequence=self._sequences[key],
             kind=kind,
             payload=payload,
         )
-        await self.deliver(event)
+        if kind in {"completed", "failed"}:
+            self._terminal.add(key)
+        await self.deliver(event, workspace_id=workspace_id)
         return event
 
-    async def deliver(self, event: OperationEvent) -> None:
-        for queue in tuple(self._subscriptions.get(event.command_id, ())):
+    async def deliver(
+        self,
+        event: OperationEvent,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> None:
+        for queue in tuple(
+            self._subscriptions.get(_subscription_key(workspace_id, event.command_id), ())
+        ):
             _offer(queue, event)
 
 
-class RedisOperationEventBroker:
-    """Cross-replica operation-event broker with Redis sequence authority."""
+class DurableOperationEventBroker:
+    """Persist-before-fanout broker used for deterministic storage contract tests."""
 
-    def __init__(self, redis_url: str, *, redis_factory: RedisFactory | None = None) -> None:
+    def __init__(self, store: OperationEventStore) -> None:
+        self._store = store
+        self._local = InMemoryOperationEventBroker()
+
+    async def start(self) -> None:
+        await self._local.start()
+
+    async def close(self) -> None:
+        await self._local.close()
+
+    async def subscribe(
+        self,
+        command_id: str,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEventSubscription:
+        return await self._local.subscribe(command_id, workspace_id=workspace_id)
+
+    async def publish(
+        self,
+        *,
+        command_id: str,
+        kind: OperationEventKind,
+        payload: dict[str, object],
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEvent | None:
+        event = await self._store.append_command_operation_event(
+            workspace_id,
+            command_id,
+            kind,
+            payload,
+        )
+        if event is not None:
+            await self._local.deliver(event, workspace_id=workspace_id)
+        return event
+
+    async def deliver(
+        self,
+        event: OperationEvent,
+        *,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> None:
+        await self._local.deliver(event, workspace_id=workspace_id)
+
+
+class RedisOperationEventBroker(DurableOperationEventBroker):
+    """Cross-replica durable event broker; Pub/Sub carries committed rows only."""
+
+    def __init__(
+        self,
+        redis_url: str,
+        store: OperationEventStore,
+        *,
+        redis_factory: RedisFactory | None = None,
+    ) -> None:
+        super().__init__(store)
         self._redis_url = redis_url
         self._redis_factory = redis_factory or _redis_client
         self._client: AsyncRedis | None = None
         self._pubsub: Any | None = None
         self._listener: asyncio.Task[None] | None = None
-        self._local = InMemoryOperationEventBroker()
 
     async def start(self) -> None:
         if self._client is not None:
@@ -136,7 +240,7 @@ class RedisOperationEventBroker:
         await pubsub.psubscribe(f"{OPERATION_EVENT_CHANNEL_PREFIX}*")
         self._client = client
         self._pubsub = pubsub
-        await self._local.start()
+        await super().start()
         self._listener = asyncio.create_task(self._listen(), name="operation-event-redis-listener")
 
     async def close(self) -> None:
@@ -153,10 +257,7 @@ class RedisOperationEventBroker:
         self._client = None
         if client is not None:
             await client.aclose()
-        await self._local.close()
-
-    async def subscribe(self, command_id: str) -> OperationEventSubscription:
-        return await self._local.subscribe(command_id)
+        await super().close()
 
     async def publish(
         self,
@@ -164,16 +265,25 @@ class RedisOperationEventBroker:
         command_id: str,
         kind: OperationEventKind,
         payload: dict[str, object],
-    ) -> OperationEvent:
-        client = self._require_client()
-        sequence = int(await client.incr(_sequence_key(command_id)))
-        event = OperationEvent(
-            command_id=command_id,
-            sequence=sequence,
-            kind=kind,
-            payload=payload,
+        workspace_id: str = DEFAULT_WORKSPACE_ID,
+    ) -> OperationEvent | None:
+        event = await self._store.append_command_operation_event(
+            workspace_id,
+            command_id,
+            kind,
+            payload,
         )
-        await client.publish(_channel(command_id), event.model_dump_json())
+        if event is None:
+            return None
+        client = self._require_client()
+        envelope = {
+            "workspace_id": workspace_id,
+            "event": event.model_dump(mode="json"),
+        }
+        await client.publish(_channel(workspace_id, command_id), _json(envelope))
+        # The local gateway must not wait for its own Pub/Sub round trip. The
+        # SSE cursor removes this duplicate when the listener receives it back.
+        await self.deliver(event, workspace_id=workspace_id)
         return event
 
     async def _listen(self) -> None:
@@ -181,11 +291,11 @@ class RedisOperationEventBroker:
         async for raw in self._pubsub.listen():
             if not isinstance(raw, dict) or raw.get("type") not in {"message", "pmessage"}:
                 continue
-            try:
-                event = OperationEvent.model_validate_json(raw.get("data"))
-            except (TypeError, ValueError):
+            parsed = _parse_envelope(raw.get("data"))
+            if parsed is None:
                 continue
-            await self._local.deliver(event)
+            workspace_id, event = parsed
+            await self.deliver(event, workspace_id=workspace_id)
 
     def _require_client(self) -> AsyncRedis:
         if self._client is None:
@@ -205,18 +315,48 @@ def _redis_client(url: str) -> AsyncRedis:
     )
 
 
-def _channel(command_id: str) -> str:
-    return f"{OPERATION_EVENT_CHANNEL_PREFIX}{command_id}"
+def _subscription_key(workspace_id: str, command_id: str) -> tuple[str, str]:
+    return workspace_id.strip(), command_id.strip()
 
 
-def _sequence_key(command_id: str) -> str:
-    return f"{OPERATION_EVENT_SEQUENCE_PREFIX}{command_id}"
+def _channel(workspace_id: str, command_id: str) -> str:
+    return f"{OPERATION_EVENT_CHANNEL_PREFIX}{workspace_id}:{command_id}"
 
 
-def _offer(queue: asyncio.Queue[OperationEvent], event: OperationEvent) -> None:
+def _json(value: dict[str, object]) -> str:
+    from json import dumps
+
+    return dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+def _parse_envelope(raw: object) -> tuple[str, OperationEvent] | None:
+    from json import loads
+
+    if not isinstance(raw, (bytes, str)):
+        return None
+    try:
+        decoded = loads(raw)
+        if not isinstance(decoded, dict):
+            return None
+        workspace_id = decoded.get("workspace_id")
+        event = decoded.get("event")
+        if (
+            not isinstance(workspace_id, str)
+            or not workspace_id.strip()
+            or not isinstance(event, dict)
+        ):
+            return None
+        return workspace_id, OperationEvent.model_validate(event)
+    except (TypeError, ValueError):
+        return None
+
+
+def _offer(queue: asyncio.Queue[_SubscriptionItem], event: OperationEvent) -> None:
     try:
         queue.put_nowait(event)
     except asyncio.QueueFull:
+        # Dropping a middle event would violate replay ordering. Closing this
+        # live subscription makes the browser reconnect with Last-Event-ID.
         while not queue.empty():
             queue.get_nowait()
-        queue.put_nowait(event)
+        queue.put_nowait(OperationEventStreamOverflow("operation event stream overflow"))
