@@ -1778,6 +1778,24 @@ class ClusterConnectStatusResponse(StrictModel):
     connected_at: str | None = None
 
 
+class ClusterUnregisterResponse(StrictModel):
+    cluster_id: str
+    status: Literal["uninstalling", "cleanup_required", "disconnected", "purged"]
+    stage: Literal[
+        "agent_cleanup_queued",
+        "manual_cleanup_required",
+        "registration_revoked",
+        "purged",
+    ]
+    command_id: str | None = None
+    command_status_path: str | None = None
+    uninstall_command: str | None = None
+    cleanup_verified: bool = False
+    resources: list[str] = Field(default_factory=list)
+    residual_resources: list[str] = Field(default_factory=list)
+    failure_reason: str | None = None
+
+
 class AlertChannelResponse(StrictModel):
     channel_id: str
     workspace_id: str

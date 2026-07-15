@@ -54,6 +54,12 @@ from domains.target.management_guard import (
     management_readonly_detail,
 )
 from domains.target.reconciler import desired_state_version
+from domains.target.uninstall import (
+    SELF_CLEANUP_RESIDUALS,
+    queue_agent_uninstall,
+    target_uninstall_command,
+    target_uninstall_resources,
+)
 from packages.config.security import (
     TEST_FIXTURE_ENVIRONMENT,
     test_fixture_purge_enabled,
@@ -81,6 +87,7 @@ from packages.contracts.gateway.responses import (
     ClusterListResponse,
     ClusterResponse,
     ClusterSummary,
+    ClusterUnregisterResponse,
     EvidenceJobPollResponse,
     EvidenceJobResultResponse,
     EvidenceJobScheduleResponse,
@@ -1482,14 +1489,21 @@ async def update_cluster_scheduling_profiles(
     )
 
 
-@router.delete(gateway_routes.CLUSTER_PATH, status_code=204)
+@router.delete(
+    gateway_routes.CLUSTER_PATH,
+    response_model=ClusterUnregisterResponse,
+    status_code=202,
+)
 async def unregister_cluster(
     cluster_id: str,
     purge: bool = False,
+    manual_cleanup_attested: bool = False,
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
-) -> None:
+) -> ClusterUnregisterResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    uninstall_command = target_uninstall_command()
+    resources = target_uninstall_resources()
     if purge:
         # 테스트 fixture 물리 삭제만 별도 UoW로 묶고 운영 soft-delete 경로는 그대로 둔다.
         with unit_of_work_or_null(db):
@@ -1506,18 +1520,80 @@ async def unregister_cluster(
                 )
             if not purge_registration(workspace_id, cluster_id):
                 raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-        return
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="purged",
+            stage="purged",
+            cleanup_verified=True,
+        )
 
     unregisterable_registration(db, workspace_id, cluster_id)
+    if not manual_cleanup_attested:
+        agents = visible_cluster_agent_statuses(
+            db.list_cluster_agent_statuses(workspace_id, cluster_id)
+        )
+        latest_agent = agents[0] if agents else None
+        online = cluster_connection_status(latest_agent) == AGENT_STATUS_ONLINE
+        queue = getattr(db, "queue_agent_command", None)
+        failure_reason: str | None = None
+        if online and callable(queue):
+            try:
+                queued = queue_agent_uninstall(
+                    db,
+                    cluster_id=cluster_id,
+                    workspace_id=workspace_id,
+                    requested_by=str(current.user_id),
+                )
+            except Exception as exc:
+                failure_reason = f"agent cleanup queue failed: {type(exc).__name__}"
+            else:
+                if queued.inserted:
+                    return ClusterUnregisterResponse(
+                        cluster_id=cluster_id,
+                        status="uninstalling",
+                        stage="agent_cleanup_queued",
+                        command_id=queued.command_id,
+                        command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(
+                            command_id=queued.command_id
+                        ),
+                        uninstall_command=uninstall_command,
+                        resources=resources,
+                        residual_resources=list(SELF_CLEANUP_RESIDUALS),
+                    )
+                failure_reason = "agent cleanup command was not queued"
+        elif online:
+            failure_reason = "agent cleanup queue is unavailable"
+        else:
+            failure_reason = "agent is offline; run the uninstall command in the cluster"
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="cleanup_required",
+            stage="manual_cleanup_required",
+            uninstall_command=uninstall_command,
+            resources=resources,
+            residual_resources=list(SELF_CLEANUP_RESIDUALS),
+            failure_reason=failure_reason,
+        )
+
     unregister = getattr(db, "unregister_target_cluster", None)
     if callable(unregister):
         if not unregister(workspace_id, cluster_id):
             raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-        return
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="disconnected",
+            stage="registration_revoked",
+            cleanup_verified=False,
+        )
     status_updater = getattr(db, "update_cluster_registration_status", None)
     if callable(status_updater):
         status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.INSTALL_EXPIRED.value)
-        return
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="disconnected",
+            stage="registration_revoked",
+            cleanup_verified=False,
+        )
     raise HTTPException(
         status_code=500,
         detail={

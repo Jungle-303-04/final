@@ -176,6 +176,48 @@ class KubernetesApiClient:
         )
         return self.response_body(response)
 
+    async def delete_namespaced_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject:
+        response = await self.request(
+            "DELETE",
+            self.namespaced_resource_path(
+                api_group=api_group,
+                version=version,
+                namespace=namespace,
+                resource=resource,
+                name=name,
+            ),
+            allow_not_found=True,
+        )
+        return {"deleted": response.status_code != 404, "status_code": response.status_code}
+
+    async def delete_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject:
+        response = await self.request(
+            "DELETE",
+            self.cluster_resource_path(
+                api_group=api_group,
+                version=version,
+                resource=resource,
+                name=name,
+            ),
+            allow_not_found=True,
+        )
+        return {"deleted": response.status_code != 404, "status_code": response.status_code}
+
     async def request(
         self,
         method: str,
@@ -183,6 +225,7 @@ class KubernetesApiClient:
         *,
         body: JsonObject | None = None,
         content_type: str | None = None,
+        allow_not_found: bool = False,
     ) -> httpx.Response:
         headers = self.auth_headers()
         if content_type is not None:
@@ -197,6 +240,8 @@ class KubernetesApiClient:
                 headers=headers,
                 json=body,
             )
+            if allow_not_found and response.status_code == 404:
+                return response
             response.raise_for_status()
             return response
 
@@ -216,6 +261,21 @@ class KubernetesApiClient:
             prefix = f"/apis/{api_group}/{version}"
         path = f"{prefix}/namespaces/{namespace}/{resource}/{name}"
         return f"{path}/{subresource}" if subresource else path
+
+    def cluster_resource_path(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+    ) -> str:
+        prefix = (
+            f"/api/{version}"
+            if api_group in {"", CORE_API_GROUP}
+            else f"/apis/{api_group}/{version}"
+        )
+        return f"{prefix}/{resource}/{name}"
 
     def base_url(self) -> str:
         if self._base_url is not None:
