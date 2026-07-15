@@ -22,8 +22,22 @@ export interface RafStreamCoalescerRuntime {
   subscribeVisibilityChange(listener: () => void): () => void;
 }
 
+/**
+ * A public resume cursor is an authorization-bound opaque key, not a sequence.
+ * `keyOf` must identify one replay frame (not merely a transport position when
+ * multiple frame kinds can share it). The caller owns key extraction and
+ * equality; this scheduler never parses, sorts, or otherwise infers an order.
+ */
+export interface RafStreamOpaqueCursor<T> {
+  equals?: (left: string, right: string) => boolean;
+  keyOf: (event: T) => string | null | undefined;
+}
+
 export interface RafStreamCoalescerOptions<T> {
+  /** Strictly monotonic numeric stream position for protocols that expose one. */
   cursorOf?: (event: T) => number | null | undefined;
+  /** Equality-only resume cursor for public opaque cursor protocols. */
+  opaqueCursor?: RafStreamOpaqueCursor<T>;
   onFlush(events: readonly T[]): void;
   policy: RafStreamPolicy;
   /**
@@ -85,13 +99,15 @@ const browserRuntime: RafStreamCoalescerRuntime = {
 
 /**
  * Returns a transport-neutral scheduler. Supplying `cursorOf` turns duplicate
- * replay suppression and monotonic in-frame ordering on; omitting it keeps the
- * same FIFO/rAF batching for streams whose protocol has no server cursor.
+ * replay suppression and monotonic in-frame ordering on. `opaqueCursor` keeps
+ * server arrival order and only removes equal resume frames; opaque tokens are
+ * never ordered client-side. Omitting both keeps FIFO/rAF batching.
  */
 export function createRafStreamCoalescer<T>(
   options: RafStreamCoalescerOptions<T>,
 ): RafStreamCoalescer<T> {
   validatePolicy(options.policy);
+  validateCursorConfiguration(options);
   const runtimeOverrides = options.runtime;
   const runtime: RafStreamCoalescerRuntime = {
     cancelFrame: (frame) => (runtimeOverrides?.cancelFrame ?? browserRuntime.cancelFrame)
@@ -120,6 +136,8 @@ export function createRafStreamCoalescer<T>(
   let lastFlushedAt = Number.NEGATIVE_INFINITY;
   let lastFlushedCursor: number | null = null;
   let lastQueuedCursor: number | null = null;
+  let lastFlushedOpaqueKey: string | null = null;
+  let queuedOpaqueKeys: string[] = [];
 
   const unsubscribeVisibility = runtime.subscribeVisibilityChange(() => {
     if (!runtime.isVisible()) {
@@ -154,6 +172,19 @@ export function createRafStreamCoalescer<T>(
       }
       lastQueuedCursor = cursor;
     }
+    const opaqueKey = opaqueKeyFor(event);
+    if (opaqueKey !== null) {
+      if (
+        lastFlushedOpaqueKey !== null
+        && opaqueKeysEqual(lastFlushedOpaqueKey, opaqueKey)
+      ) {
+        return "duplicate";
+      }
+      if (queuedOpaqueKeys.some((queuedKey) => opaqueKeysEqual(queuedKey, opaqueKey))) {
+        return "duplicate";
+      }
+      queuedOpaqueKeys.push(opaqueKey);
+    }
     pending.push(event);
     schedule();
     return "queued";
@@ -178,6 +209,7 @@ export function createRafStreamCoalescer<T>(
     }
     if (discarded === 0) return 0;
     lastQueuedCursor = lastCursor(pending) ?? lastFlushedCursor;
+    queuedOpaqueKeys = opaqueKeys(pending);
     if (pending.length === 0) cancelPendingSchedule();
     return discarded;
   }
@@ -220,6 +252,10 @@ export function createRafStreamCoalescer<T>(
     lastFlushedAt = runtime.now();
     const cursor = lastCursor(batch);
     if (cursor !== null) lastFlushedCursor = cursor;
+    const opaqueKey = lastOpaqueKey(batch);
+    if (opaqueKey !== null) lastFlushedOpaqueKey = opaqueKey;
+    lastQueuedCursor = lastCursor(pending) ?? lastFlushedCursor;
+    queuedOpaqueKeys = opaqueKeys(pending);
     schedule();
   }
 
@@ -246,6 +282,32 @@ export function createRafStreamCoalescer<T>(
     }
     return null;
   }
+
+  function opaqueKeyFor(event: T): string | null {
+    const key = options.opaqueCursor?.keyOf(event);
+    return key === null || key === undefined ? null : key;
+  }
+
+  function opaqueKeysEqual(left: string, right: string): boolean {
+    return options.opaqueCursor?.equals?.(left, right) ?? Object.is(left, right);
+  }
+
+  function opaqueKeys(events: readonly T[]): string[] {
+    const keys: string[] = [];
+    for (const event of events) {
+      const key = opaqueKeyFor(event);
+      if (key !== null) keys.push(key);
+    }
+    return keys;
+  }
+
+  function lastOpaqueKey(events: readonly T[]): string | null {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const key = opaqueKeyFor(events[index]);
+      if (key !== null) return key;
+    }
+    return null;
+  }
 }
 
 function validatePolicy(policy: RafStreamPolicy): void {
@@ -258,5 +320,11 @@ function validatePolicy(policy: RafStreamPolicy): void {
     || policy.maxFramesPerSecond > 60
   ) {
     throw new RangeError("stream maxFramesPerSecond must be an integer between 1 and 60");
+  }
+}
+
+function validateCursorConfiguration<T>(options: RafStreamCoalescerOptions<T>): void {
+  if (options.cursorOf !== undefined && options.opaqueCursor !== undefined) {
+    throw new TypeError("stream cursor policy must be numeric or opaque, not both");
   }
 }
