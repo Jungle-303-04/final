@@ -18,13 +18,21 @@ feature row and rejects a newly added source section until it has a product
 boundary. This keeps the mapping structured without copying action lists into
 Python or the browser.
 
-`reference-ui-delta-ledger.json` is a separate immutable-evidence ledger for
-the latest UI rebaseline. It enumerates every A/M/D/R path between the observed
+`reference-ui-delta-ledger.json` is a separate schema-v2 immutable-evidence
+ledger for the latest UI rebaseline. It enumerates every A/M/D/R path between the observed
 inventory revision and the frozen target revision, including source blob IDs and
 SHA-256 values. A row begins as explicit `pending`; it cannot be counted as
-ported or complete. A classified row must contain an immutable semantic
-`sourceKey`, source symbol, interaction, transport, realtime merge policy, and
-when motion exists, reduced-motion evidence.
+ported or complete and its `interactions` array must be empty. A classified file
+must instead declare a non-empty `interactions` array: every independent source
+event, API, keyboard flow, state update, or motion item records its immutable,
+globally unique semantic `sourceKey`, source symbol, semantic interaction,
+legacy aliases, transport, realtime merge policy, and, when motion exists,
+reduced-motion evidence. Source identity is therefore one-to-many per file,
+not a lossy file-level field. Styles and assets use the same structure with an
+explicit noninteractive semantic interaction (for example, `noninteractive
+asset: provider logo`) and `transport: none`/`realtime: null`. File-level
+interaction fields are rejected so an analysis cannot collapse several source
+behaviors into one row.
 
 `reference-feature-source-aliases.json` is the compatibility bridge for the
 old positional `reference.feature.NNN` IDs. Those IDs remain aliases for

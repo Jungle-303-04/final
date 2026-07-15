@@ -51,7 +51,13 @@ SHA-256을 별도로 기록한다. 의미가 바뀌면 같은 key를 수정하�
 새로 발급한다.
 
 `--check`은 approved upstream Git tree와 delta ledger의 path/blob/SHA-256
-결정성만 확인한다. `--require-classified`는 남은 pending row가 하나라도 있으면
+결정성만 확인한다. 각 파일의 `interactions`는 빈 배열에서 시작하며, classified
+파일은 source event/API/keyboard/motion별 non-empty 배열을 가져야 한다. 배열의
+각 항목은 전 파일에서 한 번만 쓰이는 immutable semantic key와 symbol,
+interaction, legacy alias, transport, realtime, motion evidence를 기록한다.
+따라서 한 파일 안의 여러 사용자 이벤트와 stream을 단일 proof로 축약할 수 없다.
+style·asset은 `noninteractive asset: …`처럼 명시적인 의미 interaction으로 같은
+계약을 사용한다. `--require-classified`는 남은 pending row가 하나라도 있으면
 실패한다. `--require-rebased`는 inventory에 선언된 source revision과 target이
 다르면 실패한다. release target은 두 조건을 모두 사용한다. 따라서 현재는
 일반 hash check는 통과하지만 rebaseline/release check는 의도적으로 실패한다.

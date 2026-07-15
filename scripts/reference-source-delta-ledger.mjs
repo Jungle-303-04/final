@@ -24,6 +24,15 @@ const SOURCE_KEY = /^upstream-ui:[a-z0-9-]+:[a-z0-9-]+:[a-z0-9-]+:v[1-9][0-9]*$/
 const REVISION = /^[0-9a-f]{40}$/
 const BLOB = /^[0-9a-f]{40}$/
 const SHA256 = /^[0-9a-f]{64}$/
+const FILE_LEVEL_INTERACTION_EVIDENCE_KEYS = [
+  'sourceKey',
+  'legacyContractIds',
+  'symbol',
+  'interaction',
+  'transport',
+  'realtime',
+  'motion',
+]
 
 function normalizedPath(value) {
   return String(value).split(path.sep).join('/')
@@ -63,13 +72,7 @@ function blankDeltaRow(change, baseFiles, targetFiles) {
     base: needsBase ? sourceFileFromMap(baseFiles, previousPath ?? filePath, 'base') : null,
     target: needsTarget ? sourceFileFromMap(targetFiles, filePath, 'target') : null,
     classification: 'pending',
-    sourceKey: null,
-    legacyContractIds: [],
-    symbol: null,
-    interaction: null,
-    transport: 'none',
-    realtime: null,
-    motion: null,
+    interactions: [],
   }
 }
 
@@ -88,7 +91,7 @@ export function buildDeltaLedger({
   const files = changes.map((change) => blankDeltaRow(change, baseFiles, targetFiles)).sort(sortRows)
   const statusCounts = Object.fromEntries([...CHANGE_STATUSES].map((status) => [status, files.filter((row) => row.status === status).length]))
   const ledger = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceRepository,
     baseRevision,
     targetRevision,
@@ -118,45 +121,51 @@ function validatePath(value, label, errors) {
   }
 }
 
-function validateClassifiedRow(row, label, errors) {
-  if (!SOURCE_KEY.test(row.sourceKey ?? '')) errors.push(`${label}: classified row requires immutable sourceKey`)
-  if (typeof row.symbol !== 'string' || !row.symbol.trim()) errors.push(`${label}: classified row requires source symbol`)
-  if (typeof row.interaction !== 'string' || !row.interaction.trim()) errors.push(`${label}: classified row requires interaction`)
-  if (!Array.isArray(row.legacyContractIds) || row.legacyContractIds.some((id) => !/^reference\.feature\.\d{3}$/.test(id))) {
+function validateClassifiedInteraction(interaction, label, errors) {
+  if (!interaction || typeof interaction !== 'object' || Array.isArray(interaction)) {
+    errors.push(`${label}: interaction must be an object`)
+    return
+  }
+  if (!SOURCE_KEY.test(interaction.sourceKey ?? '')) errors.push(`${label}: immutable sourceKey is required`)
+  if (typeof interaction.symbol !== 'string' || !interaction.symbol.trim()) errors.push(`${label}: source symbol is required`)
+  if (typeof interaction.interaction !== 'string' || !interaction.interaction.trim()) errors.push(`${label}: semantic interaction is required`)
+  if (!Array.isArray(interaction.legacyContractIds) || interaction.legacyContractIds.some((id) => !/^reference\.feature\.\d{3}$/.test(id))) {
     errors.push(`${label}: legacyContractIds must contain only reference feature aliases`)
   }
+  validateRealtime(interaction, label, errors)
+  validateMotion(interaction, label, errors)
 }
 
-function validateRealtime(row, label, errors) {
-  if (!TRANSPORTS.has(row.transport)) {
+function validateRealtime(interaction, label, errors) {
+  if (!TRANSPORTS.has(interaction.transport)) {
     errors.push(`${label}: transport is not supported`)
     return
   }
-  if (row.transport === 'none') {
-    if (row.realtime !== null) errors.push(`${label}: none transport requires realtime null`)
+  if (interaction.transport === 'none') {
+    if (interaction.realtime !== null) errors.push(`${label}: none transport requires realtime null`)
     return
   }
-  if (!row.realtime || typeof row.realtime !== 'object') {
-    errors.push(`${label}: ${row.transport} transport requires realtime policy`)
+  if (!interaction.realtime || typeof interaction.realtime !== 'object') {
+    errors.push(`${label}: ${interaction.transport} transport requires realtime policy`)
     return
   }
   for (const key of ['resume', 'backpressure', 'merge']) {
-    if (typeof row.realtime[key] !== 'string' || !row.realtime[key].trim()) {
+    if (typeof interaction.realtime[key] !== 'string' || !interaction.realtime[key].trim()) {
       errors.push(`${label}: realtime.${key} is required`)
     }
   }
 }
 
-function validateMotion(row, label, errors) {
-  if (row.motion === null) return
-  if (!row.motion || typeof row.motion !== 'object') {
+function validateMotion(interaction, label, errors) {
+  if (interaction.motion === null) return
+  if (!interaction.motion || typeof interaction.motion !== 'object') {
     errors.push(`${label}: motion must be null or an object`)
     return
   }
-  if (typeof row.motion.reducedMotion !== 'string' || !row.motion.reducedMotion.trim()) {
+  if (typeof interaction.motion.reducedMotion !== 'string' || !interaction.motion.reducedMotion.trim()) {
     errors.push(`${label}: motion.reducedMotion is required`)
   }
-  if (!Array.isArray(row.motion.evidence) || row.motion.evidence.length === 0) {
+  if (!Array.isArray(interaction.motion.evidence) || interaction.motion.evidence.length === 0) {
     errors.push(`${label}: motion.evidence requires at least one item`)
   }
 }
@@ -164,7 +173,7 @@ function validateMotion(row, label, errors) {
 export function validateDeltaLedger(ledger) {
   const errors = []
   if (!ledger || typeof ledger !== 'object') return ['ledger must be an object']
-  if (ledger.schemaVersion !== 1) errors.push('schemaVersion must equal 1')
+  if (ledger.schemaVersion !== 2) errors.push('schemaVersion must equal 2')
   if (!REVISION.test(ledger.baseRevision ?? '')) errors.push('baseRevision must be a 40-character lowercase hexadecimal revision')
   if (!REVISION.test(ledger.targetRevision ?? '')) errors.push('targetRevision must be a 40-character lowercase hexadecimal revision')
   if (typeof ledger.sourceRepository !== 'string' || !ledger.sourceRepository.startsWith('https://')) errors.push('sourceRepository must be an HTTPS URL')
@@ -188,6 +197,7 @@ export function validateDeltaLedger(ledger) {
   }
 
   const seenPaths = new Set()
+  const seenSourceKeys = new Set()
   for (const row of ledger.files) {
     const label = String(row?.path ?? '<unknown>')
     validatePath(row?.path, label, errors)
@@ -210,15 +220,27 @@ export function validateDeltaLedger(ledger) {
       errors.push(`${label}: classification is not supported`)
       continue
     }
+    if (FILE_LEVEL_INTERACTION_EVIDENCE_KEYS.some((key) => Object.hasOwn(row, key))) {
+      errors.push(`${label}: file-level interaction evidence must use interactions[]`)
+    }
     if (row.classification === 'pending') {
-      if (row.sourceKey !== null || row.symbol !== null || row.interaction !== null || row.transport !== 'none' || row.realtime !== null || row.motion !== null || (row.legacyContractIds?.length ?? 0) !== 0) {
-        errors.push(`${label}: pending row must not claim source classification evidence`)
+      if (!Array.isArray(row.interactions) || row.interactions.length !== 0) {
+        errors.push(`${label}: pending row must not claim interaction evidence`)
       }
       continue
     }
-    validateClassifiedRow(row, label, errors)
-    validateRealtime(row, label, errors)
-    validateMotion(row, label, errors)
+    if (!Array.isArray(row.interactions) || row.interactions.length === 0) {
+      errors.push(`${label}: classified row requires non-empty interactions[]`)
+      continue
+    }
+    row.interactions.forEach((interaction, index) => {
+      const interactionLabel = `${label}: interactions[${index}]`
+      validateClassifiedInteraction(interaction, interactionLabel, errors)
+      if (SOURCE_KEY.test(interaction?.sourceKey ?? '')) {
+        if (seenSourceKeys.has(interaction.sourceKey)) errors.push(`${interactionLabel}: sourceKey is duplicated`)
+        else seenSourceKeys.add(interaction.sourceKey)
+      }
+    })
   }
   return errors
 }
