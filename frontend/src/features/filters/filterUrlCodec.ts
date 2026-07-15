@@ -130,6 +130,7 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     invalid.detailFull,
     invalid.timeRange,
     invalid.timeAt,
+    invalid.graph,
   );
   return {
     state,
@@ -273,6 +274,6 @@ function createInvalidFilterValues(): MutableInvalidFilterValues {
     issuesEnvironment: [], applicationsEnvironment: [], applicationsStatus: [],
     applicationsPendingPromotion: [],
     gitopsEnvironment: [], gitopsApproval: [], gitopsChangeType: [],
-    checksSeverity: [], checksCategory: [], detailFull: [], timeRange: [], timeAt: [],
+    checksSeverity: [], checksCategory: [], detailFull: [], timeRange: [], timeAt: [], graph: [],
   };
 }

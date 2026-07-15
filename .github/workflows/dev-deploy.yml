@@ -52,6 +52,7 @@ jobs:
       CONSOLE_ECR_REPOSITORY: ${{ vars.AWS_DEV_CONSOLE_ECR_REPOSITORY }}
       EKS_CLUSTER: ${{ vars.AWS_DEV_EKS_CLUSTER }}
       BASE_URL: ${{ vars.AWS_DEV_BASE_URL }}
+      AGENT_API_BASE_URL: ${{ vars.AGENT_API_BASE_URL }}
       MGMT_CONTEXT: opsia-dev
       MGMT_NS: management
       SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
@@ -63,12 +64,38 @@ jobs:
       SMOKE_CLUSTER_ID: ${{ secrets.AWS_DEV_SMOKE_CLUSTER_ID }}
       SMOKE_RCA_CORRELATION_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_CORRELATION_ID }}
       SMOKE_RCA_INCIDENT_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_INCIDENT_ID }}
+      LLM_PROVIDER: ${{ vars.AWS_DEV_LLM_PROVIDER || 'openai' }}
+      LLM_MODEL: ${{ vars.AWS_DEV_LLM_MODEL || 'gpt-4.1' }}
+      LLM_API_KEY: ${{ secrets.AWS_DEV_LLM_API_KEY }}
     steps:
       - name: Check out gated dev SHA
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source_sha || github.event.workflow_run.head_sha }}
           persist-credentials: false
+
+      - name: Download automatic deployment scope
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-deploy-scope
+          path: ${{ runner.temp }}/dev-deploy-scope
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Resolve automatic deployment scope
+        if: github.event_name == 'workflow_run'
+        shell: bash
+        run: |
+          set -euo pipefail
+          scope_file="${RUNNER_TEMP}/dev-deploy-scope/scope"
+          test -f "${scope_file}"
+          scope="$(tr -d '\r\n' <"${scope_file}")"
+          case "${scope}" in
+            FULL|CONSOLE) ;;
+            *) echo "invalid automatic deployment scope" >&2; exit 1 ;;
+          esac
+          echo "DEPLOYMENT_SCOPE=${scope}" >>"${GITHUB_ENV}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -100,6 +127,9 @@ jobs:
           [[ "${CONSOLE_ECR_REPOSITORY}" =~ ^[a-z0-9]+([._/-][a-z0-9]+)*$ ]]
           [[ "${EKS_CLUSTER}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]]
           [[ "${BASE_URL}" =~ ^https://[^[:space:]]+$ ]]
+          if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]; then
+            [[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]
+          fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             [[ "${PREVIOUS_RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
             case "${DEPLOYMENT_SCOPE}" in
@@ -291,8 +321,31 @@ jobs:
             delete job management-database-migration --ignore-not-found --wait=true
           kubectl --context "${MGMT_CONTEXT}" apply \
             --filename "${RUNNER_TEMP}/migration-job.yaml"
-          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
-            wait --for=condition=complete job/management-database-migration --timeout=900s
+          deadline=$((SECONDS + 900))
+          while (( SECONDS < deadline )); do
+            succeeded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get job management-database-migration \
+              -o jsonpath='{.status.succeeded}' 2>/dev/null || true)"
+            failed="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              get job management-database-migration \
+              -o jsonpath='{.status.failed}' 2>/dev/null || true)"
+            if [[ "${succeeded}" == "1" ]]; then
+              break
+            fi
+            if [[ -n "${failed}" && "${failed}" != "0" ]]; then
+              kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+                logs job/management-database-migration --all-containers --tail=300 || true
+              kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+                describe job management-database-migration || true
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "${succeeded:-}" != "1" ]]; then
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              logs job/management-database-migration --all-containers --tail=300 || true
+            exit 1
+          fi
 
       - name: Bootstrap fixed dev administrator
         if: env.DEPLOYMENT_SCOPE == 'FULL'
@@ -342,7 +395,7 @@ jobs:
           [[ "${admin_id}" =~ ^user-[0-9a-f-]{36}$ ]]
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             patch configmap management-runtime-config --type merge \
-            --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\"}}"
+            --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\",\"CONTROL_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"POD_EXEC_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"TARGET_DEFAULT_CONTROL_NAMESPACES\":\"sandbox,color-turf\"}}"
 
           cursor_encoded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             get secret management-runtime-secret \
@@ -359,7 +412,50 @@ jobs:
               --patch "{\"data\":{\"FILTER_CURSOR_SIGNING_KEY\":\"${cursor_encoded}\"}}" \
               >/dev/null
           fi
-          unset admin_id cursor_encoded cursor_value
+
+          if [[ -n "${LLM_API_KEY}" ]]; then
+            llm_provider_encoded="$(printf '%s' "${LLM_PROVIDER}" | base64 | tr -d '\n')"
+            llm_model_encoded="$(printf '%s' "${LLM_MODEL}" | base64 | tr -d '\n')"
+            llm_key_encoded="$(printf '%s' "${LLM_API_KEY}" | base64 | tr -d '\n')"
+            llm_patch="$(jq -cn \
+              --arg provider "${llm_provider_encoded}" \
+              --arg model "${llm_model_encoded}" \
+              --arg key "${llm_key_encoded}" \
+              '{data:{LLM_PROVIDER:$provider,LLM_MODEL:$model,LLM_API_KEY:$key}}')"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              patch secret management-runtime-secret --type merge --patch "${llm_patch}" \
+              >/dev/null
+          fi
+          unset admin_id cursor_encoded cursor_value llm_provider_encoded llm_model_encoded llm_key_encoded llm_patch
+
+      - name: Pin target agent image in runtime config
+        if: env.DEPLOYMENT_SCOPE == 'FULL'
+        shell: bash
+        env:
+          TARGET_AGENT_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          [[ "${TARGET_AGENT_IMAGE}" =~ ^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$ ]]
+          [[ "${AGENT_API_BASE_URL}" =~ ^https://[^/?#[:space:]]+/api$ ]]
+          gitops_image_before="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.GITOPS_WEBHOOK_IMAGE}')"
+          kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            patch configmap management-runtime-config --type merge \
+            --patch "{\"data\":{\"PUBLIC_MANAGEMENT_BASE_URL\":\"${AGENT_API_BASE_URL}\",\"TARGET_AGENT_IMAGE\":\"${TARGET_AGENT_IMAGE}\"}}"
+          installed_management_base_url="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.PUBLIC_MANAGEMENT_BASE_URL}')"
+          installed_target_image="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.TARGET_AGENT_IMAGE}')"
+          gitops_image_after="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+            get configmap management-runtime-config \
+            --output jsonpath='{.data.GITOPS_WEBHOOK_IMAGE}')"
+          test "${installed_management_base_url}" = "${AGENT_API_BASE_URL}"
+          test "${installed_target_image}" = "${TARGET_AGENT_IMAGE}"
+          test "${gitops_image_after}" = "${gitops_image_before}"
+          unset gitops_image_before gitops_image_after installed_management_base_url installed_target_image
 
       - name: Roll out immutable service digest
         if: env.DEPLOYMENT_SCOPE == 'FULL'

@@ -6,17 +6,21 @@ import { toIssueAuditTimelinePage } from "./issuesAuditCanonical";
 const RESPONSE = {
   items: [
     {
+      event_id: "event-incident-1",
       subject: "incident.detected",
       source: "dashboard-projection",
       created_at: "2026-07-13T04:00:00+00:00",
       causation_id: null,
+      journey_stage: "alert" as const,
       payload_summary: { incident_id: "incident-1" },
     },
     {
+      event_id: "event-rca-1",
       subject: "rca.completed",
       source: "rca-worker",
       created_at: "not-a-client-filter",
       causation_id: "event-parent-1",
+      journey_stage: "rca" as const,
       payload_summary: { confidence: 0.91 },
     },
   ],
@@ -33,17 +37,21 @@ describe("Issues audit timeline canonical mapping", () => {
       correlationId: "correlation-1",
       items: [
         {
+          eventId: "event-incident-1",
           subject: "incident.detected",
           source: "dashboard-projection",
           createdAt: "2026-07-13T04:00:00+00:00",
           causationId: null,
+          journeyStage: "alert",
           payloadSummary: { incident_id: "incident-1" },
         },
         {
+          eventId: "event-rca-1",
           subject: "rca.completed",
           source: "rca-worker",
           createdAt: "not-a-client-filter",
           causationId: "event-parent-1",
+          journeyStage: "rca",
           payloadSummary: { confidence: 0.91 },
         },
       ],

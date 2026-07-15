@@ -33,10 +33,23 @@ describe("S10 Applications surface", () => {
       pendingPromotion: true,
       query: "check",
     }, expect.any(AbortSignal));
+    expect(screen.queryByRole("textbox")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Table view" }));
     expect(screen.getByRole("region", { name: "Applications" })).toBeTruthy();
-    expect(screen.getByRole("cell", { name: "checkout-api" })).toBeTruthy();
+    expect(within(screen.getByRole("row", { name: /checkout-api/ })).getByText("checkout-api")).toBeTruthy();
+  });
+
+  it("routes an empty catalog to the real GitOps connection flow", async () => {
+    const port = applicationsPort({
+      listApplications: vi.fn().mockResolvedValue([]),
+    });
+    renderApplications(port, "/applications?clusters=cluster-1");
+
+    expect(await screen.findByText("No applications to show.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Connect an application in GitOps" })
+      .getAttribute("href"))
+      .toBe("/gitops?clusters=cluster-1&mode=new");
   });
 
   it("opens URL-backed detail and keeps overview evidence honest", async () => {

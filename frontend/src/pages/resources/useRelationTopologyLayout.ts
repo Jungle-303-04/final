@@ -1,6 +1,6 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkNode } from "elkjs/lib/elk-api";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Edge } from "@xyflow/react";
 
 import type { RelationGraphNode } from "./relationTopologyGraphTypes";
@@ -10,21 +10,26 @@ const NODE_WIDTH = 176;
 const NODE_HEIGHT = 88;
 
 export function useRelationTopologyLayout(nodes: RelationGraphNode[], edges: Edge[]) {
-  const initial = useMemo(() => nodes.map((node, index) => ({
-    ...node,
-    position: { x: (index % 4) * 216, y: Math.floor(index / 4) * 120 },
-  })), [nodes]);
   const signature = `${nodes.map((node) => node.id).join("|")}::${edges.map(
-    (edge) => `${edge.source}>${edge.target}`,
+    (edge) => `${edge.id}:${edge.source}>${edge.target}`,
   ).join("|")}`;
-  const [layout, setLayout] = useState<{ signature: string; nodes: RelationGraphNode[] }>({
+  const topologyRef = useRef({ nodes, edges });
+  useEffect(() => {
+    topologyRef.current = { nodes, edges };
+  }, [edges, nodes]);
+  const [layout, setLayout] = useState<{
+    signature: string;
+    positions: Map<string, { x: number; y: number }>;
+  }>({
     signature: "",
-    nodes: [],
+    positions: new Map(),
   });
 
   useEffect(() => {
     let cancelled = false;
-    if (nodes.length === 0) return () => { cancelled = true; };
+    const current = topologyRef.current;
+    const fallback = fallbackPositions(current.nodes);
+    if (current.nodes.length === 0) return () => { cancelled = true; };
     const graph: ElkNode = {
       id: "relations-root",
       layoutOptions: {
@@ -34,8 +39,8 @@ export function useRelationTopologyLayout(nodes: RelationGraphNode[], edges: Edg
         "elk.layered.spacing.nodeNodeBetweenLayers": "54",
         "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
       },
-      children: nodes.map((node) => ({ id: node.id, width: NODE_WIDTH, height: NODE_HEIGHT })),
-      edges: edges.map((edge) => ({
+      children: current.nodes.map((node) => ({ id: node.id, width: NODE_WIDTH, height: NODE_HEIGHT })),
+      edges: current.edges.map((edge) => ({
         id: edge.id,
         sources: [edge.source],
         targets: [edge.target],
@@ -46,19 +51,29 @@ export function useRelationTopologyLayout(nodes: RelationGraphNode[], edges: Edg
       const positions = new Map((result.children ?? []).map((node) => [node.id, node]));
       setLayout({
         signature,
-        nodes: nodes.map((node, index) => ({
-          ...node,
-          position: {
-            x: positions.get(node.id)?.x ?? initial[index]?.position.x ?? 0,
-            y: positions.get(node.id)?.y ?? initial[index]?.position.y ?? 0,
-          },
-        })),
+        positions: new Map(current.nodes.map((node) => [node.id, {
+          x: positions.get(node.id)?.x ?? fallback.get(node.id)?.x ?? 0,
+          y: positions.get(node.id)?.y ?? fallback.get(node.id)?.y ?? 0,
+        }])),
       });
     }).catch(() => {
-      if (!cancelled) setLayout({ signature, nodes: initial });
+      if (!cancelled) setLayout({ signature, positions: fallback });
     });
     return () => { cancelled = true; };
-  }, [edges, initial, nodes, signature]);
+  }, [signature]);
 
-  return layout.signature === signature ? layout.nodes : initial;
+  const positions = layout.signature === signature
+    ? layout.positions
+    : fallbackPositions(nodes);
+  return nodes.map((node) => ({
+    ...node,
+    position: positions.get(node.id) ?? { x: 0, y: 0 },
+  }));
+}
+
+function fallbackPositions(nodes: RelationGraphNode[]) {
+  return new Map(nodes.map((node, index) => [node.id, {
+    x: (index % 4) * 216,
+    y: Math.floor(index / 4) * 120,
+  }]));
 }

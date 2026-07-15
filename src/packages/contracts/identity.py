@@ -68,6 +68,7 @@ class Permission(StrEnum):
     CLUSTER_POLICY_MANAGE = "cluster.policy.manage"
     CLUSTER_ROLE_MANAGE = "cluster.role.manage"
     DANGEROUS_ACTION_APPROVE = "dangerous_action.approve"
+    POD_EXEC = "pod.exec"
 
 
 class UserStatus(StrEnum):
@@ -106,6 +107,8 @@ class ClusterRegistrationStatus(StrEnum):
     REGISTERED = "registered"
     PENDING_INSTALL = "pending_install"
     INSTALL_EXPIRED = "install_expired"
+    UNINSTALL_REQUESTED = "uninstall_requested"
+    DISCONNECTED = "disconnected"
 
 
 @dataclass(frozen=True)
@@ -176,6 +179,7 @@ CLUSTER_STEWARD_PERMISSIONS: frozenset[str] = INCIDENT_PERMISSIONS | frozenset(
         Permission.CLUSTER_POLICY_MANAGE.value,
         Permission.CLUSTER_ROLE_MANAGE.value,
         Permission.DANGEROUS_ACTION_APPROVE.value,
+        Permission.POD_EXEC.value,
     }
 )
 

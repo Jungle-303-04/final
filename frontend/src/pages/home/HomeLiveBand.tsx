@@ -8,6 +8,7 @@ import { useI18n } from "../../shared/i18n/I18nProvider";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import {
   Item,
   ItemActions,
@@ -74,12 +75,13 @@ function NodePanel({ state }: { state: HomePageState }) {
       </div>
       <ul
         aria-label={t("home.node.list")}
-        className="grid min-w-0 list-none gap-2 md:grid-cols-2 2xl:grid-cols-3"
+        className="flex min-w-0 snap-x list-none gap-3 overflow-x-auto pb-2"
         data-render-strategy="content-visibility"
+        data-slot="home-server-band"
       >
         {nodes.data.nodes.map((node) => (
           <li
-            className="[contain-intrinsic-size:auto_7rem] [content-visibility:auto]"
+            className="min-w-[17rem] flex-1 snap-start [contain-intrinsic-size:auto_7rem] [content-visibility:auto]"
             key={node.id}
           >
             <NodeItem node={node} state={state} />
@@ -103,8 +105,10 @@ function NodeItem({ node, state }: { node: HomeNodeSummary; state: HomePageState
       <ItemMedia variant="icon">
         <Server aria-hidden="true" />
       </ItemMedia>
-      <ItemContent>
-        <ItemTitle className="max-w-full break-all">{node.name}</ItemTitle>
+      <ItemContent className="min-w-0">
+        <ItemTitle className="max-w-full min-w-0">
+          <OverflowIdentity value={node.name} />
+        </ItemTitle>
         <ItemDescription>
           {t("home.node.description", {
             capacity: formatNumber(node.podsCapacity),
@@ -201,7 +205,9 @@ function PodItem({ pod }: { pod: HomePodSummary }) {
     <Item variant="outline">
       <ItemMedia variant="icon"><Boxes aria-hidden="true" /></ItemMedia>
       <ItemContent>
-        <ItemTitle className="max-w-full break-all">{pod.name}</ItemTitle>
+        <ItemTitle className="max-w-full min-w-0">
+          <OverflowIdentity value={pod.name} />
+        </ItemTitle>
         <ItemDescription>
           {t("home.pod.description", {
             namespace: pod.namespace,

@@ -20,9 +20,7 @@ AUTO_ROUTE_APPROVAL_REQUIRED_REASON = (
     "선택 후보 route=auto는 command 실행 채널을 의미하지만 "
     "approval_required=true라 자동 실행하지 않습니다."
 )
-APPROVAL_REQUIRED_REASON = (
-    "선택 후보가 approval_required=true라 사용자 선택이 필요합니다."
-)
+APPROVAL_REQUIRED_REASON = "선택 후보가 approval_required=true라 사용자 선택이 필요합니다."
 NON_AUTO_ROUTE_REASON = (
     "선택 후보 route가 command 자동 실행 채널이 아니라 사용자 선택이 필요합니다."
 )
@@ -69,18 +67,23 @@ class RecoverySelector:
 
 
 def requires_approval(candidate: object) -> bool:
-    action_type = getattr(getattr(candidate, "draft", None), "action_type", "")
-    params = getattr(getattr(candidate, "draft", None), "params", {}) or {}
+    draft = getattr(candidate, "draft", None)
+    action_type = getattr(draft, "action_type", "")
+    params = getattr(draft, "params", {}) or {}
+    namespace = str(getattr(draft, "namespace", "") or "")
     requested = str(params.get("command") or action_type)
     action = command_action_for_recovery(requested)
     spec = command_action_spec(action) if action else None
-    return bool(spec is not None and spec.requires_approval)
+    return bool(spec is not None and spec.requires_approval_for(namespace))
 
 
 def selection_reason(candidate: object) -> str:
     if requires_approval(candidate):
         return f"{APPROVAL_REQUIRED_COMMAND_REASON} {candidate_reason_suffix(candidate)}"
-    if bool(getattr(candidate, "approval_required", False)) and getattr(candidate, "route", "") == "auto":
+    if (
+        bool(getattr(candidate, "approval_required", False))
+        and getattr(candidate, "route", "") == "auto"
+    ):
         return f"{AUTO_ROUTE_APPROVAL_REQUIRED_REASON} {candidate_reason_suffix(candidate)}"
     if bool(getattr(candidate, "approval_required", False)):
         return f"{APPROVAL_REQUIRED_REASON} {candidate_reason_suffix(candidate)}"

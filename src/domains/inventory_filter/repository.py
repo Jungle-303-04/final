@@ -745,6 +745,10 @@ class InventoryFilterRepository(DatabaseConnection):
             "global_application_matches",
             replace(filters, applications=()),
         )
+        resource_type_matches = filtered(
+            "global_resource_type_matches",
+            replace(filters, resource_types=()),
+        )
         selected_matches = filtered("global_selected_matches", filters)
 
         cluster = ClusterRegistration.__table__
@@ -851,6 +855,20 @@ class InventoryFilterRepository(DatabaseConnection):
             application.c.application_id,
         ).limit(effective_limit)
 
+        resource_type_statement = select(
+            resource_type_matches.c.resource_type.label("id"),
+            resource_type_matches.c.resource_type.label("label"),
+            func.count(func.distinct(resource_type_matches.c.version_id)).label("count"),
+        ).group_by(resource_type_matches.c.resource_type)
+        if normalized_query:
+            resource_type_statement = resource_type_statement.where(
+                func.lower(resource_type_matches.c.resource_type).like(pattern, escape="\\")
+            )
+        resource_type_statement = resource_type_statement.order_by(
+            func.count(func.distinct(resource_type_matches.c.version_id)).desc(),
+            resource_type_matches.c.resource_type,
+        ).limit(effective_limit)
+
         label = InventoryResourceLabelVersion.__table__
         label_statement = (
             select(
@@ -896,6 +914,7 @@ class InventoryFilterRepository(DatabaseConnection):
             clusters = [dict(row) for row in conn.execute(cluster_statement).mappings()]
             namespaces = [dict(row) for row in conn.execute(namespace_statement).mappings()]
             applications = [dict(row) for row in conn.execute(application_statement).mappings()]
+            resource_types = [dict(row) for row in conn.execute(resource_type_statement).mappings()]
             labels = (
                 [dict(row) for row in conn.execute(label_statement).mappings()]
                 if normalized_query
@@ -910,6 +929,14 @@ class InventoryFilterRepository(DatabaseConnection):
             "clusters": _serialize_global_facets(clusters),
             "namespaces": _serialize_global_facets(namespaces),
             "applications": _serialize_global_facets(applications),
+            "resource_types": [
+                {
+                    "id": str(row["id"]),
+                    "label": str(row["label"]).replace("_", " ").replace("-", " ").title(),
+                    "count": int(row["count"]),
+                }
+                for row in resource_types
+            ],
             "labels": [
                 {"key": str(row["key"]), "value": str(row["value"]), "count": int(row["count"])}
                 for row in labels
@@ -1548,7 +1575,7 @@ def _resource_metric_history_statements(
     window_seconds: int,
     limit: int,
 ) -> tuple[Select[Any], Select[Any]]:
-    """Build pinned resource-resolution and revision-joined usage history statements."""
+    """Build pinned Pod/Node resolution and revision-joined real usage history."""
     current = _current_versions(
         workspace_id,
         cluster_ids,
@@ -1565,13 +1592,17 @@ def _resource_metric_history_statements(
         select(
             filtered.c.inventory_key.label("resource_id"),
             filtered.c.cluster_id,
+            filtered.c.resource_type,
             filtered.c.namespace,
             filtered.c.name,
         )
         .where(
             filtered.c.inventory_key.in_(resource_ids),
-            filtered.c.resource_type == "pod",
-            filtered.c.namespace.is_not(None),
+            filtered.c.resource_type.in_(("pod", "node")),
+            or_(
+                filtered.c.resource_type == "node",
+                filtered.c.namespace.is_not(None),
+            ),
         )
         .order_by(filtered.c.inventory_key)
     )
@@ -1815,6 +1846,7 @@ def _empty_global_filter_facets() -> JsonObject:
         "clusters": [],
         "namespaces": [],
         "applications": [],
+        "resource_types": [],
         "labels": [],
         "resources": [],
     }

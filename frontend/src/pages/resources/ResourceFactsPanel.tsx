@@ -4,14 +4,15 @@ import {
   type I18nController,
   type TranslationFunction,
 } from "../../shared/i18n";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 
 export function ResourceFactsPanel({ facts }: { facts: ResourceFacts }) {
   const { formatNumber, t } = useI18n();
   const entries = factsEntries(facts, t, formatNumber);
   if (entries.length === 0) return null;
   return (
-    <section aria-labelledby="resource-facts-title" className="grid gap-3 rounded-lg border p-4">
-      <h3 className="font-medium" id="resource-facts-title">
+    <section aria-labelledby="resource-facts-title" className="grid gap-3 rounded-xl border bg-card p-4 shadow-xs">
+      <h3 className="font-heading font-medium" id="resource-facts-title">
         {t("resources.detail.facts")}
       </h3>
       <DefinitionGrid entries={entries} />
@@ -21,15 +22,12 @@ export function ResourceFactsPanel({ facts }: { facts: ResourceFacts }) {
 
 export function DefinitionGrid({ entries }: { entries: Array<[string, string]> }) {
   return (
-    <dl className="grid min-w-0 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+    <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-2">
       {entries.map(([label, value]) => (
-        <div className="min-w-0" key={label}>
+        <div className="min-w-0 rounded-lg border bg-background/65 px-3 py-2.5" key={label}>
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd
-            className="min-w-0 font-medium [overflow-wrap:anywhere]"
-            data-slot="resource-definition-value"
-          >
-            {value}
+          <dd className="min-w-0" data-slot="resource-definition-value">
+            <OverflowIdentity className="font-medium" value={value} />
           </dd>
         </div>
       ))}

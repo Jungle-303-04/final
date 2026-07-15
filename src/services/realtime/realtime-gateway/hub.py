@@ -85,6 +85,14 @@ class RealtimeHub:
             state={STATE_CLUSTERS_KEY: clusters, STATE_RESOURCES_KEY: resources},
         )
 
+    def resources_for_cluster(self, cluster_id: str) -> dict[str, dict]:
+        """Return a detached current resource cut for server-side persistence/evaluation."""
+        return {
+            key: dict(value)
+            for key, value in self._resources.items()
+            if delta_key_parts(key)[0] == cluster_id
+        }
+
     # ---- agent ingest → fan-out ----
 
     def publish_summary(self, summary: LiveSummary) -> LiveSummaryMessage:

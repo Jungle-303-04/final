@@ -10,29 +10,29 @@ import { POD_DETAIL, renderResources, resourcesPort } from "./ResourcesPage.test
 afterEach(() => cleanup());
 
 describe("ResourcesPage detail overflow", () => {
-  it("renders long identity, UID, and owner values as complete wrap-safe text", async () => {
+  it("keeps long identity, UID, and owner values single-line with full-value tooltips", async () => {
     renderLongDetail();
     const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
-    const title = within(dialog).getByRole("heading", { name: `${LONG_NAME} 상세` });
-    const uid = await within(dialog).findByText(LONG_UID);
-    const owner = within(dialog).getByText(`Deployment/${LONG_OWNER}`);
+    const title = within(dialog).getByRole("heading", { level: 2 });
+    const uid = await within(dialog).findByLabelText(LONG_UID);
+    const owner = within(dialog).getByLabelText(`Deployment/${LONG_OWNER}`);
 
-    expect(title.className).toContain("[overflow-wrap:anywhere]");
-    expect(uid.closest("dd")?.className).toContain("[overflow-wrap:anywhere]");
-    expect(owner.closest("dd")?.className).toContain("[overflow-wrap:anywhere]");
-    expect(owner.closest("dd")?.className).not.toContain("truncate");
+    expect(title.className).toContain("truncate");
+    expect(title.textContent).not.toBe(`${LONG_NAME} 상세`);
+    expect(uid.className).toContain("truncate");
+    expect(owner.className).toContain("truncate");
+    expect(title.closest("[data-slot=tooltip-trigger]")?.textContent ?? title.textContent).toBeTruthy();
   });
 
-  it("keeps long related identities complete and wrap-safe", async () => {
+  it("keeps long related identities single-line and hover-recoverable", async () => {
     const user = userEvent.setup();
     renderLongDetail();
     const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
     await user.click(await within(dialog).findByRole("tab", { name: "관계 1" }));
-    const related = await within(dialog).findByText(
+    const related = await within(dialog).findByLabelText(
       `Service · ${LONG_NAMESPACE}/${LONG_RELATED_NAME}`,
     );
-    expect(related.className).toContain("[overflow-wrap:anywhere]");
-    expect(related.className).not.toContain("truncate");
+    expect(related.className).toContain("truncate");
   });
 
   it("keeps long event reasons and messages complete and wrap-safe", async () => {
@@ -40,9 +40,9 @@ describe("ResourcesPage detail overflow", () => {
     renderLongDetail();
     const dialog = await screen.findByRole("dialog", { name: `${LONG_NAME} 상세` });
     await user.click(await within(dialog).findByRole("tab", { name: "이벤트 1" }));
-    const reason = await within(dialog).findByText(LONG_EVENT_REASON);
+    const reason = await within(dialog).findByLabelText(LONG_EVENT_REASON);
     const message = within(dialog).getByText(LONG_EVENT_MESSAGE);
-    expect(reason.className).toContain("[overflow-wrap:anywhere]");
+    expect(reason.className).toContain("truncate");
     expect(message.className).toContain("[overflow-wrap:anywhere]");
   });
 });

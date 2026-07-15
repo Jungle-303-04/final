@@ -51,6 +51,12 @@ USERS_PATH = "/users"
 ALERT_CHANNELS_PATH = "/alert-channels"
 ALERT_CHANNEL_PATH = "/alert-channels/{channel_id}"
 ALERT_CHANNEL_TEST_PATH = "/alert-channels/test"
+# Opsia 소유 알림 규칙. 클러스터 PrometheusRule 경로와 분리한다.
+ALERT_RULES_PATH = "/alert-rules"
+ALERT_RULE_PATH = "/alert-rules/{rule_id}"
+ALERT_EVENTS_PATH = "/alert-events"
+ALERT_EVENT_ACK_PATH = "/alert-events/{event_id}/ack"
+ALERT_EVENT_PROMOTE_INCIDENT_PATH = "/alert-events/{event_id}/promote-incident"
 ACCESS_PATH = "/access"
 ACCESS_ITEM_PATH = "/access/{access_id}"
 APPLICATIONS_PATH = "/applications"
@@ -115,6 +121,7 @@ AGENT_DEBUG_QUERY_PATH = "/agent/debug/query"
 CLUSTERS_PATH = "/clusters"
 CLUSTERS_CONNECT_PATH = "/clusters/connect"
 CLUSTER_PATH = "/clusters/{cluster_id}"
+CLUSTER_CONNECT_COMMAND_PATH = "/clusters/{cluster_id}/connect-command"
 # 콘솔 fleet 화면용 집계 — 워크스페이스 전체 클러스터 health/사용량 롤업(세션 범위).
 FLEET_SUMMARY_PATH = "/fleet/summary"
 # 클러스터 타일 클릭 드릴다운 — 워크로드 health 그룹/경고 이벤트/열린 인시던트/usage 스냅샷.
@@ -144,6 +151,11 @@ RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"
 # 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
 # disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
 RESOURCE_CAPABILITIES_PATH = "/capabilities"
+# GitOps manifest editor. The selected live inventory resource is resolved to an
+# exact application/deployment binding; writes are emitted only as Safe PR events.
+RESOURCE_MANIFEST_SOURCE_PATH = "/resource-manifests/{resource_id}"
+RESOURCE_MANIFEST_PREVIEW_PATH = "/resource-manifests/{resource_id}/preview"
+RESOURCE_MANIFEST_APPROVE_PATH = "/resource-manifests/{resource_id}/approve"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"
 ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"

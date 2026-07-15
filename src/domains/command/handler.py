@@ -142,7 +142,11 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     spec = command_action_spec(command.action)
     if spec is not None and not spec.allows_namespace(command.namespace):
         return PolicyResult.reject(ACTION_NAMESPACE_REASON)
-    if spec is not None and spec.requires_approval and not approval_exempt_for_environment(command):
+    if (
+        spec is not None
+        and spec.requires_approval_for(command.namespace)
+        and not approval_exempt_for_environment(command)
+    ):
         if not command.approval_ref:
             return PolicyResult.reject(MISSING_APPROVAL_REF_REASON)
         if not command.policy_decision_ref:
@@ -181,7 +185,7 @@ def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
 
 def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
     spec = command_action_spec(command.action)
-    if spec is None or not spec.requires_approval:
+    if spec is None or not spec.requires_approval_for(command.namespace):
         return False
     return not approval_exempt_for_environment(command)
 

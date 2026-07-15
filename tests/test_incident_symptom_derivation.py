@@ -328,8 +328,14 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
     ),
     "probe-fail": (
         PROBE_FAIL_SNAPSHOT,
-        "Ingress 502/503",  # backend readiness 실패 계열 — ingress_5xx 룰이 다룬다
-        ["upstream_unavailable", "backend_readiness_failure", "application_5xx_spike"],
+        "Readiness probe response failure",
+        [
+            "probe_path_wrong",
+            "probe_port_wrong",
+            "timeout_too_short",
+            "startup_window_too_short",
+            "app_real_health_failure",
+        ],
     ),
     "sched-fail": (
         SCHED_FAIL_SNAPSHOT,
@@ -345,8 +351,14 @@ FAULT_CASES: dict[str, tuple[dict[str, Any], str, list[str]]] = {
     ),
     "svc-selector": (
         SVC_SELECTOR_SNAPSHOT,
-        "Ingress 502/503",  # 빈 endpoint 배선 문제 — upstream_unavailable 후보와 정합
-        ["upstream_unavailable", "backend_readiness_failure", "application_5xx_spike"],
+        "Service has no ready endpoints",
+        [
+            "selector_label_mismatch",
+            "pods_not_ready",
+            "rollout_unavailable",
+            "wrong_service_port",
+            "endpoint_slice_delay",
+        ],
     ),
 }
 
@@ -716,7 +728,7 @@ FAULT_COMPLETION_CASES: dict[str, tuple[ClusterEvidenceReceivedBody, str]] = {
             metrics={"ready_endpoints": 0},
             logs=[{"line": "readiness probe failed: wrong health port"}],
         ),
-        "backend_readiness_failure",
+        "probe_path_wrong",
     ),
     "sched-fail": (
         evidence_payload(SCHED_FAIL_SNAPSHOT),
@@ -735,7 +747,7 @@ FAULT_COMPLETION_CASES: dict[str, tuple[ClusterEvidenceReceivedBody, str]] = {
                 }
             ],
         ),
-        "upstream_unavailable",
+        "wrong_service_port",
     ),
 }
 
@@ -747,6 +759,16 @@ def test_fault_scenarios_complete_rca_and_offer_recovery(fault: str) -> None:
     db = SpyDb()
 
     events = run_to_rca_completion(payload, db=db, correlation_id=f"corr-complete-{fault}")
+
+    if fault in {"probe-fail", "svc-selector"}:
+        # The truthful probe/endpoint-specific rules require workload/selector metadata.
+        # Without that source they may rank a candidate, but must remain blocked rather
+        # than claiming a completed RCA from an inferred Ingress 5xx.
+        assert subjects_of(events)[-1] == "rca.analysis_blocked"
+        blocked = events[-1]
+        assert blocked.rca_detail.root_cause == expected_root_cause
+        assert blocked.rca_detail.missing_evidence
+        return
 
     assert subjects_of(events) == GOLDEN_PATH_SUBJECTS
     completed = events[-1]
@@ -872,6 +894,56 @@ def test_recent_probe_event_does_not_reopen_recovered_pod(
     detected = event_by_subject(events, "incident.detected")
     assert detected.detected is False
     assert detected.incident is None
+
+
+@pytest.mark.parametrize(
+    ("probe_name", "expected_symptom"),
+    [
+        (
+            "Readiness",
+            "Readiness probe response failure",
+        ),
+        (
+            "Liveness",
+            "Liveness probe response failure",
+        ),
+    ],
+)
+def test_probe_failure_is_not_presented_as_ingress_5xx_without_5xx_evidence(
+    probe_name: str,
+    expected_symptom: str,
+) -> None:
+    pod_name = "checkout-api-7f8d9c-1"
+    failing = snapshot(
+        pods=(
+            pod(
+                pod_name,
+                owner=("ReplicaSet", "checkout-api-7f8d9c"),
+                ready=False,
+            ),
+        ),
+        events=(
+            warning_event(
+                "Unhealthy",
+                f'{probe_name} probe failed: Get "http://10.1.0.7:8080/health": connection refused',
+                involved=("Pod", pod_name),
+                count=4,
+            ),
+        ),
+    )
+    failing["cluster"]["collected_at"] = "2026-07-07T09:06:00+00:00"
+
+    events = run_to_plan(
+        evidence_payload(failing),
+        correlation_id=f"corr-{probe_name.casefold()}-probe",
+    )
+
+    detected = event_by_subject(events, "incident.detected")
+    assert detected.incident.symptom == expected_symptom
+    assert detected.incident.symptom != "Ingress 502/503"
+    planned = event_by_subject(events, "rca.candidates.planned")
+    assert planned.rule_missing is None
+    assert "probe_port_wrong" in [candidate.candidate_id for candidate in planned.candidates]
 
 
 def test_multiple_failing_pods_pick_dominant_signal_and_keep_the_rest() -> None:

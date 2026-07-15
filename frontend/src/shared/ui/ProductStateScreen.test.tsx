@@ -48,7 +48,7 @@ describe("ProductStateScreen", () => {
     expect(main.getAttribute("aria-busy")).toBeNull();
     expect(container.querySelector("[aria-live]")).toBeNull();
     expect(container.querySelector('[data-slot="badge"]')).toBeNull();
-    expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "서비스 연결을 확인하고 있습니다" })).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
@@ -64,7 +64,7 @@ describe("ProductStateScreen", () => {
 
     expect(screen.getByRole("button", { name: "세션 종료" })).toBeTruthy();
     expect(screen.getByRole("heading", {
-      name: "API 연결 계층을 검증하고 있습니다",
+      name: "서비스 연결을 확인하고 있습니다",
     })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });

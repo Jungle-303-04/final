@@ -1,7 +1,7 @@
 import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import type { ComponentProps } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 export function Command({ className, ...props }: ComponentProps<typeof CommandPrimitive>) {
   return (

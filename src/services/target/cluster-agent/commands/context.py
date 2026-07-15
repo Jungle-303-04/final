@@ -42,6 +42,25 @@ class KubernetesClient(Protocol):
         subresource: str | None = None,
     ) -> JsonObject: ...
 
+    async def delete_namespaced_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject: ...
+
+    async def delete_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+    ) -> JsonObject: ...
+
 
 @dataclass(frozen=True)
 class KubernetesCommandSpec:

@@ -27,3 +27,14 @@ export function getClusterConnectStatus(
   const path = `/api/clusters/${encodePathSegment(clusterId)}/connection` as ApiPath;
   return apiRequest(path, clusterConnectStatusResponseSchema, { signal });
 }
+
+export function reissueClusterConnectCommand(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<ClusterConnectResponse> {
+  const normalizedClusterId = clusterId.trim();
+  if (!normalizedClusterId) throw new TypeError("clusterId is required");
+  const path =
+    `/api/clusters/${encodePathSegment(normalizedClusterId)}/connect-command` as ApiPath;
+  return apiRequest(path, clusterConnectResponseSchema, { method: "POST", signal });
+}

@@ -81,6 +81,30 @@ describe("physical topology API", () => {
       }],
     });
   });
+
+  it("accepts over-request usage with evidence and rejects it without a denominator", async () => {
+    const measuredPod = {
+      ...PHYSICAL_TOPOLOGY_ENDPOINT.pods[0],
+      usage_pct: 106.2,
+      cpu_mcores: 531,
+      cpu_request_mcores: 500,
+      mem_mib: 64,
+      mem_request_mib: 128,
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      ...PHYSICAL_TOPOLOGY_ENDPOINT,
+      pods: [measuredPod],
+    }));
+    await expect(getPhysicalTopology({ clusters: ["cluster-a"] }))
+      .resolves.toMatchObject({ pods: [{ usage_pct: 106.2 }] });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      ...PHYSICAL_TOPOLOGY_ENDPOINT,
+      pods: [{ ...measuredPod, cpu_request_mcores: null }],
+    }));
+    await expect(getPhysicalTopology({ clusters: ["cluster-a"] }))
+      .rejects.toMatchObject({ kind: "invalid-payload" });
+  });
 });
 
 function jsonResponse(payload: unknown): Response {

@@ -1,24 +1,27 @@
-import { GitBranch, Save } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { GitBranch, Plus, Save } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 import type {
   ReleaseApplication,
+  ReleaseCluster,
   ReleasePlan,
   ReleasePlanStatus,
+  ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
 import {
   APPROVAL_POLICIES,
   planValidationCodes,
   settingString,
   stepKey,
+  syncSelectedApplications,
   type StepSetupField,
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
 import { Surface } from "../../shared/ui/Surface";
+import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
 import { PlanStepEditor } from "./PlanStepEditor";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
-import { WorkflowTargetAddControl } from "./WorkflowTargetAddControl";
 import { WorkflowWorkspaceHeader } from "./WorkflowWorkspaceHeader";
 import {
   FormField,
@@ -29,25 +32,36 @@ import {
 export function PlanEditor({
   plan,
   applications,
+  clusters,
   pending,
+  targetPending,
   focusedStepId,
   focusedField,
   onChange,
   onSave,
+  onCreateTarget,
 }: {
   plan: ReleasePlan;
   applications: ReleaseApplication[];
+  clusters: ReleaseCluster[];
   pending: boolean;
+  targetPending: boolean;
   focusedStepId?: string;
   focusedField?: StepSetupField;
   onChange: (plan: ReleasePlan) => void;
   onSave: () => void;
+  onCreateTarget: (input: ReleaseTargetInput) => Promise<ReleaseApplication | null>;
 }) {
   const { t } = useI18n();
+  const [targetToAdd, setTargetToAdd] = useState("");
   const [expandedStepId, setExpandedStepId] = useState(
     focusedStepId || (plan.steps[0] ? stepKey(plan.steps[0], 0) : ""),
   );
   const validationCodes = planValidationCodes(plan);
+  const availableTargets = useMemo(() => {
+    const selected = new Set(plan.steps.map((step) => step.application_id));
+    return applications.filter((application) => !selected.has(application.id));
+  }, [applications, plan.steps]);
   const effectiveExpandedStepId = plan.steps.some(
     (step, index) => stepKey(step, index) === expandedStepId,
   )
@@ -55,6 +69,30 @@ export function PlanEditor({
     : plan.steps[0]
       ? stepKey(plan.steps[0], 0)
       : "";
+  const addTarget = () => {
+    const applicationId = targetToAdd || availableTargets[0]?.id;
+    if (!applicationId) return;
+    onChange(syncSelectedApplications(
+      plan,
+      [...plan.steps.map((step) => step.application_id), applicationId],
+      applications,
+    ));
+    setExpandedStepId(applicationId);
+    setTargetToAdd("");
+  };
+  const createAndAddTarget = async (input: ReleaseTargetInput) => {
+    const application = await onCreateTarget(input);
+    if (!application) return null;
+    const selectedIds = plan.steps.map((step) => step.application_id);
+    onChange(syncSelectedApplications(
+      plan,
+      selectedIds.includes(application.id) ? selectedIds : [...selectedIds, application.id],
+      [...applications, application],
+    ));
+    setExpandedStepId(application.id);
+    return application;
+  };
+
   return (
     <div className="grid min-w-0 gap-4">
       <WorkflowWorkspaceHeader
@@ -120,13 +158,23 @@ export function PlanEditor({
             titleId="workflow-editor-steps"
             variant="compact"
           />
-          <WorkflowTargetAddControl
-            applications={applications}
-            onAdded={setExpandedStepId}
-            onChange={onChange}
-            plan={plan}
-          />
+          <DeploymentTargetDialog clusters={clusters} onCreate={createAndAddTarget} pending={targetPending} />
         </div>
+        {availableTargets.length ? (
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+            <NativeSelect
+              ariaLabel={t("workflows.editor.application")}
+              className="w-full min-w-0 sm:w-64"
+              onChange={setTargetToAdd}
+              value={targetToAdd || availableTargets[0]?.id || ""}
+            >
+              {availableTargets.map((application) => <option key={application.id} value={application.id}>{application.name}</option>)}
+            </NativeSelect>
+            <Button onClick={addTarget} variant="outline">
+              <Plus aria-hidden="true" />{t("workflows.editor.addTarget")}
+            </Button>
+          </div>
+        ) : null}
         {plan.steps.length ? (
           <div className="grid min-w-0 gap-2">
             {plan.steps.map((step, index) => (

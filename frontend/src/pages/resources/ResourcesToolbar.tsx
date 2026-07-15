@@ -11,17 +11,16 @@ export function ResourcesToolbar({
 }) {
   const { t } = useI18n();
   return (
-    <div className="flex justify-end border-b p-3">
-      <Toggle
-        aria-label={t("resources.filter.includeInactive")}
-        className="w-32 shrink-0"
-        onPressedChange={(pressed) => onIncludeDeletedChange(pressed)}
-        pressed={includeDeleted}
-        variant="outline"
-      >
-        <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
-        {t("resources.filter.includeInactive.short")}
-      </Toggle>
-    </div>
+    <Toggle
+      aria-label={t("resources.filter.includeInactive")}
+      className="shrink-0"
+      onPressedChange={(pressed) => onIncludeDeletedChange(pressed)}
+      pressed={includeDeleted}
+      size="sm"
+      variant="outline"
+    >
+      <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
+      {t("resources.filter.includeInactive.short")}
+    </Toggle>
   );
 }

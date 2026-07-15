@@ -13,6 +13,8 @@ const nullableMetricSchema = metricSchema.nullable();
 const backfilledNullableMetricSchema = metricSchema.nullish().transform((value) => value ?? null);
 const backfilledNullableIntegerSchema = z.number().int().nonnegative().nullish()
   .transform((value) => value ?? null);
+const backfilledNullableRequestMetricSchema = z.number().finite().positive().nullish()
+  .transform((value) => value ?? null);
 
 export const physicalTopologyServerSchema = z.strictObject({
   id: z.string().min(1),
@@ -62,15 +64,27 @@ export const physicalTopologyPodSchema = z.strictObject({
   server_id: z.string().min(1).nullable(),
   usage_pct: nullableMetricSchema,
   cpu_mcores: nullableMetricSchema,
+  cpu_request_mcores: backfilledNullableRequestMetricSchema,
   mem_mib: nullableMetricSchema,
-  cpu_request_mcores: backfilledNullableMetricSchema,
-  mem_request_mib: backfilledNullableMetricSchema,
-  cpu_limit_mcores: backfilledNullableMetricSchema,
-  mem_limit_mib: backfilledNullableMetricSchema,
+  mem_request_mib: backfilledNullableRequestMetricSchema,
+  cpu_limit_mcores: backfilledNullableRequestMetricSchema,
+  mem_limit_mib: backfilledNullableRequestMetricSchema,
   phase: z.string().min(1),
   health: z.string().min(1),
   restarts: z.number().int().nonnegative(),
   matches_filter: z.boolean(),
+}).superRefine((pod, context) => {
+  if (pod.usage_pct === null) return;
+  if (
+    pod.cpu_request_mcores !== null &&
+    pod.mem_request_mib !== null &&
+    (pod.cpu_mcores !== null || pod.mem_mib !== null)
+  ) return;
+  context.addIssue({
+    code: "custom",
+    message: "pod usage requires complete request evidence",
+    path: ["usage_pct"],
+  });
 });
 
 export const physicalTopologySchema = z.strictObject({

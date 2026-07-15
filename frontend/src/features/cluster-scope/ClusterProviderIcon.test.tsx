@@ -31,7 +31,7 @@ describe("ClusterProviderIcon", () => {
     },
   );
 
-  it("uses the generic Kubernetes glyph when provider metadata is unknown", () => {
+  it("uses a neutral server glyph when provider metadata is unknown", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ClusterProviderIcon provider="unknown" />
@@ -39,7 +39,7 @@ describe("ClusterProviderIcon", () => {
     );
 
     const icon = screen.getByRole("img", { name: "Unknown Kubernetes provider" });
-    expect(icon.querySelector(".lucide-boxes")).not.toBeNull();
-    expect(icon.querySelector(".lucide-server")).toBeNull();
+    expect(icon.querySelector(".lucide-server")).not.toBeNull();
+    expect(icon.querySelector(".lucide-boxes")).toBeNull();
   });
 });

@@ -13,6 +13,8 @@ import type {
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
+import { shortIdentity } from "../../shared/presentation/shortIdentity";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/primitives/tooltip";
 import {
   Table,
   TableBody,
@@ -75,7 +77,7 @@ export function ResourcesTable({
   return (
     <Table aria-label={t("resources.table.aria")} scrollAreaLabel={t("resources.table.scrollArea")}>
       <TableCaption className="sr-only">{t("resources.table.caption")}</TableCaption>
-      <TableHeader>
+      <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur">
         <TableRow>
           {columns.map((column) => column.sortable ? (
             <SortableHead
@@ -210,21 +212,28 @@ function ResourceNameButton({
 }) {
   const { t } = useI18n();
   return (
-    <Button
-      aria-label={t("resources.table.openDetail", { name: item.name })}
-      className="h-auto max-w-full justify-start px-0 text-left"
-      onClick={() => onOpen(identity)}
-      ref={(element) => {
-        if (element) rowButtons.current.set(item.id, element);
-        else rowButtons.current.delete(item.id);
-        registerRowButton(identity, element);
-      }}
-      type="button"
-      variant="link"
-    >
-      <span className="truncate">{item.name}</span>
-      <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={(
+          <Button
+            aria-label={t("resources.table.openDetail", { name: item.name })}
+            className="h-auto max-w-full justify-start px-0 text-left"
+            onClick={() => onOpen(identity)}
+            ref={(element) => {
+              if (element) rowButtons.current.set(item.id, element);
+              else rowButtons.current.delete(item.id);
+              registerRowButton(identity, element);
+            }}
+            type="button"
+            variant="link"
+          />
+        )}
+      >
+        <span className="truncate">{shortIdentity(item.name)}</span>
+        <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
+      </TooltipTrigger>
+      <TooltipContent className="break-all" side="top">{item.name}</TooltipContent>
+    </Tooltip>
   );
 }
 

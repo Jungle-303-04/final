@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 from capture_image_digests import image_repository, live_deployment_images
 from revert_image_digests import IMAGE_DIGEST, TIMEOUT, RollbackPlan, load_plan
+
+MAX_ROLLOUT_STATUS_WORKERS = 8
 
 
 def live_deployments(*, context: str, namespace: str) -> Any:
@@ -72,12 +75,49 @@ def rollout_commands(
     if not TIMEOUT.fullmatch(timeout):
         raise ValueError("timeout must be a positive Kubernetes duration such as 300s")
 
-    commands: list[tuple[str, ...]] = [("kubectl", "config", "get-contexts", context, "-o", "name")]
+    context_command = ("kubectl", "config", "get-contexts", context, "-o", "name")
+    set_image_commands: list[tuple[str, ...]] = []
+    rollout_status_commands: list[tuple[str, ...]] = []
     for target in plan.targets:
         prefix = ("kubectl", "--context", context, "-n", target.namespace)
-        commands.append((*prefix, "set", "image", target.resource, f"{target.container}={image}"))
-        commands.append((*prefix, "rollout", "status", target.resource, f"--timeout={timeout}"))
-    return tuple(commands)
+        set_image_commands.append(
+            (*prefix, "set", "image", target.resource, f"{target.container}={image}")
+        )
+        rollout_status_commands.append(
+            (*prefix, "rollout", "status", target.resource, f"--timeout={timeout}")
+        )
+    return (context_command, *set_image_commands, *rollout_status_commands)
+
+
+def wait_for_rollout_statuses(
+    commands: tuple[tuple[str, ...], ...],
+    *,
+    max_workers: int = MAX_ROLLOUT_STATUS_WORKERS,
+) -> None:
+    if not commands:
+        return
+    worker_count = min(max_workers, len(commands))
+    if worker_count < 1:
+        raise ValueError("max_workers must be positive")
+
+    failures: list[tuple[tuple[str, ...], Exception]] = []
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="rollout-status",
+    ) as executor:
+        futures = {
+            executor.submit(subprocess.run, command, check=True): command for command in commands
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as error:  # noqa: BLE001 - aggregate every kubectl failure
+                failures.append((futures[future], error))
+
+    if failures:
+        failures.sort(key=lambda failure: failure[0])
+        resources = [command[-2] for command, _error in failures]
+        raise RuntimeError(f"rollout status failed for {resources!r}") from failures[0][1]
 
 
 def rollout(plan: RollbackPlan, *, context: str, image: str, timeout: str) -> None:
@@ -95,8 +135,12 @@ def rollout(plan: RollbackPlan, *, context: str, image: str, timeout: str) -> No
         live_document=live_deployments(context=context, namespace=namespace),
         require_exact_digest=False,
     )
-    for command in commands[1:]:
+    target_count = len(plan.targets)
+    set_image_commands = commands[1 : 1 + target_count]
+    rollout_status_commands = commands[1 + target_count :]
+    for command in set_image_commands:
         subprocess.run(command, check=True)
+    wait_for_rollout_statuses(rollout_status_commands)
     count = verify_repository_rollout(
         plan,
         image=image,

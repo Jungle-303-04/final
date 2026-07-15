@@ -72,6 +72,16 @@ export interface IssueMissingEvidenceCheck {
   reason: string | null;
 }
 
+export interface IssueRcaNarrative {
+  locale: "ko";
+  executiveSummary: string;
+  impact: string;
+  reasoning: string;
+  recommendedAction: string;
+  recurrencePrevention: string[];
+  limitations: string[];
+}
+
 export interface IssueRcaReport {
   id: string;
   correlationId: string;
@@ -94,6 +104,8 @@ export interface IssueRcaReport {
   candidates: IssueCandidateScore[];
   supportingEvidenceRefs: IssueEvidenceReference[];
   missingEvidenceChecks: IssueMissingEvidenceCheck[];
+  narrative: IssueRcaNarrative | null;
+  narrativeStatus: "generated" | "unavailable";
   createdAt: string | null;
 }
 

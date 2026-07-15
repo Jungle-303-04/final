@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import re
 from collections.abc import Mapping
 from urllib.parse import quote
@@ -73,7 +74,11 @@ STALE_BASE_MESSAGE = "safe pr base branch no longer matches the approved commit"
 INVALID_SOURCE_RESPONSE_MESSAGE = "GitHub manifest source response is incomplete"
 BRANCH_COLLISION_MESSAGE = "safe pr head branch already exists without a matching open PR"
 AUTHORITY_MISMATCH_MESSAGE = "safe pr structured patch does not match workflow authority"
+MANIFEST_EDIT_AUTHORITY_MISMATCH_MESSAGE = (
+    "safe pr manifest edit does not match its granted human approval"
+)
 UNSUPPORTED_REMEDIATION_SOURCE_MESSAGE = "remediation source patch unsupported"
+SAFE_PR_MANIFEST_EDIT_KIND = "safe_pr_manifest_edit"
 
 # 자격 증명 부재는 부팅 실패가 아니라 요청 시점 실패 — 워커는 뜨고,
 # 각 safe_pr.requested 는 safe_pr.failed 경로로 흐름.
@@ -88,6 +93,10 @@ MISSING_EXISTING_PR_MESSAGE = (
 
 LOGGER = get_logger(__name__)
 StructuredPatchPlan = ManifestImagePatchPlan | ManifestScalarPatchPlan
+
+
+def manifest_content_sha256(content: str) -> str:
+    return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
 
 
 def normalize_branch_ref(branch: str) -> str:
@@ -268,6 +277,7 @@ class GithubScmProvider:
         LOGGER.info("github_provider_started", extra={CONTEXT_KEY: context})
         patch_plans = self.patch_plans(request)
         structured = any(plan is not None for plan in patch_plans)
+        manifest_edit_authority: Mapping[str, object] | None = None
         if structured and (
             any(plan is None for plan in patch_plans)
             or any(plan.expected_base_sha != request.commit_sha for plan in patch_plans if plan)
@@ -275,9 +285,20 @@ class GithubScmProvider:
             raise RuntimeError(STALE_BASE_MESSAGE)
         if structured:
             await self.validate_structured_patch_authority(request, patch_plans, ctx)
+        elif request.pr_kind == SAFE_PR_MANIFEST_EDIT_KIND:
+            manifest_edit_authority = await self.validate_manifest_edit_approval(request, ctx)
 
         async with self.client(token) as client:
             base_sha = await self.base_branch_sha(client, repo, base_branch, context)
+            if request.pr_kind == SAFE_PR_MANIFEST_EDIT_KIND:
+                await self.validate_manifest_edit_source(
+                    client,
+                    repo,
+                    base_sha,
+                    request,
+                    manifest_edit_authority,
+                    context,
+                )
             if structured:
                 existing = await self.find_existing_pr(
                     client,
@@ -614,6 +635,72 @@ class GithubScmProvider:
             return plans
         except ManifestSourcePatchError as exc:
             raise RuntimeError(str(exc)) from exc
+
+    async def validate_manifest_edit_approval(
+        self,
+        request: SafePrRequestedBody,
+        ctx: EventContext[PullRequestStore],
+    ) -> Mapping[str, object]:
+        load_approval = getattr(ctx.db, "get_workflow_approval", None)
+        if not callable(load_approval) or not request.approval_ref:
+            raise RuntimeError(MANIFEST_EDIT_AUTHORITY_MISMATCH_MESSAGE)
+        approval = await load_approval(request.approval_ref, request.workspace_id)
+        details = approval.get("details") if isinstance(approval, Mapping) else None
+        expected = {
+            "authority": SAFE_PR_MANIFEST_EDIT_KIND,
+            "repository_id": request.repository_id,
+            "repo_ref": request.repo_ref,
+            "branch": request.base_branch,
+            "manifest_path": request.manifest_path,
+            "base_sha": request.commit_sha,
+            "patch_sha256": request.patch_sha256,
+        }
+        if (
+            not isinstance(approval, Mapping)
+            or not isinstance(details, Mapping)
+            or str(approval.get("status") or "") != "granted"
+            or str(approval.get("workspace_id") or "") != request.workspace_id
+            or str(approval.get("workflow_run_id") or "") != request.workflow_run_id
+            or str(approval.get("application_id") or "") != request.application_id
+            or str(approval.get("binding_id") or "") != request.binding_id
+            or str(approval.get("environment") or "") != request.environment
+            or not str(approval.get("requested_by") or "")
+            or str(approval.get("requested_by") or "") != str(approval.get("decided_by") or "")
+            or approval.get("decision") != "granted"
+            or any(str(details.get(key) or "") != value for key, value in expected.items())
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(details.get("source_sha256") or ""))
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(details.get("desired_sha256") or ""))
+            or len(request.patches) != 1
+            or request.patches[0].path != request.manifest_path
+            or manifest_content_sha256(request.patches[0].content)
+            != str(details.get("desired_sha256") or "")
+        ):
+            raise RuntimeError(MANIFEST_EDIT_AUTHORITY_MISMATCH_MESSAGE)
+        return details
+
+    async def validate_manifest_edit_source(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        base_sha: str,
+        request: SafePrRequestedBody,
+        authority: Mapping[str, object] | None,
+        context: dict[str, object] | None = None,
+    ) -> None:
+        if base_sha != request.commit_sha:
+            raise RuntimeError(STALE_BASE_MESSAGE)
+        source = await self.source_file_content(
+            client, repo, base_sha, request.manifest_path, context
+        )
+        source_digest = manifest_content_sha256(source)
+        desired_digest = manifest_content_sha256(request.patches[0].content)
+        if (
+            authority is None
+            or source_digest != str(authority.get("source_sha256") or "")
+            or desired_digest != str(authority.get("desired_sha256") or "")
+            or source_digest == desired_digest
+        ):
+            raise RuntimeError(MANIFEST_EDIT_AUTHORITY_MISMATCH_MESSAGE)
 
     async def validate_structured_patch_authority(
         self,

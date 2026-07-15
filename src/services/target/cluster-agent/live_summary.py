@@ -10,8 +10,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, suppress
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import httpx
@@ -20,6 +23,10 @@ from kubernetes_api import (
     kubernetes_client,
     kubernetes_headers,
     service_account_token,
+)
+from live_resource_metrics import (
+    PodResourceMetricsCollector,
+    collection_interval_for_pods,
 )
 
 import config as agent_config
@@ -31,9 +38,16 @@ from packages.contracts.realtime import (
     AGENT_LIVE_PATH,
     MAX_HOT_PODS,
     HotPod,
+    LiveMetricsMetadata,
     LiveSummary,
     LiveSummaryMessage,
     ResourceDelta,
+)
+from packages.contracts.terminal import (
+    TerminalConnected,
+    TerminalEnd,
+    TerminalError,
+    TerminalOutput,
 )
 
 LOGGER = get_logger(__name__)
@@ -45,6 +59,14 @@ SummaryCollector = Callable[[], Awaitable[LiveSummary | None]]
 
 class LiveStreamConnection(Protocol):
     async def send(self, message: str) -> None: ...
+
+    async def recv(self) -> str | bytes: ...
+
+
+class TerminalController(Protocol):
+    async def handle(self, payload: object, emit: Callable[..., Awaitable[None]]) -> bool: ...
+
+    async def close_all(self) -> None: ...
 
 
 # (url, headers) → async context manager yielding LiveStreamConnection
@@ -73,6 +95,11 @@ def _clamp_interval(raw: str) -> float:
     )
 
 
+def next_collection_delay(target_interval: float, collection_elapsed: float) -> float:
+    """Keep collection start-to-start cadence at the adaptive target interval."""
+    return max(0.0, target_interval - max(0.0, collection_elapsed))
+
+
 class KubernetesPodSummaryCollector:
     """k8s pod 목록(상한 있음)에서 bounded 요약을 계산함. API 미접근 환경이면 None."""
 
@@ -81,6 +108,7 @@ class KubernetesPodSummaryCollector:
         cluster_id: str,
         window_ms: int,
         transport: httpx.AsyncBaseTransport | None = None,
+        metrics_collector: PodResourceMetricsCollector | None = None,
     ) -> None:
         self.cluster_id = cluster_id
         self.window_ms = window_ms
@@ -88,6 +116,11 @@ class KubernetesPodSummaryCollector:
         self._last_restart_total: int | None = None
         self._last_resources: dict[str, dict[str, Any]] = {}
         self._pending_deltas: list[ResourceDelta] = []
+        self._next_interval_seconds = max(window_ms / 1000, 0.001)
+        self._last_collection_started: float | None = None
+        self.metrics_collector = metrics_collector or PodResourceMetricsCollector(
+            agent_config.LIVE_RESOURCE_NODE_CONCURRENCY
+        )
 
     async def __call__(self) -> LiveSummary | None:
         base_url = kubernetes_api_base_url()
@@ -95,18 +128,50 @@ class KubernetesPodSummaryCollector:
         if not base_url or not token:
             return None
         pods: list[dict[str, Any]] = []
+        headers = kubernetes_headers(token)
+        collection_started = time.monotonic()
+        actual_interval_seconds = (
+            collection_started - self._last_collection_started
+            if self._last_collection_started is not None
+            else self._next_interval_seconds
+        )
+        self._last_collection_started = collection_started
         async with kubernetes_client(self.transport) as client:
-            for namespace in agent_config.LIVE_SUMMARY_NAMESPACES:
+            continuation = ""
+            while len(pods) < agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT:
+                params: dict[str, str | int] = {"limit": agent_config.LIVE_SUMMARY_POD_LIST_LIMIT}
+                if continuation:
+                    params["continue"] = continuation
                 response = await client.get(
-                    f"{base_url}/api/v1/namespaces/{namespace}/pods",
-                    params={"limit": agent_config.LIVE_SUMMARY_POD_LIST_LIMIT},
-                    headers=kubernetes_headers(token),
+                    f"{base_url}/api/v1/pods",
+                    params=params,
+                    headers=headers,
                 )
                 response.raise_for_status()
-                pods.extend(response.json().get("items", []))
-        return self.summarize(pods)
+                payload = response.json()
+                remaining = agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT - len(pods)
+                pods.extend(payload.get("items", [])[:remaining])
+                continuation = str(payload.get("metadata", {}).get("continue") or "")
+                if not continuation:
+                    break
+            measured = await self.metrics_collector.collect(
+                client,
+                base_url=base_url,
+                headers=headers,
+                pods=pods,
+                actual_interval_seconds=max(actual_interval_seconds, 0.0),
+            )
+        return self.summarize(pods, measured, observed_at=datetime.now(UTC))
 
-    def summarize(self, pods: list[dict[str, Any]]) -> LiveSummary:
+    def summarize(
+        self,
+        pods: list[dict[str, Any]],
+        pod_metrics: dict[str, dict[str, Any]] | None = None,
+        *,
+        observed_at: datetime | None = None,
+    ) -> LiveSummary:
+        self._next_interval_seconds = collection_interval_for_pods(len(pods))
+        window_ms = int(self._next_interval_seconds * 1000)
         ready_count = 0
         restart_total = 0
         crash_looping = False
@@ -134,6 +199,7 @@ class KubernetesPodSummaryCollector:
                 )
             if namespace and name:
                 key = f"{self.cluster_id}/{namespace}/pod/{name}"
+                metrics = (pod_metrics or {}).get(f"{namespace}/{name}", {})
                 next_resources[key] = {
                     "resource_type": "pod",
                     "kind": "Pod",
@@ -146,8 +212,13 @@ class KubernetesPodSummaryCollector:
                     "owner_kind": owner_kind,
                     "owner_name": owner_name,
                     "health": pod_health(phase, ready, restarts),
+                    **metrics,
                 }
-        self._pending_deltas = resource_deltas(self._last_resources, next_resources)
+        self._pending_deltas = resource_deltas(
+            self._last_resources,
+            next_resources,
+            observed_at=observed_at or datetime.now(UTC),
+        )
         self._last_resources = next_resources
         restart_delta = (
             max(0, restart_total - self._last_restart_total)
@@ -161,15 +232,21 @@ class KubernetesPodSummaryCollector:
             phase = "progressing"
         else:
             phase = "idle"
+        metrics_metadata = aggregate_metrics_metadata(pod_metrics)
         return LiveSummary(
             cluster_id=self.cluster_id,
-            window_ms=self.window_ms,
+            window_ms=window_ms,
             pods_ready=ready_count,
             pods_total=len(pods),
             restart_delta=restart_delta,
             rollout_phase=phase,
             hot_pods=hot_pods,
+            metrics_metadata=metrics_metadata,
         )
+
+    def next_interval_seconds(self) -> float:
+        """다음 publisher sleep이 사용할 현재 적응 주기."""
+        return self._next_interval_seconds
 
     def drain_deltas(self) -> list[ResourceDelta]:
         deltas = self._pending_deltas
@@ -189,6 +266,7 @@ class LiveSummaryPublisher:
         interval_seconds: float,
         collector: SummaryCollector,
         connect: LiveStreamConnector | None = None,
+        terminal_controller: TerminalController | None = None,
         retry_delay_seconds: float = agent_config.LIVE_SUMMARY_RETRY_DELAY_SECONDS,
         enabled: bool = True,
     ) -> None:
@@ -198,6 +276,7 @@ class LiveSummaryPublisher:
         self.interval_seconds = interval_seconds
         self.collector = collector
         self.connect = connect or _websockets_connector
+        self.terminal_controller = terminal_controller
         self.retry_delay_seconds = retry_delay_seconds
         self.enabled = enabled
 
@@ -207,6 +286,7 @@ class LiveSummaryPublisher:
         cluster_id: str,
         management_base_url: str,
         kubernetes_transport: httpx.AsyncBaseTransport | None = None,
+        terminal_controller: TerminalController | None = None,
     ) -> LiveSummaryPublisher:
         enabled = (
             env(
@@ -231,6 +311,7 @@ class LiveSummaryPublisher:
             collector=KubernetesPodSummaryCollector(
                 cluster_id, int(interval * 1000), kubernetes_transport
             ),
+            terminal_controller=terminal_controller,
             enabled=enabled,
         )
 
@@ -265,27 +346,105 @@ class LiveSummaryPublisher:
                 await asyncio.sleep(self.retry_delay_seconds)
 
     async def _stream(self, connection: LiveStreamConnection) -> None:
+        send_lock = asyncio.Lock()
+
+        async def send_model(
+            message: TerminalConnected | TerminalOutput | TerminalEnd | TerminalError,
+        ) -> None:
+            async with send_lock:
+                await connection.send(message.model_dump_json())
+
+        producer = asyncio.create_task(self._publish_loop(connection, send_lock))
+        if self.terminal_controller is None:
+            await producer
+            return
+        try:
+            while True:
+                raw = await connection.recv()
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8")
+                try:
+                    payload = json.loads(raw)
+                except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                await self.terminal_controller.handle(payload, send_model)
+        finally:
+            producer.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer
+            await self.terminal_controller.close_all()
+
+    async def _publish_loop(
+        self,
+        connection: LiveStreamConnection,
+        send_lock: asyncio.Lock,
+    ) -> None:
         while True:
+            collection_started = time.monotonic()
             summary = await self.collector()
             if summary is not None:
-                message = LiveSummaryMessage(cluster_id=self.cluster_id, summary=summary)
-                await connection.send(message.model_dump_json())
                 drain = getattr(self.collector, "drain_deltas", None)
                 if callable(drain):
                     for delta in drain():
-                        await connection.send(delta.model_dump_json())
-            await asyncio.sleep(self.interval_seconds)
+                        async with send_lock:
+                            await connection.send(delta.model_dump_json())
+                # gateway는 summary 시점의 최신 delta cut을 replay/alert 저장소에 남긴다.
+                # summary를 먼저 보내면 저장/평가가 항상 한 수집 주기 뒤처진다.
+                message = LiveSummaryMessage(cluster_id=self.cluster_id, summary=summary)
+                async with send_lock:
+                    await connection.send(message.model_dump_json())
+            next_interval = getattr(self.collector, "next_interval_seconds", None)
+            target_interval = next_interval() if callable(next_interval) else self.interval_seconds
+            delay = next_collection_delay(
+                target_interval,
+                time.monotonic() - collection_started,
+            )
+            await asyncio.sleep(delay)
+
+
+def aggregate_metrics_metadata(
+    pod_metrics: dict[str, dict[str, Any]] | None,
+) -> LiveMetricsMetadata | None:
+    if not pod_metrics:
+        return None
+    entries = [
+        value.get("metrics_metadata")
+        for value in pod_metrics.values()
+        if isinstance(value.get("metrics_metadata"), dict)
+    ]
+    if not entries:
+        return None
+    sources = {str(entry.get("source") or "unavailable") for entry in entries}
+    source = next(iter(sources)) if len(sources) == 1 else "mixed"
+    intervals = [
+        float(entry["actual_interval_seconds"])
+        for entry in entries
+        if entry.get("actual_interval_seconds") is not None
+    ]
+    reasons = sorted(
+        {str(entry["degraded_reason"]) for entry in entries if entry.get("degraded_reason")}
+    )
+    return LiveMetricsMetadata(
+        source=source,
+        actual_interval_seconds=max(intervals) if intervals else None,
+        degraded_reason=",".join(reasons) or None,
+    )
 
 
 def resource_deltas(
-    before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]]
+    before: dict[str, dict[str, Any]],
+    after: dict[str, dict[str, Any]],
+    *,
+    observed_at: datetime,
 ) -> list[ResourceDelta]:
     deltas: list[ResourceDelta] = []
     for key, value in after.items():
         if before.get(key) != value:
-            deltas.append(ResourceDelta(op="replace", key=key, value=value))
+            deltas.append(
+                ResourceDelta(op="replace", key=key, value=value, observed_at=observed_at)
+            )
     for key in before.keys() - after.keys():
-        deltas.append(ResourceDelta(op="remove", key=key, value=None))
+        deltas.append(ResourceDelta(op="remove", key=key, value=None, observed_at=observed_at))
     return deltas
 
 

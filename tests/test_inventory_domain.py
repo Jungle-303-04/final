@@ -293,6 +293,41 @@ def test_duplicate_inventory_keys_are_deduped_last_wins_before_upsert() -> None:
     ]
 
 
+def test_inventory_event_preserves_event_time_separately_from_collection_time() -> None:
+    collected_at = datetime(2026, 7, 15, 3, 20, tzinfo=UTC)
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {
+            "cluster": {"collected_at": "2026-07-15T03:20:00Z"},
+            "events": [
+                {
+                    "uid": "evt-readiness",
+                    "namespace": "production",
+                    "type": "Warning",
+                    "reason": "Unhealthy",
+                    "first_timestamp": "2026-07-15T02:55:00Z",
+                    "last_timestamp": "2026-07-15T03:01:30Z",
+                }
+            ],
+        },
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    resource = next(item for item in snapshot["resources"] if item["resource_type"] == "event")
+
+    row = normalize_inventory_resource(
+        resource,
+        workspace_id="ws-1",
+        cluster_id="cluster-1",
+        snapshot_id="snapshot-1",
+        observed_at=collected_at,
+    )
+
+    assert row["first_seen_at"] == datetime(2026, 7, 15, 2, 55, tzinfo=UTC)
+    assert row["observed_at"] == datetime(2026, 7, 15, 3, 1, 30, tzinfo=UTC)
+    assert row["last_seen_at"] == datetime(2026, 7, 15, 3, 1, 30, tzinfo=UTC)
+    assert row["summary"]["collected_at"] == "2026-07-15T03:20:00Z"
+
+
 def test_inventory_snapshot_route_uses_agent_identity_scope() -> None:
     db = StubInventoryDb()
     events = StubInventoryEvents()
@@ -766,6 +801,29 @@ def test_kubernetes_evidence_snapshot_usage_empty_when_nothing_observed() -> Non
         {}, cluster_id="cluster-1", agent_id="agent-1"
     )
     assert snapshot["usage"] == {}
+
+
+def test_label_scoped_evidence_snapshot_is_not_authoritative_fleet_liveness() -> None:
+    normal = kubernetes_evidence_to_inventory_snapshot(
+        {"collection_scopes": [{"namespace": "production", "label_selector": None}]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    rca_test = kubernetes_evidence_to_inventory_snapshot(
+        {
+            "collection_scopes": [
+                {
+                    "namespace": "production",
+                    "label_selector": "kubeheal.io/rca-test-run=run-1",
+                }
+            ]
+        },
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+
+    assert normal["summary"]["live_inventory"] is True
+    assert rca_test["summary"]["live_inventory"] is False
 
 
 def test_kubernetes_evidence_snapshot_preserves_detected_provider() -> None:

@@ -49,6 +49,7 @@ from queries import (
 )
 from span import configure_tracing
 from telemetry_registry import telemetry
+from terminal_exec import PodExecController
 
 import config as agent_config
 from config import (
@@ -113,6 +114,13 @@ from domains.rca.test_scenarios import (
     test_scenario_by_id,
 )
 from domains.target.management_guard import MANAGEMENT_CLUSTER_ROLE, MANAGEMENT_READONLY_CODE
+from domains.target.uninstall import (
+    FINAL_AGENT_DEPLOYMENT,
+    PRE_ACK_CLUSTER_CLEANUP,
+    PRE_ACK_NAMESPACED_CLEANUP,
+    SELF_CLEANUP_RESIDUALS,
+    UNINSTALL_CONTRACT_VERSION,
+)
 from packages.config.constants import (
     RCA_TEST_COMMAND_ACTIONS,
     Command,
@@ -137,6 +145,7 @@ from packages.contracts.gateway.requests import (
     DesiredStatePolicy,
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
+    StrictModel,
 )
 from packages.contracts.gitops import supported_kubernetes_resource
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
@@ -156,6 +165,7 @@ RCA_TEST_CLEANUP_INTERVAL_SECONDS = 30
 RCA_TEST_CLEANUP_TIMEOUT_SECONDS = 30.0
 RCA_TEST_CLEANUP_POLL_SECONDS = 0.25
 RCA_TEST_OWNER_CONFLICT_STATUSES = frozenset({409, 422})
+AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS = (0.5, 1.0, 2.0)
 
 
 def parse_provider_worker_counts(raw_counts: str) -> dict[str, int]:
@@ -198,6 +208,11 @@ class RcaTestOwnedResource:
 
 class RcaTestFixtureOwnershipChanged(RuntimeError):
     """cleanup 대상 이름이 다른 run 소유로 바뀐 안전한 경합."""
+
+
+class ClusterAgentUninstallPayload(StrictModel):
+    cluster_id: str
+    contract_version: int
 
 
 class AgentConfig:
@@ -503,6 +518,7 @@ class TargetClusterAgent:
             cluster_id=self.cluster_id,
             management_base_url=self.base_url,
             kubernetes_transport=kubernetes_transport,
+            terminal_controller=PodExecController(),
         )
         if providers is None:
             providers = (
@@ -802,7 +818,14 @@ class TargetClusterAgent:
                         agent_id=self.agent_id,
                         result=result,
                     )
-                    await self.flush_command_results_once(client)
+                    result_flushed = await self.flush_command_results_once(client)
+                    if (
+                        result_flushed
+                        and action == Command.CLUSTER_AGENT_UNINSTALL_ACTION
+                        and result.get(Gateway.STATUS) == AgentConfig.COMMAND_COMPLETED_STATUS
+                        and result.get("cleanup_completed") is True
+                    ):
+                        await self.delete_agent_deployment_after_ack()
             except Exception as exc:
                 LOGGER.warning(
                     "command_polling_failed",
@@ -952,7 +975,10 @@ class TargetClusterAgent:
         payload = self.command_payload(command)
         if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
             return self.command_result(False, RCA_TEST_RUNS_DISABLED_MESSAGE)
-        if not getattr(self, "direct_commands_enabled", True) and action != QUERY_RUN_ACTION:
+        if not getattr(self, "direct_commands_enabled", True) and action not in {
+            QUERY_RUN_ACTION,
+            Command.CLUSTER_AGENT_UNINSTALL_ACTION,
+        }:
             return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
         if self.management_write_blocked(action):
             LOGGER.warning(
@@ -968,7 +994,7 @@ class TargetClusterAgent:
             return self.command_result(False, MANAGEMENT_READONLY_CODE)
         approval_error = self.approval_evidence_error(command)
         if (
-            self.write_action_requires_approval(action)
+            self.write_action_requires_approval(action, command)
             and approval_error
             and not self.approval_exempt_for_environment(action, command)
         ):
@@ -996,9 +1022,13 @@ class TargetClusterAgent:
         except Exception as exc:
             return self.command_result(False, str(exc))
 
-    def write_action_requires_approval(self, action: str) -> bool:
-        # rollout_restart 는 spec 변경이 없는 비파괴 조치라 승인 증적 없이 허용한다
-        # (namespace 정책 가드는 그대로 적용됨). 상태 변경 액션만 승인 증적을 요구한다.
+    def write_action_requires_approval(
+        self,
+        action: str,
+        command: CommandRecord,
+    ) -> bool:
+        if action == AgentConfig.ROLLOUT_RESTART_ACTION:
+            return self.command_namespace_value(command).strip().lower() != Sandbox.NAMESPACE
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
@@ -1016,6 +1046,7 @@ class TargetClusterAgent:
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
             Command.RCA_TEST_SCENARIO_INJECT_ACTION,
             Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
+            Command.CLUSTER_AGENT_UNINSTALL_ACTION,
         }
 
     def command_metadata_value(self, command: CommandRecord, field: str) -> str:
@@ -1214,13 +1245,102 @@ class TargetClusterAgent:
     async def apply_default_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         return ctx.fail(f"unsupported action: {ctx.action}")
 
+    @command.handler(
+        Command.CLUSTER_AGENT_UNINSTALL_ACTION,
+        payload_model=ClusterAgentUninstallPayload,
+    )
+    async def schedule_agent_uninstall_command(
+        self,
+        ctx: CommandContext[ClusterAgentUninstallPayload],
+    ) -> JsonObject:
+        if ctx.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+            return ctx.fail(MANAGEMENT_READONLY_CODE)
+        if ctx.payload.cluster_id != self.cluster_id:
+            return ctx.fail("uninstall cluster_id does not match agent identity")
+        if ctx.payload.contract_version != UNINSTALL_CONTRACT_VERSION:
+            return ctx.fail("unsupported agent uninstall contract version")
+        await self.prepare_agent_installation_cleanup()
+        return ctx.ok(
+            "allowlisted agent runtime cleaned; deployment removal waits for result delivery",
+            applied=True,
+            cleanup_completed=True,
+            residual_resources=list(SELF_CLEANUP_RESIDUALS),
+        )
+
+    async def prepare_agent_installation_cleanup(self) -> None:
+        """Delete exact non-final Opsia resources before reporting completion.
+
+        Any failure propagates into a FAILED command result and leaves the agent
+        Deployment running.  The server therefore never revokes registration on
+        a merely scheduled or partially applied cleanup.
+        """
+
+        for item in PRE_ACK_NAMESPACED_CLEANUP:
+            await self.kubernetes.delete_namespaced_resource(
+                api_group=item.api_group,
+                version=item.version,
+                namespace=item.namespace,
+                resource=item.resource,
+                name=item.name,
+            )
+        for item in PRE_ACK_CLUSTER_CLEANUP:
+            await self.kubernetes.delete_cluster_resource(
+                api_group=item.api_group,
+                version=item.version,
+                resource=item.resource,
+                name=item.name,
+            )
+
+    async def delete_agent_deployment_after_ack(self) -> bool:
+        """Remove the running agent only after its durable completion ACK."""
+
+        attempts = len(AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS)
+        for attempt in range(attempts):
+            try:
+                await self.kubernetes.delete_namespaced_resource(
+                    api_group=FINAL_AGENT_DEPLOYMENT.api_group,
+                    version=FINAL_AGENT_DEPLOYMENT.version,
+                    namespace=FINAL_AGENT_DEPLOYMENT.namespace,
+                    resource=FINAL_AGENT_DEPLOYMENT.resource,
+                    name=FINAL_AGENT_DEPLOYMENT.name,
+                )
+                LOGGER.info(
+                    "agent_uninstall_runtime_deleted",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            "attempt": attempt + 1,
+                        }
+                    },
+                )
+                return True
+            except Exception as exc:
+                final_attempt = attempt + 1 >= attempts
+                log = LOGGER.error if final_attempt else LOGGER.warning
+                log(
+                    "agent_uninstall_final_delete_failed",
+                    extra={
+                        CONTEXT_KEY: {
+                            Gateway.CLUSTER_ID: self.cluster_id,
+                            "attempt": attempt + 1,
+                            "max_attempts": attempts,
+                            "exception_type": type(exc).__name__,
+                        }
+                    },
+                )
+                if not final_attempt:
+                    await asyncio.sleep(AGENT_UNINSTALL_FINAL_DELETE_RETRY_DELAYS[attempt])
+        return False
+
     def command_payload(self, command: CommandRecord) -> JsonObject:
         payload = command.get(Gateway.PAYLOAD)
         if not isinstance(payload, dict):
             return dict(command)
-        if str(command.get(Gateway.ACTION, "")) == AgentConfig.APPLY_MANIFEST_ACTION and isinstance(
-            payload.get("diff"), dict
-        ):
+        action = str(command.get(Gateway.ACTION, ""))
+        if action in {
+            AgentConfig.APPLY_MANIFEST_ACTION,
+            AgentConfig.ROLLOUT_RESTART_ACTION,
+        } and isinstance(payload.get("diff"), dict):
             return payload
         nested_payload = payload.get(Gateway.PAYLOAD)
         return nested_payload if isinstance(nested_payload, dict) else payload

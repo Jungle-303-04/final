@@ -196,6 +196,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [oss/SECURITY](oss/SECURITY.md)
 - [oss/publication-checklist](oss/publication-checklist.md)
 - [platform-foundation-plan](platform-foundation-plan.md)
+- [pod-terminal](pod-terminal.md)
 - [production-readiness](production-readiness.md)
 - [release-flow-production-readiness](release-flow-production-readiness.md)
 - [remediation-plan-2026-07-11](remediation-plan-2026-07-11.md)
@@ -208,13 +209,16 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 자동 조율 문서는 아래에 있다.
 
 - [auto/backend-pipeline](auto/backend-pipeline.md)
+- [auto/cleanup-report](auto/cleanup-report.md)
 - [auto/codex-goal-directive-20260714](auto/codex-goal-directive-20260714.md)
 - [auto/codex-directive-20260714-final](auto/codex-directive-20260714-final.md)
+- [auto/demo-readiness](auto/demo-readiness.md)
 - [auto/deploy-plan](auto/deploy-plan.md)
 - [auto/deploy-drift-audit](auto/deploy-drift-audit.md)
 - [auto/deploy-setup](auto/deploy-setup.md)
 - [auto/deploy-status](auto/deploy-status.md)
 - [auto/frontend-pipeline](auto/frontend-pipeline.md)
+- [auto/inflight](auto/inflight.md)
 - [auto/night-directives](auto/night-directives.md)
 - [auto/night-log](auto/night-log.md)
 - [auto/night-log-backend](auto/night-log-backend.md)
@@ -264,6 +268,7 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [rca-production-onboarding/07-how-to-find-and-implement](rca-production-onboarding/07-how-to-find-and-implement.md)
 - [rca-production-onboarding/08-provider-evidence-field-guide](rca-production-onboarding/08-provider-evidence-field-guide.md)
 - [rca-production-onboarding/09-rca-rule-catalog-guide](rca-production-onboarding/09-rca-rule-catalog-guide.md)
+- [rca-production-onboarding/10-recovery-action-compatibility](rca-production-onboarding/10-recovery-action-compatibility.md)
 - [rca-production-onboarding/provider-evidence-request](rca-production-onboarding/provider-evidence-request.md)
 
 팀 문서는 아래에 있다.
@@ -413,6 +418,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-017-motion-spec](spec/frontend/vp-017-motion-spec.md)
 - [spec/frontend/vp-018-shell-corrections](spec/frontend/vp-018-shell-corrections.md)
 - [spec/frontend/vp-019-radar-full-port](spec/frontend/vp-019-radar-full-port.md)
+- [spec/frontend/vp-020-alerts](spec/frontend/vp-020-alerts.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)
 - [spec/packages/contracts](spec/packages/contracts.md)

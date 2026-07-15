@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 
 export function WorkflowWorkspaceHeader({

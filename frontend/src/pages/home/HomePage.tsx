@@ -1,18 +1,18 @@
-import { CircleAlert, RefreshCw } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
-import { Button } from "../../shared/ui/primitives/button";
+import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
+import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeLiveBand } from "./HomeLiveBand";
 import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({ port }: { port: HomePort }) {
-  const { t } = useI18n();
   const state = useHomePageState(port);
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
@@ -38,23 +38,17 @@ export function HomePage({ port }: { port: HomePort }) {
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
-        <Button
-          aria-label={t("common.action.refresh")}
-          disabled={refreshing}
-          onClick={state.refresh}
-          size="icon"
-          type="button"
-          variant="outline"
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={refreshing ? "motion-safe:animate-spin" : undefined}
-          />
-        </Button>
+        <PollingFreshness
+          connectionState={homeConnectionState(state)}
+          dataUpdatedAt={state.dataUpdatedAt}
+          intervalSeconds={state.selectedNodeName ? 5 : 10}
+          isFetching={refreshing}
+          onRefresh={state.refresh}
+        />
       </header>
       {!state.selectedClusterExists ? (
         state.clusterSelection.kind === "unfiltered" ? (
-          <HomeClusterBoundary variant="required" />
+          <HomeClusterGrid clusters={state.choices.data.clusters} />
         ) : state.clusterSelection.kind === "multiple" ? (
           <HomeClusterBoundary variant="multiple" />
         ) : (
@@ -82,6 +76,14 @@ export function HomePage({ port }: { port: HomePort }) {
       )}
     </ProductPageFrame>
   );
+}
+
+function homeConnectionState(state: ReturnType<typeof useHomePageState>) {
+  const resources = [state.choices, state.overview, state.nodes, state.pods];
+  return resources.some((resource) =>
+    resource.phase === "failed" ||
+    (resource.phase === "ready" && resource.refreshFailure !== null)
+  ) ? "disconnected" as const : "connected" as const;
 }
 
 function HomeClusterBoundary({

@@ -46,6 +46,8 @@ class EventIdAcceptedResponse(StrictModel):
 
 class AuthSessionResponse(StrictModel):
     authenticated: bool
+    display_name: str | None = None
+    email: str | None = None
     user_id: str
     roles: list[str]
     workspace_id: str
@@ -409,6 +411,18 @@ class RcaMissingCheckItem(StrictModel):
     reason: str | None = None
 
 
+class RcaNarrativeItem(StrictModel):
+    """Evidence-bounded prose generated after deterministic RCA completion."""
+
+    locale: Literal["ko"]
+    executive_summary: str
+    impact: str
+    reasoning: str
+    recommended_action: str
+    recurrence_prevention: list[str] = Field(min_length=1)
+    limitations: list[str] = Field(min_length=1)
+
+
 class RcaReportSummaryItem(StrictModel):
     """저장된 RCA report 요약 — payload 원문 대신 화이트리스트 필드만 노출(secret 유출 방지)."""
 
@@ -436,6 +450,8 @@ class RcaReportSummaryItem(StrictModel):
     candidates: list[RcaCandidateScoreItem] = Field(default_factory=list)
     supporting_evidence_refs: list[RcaEvidenceRefItem] = Field(default_factory=list)
     missing_evidence_checks: list[RcaMissingCheckItem] = Field(default_factory=list)
+    narrative: RcaNarrativeItem | None = None
+    narrative_status: Literal["generated", "unavailable"] = "unavailable"
 
 
 class RcaReportListResponse(StrictModel):
@@ -689,7 +705,7 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
-ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale"]
+ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale", "pod.exec"]
 
 
 class ResourceCapabilitySubject(StrictModel):
@@ -708,7 +724,7 @@ class ResourceActionCapability(StrictModel):
     """현재 actor가 바로 진입할 수 있는 실제 gateway action."""
 
     capability_id: ResourceActionCapabilityId
-    method: Literal["POST"] = "POST"
+    method: Literal["POST", "WEBSOCKET"] = "POST"
     path: str = Field(min_length=1, pattern=r"^/")
 
 
@@ -727,6 +743,46 @@ class ResourceCapabilitiesResponse(StrictModel):
         if len(capability_ids) != len(set(capability_ids)):
             raise ValueError("resource capabilities must be unique")
         return self
+
+
+class ResourceManifestSourceChoice(StrictModel):
+    application_id: str
+    application_name: str
+    repository_ref: str
+    branch: str
+    manifest_path: str
+    environment: str
+
+
+class ResourceManifestSourceResponse(StrictModel):
+    resource_id: str
+    status: Literal["available", "ambiguous", "unsupported"]
+    choices: list[ResourceManifestSourceChoice] = Field(default_factory=list)
+    selected: ResourceManifestSourceChoice | None = None
+    base_sha: str | None = None
+    source_sha256: str | None = None
+    content: str | None = None
+    reason: str | None = None
+
+
+class ResourceManifestPreviewResponse(StrictModel):
+    valid: bool
+    changed: bool
+    base_sha: str
+    source_sha256: str
+    desired_sha256: str
+    diff: str
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ResourceManifestApproveResponse(StrictModel):
+    accepted: bool
+    event_id: str
+    correlation_id: str
+    workflow_run_id: str
+    approval_id: str
+    sync_state: Literal["awaiting_pr_merge"] = "awaiting_pr_merge"
 
 
 FilterCountCompleteness = Literal["exact", "partial", "unavailable"]
@@ -821,10 +877,15 @@ class GlobalResourceFacetItem(GlobalClusterFacetItem):
     kind: str = Field(min_length=1)
 
 
+class GlobalResourceTypeFacetItem(GlobalClusterFacetItem):
+    pass
+
+
 class GlobalFilterFacetsResponse(StrictModel):
     clusters: list[GlobalClusterFacetItem] = Field(default_factory=list)
     namespaces: list[GlobalNamespaceFacetItem] = Field(default_factory=list)
     applications: list[GlobalApplicationFacetItem] = Field(default_factory=list)
+    resource_types: list[GlobalResourceTypeFacetItem] = Field(default_factory=list)
     labels: list[GlobalLabelFacetItem] = Field(default_factory=list)
     resources: list[GlobalResourceFacetItem] = Field(default_factory=list)
 
@@ -859,8 +920,8 @@ class ResourceMetricHistoryPoint(StrictModel):
 class ResourceMetricHistorySeries(StrictModel):
     resource_id: str = Field(min_length=1)
     cluster_id: str = Field(min_length=1)
-    resource_type: Literal["pod"] = "pod"
-    namespace: str = Field(min_length=1)
+    resource_type: Literal["pod", "node"]
+    namespace: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1)
     points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
     has_sparkline_points: bool
@@ -869,6 +930,10 @@ class ResourceMetricHistorySeries(StrictModel):
 
     @model_validator(mode="after")
     def validate_metric_history(self) -> Self:
+        if self.resource_type == "pod" and self.namespace is None:
+            raise ValueError("pod metric history requires a namespace")
+        if self.resource_type == "node" and self.namespace is not None:
+            raise ValueError("node metric history must be cluster scoped")
         observed_at = [point.observed_at for point in self.points]
         if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
             raise ValueError("resource metric history points must be unique and ordered")
@@ -1108,15 +1173,23 @@ class PhysicalTopologyPod(StrictModel):
     # requests 대비 사용률이다. requests 근거가 projection에 없으면 0이 아니라 null이다.
     usage_pct: float | None = Field(default=None, ge=0)
     cpu_mcores: float | None = Field(default=None, ge=0)
+    cpu_request_mcores: float | None = Field(default=None, gt=0)
     mem_mib: float | None = Field(default=None, ge=0)
-    cpu_request_mcores: float | None = Field(default=None, ge=0)
-    mem_request_mib: float | None = Field(default=None, ge=0)
-    cpu_limit_mcores: float | None = Field(default=None, ge=0)
-    mem_limit_mib: float | None = Field(default=None, ge=0)
+    mem_request_mib: float | None = Field(default=None, gt=0)
+    cpu_limit_mcores: float | None = Field(default=None, gt=0)
+    mem_limit_mib: float | None = Field(default=None, gt=0)
     phase: str
     health: str
     restarts: int = Field(ge=0)
     matches_filter: bool
+
+    @model_validator(mode="after")
+    def validate_request_relative_usage(self) -> Self:
+        requests_missing = self.cpu_request_mcores is None or self.mem_request_mib is None
+        measurements_missing = self.cpu_mcores is None and self.mem_mib is None
+        if self.usage_pct is not None and (requests_missing or measurements_missing):
+            raise ValueError("physical topology usage requires complete request evidence")
+        return self
 
 
 class PhysicalTopologyResponse(StrictModel):
@@ -1770,6 +1843,24 @@ class ClusterConnectStatusResponse(StrictModel):
     connected_at: str | None = None
 
 
+class ClusterUnregisterResponse(StrictModel):
+    cluster_id: str
+    status: Literal["uninstalling", "cleanup_required", "disconnected", "purged"]
+    stage: Literal[
+        "agent_cleanup_queued",
+        "manual_cleanup_required",
+        "registration_revoked",
+        "purged",
+    ]
+    command_id: str | None = None
+    command_status_path: str | None = None
+    uninstall_command: str | None = None
+    cleanup_verified: bool = False
+    resources: list[str] = Field(default_factory=list)
+    residual_resources: list[str] = Field(default_factory=list)
+    failure_reason: str | None = None
+
+
 class AlertChannelResponse(StrictModel):
     channel_id: str
     workspace_id: str
@@ -1889,13 +1980,34 @@ class AiEvidenceLink(StrictModel):
         return self
 
 
+class AiChatAction(StrictModel):
+    """Human-confirmed action proposal; this response never executes it."""
+
+    type: Literal["create_alert_rule"]
+    payload: JsonMap
+    rationale: str = Field(min_length=1, max_length=1000)
+
+
 class AiChatResponse(StrictModel):
     answer: str = Field(min_length=1, max_length=4000)
     evidence: list[AiEvidenceLink] = Field(default_factory=list, max_length=20)
+    action: AiChatAction | None = None
+    # Capability/identity questions are answered by the configured model from
+    # the product capability contract, not from cluster evidence. Keeping this
+    # explicit prevents an arbitrary evidence-free operational claim from
+    # passing the response boundary.
+    answer_kind: Literal["capability"] | None = None
 
     @model_validator(mode="after")
     def require_evidence_or_canonical_no_data(self) -> Self:
-        if not self.evidence and self.answer != AI_NO_DATA_ANSWER:
+        if self.answer_kind == "capability" and (self.evidence or self.action is not None):
+            raise ValueError("AI capability answers cannot carry operational evidence or actions")
+        if (
+            not self.evidence
+            and self.action is None
+            and self.answer_kind != "capability"
+            and self.answer != AI_NO_DATA_ANSWER
+        ):
             raise ValueError("AI answer without evidence must use the canonical no-data answer")
         identities = [(item.type, item.id) for item in self.evidence]
         if len(set(identities)) != len(identities):

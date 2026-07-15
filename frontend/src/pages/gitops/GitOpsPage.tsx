@@ -1,4 +1,5 @@
 import { GitBranch, LayoutGrid, RefreshCw, X } from "lucide-react";
+import { useState } from "react";
 import type { GitOpsPort, ReleasePlan } from "../../features/gitops/gitOpsContract";
 import { WORKFLOW_VIEWS, settingString, type WorkflowView } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
@@ -15,8 +16,51 @@ import { NativeSelect, policyLabel } from "./WorkflowFormControls";
 import { WorkflowOverview } from "./WorkflowOverview";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowPlanPicker } from "./WorkflowPlanPicker";
+import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
+
+type GitOpsSection = "changes" | "sync";
 
 export function GitOpsPage({ port }: { port: GitOpsPort }) {
+  const { t } = useI18n();
+  const [section, setSection] = useState<GitOpsSection>("changes");
+
+  return (
+    <ProductPageFrame className="gap-4">
+      <WorkflowInlineHeading
+        as="h1"
+        icon={<GitBranch aria-hidden="true" />}
+        title={t("workflows.title")}
+        variant="page"
+      />
+      <Tabs
+        className="min-w-0 gap-4"
+        onValueChange={(value) => {
+          if (value === "changes" || value === "sync") setSection(value);
+        }}
+        value={section}
+      >
+        <nav aria-label={t("workflows.section.aria")} className="min-w-0 border-b">
+          <TabsList
+            aria-label={t("workflows.section.aria")}
+            className="grid h-auto w-full max-w-sm grid-cols-2 overflow-hidden rounded-none bg-transparent p-0"
+            variant="line"
+          >
+            <TabsTrigger className="h-10" value="changes">{t("workflows.section.changes")}</TabsTrigger>
+            <TabsTrigger className="h-10" value="sync">{t("workflows.section.sync")}</TabsTrigger>
+          </TabsList>
+        </nav>
+        <TabsContent className="min-w-0" value="changes">
+          {section === "changes" ? <GitOpsChangesWorkspace port={port} /> : null}
+        </TabsContent>
+        <TabsContent className="min-w-0" value="sync">
+          {section === "sync" ? <GitOpsSyncTableView port={port} /> : null}
+        </TabsContent>
+      </Tabs>
+    </ProductPageFrame>
+  );
+}
+
+function GitOpsChangesWorkspace({ port }: { port: GitOpsPort }) {
   const { t } = useI18n();
   const page = useGitOpsPageController(port);
 
@@ -25,31 +69,27 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
   }
   if (page.creating) {
     return (
-      <ProductPageFrame>
+      <div className="grid min-w-0 gap-4">
         {page.feedback ? <FeedbackBanner feedback={page.feedback} onClose={() => page.setFeedback(undefined)} /> : null}
         <PlanWizard
           applications={page.data.applications}
+          clusters={page.data.clusters}
           onCancel={page.cancelCreate}
           onChange={page.setNewPlan}
           onCreate={() => void page.createPlan()}
+          onCreateTarget={page.createTarget}
           pending={page.operation === "create"}
           plan={page.newPlan}
+          targetPending={page.operation === "target"}
         />
-      </ProductPageFrame>
+      </div>
     );
   }
 
   return (
-    <ProductPageFrame className="gap-4">
-      <header className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <WorkflowInlineHeading
-          as="h1"
-          className="flex-1"
-          icon={<GitBranch aria-hidden="true" />}
-          title={t("workflows.title")}
-          variant="page"
-        />
-        {page.selectedPlan ? (
+    <div className="grid min-w-0 gap-4">
+      {page.selectedPlan ? (
+        <div className="flex min-w-0 justify-end">
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row lg:max-w-2xl">
             <Button className="self-stretch sm:self-end" onClick={page.showPlanList} variant="outline">
               <LayoutGrid aria-hidden="true" />{t("workflows.plan.list")}
@@ -66,8 +106,8 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
               </NativeSelect>
             </label>
           </div>
-        ) : null}
-      </header>
+        </div>
+      ) : null}
 
       {page.feedback ? <FeedbackBanner feedback={page.feedback} onClose={() => page.setFeedback(undefined)} /> : null}
       {page.data.error ? <LoadError onRetry={page.data.refresh} /> : null}
@@ -106,12 +146,15 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           <TabsContent className="min-w-0" value="edit">
             <PlanEditor
               applications={page.data.applications}
+              clusters={page.data.clusters}
               focusedField={page.editorTarget?.field}
               focusedStepId={page.editorTarget?.stepId}
               onChange={page.setDraft}
               onSave={() => void page.saveDraft()}
+              onCreateTarget={page.createTarget}
               pending={page.operation === "save"}
               plan={page.draft}
+              targetPending={page.operation === "target"}
             />
           </TabsContent>
           <TabsContent className="min-w-0" value="runs">
@@ -144,7 +187,7 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
       ) : (
         <WorkflowPlanPicker onCreate={page.beginCreate} onSelect={page.openPlan} plans={page.data.plans} />
       )}
-    </ProductPageFrame>
+    </div>
   );
 }
 

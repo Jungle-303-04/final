@@ -8,14 +8,23 @@ agent 인증은 api-gateway 와 동일한 per-cluster 토큰(x-agent-token 해�
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 from hub import BrowserClient, RealtimeHub
+from terminal_sessions import (
+    TerminalAuditor,
+    TerminalAuthorizer,
+    TerminalSessionBroker,
+    database_terminal_auditor,
+    database_terminal_authorizer,
+)
 
 from domains.identity.dependencies import (
     AGENT_TOKEN_HEADER,
@@ -43,6 +52,7 @@ from packages.contracts.realtime import (
     delta_key_parts,
     parse_realtime_message,
 )
+from packages.contracts.terminal import BROWSER_TERMINAL_PATH
 from packages.runtime.service import FastApiService
 from packages.security.trusted_proxy import (
     assert_trusted_proxy_config_safe,
@@ -67,6 +77,7 @@ CLOSE_PROTOCOL_VIOLATION = 1008
 AgentAuthenticator = Callable[[str], Any]
 BrowserSessionAuthenticator = Callable[[str | None], Awaitable[Any]]
 BrowserClusterAuthorizer = Callable[[Any, str, str], Awaitable[bool]]
+LiveUsagePersister = Callable[[str, str, datetime, dict[str, Any]], Any]
 
 REDIS_URL_ENV = "REDIS_URL"
 SESSION_KEY_PREFIX = "session"
@@ -163,6 +174,9 @@ def create_app(
     authenticate_agent: AgentAuthenticator | None = None,
     authenticate_browser: BrowserSessionAuthenticator | None = None,
     authorize_browser_cluster: BrowserClusterAuthorizer | None = None,
+    authorize_browser_terminal: TerminalAuthorizer | None = None,
+    audit_terminal: TerminalAuditor | None = None,
+    persist_live_usage: LiveUsagePersister | None = None,
 ) -> FastAPI:
     if db is None and (authenticate_agent is None or authorize_browser_cluster is None):
         db = Database()
@@ -177,8 +191,35 @@ def create_app(
         if db is None:  # pragma: no cover - create_app 위의 DB 생성 불변식 방어
             raise RuntimeError("database is required for browser cluster authorization")
         authorize_browser_cluster = database_browser_cluster_authorizer(db)
+    if authorize_browser_terminal is None:
+        authorize_browser_terminal = (
+            database_terminal_authorizer(db) if db is not None else _deny_terminal
+        )
+    if audit_terminal is None:
+        audit_terminal = database_terminal_auditor(db) if db is not None else _fail_terminal_audit
+    if persist_live_usage is None and db is not None:
+        save_live_usage = getattr(db, "save_live_cluster_usage_sample", None)
+        if callable(save_live_usage):
+
+            async def persist_live_usage(
+                workspace_id: str,
+                cluster_id: str,
+                sampled_at: datetime,
+                usage: dict[str, Any],
+            ) -> Any:
+                return await asyncio.to_thread(
+                    save_live_usage,
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    sampled_at=sampled_at,
+                    usage=usage,
+                )
 
     hub = RealtimeHub()
+    terminal_broker = TerminalSessionBroker(
+        authorize=authorize_browser_terminal,
+        audit=audit_terminal,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -220,18 +261,53 @@ def create_app(
             await websocket.close(code=CLOSE_UNAUTHORIZED)
             return
 
+        agent_channel = await terminal_broker.register_agent(cluster_id, websocket)
         await websocket.send_json(HelloMessage().model_dump(mode="json"))
         LOGGER.info("agent_stream_connected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}})
         try:
             while True:
                 payload = await websocket.receive_json()
-                if not _ingest(hub, cluster_id, payload):
+                terminal_result = await terminal_broker.handle_agent_payload(cluster_id, payload)
+                if terminal_result is True:
+                    continue
+                message = (
+                    _ingest(hub, cluster_id, payload) if terminal_result is not False else None
+                )
+                if message is None:
                     await websocket.close(code=CLOSE_PROTOCOL_VIOLATION)
                     return
+                if isinstance(message, LiveSummaryMessage) and persist_live_usage is not None:
+                    usage = live_usage_payload(
+                        message.summary.model_dump(mode="json"),
+                        hub.resources_for_cluster(cluster_id),
+                    )
+                    if usage.get("pods"):
+                        try:
+                            saved = persist_live_usage(
+                                str(identity[Gateway.WORKSPACE_ID]),
+                                cluster_id,
+                                datetime.now(UTC),
+                                usage,
+                            )
+                            if inspect.isawaitable(saved):
+                                await saved
+                        except Exception as exc:
+                            # 실시간 fan-out은 저장소 일시 장애와 독립적으로 계속 제공한다.
+                            LOGGER.warning(
+                                "live_usage_persist_failed",
+                                extra={
+                                    CONTEXT_KEY: {
+                                        Gateway.CLUSTER_ID: cluster_id,
+                                        "exception_type": type(exc).__name__,
+                                    }
+                                },
+                            )
         except WebSocketDisconnect:
             LOGGER.info(
                 "agent_stream_disconnected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
             )
+        finally:
+            await terminal_broker.unregister_agent(cluster_id, agent_channel)
 
     @app.websocket(BROWSER_LIVE_PATH)
     async def browser_live(websocket: WebSocket) -> None:
@@ -291,7 +367,33 @@ def create_app(
             with suppress(asyncio.CancelledError):
                 await sender
 
+    @app.websocket(BROWSER_TERMINAL_PATH)
+    async def browser_terminal(websocket: WebSocket) -> None:
+        await websocket.accept()
+        proxy_identity = trusted_proxy_identity(websocket.headers)
+        session = (
+            {
+                Gateway.WORKSPACE_ID: proxy_identity.workspace_id,
+                "user_id": proxy_identity.user_id,
+                "roles": [ServiceRole.SERVICE_ADMIN.value],
+            }
+            if proxy_identity is not None
+            else await authenticate_browser(browser_session_token(websocket))
+        )
+        if session is None:
+            await websocket.close(code=CLOSE_UNAUTHORIZED)
+            return
+        await terminal_broker.serve_browser(websocket, session)
+
     return app
+
+
+async def _deny_terminal(*_args: object) -> bool:
+    return False
+
+
+async def _fail_terminal_audit(*_args: object) -> None:
+    raise RuntimeError("terminal audit store is unavailable")
 
 
 def browser_session_token(websocket: WebSocket) -> str | None:
@@ -330,28 +432,76 @@ def session_roles(session: Any) -> set[str]:
     return {str(role) for role in raw_roles}
 
 
-def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> bool:
-    """agent 수신 1건 처리. 계약 위반/권한 밖 클러스터는 False(연결 종료)."""
+def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> Any | None:
+    """agent 수신 1건 처리. 계약 위반/권한 밖 클러스터는 None(연결 종료)."""
     try:
         message = parse_realtime_message(payload)
     except ValueError:
         LOGGER.warning(
             "agent_message_invalid", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
         )
-        return False
+        return None
     if isinstance(message, PingMessage):
-        return True
+        return message
     if isinstance(message, LiveSummaryMessage):
         if message.cluster_id != cluster_id or message.summary.cluster_id != cluster_id:
-            return False
+            return None
         hub.publish_summary(message.summary)
-        return True
+        return message
     if isinstance(message, ResourceDelta):
         if delta_key_parts(message.key)[0] != cluster_id:
-            return False
+            return None
         hub.publish_delta(message)
-        return True
-    return False  # hello/snapshot 은 gateway → client 방향 전용
+        return message
+    return None  # hello/snapshot 은 gateway → client 방향 전용
+
+
+def live_usage_payload(
+    summary: dict[str, Any],
+    resources: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Build a replay/evaluation sample exclusively from agent-observed live resource deltas."""
+    pods: dict[str, dict[str, Any]] = {}
+    phases: dict[str, int] = {}
+    restart_total = 0
+    for key, value in resources.items():
+        _cluster, namespace, kind, name = delta_key_parts(key)
+        if kind.casefold() != "pod" or not namespace or not name:
+            continue
+        phase = str(value.get("phase") or "Unknown")
+        phases[phase] = phases.get(phase, 0) + 1
+        restarts = max(0, int(value.get("restarts") or 0))
+        restart_total += restarts
+        measured = {
+            field: value.get(field)
+            for field in (
+                "cpu_mcores",
+                "cpu_request_mcores",
+                "cpu_request_pct",
+                "mem_mib",
+                "mem_request_mib",
+                "mem_request_pct",
+                "ready",
+                "phase",
+                "restarts",
+                "node",
+            )
+            if value.get(field) is not None
+        }
+        if measured:
+            pods[f"{namespace}/{name}"] = measured
+    metadata = summary.get("metrics_metadata")
+    usage: dict[str, Any] = {
+        "pod_total": int(summary.get("pods_total") or len(pods)),
+        "pod_running": phases.get("Running", 0),
+        "pod_pending": phases.get("Pending", 0),
+        "pod_failed": phases.get("Failed", 0),
+        "restart_total": restart_total,
+        "pods": pods,
+    }
+    if isinstance(metadata, dict):
+        usage["metrics_metadata"] = dict(metadata)
+    return usage
 
 
 async def _browser_send_loop(websocket: WebSocket, hub: RealtimeHub, client: BrowserClient) -> None:

@@ -7,9 +7,10 @@ import { Card, CardContent } from "../../shared/ui/primitives/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../shared/ui/primitives/table";
 import { ApplicationsFailureState } from "./ApplicationsState";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import type { ApplicationsResource } from "./useApplicationsData";
 import type { ApplicationDeploymentModel } from "./applicationsContract";
-import { applicationStatusTone, formatObservedTime, shortSha } from "./applicationPresentation";
+import { applicationStatusTone, formatObservedTime } from "./applicationPresentation";
 
 export function ApplicationDeploymentsPanel({
   hrefForChange,
@@ -43,7 +44,9 @@ export function ApplicationDeploymentsPanel({
               <TableCell>{formatObservedTime(deployment.deployedAt, locale) ?? copy.unavailable}</TableCell>
               <TableCell>{deployment.environment ?? copy.unavailable}</TableCell>
               <TableCell>{deployment.version ?? copy.unavailable}</TableCell>
-              <TableCell className="font-mono text-xs">{shortSha(deployment.gitSha) ?? copy.unavailable}</TableCell>
+              <TableCell className="max-w-44 font-mono text-xs">
+                {deployment.gitSha ? <OverflowIdentity value={deployment.gitSha} /> : copy.unavailable}
+              </TableCell>
               <TableCell>{deployment.deployedBy ?? copy.unavailable}</TableCell>
               <TableCell><StatusMark label={deployment.status ?? copy.unknown} tone={applicationStatusTone(deployment.status)} /></TableCell>
               <TableCell>{deployment.gitOpsChangeId ? (

@@ -122,8 +122,9 @@ class RecoverySelectionDb(RecoveryRouterDb):
             "correlation_id": self.row["correlation_id"],
         }
 
-    def request_workflow_approval(self, payload: dict[str, object]) -> None:
+    def request_workflow_approval(self, payload: dict[str, object]) -> dict[str, object]:
         self.approvals.append(payload)
+        return {**payload, "workflow_run_id": "workflow-recovery-1"}
 
 
 class RecoverySelectionEvents:
@@ -330,6 +331,7 @@ def test_select_recovery_action_by_correlation_accepts_object_ids_in_json() -> N
     assert len(events.bodies) == 1
     assert events.bodies[0].selected.action_id == selected_action_id
     assert events.bodies[0].reason == "operator chose manual analysis"
+    assert events.bodies[0].selected.draft.params["workflow_run_id"] == "workflow-recovery-1"
 
 
 def test_select_recovery_action_defaults_to_recommended_candidate() -> None:

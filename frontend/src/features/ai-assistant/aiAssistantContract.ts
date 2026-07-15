@@ -23,9 +23,34 @@ export interface AiEvidenceLink {
   link: `/${string}`;
 }
 
+export interface AiAlertRuleActionPayload {
+  name: string;
+  scope: {
+    clusters: readonly string[];
+    namespaces: readonly string[];
+    applications: readonly string[];
+    labels: readonly string[];
+  };
+  metric: "cpu_pct" | "mem_pct" | "restart_count" | "pod_not_ready";
+  comparator: ">" | ">=" | "<" | "<=";
+  threshold: number;
+  forSeconds: number;
+  severity: "critical" | "high" | "medium" | "low";
+  channels: readonly string[];
+  enabled: boolean;
+}
+
+export interface AiAlertRuleAction {
+  type: "create_alert_rule";
+  payload: AiAlertRuleActionPayload;
+  rationale: string;
+}
+
 export interface AiAssistantAnswer {
   answer: string;
   evidence: AiEvidenceLink[];
+  action: AiAlertRuleAction | null;
+  answerKind?: "capability" | null;
 }
 
 export interface AiAssistantSuggestion {
@@ -61,9 +86,14 @@ export interface AiAssistantPort {
     context: AiAssistantContext,
     signal?: AbortSignal,
   ): Promise<AiAssistantSuggestion[]>;
+  createAlertRule(
+    action: AiAlertRuleAction,
+    signal?: AbortSignal,
+  ): Promise<{ ruleId: string }>;
 }
 
 export const EMPTY_AI_ASSISTANT_PORT: AiAssistantPort = {
   ask: async () => { throw new AiAssistantPortFailure("unavailable"); },
   loadSuggestions: async () => [],
+  createAlertRule: async () => { throw new AiAssistantPortFailure("unavailable"); },
 };

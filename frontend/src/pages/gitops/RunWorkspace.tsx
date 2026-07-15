@@ -20,6 +20,7 @@ import {
 } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Surface } from "../../shared/ui/Surface";
 import {
   checkCoveredBySetupIssues,
@@ -180,9 +181,7 @@ export function RunWorkspace({
                     </h3>
                     <RunStatusBadge status={selectedRun.status} />
                   </div>
-                  <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                    {selectedRun.run_id}
-                  </span>
+                  <OverflowIdentity className="text-xs text-muted-foreground" value={selectedRun.run_id} />
                 </div>
                 <RunActions pending={pending} run={selectedRun} onAction={onAction} />
               </div>

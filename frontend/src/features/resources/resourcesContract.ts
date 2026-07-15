@@ -92,6 +92,8 @@ export type ResourceFacts =
       hostIp: string | null;
       waitingReasons: string[];
       terminatedReasons: string[];
+      /** Canonical inventory adapters populate this from the observed Pod spec. */
+      containerNames?: string[];
     }
   | {
       type: "node";

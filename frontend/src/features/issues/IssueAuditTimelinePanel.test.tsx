@@ -13,20 +13,24 @@ const PAGE: IssueAuditTimelinePage = {
   correlationId: "correlation-1",
   items: [
     {
+      eventId: "event-incident-1",
       subject: "incident.detected",
       source: "dashboard-projection",
       createdAt: "2026-07-13T01:10:00Z",
       causationId: null,
+      journeyStage: "alert",
       payloadSummary: {
         incident_id: "incident-1",
         snapshot: { attempt: 2, ready: false },
       },
     },
     {
+      eventId: "event-rca-1",
       subject: "rca.completed",
       source: "rca-worker",
       createdAt: "2026-07-13T01:30:00Z",
       causationId: "event-parent-1",
+      journeyStage: "rca",
       payloadSummary: {},
     },
   ],

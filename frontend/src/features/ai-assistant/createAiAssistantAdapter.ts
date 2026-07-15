@@ -22,6 +22,27 @@ export function createAiAssistantAdapter(
             ...item,
             link: item.link as `/${string}`,
           })),
+          action: response.action ? {
+            type: response.action.type,
+            rationale: response.action.rationale,
+            payload: {
+              name: response.action.payload.name,
+              scope: {
+                clusters: response.action.payload.scope.clusters ?? [],
+                namespaces: response.action.payload.scope.namespaces ?? [],
+                applications: response.action.payload.scope.applications ?? [],
+                labels: response.action.payload.scope.labels ?? [],
+              },
+              metric: response.action.payload.metric,
+              comparator: response.action.payload.comparator,
+              threshold: response.action.payload.threshold,
+              forSeconds: response.action.payload.for_seconds,
+              severity: response.action.payload.severity,
+              channels: response.action.payload.channels,
+              enabled: response.action.payload.enabled,
+            },
+          } : null,
+          answerKind: response.answer_kind ?? null,
         };
       });
     },
@@ -29,6 +50,25 @@ export function createAiAssistantAdapter(
       return withFailure(async () => (
         await endpoints.getAiSuggestions(toEndpointContext(context), signal)
       ).suggestions);
+    },
+    async createAlertRule(action, signal) {
+      if (action.type !== "create_alert_rule") {
+        throw new AiAssistantPortFailure("invalid-request");
+      }
+      return withFailure(async () => {
+        const created = await endpoints.createAlertRule({
+          name: action.payload.name,
+          scope: action.payload.scope,
+          metric: action.payload.metric,
+          comparator: action.payload.comparator,
+          threshold: action.payload.threshold,
+          for_seconds: action.payload.forSeconds,
+          severity: action.payload.severity,
+          channels: action.payload.channels,
+          enabled: action.payload.enabled,
+        }, signal);
+        return { ruleId: created.rule_id };
+      });
     },
   };
 }

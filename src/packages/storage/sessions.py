@@ -16,6 +16,8 @@ class AuthSession:
     user_id: str
     roles: list[str]
     workspace_id: str
+    display_name: str | None = None
+    email: str | None = None
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,8 @@ class SessionStore(Protocol):
         user_id: str,
         roles: list[str] | None = None,
         workspace_id: str | None = None,
+        display_name: str | None = None,
+        email: str | None = None,
     ) -> AuthSession: ...
 
     async def get_session(self, token: str | None) -> AuthSession | None: ...
@@ -113,6 +117,8 @@ class MemorySessionStore:
         user_id: str,
         roles: list[str] | None = None,
         workspace_id: str | None = None,
+        display_name: str | None = None,
+        email: str | None = None,
     ) -> AuthSession:
         self._require_connected()
         token = secrets.token_urlsafe(self.config.token_bytes)
@@ -121,6 +127,8 @@ class MemorySessionStore:
             user_id=user_id,
             roles=roles or list(self.config.default_roles),
             workspace_id=workspace_id or self.config.default_workspace_id,
+            display_name=display_name,
+            email=email,
         )
         self.sessions[token] = (time.monotonic() + self.config.ttl_seconds, session)
         return session
@@ -250,6 +258,8 @@ class RedisSessionStore:
         user_id: str,
         roles: list[str] | None = None,
         workspace_id: str | None = None,
+        display_name: str | None = None,
+        email: str | None = None,
     ) -> AuthSession:
         token = secrets.token_urlsafe(self.config.token_bytes)
         session = AuthSession(
@@ -257,6 +267,8 @@ class RedisSessionStore:
             user_id=user_id,
             roles=roles or list(self.config.default_roles),
             workspace_id=workspace_id or self.config.default_workspace_id,
+            display_name=display_name,
+            email=email,
         )
         await self._client().setex(
             f"{self.config.key_prefix}:{token}",
@@ -266,6 +278,8 @@ class RedisSessionStore:
                     "user_id": session.user_id,
                     "roles": session.roles,
                     "workspace_id": session.workspace_id,
+                    "display_name": session.display_name,
+                    "email": session.email,
                 }
             ),
         )
@@ -283,6 +297,8 @@ class RedisSessionStore:
             user_id=payload["user_id"],
             roles=list(payload.get("roles", [])),
             workspace_id=payload.get("workspace_id", self.config.default_workspace_id),
+            display_name=payload.get("display_name"),
+            email=payload.get("email"),
         )
 
     async def touch_session(self, token: str | None) -> bool:

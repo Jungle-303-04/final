@@ -1,5 +1,6 @@
 import { apiRequest, type ApiPath } from "./client";
-import { listApplications } from "./applications";
+import { connectApplication, listApplications } from "./applications";
+import { listClusters } from "./clusters";
 import {
   releaseGeneratedManifestSchema,
   releasePlanListSchema,
@@ -25,6 +26,8 @@ export type ReleaseRunAction =
 export function createReleaseFlowClient() {
   return {
     listApplications: (signal?: AbortSignal) => listApplications({ signal }),
+    listClusters: (signal?: AbortSignal) => listClusters({}, signal),
+    connectApplication,
     listPlans: (signal?: AbortSignal) =>
       apiRequest("/api/release-plans", releasePlanListSchema, { signal }),
     listRuns: (planId?: string, signal?: AbortSignal) => {

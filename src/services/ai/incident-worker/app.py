@@ -10,6 +10,7 @@ from packages.contracts.stores import RcaStore
 from packages.runtime.app import App, EventContext
 from services.ai.agent.defaults import EvidenceDefaults
 from services.ai.agent.pipeline import IncidentPipeline
+from services.ai.agent.pipeline.incident_signal import incident_termination_identity
 
 app = App("incident-worker")
 pipeline = IncidentPipeline()
@@ -23,9 +24,23 @@ async def on_evidence_built(
 ) -> AsyncIterator[EventBody]:
     evt = await hydrate_evidence_built(evt, ctx)
     bodies = pipeline.build_bodies(evt.evidence, ctx.correlation_id)
-    yield bodies.detected_body
     if not bodies.detected_body.detected:
+        yield bodies.detected_body
         return
+    incident = bodies.detected_body.incident
+    if incident is not None:
+        identity = incident_termination_identity(evt.evidence, incident)
+        if identity is not None:
+            claimed = await ctx.db.claim_incident_signal(
+                evt.evidence.workspace_id,
+                evt.evidence.cluster_id,
+                identity.signal_key,
+                ctx.correlation_id,
+                identity.payload,
+            )
+            if not claimed:
+                return
+    yield bodies.detected_body
     yield bodies.next_body
 
 

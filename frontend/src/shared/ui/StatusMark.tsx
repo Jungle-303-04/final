@@ -1,4 +1,4 @@
-import { cn } from "./primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { useI18n, type MessageKey } from "../i18n";
 
 export type StatusTone = "healthy" | "warning" | "critical" | "stale" | "unknown";

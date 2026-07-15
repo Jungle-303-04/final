@@ -8,7 +8,8 @@ import {
   getIncidentRecentChanges,
   getInventorySummary,
   getNodePodsSummary,
-  getClusterConnectStatus,
+  getClusterConnectionStatus,
+  getCommandStatus,
   getPhysicalTopology,
   getRelationTopology,
   getChangeTimeline,
@@ -20,11 +21,13 @@ import {
   listRcaReports,
   listRcaTimeline,
   listClusters,
+  unregisterCluster,
   listGlobalFilterFacets,
   listFilteredResources,
   listResourceFilterFacets,
   listResourceLabelFacets,
   connectCluster,
+  reissueClusterConnectCommand,
   getApplicationDrift,
   getApplicationOverview,
   listApplicationCatalog,
@@ -39,7 +42,21 @@ import {
   postAiChat,
   openPodLogStream,
   openWorkloadLogStream,
+  openPodTerminal,
+  createRealtimeClient,
+  acknowledgeAlertEvent,
+  listAlertEvents,
+  listApplicationDeployments,
+  promoteAlertEvent,
+  createAlertRule,
+  deleteAlertRule,
+  listAlertRules,
+  updateAlertRule,
+  approveResourceManifestEdit,
+  getResourceManifestSource,
+  previewResourceManifestEdit,
 } from "../api";
+import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
 import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createAuthAdapter } from "../features/auth/createAuthAdapter";
@@ -58,6 +75,7 @@ import { createChangeTimelineAdapter } from "../features/resources/createChangeT
 import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
 import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
+import { createResourceManifestAdapter } from "../features/resources/createResourceManifestAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -65,6 +83,10 @@ import { createClustersSurface } from "../pages/clusters/createClustersSurface";
 import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
 import { createSettingsSurface } from "../pages/settings/createSettingsSurface";
 import { createProductComposition } from "./productComposition";
+import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
+import { createPodTerminalAdapter } from "../features/pod-terminal/createPodTerminalAdapter";
+import { createAlertsSurface } from "../pages/alerts/createAlertsSurface";
+import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -73,7 +95,13 @@ export function createApiComposition() {
     getNodePodsSummary,
     listClusters,
   });
-  const clustersPort = createClustersAdapter({ connectCluster, getClusterConnectStatus });
+  const clustersPort = createClustersAdapter({
+    connectCluster,
+    getClusterConnectionStatus,
+    getCommandStatus,
+    reissueClusterConnectCommand,
+    unregisterCluster,
+  });
   const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
   const resourcesPort = createResourcesAdapter({
     getInventoryResourceDetail,
@@ -86,6 +114,18 @@ export function createApiComposition() {
     listResourceLabelFacets,
   });
   const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
+  const physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = {
+    connect(subscription, handlers) {
+      const client = createRealtimeClient({
+        subscription,
+        reconnect: { baseDelayMs: 3_000, maxDelayMs: 30_000 },
+        onMessage: handlers.onMessage,
+        onStateChange: (state) => handlers.onStatusChange(state.status),
+      });
+      client.connect();
+      return () => client.close();
+    },
+  };
   const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
   const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
@@ -97,6 +137,12 @@ export function createApiComposition() {
   const resourceActionsPort = createResourceActionsAdapter({
     restartDeployment,
     scaleDeployment,
+  });
+  const podTerminalPort = createPodTerminalAdapter({ openPodTerminal });
+  const resourceManifestPort = createResourceManifestAdapter({
+    approveResourceManifestEdit,
+    getResourceManifestSource,
+    previewResourceManifestEdit,
   });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
@@ -114,9 +160,27 @@ export function createApiComposition() {
     listApplicationCatalog,
     listApplicationDeploymentHistory,
   });
-  const gitOpsPort = createGitOpsAdapter(createReleaseFlowClient());
-  const aiAssistantPort = createAiAssistantAdapter({ getAiSuggestions, postAiChat });
+  const gitOpsPort = createGitOpsAdapter({
+    ...createReleaseFlowClient(),
+    listApplicationDeployments,
+  });
+  const aiAssistantPort = createAiAssistantAdapter({
+    createAlertRule,
+    getAiSuggestions,
+    postAiChat,
+  });
   const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
+  const alertEventsPort = createAlertEventsAdapter({
+    acknowledgeAlertEvent,
+    listAlertEvents,
+    promoteAlertEvent,
+  });
+  const alertRulesPort = createAlertRulesAdapter({
+    createAlertRule,
+    deleteAlertRule,
+    listAlertRules,
+    updateAlertRule,
+  });
   return createProductComposition([
     {
       id: "clusters",
@@ -132,16 +196,24 @@ export function createApiComposition() {
         resourcesPort,
         resourcesFilterPort,
         physicalTopologyPort,
+        physicalTopologyRealtimePort,
+        homePort,
         relationTopologyPort,
         changeTimelinePort,
         resourceMetricsHistoryPort,
         resourceCapabilitiesPort,
         resourceActionsPort,
+        podTerminalPort,
+        resourceManifestPort,
       ),
     },
     {
       id: "issues",
       Component: createIssuesSurface(issuesPort),
+    },
+    {
+      id: "alerts",
+      Component: createAlertsSurface(alertRulesPort),
     },
     {
       id: "applications",
@@ -159,5 +231,5 @@ export function createApiComposition() {
     getSession,
     login,
     logout,
-  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort);
+  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort);
 }

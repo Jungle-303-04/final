@@ -30,6 +30,28 @@ afterEach(() => {
 });
 
 describe("GitOpsPage workspace navigation", () => {
+  it("separates incoming changes from real deployment sync observations", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    renderGitOps("/gitops", port);
+
+    const sections = screen.getByRole("navigation", { name: "GitOps views" });
+    expect(within(sections).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Changes",
+      "Sync status",
+    ]);
+    expect(await screen.findByRole("heading", { name: "Select plan" })).toBeTruthy();
+
+    await user.click(within(sections).getByRole("tab", { name: "Sync status" }));
+
+    expect(await screen.findByRole("heading", { name: "Deployment sync status" })).toBeTruthy();
+    expect(await screen.findByText("Checkout API")).toBeTruthy();
+    expect(screen.getByText("production-cluster")).toBeTruthy();
+    expect(screen.getByText("Synced")).toBeTruthy();
+    expect(screen.getByText("81de44f")).toBeTruthy();
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+  });
+
   it("starts with plan blocks and opens the selected plan overview", async () => {
     const user = userEvent.setup();
     renderGitOps("/gitops");
@@ -119,48 +141,44 @@ describe("GitOpsPage workspace navigation", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Plan name")));
   });
 
-  it("adds and removes release targets explicitly while creating a plan", async () => {
+  it("keeps checkbox selection and registers a new deployment target from the wizard", async () => {
     const user = userEvent.setup();
-    renderGitOps("/gitops");
+    const port = gitOpsPort();
+    renderGitOps("/gitops", port);
 
     await user.click(await screen.findByRole("button", { name: "New plan" }));
-    await user.type(screen.getByLabelText("Plan name"), "Explicit target plan");
+    await user.type(screen.getByLabelText("Plan name"), "Target registration plan");
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByRole("heading", { name: "Choose release targets" })).toBeTruthy();
-    const applicationSelect = screen.getByLabelText("Application") as HTMLSelectElement;
-    const addTarget = screen.getByRole("button", { name: "Add target" }) as HTMLButtonElement;
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.queryByRole("combobox", { name: "Application" })).toBeNull();
 
-    expect(applicationSelect.value).toBe("checkout-api");
-    await user.click(addTarget);
-    expect(screen.getByText("Checkout API")).toBeTruthy();
-    expect(applicationSelect.value).toBe("payments-worker");
+    await user.click(screen.getByRole("button", { name: "New deployment target" }));
+    expect(await screen.findByRole("dialog", { name: "New deployment target" })).toBeTruthy();
+    const preview = screen.getByRole("complementary", { name: "Deployment target preview" });
+    expect(within(preview).getAllByText("Not set").length).toBeGreaterThan(0);
+    await user.type(screen.getByLabelText("Target name"), "Inventory API");
+    await user.type(screen.getByLabelText("Git repository"), "team/inventory-api");
+    await user.type(screen.getByLabelText("GitHub token (optional)"), "production-secret-value");
+    expect(within(preview).getByText("Inventory API")).toBeTruthy();
+    expect(within(preview).getByText("team/inventory-api")).toBeTruthy();
+    expect(within(preview).getByText("Ready to register")).toBeTruthy();
+    expect(preview.textContent).not.toContain("production-secret-value");
+    await user.click(screen.getByRole("button", { name: "Register target" }));
 
-    await user.click(addTarget);
-    expect(screen.getByText("Payments Worker")).toBeTruthy();
-    expect(addTarget.disabled).toBe(true);
-    expect(applicationSelect.disabled).toBe(true);
-    expect(screen.getByRole("option", { name: "No targets available" })).toBeTruthy();
-
-    await user.click(screen.getByRole("button", { name: "Remove step: Checkout API" }));
-    expect(addTarget.disabled).toBe(false);
-    expect(applicationSelect.disabled).toBe(false);
-    expect(applicationSelect.value).toBe("checkout-api");
-  });
-
-  it("keeps the edit target action visible when every application is selected", async () => {
-    const user = userEvent.setup();
-    renderGitOps("/gitops?plan=plan-a&view=edit");
-
-    const addTarget = await screen.findByRole("button", { name: "Add target" }) as HTMLButtonElement;
-    const applicationSelect = screen.getByLabelText("Application") as HTMLSelectElement;
-    expect(addTarget.disabled).toBe(false);
-
-    await user.click(addTarget);
-
-    expect(addTarget.disabled).toBe(true);
-    expect(applicationSelect.disabled).toBe(true);
-    expect(screen.getByRole("option", { name: "No targets available" })).toBeTruthy();
+    await waitFor(() => expect(port.connectApplication).toHaveBeenCalledWith({
+      name: "Inventory API",
+      repository: "team/inventory-api",
+      branch: "main",
+      manifestPath: "deploy.yaml",
+      clusterId: "production-cluster",
+      namespace: "default",
+      environment: "development",
+      token: "production-secret-value",
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New deployment target" })).toBeNull());
+    expect((screen.getByRole("checkbox", { name: /Inventory API/ }) as HTMLInputElement).checked).toBe(true);
   });
 
   it("keeps the overview next action in the workspace header", async () => {

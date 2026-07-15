@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "../../shared/ui/primitives/cn";
+import { cn } from "@/shared/lib/cn";
 
 type HeadingTag = "h1" | "h2" | "h3" | "strong";
 type HeadingVariant = "page" | "section" | "compact";

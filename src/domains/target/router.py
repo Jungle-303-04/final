@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
+from sqlalchemy.exc import IntegrityError
 
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -44,7 +45,7 @@ from domains.target.evidence_policy import (
     enabled_provider_keys,
     provider_policy_snapshots,
 )
-from domains.target.install_manifest import target_install_manifest
+from domains.target.install_manifest import agent_namespace, target_install_manifest
 from domains.target.management_guard import (
     MANAGEMENT_CLUSTER_ROLE,
     freeze_management_policy,
@@ -54,6 +55,12 @@ from domains.target.management_guard import (
     management_readonly_detail,
 )
 from domains.target.reconciler import desired_state_version
+from domains.target.uninstall import (
+    SELF_CLEANUP_RESIDUALS,
+    queue_agent_uninstall,
+    target_uninstall_command,
+    target_uninstall_resources,
+)
 from packages.config.security import (
     TEST_FIXTURE_ENVIRONMENT,
     test_fixture_purge_enabled,
@@ -81,6 +88,7 @@ from packages.contracts.gateway.responses import (
     ClusterListResponse,
     ClusterResponse,
     ClusterSummary,
+    ClusterUnregisterResponse,
     EvidenceJobPollResponse,
     EvidenceJobResultResponse,
     EvidenceJobScheduleResponse,
@@ -121,6 +129,8 @@ CONNECT_PROVIDER_HINTS = {
     "azure": "aks",
     "onprem": "onprem",
 }
+CLUSTER_ACTIVE_NAME_INDEX = "ux_cluster_registrations_workspace_active_name"
+CLUSTER_NAME_CONFLICT_CODE = "cluster_name_conflict"
 TARGET_PROVIDER_INVALID = "target install provider selection is invalid"
 # evidence job 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
 DEFAULT_EVIDENCE_JOB_POLL_SECONDS_ENV = (
@@ -142,6 +152,7 @@ AGENT_STATUS_NEVER_CONNECTED = "never_connected"
 AGENT_STATUS_ONLINE = "online"
 AGENT_STATUS_STALE = "stale"
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
+TARGET_DEFAULT_CONTROL_NAMESPACES_ENV = "TARGET_DEFAULT_CONTROL_NAMESPACES"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
 PUBLIC_MANAGEMENT_BASE_URL_ENV = "PUBLIC_MANAGEMENT_BASE_URL"
 PUBLIC_API_BASE_URL_ENV = "PUBLIC_API_BASE_URL"
@@ -336,6 +347,11 @@ def normalize_target_provider_defaults(payload: TargetRegisterRequest) -> Target
     if management_base_url:
         updates["management_base_url"] = management_base_url
 
+    if payload.cluster_role != MANAGEMENT_CLUSTER_ROLE and not payload.control_namespaces.strip():
+        default_control_namespaces = env(TARGET_DEFAULT_CONTROL_NAMESPACES_ENV, "").strip()
+        if default_control_namespaces:
+            updates["control_namespaces"] = default_control_namespaces
+
     if payload.cluster_role == MANAGEMENT_CLUSTER_ROLE:
         updates["install_node_collector"] = False
         updates["install_sample_workload"] = False
@@ -362,6 +378,41 @@ def generated_cluster_id(name: str) -> str:
     suffix = f"{secrets.randbelow(10_000):04d}"
     base = slugify_cluster_name(name)[:58].strip("-") or "cluster"
     return f"{base}-{suffix}"
+
+
+def normalized_cluster_display_name(name: object) -> str:
+    return str(name).strip().casefold()
+
+
+def cluster_name_conflict_detail() -> dict[str, str]:
+    return {
+        "code": CLUSTER_NAME_CONFLICT_CODE,
+        "detail": "같은 워크스페이스에 동일한 이름의 활성 클러스터가 이미 있습니다",
+    }
+
+
+def require_unique_cluster_display_name(db: Any, workspace_id: str, name: str) -> None:
+    lister = getattr(db, "list_cluster_registrations", None)
+    if not callable(lister):
+        return
+    normalized = normalized_cluster_display_name(name)
+    for registration in lister(workspace_id, limit=500):
+        if str(registration.get("status") or "") in {
+            ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+            ClusterRegistrationStatus.DISCONNECTED.value,
+        }:
+            continue
+        if normalized_cluster_display_name(registration.get("name")) == normalized:
+            raise HTTPException(status_code=409, detail=cluster_name_conflict_detail())
+
+
+def is_cluster_name_integrity_conflict(error: IntegrityError) -> bool:
+    original = getattr(error, "orig", None)
+    diagnostic = getattr(original, "diag", None)
+    constraint_name = getattr(diagnostic, "constraint_name", None)
+    return constraint_name == CLUSTER_ACTIVE_NAME_INDEX or CLUSTER_ACTIVE_NAME_INDEX in str(
+        original
+    )
 
 
 def resolve_target_cluster_id(payload: TargetRegisterRequest, workspace_id: str, db: Any) -> str:
@@ -591,7 +642,29 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    return f"curl -fsSL {shell_quote(f'{base}{path}')} | kubectl apply -f -"
+    return guarded_kubectl_apply_command(payload, f"{base}{path}")
+
+
+def guarded_kubectl_apply_command(
+    payload: TargetRegisterRequest,
+    manifest_url: str,
+    context: str = "",
+) -> str:
+    """기존 에이전트 소유권을 다른 등록으로 조용히 덮어쓰지 않는 설치 명령."""
+    kubectl = "kubectl"
+    if context:
+        kubectl = f"kubectl --context {shell_quote(context)}"
+    namespace = agent_namespace(payload)
+    expected_cluster_id = payload.cluster_id or ""
+    guard = (
+        f'existing="$({kubectl} -n {shell_quote(namespace)} get configmap '
+        "target-runtime-config -o jsonpath='{.data.TARGET_CLUSTER_ID}' "
+        '2>/dev/null || true)"; '
+        f'if [ -n "$existing" ] && [ "$existing" != {shell_quote(expected_cluster_id)} ]; '
+        "then printf 'Opsia agent is already registered as %s; disconnect it before connecting "
+        f'{expected_cluster_id}.\\n\' "$existing" >&2; exit 1; fi; '
+    )
+    return f"{guard}curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -"
 
 
 def kubectl_apply_command(
@@ -601,10 +674,7 @@ def kubectl_apply_command(
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    kubectl = "kubectl"
-    if context:
-        kubectl = f"kubectl --context {shell_quote(context)}"
-    return f"curl -fsSL {shell_quote(f'{base}{path}')} | {kubectl} apply -f -"
+    return guarded_kubectl_apply_command(payload, f"{base}{path}", context)
 
 
 def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
@@ -1145,24 +1215,106 @@ async def connect_cluster(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
 ) -> ClusterConnectResponse:
-    receipt = await register_target(
-        TargetRegisterRequest(
-            name=payload.name.strip(),
-            environment="development",
-            cloud_provider="existing-k8s",
-            deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
-            provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},
-        ),
-        current=current,
-        db=db,
-        events=events,
-    )
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    display_name = payload.name.strip()
+    require_unique_cluster_display_name(db, workspace_id, display_name)
+    try:
+        receipt = await register_target(
+            TargetRegisterRequest(
+                name=display_name,
+                environment="development",
+                cloud_provider="existing-k8s",
+                deploy_provider=MANUAL_MANIFEST_DEPLOY_PROVIDER,
+                provider_config={"provider_hint": CONNECT_PROVIDER_HINTS[payload.provider]},
+            ),
+            current=current,
+            db=db,
+            events=events,
+        )
+    except IntegrityError as exc:
+        if is_cluster_name_integrity_conflict(exc):
+            raise HTTPException(
+                status_code=409,
+                detail=cluster_name_conflict_detail(),
+            ) from exc
+        raise
     if not receipt.install_command or not receipt.connect_expires_at:
         raise HTTPException(status_code=503, detail="cluster install command is unavailable")
     return ClusterConnectResponse(
         cluster_id=receipt.cluster_id,
         install_command=receipt.install_command,
         expires_at=receipt.connect_expires_at,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CONNECT_COMMAND_PATH,
+    response_model=ClusterConnectResponse,
+)
+async def reissue_cluster_connect_command(
+    cluster_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> ClusterConnectResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    registration = unregisterable_registration(db, workspace_id, cluster_id)
+    status = str(registration.get("status") or "")
+    if status not in {
+        ClusterRegistrationStatus.PENDING_INSTALL.value,
+        ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "cluster_already_connected",
+                "detail": "이미 연결된 클러스터의 설치 명령은 다시 발급할 수 없습니다",
+            },
+        )
+    agents = visible_cluster_agent_statuses(
+        db.list_cluster_agent_statuses(workspace_id, cluster_id)
+    )
+    if agents and cluster_connection_status(agents[0]) == AGENT_STATUS_ONLINE:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "cluster_already_connected",
+                "detail": "에이전트가 이미 연결되어 설치 명령을 다시 발급하지 않았습니다",
+            },
+        )
+
+    payload = normalize_target_provider_defaults(
+        target_register_payload_from_settings(registration.get("settings") or {})
+    )
+    agent_token = secrets.token_urlsafe(AGENT_TOKEN_BYTES)
+    timeout_seconds = target_registration_connect_timeout_seconds()
+    expires_at = connect_expires_at_from(datetime.now(UTC), timeout_seconds)
+    settings = payload.model_dump(exclude={"apply", "kube_context"})
+    settings["connect_timeout_seconds"] = timeout_seconds
+    settings["connect_expires_at"] = expires_at
+    rotate = getattr(db, "reissue_target_cluster_install", None)
+    if not callable(rotate):
+        raise HTTPException(
+            status_code=503, detail="cluster install command rotation is unavailable"
+        )
+    with unit_of_work_or_null(db):
+        rotated = rotate(
+            workspace_id,
+            cluster_id,
+            agent_token_hash=hash_agent_token(agent_token),
+            settings=settings,
+        )
+        if not rotated:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "cluster_connect_state_changed",
+                    "detail": "연결 상태가 바뀌어 설치 명령을 다시 발급하지 않았습니다",
+                },
+            )
+    return ClusterConnectResponse(
+        cluster_id=cluster_id,
+        install_command=install_command_for(payload, agent_token),
+        expires_at=expires_at,
     )
 
 
@@ -1482,14 +1634,21 @@ async def update_cluster_scheduling_profiles(
     )
 
 
-@router.delete(gateway_routes.CLUSTER_PATH, status_code=204)
+@router.delete(
+    gateway_routes.CLUSTER_PATH,
+    response_model=ClusterUnregisterResponse,
+    status_code=202,
+)
 async def unregister_cluster(
     cluster_id: str,
     purge: bool = False,
+    manual_cleanup_attested: bool = False,
     current: Any = Depends(require_admin_session),
     db: Any = Depends(get_db),
-) -> None:
+) -> ClusterUnregisterResponse:
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    uninstall_command = target_uninstall_command()
+    resources = target_uninstall_resources()
     if purge:
         # 테스트 fixture 물리 삭제만 별도 UoW로 묶고 운영 soft-delete 경로는 그대로 둔다.
         with unit_of_work_or_null(db):
@@ -1506,18 +1665,87 @@ async def unregister_cluster(
                 )
             if not purge_registration(workspace_id, cluster_id):
                 raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-        return
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="purged",
+            stage="purged",
+            cleanup_verified=True,
+        )
 
     unregisterable_registration(db, workspace_id, cluster_id)
+    if not manual_cleanup_attested:
+        agents = visible_cluster_agent_statuses(
+            db.list_cluster_agent_statuses(workspace_id, cluster_id)
+        )
+        latest_agent = agents[0] if agents else None
+        online = cluster_connection_status(latest_agent) == AGENT_STATUS_ONLINE
+        queue = getattr(db, "queue_agent_command", None)
+        failure_reason: str | None = None
+        if online and callable(queue):
+            try:
+                queued = queue_agent_uninstall(
+                    db,
+                    cluster_id=cluster_id,
+                    workspace_id=workspace_id,
+                    requested_by=str(current.user_id),
+                )
+            except Exception as exc:
+                failure_reason = f"agent cleanup queue failed: {type(exc).__name__}"
+            else:
+                if queued.inserted:
+                    status_updater = getattr(db, "update_cluster_registration_status", None)
+                    if callable(status_updater):
+                        status_updater(
+                            workspace_id,
+                            cluster_id,
+                            ClusterRegistrationStatus.UNINSTALL_REQUESTED.value,
+                        )
+                    return ClusterUnregisterResponse(
+                        cluster_id=cluster_id,
+                        status="uninstalling",
+                        stage="agent_cleanup_queued",
+                        command_id=queued.command_id,
+                        command_status_path=gateway_routes.COMMAND_STATUS_PATH.format(
+                            command_id=queued.command_id
+                        ),
+                        uninstall_command=uninstall_command,
+                        resources=resources,
+                        residual_resources=list(SELF_CLEANUP_RESIDUALS),
+                    )
+                failure_reason = "agent cleanup command was not queued"
+        elif online:
+            failure_reason = "agent cleanup queue is unavailable"
+        else:
+            failure_reason = "agent is offline; run the uninstall command in the cluster"
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="cleanup_required",
+            stage="manual_cleanup_required",
+            uninstall_command=uninstall_command,
+            resources=resources,
+            residual_resources=list(SELF_CLEANUP_RESIDUALS),
+            failure_reason=failure_reason,
+        )
+
     unregister = getattr(db, "unregister_target_cluster", None)
     if callable(unregister):
         if not unregister(workspace_id, cluster_id):
             raise HTTPException(status_code=NOT_FOUND_CODE, detail=CLUSTER_NOT_FOUND)
-        return
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="disconnected",
+            stage="registration_revoked",
+            cleanup_verified=False,
+        )
     status_updater = getattr(db, "update_cluster_registration_status", None)
     if callable(status_updater):
-        status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.INSTALL_EXPIRED.value)
-        return
+        status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.DISCONNECTED.value)
+        return ClusterUnregisterResponse(
+            cluster_id=cluster_id,
+            status="disconnected",
+            stage="registration_revoked",
+            cleanup_verified=False,
+        )
     raise HTTPException(
         status_code=500,
         detail={

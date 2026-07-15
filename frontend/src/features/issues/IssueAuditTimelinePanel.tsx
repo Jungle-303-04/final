@@ -41,14 +41,20 @@ export function IssueAuditTimelinePanel({
                   const payload = Object.entries(event.payloadSummary);
                   return (
                     <li
-                      className="grid gap-2 rounded-lg border p-3"
-                      key={`${event.createdAt}:${event.source}:${event.subject}:${index}`}
+                      className="relative grid min-w-0 gap-2 overflow-hidden rounded-lg border p-3 pl-5 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary/60"
+                      key={event.eventId}
                     >
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <p className="break-words font-medium" data-testid="audit-event-subject">
-                          {event.subject}
+                        <p
+                          className="min-w-0 flex-1 truncate font-medium"
+                          data-testid="audit-event-subject"
+                          title={event.subject}
+                        >
+                          {copy.auditEvent(event.subject)}
                         </p>
-                        <Badge variant="outline">{event.source}</Badge>
+                        <Badge title={event.source} variant="outline">
+                          {copy.auditStage(event.journeyStage)}
+                        </Badge>
                       </div>
                       <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <time>{copy.auditTime(event.createdAt)}</time>

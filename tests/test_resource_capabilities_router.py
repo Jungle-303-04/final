@@ -26,19 +26,33 @@ def deployment_resource() -> dict[str, object]:
     }
 
 
+def pod_resource() -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": "resource-pod-checkout-api-1",
+        "resource_type": "pod",
+        "kind": "Pod",
+        "name": "checkout-api-1",
+    }
+
+
 class ResourceCapabilitiesDb:
     def __init__(
         self,
         *,
         inventory_permitted: bool = True,
         deploy_permitted: bool = True,
+        pod_exec_permitted: bool = True,
         command_supported: bool = True,
+        pod_exec_supported: bool = True,
         management: bool = False,
         resource: dict[str, object] | None = None,
     ) -> None:
         self.inventory_permitted = inventory_permitted
         self.deploy_permitted = deploy_permitted
+        self.pod_exec_permitted = pod_exec_permitted
         self.command_supported = command_supported
+        self.pod_exec_supported = pod_exec_supported
         self.management = management
         self.resource = deployment_resource() if resource is None else resource
         self.lookups: list[tuple[str, str]] = []
@@ -70,6 +84,8 @@ class ResourceCapabilitiesDb:
             return self.inventory_permitted
         if permission == "deploy.run":
             return self.deploy_permitted
+        if permission == "pod.exec":
+            return self.pod_exec_permitted
         return False
 
     def list_cluster_agent_statuses(
@@ -78,7 +94,11 @@ class ResourceCapabilitiesDb:
         cluster_id: str,
     ) -> list[dict[str, object]]:
         assert (workspace_id, cluster_id) == ("workspace-a", "cluster-a")
-        capabilities = ["command_receiver"] if self.command_supported else ["collector"]
+        capabilities = ["collector"]
+        if self.command_supported:
+            capabilities.append("command_receiver")
+        if self.pod_exec_supported:
+            capabilities.append("pod_exec_stream")
         return [{"status": "connected", "capabilities": capabilities}]
 
     def get_cluster_registration(
@@ -157,9 +177,8 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
         ResourceCapabilitiesDb(
             resource={
                 **deployment_resource(),
-                "resource_type": "pod",
-                "kind": "Pod",
-                "name": "checkout-api-1",
+                "resource_type": "service",
+                "kind": "Service",
             }
         ),
     ],
@@ -177,6 +196,48 @@ def test_capabilities_hides_denied_unsupported_or_inapplicable_actions(
     response = client(db).get(
         "/capabilities",
         params={"resource": "resource-deployment-api"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["capabilities"] == []
+
+
+def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod() -> None:
+    db = ResourceCapabilitiesDb(resource=pod_resource())
+    response = client(db).get(
+        "/capabilities",
+        params={"resource": "resource-pod-checkout-api-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["capabilities"] == [
+        {
+            "capability_id": "pod.exec",
+            "method": "WEBSOCKET",
+            "path": "/live/terminal",
+        }
+    ]
+    assert [check[-1] for check in db.access_checks] == ["inventory.read", "pod.exec"]
+
+
+@pytest.mark.parametrize(
+    "db",
+    [
+        ResourceCapabilitiesDb(resource=pod_resource(), pod_exec_permitted=False),
+        ResourceCapabilitiesDb(resource=pod_resource(), pod_exec_supported=False),
+        ResourceCapabilitiesDb(resource=pod_resource(), management=True),
+        ResourceCapabilitiesDb(
+            resource={**pod_resource(), "namespace": "kube-system"},
+        ),
+    ],
+    ids=["permission-denied", "agent-unsupported", "management-readonly", "namespace-policy"],
+)
+def test_capabilities_hides_pod_exec_when_any_safety_gate_fails(
+    db: ResourceCapabilitiesDb,
+) -> None:
+    response = client(db).get(
+        "/capabilities",
+        params={"resource": "resource-pod-checkout-api-1"},
     )
 
     assert response.status_code == 200

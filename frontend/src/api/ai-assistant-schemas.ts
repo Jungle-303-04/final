@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { alertRuleCreateRequestSchema } from "./alert-rules-schemas";
+
 const stringList = z.array(z.string().min(1));
 
 export const aiAssistantFiltersSchema = z.strictObject({
@@ -32,9 +34,17 @@ export const aiEvidenceLinkSchema = z.strictObject({
   link: z.string().regex(/^\/(?!\/)[^\s]*$/u),
 });
 
+export const aiChatActionSchema = z.strictObject({
+  type: z.literal("create_alert_rule"),
+  payload: alertRuleCreateRequestSchema,
+  rationale: z.string().min(1).max(1_000),
+});
+
 export const aiChatResponseSchema = z.strictObject({
   answer: z.string().min(1),
   evidence: z.array(aiEvidenceLinkSchema),
+  action: aiChatActionSchema.nullable().optional(),
+  answer_kind: z.literal("capability").nullable().optional(),
 }).superRefine((response, context) => {
   const ids = response.evidence.map((item) => `${item.type}\u001f${item.id}`);
   if (new Set(ids).size !== ids.length) {

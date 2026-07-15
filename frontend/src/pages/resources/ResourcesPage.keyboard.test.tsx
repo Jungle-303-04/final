@@ -87,16 +87,14 @@ describe("ResourcesPage keyboard navigation", () => {
       .toBeTruthy();
   }, 30_000);
 
-  it("cycles API-discovered resource types with [ and ] while focus is outside an editor", async () => {
+  it("does not keep the removed resource catalog keyboard cycle alive", async () => {
     renderResources(resourcesPort(), "/resources?clusters=cluster-1&resources.types=pod");
     await screen.findByRole("table", { name: "리소스 목록" }, { timeout: 5_000 });
 
     fireEvent.keyDown(document, { key: "]" });
-    await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
-      .toContain("clusters=cluster-1&resources.types=node"));
     fireEvent.keyDown(document, { key: "[" });
-    await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
-      .toContain("clusters=cluster-1&resources.types=pod"));
+    expect(screen.getByTestId("resources-location").textContent)
+      .toContain("clusters=cluster-1&resources.types=pod");
   }, 15_000);
 
   it("does not run collection shortcuts while the editable global filter owns focus", async () => {

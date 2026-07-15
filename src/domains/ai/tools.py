@@ -970,6 +970,7 @@ async def list_command_actions(context: ToolContext) -> dict[str, Any]:
                 "recovery_aliases": list(spec.recovery_aliases),
                 "allowed_namespaces": list(spec.allowed_namespaces),
                 "requires_approval": spec.requires_approval,
+                "requires_approval_outside_sandbox": (spec.requires_approval_outside_sandbox),
             }
             for spec in registered_command_actions()
         ]

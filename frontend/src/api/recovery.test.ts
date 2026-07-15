@@ -43,6 +43,7 @@ const ACCEPTED = {
   accepted: true,
   event_id: "evt-789",
   correlation_id: "corr-123",
+  command_id: null,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -71,22 +72,24 @@ describe("recovery plan API", () => {
     );
   });
 
-  it("selects one action through the canonical plan and action path", async () => {
+  it("selects one action through the correlation path with opaque ids in JSON", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(jsonResponse(ACCEPTED));
 
     await expect(
-      selectRecoveryAction("plan-123", "increase-memory", {
+      selectRecoveryAction("corr-123", "plan-123", "increase-memory", {
         reason: "Memory pressure is confirmed by the evidence",
       }),
     ).resolves.toEqual(ACCEPTED);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/rca/recovery-plans/plan-123/actions/increase-memory/select",
+      "/api/rca/recovery-plans/by-correlation/corr-123/actions/select",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         body: JSON.stringify({
+          expected_plan_id: "plan-123",
+          action_id: "increase-memory",
           reason: "Memory pressure is confirmed by the evidence",
         }),
       }),
@@ -99,13 +102,20 @@ describe("recovery plan API", () => {
       .mockResolvedValue(jsonResponse(ACCEPTED));
 
     await expect(
-      selectRecoveryAction("plan/123", "increase memory"),
+      selectRecoveryAction(
+        "corr/123",
+        "object://evidence/plan.json",
+        "object://evidence/action.json:restart",
+      ),
     ).resolves.toEqual(ACCEPTED);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/rca/recovery-plans/plan%2F123/actions/increase%20memory/select",
+      "/api/rca/recovery-plans/by-correlation/corr%2F123/actions/select",
       expect.objectContaining({
         method: "POST",
-        body: "{}",
+        body: JSON.stringify({
+          expected_plan_id: "object://evidence/plan.json",
+          action_id: "object://evidence/action.json:restart",
+        }),
         headers: expect.any(Headers),
       }),
     );
@@ -116,11 +126,17 @@ describe("recovery plan API", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(jsonResponse(ACCEPTED));
 
-    await selectRecoveryAction("plan-123", "increase-memory", { reason: null });
+    await selectRecoveryAction("corr-123", "plan-123", "increase-memory", { reason: null });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/rca/recovery-plans/plan-123/actions/increase-memory/select",
-      expect.objectContaining({ body: JSON.stringify({ reason: null }) }),
+      "/api/rca/recovery-plans/by-correlation/corr-123/actions/select",
+      expect.objectContaining({
+        body: JSON.stringify({
+          expected_plan_id: "plan-123",
+          action_id: "increase-memory",
+          reason: null,
+        }),
+      }),
     );
   });
 
@@ -144,7 +160,7 @@ describe("recovery plan API", () => {
     );
 
     await expect(
-      selectRecoveryAction("plan-123", "increase-memory"),
+      selectRecoveryAction("corr-123", "plan-123", "increase-memory"),
     ).rejects.toMatchObject({
       kind: "http",
       status: 409,

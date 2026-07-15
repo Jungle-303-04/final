@@ -223,7 +223,45 @@ def test_self_agent_uses_the_same_origin_internal_api_and_realtime_paths() -> No
     agent_env = {item["name"]: item.get("value") for item in container["env"]}
 
     assert agent_env["MANAGEMENT_BASE_URL"] == "http://opsia.opsia-system.svc/api"
-    assert agent_env["REALTIME_GATEWAY_URL"] == "ws://opsia.opsia-system.svc/api"
+    assert agent_env["REALTIME_GATEWAY_URL"] == "ws://opsia.opsia-system.svc"
+
+
+def test_agent_realtime_gateway_url_is_configurable_without_api_path() -> None:
+    documents = _render_chart(
+        "--set-string",
+        "agent.realtimeGatewayUrl=wss://agent-api.example.com",
+    )
+    agent = next(
+        item
+        for item in documents
+        if item["kind"] == "DaemonSet" and item["metadata"]["name"] == "opsia-agent"
+    )
+    env = {item["name"]: item.get("value") for item in _container(agent, "agent")["env"]}
+
+    assert env["REALTIME_GATEWAY_URL"] == "wss://agent-api.example.com"
+    assert "/api/live/agent" not in env["REALTIME_GATEWAY_URL"]
+
+
+def test_agent_realtime_gateway_url_rejects_management_api_path() -> None:
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "opsia",
+            str(CHART),
+            "--namespace",
+            "opsia-system",
+            "--set-string",
+            "agent.realtimeGatewayUrl=wss://agent-api.example.com/api",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "realtimeGatewayUrl" in result.stderr
 
 
 def test_access_modes_render_explicit_exposure_without_exposing_internal_ports() -> None:

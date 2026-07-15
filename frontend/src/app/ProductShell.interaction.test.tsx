@@ -143,7 +143,7 @@ describe("ProductShell keyboard and help interaction", () => {
       name: "현재 워크스페이스: test-workspace",
     }));
     expect(await screen.findByText(
-      "세션 계약에는 현재 워크스페이스만 제공됩니다.",
+      "현재 워크스페이스만 사용할 수 있습니다.",
     )).toBeTruthy();
     await user.keyboard("{Escape}");
 
@@ -167,7 +167,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(sidebar.getAttribute("data-state")).toBe("expanded");
     expect(screen.getByRole("link", { name: "리소스" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "홈" })).toBeTruthy();
-    expect(container.querySelector("[data-slot='unified-filter-bar']")).toBeNull();
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
     expect(sidebar.className).toContain("--motion-layout");
     expect(screen.getByText("Opsia").className.split(/\s+/u)).not.toContain("w-0");
 
@@ -252,7 +252,7 @@ describe("ProductShell keyboard and help interaction", () => {
           </MemoryRouter>
         </I18nProvider>,
       );
-      expect(screen.getByRole("heading", { name: "API 연결 계층을 검증하고 있습니다" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "서비스 연결을 확인하고 있습니다" })).toBeTruthy();
       expect(screen.queryByRole("navigation")).toBeNull();
       expect(screen.queryByRole("button", { name: "키보드 단축키" })).toBeNull();
 

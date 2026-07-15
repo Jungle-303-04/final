@@ -55,6 +55,41 @@ describe("AI assistant API", () => {
     expect(fetchMock).toHaveBeenCalledWith(expected, expect.objectContaining({ method: "GET" }));
   });
 
+  it("accepts an evidence-free capability answer with its explicit response kind", async () => {
+    const response = {
+      answer: "현재 인벤토리와 저장된 로그 근거를 설명할 수 있습니다.",
+      evidence: [],
+      answer_kind: "capability",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(response));
+
+    await expect(postAiChat(CONTEXT, "넌 뭘 할 수 있니?")).resolves.toEqual(response);
+  });
+
+  it("accepts only the allowlisted, fully validated alert action payload", async () => {
+    const response = {
+      answer: "Review the alert rule proposal.",
+      evidence: [{ type: "inventory-resource", id: "pod-1", label: "Pod", link: "/resources" }],
+      action: {
+        type: "create_alert_rule",
+        rationale: "Current cluster scope",
+        payload: {
+          name: "CPU 70%",
+          scope: { clusters: ["cluster-1"], namespaces: [], applications: [], labels: [] },
+          metric: "cpu_pct",
+          comparator: ">",
+          threshold: 70,
+          for_seconds: 20,
+          severity: "high",
+          channels: [],
+          enabled: true,
+        },
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(response));
+    await expect(postAiChat(CONTEXT, "CPU 70% alert")).resolves.toEqual(response);
+  });
+
   it("rejects unsafe evidence links and malformed context", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       answer: "Open this link",

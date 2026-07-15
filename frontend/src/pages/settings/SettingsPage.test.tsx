@@ -43,7 +43,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Woo Nyong")).toBeTruthy();
     expect(screen.getByText("woonyong.kr@gmail.com")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("표시 가능한 클러스터 2개")).toBeTruthy());
-    expect(screen.getAllByText("API 미연결")).toHaveLength(4);
+    expect(screen.getAllByText("준비 중")).toHaveLength(4);
     expect(screen.getByText("즉시 실행")).toBeTruthy();
     expect(screen.getByText("승인 필요")).toBeTruthy();
   });

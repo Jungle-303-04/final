@@ -8,7 +8,9 @@ import {
   PHYSICAL_SERVER_WIDTH,
   physicalServerPlacements,
   podAbnormalBadge,
+  podShortLabel,
   podUsageTone,
+  visiblePhysicalPods,
 } from "./physicalTopologyViewModel";
 
 describe("physical topology view model", () => {
@@ -32,10 +34,16 @@ describe("physical topology view model", () => {
       .toBe("crash-loop");
     expect(podAbnormalBadge(pod({ phase: "Pending", usagePercent: 99 })))
       .toBe("pending");
-    expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 3 })))
+    expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 1 })))
       .toBe("restarting");
     expect(podAbnormalBadge(pod({ phase: "Running", restartCount: 0 })))
       .toBeNull();
+  });
+
+  it("derives the visible pod mark only from the real name prefix", () => {
+    expect(podShortLabel("checkout-api-0")).toBe("CH");
+    expect(podShortLabel("a")).toBe("A");
+    expect(podShortLabel("패스-수집기-0")).toBe("패스");
   });
 
   it("places matching and nonmatching pods together and preserves unassigned truth", () => {
@@ -55,6 +63,26 @@ describe("physical topology view model", () => {
       countCompleteness: "unavailable",
     });
   });
+
+  it("puts problem pods first, renders at most twelve, and reports the local remainder", () => {
+    const normalPods = Array.from({ length: 13 }, (_, index) => pod({
+      id: `pod:normal-${index}`,
+      name: `normal-${index}`,
+    }));
+    const pending = pod({ id: "pod:pending", name: "pending", phase: "Pending" });
+    const sorted = visiblePhysicalPods([...normalPods, pending]);
+    expect(sorted).toHaveLength(MAX_VISIBLE_PODS_PER_SERVER);
+    expect(sorted[0]?.id).toBe("pod:pending");
+
+    const placements = physicalServerPlacements({
+      ...PHYSICAL_TOPOLOGY,
+      pods: [...normalPods, pending],
+      truncatedByServer: { "node:worker-a": 4 },
+    });
+    expect(placements[0]?.omittedCount).toBe(6);
+    expect(placements[0]?.visibleTotalCount).toBe(MAX_VISIBLE_PODS_PER_SERVER);
+    expect(placements[0]?.pods[0]?.id).toBe("pod:pending");
+  });
 });
 
 function pod(overrides: Partial<PhysicalTopologyPod>): PhysicalTopologyPod {
@@ -65,8 +93,8 @@ function pod(overrides: Partial<PhysicalTopologyPod>): PhysicalTopologyPod {
     serverId: "node:worker-a",
     usagePercent: null,
     cpuMillicores: null,
-    memoryMebibytes: null,
     cpuRequestMillicores: null,
+    memoryMebibytes: null,
     memoryRequestMebibytes: null,
     cpuLimitMillicores: null,
     memoryLimitMebibytes: null,

@@ -1,25 +1,21 @@
-import { Server, Waypoints } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
+import type { HomePort } from "../../features/home/homeContract";
 import type { TimelineRange } from "../../features/filters/filterContract";
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
-import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { ButtonGroup } from "../../shared/ui/primitives/button-group";
+import { cn } from "../../shared/lib/cn";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import { RelationTopologyCanvas } from "./RelationTopologyCanvas";
-import {
-  PhysicalGraphBreadcrumb,
-  TimelineRangeSelect,
-  TimelineStrip,
-  type PhysicalGraphBreadcrumbItem,
-} from "./ResourcesGraphChrome";
+import { TimelineStrip, type PhysicalGraphBreadcrumbItem } from "./ResourcesGraphChrome";
+import { ResourcesGraphHeader, ResourcesGraphResizeHandle } from "./ResourcesGraphControls";
 import { ResourcesPhysicalTopologyScene } from "./ResourcesPhysicalTopologyScene";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
+import { useResizableGraphHeight } from "./useResizableGraphHeight";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export type PhysicalGraphBreadcrumb = PhysicalGraphBreadcrumbItem;
 
@@ -27,8 +23,13 @@ export function ResourcesGraphShell({
   breadcrumbs,
   clusterId,
   frame,
+  includeDeleted,
   relationFrame,
+  onSelectRelationResource,
+  selectedRelationResourceId,
   onOpenPod,
+  nodePodsPort,
+  onNodePodsUnauthorized,
   onSelectAll,
   onRevealServer,
   skeletonServerCount,
@@ -38,14 +39,24 @@ export function ResourcesGraphShell({
   timelineAtMs,
   timelineFrame,
   timelineRange,
+  timelineReplayStatus,
+  timelineReplayWindow,
   onTimelineAtChange,
   onTimelineRangeChange,
+  collapsed,
+  onCollapsedChange,
+  onIncludeDeletedChange,
 }: {
   breadcrumbs: PhysicalGraphBreadcrumb[];
   clusterId: string;
   frame: PhysicalTopologyFrame;
+  includeDeleted: boolean;
   relationFrame: RelationTopologyFrame;
-  onOpenPod: (pod: PhysicalTopologyPod) => void;
+  onSelectRelationResource: (resourceId: string) => boolean;
+  selectedRelationResourceId: string | null;
+  onOpenPod: (pod: PhysicalPodOpenTarget) => void;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
+  onNodePodsUnauthorized: () => void;
   onSelectAll: () => void;
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;
@@ -55,14 +66,20 @@ export function ResourcesGraphShell({
   timelineAtMs: number | undefined;
   timelineFrame: ChangeTimelineFrame;
   timelineRange: TimelineRange;
+  timelineReplayStatus: "live" | "ready" | "gap";
+  timelineReplayWindow: { fromMs: number | null; toMs: number | null };
   onTimelineAtChange: (value: number | undefined) => void;
   onTimelineRangeChange: (value: TimelineRange) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+  onIncludeDeletedChange: (value: boolean) => void;
 }) {
-  const { formatNumber, t } = useI18n();
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const { capture, play } = useCameraMorph(rootRef);
   const [displayedView, setDisplayedView] = useState<ResourceTopologyView>("physical");
   const [autoHintVisible, setAutoHintVisible] = useState(false);
+  const { beginResize, height, reset, resizeBy } = useResizableGraphHeight();
   const [retainedPhysical, setRetainedPhysical] = useState<
     Extract<PhysicalTopologyFrame, { phase: "ready" }> | null
   >(
@@ -122,6 +139,10 @@ export function ResourcesGraphShell({
   }, [displayedView, play]);
 
   useEffect(() => {
+    rootRef.current?.style.setProperty("--product-graph-user-height", `${height}px`);
+  }, [height]);
+
+  useEffect(() => {
     if (displayedView === "physical" && frame.phase === "loading") {
       const animationFrame = requestAnimationFrame(() => {
         play();
@@ -141,103 +162,107 @@ export function ResourcesGraphShell({
     setAutoHintVisible(false);
     onTopologyViewChange(view);
   };
-
   return (
     <div
       aria-busy={topologyView !== displayedView || displayedFrame.phase === "loading"}
       aria-live="polite"
-      className="group/resources-graph relative isolate h-96 overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40 sm:h-80"
+      className={cn(
+        "group/resources-graph relative isolate flex overflow-hidden bg-linear-to-b from-muted/20 via-card to-muted/40",
+        collapsed
+          ? "h-auto flex-row"
+          : displayedView === "relations"
+            ? "h-(--product-graph-height-mobile) flex-col sm:h-(--product-graph-user-height)"
+            : "h-auto flex-col",
+      )}
+      data-collapsed={collapsed ? "true" : "false"}
+      data-height={!collapsed && displayedView === "relations" ? height : undefined}
       data-phase={displayedFrame.phase}
       data-slot="resources-graph-shell"
       data-view={displayedView}
       ref={rootRef}
     >
-      <div className="absolute inset-x-0 top-0 z-20 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b bg-background/80 px-3 py-2 backdrop-blur">
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge variant="secondary">
-            {displayedView === "physical" ? <Server aria-hidden="true" /> : <Waypoints aria-hidden="true" />}
-            <span id="resources-graph-title">
-              {t(displayedView === "physical"
-                ? "resources.graph.physical.title"
-                : "resources.graph.relations.title")}
-            </span>
-          </Badge>
-          {displayedView === "physical" && physicalSceneFrame.phase === "ready" ? (
-            <Badge variant="outline">
-              {t("resources.graph.server.total", {
-                count: formatNumber(physicalSceneFrame.data.servers.length),
-              })}
-            </Badge>
-          ) : displayedView === "relations" && relationSceneFrame.phase === "ready" ? (
-            <Badge variant="outline">
-              {t("resources.graph.relations.total", {
-                count: formatNumber(relationSceneFrame.data.nodes.length),
-              })}
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <TimelineRangeSelect onChange={onTimelineRangeChange} value={timelineRange} />
-          <ButtonGroup aria-label={t("resources.graph.view.aria")}>
-            <Button
-              aria-pressed={topologyView === "physical"}
-              onClick={() => changeTopologyView("physical")}
-              size="sm"
-              type="button"
-              variant={topologyView === "physical" ? "secondary" : "outline"}
-            >
-              {t("resources.graph.view.physical")}
-            </Button>
-            <Button
-              aria-pressed={topologyView === "relations"}
-              onClick={() => changeTopologyView("relations")}
-              size="sm"
-              type="button"
-              variant={topologyView === "relations" ? "secondary" : "outline"}
-            >
-              {t("resources.graph.view.relations")}
-            </Button>
-          </ButtonGroup>
-          <PhysicalGraphBreadcrumb items={breadcrumbs} onSelectAll={onSelectAll} />
-        </div>
-      </div>
+      <ResourcesGraphHeader
+        breadcrumbs={breadcrumbs}
+        collapsed={collapsed}
+        displayedView={displayedView}
+        includeDeleted={includeDeleted}
+        onCollapsedChange={onCollapsedChange}
+        onIncludeDeletedChange={onIncludeDeletedChange}
+        onSelectAll={onSelectAll}
+        onTimelineRangeChange={onTimelineRangeChange}
+        onTopologyViewChange={changeTopologyView}
+        physicalFrame={physicalSceneFrame}
+        relationFrame={relationSceneFrame}
+        timelineRange={timelineRange}
+        topologyView={topologyView}
+      />
 
-      <div className="absolute inset-x-0 bottom-0 top-20 sm:top-11" data-slot="topology-canvas">
-        {displayedView === "relations" ? (
-          <RelationTopologyCanvas frame={relationSceneFrame} />
-        ) : (
-          <ResourcesPhysicalTopologyScene
-            clusterId={clusterId}
-            frame={physicalSceneFrame}
-            onOpenPod={onOpenPod}
-            onRevealServer={onRevealServer}
-            skeletonServerCount={skeletonServerCount}
-          />
-        )}
-      </div>
-
-      {autoHintVisible ? (
-        <div
-          className="absolute right-3 top-24 z-30 flex max-w-sm items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 text-xs shadow-lg backdrop-blur sm:top-14"
-          data-slot="resources-graph-auto-hint"
-          role="status"
-        >
-          <span>{t("resources.graph.autoHint")}</span>
-          <Button
-            onClick={() => {
-              setAutoHintVisible(false);
-              changeTopologyView("physical");
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
+      {!collapsed ? (
+        <>
+          <div
+            className={cn(
+              "relative min-h-0",
+              displayedView === "relations" ? "flex-1" : "shrink-0",
+            )}
+            data-slot="topology-canvas"
           >
-            {t("resources.graph.autoHint.revert")}
-          </Button>
-        </div>
-      ) : null}
+            {displayedView === "relations" ? (
+              <RelationTopologyCanvas
+                frame={relationSceneFrame}
+                onSelectResource={onSelectRelationResource}
+                selectedResourceId={selectedRelationResourceId}
+              />
+            ) : (
+              <ResourcesPhysicalTopologyScene
+                clusterId={clusterId}
+                frame={physicalSceneFrame}
+                nodePodsPort={nodePodsPort}
+                onOpenPod={onOpenPod}
+                onNodePodsUnauthorized={onNodePodsUnauthorized}
+                onRevealServer={onRevealServer}
+                skeletonServerCount={skeletonServerCount}
+              />
+            )}
+            {autoHintVisible ? (
+              <div
+                className="pointer-events-none absolute right-3 top-3 z-30 flex max-w-sm items-center gap-2 rounded-lg border bg-background/40 px-3 py-2 text-xs shadow-sm backdrop-blur"
+                data-slot="resources-graph-auto-hint"
+                role="status"
+              >
+                <span>{t("resources.graph.autoHint")}</span>
+                <Button
+                  className="pointer-events-auto"
+                  onClick={() => {
+                    setAutoHintVisible(false);
+                    changeTopologyView("physical");
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {t("resources.graph.autoHint.revert")}
+                </Button>
+              </div>
+            ) : null}
+          </div>
 
-      <TimelineStrip atMs={timelineAtMs} frame={timelineFrame} onAtChange={onTimelineAtChange} />
+          <TimelineStrip
+            atMs={timelineAtMs}
+            frame={timelineFrame}
+            onAtChange={onTimelineAtChange}
+            replayStatus={timelineReplayStatus}
+            replayWindow={timelineReplayWindow}
+          />
+          {displayedView === "relations" ? (
+            <ResourcesGraphResizeHandle
+              height={height}
+              onReset={reset}
+              onResizeBy={resizeBy}
+              onResizeStart={beginResize}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

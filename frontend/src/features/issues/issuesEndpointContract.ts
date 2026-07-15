@@ -99,6 +99,16 @@ export interface IssuesEndpointMissingCheck {
   reason: string | null;
 }
 
+export interface IssuesEndpointRcaNarrative {
+  locale: "ko";
+  executive_summary: string;
+  impact: string;
+  reasoning: string;
+  recommended_action: string;
+  recurrence_prevention: string[];
+  limitations: string[];
+}
+
 export interface IssuesEndpointRcaReport {
   id: number;
   workspace_id: string;
@@ -123,6 +133,8 @@ export interface IssuesEndpointRcaReport {
   candidates: IssuesEndpointCandidateScore[];
   supporting_evidence_refs: IssuesEndpointEvidenceRef[];
   missing_evidence_checks: IssuesEndpointMissingCheck[];
+  narrative: IssuesEndpointRcaNarrative | null;
+  narrative_status: "generated" | "unavailable";
 }
 
 export interface IssuesEndpointRcaReportPage {
@@ -183,10 +195,24 @@ export interface IssuesEndpointAuditTimelineOptions
 }
 
 export interface IssuesEndpointAuditTimelineItem {
+  event_id: string;
   subject: string;
   source: string;
   created_at: string;
   causation_id: string | null;
+  journey_stage:
+    | "alert"
+    | "evidence"
+    | "rca"
+    | "recovery"
+    | "command"
+    | "pr"
+    | "workflow"
+    | "cluster"
+    | "ai"
+    | "notification"
+    | "system"
+    | "unknown";
   payload_summary: Record<string, unknown>;
 }
 
@@ -250,6 +276,7 @@ export interface IssuesEndpointDependencies {
     options?: IssuesEndpointRequestOptions,
   ): Promise<IssuesEndpointRecoveryPlan>;
   selectRecoveryAction(
+    correlationId: string,
     planId: string,
     actionId: string,
     input?: IssuesEndpointRecoveryInput,

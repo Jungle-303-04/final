@@ -3643,7 +3643,7 @@ gone branch 0, `(prunable)` worktree 0이다.
 
 [VP-015 P2~P4] 2026-07-14 13:22 KST / Dev Gate `29305649957` 성공 뒤 자동 FULL Dev Deploy `29305760596` in_progress로 P2 증명; 기존 FULL `29302233623`의 backend·console digest, public health 200, 고정 관리자 로그인, cluster-1/2 ready·agent 1/1·resource read 재확인 / 레거시 DB 재생성 경로도 `AWS_BOOTSTRAP_ADMIN=1`로 정렬(비밀번호는 secret에만 보존)
 
-[VP-015 P5] 2026-07-14 13:22 KST / Skyhook Radar v1.5.7 고정 커밋 `88bd1e97fa5c10be8735154ae379d50c1ba1df2b` 889파일을 `references/radar-upstream/`에 보존, Apache-2.0 원문·root NOTICE·README 귀속 반영 / 이식 파일은 원본 헤더와 Opsia 수정 사실을 함께 남기는 규율 확정 / 다음 한 걸음: S0 모션 기반
+[VP-015 P5] 2026-07-14 13:22 KST / Skyhook Radar v1.5.7 고정 커밋 `88bd1e97fa5c10be8735154ae379d50c1ba1df2b` 889파일을 `references/upstream/`에 보존, Apache-2.0 원문·root NOTICE·README 귀속 반영 / 이식 파일은 원본 헤더와 Opsia 수정 사실을 함께 남기는 규율 확정 / 다음 한 걸음: S0 모션 기반
 
 [VP-015 S0] 2026-07-14 13:31 KST / `frontend/src/motion/`에 VP-017 exact duration·easing·stagger token, FLIP camera morph(420ms·동시 200 상한), 520ms clamp, reduced-motion CSS/JS 차단을 중앙화 / 컴포넌트 밖 keyframes·animate 회귀 가드와 21개 계약 테스트 추가 / typecheck·lint·design guard·production build 통과, 화면 구조 변화 없음 / 다음 한 걸음: gate-fast→dev push 후 S1 Clusters
 
@@ -3671,3 +3671,5 @@ gone branch 0, `(prunable)` worktree 0이다.
 [VP-015 S10 public P0] 2026-07-14 20:27 KST / deploy `29326466743` SUCCESS·public health/root/Applications route 200·bundle `index-MbLKlq1P.js`, 그러나 실제 `/api/applications` 500과 화면 오류 상태를 실브라우저로 재현 / service-admin wildcard sentinel `None`을 신규 `_product_scope`가 `set(None)` 처리한 것이 원인; 기존 `resolve_allowed_application_ids`로 concrete workspace app ID를 물질화하고 wildcard 회귀 추가, Applications 관련 47 tests PASS / S11과 함께 dev 재배포 예정
 
 [테마 V1 배포] 2026-07-14 21:44 KST / `a3f49b290` Dev Gate `29332818331` SUCCESS; 프론트 전용 SHA의 자동 FULL run `29333092606`은 클러스터 변경 전 취소하고 CONSOLE run `29333280367`로 범위를 교정 / 새 콘솔의 in-cluster health·bundle 변화·source SHA·digest·rollout은 모두 통과했지만 GitHub runner의 Cloudflare public health만 403이라 smoke가 실패하고 이전 이미지로 정상 rollback; 로컬 public health/root는 200 / FULL smoke와 동일하게 public edge를 비차단 관측으로 통일하고 in-cluster 증적을 배포 게이트 정본으로 유지한 뒤 재배포
+
+[P0 원본 스냅샷 정정] 2026-07-14 23:46 KST / 지시서가 v1.5.7 `88bd1e97…`에 492파일이 있다고 기록했으나 GitHub 고정 tarball과 기존 스냅샷을 각각 실측하면 `packages/k8s-ui/src` 268파일로 일치; 현재 upstream `10461f40bcfaf6dd578b24262c8f8fb84ae20766`에서 실제 492파일을 확인해 `references/upstream/`에 전체 1,640파일을 중립 경로로 고정 / 루트 `NOTICE`에 원저작자·Apache-2.0·출처·고정 SHA·상당한 수정 및 재작성·provider 로고 nominative use를 명시하고 `LICENSE-APACHE-2.0.txt` 전문을 추가; 앱 코드의 `references/` import 0 확인 / 배포 없는 부품 준비 슬라이스, 다음 한 걸음: P1 흡수 코드모드

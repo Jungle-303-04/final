@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Any
 
 import pytest
@@ -145,6 +146,80 @@ def test_late_browser_gets_state_via_snapshot() -> None:
     assert snapshot["state"]["resources"][f"{CLUSTER}/sandbox/pod/checkout-abc"] == {
         "app": "checkout",
         "ready": True,
+    }
+
+
+def test_live_summary_persists_agent_observed_pod_metrics() -> None:
+    module = load_gateway_module()
+    persisted: list[tuple[str, str, dict[str, Any]]] = []
+
+    def persist_live_usage(
+        workspace_id: str,
+        cluster_id: str,
+        _sampled_at: object,
+        usage: dict[str, Any],
+    ) -> bool:
+        persisted.append((workspace_id, cluster_id, usage))
+        return True
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        persist_live_usage=persist_live_usage,
+    )
+    client = TestClient(app)
+    with client.websocket_connect(
+        f"/live/browser?workspace_id={WORKSPACE}&cluster_id={CLUSTER}",
+        headers=browser_headers(),
+    ) as browser:
+        browser.receive_json()
+        browser.receive_json()
+        with client.websocket_connect(
+            f"/live/agent?cluster_id={CLUSTER}",
+            headers={"x-agent-token": GOOD_TOKEN},
+        ) as agent:
+            agent.receive_json()
+            agent.send_json(
+                {
+                    "type": "resource.delta",
+                    "op": "replace",
+                    "key": f"{CLUSTER}/sandbox/pod/game-0",
+                    "value": {
+                        "ready": "1/1",
+                        "phase": "Running",
+                        "restarts": 2,
+                        "node": "node-a",
+                        "cpu_mcores": 530,
+                        "cpu_request_mcores": 500,
+                        "cpu_request_pct": 106,
+                        "mem_mib": 48,
+                        "mem_request_mib": 64,
+                        "mem_request_pct": 75,
+                    },
+                }
+            )
+            agent.send_json(summary_payload())
+            assert [browser.receive_json()["type"] for _ in range(2)] == [
+                "resource.delta",
+                "live.summary",
+            ]
+
+    assert len(persisted) == 1
+    workspace_id, cluster_id, usage = persisted[0]
+    assert (workspace_id, cluster_id) == (WORKSPACE, CLUSTER)
+    assert usage["restart_total"] == 2
+    assert usage["pods"]["sandbox/game-0"] == {
+        "cpu_mcores": 530,
+        "cpu_request_mcores": 500,
+        "cpu_request_pct": 106,
+        "mem_mib": 48,
+        "mem_request_mib": 64,
+        "mem_request_pct": 75,
+        "ready": "1/1",
+        "phase": "Running",
+        "restarts": 2,
+        "node": "node-a",
     }
 
 
@@ -380,3 +455,234 @@ def test_database_cluster_authorizer_allows_authenticated_service_admin() -> Non
         )
         is True
     )
+
+
+def test_database_terminal_authorizer_requires_permission_exact_pod_and_container() -> None:
+    module = load_gateway_module()
+
+    class TerminalDb:
+        def __init__(self) -> None:
+            self.allowed = True
+            self.lookups: list[dict[str, str]] = []
+
+        def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, Any]:
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "settings": {"cluster_role": "target"},
+            }
+
+        def get_cluster_policy(self, _workspace_id: str, _cluster_id: str) -> dict[str, str]:
+            return {"cluster_role": "target"}
+
+        def can_access(self, *args: str) -> bool:
+            assert args == ("user-1", WORKSPACE, "cluster", CLUSTER, "pod.exec")
+            return self.allowed
+
+        def get_inventory_resource(self, **identity: str) -> dict[str, Any] | None:
+            self.lookups.append(identity)
+            if identity != {
+                "workspace_id": WORKSPACE,
+                "cluster_id": CLUSTER,
+                "resource_type": "pod",
+                "kind": "Pod",
+                "namespace": "sandbox",
+                "name": "api-0",
+            }:
+                return None
+            return {"summary": {"containers": [{"name": "app"}]}}
+
+    db = TerminalDb()
+    authorize = module.database_terminal_authorizer(db)
+    session = {"user_id": "user-1", "workspace_id": WORKSPACE, "roles": ["user"]}
+
+    assert asyncio.run(authorize(session, WORKSPACE, CLUSTER, "sandbox", "api-0", "app"))
+    assert not asyncio.run(
+        authorize(session, WORKSPACE, CLUSTER, "sandbox", "api-0", "missing-container")
+    )
+    db.allowed = False
+    assert not asyncio.run(authorize(session, WORKSPACE, CLUSTER, "sandbox", "api-0", "app"))
+    assert len(db.lookups) == 2
+
+
+def test_database_terminal_authorizer_allows_service_admin_but_keeps_namespace_guard() -> None:
+    module = load_gateway_module()
+
+    class AdminDb:
+        def get_cluster_registration(self, workspace_id: str, cluster_id: str) -> dict[str, Any]:
+            return {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "settings": {"cluster_role": "target"},
+            }
+
+        def get_cluster_policy(self, _workspace_id: str, _cluster_id: str) -> dict[str, str]:
+            return {"cluster_role": "target"}
+
+        def can_access(self, *_args: str) -> bool:
+            raise AssertionError("service admin must not need an explicit access row")
+
+        def get_inventory_resource(self, **_identity: str) -> dict[str, Any]:
+            return {"summary": {"containers": [{"name": "app"}]}}
+
+    authorize = module.database_terminal_authorizer(AdminDb())
+    admin = {
+        "user_id": "admin-1",
+        "workspace_id": WORKSPACE,
+        "roles": ["service_admin"],
+    }
+
+    assert asyncio.run(authorize(admin, WORKSPACE, CLUSTER, "sandbox", "api-0", "app"))
+    assert not asyncio.run(authorize(admin, WORKSPACE, CLUSTER, "kube-system", "api-0", "app"))
+
+
+def test_pod_terminal_bridges_real_agent_frames_redacts_and_audits() -> None:
+    module = load_gateway_module()
+    audits: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def authorize_terminal(
+        _session: object,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        pod: str,
+        container: str,
+    ) -> bool:
+        return (workspace_id, cluster_id, namespace, pod, container) == (
+            WORKSPACE,
+            CLUSTER,
+            "sandbox",
+            "api-0",
+            "app",
+        )
+
+    async def audit(subject: str, workspace_id: str, payload: dict[str, Any]) -> None:
+        audits.append((subject, workspace_id, payload))
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_terminal=authorize_terminal,
+        audit_terminal=audit,
+    )
+    client = TestClient(app)
+    command = "printf 'password=top-secret\\n'; exit 7"
+
+    with client.websocket_connect(
+        f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+    ) as agent:
+        agent.receive_json()
+        with client.websocket_connect(
+            f"/live/terminal?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
+            "&namespace=sandbox&pod=api-0&container=app",
+            headers=browser_headers(),
+        ) as browser:
+            browser.send_json({"type": "terminal.start", "command": command})
+            execute = agent.receive_json()
+            session_id = execute["session_id"]
+            assert execute == {
+                "type": "terminal.exec",
+                "session_id": session_id,
+                "namespace": "sandbox",
+                "pod": "api-0",
+                "container": "app",
+                "command": command,
+                "timeout_seconds": 300,
+                "tty": False,
+            }
+            agent.send_json({"type": "terminal.connected", "session_id": session_id})
+            assert browser.receive_json() == {
+                "type": "terminal.connected",
+                "session_id": session_id,
+            }
+            agent.send_json(
+                {
+                    "type": "terminal.output",
+                    "session_id": session_id,
+                    "stream": "stdout",
+                    "data": "password=top-secret\n",
+                }
+            )
+            output = browser.receive_json()
+            assert output["type"] == "terminal.output"
+            assert "top-secret" not in output["data"]
+            assert "[REDACTED]" in output["data"]
+            browser.send_json(
+                {"type": "terminal.input", "session_id": session_id, "data": "confirm\n"}
+            )
+            assert agent.receive_json() == {
+                "type": "terminal.input",
+                "session_id": session_id,
+                "data": "confirm\n",
+            }
+            agent.send_json(
+                {
+                    "type": "terminal.end",
+                    "session_id": session_id,
+                    "exit_code": 7,
+                    "reason": "completed",
+                }
+            )
+            assert browser.receive_json() == {
+                "type": "terminal.end",
+                "session_id": session_id,
+                "exit_code": 7,
+                "reason": "completed",
+            }
+
+    assert [item[0] for item in audits] == [
+        "terminal.session.started",
+        "terminal.session.finished",
+    ]
+    started = audits[0][2]
+    assert started["command_sha256"] == hashlib.sha256(command.encode()).hexdigest()
+    assert started["command_length"] == len(command)
+    assert command not in str(audits)
+    assert "top-secret" not in str(audits)
+    assert audits[1][2]["exit_code"] == 7
+
+
+def test_pod_terminal_fails_closed_without_exact_authorization_or_agent() -> None:
+    module = load_gateway_module()
+
+    async def deny(*_args: object) -> bool:
+        return False
+
+    async def audit(*_args: object) -> None:
+        return None
+
+    denied_app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_terminal=deny,
+        audit_terminal=audit,
+    )
+    with TestClient(denied_app).websocket_connect(
+        f"/live/terminal?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
+        "&namespace=sandbox&pod=api-0&container=app",
+        headers=browser_headers(),
+    ) as browser:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            browser.receive_json()
+    assert excinfo.value.code == 4401
+
+    async def allow(*_args: object) -> bool:
+        return True
+
+    offline_app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_terminal=allow,
+        audit_terminal=audit,
+    )
+    with TestClient(offline_app).websocket_connect(
+        f"/live/terminal?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
+        "&namespace=sandbox&pod=api-0&container=app",
+        headers=browser_headers(),
+    ) as browser:
+        error = browser.receive_json()
+    assert error["type"] == "terminal.error"
+    assert error["code"] == "agent_unavailable"

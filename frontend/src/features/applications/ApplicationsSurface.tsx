@@ -1,10 +1,18 @@
-import { Grid2X2, List, RefreshCw, Search } from "lucide-react";
+import { Boxes, GitBranch, Grid2X2, List, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
-import { Input } from "../../shared/ui/primitives/input";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "../../shared/ui/primitives/empty";
 import { ApplicationCard } from "./ApplicationCard";
 import { ApplicationDetailWorkspace, openApplicationDetail } from "./ApplicationDetailWorkspace";
 import { ApplicationsFailureState } from "./ApplicationsState";
@@ -56,27 +64,14 @@ function ApplicationsCatalog({
           <RefreshCw aria-hidden="true" className={catalog.refreshing ? "motion-safe:animate-spin" : undefined} />
         </Button>
       </header>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
-        <label className="relative min-w-0 flex-1 sm:max-w-md">
-          <span className="sr-only">{copy.search}</span>
-          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            onChange={(event) => filter.updateFilters((current) => ({
-              ...current,
-              applicationSurface: { ...current.applicationSurface, query: event.target.value },
-            }), "typing")}
-            placeholder={copy.searchPlaceholder}
-            value={filter.state.applicationSurface.query}
-          />
-        </label>
+      <div className="flex min-w-0 items-center justify-end">
         <div className="flex items-center gap-1" role="group" aria-label={copy.title}>
           <Button aria-label={copy.gridView} aria-pressed={view === "grid"} onClick={() => setView("grid")} size="icon" type="button" variant={view === "grid" ? "secondary" : "ghost"}><Grid2X2 aria-hidden="true" /></Button>
           <Button aria-label={copy.tableView} aria-pressed={view === "table"} onClick={() => setView("table")} size="icon" type="button" variant={view === "table" ? "secondary" : "ghost"}><List aria-hidden="true" /></Button>
         </div>
       </div>
       {catalog.data.length === 0 ? (
-        <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">{copy.empty}</p>
+        <ApplicationsEmptyState href={gitOpsCreateHref(filter)} />
       ) : view === "grid" ? (
         <ul className="grid min-w-0 gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {catalog.data.map((application) => (
@@ -90,4 +85,34 @@ function ApplicationsCatalog({
       )}
     </ProductPageFrame>
   );
+}
+
+function ApplicationsEmptyState({ href }: { href: string }) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  return (
+    <Empty className="min-h-80 rounded-xl border bg-card px-6 py-12 shadow-sm">
+      <EmptyMedia className="bg-primary/10 text-primary" variant="icon">
+        <Boxes aria-hidden="true" />
+      </EmptyMedia>
+      <EmptyHeader>
+        <EmptyTitle>{copy.empty}</EmptyTitle>
+        <EmptyDescription className="max-w-lg text-pretty leading-6">
+          {copy.emptyDescription}
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button render={<Link to={href} />}>
+          <GitBranch aria-hidden="true" />
+          {copy.connectInGitOps}
+        </Button>
+      </EmptyContent>
+    </Empty>
+  );
+}
+
+function gitOpsCreateHref(filter: ReturnType<typeof useUnifiedFilter>): string {
+  const href = filter.navigationHref("/gitops");
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}mode=new`;
 }

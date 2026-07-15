@@ -75,9 +75,18 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-def _authenticated_body(session: Any) -> AuthSessionResponse:
+def _authenticated_body(session: Any, password_auth: Any | None = None) -> AuthSessionResponse:
+    display_name = getattr(session, "display_name", None)
+    email = getattr(session, "email", None)
+    if password_auth is not None and (display_name is None or email is None):
+        identity = password_auth.user_identity(session.user_id)
+        if identity is not None:
+            display_name = display_name or identity.get("display_name")
+            email = email or identity.get("email")
     return AuthSessionResponse(
         authenticated=True,
+        display_name=display_name,
+        email=email,
         user_id=session.user_id,
         roles=session.roles,
         workspace_id=session.workspace_id,
@@ -129,8 +138,11 @@ async def _request_email_verification(request: Request, events: Any, challenge: 
 
 
 @router.get(gateway_routes.AUTH_SESSION_PATH, response_model=AuthSessionResponse)
-async def session(current: Any = Depends(require_session)) -> AuthSessionResponse:
-    return _authenticated_body(current)
+async def session(
+    current: Any = Depends(require_session),
+    password_auth: Any = Depends(get_password_auth),
+) -> AuthSessionResponse:
+    return _authenticated_body(current, password_auth)
 
 
 @router.post(gateway_routes.AUTH_SESSION_REFRESH_PATH, response_model=AuthSessionResponse)
@@ -140,11 +152,11 @@ async def refresh_session(
     password_auth: Any = Depends(get_password_auth),
 ) -> AuthSessionResponse:
     if current.token == TRUSTED_PROXY_SESSION_TOKEN:
-        return _authenticated_body(current)
+        return _authenticated_body(current, password_auth)
     if not await password_auth.sessions.touch_session(current.token):
         raise HTTPException(status_code=401, detail="authentication required")
     _set_session_cookie(response, current)
-    return _authenticated_body(current)
+    return _authenticated_body(current, password_auth)
 
 
 @router.post(gateway_routes.AUTH_SIGNUP_PATH, response_model=EmailVerificationResponse)

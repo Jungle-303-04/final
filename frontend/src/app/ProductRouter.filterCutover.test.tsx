@@ -100,17 +100,17 @@ afterEach(() => {
 });
 
 describe("ProductRouter unified filter cutover", () => {
-  it("keeps URL-backed filters and hides editable controls while detail owns the content", async () => {
+  it("keeps one shell-owned filter in the same slot while detail is open", async () => {
     const { container, router } = renderProductRouter(
       `/resources${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
-    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(0);
-    expect(screen.queryByRole("button", {
+    expect(container.querySelectorAll("[data-slot='unified-filter-bar']")).toHaveLength(1);
+    expect(screen.getByRole("button", {
       name: "Filter clusters, apps, labels, and resources",
-    })).toBeNull();
+    })).toBeTruthy();
 
     await waitFor(() => {
       expect(currentLocation(router)).toBe(`/resources${FILTER_SEARCH}#detail`);
@@ -141,9 +141,9 @@ describe("ProductRouter unified filter cutover", () => {
     await user.keyboard("gh");
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
     });
-    expect(router.state.historyAction).toBe("PUSH");
+    expect(router.state.historyAction).toBe("REPLACE");
   });
 
   it("drops detail when a route shortcut targets the already active surface", async () => {
@@ -168,7 +168,7 @@ describe("ProductRouter unified filter cutover", () => {
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
@@ -185,6 +185,18 @@ describe("ProductRouter unified filter cutover", () => {
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
+
+  it("uses the cluster operating screen as the temporary landing screen", async () => {
+    const { router } = renderProductRouter(
+      `/${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+    );
+
+    await waitFor(() => {
+      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+    });
+    expect(router.state.historyAction).toBe("REPLACE");
+  });
 });
 
 const emptyClusterScope: ClusterScopePort = {
@@ -198,6 +210,7 @@ function renderProductRouter(
 ) {
   const composition = createProductComposition([
     { id: "home", Component: HomeSurface },
+    { id: "clusters", Component: ClustersSurface },
     { id: "resources", Component: ResourcesSurface },
     { id: "issues", Component: IssuesSurface },
     ...(includeWorkflows ? [{ id: "gitops" as const, Component: WorkflowsSurface }] : []),
@@ -228,6 +241,10 @@ function HomeSurface() {
 
 function ResourcesSurface() {
   return <p>Resources surface</p>;
+}
+
+function ClustersSurface() {
+  return <p>Clusters surface</p>;
 }
 
 function IssuesSurface() {

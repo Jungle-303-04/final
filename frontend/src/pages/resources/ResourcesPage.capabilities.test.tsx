@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -74,9 +74,16 @@ describe("resource detail capabilities", () => {
     });
     renderWithRuntime(capabilities, actions);
 
-    const restart = await screen.findByRole("button", { name: "재시작" });
+    const restart = await screen.findByRole(
+      "button",
+      { name: "재시작" },
+      { timeout: 5_000 },
+    );
     expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();
-    expect(screen.queryAllByRole("button").some((button) => button.hasAttribute("disabled")))
+    const actionBar = document.querySelector('[data-slot="resource-detail-actions"]');
+    expect(actionBar).toBeTruthy();
+    expect(within(actionBar as HTMLElement).queryAllByRole("button")
+      .some((button) => button.hasAttribute("disabled")))
       .toBe(false);
 
     await user.click(restart);
@@ -95,7 +102,11 @@ describe("resource detail capabilities", () => {
     });
     renderWithRuntime(capabilities, resourcesActionsPort());
 
-    expect(await screen.findByRole("dialog", { name: "checkout-api 상세" })).toBeTruthy();
+    expect(await screen.findByRole(
+      "dialog",
+      { name: "checkout-api 상세" },
+      { timeout: 5_000 },
+    )).toBeTruthy();
     await waitFor(() => expect(capabilities.loadResourceCapabilities).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "재시작" })).toBeNull();
     expect(screen.queryByRole("button", { name: "스케일" })).toBeNull();

@@ -2,7 +2,9 @@ import {
   GitOpsPortFailure,
   type GitOpsFailureCode,
   type GitOpsPort,
+  type GitOpsSyncTarget,
   type ReleaseApplication,
+  type ReleaseCluster,
 } from "./gitOpsContract";
 import type { GitOpsEndpointDependencies } from "./gitOpsEndpointContract";
 
@@ -12,6 +14,33 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       return withPortFailure(async () => {
         const response = await endpoints.listApplications(signal);
         return response.applications.map(toApplication).filter((item): item is ReleaseApplication => item !== null);
+      });
+    },
+    async listSyncTargets(signal) {
+      return withPortFailure(async () => {
+        const response = await endpoints.listApplications(signal);
+        const applications = response.applications
+          .map(toApplication)
+          .filter((item): item is ReleaseApplication => item !== null);
+        const groups = await Promise.all(applications.map(async (application) => {
+          const deployments = await endpoints.listApplicationDeployments(application.id, { signal });
+          return deployments.deployments.map((deployment) => toSyncTarget(application, deployment));
+        }));
+        return groups.flat().sort(compareSyncTargets);
+      });
+    },
+    async listClusters(signal) {
+      return withPortFailure(async () => {
+        const response = await endpoints.listClusters(signal);
+        return response.clusters.map(toCluster);
+      });
+    },
+    async connectApplication(input, signal) {
+      return withPortFailure(async () => {
+        const response = await endpoints.connectApplication(input, signal);
+        const application = toApplication(response.application);
+        if (!application) throw new Error("connected application is missing an id");
+        return application;
       });
     },
     async listPlans(signal) {
@@ -30,6 +59,46 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.submitSafePr(plan, stepIndex, signal)),
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
+  };
+}
+
+function toSyncTarget(
+  application: ReleaseApplication,
+  value: Record<string, unknown>,
+): GitOpsSyncTarget {
+  const bindingId = stringValue(value.binding_id);
+  if (!bindingId) throw new GitOpsPortFailure("invalid-response");
+  const poll = mapValue(value.gitops_poll);
+  return {
+    id: `${application.id}:${bindingId}`,
+    applicationId: application.id,
+    applicationName: application.name,
+    clusterId: nullableStringValue(value.cluster_id),
+    namespace: nullableStringValue(value.namespace),
+    environment: nullableStringValue(value.environment),
+    syncStatus: poll ? nullableStringValue(poll.status) : null,
+    revision: poll ? nullableStringValue(poll.last_seen_commit_sha) : null,
+    observedAt: poll ? nullableStringValue(poll.last_polled_at) : null,
+  };
+}
+
+function compareSyncTargets(left: GitOpsSyncTarget, right: GitOpsSyncTarget): number {
+  return left.applicationName.localeCompare(right.applicationName) ||
+    (left.clusterId ?? "").localeCompare(right.clusterId ?? "") ||
+    left.id.localeCompare(right.id);
+}
+
+function toCluster(value: {
+  cluster_id: string;
+  name: string;
+  environment: string;
+  connection_status: string;
+}): ReleaseCluster {
+  return {
+    id: value.cluster_id,
+    name: value.name || value.cluster_id,
+    environment: value.environment,
+    connectionStatus: value.connection_status,
   };
 }
 
@@ -56,6 +125,17 @@ function firstStringValue(value: Record<string, unknown>, keys: readonly string[
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function nullableStringValue(value: unknown): string | null {
+  const normalized = stringValue(value).trim();
+  return normalized || null;
+}
+
+function mapValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {

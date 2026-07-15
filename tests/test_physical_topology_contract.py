@@ -39,8 +39,8 @@ def _payload() -> dict[str, object]:
                 "server_id": "node-key-a",
                 "usage_pct": None,
                 "cpu_mcores": 120.5,
-                "mem_mib": 256.0,
                 "cpu_request_mcores": 250.0,
+                "mem_mib": 256.0,
                 "mem_request_mib": 512.0,
                 "cpu_limit_mcores": 500.0,
                 "mem_limit_mib": 1024.0,
@@ -90,6 +90,11 @@ def test_physical_topology_contract_is_additive_bounded_and_allowlisted() -> Non
 def test_physical_topology_rejects_unknown_server_links_and_truncation() -> None:
     payload = _payload()
     payload["pods"] = [{**payload["pods"][0], "server_id": "missing-node"}]
+    with pytest.raises(ValidationError):
+        PhysicalTopologyResponse.model_validate(payload)
+
+    payload = _payload()
+    payload["pods"] = [{**payload["pods"][0], "usage_pct": 106.2, "cpu_request_mcores": None}]
     with pytest.raises(ValidationError):
         PhysicalTopologyResponse.model_validate(payload)
 
@@ -178,8 +183,8 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
     }
     assert built["pods"][0]["usage_pct"] is None
     assert built["pods"][0]["cpu_mcores"] == 120.5
-    assert built["pods"][0]["mem_mib"] == 256.0
     assert built["pods"][0]["cpu_request_mcores"] is None
+    assert built["pods"][0]["mem_mib"] == 256.0
     assert built["pods"][0]["mem_request_mib"] is None
     assert built["pods"][0]["cpu_limit_mcores"] is None
     assert built["pods"][0]["mem_limit_mib"] is None
@@ -188,7 +193,7 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
     assert "topology_pod_budget_exceeded" in built["partial_reason_codes"]
 
 
-def test_physical_topology_builder_derives_requests_ratio_only_from_observed_requests() -> None:
+def test_physical_topology_builder_preserves_actual_usage_and_request_denominators() -> None:
     result = {
         "servers": [],
         "pods": [
@@ -200,9 +205,7 @@ def test_physical_topology_builder_derives_requests_ratio_only_from_observed_req
                 "health": "healthy",
                 "summary": {
                     "cpu_request_mcores": 200,
-                    "mem_request_mib": 256,
-                    "cpu_limit_mcores": 500,
-                    "mem_limit_mib": 1024,
+                    "mem_request_mib": 128,
                     "restart_total": 0,
                 },
                 "placement_node_name": "",
@@ -214,15 +217,55 @@ def test_physical_topology_builder_derives_requests_ratio_only_from_observed_req
         result,
         latest_usage_sample={
             "sampled_at": "2026-07-14T05:00:00Z",
-            "usage": {"pods": {"shop/checkout-a": {"cpu_mcores": 100}}},
+            "usage": {"pods": {"shop/checkout-a": {"cpu_mcores": 250, "mem_mib": 64}}},
         },
         matched_count_completeness="partial",
         total_count_completeness="exact",
     )
 
-    assert built["pods"][0]["usage_pct"] == 50.0
+    assert built["pods"][0]["usage_pct"] == 125.0
+    assert built["pods"][0]["cpu_mcores"] == 250.0
+    assert built["pods"][0]["cpu_request_mcores"] == 200.0
+    assert built["pods"][0]["mem_mib"] == 64.0
+    assert built["pods"][0]["mem_request_mib"] == 128.0
+    assert built["pods"][0]["server_id"] is None
+
+
+def test_physical_topology_builder_nulls_usage_when_any_request_is_missing() -> None:
+    result = {
+        "servers": [],
+        "pods": [
+            {
+                "inventory_key": "pod-key-a",
+                "name": "checkout-a",
+                "namespace": "shop",
+                "status": "Running",
+                "health": "healthy",
+                "summary": {
+                    "cpu_request_mcores": 200,
+                    "cpu_limit_mcores": 500,
+                    "mem_limit_mib": 1024,
+                    "restart_total": 0,
+                },
+                "placement_node_name": "",
+                "matches_filter": True,
+            }
+        ],
+    }
+
+    built = build_physical_topology(
+        result,
+        latest_usage_sample={
+            "sampled_at": "2026-07-14T05:00:00Z",
+            "usage": {"pods": {"shop/checkout-a": {"cpu_mcores": 250, "mem_mib": 64}}},
+        },
+        matched_count_completeness="exact",
+        total_count_completeness="exact",
+    )
+
+    assert built["pods"][0]["usage_pct"] is None
     assert built["pods"][0]["server_id"] is None
     assert built["pods"][0]["cpu_request_mcores"] == 200.0
-    assert built["pods"][0]["mem_request_mib"] == 256.0
+    assert built["pods"][0]["mem_request_mib"] is None
     assert built["pods"][0]["cpu_limit_mcores"] == 500.0
     assert built["pods"][0]["mem_limit_mib"] == 1024.0

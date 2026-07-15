@@ -11,6 +11,7 @@ from domains.rca.events import (
     RcaReportDetail,
     RecoveryActionCandidate,
 )
+from packages.config.constants import Sandbox
 from packages.contracts.event_bus.bodies import JsonObject
 from services.ai.agent.defaults import RecoveryDefaults
 
@@ -59,6 +60,7 @@ class RecoveryActionSpec:
     validation_checks: tuple[str, ...]
     rollback_plan: str
     params: JsonObject
+    approval_required_outside_sandbox: bool = False
 
     def to_candidate(
         self,
@@ -69,6 +71,9 @@ class RecoveryActionSpec:
         active_defaults = defaults or RecoveryDefaults()
         incident = context.incident
         detail = context.detail
+        approval_required = self.approval_required or (
+            self.approval_required_outside_sandbox and incident.namespace != Sandbox.NAMESPACE
+        )
         action_id = f"{context.report.evidence_ref}:{self.action_type}"
         params = {
             "root_cause": detail.root_cause,
@@ -97,7 +102,7 @@ class RecoveryActionSpec:
             score=self.score,
             risk_level=self.risk_level,
             blast_radius=self.blast_radius,
-            approval_required=self.approval_required,
+            approval_required=approval_required,
             prerequisites=list(self.prerequisites),
             validation_checks=list(self.validation_checks),
             rollback_plan=self.rollback_plan,

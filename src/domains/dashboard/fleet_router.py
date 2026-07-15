@@ -19,6 +19,7 @@ health 판정 규칙(결정적, 단위 테스트로 고정):
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -60,6 +61,7 @@ UNKNOWN_WORKLOAD_HEALTH = "unknown"
 FLEET_CLUSTER_LIMIT = 200
 WORKLOAD_LIMIT = 500
 WARNING_EVENT_LIMIT = 10
+WARNING_EVENT_SCAN_LIMIT = 100
 OPEN_INCIDENT_LIMIT = 20
 NODE_LIMIT = 1000
 POD_LIMIT = 1000
@@ -238,24 +240,47 @@ def build_cluster_summary_detail(
     if registration is None:
         return None
 
-    workloads: dict[str, list[ClusterWorkloadHealthItem]] = {}
-    for row in db.list_inventory_resources(
+    workload_rows = db.list_inventory_resources(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
         resource_type="workload",
         namespace=None,
         include_deleted=False,
         limit=WORKLOAD_LIMIT,
-    ):
+    )
+    workloads: dict[str, list[ClusterWorkloadHealthItem]] = {}
+    for row in workload_rows:
         health = str(row.get("health") or UNKNOWN_WORKLOAD_HEALTH)
         workloads.setdefault(health, []).append(workload_health_item(row))
 
-    warning_events = [
-        warning_event_item(row)
-        for row in db.list_recent_warning_events(
-            workspace_id, cluster_id, limit=WARNING_EVENT_LIMIT
-        )
-    ]
+    pod_rows = db.list_inventory_resources(
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        resource_type="pod",
+        namespace=None,
+        include_deleted=False,
+        limit=POD_LIMIT,
+    )
+    snapshot_getter = getattr(db, "latest_inventory_snapshot", None)
+    latest_snapshot = (
+        snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
+    )
+    current_snapshot_id = (
+        str(latest_snapshot.get("snapshot_id"))
+        if isinstance(latest_snapshot, dict) and latest_snapshot.get("snapshot_id")
+        else None
+    )
+    warning_events = current_warning_event_items(
+        db.list_recent_warning_events(
+            workspace_id,
+            cluster_id,
+            limit=WARNING_EVENT_SCAN_LIMIT,
+        ),
+        pods=pod_rows,
+        workloads=workload_rows,
+        current_snapshot_id=current_snapshot_id,
+        limit=WARNING_EVENT_LIMIT,
+    )
     open_incidents = [
         open_incident_item(row)
         for row in db.list_open_rca_incidents(workspace_id, cluster_id, limit=OPEN_INCIDENT_LIMIT)
@@ -349,15 +374,13 @@ def build_node_pods_summary(
         raise HTTPException(status_code=NOT_FOUND_CODE, detail="node not found")
     pods = [
         pod
-        for pod in observable_workload_pods(
-            db.list_inventory_resources(
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                resource_type="pod",
-                namespace=None,
-                include_deleted=False,
-                limit=POD_LIMIT,
-            )
+        for pod in db.list_inventory_resources(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            resource_type="pod",
+            namespace=None,
+            include_deleted=False,
+            limit=POD_LIMIT,
         )
         if pod_node_name(pod) == node_name
     ]
@@ -520,8 +543,223 @@ def warning_event_item(row: JsonObject) -> ClusterWarningEventItem:
         involved_kind=summary.get("involved_kind"),
         involved_name=summary.get("involved_name"),
         count=_int_or_zero(summary.get("count")),
-        last_seen_at=row.get("last_seen_at"),
+        last_seen_at=_optional_text(
+            summary.get("last_timestamp")
+            or summary.get("first_timestamp")
+            or row.get("last_seen_at")
+        ),
     )
+
+
+def current_warning_event_items(
+    rows: list[JsonObject],
+    *,
+    pods: list[JsonObject],
+    workloads: list[JsonObject],
+    current_snapshot_id: str | None,
+    limit: int,
+) -> list[ClusterWarningEventItem]:
+    """Return active warning groups, not one card per retained Event object.
+
+    Pod and ReplicaSet Events are accepted only when the involved object belongs to the
+    current inventory snapshot. Events from deleted rollout objects therefore remain in
+    inventory history but disappear from the active rail. Multiple current pods owned by
+    the same workload are grouped by owner/reason (and probe subtype) into one card.
+    """
+    current_pods = [row for row in pods if row_is_current(row, current_snapshot_id)]
+    current_workloads = [row for row in workloads if row_is_current(row, current_snapshot_id)]
+    pod_index = resource_index(current_pods, default_kind="Pod")
+    workload_index = resource_index(current_workloads)
+    grouped: dict[tuple[str, str, str, str, str], JsonObject] = {}
+
+    for row in rows:
+        if not row_is_current(row, current_snapshot_id):
+            continue
+        summary = _summary(row)
+        namespace = str(row.get("namespace") or summary.get("namespace") or "")
+        involved_kind = str(summary.get("involved_kind") or "")
+        involved_name = str(summary.get("involved_name") or "")
+        involved_uid = _optional_text(summary.get("involved_uid"))
+        target = current_event_target(
+            namespace=namespace,
+            involved_kind=involved_kind,
+            involved_name=involved_name,
+            involved_uid=involved_uid,
+            summary=summary,
+            pod_index=pod_index,
+            workload_index=workload_index,
+        )
+        if target is None:
+            continue
+        target_kind, target_name = target
+        reason = str(summary.get("reason") or "")
+        signal = warning_signal_key(str(summary.get("message") or ""))
+        key = (namespace, target_kind, target_name, reason, signal)
+        event_time = warning_event_time(row)
+        existing = grouped.get(key)
+        if existing is None:
+            identity_parts = [namespace or "cluster", target_kind, target_name, reason]
+            if signal:
+                identity_parts.append(signal.replace(" ", "-"))
+            grouped[key] = {
+                "namespace": namespace or None,
+                "name": ":".join(identity_parts),
+                "reason": reason or None,
+                "message": _optional_text(summary.get("message")),
+                "involved_kind": target_kind or None,
+                "involved_name": target_name or None,
+                "count": _int_or_zero(summary.get("count")),
+                "last_seen_at": event_time,
+            }
+            continue
+        existing["count"] = _int_or_zero(existing.get("count")) + _int_or_zero(summary.get("count"))
+        if event_time_is_newer(event_time, _optional_text(existing.get("last_seen_at"))):
+            existing["last_seen_at"] = event_time
+            existing["message"] = _optional_text(summary.get("message"))
+
+    ordered = sorted(
+        grouped.values(),
+        key=lambda item: event_time_sort_key(_optional_text(item.get("last_seen_at"))),
+        reverse=True,
+    )
+    return [ClusterWarningEventItem.model_validate(item) for item in ordered[:limit]]
+
+
+def row_is_current(row: JsonObject, current_snapshot_id: str | None) -> bool:
+    row_snapshot_id = _optional_text(row.get("snapshot_id"))
+    if current_snapshot_id is None or row_snapshot_id is None:
+        return True
+    return row_snapshot_id == current_snapshot_id
+
+
+def resource_index(
+    rows: list[JsonObject],
+    *,
+    default_kind: str | None = None,
+) -> dict[tuple[str, str, str], JsonObject]:
+    indexed: dict[tuple[str, str, str], JsonObject] = {}
+    for row in rows:
+        summary = _summary(row)
+        namespace = str(row.get("namespace") or summary.get("namespace") or "")
+        kind = str(row.get("kind") or summary.get("kind") or default_kind or "")
+        name = str(row.get("name") or summary.get("name") or "")
+        if kind and name:
+            indexed[(namespace, kind.casefold(), name)] = row
+    return indexed
+
+
+def current_event_target(
+    *,
+    namespace: str,
+    involved_kind: str,
+    involved_name: str,
+    involved_uid: str | None,
+    summary: JsonObject,
+    pod_index: dict[tuple[str, str, str], JsonObject],
+    workload_index: dict[tuple[str, str, str], JsonObject],
+) -> tuple[str, str] | None:
+    kind_key = involved_kind.casefold()
+    if kind_key == "pod":
+        pod = pod_index.get((namespace, "pod", involved_name))
+        if pod is None or (involved_uid and _optional_text(pod.get("uid")) != involved_uid):
+            return None
+        if warning_is_recovered_probe(summary, pod):
+            return None
+        pod_summary = _summary(pod)
+        owner_kind = _optional_text(pod_summary.get("owner_kind"))
+        owner_name = _optional_text(pod_summary.get("owner_name"))
+        if owner_kind and owner_name:
+            return root_workload_owner(
+                namespace,
+                owner_kind,
+                owner_name,
+                workload_index,
+            )
+        return ("Pod", involved_name)
+    if kind_key == "replicaset":
+        workload = workload_index.get((namespace, kind_key, involved_name))
+        if workload is None or str(workload.get("health") or "").casefold() == "healthy":
+            return None
+        return root_workload_owner(
+            namespace,
+            involved_kind,
+            involved_name,
+            workload_index,
+        )
+    return (involved_kind or "Object", involved_name or "unknown")
+
+
+def warning_is_recovered_probe(summary: JsonObject, pod: JsonObject) -> bool:
+    message = str(summary.get("message") or "").casefold()
+    if str(summary.get("reason") or "") != "Unhealthy" or "probe" not in message:
+        return False
+    pod_summary = _summary(pod)
+    conditions = pod_summary.get("conditions")
+    if isinstance(conditions, list):
+        ready = next(
+            (
+                condition
+                for condition in conditions
+                if isinstance(condition, dict) and condition.get("type") == "Ready"
+            ),
+            None,
+        )
+        if ready is not None:
+            return str(ready.get("status")) == "True"
+    return str(pod.get("health") or "").casefold() == "healthy"
+
+
+def root_workload_owner(
+    namespace: str,
+    kind: str,
+    name: str,
+    workload_index: dict[tuple[str, str, str], JsonObject],
+) -> tuple[str, str]:
+    current = (kind, name)
+    visited: set[tuple[str, str]] = set()
+    while current not in visited:
+        visited.add(current)
+        row = workload_index.get((namespace, current[0].casefold(), current[1]))
+        if row is None:
+            break
+        summary = _summary(row)
+        owner_kind = _optional_text(summary.get("owner_kind"))
+        owner_name = _optional_text(summary.get("owner_name"))
+        if not owner_kind or not owner_name:
+            break
+        current = (owner_kind, owner_name)
+    return current
+
+
+def warning_signal_key(message: str) -> str:
+    normalized = message.casefold()
+    for signal in ("readiness probe", "liveness probe", "startup probe"):
+        if signal in normalized:
+            return signal
+    return ""
+
+
+def warning_event_time(row: JsonObject) -> str | None:
+    summary = _summary(row)
+    return _optional_text(
+        summary.get("last_timestamp") or summary.get("first_timestamp") or row.get("last_seen_at")
+    )
+
+
+def event_time_is_newer(candidate: str | None, existing: str | None) -> bool:
+    return event_time_sort_key(candidate) > event_time_sort_key(existing)
+
+
+def event_time_sort_key(value: str | None) -> datetime:
+    if not value:
+        return datetime.min.replace(tzinfo=UTC)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def open_incident_item(row: JsonObject) -> ClusterOpenIncidentItem:

@@ -1,0 +1,50 @@
+import { Globe } from 'lucide-react'
+import { cn } from '@/shared/lib/cn'
+import { Section, PropertyList, Property } from '../../ui/drawer-components'
+import { BADGE_INACTIVE } from '../../../utils/badge-colors'
+
+interface IngressClassRendererProps {
+  data: any
+}
+
+export function IngressClassRenderer({ data }: IngressClassRendererProps) {
+  const spec = data.spec || {}
+  const annotations = data.metadata?.annotations || {}
+
+  const isDefault = annotations['ingressclass.kubernetes.io/is-default-class'] === 'true'
+
+  return (
+    <>
+      <Section title="Ingress Class" icon={Globe}>
+        <PropertyList>
+          <Property label="Controller" value={spec.controller} />
+          <Property
+            label="Default"
+            value={
+              <span className={cn(
+                'badge',
+                isDefault
+                  ? 'bg-success/20 text-success'
+                  : BADGE_INACTIVE
+              )}>
+                {isDefault ? 'Yes' : 'No'}
+              </span>
+            }
+          />
+        </PropertyList>
+      </Section>
+
+      {spec.parameters && (
+        <Section title="Parameters Reference">
+          <PropertyList>
+            {spec.parameters.apiGroup && <Property label="API Group" value={spec.parameters.apiGroup} />}
+            <Property label="Kind" value={spec.parameters.kind} />
+            <Property label="Name" value={spec.parameters.name} />
+            {spec.parameters.namespace && <Property label="Namespace" value={spec.parameters.namespace} />}
+            {spec.parameters.scope && <Property label="Scope" value={spec.parameters.scope} />}
+          </PropertyList>
+        </Section>
+      )}
+    </>
+  )
+}

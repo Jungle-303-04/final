@@ -60,7 +60,7 @@ describe("useHomePageState refresh authority", () => {
     },
   );
 
-  it("polls only while visible, refreshes on visibility return, and supports manual refresh", async () => {
+  it("polls cluster summaries every 10 seconds only while visible", async () => {
     vi.useFakeTimers();
     setVisibility("visible");
     const api = homeApi();
@@ -71,7 +71,15 @@ describe("useHomePageState refresh authority", () => {
     expect(api.nodes).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(5_000);
+      await flushPromises();
+    });
+    expect(api.list).toHaveBeenCalledTimes(1);
+    expect(api.overview).toHaveBeenCalledTimes(1);
+    expect(api.nodes).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
       await flushPromises();
     });
     expect(api.list).toHaveBeenCalledTimes(2);
@@ -81,7 +89,7 @@ describe("useHomePageState refresh authority", () => {
     act(() => {
       setVisibility("hidden");
       document.dispatchEvent(new Event("visibilitychange"));
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(20_000);
     });
     await flushEffects();
     expect(api.list).toHaveBeenCalledTimes(2);
@@ -101,6 +109,23 @@ describe("useHomePageState refresh authority", () => {
     });
     expect(api.list).toHaveBeenCalledTimes(4);
     expect(api.overview).toHaveBeenCalledTimes(4);
+  });
+
+  it("polls the selected node pods every 5 seconds", async () => {
+    vi.useFakeTimers();
+    setVisibility("visible");
+    const api = homeApi();
+    renderHomeState(api.port, "/?clusters=cluster-a&node=worker-a");
+    await flushEffects();
+    expect(api.pods).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await flushPromises();
+    });
+    expect(api.pods).toHaveBeenCalledTimes(2);
+    expect(api.overview).toHaveBeenCalledOnce();
+    expect(api.nodes).toHaveBeenCalledOnce();
   });
 
   it("keeps the last success and exposes a background refresh failure", async () => {

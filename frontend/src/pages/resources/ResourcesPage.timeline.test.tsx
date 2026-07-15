@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_LOG_STREAM_PORT } from "../../features/log-stream/logStreamContract";
@@ -20,7 +20,33 @@ import {
 afterEach(cleanup);
 
 describe("ResourcesPage S11 timeline strip", () => {
-  it("jumps to evidence-backed incidents and persists the historical coordinate", async () => {
+  it("does not issue an overflow-prone all-resource timeline read", async () => {
+    const timelinePort = resourcesChangeTimelinePort();
+    renderResources(
+      resourcesPort(),
+      "/resources?clusters=cluster-1",
+      resourcesClusterPort(),
+      vi.fn(),
+      "ko",
+      resourcesFilterPort(),
+      resourcesPhysicalTopologyPort(),
+      resourcesMetricHistoryPort(),
+      resourcesCapabilitiesPort(),
+      resourcesActionsPort(),
+      EMPTY_LOG_STREAM_PORT,
+      resourcesRelationTopologyPort(),
+      timelinePort,
+    );
+
+    expect(await screen.findByRole("article", { name: "서버 worker-a" })).toBeTruthy();
+    expect(timelinePort.loadChangeTimeline).not.toHaveBeenCalled();
+    const timeline = document.querySelector('[data-slot="resources-time-scrubber"]');
+    expect(timeline?.getAttribute("data-state")).toBe("unavailable");
+    expect(timeline?.getAttribute("data-expanded")).toBe("false");
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+  });
+
+  it("does not expose server incident markers outside the browser measurement buffer", async () => {
     const user = userEvent.setup();
     const timelinePort = resourcesChangeTimelinePort({
       loadChangeTimeline: vi.fn().mockImplementation((_state, options) => {
@@ -49,13 +75,10 @@ describe("ResourcesPage S11 timeline strip", () => {
     });
     renderTimelineResources(timelinePort);
 
-    const marker = await screen.findByRole("button", { name: /Jump to incident/ });
-    await user.click(marker);
-
-    await waitFor(() => expect(readQuery().has("t.at")).toBe(true));
-    expect(screen.getByText("No snapshot for this interval")).toBeTruthy();
-    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("past");
+    await user.click(await screen.findByRole("button", { name: "Show recorded history" }));
+    expect(screen.getByText("No record in this interval")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Jump to incident/ })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
     expect(timelinePort.loadChangeTimeline).toHaveBeenCalledWith(
       expect.objectContaining({ common: expect.objectContaining({ clusters: ["cluster-1"] }) }),
       expect.objectContaining({ bucketMs: 120_000 }),
@@ -63,15 +86,25 @@ describe("ResourcesPage S11 timeline strip", () => {
     );
   });
 
-  it("starts playback from history when invoked at the live edge", async () => {
+  it("keeps live history collapsed and does not offer playback without a measured sample", async () => {
     const user = userEvent.setup();
     renderTimelineResources(resourcesChangeTimelinePort());
 
-    await user.click(await screen.findByRole("button", { name: "Play resource history" }));
-    await waitFor(() => expect(readQuery().has("t.at")).toBe(true));
+    const expand = await screen.findByRole("button", { name: "Show recorded history" });
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+
+    await user.click(expand);
+    expect(screen.getByText("Recorded changes · 2 min intervals")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+    expect(screen.getByText("No record in this interval")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
     expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("playing");
+      ?.getAttribute("data-replay-status")).toBe("live");
   });
+
 });
 
 function renderTimelineResources(timelinePort: ReturnType<typeof resourcesChangeTimelinePort>) {
@@ -90,9 +123,4 @@ function renderTimelineResources(timelinePort: ReturnType<typeof resourcesChange
     resourcesRelationTopologyPort(),
     timelinePort,
   );
-}
-
-function readQuery(): URLSearchParams {
-  const location = screen.getByTestId("resources-location").textContent ?? "";
-  return new URL(location, "https://product.test").searchParams;
 }

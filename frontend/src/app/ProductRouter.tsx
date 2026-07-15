@@ -25,6 +25,9 @@ export function ProductRouter({
   }
 
   const fallbackRoute = routeDefinitionForSurface(composition.surfaces[0].id);
+  const landingRoute = composition.releasedSurfaceIds.has("clusters")
+    ? routeDefinitionForSurface("clusters")
+    : fallbackRoute;
 
   return (
     <UnifiedFilterProvider>
@@ -39,15 +42,20 @@ export function ProductRouter({
               globalFilterPort={composition.globalFilter}
               aiAssistantPort={composition.aiAssistant}
               logStreamPort={composition.logStream}
+              alertEventsPort={composition.alertEvents}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>
+            <Route index element={<ProductFallbackRedirect path={landingRoute.path} />} />
             {composition.surfaces.map(({ id, Component }) => {
               const routeDefinition = routeDefinitionForSurface(id);
               const routePath = routeDefinition.match === "prefix"
                 ? `${routeDefinition.path}/*`
                 : routeDefinition.path;
-              return <Route key={id} path={routePath} element={<Component />} />;
+              const element = id === "home" && composition.releasedSurfaceIds.has("clusters")
+                ? <ProductFallbackRedirect path="/clusters" />
+                : <Component />;
+              return <Route key={id} path={routePath} element={element} />;
             })}
             {composition.releasedSurfaceIds.has("gitops") ? (
               <Route path="/workflows/*" element={<ProductFallbackRedirect path="/gitops" />} />

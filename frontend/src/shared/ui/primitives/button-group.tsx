@@ -5,7 +5,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 import { Separator } from "./separator";
 
 const BUTTON_GROUP_ORIENTATIONS = ["horizontal", "vertical"] as const;

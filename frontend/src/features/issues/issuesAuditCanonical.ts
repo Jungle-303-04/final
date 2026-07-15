@@ -30,6 +30,7 @@ export function toIssueAuditTimelinePage(
 }
 
 function toIssueAuditEvent(item: IssuesEndpointAuditTimelineItem): IssueAuditEvent {
+  requireOpaqueResponseValue(item.event_id, "audit event_id");
   requireOpaqueResponseValue(item.subject, "audit subject");
   requireOpaqueResponseValue(item.source, "audit source");
   requireOpaqueResponseValue(item.created_at, "audit created_at");
@@ -38,10 +39,12 @@ function toIssueAuditEvent(item: IssuesEndpointAuditTimelineItem): IssueAuditEve
   }
 
   return {
+    eventId: item.event_id,
     subject: item.subject,
     source: item.source,
     createdAt: item.created_at,
     causationId: item.causation_id,
+    journeyStage: item.journey_stage,
     payloadSummary: item.payload_summary,
   };
 }

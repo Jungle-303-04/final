@@ -64,6 +64,16 @@ const RCA_REPORTS = {
       candidates: [],
       supporting_evidence_refs: [],
       missing_evidence_checks: [],
+      narrative: {
+        locale: "ko",
+        executive_summary: "메모리 한도 초과로 Pod가 반복 재시작되었습니다.",
+        impact: "API 처리 안정성이 저하되었을 가능성이 있습니다.",
+        reasoning: "OOMKilled와 메모리 사용량 근거가 일치합니다.",
+        recommended_action: "승인 후 메모리 한도를 검토하고 단계적으로 조정합니다.",
+        recurrence_prevention: ["OOMKilled와 메모리 사용률을 함께 모니터링합니다."],
+        limitations: ["요청 오류율 근거는 수집되지 않았습니다."],
+      },
+      narrative_status: "generated",
     },
   ],
   limit: 50,
@@ -175,6 +185,23 @@ describe("Evidence and RCA report API", () => {
       jsonResponse({
         ...RCA_REPORTS,
         items: [{ ...RCA_REPORTS.items[0], confidence: "high" }],
+      }),
+    );
+
+    await expect(listRcaReports()).rejects.toMatchObject({
+      kind: "invalid-payload",
+      status: 200,
+    } satisfies Partial<ApiError>);
+  });
+
+  it("rejects incomplete LLM narrative fields", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        ...RCA_REPORTS,
+        items: [{
+          ...RCA_REPORTS.items[0],
+          narrative: { ...RCA_REPORTS.items[0].narrative, reasoning: "" },
+        }],
       }),
     );
 

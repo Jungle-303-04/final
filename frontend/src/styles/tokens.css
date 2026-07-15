@@ -55,6 +55,8 @@
   --product-cluster-select-width: 24rem;
   --product-toolbar-compact-control-width: 6rem;
   --product-toolbar-identity-width: 10rem;
+  --product-graph-height: 45rem;
+  --product-graph-height-mobile: 25rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -82,10 +84,10 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --status-healthy: oklch(0.62 0.17 157);
-  --status-warning: oklch(0.72 0.16 75);
-  --status-stale: oklch(0.62 0.13 295);
-  --status-unknown: oklch(0.58 0.02 245);
+  --status-healthy: oklch(0.64 0.185 152);
+  --status-warning: oklch(0.70 0.175 66);
+  --status-stale: oklch(0.58 0.19 292);
+  --status-unknown: oklch(0.60 0.03 245);
 }
 
 @media (min-width: 80rem) {
@@ -122,8 +124,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
-  --status-healthy: oklch(0.72 0.17 157);
-  --status-warning: oklch(0.8 0.16 75);
-  --status-stale: oklch(0.72 0.13 295);
-  --status-unknown: oklch(0.68 0.02 245);
+  --status-healthy: oklch(0.76 0.185 152);
+  --status-warning: oklch(0.82 0.17 70);
+  --status-stale: oklch(0.72 0.185 292);
+  --status-unknown: oklch(0.70 0.03 245);
 }

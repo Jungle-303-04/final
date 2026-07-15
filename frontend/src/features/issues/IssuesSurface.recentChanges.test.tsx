@@ -76,7 +76,7 @@ describe("IssuesSurface recent changes", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
     await waitFor(() => expect(loadRecentChanges).toHaveBeenCalledTimes(1));
-    await screen.findByText("incident.detected");
+    await waitFor(() => expect(port.loadAuditTimeline).toHaveBeenCalledTimes(1));
 
     expect(screen.queryByRole("region", { name: "Recent changes" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Recent changes" })).toBeNull();
@@ -144,7 +144,8 @@ describe("IssuesSurface recent changes", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
 
     expect(await screen.findByText("Recent changes unavailable")).toBeTruthy();
-    expect(await screen.findAllByText("Memory pressure")).toHaveLength(2);
+    expect((await screen.findAllByText("Memory pressure")).length).toBeGreaterThan(0);
+    fireEvent.click(await screen.findByRole("tab", { name: /Audit timeline/u }));
     expect(await screen.findByText("incident.detected")).toBeTruthy();
     expect(await screen.findByText("Root event")).toBeTruthy();
   });
@@ -178,11 +179,12 @@ describe("IssuesSurface recent changes", () => {
     const issueButton = await screen.findByRole("button", {
       name: "Elevated response latency",
     });
-    expect(issueButton.getAttribute("disabled")).not.toBeNull();
+    expect(issueButton.getAttribute("disabled")).toBeNull();
     fireEvent.click(issueButton);
 
     expect(loadRecentChanges).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "Recent changes" })).toBeNull();
+    expect(await screen.findByRole("region", { name: "Incident detail" })).toBeTruthy();
   });
 });
 

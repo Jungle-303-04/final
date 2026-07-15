@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import {
@@ -89,8 +89,8 @@ describe("ProductApp root recovery", () => {
     expect(screen.queryByRole("navigation")).toBeNull();
   }, 15_000);
 
-  it("loads the real Home contract once in StrictMode and drills into Node Pods", async () => {
-    window.history.replaceState({}, "", "/?cluster=cluster-1");
+  it("redirects the retired Home route to the real cluster inventory", async () => {
+    window.history.replaceState({}, "", "/home?cluster=cluster-1");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
@@ -107,15 +107,11 @@ describe("ProductApp root recovery", () => {
     expect(
       await screen.findByRole(
         "heading",
-        { name: "Cluster status" },
+        { name: "Clusters", level: 2 },
         { timeout: 5_000 },
       ),
     ).toBeTruthy();
-    await screen.findByRole(
-      "button",
-      { name: /worker-b/u },
-      { timeout: 5_000 },
-    );
+    expect((await screen.findAllByText("cluster-1")).length).toBeGreaterThan(0);
     expect(
       screen.getByRole("navigation", { name: "Primary navigation" }),
     ).toBeTruthy();
@@ -123,35 +119,9 @@ describe("ProductApp root recovery", () => {
     expect(screen.getByRole("link", { name: "Incidents" })).toBeTruthy();
     expect(requestCount(fetchMock, "/api/auth/session")).toBe(1);
     expect(requestCount(fetchMock, "/api/clusters?limit=100")).toBe(1);
-    await waitFor(() =>
-      expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(
-        1,
-      ),
-    );
-    await waitFor(() =>
-      expect(
-        requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary"),
-      ).toBe(1),
-    );
-
-    await userEvent
-      .setup()
-      .click(
-        await screen.findByRole(
-          "button",
-          { name: /worker-b/u },
-          { timeout: 5_000 },
-        ),
-      );
-    expect(
-      await screen.findByText("checkout-api-0", {}, { timeout: 5_000 }),
-    ).toBeTruthy();
-    expect(
-      requestCount(
-        fetchMock,
-        "/api/clusters/cluster-1/nodes/worker-b/pods/summary",
-      ),
-    ).toBe(1);
+    expect(window.location.pathname).toBe("/clusters");
+    expect(requestCount(fetchMock, "/api/clusters/cluster-1/summary")).toBe(0);
+    expect(requestCount(fetchMock, "/api/clusters/cluster-1/nodes/summary")).toBe(0);
   }, 15_000);
 
   it("loads the approved Resources contracts and keeps detail on the same route", async () => {

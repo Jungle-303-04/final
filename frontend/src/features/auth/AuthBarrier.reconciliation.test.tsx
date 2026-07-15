@@ -111,7 +111,7 @@ describe("AuthBarrier mutation reconciliation", () => {
 
     expect(await screen.findByRole("heading", {
       level: 1,
-      name: "검증된 응답을 읽지 못했습니다",
+      name: "정보를 불러오지 못했습니다",
     })).toBeTruthy();
     expect(screen.queryByText("인증된 제품")).toBeNull();
   });

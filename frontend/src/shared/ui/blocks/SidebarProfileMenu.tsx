@@ -9,7 +9,7 @@ import { ThemeSelectionList } from "../ThemeToggle";
 import type { ProductThemeController } from "../useProductTheme";
 import { Alert, AlertDescription, AlertTitle } from "../primitives/alert";
 import { Button, buttonVariants } from "../primitives/button";
-import { cn } from "../primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { Popover, PopoverContent } from "../primitives/popover";
 import { Separator } from "../primitives/separator";
 import {

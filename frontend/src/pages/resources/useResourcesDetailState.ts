@@ -6,7 +6,6 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useNavigate } from "react-router-dom";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourceIdentity } from "../../features/resources/resourcesContract";
 import {
@@ -25,10 +24,8 @@ export function useResourcesDetailState(
   setRetryBlocks: Dispatch<SetStateAction<ResourcesRetryBlocks>>,
 ) {
   const filter = useUnifiedFilter();
-  const navigate = useNavigate();
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const restoreRowKey = useRef<string | null>(null);
-  const openedFromList = useRef(false);
   const detailRequested =
     filter.detail.detail !== null ||
     filter.detail.resource !== null ||
@@ -80,7 +77,6 @@ export function useResourcesDetailState(
       (current) => ({
         ...current,
         detail: encodeResourceDetail(detailTarget.identity),
-        full: false,
         resource: null,
         resourceKind: null,
       }),
@@ -90,7 +86,6 @@ export function useResourcesDetailState(
 
   useEffect(() => {
     if (detailRequested) return;
-    openedFromList.current = false;
     const key = restoreRowKey.current;
     restoreRowKey.current = null;
     requestAnimationFrame(() => {
@@ -100,11 +95,6 @@ export function useResourcesDetailState(
 
   const closeDetail = useCallback(() => {
     setRetryBlocks((current) => withoutRetryBlock(current, "detail"));
-    if (openedFromList.current) {
-      openedFromList.current = false;
-      navigate(-1);
-      return;
-    }
     filter.updateDetail(
       (current) => ({
         ...current,
@@ -116,13 +106,19 @@ export function useResourcesDetailState(
       }),
       "detail-close",
     );
-  }, [filter, navigate, setRetryBlocks]);
+  }, [filter, setRetryBlocks]);
 
   const openDetail = useCallback(
     (identity: ResourceIdentity) => {
       if (selectedClusterId === null) return;
-      openedFromList.current = true;
       restoreRowKey.current = identityKey(identity);
+      filter.updateFilters(
+        (current) => ({
+          ...current,
+          resources: { ...current.resources, types: [identity.resourceType] },
+        }),
+        "chip-add",
+      );
       filter.updateDetail(
         (current) => ({
           ...current,

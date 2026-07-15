@@ -12,6 +12,7 @@ from domains.command.actions import (
     registered_command_actions,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.target import TARGET_NAMESPACE
 
 
 def test_builtin_actions_registered_with_policy_metadata() -> None:
@@ -23,7 +24,13 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     }
     for spec in actions:
-        assert spec.allowed_namespaces == (Sandbox.NAMESPACE,)
+        if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
+            expected = (TARGET_NAMESPACE,)
+        elif spec.action == Command.DEFAULT_ACTION:
+            expected = (Sandbox.NAMESPACE, "color-turf")
+        else:
+            expected = (Sandbox.NAMESPACE,)
+        assert spec.allowed_namespaces == expected
 
 
 def test_spec_lookup_and_namespace_policy() -> None:
@@ -34,6 +41,8 @@ def test_spec_lookup_and_namespace_policy() -> None:
     assert not spec.allows_namespace("kube-system")
     # rollout restart 는 비파괴 조치 — 승인 없이 자동 실행 가능해야 함
     assert spec.requires_approval is False
+    assert spec.requires_approval_for(Sandbox.NAMESPACE) is False
+    assert spec.requires_approval_for("color-turf") is True
     assert command_action_spec("nope") is None
     scale = command_action_spec(Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION)
     assert scale is not None

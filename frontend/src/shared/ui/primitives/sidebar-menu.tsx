@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 import { useSidebar } from "./sidebar";
 import {
   assertNoUnexpectedProps,

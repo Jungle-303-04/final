@@ -1,6 +1,6 @@
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 
 type OwnedSlot<T> = Omit<T, "data-slot"> & { "data-slot"?: never };
 

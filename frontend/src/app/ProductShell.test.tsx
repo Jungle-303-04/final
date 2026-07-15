@@ -58,6 +58,8 @@ describe("ProductShell", () => {
     expect(markup).toContain("Current workspace: test-workspace");
     expect(markup).toContain('aria-label="Current language: English"');
     expect(markup).toContain("test-user");
+    expect(markup).toContain("overflow-x-hidden");
+    expect(markup).toContain("data-horizontal:w-auto");
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('href="#product-main"');
     expect(markup).toContain("Issue content");

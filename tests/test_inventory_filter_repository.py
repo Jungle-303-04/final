@@ -227,7 +227,8 @@ def test_metric_history_sql_rechecks_filter_and_pins_samples_to_revision() -> No
     assert "cluster_id in ('cluster-a')" in resource_sql
     assert "valid_from_revision <= 42" in resource_sql
     assert "valid_to_revision > 42" in resource_sql
-    assert "resource_type = 'pod'" in resource_sql
+    assert "resource_type in ('pod', 'node')" in resource_sql
+    assert "resource_type = 'node' or" in resource_sql
     assert "inventory_key in ('pod-a', 'pod-b')" in resource_sql
     assert "selected_label_0.key = 'team'" in resource_sql
     assert "application_id in ('app-a')" in resource_sql
@@ -277,10 +278,11 @@ def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(
         "clusters": [],
         "namespaces": [],
         "applications": [],
+        "resource_types": [],
         "labels": [],
         "resources": [],
     }
-    assert len(applied) == 4
+    assert len(applied) == 5
     assert applied[0].clusters == ()
     assert applied[0].namespaces == selected.namespaces
     assert applied[0].applications == selected.applications
@@ -290,13 +292,15 @@ def test_global_facets_remove_only_their_own_axis_and_compile_scoped_sql(
     assert applied[2].clusters == selected.clusters
     assert applied[2].namespaces == selected.namespaces
     assert applied[2].applications == ()
-    assert applied[3] == selected
+    assert applied[3].resource_types == ()
+    assert applied[3].clusters == selected.clusters
+    assert applied[4] == selected
     assert all(item.query is None and item.include_deleted is False for item in applied)
 
     # Every candidate group is a real PostgreSQL-compilable statement. The common
     # temporal source keeps tenant, cluster authorization, and cursor boundaries in
     # all five queries; application candidates also retain application authorization.
-    assert len(connection.statements) == 5
+    assert len(connection.statements) == 6
     sql_by_group = [_sql(statement) for statement in connection.statements]
     for sql in sql_by_group:
         assert "workspace_id = 'workspace-a'" in sql

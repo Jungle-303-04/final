@@ -5,11 +5,14 @@ from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from domains.ai.alert_actions import DEFAULT_ALERT_RULE_FOR_SECONDS
+from domains.ai.context_facade import get_context_chat_llm
 from domains.ai.router import router as ai_router
 from domains.identity.dependencies import require_session
 from packages.contracts.gateway.responses import (
@@ -60,11 +63,38 @@ def inventory_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
+class StubContextLlm:
+    def __init__(self, reply: str = "실제 모델이 관측 근거를 바탕으로 답했습니다.") -> None:
+        self.reply = reply
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt: str, **_options: Any) -> str:
+        self.prompts.append(prompt)
+        return self.reply
+
+
+class FailingContextLlm(StubContextLlm):
+    async def complete(self, prompt: str, **_options: Any) -> str:
+        self.prompts.append(prompt)
+        raise RuntimeError("provider-secret-must-not-leak")
+
+
+class RateLimitedContextLlm(StubContextLlm):
+    async def complete(self, prompt: str, **_options: Any) -> str:
+        self.prompts.append(prompt)
+        request = httpx.Request("POST", "https://provider.invalid/v1/chat")
+        response = httpx.Response(429, request=request)
+        raise httpx.HTTPStatusError(
+            "provider-secret-must-not-leak", request=request, response=response
+        )
+
+
 class StubAiDb:
     def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
-        self.rows = rows or [inventory_row()]
+        self.rows = [inventory_row()] if rows is None else rows
         self.allowed = {"cluster-1"}
         self.access_calls: list[tuple[str, str, str, str]] = []
+        self.alert_rule_create_calls: list[dict[str, Any]] = []
 
     def accessible_resource_ids(
         self,
@@ -86,15 +116,26 @@ class StubAiDb:
             and (kwargs["namespace"] is None or row["namespace"] == kwargs["namespace"])
         ][: kwargs["limit"]]
 
+    def create_alert_rule(self, payload: dict[str, Any]) -> None:
+        self.alert_rule_create_calls.append(payload)
+        raise AssertionError("AI action proposals must never execute alert rules")
+
 
 def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="ws-1")
 
 
-def ai_app(db: StubAiDb, *, authenticated: bool = True) -> FastAPI:
+def ai_app(
+    db: StubAiDb,
+    *,
+    authenticated: bool = True,
+    llm: StubContextLlm | None = None,
+) -> FastAPI:
     app = FastAPI()
     app.include_router(ai_router)
     app.dependency_overrides[get_db] = lambda: db
+    if llm is not None:
+        app.dependency_overrides[get_context_chat_llm] = lambda: llm
     if authenticated:
         app.dependency_overrides[require_session] = current_session
     else:
@@ -105,6 +146,116 @@ def ai_app(db: StubAiDb, *, authenticated: bool = True) -> FastAPI:
 
         app.state.auth = RejectingAuth()
     return app
+
+
+def test_context_chat_calls_configured_llm_with_only_sanitized_evidence() -> None:
+    llm = StubContextLlm("checkout-api-0 파드는 현재 정상입니다.")
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "이 파드 상태를 설명해 줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "checkout-api-0 파드는 현재 정상입니다."
+    assert response.json()["evidence"]
+    assert len(llm.prompts) == 1
+    assert "checkout-api-0" in llm.prompts[0]
+    assert "must-not-leak" not in llm.prompts[0]
+
+
+def test_context_chat_uses_empty_resource_type_filter_as_all_resources() -> None:
+    llm = StubContextLlm("현재 선택한 클러스터에서 실행 중인 파드를 확인했습니다.")
+    cluster_context = deepcopy(CONTEXT)
+    cluster_context["screen"] = "clusters"
+    cluster_context["selection"] = None
+    cluster_context["filters"]["resource_types"] = []
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm)).post(
+        "/ai/chat",
+        json={"context": cluster_context, "message": "이 클러스터 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["evidence"]
+    assert response.json()["answer"].startswith("현재 선택한 클러스터")
+    assert len(llm.prompts) == 1
+
+
+def test_context_chat_answers_capability_question_through_actual_llm_without_fake_evidence() -> (
+    None
+):
+    llm = StubContextLlm(
+        "저는 현재 화면의 리소스와 로그 근거를 설명하고, 알림 규칙 초안을 제안할 수 있습니다."
+    )
+
+    response = TestClient(ai_app(StubAiDb(rows=[]), llm=llm)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "넌 뭘 할 수 있니?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": llm.reply,
+        "evidence": [],
+        "answer_kind": "capability",
+    }
+    assert len(llm.prompts) == 1
+
+
+def test_context_chat_answers_capability_question_without_configured_llm() -> None:
+    response = TestClient(ai_app(StubAiDb(rows=[]))).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "넌 뭘 할 수 있니?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer_kind"] == "capability"
+    assert "현재 인벤토리와 저장된 로그 근거" in response.json()["answer"]
+    assert response.json()["evidence"] == []
+
+
+def test_context_chat_does_not_let_llm_invent_operational_answer_without_evidence() -> None:
+    llm = StubContextLlm("근거 없이 지어낸 운영 상태")
+
+    response = TestClient(ai_app(StubAiDb(rows=[]), llm=llm)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "지금 파드가 왜 죽었어?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": AI_NO_DATA_ANSWER, "evidence": []}
+    assert llm.prompts == []
+
+
+def test_context_chat_uses_observed_evidence_when_provider_is_unavailable() -> None:
+    llm = FailingContextLlm()
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm), raise_server_exceptions=False).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "현재 파드 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "AI 생성 응답 서비스에 연결하지 못해" in response.json()["answer"]
+    assert "status Running, health healthy" in response.json()["answer"]
+    assert response.json()["evidence"]
+    assert "provider-secret" not in response.text
+
+
+def test_context_chat_distinguishes_provider_429_and_keeps_observed_evidence() -> None:
+    llm = RateLimitedContextLlm()
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm), raise_server_exceptions=False).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "현재 파드 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "provider 요청 한도(HTTP 429)" in response.json()["answer"]
+    assert "status Running, health healthy" in response.json()["answer"]
+    assert response.json()["evidence"]
+    assert "provider-secret" not in response.text
 
 
 def test_context_chat_returns_only_authorized_sanitized_evidence() -> None:
@@ -130,6 +281,113 @@ def test_context_chat_returns_only_authorized_sanitized_evidence() -> None:
     assert "status Running, health healthy" in body["answer"]
     assert "must-not-leak" not in response.text
     assert db.access_calls == [("user-1", "ws-1", "cluster", "inventory.read")]
+    assert db.alert_rule_create_calls == []
+
+
+def test_context_chat_does_not_treat_general_korean_question_as_alert_intent() -> None:
+    response = TestClient(ai_app(StubAiDb())).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "선택한 파드 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "현재 관측된 근거" in response.json()["answer"]
+    assert "action" not in response.json()
+
+
+@pytest.mark.parametrize(
+    ("message", "metric", "threshold", "comparator", "expected_name"),
+    [
+        (
+            "이 클러스터에서 파드 CPU가 70% 넘으면 알람 걸어줘",
+            "cpu_pct",
+            70.0,
+            ">",
+            "파드 CPU 70% 알림",
+        ),
+        ("메모리 사용률이 82.5% 이상이면 알려줘", "mem_pct", 82.5, ">=", "파드 메모리 82.5% 알림"),
+    ],
+)
+def test_context_chat_proposes_only_allowlisted_alert_action_from_current_filters(
+    message: str,
+    metric: str,
+    threshold: float,
+    comparator: str,
+    expected_name: str,
+) -> None:
+    db = StubAiDb()
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": message},
+    )
+
+    assert response.status_code == 200
+    action = response.json()["action"]
+    assert action["type"] == "create_alert_rule"
+    assert action["payload"] == {
+        "name": expected_name,
+        "scope": {
+            "clusters": ["cluster-1"],
+            "namespaces": ["cluster-1/shop"],
+            "applications": [],
+            "labels": [],
+        },
+        "metric": metric,
+        "comparator": comparator,
+        "threshold": threshold,
+        "for_seconds": DEFAULT_ALERT_RULE_FOR_SECONDS,
+        "severity": "high",
+        "channels": [],
+        "enabled": True,
+    }
+    assert str(DEFAULT_ALERT_RULE_FOR_SECONDS) in action["rationale"]
+    assert db.alert_rule_create_calls == []
+
+
+@pytest.mark.parametrize(
+    ("message", "question"),
+    [
+        ("CPU가 높으면 알람 걸어줘", "몇 %"),
+        ("CPU나 메모리가 80%면 알려줘", "CPU와 메모리 중"),
+        ("CPU가 70% 또는 80%면 알려줘", "하나의 %"),
+    ],
+)
+def test_context_chat_asks_for_missing_or_ambiguous_alert_condition_without_action(
+    message: str,
+    question: str,
+) -> None:
+    db = StubAiDb()
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": message},
+    )
+
+    assert response.status_code == 200
+    assert question in response.json()["answer"]
+    assert "action" not in response.json()
+    assert response.json()["evidence"]
+    assert db.alert_rule_create_calls == []
+
+
+def test_context_chat_never_guesses_alert_scope_outside_current_filters() -> None:
+    db = StubAiDb()
+    unscoped = deepcopy(CONTEXT)
+    unscoped["filters"]["clusters"] = []
+    unscoped["filters"]["namespaces"] = []
+    unscoped["filters"]["applications"] = []
+    unscoped["filters"]["labels"] = []
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": unscoped, "message": "CPU가 70% 넘으면 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "클러스터나 네임스페이스를 먼저 선택" in response.json()["answer"]
+    assert "action" not in response.json()
+    assert db.alert_rule_create_calls == []
 
 
 def test_context_chat_uses_canonical_no_data_for_unmaterialized_context() -> None:
@@ -144,6 +402,44 @@ def test_context_chat_uses_canonical_no_data_for_unmaterialized_context() -> Non
 
     assert response.status_code == 200
     assert response.json() == {"answer": AI_NO_DATA_ANSWER, "evidence": []}
+
+
+def test_context_chat_proposes_alert_action_even_without_evidence() -> None:
+    db = StubAiDb()
+    historical = deepcopy(CONTEXT)
+    historical["time"] = "2026-07-13T08:00:00+09:00"
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={"context": historical, "message": "CPU가 70% 넘으면 알려줘"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"] == []
+    assert body["action"]["type"] == "create_alert_rule"
+    assert body["action"]["payload"]["threshold"] == 70
+    assert db.alert_rule_create_calls == []
+
+
+def test_context_chat_can_offer_alert_action_without_inventory_evidence() -> None:
+    db = StubAiDb(rows=[])
+
+    response = TestClient(ai_app(db)).post(
+        "/ai/chat",
+        json={
+            "context": CONTEXT,
+            "message": "이 필터에서 파드 CPU가 70% 넘으면 알람 걸어줘",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "현재 화면 범위로 알림 규칙 초안을 제안합니다. 내용을 확인해 주세요."
+    assert body["evidence"] == []
+    assert body["action"]["type"] == "create_alert_rule"
+    assert body["action"]["payload"]["threshold"] == 70.0
+    assert db.alert_rule_create_calls == []
 
 
 def test_context_chat_rejects_extra_fields_and_naive_time() -> None:

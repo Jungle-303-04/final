@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, TypeAdapter
@@ -37,6 +38,12 @@ DELTA_KEY_SEGMENTS = 4
 
 RolloutPhase = Literal["idle", "progressing", "degraded"]
 DeltaOp = Literal["replace", "remove"]
+MetricSource = Literal[
+    "kubelet_stats_summary",
+    "metrics_server_fallback",
+    "mixed",
+    "unavailable",
+]
 
 
 class HotPod(StrictModel):
@@ -49,6 +56,14 @@ class HotPod(StrictModel):
     ready: bool = True
 
 
+class LiveMetricsMetadata(StrictModel):
+    """실시간 측정 출처와 실제 관측 간격 — 추정값과 실측값의 혼동을 막는다."""
+
+    source: MetricSource
+    actual_interval_seconds: float | None = Field(default=None, ge=0.0)
+    degraded_reason: str | None = None
+
+
 class LiveSummary(StrictModel):
     """cluster-agent 가 주기 송신하는 클러스터 요약 — raw metric 금지."""
 
@@ -59,6 +74,7 @@ class LiveSummary(StrictModel):
     restart_delta: int = Field(default=0, ge=0)
     rollout_phase: RolloutPhase = "idle"
     hot_pods: list[HotPod] = Field(default_factory=list, max_length=MAX_HOT_PODS)
+    metrics_metadata: LiveMetricsMetadata | None = None
 
 
 class Subscription(StrictModel):
@@ -100,6 +116,7 @@ class ResourceDelta(StrictModel):
     op: DeltaOp = "replace"
     key: str = Field(min_length=1)
     value: dict[str, Any] | None = None
+    observed_at: datetime | None = None
 
 
 class PingMessage(StrictModel):

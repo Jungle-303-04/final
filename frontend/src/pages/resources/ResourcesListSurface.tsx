@@ -1,20 +1,30 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
+import type { HomePort } from "../../features/home/homeContract";
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
+import type {
+  ResourcesPort,
+  ResourceSummary,
+} from "../../features/resources/resourcesContract";
+import {
+  exactRelationNodeId,
+  exactRelationResourceIdentity,
+} from "../../features/resources/relationTopologyGraphModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
+import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
-import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
+import { ResourcesCatalog, ResourcesCatalogMobile } from "./ResourcesCatalog";
 import { ResourcesInfraMapView } from "./ResourcesInfraMapView";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
+import { ResourcesListScopeStatus } from "./ResourcesListScopeStatus";
 import {
   ResourcesFailure,
   UnknownCompletenessEmpty,
@@ -22,7 +32,6 @@ import {
 import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
 import { buildInfraMapModel } from "./resourcesInfraMapModel";
 import { ResourcesTable } from "./ResourcesTable";
-import { ResourcesToolbar } from "./ResourcesToolbar";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
@@ -33,16 +42,22 @@ import {
   type InfraMapFocusItem,
 } from "./useInfraMapFocusDetails";
 import { useResourcesPageState } from "./useResourcesPageState";
+import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export function ResourcesListSurface({
   filterList,
   listFallback,
   metricHistory,
+  nodePodsPort,
+  onNodePodsUnauthorized,
   onLoadMore,
   physicalTopology,
   port,
   relationTopology,
   reportUnauthorized,
+  replay,
+  selectTableRows,
   state,
   topologyPinned,
   topologyView,
@@ -52,11 +67,15 @@ export function ResourcesListSurface({
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
   metricHistory: ResourceMetricsHistoryFrame;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
+  onNodePodsUnauthorized: () => void;
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
   port: ResourcesPort;
   relationTopology: RelationTopologyFrame;
   reportUnauthorized: () => void;
+  replay: PhysicalTopologyReplayState;
+  selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
   state: ReturnType<typeof useResourcesPageState>;
   topologyPinned: boolean;
   topologyView: ResourceTopologyView;
@@ -69,8 +88,7 @@ export function ResourcesListSurface({
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
-  const openPod = (pod: PhysicalTopologyPod) => {
-    if (state.selectedResourceType !== "pod") state.selectResourceType("pod");
+  const openPod = (pod: PhysicalPodOpenTarget) => {
     state.openDetail({
       resourceType: "pod",
       kind: "Pod",
@@ -202,67 +220,111 @@ export function ResourcesListSurface({
     (current) => ({ ...current, timeAt }),
     "time-at",
   );
+  const changeGraphCollapsed = (collapsed: boolean) => filter.updateDetail(
+    (current) => ({
+      ...current,
+      graphCollapsed: collapsed ? true : undefined,
+    }),
+    "graph-visibility",
+  );
+  const listedResources = filterList.phase === "ready" && filterList.data
+    ? filterList.data.items.map((item) => item.resource)
+    : [];
+  const selectRelationResource = (resourceId: string) => {
+    const identity = exactRelationResourceIdentity(resourceId, listedResources);
+    if (identity === null) return false;
+    state.openDetail(identity);
+    return true;
+  };
+  const selectedRelationResourceId = exactRelationNodeId(
+    state.detailIdentity,
+    listedResources,
+  );
   return (
     <div className="grid min-w-0 gap-4" data-slot="resources-four-layer-surface">
-      <Surface aria-label={t("resources.layer.filters")} className="min-w-0 overflow-hidden">
-        <ResourcesToolbar
-          includeDeleted={state.includeDeleted}
-          onIncludeDeletedChange={state.setIncludeDeleted}
-        />
-      </Surface>
-
-      <Surface aria-labelledby="resources-infra-map-title" className="min-w-0 overflow-hidden">
-        <ResourcesInfraMapView
-          focusOptions={infraMapFocusOptions}
-          model={infraMapModel}
-          onFocusRemove={removeInfraMapFocusItem}
-          onFocusSelect={selectInfraMapFocusItem}
-          onRetry={state.refresh}
-          phase={physicalTopology.phase}
-          selectedFocus={infraMapFocusItems}
-        />
-      </Surface>
-
-      <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
-        <ResourcesGraphShell
-          breadcrumbs={breadcrumbs}
-          clusterId={state.selectedClusterId ?? "unknown"}
-          frame={physicalTopology}
-          relationFrame={relationTopology}
-          onOpenPod={openPod}
-          onRevealServer={revealServer}
-          onSelectAll={rewindToAll}
-          skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
-          topologyPinned={topologyPinned}
-          topologyView={topologyView}
-          onTopologyViewChange={onTopologyViewChange}
-          timelineAtMs={filter.detail.timeAt}
-          timelineFrame={timelineFrame}
-          timelineRange={timelineRange}
-          onTimelineAtChange={changeTimelineAt}
-          onTimelineRangeChange={changeTimelineRange}
-        />
-      </Surface>
-
-      {listFallback ?? (
-        <Surface
-          aria-labelledby="resources-list-title"
-          className="min-w-0 overflow-hidden"
-          id="resources-list-surface"
-        >
-          <div className="border-b px-4 py-3">
-            <h3 className="font-medium" id="resources-list-title">
-              {state.selectedResourceType}
-            </h3>
-          </div>
-          <ResourcesListBody
-            filterList={filterList}
-            metricHistory={metricHistory}
-            onLoadMore={onLoadMore}
-            state={state}
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="sticky top-4 hidden min-w-0 lg:block" data-slot="resources-catalog-rail">
+          <ResourcesCatalog
+            items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
+            onSelect={state.selectResourceType}
+            selectedResourceType={state.selectedResourceType}
           />
-        </Surface>
-      )}
+        </aside>
+        <div className="grid min-w-0 gap-4 overflow-x-hidden">
+          <ResourcesCatalogMobile
+            items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
+            onSelect={state.selectResourceType}
+            selectedResourceType={state.selectedResourceType}
+          />
+          <Surface aria-labelledby="resources-infra-map-title" className="min-w-0 overflow-hidden">
+            <ResourcesInfraMapView
+              focusOptions={infraMapFocusOptions}
+              model={infraMapModel}
+              onFocusRemove={removeInfraMapFocusItem}
+              onFocusSelect={selectInfraMapFocusItem}
+              onRetry={state.refresh}
+              phase={physicalTopology.phase}
+              selectedFocus={infraMapFocusItems}
+            />
+          </Surface>
+          <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
+            <ResourcesGraphShell
+              breadcrumbs={breadcrumbs}
+              clusterId={state.selectedClusterId ?? "unknown"}
+              frame={physicalTopology}
+              includeDeleted={state.includeDeleted}
+              relationFrame={relationTopology}
+              onSelectRelationResource={selectRelationResource}
+              selectedRelationResourceId={selectedRelationResourceId}
+              onOpenPod={openPod}
+              nodePodsPort={nodePodsPort}
+              onNodePodsUnauthorized={onNodePodsUnauthorized}
+              onRevealServer={revealServer}
+              onSelectAll={rewindToAll}
+              skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
+              topologyPinned={topologyPinned}
+              topologyView={topologyView}
+              onTopologyViewChange={onTopologyViewChange}
+              timelineAtMs={filter.detail.timeAt}
+              timelineFrame={timelineFrame}
+              timelineRange={timelineRange}
+              timelineReplayStatus={replay.status}
+              timelineReplayWindow={{
+                fromMs: replay.availableFromMs,
+                toMs: replay.availableToMs,
+              }}
+              onTimelineAtChange={changeTimelineAt}
+              onTimelineRangeChange={changeTimelineRange}
+              collapsed={filter.detail.graphCollapsed === true}
+              onCollapsedChange={changeGraphCollapsed}
+              onIncludeDeletedChange={state.setIncludeDeleted}
+            />
+          </Surface>
+
+          {listFallback ?? (
+            <Surface
+              aria-labelledby="resources-list-title"
+              className="min-w-0 overflow-hidden"
+              id="resources-list-surface"
+            >
+              <div className="border-b px-4 py-3">
+                <h3 className="font-medium" id="resources-list-title">
+                  {filter.state.resources.types.length === 0
+                    ? t("resources.list.allTitle")
+                    : filter.state.resources.types.map(humanizeFilterValue).join(", ")}
+                </h3>
+              </div>
+              <ResourcesListBody
+                filterList={filterList}
+                metricHistory={metricHistory}
+                onLoadMore={onLoadMore}
+                selectTableRows={selectTableRows}
+                state={state}
+              />
+            </Surface>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -271,11 +333,13 @@ function ResourcesListBody({
   filterList,
   metricHistory,
   onLoadMore,
+  selectTableRows,
   state,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   metricHistory: ResourceMetricsHistoryFrame;
   onLoadMore: () => void;
+  selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
   state: ReturnType<typeof useResourcesPageState>;
 }) {
   const { t } = useI18n();
@@ -304,10 +368,10 @@ function ResourcesListBody({
   ) {
     return <UnknownCompletenessEmpty variant="list" />;
   }
-  const items = filterList.data.items.map((item) => item.resource);
+  const items = selectTableRows(filterList.data.items.map((item) => item.resource));
   return (
     <div className="min-w-0">
-      <ListScopeStatus page={filterList.data} />
+      <ResourcesListScopeStatus page={filterList.data} />
       <ResourcesTable
         items={items}
         metricHistory={metricHistory}
@@ -333,34 +397,6 @@ function ResourcesListBody({
           </Button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ListScopeStatus({ page }: { page: ResourcesFilterResourcePage }) {
-  const { formatNumber, t } = useI18n();
-  const total = page.counts.filteredCount;
-  const shown = page.items.length;
-  const filteredText = total === null
-    ? ` · ${t("resources.list.unknownTotal")}`
-    : ` · ${t("resources.list.scope.filtered", { count: formatNumber(total) })}`;
-  const excludedText = page.excludedCount > 0
-    ? ` · ${t("resources.list.scope.excluded", {
-      count: formatNumber(page.excludedCount),
-    })}`
-    : "";
-  return (
-    <div
-      aria-label={t("resources.list.scope.aria")}
-      className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-      role="status"
-    >
-      {t("resources.list.scope.shown", { count: formatNumber(shown) })}
-      {filteredText}
-      {excludedText}
-      {page.counts.filteredCountCompleteness === "partial"
-        ? ` · ${t("common.state.partial")}`
-        : ""}
     </div>
   );
 }

@@ -271,6 +271,60 @@ def test_human_command_is_queued_when_auto_command_kill_switch_is_off(
     assert len(store.calls) == 1
 
 
+def test_non_sandbox_rollout_restart_requires_recorded_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
+    store = SpyAgentCommandStore(approval=None)
+    request = command_request(
+        approval_ref=None,
+        policy_decision_ref=None,
+        environment="production",
+        namespace="color-turf",
+        actor={"auto_selected": False},
+    )
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                request,
+                SimpleNamespace(correlation_id="corr-color-turf", db=store),
+            )
+        )
+    )
+
+    assert len(events) == 1
+    assert isinstance(events[0], CommandRejectedBody)
+    assert events[0].reason == MISSING_APPROVAL_REF_REASON
+    assert store.calls == []
+
+
+def test_approved_non_sandbox_rollout_restart_is_queued(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
+    store = SpyAgentCommandStore()
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                command_request(
+                    environment="production",
+                    namespace="color-turf",
+                    actor={"auto_selected": False},
+                ),
+                SimpleNamespace(correlation_id="corr-color-turf-approved", db=store),
+            )
+        )
+    )
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert len(store.calls) == 1
+
+
 def test_build_plan_includes_agent_execution_metadata() -> None:
     plan = build_plan(command_request(), "corr-1")
     route = route_for_plan(plan)

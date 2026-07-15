@@ -32,6 +32,24 @@ export function timelinePercent(value: number, fromMs: number, toMs: number): nu
   return ((clampTimelineMs(value, fromMs, toMs) - fromMs) / (toMs - fromMs)) * 100;
 }
 
+export function browserReplayWindow(
+  timeline: Pick<ChangeTimelineSnapshot, "fromMs" | "toMs">,
+  buffer: { fromMs: number | null; toMs: number | null } | undefined,
+): { fromMs: number; toMs: number } | null {
+  if (buffer?.fromMs === null || buffer?.fromMs === undefined ||
+      buffer.toMs === null || buffer.toMs === undefined) return null;
+  const fromMs = Math.max(timeline.fromMs, buffer.fromMs);
+  const toMs = Math.min(timeline.toMs, buffer.toMs);
+  return toMs > fromMs ? { fromMs, toMs } : null;
+}
+
+export function timelinePlaybackEnd(
+  timeline: Pick<ChangeTimelineSnapshot, "fromMs" | "toMs">,
+  buffer: { fromMs: number | null; toMs: number | null } | undefined,
+): number {
+  return browserReplayWindow(timeline, buffer)?.toMs ?? timeline.toMs;
+}
+
 export function isTimelineGap(
   value: number,
   gaps: ChangeTimelineSnapshot["gaps"],
@@ -49,5 +67,8 @@ export function timelinePlaybackStart(timeline: ChangeTimelineSnapshot): number 
 }
 
 export function timelinePlaybackStep(timeline: ChangeTimelineSnapshot): number {
-  return Math.max(timeline.bucketMs, Math.ceil((timeline.toMs - timeline.fromMs) / 48));
+  // Change-event histogram buckets may be minutes wide, while measured resource
+  // samples arrive every second. Playback follows the measured clock instead of
+  // jumping one histogram bucket at a time.
+  return Math.min(1_000, timeline.bucketMs);
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -296,6 +297,12 @@ class KubernetesSnapshotProvider:
             "namespace": namespace,
             "collected_at": str(payload.get("collected_at") or datetime.now(UTC).isoformat()),
         }
+        snapshot["collection_scopes"] = [
+            {
+                "namespace": namespace,
+                "label_selector": telemetry_query.label_selector,
+            }
+        ]
         pod_metrics = pod_metrics_by_key(items(payload.get("pod_metrics")))
         node_metrics = node_metrics_by_name(items(payload.get("node_metrics")))
         raw_nodes = items(payload.get(K8S_SNAPSHOT_NODES_KEY))
@@ -323,10 +330,12 @@ class KubernetesSnapshotProvider:
         selected_names = {
             str(metadata(item).get("name") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
+            if metadata(item).get("name")
         }
         selected_uids = {
             str(metadata(item).get("uid") or "")
             for item in [*raw_pods, *(row for rows in raw_workloads.values() for row in rows)]
+            if metadata(item).get("uid")
         }
         snapshot[K8S_RESOURCE_PODS] = [
             pod_summary(
@@ -394,6 +403,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
     """Build the empty shape used by Kubernetes evidence."""
     return {
         "cluster": {"cluster_id": cluster_id},
+        "collection_scopes": [],
         K8S_SNAPSHOT_WORKLOADS_KEY: [],
         K8S_RESOURCE_PODS: [],
         K8S_SNAPSHOT_EVENTS_KEY: [],
@@ -407,6 +417,8 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
 def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
     """Add one normalized snapshot into another snapshot."""
     target["cluster"] = {**dict(target.get("cluster", {})), **dict(source.get("cluster", {}))}
+    target.setdefault("collection_scopes", [])
+    target["collection_scopes"].extend(source.get("collection_scopes", []))
     if "detected_provider" not in target and source.get("detected_provider"):
         target["detected_provider"] = source["detected_provider"]
     for key in (
@@ -468,6 +480,7 @@ RCA_TEST_LABEL = "kubeheal.io/rca-test"
 RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
 RCA_TEST_RESOURCE_PREFIX = "rca-test-"
 EVIDENCE_IDENTITY_LABELS = (RCA_TEST_RUN_LABEL, RCA_TEST_LABEL)
+LIVE_SCOPED_EVENT_KINDS = frozenset({"Pod", K8S_KIND_REPLICA_SET})
 
 
 def scoped_items(payload: Any, label_selector: str | None) -> list[JsonObject]:
@@ -519,12 +532,16 @@ def scoped_events(
     for row in rows:
         involved = row.get("involvedObject")
         involved_body = involved if isinstance(involved, dict) else {}
+        kind = str(involved_body.get("kind") or "")
         name = str(involved_body.get("name") or "")
         uid = str(involved_body.get("uid") or "")
+        matches_current_resource = name in selected_names or (uid and uid in selected_uids)
         if label_selector:
-            if name in selected_names or (uid and uid in selected_uids):
+            if matches_current_resource:
                 scoped.append(row)
-        elif not name.startswith(RCA_TEST_RESOURCE_PREFIX):
+        elif not name.startswith(RCA_TEST_RESOURCE_PREFIX) and (
+            kind not in LIVE_SCOPED_EVENT_KINDS or matches_current_resource
+        ):
             scoped.append(row)
     return scoped
 
@@ -619,6 +636,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     pod_spec = spec(item)
     owner_kind, owner_name = owner_ref(item)
     measured = dict(metrics or {})
+    cpu_request_mcores, mem_request_mib = pod_request_totals(pod_spec)
     containers = [
         container_summary(container)
         for container in pod_status.get("containerStatuses", [])
@@ -644,9 +662,11 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "host_ip": pod_status.get("hostIP"),
         "conditions": pod_status.get("conditions", []),
         "containers": containers,
-        **pod_resource_requirements_summary(pod_spec),
+        **pod_limit_summary(pod_spec),
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),
+        "cpu_request_mcores": cpu_request_mcores,
+        "mem_request_mib": mem_request_mib,
         "restart_total": sum(int(container.get("restart_count", 0)) for container in containers),
         "waiting_reasons": [
             container.get("state_reason")
@@ -671,22 +691,14 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     }
 
 
-def pod_resource_requirements_summary(pod_spec: JsonObject) -> JsonObject:
-    """Return Pod-level CPU and memory requests/limits in normalized units."""
+def pod_limit_summary(pod_spec: JsonObject) -> JsonObject:
+    """Return Pod-level CPU and memory limits in normalized units."""
     containers = items_from_value(pod_spec.get("containers"))
     init_containers = items_from_value(pod_spec.get("initContainers"))
     regular = resource_totals(containers)
     init = resource_maxima(init_containers)
     return compact_dict(
         {
-            "cpu_request_mcores": max_optional(
-                regular.get("cpu_request_mcores"),
-                init.get("cpu_request_mcores"),
-            ),
-            "mem_request_mib": max_optional(
-                regular.get("mem_request_mib"),
-                init.get("mem_request_mib"),
-            ),
             "cpu_limit_mcores": max_optional(
                 regular.get("cpu_limit_mcores"),
                 init.get("cpu_limit_mcores"),
@@ -702,7 +714,7 @@ def pod_resource_requirements_summary(pod_spec: JsonObject) -> JsonObject:
 def resource_totals(containers: list[JsonObject]) -> JsonObject:
     totals: JsonObject = {}
     for container in containers:
-        values = container_resource_values(container)
+        values = container_limit_values(container)
         for key, value in values.items():
             if value is not None:
                 totals[key] = float(totals.get(key) or 0.0) + value
@@ -712,20 +724,17 @@ def resource_totals(containers: list[JsonObject]) -> JsonObject:
 def resource_maxima(containers: list[JsonObject]) -> JsonObject:
     maxima: JsonObject = {}
     for container in containers:
-        values = container_resource_values(container)
+        values = container_limit_values(container)
         for key, value in values.items():
             if value is not None:
                 maxima[key] = max(float(maxima.get(key) or 0.0), value)
     return maxima
 
 
-def container_resource_values(container: JsonObject) -> dict[str, float | None]:
+def container_limit_values(container: JsonObject) -> dict[str, float | None]:
     resources = container.get("resources") if isinstance(container.get("resources"), dict) else {}
-    requests = resources.get("requests") if isinstance(resources.get("requests"), dict) else {}
     limits = resources.get("limits") if isinstance(resources.get("limits"), dict) else {}
     return {
-        "cpu_request_mcores": parse_cpu_mcores(requests.get("cpu")),
-        "mem_request_mib": parse_memory_mib(requests.get("memory")),
         "cpu_limit_mcores": parse_cpu_mcores(limits.get("cpu")),
         "mem_limit_mib": parse_memory_mib(limits.get("memory")),
     }
@@ -743,6 +752,66 @@ def max_optional(left: float | None, right: float | None) -> float | None:
     if right is None:
         return left
     return max(left, right)
+
+
+def pod_request_totals(pod_spec: JsonObject) -> tuple[float | None, float | None]:
+    """Return effective Pod requests only when the regular-container axis is observed."""
+    containers = pod_spec.get("containers")
+    if not isinstance(containers, list) or not containers:
+        return None, None
+
+    cpu_total = 0.0
+    memory_total = 0.0
+    cpu_complete = True
+    memory_complete = True
+    for container in containers:
+        if not isinstance(container, dict):
+            cpu_complete = False
+            memory_complete = False
+            continue
+        resources = container.get("resources")
+        requests = resources.get("requests") if isinstance(resources, dict) else None
+        if not isinstance(requests, dict):
+            cpu_complete = False
+            memory_complete = False
+            continue
+
+        cpu = parse_cpu_mcores(requests.get("cpu"))
+        if _positive_finite(cpu):
+            cpu_total += cpu
+        else:
+            cpu_complete = False
+
+        memory = parse_memory_mib(requests.get("memory"))
+        if _positive_finite(memory):
+            memory_total += memory
+        else:
+            memory_complete = False
+
+    init_cpu_max, init_memory_max = init_request_maxima(
+        items_from_value(pod_spec.get("initContainers"))
+    )
+    return (
+        max_optional(cpu_total, init_cpu_max) if cpu_complete else None,
+        max_optional(memory_total, init_memory_max) if memory_complete else None,
+    )
+
+
+def init_request_maxima(containers: list[JsonObject]) -> tuple[float | None, float | None]:
+    cpu_max: float | None = None
+    memory_max: float | None = None
+    for container in containers:
+        resources = container.get("resources")
+        requests = resources.get("requests") if isinstance(resources, dict) else None
+        if not isinstance(requests, dict):
+            continue
+        cpu_max = max_optional(cpu_max, parse_cpu_mcores(requests.get("cpu")))
+        memory_max = max_optional(memory_max, parse_memory_mib(requests.get("memory")))
+    return cpu_max, memory_max
+
+
+def _positive_finite(value: float | None) -> bool:
+    return value is not None and math.isfinite(value) and value > 0
 
 
 def container_summary(item: JsonObject) -> JsonObject:

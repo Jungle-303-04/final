@@ -17,14 +17,20 @@ export const resourceMetricHistoryPointSchema = z.strictObject({
 export const resourceMetricHistorySeriesSchema = z.strictObject({
   resource_id: z.string().min(1),
   cluster_id: z.string().min(1),
-  resource_type: z.literal("pod"),
-  namespace: z.string().min(1),
+  resource_type: z.enum(["pod", "node"]),
+  namespace: z.string().min(1).nullable(),
   name: z.string().min(1),
   points: z.array(resourceMetricHistoryPointSchema),
   has_sparkline_points: z.boolean(),
   completeness: filterCountCompletenessSchema,
   partial_reason_codes: z.array(z.string()),
 }).superRefine((series, context) => {
+  if (series.resource_type === "pod" && series.namespace === null) {
+    context.addIssue({ code: "custom", message: "pod metric history requires a namespace", path: ["namespace"] });
+  }
+  if (series.resource_type === "node" && series.namespace !== null) {
+    context.addIssue({ code: "custom", message: "node metric history must be cluster scoped", path: ["namespace"] });
+  }
   const observed = series.points.map((point) => point.observed_at);
   if (new Set(observed).size !== observed.length ||
     observed.some((value, index) => index > 0 && value <= observed[index - 1]!)) {

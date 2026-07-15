@@ -40,6 +40,9 @@ class StubUserStore:
     def get_user_by_email(self, email: str) -> dict[str, Any] | None:
         return self.users.get(email)
 
+    def get_user_by_id(self, user_id: str) -> dict[str, Any] | None:
+        return self._find_user(user_id)
+
     def create_user(
         self,
         user_id: str,
@@ -117,6 +120,8 @@ class StubSessionStore:
         user_id: str,
         roles: list[str] | None = None,
         workspace_id: str | None = None,
+        display_name: str | None = None,
+        email: str | None = None,
     ) -> Any:
         # Redis 대신 dict에 저장해서 PasswordAuthService 흐름만 검증.
         token = f"token-{len(self.sessions) + 1}"
@@ -125,6 +130,8 @@ class StubSessionStore:
             user_id,
             roles or [self.auth_module.ServiceRole.USER.value],
             workspace_id or "default",
+            display_name,
+            email,
         )
         self.sessions[token] = session
         return session
@@ -268,6 +275,8 @@ def test_password_login_creates_session() -> None:
 
         assert session.user_id == "local-user"
         assert session.roles == ["user"]
+        assert session.display_name == "Local User"
+        assert session.email == "local@example.com"
         assert await sessions.get_session(session.token) == session
         assert len(sessions.rate_checks) == 2
 

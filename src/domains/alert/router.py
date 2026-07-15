@@ -2,13 +2,38 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from domains.alert.delivery import post_alert_webhook
 from domains.alert.events import AlertRequestedBody
+from domains.alert.schemas import (
+    AlertEventResponse,
+    AlertEventSeverity,
+    AlertEventStatus,
+    AlertIncidentPromotionResponse,
+    AlertRuleCreatedResponse,
+    AlertRuleCreateRequest,
+    AlertRuleListResponse,
+    AlertRulePatchRequest,
+    AlertRuleResponse,
+)
+from domains.alert.service import (
+    AlertChannelNotFoundError,
+    AlertEventNotFoundError,
+    AlertEventStateConflictError,
+    AlertRuleNotFoundError,
+    acknowledge_alert_event_occurrence,
+    alert_event_response,
+    alert_rule_response,
+    create_alert_rule_setting,
+    promote_alert_event_occurrence,
+    update_alert_rule_setting,
+)
 from domains.identity.dependencies import require_admin_session
+from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
 from packages.contracts.gateway.responses import (
@@ -17,14 +42,175 @@ from packages.contracts.gateway.responses import (
     AlertChannelTestResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
-from packages.runtime.dependencies import get_db
+from packages.runtime.dependencies import get_db, get_events
 from packages.security.outbound_url import UnsafeOutboundUrlError, validate_outbound_url_syntax
+from packages.storage.engine import unit_of_work_or_null
 
 router = APIRouter()
 NOT_FOUND_CODE = 404
 CHANNEL_NOT_FOUND = "alert channel not found"
 UNSAFE_WEBHOOK_URL_CODE = "unsafe_webhook_url"
 UNSAFE_WEBHOOK_URL_DETAIL = "안전하지 않은 웹훅 URL입니다."
+ALERT_CHANNEL_NOT_FOUND_CODE = "alert_channel_not_found"
+ALERT_CHANNEL_NOT_FOUND_DETAIL = "선택한 알림 채널을 찾을 수 없습니다."
+ALERT_RULE_NOT_FOUND = "alert rule not found"
+ALERT_EVENT_NOT_FOUND = "alert event not found"
+
+
+@router.post(
+    gateway_routes.ALERT_RULES_PATH,
+    response_model=AlertRuleCreatedResponse,
+    status_code=201,
+)
+async def create_alert_rule(
+    payload: AlertRuleCreateRequest,
+    response: Response,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertRuleCreatedResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        created = create_alert_rule_setting(
+            db,
+            payload,
+            workspace_id=workspace_id,
+            actor_id=str(current.user_id),
+        )
+    except AlertChannelNotFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": ALERT_CHANNEL_NOT_FOUND_CODE,
+                "detail": ALERT_CHANNEL_NOT_FOUND_DETAIL,
+            },
+        ) from exc
+    response.headers["Location"] = gateway_routes.ALERT_RULE_PATH.format(rule_id=created.rule_id)
+    return created
+
+
+@router.get(gateway_routes.ALERT_RULES_PATH, response_model=AlertRuleListResponse)
+async def list_alert_rules(
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertRuleListResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    return AlertRuleListResponse(
+        rules=[alert_rule_response(row) for row in db.list_alert_rules(workspace_id)]
+    )
+
+
+@router.patch(gateway_routes.ALERT_RULE_PATH, response_model=AlertRuleResponse)
+async def update_alert_rule(
+    rule_id: str,
+    payload: AlertRulePatchRequest,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertRuleResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        return update_alert_rule_setting(
+            db,
+            rule_id,
+            payload,
+            workspace_id=workspace_id,
+        )
+    except AlertChannelNotFoundError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": ALERT_CHANNEL_NOT_FOUND_CODE,
+                "detail": ALERT_CHANNEL_NOT_FOUND_DETAIL,
+            },
+        ) from exc
+    except AlertRuleNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=ALERT_RULE_NOT_FOUND) from exc
+
+
+@router.delete(gateway_routes.ALERT_RULE_PATH, status_code=204, response_model=None)
+async def delete_alert_rule(
+    rule_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> None:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    if not db.delete_alert_rule(workspace_id, rule_id):
+        raise HTTPException(status_code=404, detail=ALERT_RULE_NOT_FOUND)
+
+
+@router.get(gateway_routes.ALERT_EVENTS_PATH, response_model=list[AlertEventResponse])
+async def list_alert_events(
+    from_time: datetime | None = Query(default=None, alias="from"),
+    to_time: datetime | None = Query(default=None, alias="to"),
+    rule_id: str | None = Query(default=None, min_length=1, max_length=120),
+    severity: AlertEventSeverity | None = None,
+    status: AlertEventStatus | None = None,
+    limit: int = Query(default=100, ge=1, le=200),
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> list[AlertEventResponse]:
+    if from_time is not None and to_time is not None and from_time > to_time:
+        raise HTTPException(status_code=422, detail="from must not be after to")
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    rows = db.list_alert_events(
+        workspace_id,
+        from_time=from_time,
+        to_time=to_time,
+        rule_id=rule_id,
+        severity=severity,
+        status=status,
+        limit=limit,
+    )
+    return [alert_event_response(row) for row in rows]
+
+
+@router.post(gateway_routes.ALERT_EVENT_ACK_PATH, response_model=AlertEventResponse)
+async def acknowledge_alert_event(
+    event_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertEventResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        return acknowledge_alert_event_occurrence(
+            db,
+            event_id,
+            workspace_id=workspace_id,
+            actor_id=str(current.user_id),
+        )
+    except AlertEventNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=ALERT_EVENT_NOT_FOUND) from exc
+    except AlertEventStateConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    gateway_routes.ALERT_EVENT_PROMOTE_INCIDENT_PATH,
+    response_model=AlertIncidentPromotionResponse,
+)
+async def promote_alert_event_to_incident(
+    event_id: str,
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AlertIncidentPromotionResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    try:
+        with unit_of_work_or_null(db):
+            response, body = promote_alert_event_occurrence(
+                db,
+                event_id,
+                workspace_id=workspace_id,
+                actor_id=str(current.user_id),
+            )
+            if body is not None:
+                await events.accept_body(
+                    body,
+                    correlation_id=response.incident_id,
+                    actor=Actor(str(current.user_id), tuple(current.roles)),
+                )
+    except AlertEventNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=ALERT_EVENT_NOT_FOUND) from exc
+    return response
 
 
 @router.get(gateway_routes.ALERT_CHANNELS_PATH, response_model=AlertChannelListResponse)

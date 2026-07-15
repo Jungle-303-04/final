@@ -1,26 +1,7 @@
-import {
-  IconBrandAws,
-  IconBrandAzure,
-  IconBrandGoogle,
-  type Icon,
-} from "@tabler/icons-react";
-import { Boxes, ServerCog } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
 import type { HomeClusterProvider } from "../home/homeContract";
 import { useI18n, type MessageKey } from "../../shared/i18n";
-import { cn } from "../../shared/ui/primitives/cn";
-
-const providerIcons: Record<
-  HomeClusterProvider,
-  ComponentType<SVGProps<SVGSVGElement>> | Icon
-> = {
-  aks: IconBrandAzure,
-  eks: IconBrandAws,
-  gke: IconBrandGoogle,
-  kind: Boxes,
-  onprem: ServerCog,
-  unknown: Boxes,
-};
+import { ProviderLogo } from "../../shared/brand/ProviderLogo";
+import { cn } from "../../shared/lib/cn";
 
 const providerLabelKeys: Record<HomeClusterProvider, MessageKey> = {
   aks: "clusterScope.provider.aks",
@@ -32,26 +13,38 @@ const providerLabelKeys: Record<HomeClusterProvider, MessageKey> = {
 };
 
 export function ClusterProviderIcon({
+  appearance = "compact",
   className,
   provider,
 }: {
+  appearance?: "card" | "compact";
   className?: string;
   provider: HomeClusterProvider;
 }) {
   const { t } = useI18n();
-  const IconComponent = providerIcons[provider];
   const label = t(providerLabelKeys[provider]);
 
   return (
     <span
       aria-label={label}
-      className={cn("inline-grid size-4 shrink-0 place-items-center", className)}
+      className={cn(
+        "inline-grid shrink-0 place-items-center",
+        appearance === "card"
+          ? "size-9 rounded-lg border bg-muted/45 text-foreground shadow-xs"
+          : "size-4",
+        className,
+      )}
       data-provider={provider}
       data-slot="cluster-provider-icon"
       role="img"
       title={label}
     >
-      <IconComponent aria-hidden="true" className="size-4" />
+      <ProviderLogo
+        className={appearance === "card"
+          ? provider === "eks" ? "h-4 w-7" : "size-5"
+          : provider === "eks" ? "h-2.5 w-4" : "size-3.5"}
+        provider={provider}
+      />
     </span>
   );
 }

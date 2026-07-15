@@ -1,4 +1,5 @@
 export * from "./barrels/ai";
+export * from "./barrels/alerts";
 export * from "./barrels/catalog";
 export * from "./barrels/gitops";
 export * from "./barrels/metrics";
@@ -21,7 +22,13 @@ export {
   type LoginCredentials,
 } from "./auth";
 export { getFleetSummary } from "./fleet";
-export { listClusters, type ListClustersOptions } from "./clusters";
+export {
+  listClusters,
+  unregisterCluster,
+  type ClusterUnregisterResponse,
+  type ListClustersOptions,
+  type UnregisterClusterOptions,
+} from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
 export {
@@ -254,10 +261,12 @@ export {
   type InventoryResourceList,
 } from "./inventory-schemas";
 export {
+  liveMetricsMetadataSchema,
   liveSummarySchema,
   parseRealtimeMessage,
   realtimeMessageSchema,
   type LiveSubscription,
+  type LiveMetricsMetadata,
   type LiveSummary,
   type LiveSummaryMessage,
   type RealtimeMessage,
@@ -275,7 +284,11 @@ export {
   type FleetSummary,
   type FleetTotals,
 } from "./schemas";
-export { connectCluster, getClusterConnectStatus } from "./cluster-connect";
+export {
+  connectCluster,
+  getClusterConnectStatus,
+  reissueClusterConnectCommand,
+} from "./cluster-connect";
 export {
   clusterConnectProviderSchema,
   clusterConnectResponseSchema,

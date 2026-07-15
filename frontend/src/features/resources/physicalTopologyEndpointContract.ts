@@ -32,8 +32,8 @@ export interface PhysicalTopologyEndpointPod {
   server_id: string | null;
   usage_pct: number | null;
   cpu_mcores: number | null;
-  mem_mib: number | null;
   cpu_request_mcores: number | null;
+  mem_mib: number | null;
   mem_request_mib: number | null;
   cpu_limit_mcores: number | null;
   mem_limit_mib: number | null;

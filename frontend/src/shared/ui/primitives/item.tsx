@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "./cn";
+import { cn } from "@/shared/lib/cn";
 import { Separator } from "./separator";
 
 const ITEM_ELEMENTS = ["div", "a", "button"] as const;

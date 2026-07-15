@@ -52,6 +52,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+  # create on pods/exec cannot be resourceNames-scoped. Gateway + agent both
+  # enforce exact inventory identity, pod.exec, and POD_EXEC_ALLOWED_NAMESPACES.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
@@ -66,6 +71,9 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
 ---
 # 위 읽기 전용 ClusterRole을 cluster-agent ServiceAccount에 바인딩한다.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -256,6 +264,8 @@ spec:
           env:
             - name: MANAGEMENT_BASE_URL
               value: "__MANAGEMENT_BASE_URL__"
+            - name: REALTIME_GATEWAY_URL
+              value: "__REALTIME_GATEWAY_URL__"
             - name: NODE_COLLECTOR_ENABLED
               value: "true"
             - name: NODE_COLLECTOR_IMAGE

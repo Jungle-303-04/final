@@ -9,6 +9,26 @@ import { homePort, renderHome } from "./HomePage.testSupport";
 afterEach(cleanup);
 
 describe("HomePage", () => {
+  it("shows real cluster tiles when no cluster is selected", async () => {
+    const user = userEvent.setup();
+    renderHome(homePort(), ["/"]);
+
+    const overview = await screen.findByRole("region", {
+      name: "클러스터 한눈에 보기",
+    });
+    expect(overview).toBeTruthy();
+    expect(screen.getByRole("img", {
+      name: "Amazon Elastic Kubernetes Service",
+    })).toBeTruthy();
+    expect(screen.getByText("서버 2")).toBeTruthy();
+    expect(screen.getByText("파드 18")).toBeTruthy();
+    expect(screen.getByText("인시던트 1")).toBeTruthy();
+
+    await user.click(screen.getByRole("link", { name: "cluster-1 리소스 열기" }));
+    expect(screen.getByTestId("home-location").textContent)
+      .toContain("/resources?clusters=cluster-1");
+  });
+
   it("renders English by default without translating Kubernetes nouns or backend values", async () => {
     renderHome(homePort(), ["/?clusters=cluster-1"], vi.fn(), null);
 
@@ -37,12 +57,40 @@ describe("HomePage", () => {
     expect(screen.queryByText(/시스템·관측 에이전트를 제외한/u)).toBeNull();
     expect(await screen.findByRole("button", { name: /worker-a/u }, { timeout: 5_000 }))
       .toBeTruthy();
+    expect(document.querySelector('[data-slot="home-server-band"]')).toBeTruthy();
     expect(screen.getByRole("complementary", { name: "활성 이슈" }).textContent)
       .toContain("Restart loop");
     expect(port.listClusterChoices).toHaveBeenCalledOnce();
     expect(port.loadClusterOverview).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
     expect(port.loadNodes).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
   }, 15_000);
+
+  it("keeps an internal Node hostname on one identifiable label while preserving its full identity", async () => {
+    const port = homePort({
+      loadNodes: vi.fn().mockResolvedValue({
+        clusterId: "cluster-1",
+        completeness: "unknown",
+        nodes: [{
+          id: "node:cluster-1/ip-192-168-51-161.ap-northeast-2.compute.internal",
+          identityStability: "ephemeral",
+          name: "ip-192-168-51-161.ap-northeast-2.compute.internal",
+          ready: true,
+          health: "healthy",
+          podsRunning: 18,
+          podsCapacity: 29,
+          cpuPercent: 11.4,
+          memoryPercent: 32.3,
+          restartCount: 1,
+          conditions: [],
+        }],
+      }),
+    });
+    renderHome(port);
+
+    const node = await screen.findByRole("button", { name: /ip-192-168-51-161/u });
+    expect(node.textContent).toContain("ip-192-168-51-161");
+    expect(node.textContent).not.toContain(".ap-northeast-2.compute.internal");
+  });
 
   it("keeps an unknown URL cluster explicit instead of selecting the first cluster", async () => {
     const port = homePort();
@@ -60,7 +108,7 @@ describe("HomePage", () => {
     });
     renderHome(port);
 
-    expect(await screen.findByRole("heading", { name: "관측된 Cluster가 없습니다" }))
+    expect(await screen.findByRole("heading", { name: "연결된 클러스터가 없습니다" }))
       .toBeTruthy();
     expect(screen.queryByRole("heading", { name: "이 범위에 접근할 수 없습니다" }))
       .toBeNull();
@@ -119,7 +167,7 @@ describe("HomePage", () => {
     renderHome(port, ["/?clusters=cluster-1"], reportUnauthorized);
 
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
-    expect(screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }))
+    expect(screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }))
       .toBeNull();
   });
 });

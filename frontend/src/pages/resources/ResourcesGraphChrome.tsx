@@ -1,4 +1,4 @@
-import { Pause, Play } from "lucide-react";
+import { ChevronDown, ChevronUp, Pause, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { TimelineRange } from "../../features/filters/filterContract";
@@ -15,8 +15,10 @@ import {
 } from "../../shared/ui/primitives/select";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import {
+  browserReplayWindow,
   isTimelineGap,
   timelinePercent,
+  timelinePlaybackEnd,
   timelinePlaybackStart,
   timelinePlaybackStep,
 } from "./scrubberMath";
@@ -66,25 +68,12 @@ export function UnavailableTimeline({ loading = false }: { loading?: boolean }) 
   return (
     <div
       aria-describedby="resources-timeline-unavailable"
-      className="absolute inset-x-3 bottom-3 z-20 flex translate-y-1.5 items-center gap-3 rounded-xl border bg-background/95 px-3 py-2 opacity-100 shadow-lg backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:translate-y-0 motion-reduce:transition-opacity sm:opacity-0 sm:group-focus-within/resources-graph:translate-y-0 sm:group-focus-within/resources-graph:opacity-100 sm:group-hover/resources-graph:translate-y-0 sm:group-hover/resources-graph:opacity-100"
+      className="flex min-h-10 shrink-0 items-center border-t bg-background/30 px-3 py-1.5"
+      data-expanded="false"
       data-slot="resources-time-scrubber"
       data-state={loading ? "loading" : "unavailable"}
     >
-      <Button aria-label={t("resources.timeline.play")} disabled size="icon-sm" type="button" variant="ghost">
-        <Play aria-hidden="true" />
-        <Pause aria-hidden="true" className="hidden" />
-      </Button>
-      <input
-        aria-label={t("resources.timeline.aria")}
-        className="h-2 min-w-0 flex-1 cursor-not-allowed accent-primary opacity-45"
-        disabled
-        max={100}
-        min={0}
-        readOnly
-        type="range"
-        value={100}
-      />
-      <span className="sr-only" id="resources-timeline-unavailable">
+      <span className="text-xs text-muted-foreground" id="resources-timeline-unavailable" role="status">
         {t(loading ? "resources.timeline.loading" : "resources.timeline.unavailable")}
       </span>
     </div>
@@ -95,18 +84,32 @@ export function TimelineStrip({
   atMs,
   frame,
   onAtChange,
+  replayStatus = "live",
+  replayWindow,
 }: {
   atMs: number | undefined;
   frame: ChangeTimelineFrame;
   onAtChange: (atMs: number | undefined) => void;
+  replayStatus?: "live" | "ready" | "gap";
+  replayWindow?: { fromMs: number | null; toMs: number | null };
 }) {
   const { formatDate, t } = useI18n();
   const [dragging, setDragging] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const timeline = frame.phase === "ready" ? frame.data : null;
-  const live = atMs === undefined;
+  const availableWindow = timeline === null
+    ? null
+    : browserReplayWindow(timeline, replayWindow);
+  const replayFromMs = availableWindow?.fromMs ?? 0;
+  const replayToMs = availableWindow?.toMs ?? 0;
+  const replayAvailable = availableWindow !== null;
+  const playbackEnd = timeline === null ? 0 : timelinePlaybackEnd(timeline, replayWindow);
+  const live = atMs === undefined || (replayAvailable && atMs >= replayToMs);
   const selectedMs = timeline
-    ? Math.min(timeline.toMs, Math.max(timeline.fromMs, atMs ?? timeline.toMs))
+    ? replayAvailable
+      ? Math.min(replayToMs, Math.max(replayFromMs, atMs ?? replayToMs))
+      : timeline.toMs
     : 0;
 
   useEffect(() => {
@@ -114,70 +117,119 @@ export function TimelineStrip({
     const interval = window.setInterval(() => {
       const current = atMs ?? timelinePlaybackStart(timeline);
       const next = current + timelinePlaybackStep(timeline);
-      if (next >= timeline.toMs) {
+      if (next >= playbackEnd) {
         setPlaying(false);
         onAtChange(undefined);
       } else {
         onAtChange(next);
       }
-    }, 250);
+    }, 1_000);
     return () => window.clearInterval(interval);
-  }, [atMs, onAtChange, playing, timeline]);
+  }, [atMs, onAtChange, playbackEnd, playing, timeline]);
 
   if (timeline === null) {
     return <UnavailableTimeline loading={frame.phase === "loading"} />;
   }
 
-  const incidentEvents = timeline.events.filter((event) => event.kind === "incident");
-  const maxTotal = Math.max(1, ...timeline.buckets.map((bucket) => bucket.total));
-  const selectedInGap = isTimelineGap(selectedMs, timeline.gaps);
+  const visibleBuckets = replayAvailable
+    ? timeline.buckets.filter((bucket) =>
+        bucket.endMs >= replayFromMs && bucket.startMs <= replayToMs)
+    : [];
+  const incidentEvents = replayAvailable
+    ? timeline.events.filter((event) => event.kind === "incident" &&
+        event.occurredMs >= replayFromMs && event.occurredMs <= replayToMs)
+    : [];
+  const maxTotal = Math.max(1, ...visibleBuckets.map((bucket) => bucket.total));
+  const selectedInGap = isTimelineGap(selectedMs, timeline.gaps) ||
+    (!live && replayStatus === "gap") || !replayAvailable;
   const formatTime = (value: number) => formatDate(value, {
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
   });
+  const selectedPosition = replayAvailable
+    ? timelinePercent(selectedMs, replayFromMs, replayToMs)
+    : 0;
 
   return (
-    <>
-      {!live ? (
-        <div className="absolute left-3 top-24 z-30 rounded-full border bg-background/95 px-2.5 py-1 text-xs font-medium shadow-sm backdrop-blur sm:top-14" role="status">
-          {t("resources.timeline.past", { time: formatTime(selectedMs) })}
-        </div>
-      ) : null}
-      {selectedInGap ? (
-        <div className="absolute inset-x-0 bottom-16 z-30 mx-auto w-fit rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground" role="status">
-          {t("resources.timeline.noSnapshot")}
-        </div>
-      ) : null}
-      <div
-        className={`absolute inset-x-3 bottom-3 z-20 flex translate-y-1.5 items-center gap-3 rounded-xl border bg-background/95 px-3 py-2 shadow-lg backdrop-blur transition-[opacity,transform] duration-200 motion-reduce:translate-y-0 motion-reduce:transition-opacity ${
-          live && !playing
-            ? "opacity-100 sm:opacity-0 sm:group-focus-within/resources-graph:translate-y-0 sm:group-focus-within/resources-graph:opacity-100 sm:group-hover/resources-graph:translate-y-0 sm:group-hover/resources-graph:opacity-100"
-            : "translate-y-0 opacity-100"
-        }`}
-        data-slot="resources-time-scrubber"
-        data-state={playing ? "playing" : live ? "live" : "past"}
-      >
+    <div
+      className="shrink-0 border-t bg-background/30"
+      data-expanded={expanded ? "true" : "false"}
+      data-replay-status={replayStatus}
+      data-slot="resources-time-scrubber"
+      data-state={playing ? "playing" : live ? "live" : "past"}
+    >
+      <div className="flex min-h-10 items-center gap-2 px-3 py-1.5">
+        <span className="shrink-0 text-xs font-medium" role="status">
+          {live
+            ? t("resources.timeline.live")
+            : t("resources.timeline.past", { time: formatTime(selectedMs) })}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {t("resources.timeline.recorded", {
+            interval: timelineIntervalLabel(timeline.bucketMs, t),
+          })}
+        </span>
         <Button
-          aria-label={t(playing ? "resources.timeline.pause" : "resources.timeline.play")}
+          aria-expanded={expanded}
+          aria-label={t(expanded ? "resources.timeline.collapse" : "resources.timeline.expand")}
           onClick={() => {
-            if (playing) {
-              setPlaying(false);
-              return;
-            }
-            if (live) onAtChange(timelinePlaybackStart(timeline));
-            setPlaying(true);
+            setExpanded((current) => !current);
+            if (expanded) setPlaying(false);
           }}
-          size="icon-sm"
+          size="sm"
           type="button"
           variant="ghost"
         >
-          {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+          {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+          {t(expanded ? "resources.timeline.collapse" : "resources.timeline.expand")}
         </Button>
-        <div className="relative h-8 min-w-0 flex-1">
-          <svg aria-hidden="true" className="absolute inset-0 size-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 32">
-            {timeline.buckets.map((bucket) => {
-              const x = timelinePercent(bucket.startMs, timeline.fromMs, timeline.toMs);
-              const width = Math.max(0.25, timelinePercent(bucket.endMs, timeline.fromMs, timeline.toMs) - x);
+      </div>
+      {expanded ? (
+        <div className="flex min-h-12 items-center gap-2 border-t bg-background/20 px-3 py-1.5">
+          {selectedInGap ? (
+            <span className="shrink-0 rounded-full border bg-muted px-2 py-1 text-xs text-muted-foreground" role="status">
+              {t("resources.timeline.noSnapshot")}
+            </span>
+          ) : null}
+          {!live && !selectedInGap ? (
+            <Button
+              aria-label={t(playing ? "resources.timeline.pause" : "resources.timeline.play")}
+              onClick={() => {
+                if (playing) {
+                  setPlaying(false);
+                  return;
+                }
+                setPlaying(true);
+              }}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            </Button>
+          ) : null}
+        <div className="relative h-16 min-w-0 flex-1 pt-5">
+          <output
+            aria-live="polite"
+            className="pointer-events-none absolute top-0 z-30 -translate-x-1/2 rounded-md border bg-popover px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-sm transition-[border-color,box-shadow] data-[dragging=true]:border-primary data-[dragging=true]:shadow-md motion-reduce:transition-none"
+            data-dragging={dragging ? "true" : "false"}
+            style={{ left: `${Math.min(94, Math.max(6, selectedPosition))}%` }}
+          >
+            {live ? t("resources.timeline.now") : formatTime(selectedMs)}
+          </output>
+          <svg aria-hidden="true" className="absolute inset-x-0 top-5 h-8 w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 32">
+            {visibleBuckets.map((bucket) => {
+              const x = timelinePercent(
+                Math.max(bucket.startMs, replayFromMs),
+                replayFromMs,
+                replayToMs,
+              );
+              const width = Math.max(0.25, timelinePercent(
+                Math.min(bucket.endMs, replayToMs),
+                replayFromMs,
+                replayToMs,
+              ) - x);
               const height = Math.max(2, (bucket.total / maxTotal) * 20);
               const warningHeight = bucket.total === 0 ? 0 : (bucket.warnings / bucket.total) * height;
               return (
@@ -189,15 +241,20 @@ export function TimelineStrip({
                 </g>
               );
             })}
-            {timeline.gaps.map((gap) => {
-              const x = timelinePercent(gap.from, timeline.fromMs, timeline.toMs);
-              const width = timelinePercent(gap.to, timeline.fromMs, timeline.toMs) - x;
+            {timeline.gaps.filter((gap) => replayAvailable &&
+              gap.to >= replayFromMs && gap.from <= replayToMs).map((gap) => {
+              const x = timelinePercent(Math.max(gap.from, replayFromMs), replayFromMs, replayToMs);
+              const width = timelinePercent(
+                Math.min(gap.to, replayToMs),
+                replayFromMs,
+                replayToMs,
+              ) - x;
               return <rect className="fill-muted" height="28" key={`${gap.from}:${gap.to}`} width={width} x={x} y="0" />;
             })}
           </svg>
-          <svg className="pointer-events-none absolute inset-0 z-20 size-full overflow-visible" viewBox="0 0 100 32">
+          <svg className="pointer-events-none absolute inset-x-0 top-5 z-20 h-8 w-full overflow-visible" viewBox="0 0 100 32">
             {incidentEvents.map((event) => {
-              const markerX = timelinePercent(event.occurredMs, timeline.fromMs, timeline.toMs);
+              const markerX = timelinePercent(event.occurredMs, replayFromMs, replayToMs);
               const label = t("resources.timeline.incidentMarker", { time: formatTime(event.occurredMs) });
               return (
                 <foreignObject height="28" key={`${event.id}:${event.occurredMs}`} width="2" x={markerX - 1} y="0">
@@ -206,7 +263,7 @@ export function TimelineStrip({
                     className="pointer-events-auto size-full rounded-sm border-x border-destructive bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => {
                       setPlaying(false);
-                      onAtChange(Math.max(timeline.fromMs, event.occurredMs - timeline.bucketMs));
+                      onAtChange(Math.max(replayFromMs, event.occurredMs - timeline.bucketMs));
                     }}
                     title={label}
                     type="button"
@@ -214,39 +271,50 @@ export function TimelineStrip({
                 </foreignObject>
               );
             })}
-            {dragging ? (
-              <foreignObject
-                height="24"
-                width="20"
-                x={Math.min(80, Math.max(0, timelinePercent(selectedMs, timeline.fromMs, timeline.toMs) - 10))}
-                y="-26"
-              >
-                <output className="block size-full rounded-md border bg-popover px-1 py-1 text-center text-xs shadow-sm">
-                  {live ? t("resources.timeline.now") : formatTime(selectedMs)}
-                </output>
-              </foreignObject>
-            ) : null}
           </svg>
-          <input
+          {replayAvailable ? <input
             aria-label={t("resources.timeline.aria")}
-            className="absolute inset-x-0 bottom-0 z-10 h-3 w-full cursor-pointer accent-primary"
-            max={timeline.toMs}
-            min={timeline.fromMs}
+            className="absolute inset-x-0 top-5 z-10 h-8 w-full cursor-pointer appearance-none bg-transparent accent-primary [&::-moz-range-progress]:h-1 [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-primary [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background [&::-moz-range-thumb]:bg-primary [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-muted-foreground/30 [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted-foreground/30 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm"
+            max={replayToMs}
+            min={replayFromMs}
             onChange={(event) => {
               setPlaying(false);
               const next = Number(event.currentTarget.value);
-              onAtChange(next >= timeline.toMs ? undefined : next);
+              onAtChange(next >= replayToMs ? undefined : next);
             }}
             onPointerDown={() => setDragging(true)}
             onPointerUp={() => setDragging(false)}
-            step={timeline.bucketMs}
+            step={Math.min(1_000, timeline.bucketMs)}
             type="range"
             value={selectedMs}
-          />
+          /> : null}
+          {replayAvailable ? (
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 bottom-0 flex items-center justify-between text-[10px] tabular-nums text-muted-foreground"
+            >
+              <time dateTime={new Date(replayFromMs).toISOString()}>{formatTime(replayFromMs)}</time>
+              <time dateTime={new Date(replayToMs).toISOString()}>{formatTime(replayToMs)}</time>
+            </div>
+          ) : null}
         </div>
-      </div>
-    </>
+        </div>
+      ) : null}
+    </div>
   );
+}
+
+function timelineIntervalLabel(
+  bucketMs: number,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const seconds = Math.max(1, Math.round(bucketMs / 1_000));
+  if (seconds < 60) {
+    return t("resources.timeline.interval.seconds", { count: seconds });
+  }
+  return t("resources.timeline.interval.minutes", {
+    count: Math.max(1, Math.round(seconds / 60)),
+  });
 }
 
 const TIMELINE_RANGES: readonly TimelineRange[] = ["15m", "1h", "6h", "24h"];

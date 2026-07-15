@@ -13,7 +13,10 @@ import {
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 describe("ResourcesPage S4 physical topology", () => {
   it("renders verified servers and pods without re-filtering the response", async () => {
@@ -24,11 +27,26 @@ describe("ResourcesPage S4 physical topology", () => {
     );
 
     expect(await screen.findByRole("table", { name: "Resource list" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Resource filters" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Resource filters" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Include inactive resources" })
+      .closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
     expect(screen.getByText("Physical placement")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Server placement view" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Topology");
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     expect(screen.getByRole("article", { name: "Server worker-b" })).toBeTruthy();
+    const physicalGrid = document.querySelector('[data-slot="physical-topology-grid"]');
+    expect(physicalGrid?.className)
+      .toContain("grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]");
+    expect(document.querySelector(".react-flow")).toBeNull();
+    expect(screen.getByRole("article", { name: "Server worker-a" }).className)
+      .toContain("w-full");
     expect(screen.getByText("2 / 18 pods")).toBeTruthy();
+    const legend = screen.getByRole("complementary", { name: "Pod placement legend" });
+    expect(legend.className).toContain("flex-nowrap");
+    expect(within(legend).getByText("Fill · highest CPU / memory request usage")).toBeTruthy();
+    expect(within(legend).getByText("Dashed · metric or request unavailable")).toBeTruthy();
+    expect(within(legend).getByText("Badge · abnormal phase or restarts")).toBeTruthy();
 
     const crashLoop = screen.getByRole("button", {
       name: "Pod checkout-api-0, CrashLoopBackOff, usage 12%",
@@ -40,16 +58,20 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(within(crashLoop).getByRole("img", { name: "CrashLoop" })).toBeTruthy();
     expect(highLoadNonMatch.getAttribute("data-usage-tone")).toBe("red");
     expect(highLoadNonMatch.getAttribute("data-matches-filter")).toBe("false");
-    expect(highLoadNonMatch.getAttribute("disabled")).not.toBeNull();
+    expect(highLoadNonMatch.getAttribute("disabled")).toBeNull();
+    expect(highLoadNonMatch.className).toContain("opacity-45");
     expect(document.querySelectorAll('[data-slot="physical-topology-pod"]')).toHaveLength(3);
+    expect(crashLoop.textContent).toContain("CH");
+    expect(highLoadNonMatch.textContent).toContain("OR");
     expect(document.querySelectorAll('[data-pod-badge="crash-loop"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-pod-badge="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-pod-badge="restarting"]')).toHaveLength(0);
 
-    const timeline = screen.getByRole("slider", { name: "Time" });
-    expect(timeline.getAttribute("disabled")).toBeNull();
-    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("live");
+    const timeline = document.querySelector('[data-slot="resources-time-scrubber"]');
+    expect(timeline?.getAttribute("data-state")).toBe("live");
+    expect(timeline?.getAttribute("data-expanded")).toBe("false");
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledWith(
       expect.objectContaining({
         common: expect.objectContaining({ clusters: ["cluster-1"] }),
@@ -81,6 +103,32 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-graph-shell"]')
       ?.getAttribute("data-phase")).toBe("ready");
+  });
+
+  it("uses content height for servers and keeps collapse in graph=0", async () => {
+    const user = userEvent.setup();
+    renderEnglishResources(
+      "/resources?clusters=cluster-1&resources.types=pod",
+      resourcesPhysicalTopologyPort(),
+    );
+
+    await screen.findByRole("article", { name: "Server worker-a" });
+    const graph = document.querySelector('[data-slot="resources-graph-shell"]');
+    expect(graph?.getAttribute("data-height")).toBeNull();
+    expect(graph?.className).toContain("h-auto");
+    expect(graph?.className).not.toContain("h-(--product-graph-height-mobile)");
+    expect(document.querySelector('[data-slot="topology-canvas"]')?.className)
+      .toContain("shrink-0");
+    expect(document.querySelector('[data-slot="resources-graph-resize-handle"]')).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Collapse graph" }));
+    await waitFor(() => expect(readResourcesQuery().get("graph")).toBe("0"));
+    expect(graph?.getAttribute("data-collapsed")).toBe("true");
+    expect(document.querySelector('[data-slot="topology-canvas"]')).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Expand graph" }));
+    await waitFor(() => expect(readResourcesQuery().has("graph")).toBe(false));
+    expect(graph?.getAttribute("data-collapsed")).toBe("false");
   });
 
   it("aborts the old topology request and ignores its late response", async () => {
@@ -125,8 +173,7 @@ describe("ResourcesPage S4 physical topology", () => {
     renderEnglishResources("/resources?clusters=cluster-1", physicalPort);
 
     expect(await screen.findByRole("article", { name: "Server worker-a" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Not an observed resource type" }))
-      .toBeTruthy();
+    expect(screen.getByRole("heading", { name: "All resources" })).toBeTruthy();
     expect(physicalPort.loadPhysicalTopology).toHaveBeenCalledOnce();
   });
 
@@ -137,8 +184,10 @@ describe("ResourcesPage S4 physical topology", () => {
 
     expect(await screen.findByRole("region", { name: "Cluster zoom overview" }))
       .toBeTruthy();
-    expect(document.querySelectorAll('[data-slot="cluster-server-preview"]'))
+    expect(document.querySelectorAll('[data-slot="cluster-provider-icon"]'))
       .toHaveLength(2);
+    expect(document.querySelectorAll('[data-slot="cluster-server-preview"]'))
+      .toHaveLength(0);
     expect(physicalPort.loadPhysicalTopology).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("link", { name: "Open resources for cluster-1" }));
@@ -149,22 +198,21 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(readResourcesQuery().has("clusters")).toBe(false);
   });
 
-  it("writes node focus and scrolls the existing table for an omitted-pod drill-in", async () => {
+  it("opens the real node pod summary for an omitted-pod drill-in", async () => {
     const user = userEvent.setup();
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(Element.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
-    });
     renderEnglishResources(
       "/resources?clusters=cluster-1&resources.types=pod",
       resourcesPhysicalTopologyPort(),
     );
 
-    await user.click(await screen.findByRole("button", { name: "+16 pods" }));
-    await waitFor(() => expect(readResourcesQuery().get("node")).toBe("node:worker-a"));
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
-    expect(screen.getByRole("table", { name: "Resource list" })).toBeTruthy();
+    await user.click(await screen.findByRole("button", {
+      name: "View every pod on server worker-a",
+    }));
+    const overlay = await screen.findByRole("dialog", { name: "Pods on server worker-a" });
+    expect(within(overlay).getByText("checkout-api-0")).toBeTruthy();
+    expect(within(overlay).getByText("Names for 17 additional pods are unavailable"))
+      .toBeTruthy();
+    expect(readResourcesQuery().has("node")).toBe(false);
   });
 
   it("keeps multi-Cluster scope honest and skips the physical request", async () => {
@@ -175,7 +223,7 @@ describe("ResourcesPage S4 physical topology", () => {
     );
 
     expect(await screen.findByRole("heading", {
-      name: "Multi-Cluster results need server support",
+      name: "Select one cluster",
     })).toBeTruthy();
     expect(physicalPort.loadPhysicalTopology).not.toHaveBeenCalled();
     expect(screen.queryByRole("table", { name: "Resource list" })).toBeNull();
@@ -194,6 +242,38 @@ describe("ResourcesPage S4 physical topology", () => {
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
     expect(await within(dialog).findByText("Point-in-time evidence")).toBeTruthy();
     expect(within(dialog).getAllByText("Unavailable")).toHaveLength(2);
+  }, 15_000);
+
+  it("opens detail for a visible pod even when it is outside the active filter match", async () => {
+    const user = userEvent.setup();
+    const port = resourcesPort();
+    renderResources(
+      port,
+      "/resources?clusters=cluster-1&resources.types=pod&resources.q=checkout",
+      resourcesClusterPort(),
+      undefined,
+      "en",
+      resourcesFilterPort(),
+      resourcesPhysicalTopologyPort(),
+    );
+
+    const pod = await screen.findByRole("button", {
+      name: "Pod orders-api-0, Running, usage 91%",
+    });
+    expect(pod.getAttribute("data-matches-filter")).toBe("false");
+    await user.click(pod);
+
+    expect(await screen.findByRole("dialog", { name: "orders-api-0 details" })).toBeTruthy();
+    expect(port.loadResourceDetail).toHaveBeenCalledWith(
+      "cluster-1",
+      {
+        resourceType: "pod",
+        kind: "Pod",
+        namespace: "shop",
+        name: "orders-api-0",
+      },
+      expect.any(AbortSignal),
+    );
   }, 15_000);
 });
 

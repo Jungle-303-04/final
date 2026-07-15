@@ -86,14 +86,23 @@ make smoke
 자세한 기준은 [docs/aws-testing-runbook.md](docs/aws-testing-runbook.md)를 본다.
 API를 사람이 직접 눌러 확인할 때는 [docs/api/README.md](docs/api/README.md)를 열고 Bruno collection을 사용한다.
 
+## 로컬 캐시 정리
+
+```bash
+make clean
+```
+
+`make clean`은 Python/Playwright 캐시와 프론트 빌드 산출물만 삭제한다. `.env*`,
+`outputs/`, `node_modules/`, `.venv/`, Terraform state는 보존한다.
+
 ## Radar Kubernetes UI
 
 [Radar](https://github.com/skyhook-io/radar)를 사용해 프로젝트 클러스터의 토폴로지, 리소스, 이벤트 타임라인, Helm 상태를 브라우저에서 확인할 수 있다.
 
-Opsia의 일부 UI는 Radar의 컴포넌트와 상호작용을 이식·개작한다. 원본은 Apache-2.0으로
-배포되는 Skyhook의 Radar이며, 대조 가능한 v1.5.7 고정 소스
-`88bd1e97fa5c10be8735154ae379d50c1ba1df2b`를 `references/radar-upstream/`에 보존한다.
-귀속과 수정 표기 규율은 루트 `NOTICE`를 따른다.
+Opsia의 일부 UI는 Apache-2.0으로 배포되는 Skyhook Radar의 컴포넌트와 상호작용을
+상당한 수정을 거쳐 재작성한다. `packages/k8s-ui/src` 492파일이 확인된 고정 소스
+`10461f40bcfaf6dd578b24262c8f8fb84ae20766`을 `references/upstream/`에 보존한다.
+귀속과 상표 고지는 루트 `NOTICE`, 라이선스 전문은 `LICENSE-APACHE-2.0.txt`를 따른다.
 
 ```bash
 # 프로젝트의 target(cluster-1) + management(mgmt) 클러스터 열기

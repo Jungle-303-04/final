@@ -40,7 +40,7 @@ describe("ProductErrorBoundary", () => {
     );
 
     expect(screen.getAllByRole("main")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "검증된 응답을 읽지 못했습니다" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "정보를 불러오지 못했습니다" })).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain("unknown");
     expect(screen.getByRole("button", { name: "화면 다시 열기" })).toBeTruthy();
     expect(document.activeElement?.id).toBe("product-main");
@@ -102,7 +102,7 @@ describe("ProductErrorBoundary", () => {
     const firstInstanceId = screen.getByTestId("instance-id").textContent;
 
     await userEvent.setup().click(screen.getByRole("button", { name: "오류 발생" }));
-    expect(screen.getByRole("heading", { name: "검증된 응답을 읽지 못했습니다" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "정보를 불러오지 못했습니다" })).toBeTruthy();
     expect(document.activeElement?.id).toBe("product-main");
 
     await userEvent.setup().click(screen.getByRole("button", { name: "화면 다시 열기" }));

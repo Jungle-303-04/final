@@ -1,6 +1,11 @@
 import {
   ClustersPortFailure,
   type ClusterConnectProvider,
+  type ClusterConnectReceipt,
+  type ClusterConnectStage,
+  type ClusterDisconnectProgress,
+  type ClusterDisconnectReceipt,
+  type ClusterDisconnectPort,
   type ClusterConnectionSnapshot,
   type ClustersFailureCode,
   type ClustersPort,
@@ -13,9 +18,32 @@ interface ClusterConnectWire {
 }
 
 interface ClusterConnectionWire {
-  status: "waiting" | "connected" | "expired";
-  agent_version: string | null;
-  connected_at: string | null;
+  cluster_id: string;
+  connection_status: string;
+  connection_stage?: ClusterConnectStage;
+  last_agent_id: string | null;
+  last_seen_at: string | null;
+  agents: Array<{ details: Record<string, unknown> }>;
+  connect_timeout_seconds: number | null;
+  connect_expires_at: string | null;
+}
+
+interface ClusterUnregisterWire {
+  cluster_id: string;
+  status: "uninstalling" | "cleanup_required" | "disconnected" | "purged";
+  stage: string;
+  command_id: string | null;
+  command_status_path: string | null;
+  uninstall_command: string | null;
+  cleanup_verified: boolean;
+  resources: string[];
+  residual_resources: string[];
+  failure_reason: string | null;
+}
+
+interface CommandStatusWire {
+  status: "queued" | "leased" | "running" | "completed" | "failed";
+  result: Record<string, unknown>;
 }
 
 export interface ClustersEndpointDependencies {
@@ -23,38 +51,112 @@ export interface ClustersEndpointDependencies {
     input: { name: string; provider: ClusterConnectProvider },
     signal?: AbortSignal,
   ): Promise<ClusterConnectWire>;
-  getClusterConnectStatus(
+  getClusterConnectionStatus(
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<ClusterConnectionWire>;
+  reissueClusterConnectCommand(
+    clusterId: string,
+    signal?: AbortSignal,
+  ): Promise<ClusterConnectWire>;
+  unregisterCluster(
+    clusterId: string,
+    options?: { manualCleanupAttested?: boolean },
+    signal?: AbortSignal,
+  ): Promise<ClusterUnregisterWire>;
+  getCommandStatus(commandId: string, signal?: AbortSignal): Promise<CommandStatusWire>;
 }
 
-export function createClustersAdapter(endpoints: ClustersEndpointDependencies): ClustersPort {
+export function createClustersAdapter(
+  endpoints: ClustersEndpointDependencies,
+): ClustersPort & ClusterDisconnectPort {
   return {
     async connect(input, signal) {
-      return withFailure(async () => {
-        const response = await endpoints.connectCluster(input, signal);
-        const command = response.install_command.trim();
-        if (!response.cluster_id.trim() || !command || command.includes("\n")) invalidResponse();
-        canonicalTimestamp(response.expires_at);
-        return {
-          clusterId: response.cluster_id,
-          installCommand: command,
-          expiresAt: response.expires_at,
-        };
-      });
+      return withFailure(async () => connectReceipt(await endpoints.connectCluster(input, signal)));
     },
     async loadConnection(clusterId, signal) {
       return withFailure(async () => {
-        const response = await endpoints.getClusterConnectStatus(clusterId, signal);
-        canonicalNullableTimestamp(response.connected_at);
+        const response = await endpoints.getClusterConnectionStatus(clusterId, signal);
+        canonicalNullableTimestamp(response.last_seen_at);
+        const stage = response.connection_stage ?? "awaiting_install";
+        const agentVersion = response.agents
+          .map((agent) => agent.details.version)
+          .find((version): version is string => typeof version === "string") ?? null;
         return {
-          status: response.status,
-          agentVersion: response.agent_version,
-          connectedAt: response.connected_at,
+          status: stage === "ready"
+            ? "connected"
+            : stage === "expired" || response.connection_status === "install_expired"
+              ? "expired"
+              : "waiting",
+          stage,
+          agentVersion,
+          lastSeenAt: response.last_seen_at,
         } satisfies ClusterConnectionSnapshot;
       });
     },
+    async reissue(clusterId, signal) {
+      return withFailure(async () => connectReceipt(
+        await endpoints.reissueClusterConnectCommand(clusterId, signal),
+      ));
+    },
+    async disconnect(clusterId, signal) {
+      return withFailure(async () => disconnectReceipt(
+        await endpoints.unregisterCluster(clusterId, {}, signal),
+      ));
+    },
+    async loadDisconnect(commandId, signal) {
+      return withFailure(async () => disconnectProgress(
+        await endpoints.getCommandStatus(commandId, signal),
+      ));
+    },
+    async confirmManualCleanup(clusterId, signal) {
+      return withFailure(async () => disconnectReceipt(
+        await endpoints.unregisterCluster(
+          clusterId,
+          { manualCleanupAttested: true },
+          signal,
+        ),
+      ));
+    },
+  };
+}
+
+function connectReceipt(response: ClusterConnectWire): ClusterConnectReceipt {
+  const command = response.install_command.trim();
+  if (!response.cluster_id.trim() || !command || command.includes("\n")) invalidResponse();
+  canonicalTimestamp(response.expires_at);
+  return {
+    clusterId: response.cluster_id,
+    installCommand: command,
+    expiresAt: response.expires_at,
+  };
+}
+
+function disconnectReceipt(response: ClusterUnregisterWire): ClusterDisconnectReceipt {
+  return {
+    status: response.status === "cleanup_required"
+      ? "cleanup-required"
+      : response.status === "uninstalling"
+        ? "uninstalling"
+        : "disconnected",
+    commandId: response.command_id,
+    uninstallCommand: response.uninstall_command,
+    residualResources: response.residual_resources,
+    failureReason: response.failure_reason,
+  };
+}
+
+function disconnectProgress(response: CommandStatusWire): ClusterDisconnectProgress {
+  const result = response.result;
+  const failureReason = typeof result.failure_reason === "string"
+    ? result.failure_reason
+    : typeof result.message === "string"
+      ? result.message
+      : null;
+  return {
+    status: response.status,
+    cleanupCompleted: result.cleanup_completed === true,
+    failureReason,
   };
 }
 

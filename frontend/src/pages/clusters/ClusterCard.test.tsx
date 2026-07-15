@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { I18nProvider } from "../../shared/i18n";
 import { ClusterCard } from "./ClusterCard";
@@ -28,7 +29,7 @@ const cluster: HomeClusterChoice = {
 afterEach(cleanup);
 
 describe("ClusterCard", () => {
-  it("renders enum provider, verified metrics, stagger, and five morph previews", () => {
+  it("renders the canonical provider, verified metrics, and staggered card entrance", () => {
     const { container } = renderCard(cluster, 2);
 
     expect(screen.getByRole("img", { name: "Amazon Elastic Kubernetes Service" })
@@ -39,16 +40,7 @@ describe("ClusterCard", () => {
     expect(screen.getByText("Incidents 1")).toBeTruthy();
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
-    expect([...container.querySelectorAll("[data-morph-id]")].map((element) => (
-      element.getAttribute("data-morph-id")
-    ))).toEqual([
-      "server:cluster-1:0",
-      "server:cluster-1:1",
-      "server:cluster-1:2",
-      "server:cluster-1:3",
-      "server:cluster-1:4",
-    ]);
-    expect(screen.getByText("+3")).toBeTruthy();
+    expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {
@@ -69,15 +61,59 @@ describe("ClusterCard", () => {
     expect(screen.queryByText("Healthy")).toBeNull();
   });
 
+  it("does not label a pending registration healthy before it connects", () => {
+    renderCard({
+      ...cluster,
+      connectionState: "pending",
+      registrationState: "pending",
+      openIncidentCount: 0,
+    });
+
+    expect(screen.getByText("Waiting for connection")).toBeTruthy();
+    expect(screen.queryByText("Healthy")).toBeNull();
+  });
+
   it("links the whole card to the canonical Resources URL", () => {
     renderCard(cluster);
 
     expect(screen.getByRole("link", { name: "Open resources for Production" })
       .getAttribute("href")).toBe("/resources?clusters=cluster-1");
   });
+
+  it("opens a separate card menu without nesting the disconnect action in navigation", async () => {
+    const user = userEvent.setup();
+    const onDisconnect = vi.fn();
+    renderCard(cluster, 0, onDisconnect);
+
+    await user.click(screen.getByRole("button", { name: "Cluster actions for Production" }));
+    const action = screen.getByRole("menuitem", { name: "Disconnect" });
+    expect(action.closest("a")).toBeNull();
+    await user.click(action);
+    expect(onDisconnect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("keeps a background disconnection visible on the card and resumes it", async () => {
+    const user = userEvent.setup();
+    const onDisconnect = vi.fn();
+    renderCard(cluster, 0, onDisconnect, "uninstalling");
+
+    const progress = screen.getByRole("button", { name: "Disconnecting · 2/3" });
+    expect(progress.closest("a")).toBeNull();
+    await user.click(progress);
+    expect(onDisconnect).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "Cluster actions for Production" }));
+    expect(screen.getByRole("menuitem", { name: "View disconnection progress" })).toBeTruthy();
+  });
 });
 
-function renderCard(value: HomeClusterChoice, index = 0) {
+function renderCard(
+  value: HomeClusterChoice,
+  index = 0,
+  onDisconnect?: () => void,
+  disconnectPhase?: "uninstalling",
+) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <MemoryRouter>
@@ -85,6 +121,8 @@ function renderCard(value: HomeClusterChoice, index = 0) {
           cluster={value}
           href="/resources?clusters=cluster-1"
           index={index}
+          disconnectPhase={disconnectPhase}
+          onDisconnect={onDisconnect}
         />
       </MemoryRouter>
     </I18nProvider>,

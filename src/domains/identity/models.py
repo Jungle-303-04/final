@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import BigInteger, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, Index, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.contracts.identity import GLOBAL_ROLE_POLICY_ORGANIZATION_ID
@@ -135,7 +135,6 @@ class Workspace(Base):
 
 class ClusterRegistration(Base):
     __tablename__ = "cluster_registrations"
-    __table_args__ = (UniqueConstraint("workspace_id", "cluster_id"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.workspace_id"))
     cluster_id: Mapped[str] = text_column()
@@ -146,3 +145,13 @@ class ClusterRegistration(Base):
     settings: Mapped[dict[str, Any]] = jsonb_column()
     created_at: Mapped[Any] = created_at_column()
     updated_at: Mapped[Any] = updated_at_column()
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "cluster_id"),
+        Index(
+            "ux_cluster_registrations_workspace_active_name",
+            workspace_id,
+            func.lower(func.btrim(name)),
+            unique=True,
+            postgresql_where=text("status not in ('install_expired', 'disconnected')"),
+        ),
+    )

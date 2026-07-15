@@ -39,6 +39,7 @@ export const recoveryActionAcceptedSchema = z.strictObject({
   accepted: z.boolean(),
   event_id: z.string().min(1),
   correlation_id: z.string().min(1),
+  command_id: z.string().min(1).nullable(),
 });
 
 export type RecoveryActionCandidate = z.infer<

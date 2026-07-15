@@ -10,6 +10,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -186,6 +187,19 @@ def test_schema_defines_expected_tables() -> None:
         "metric_widgets",
     }
     assert expected <= set(metadata.tables)
+
+
+def test_cluster_registration_schema_prevents_duplicate_active_display_names() -> None:
+    table = metadata.tables["cluster_registrations"]
+    index = next(
+        candidate
+        for candidate in table.indexes
+        if candidate.name == "ux_cluster_registrations_workspace_active_name"
+    )
+
+    assert index.unique is True
+    assert "lower(btrim(cluster_registrations.name))" in str(index.expressions[1])
+    assert "install_expired" in str(index.dialect_options["postgresql"]["where"])
 
 
 def test_event_schema_preserves_causation_id() -> None:
@@ -2124,10 +2138,12 @@ def test_resolve_recovered_ephemeral_incidents_is_bounded_and_inventory_aware() 
     sql = str(compiled)
     assert "UPDATE rca_timeline" in sql
     assert "cluster_inventory_resources" in sql
+    assert "cluster_inventory_snapshots" in sql
+    assert "snapshot_id" in sql
     assert "recovered_ephemeral_incidents" in sql
     assert "FOR UPDATE SKIP LOCKED" in sql
     assert "incident_resolved" in compiled.params.values()
-    assert ["Pod", "ReplicaSet"] in compiled.params.values()
+    assert ["pod", "replicaset"] in compiled.params.values()
 
 
 def test_user_account_schema_supports_password_login() -> None:
@@ -2350,7 +2366,7 @@ def test_rca_query_without_cursor_keeps_offset_compatibility() -> None:
     assert "OFFSET" in sql
 
 
-def test_rca_report_query_omits_payload_from_select_list() -> None:
+def test_rca_report_query_selects_only_bounded_narrative_paths_from_payload() -> None:
     recorded: list[Any] = []
     repository = _repository_with_recorded_sql(RcaRepository, recorded)
 
@@ -2359,7 +2375,9 @@ def test_rca_report_query_omits_payload_from_select_list() -> None:
     compiled = recorded[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
     select_list = sql.split("\nFROM rca_reports", maxsplit=1)[0]
-    assert "rca_reports.payload" not in select_list
+    assert "rca_reports.payload AS payload" not in select_list
+    assert "AS narrative" in select_list
+    assert "AS narrative_status" in select_list
     assert "rca_reports.candidates" in select_list
     assert "rca_reports.supporting_evidence_refs" in select_list
 
@@ -2577,6 +2595,56 @@ def test_dashboard_timeline_query_omits_payload_from_select_list() -> None:
     assert "rca_timeline.last_event_id" not in select_list
     assert "rca_timeline.last_event_at" not in select_list
     assert "rca_timeline.updated_at" in select_list
+    assert "rca_timeline.incident_id IS NOT NULL" in sql
+
+
+def test_disconnect_migration_drops_old_unique_index_before_status_conversion() -> None:
+    migration = Path("alembic/versions/20260715_0260_cluster_disconnect_lifecycle.py").read_text()
+
+    drop_offset = migration.index('op.drop_index(INDEX_NAME, table_name="cluster_registrations")')
+    update_offset = migration.index("update cluster_registrations")
+    create_offset = migration.index("op.create_index(")
+
+    assert drop_offset < update_offset < create_offset
+
+
+def test_dashboard_timeline_collapses_repeated_poll_correlations() -> None:
+    now = datetime(2026, 7, 15, 5, 0, tzinfo=UTC)
+    base = {
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "incident_namespace": "target",
+        "incident_resource_kind": "Pod",
+        "incident_resource_name": "collector-1",
+        "incident_symptom": "FailedScheduling",
+        "incident_logical_key": "cluster-1|target|Pod|collector-1|FailedScheduling",
+        "evidence_ref": None,
+        "current_subject": "incident.detected",
+        "status": "incident_detected",
+        "root_cause": "node_affinity_or_taint_mismatch",
+        "confidence": 1.0,
+        "supporting_evidence": [],
+        "missing_evidence": [],
+        "action_route": None,
+        "command_id": None,
+        "pr_url": None,
+        "error_reason": None,
+        "severity": "medium",
+        "environment": None,
+        "application_ids": None,
+        "labels": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    rows = [
+        {**base, "id": 2, "correlation_id": "corr-new", "incident_id": "incident-new"},
+        {**base, "id": 1, "correlation_id": "corr-old", "incident_id": "incident-old"},
+    ]
+    repository = _repository_with_recorded_sql(DashboardRepository, [], rows=rows)
+
+    items = repository.list_rca_timeline("workspace-1", allowed_cluster_ids=None, limit=10)
+
+    assert [item["correlation_id"] for item in items] == ["corr-new"]
 
 
 def test_rca_backlog_resolve_updates_open_missing_rule_item() -> None:

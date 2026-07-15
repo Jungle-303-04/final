@@ -2,7 +2,7 @@ import { Check, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { useI18n, type MessageKey } from "../i18n";
 import { Button } from "./primitives/button";
-import { cn } from "./primitives/cn";
+import { cn } from "@/shared/lib/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "./primitives/popover";
 import type { ProductThemeController, ProductThemeSelection } from "./useProductTheme";
 

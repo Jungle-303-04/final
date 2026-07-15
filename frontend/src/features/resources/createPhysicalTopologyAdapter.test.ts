@@ -30,8 +30,8 @@ const PHYSICAL_TOPOLOGY_ENDPOINT = {
     server_id: "node:worker-a",
     usage_pct: null,
     cpu_mcores: 12.5,
-    mem_mib: 48,
     cpu_request_mcores: 25,
+    mem_mib: 48,
     mem_request_mib: 96,
     cpu_limit_mcores: 100,
     mem_limit_mib: 256,
@@ -102,6 +102,8 @@ describe("physical topology adapter", () => {
       pods: [{
         cpuLimitMillicores: 100,
         cpuRequestMillicores: 25,
+        memoryLimitMebibytes: 256,
+        memoryRequestMebibytes: 96,
         matchesFilter: true,
         usagePercent: null,
       }],

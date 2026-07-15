@@ -99,6 +99,8 @@ class GitHubClient(Protocol):
 
     async def content(self, repo_ref: str, branch: str, path: str) -> bytes: ...
 
+    async def branch_sha(self, repo_ref: str, branch: str) -> str: ...
+
 
 class RenderCommandExecutor(Protocol):
     def __call__(
@@ -193,6 +195,18 @@ class GitHubRepositoryClient:
         if len(decoded) > MAX_MANIFEST_BYTES:
             raise RepositoryDiscoveryError(422, "selected manifest exceeds the scan size limit")
         return decoded
+
+    async def branch_sha(self, repo_ref: str, branch: str) -> str:
+        data = await self._get(
+            f"/repos/{quote(repo_ref, safe='/')}/git/ref/heads/{quote(branch, safe='')}"
+        )
+        if not isinstance(data, Mapping):
+            raise RepositoryDiscoveryError(502, "github branch response was invalid")
+        target = data.get("object")
+        sha = str(target.get("sha") or "") if isinstance(target, Mapping) else ""
+        if not re.fullmatch(r"[0-9a-f]{40,64}", sha):
+            raise RepositoryDiscoveryError(502, "github branch response was invalid")
+        return sha
 
     async def _get(self, path: str, params: Mapping[str, str] | None = None) -> Any:
         headers = {

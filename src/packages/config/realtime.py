@@ -26,6 +26,7 @@ def derive_realtime_gateway_url(
     host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
     default_port = 443 if parts.scheme == "https" else 80
     suffix = f":{parts.port}" if parts.port not in {None, default_port} else ""
-    path = parts.path.rstrip("/")
     scheme = "wss" if parts.scheme == "https" else "ws"
-    return f"{scheme}://{host}{suffix}{path}"
+    # 등록 API는 보통 /api 아래에 있지만 agent 전용 proxy는 origin의
+    # 정확한 /live/agent 경로만 노출한다. 관리 API path를 이어 붙이지 않는다.
+    return f"{scheme}://{host}{suffix}"

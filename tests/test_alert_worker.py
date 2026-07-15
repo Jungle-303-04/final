@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -192,3 +193,33 @@ def test_alert_policy_blocks_auto_command_outside_allowed_environment(monkeypatc
 
     assert subjects_of(outs) == ["alert.rejected"]
     assert outs[0].reason == "auto command not allowed for environment"
+
+
+def test_operational_evaluation_loop_recovers_after_one_failed_cycle() -> None:
+    alert = load_service("alert/alert-worker")
+    stopping = asyncio.Event()
+
+    class Engine:
+        interval_seconds = 0.001
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def evaluate_once(self) -> list[dict[str, object]]:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("temporary database failure")
+            stopping.set()
+            return []
+
+    engine = Engine()
+
+    asyncio.run(alert.run_alert_evaluation(engine, stopping))
+
+    assert engine.calls == 2
+
+
+def test_default_rule_evaluation_interval_is_five_seconds() -> None:
+    alert = load_service("alert/alert-worker")
+
+    assert alert.DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS == "5"

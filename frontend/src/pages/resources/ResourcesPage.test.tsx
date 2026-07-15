@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomePortFailure } from "../../features/home/homeContract";
 import { ResourcesPortFailure } from "../../features/resources/resourcesContract";
@@ -9,6 +10,7 @@ import {
   CATALOG,
   CLUSTERS,
   deferred,
+  NODE_LIST,
   POD_LIST,
   renderResources,
   resourcesClusterPort,
@@ -28,6 +30,43 @@ afterEach(() => {
 });
 
 describe("ResourcesPage scope and collection semantics", () => {
+  it("switches the actual Pod and Node catalog entries into their matching tables", async () => {
+    const user = userEvent.setup();
+    const nodeList = { ...NODE_LIST, clusterId: "cluster-1" };
+    const listResources = vi.fn().mockImplementation((_clusterId, query) => (
+      Promise.resolve(query.resourceType === "node" ? nodeList : POD_LIST)
+    ));
+    const filterPort = resourcesFilterPort({
+      listResourcePage: vi.fn().mockImplementation((state) => (
+        Promise.resolve(filterPageFromList(
+          state.resources.types.includes("node") ? nodeList : POD_LIST,
+        ))
+      )),
+    });
+    const port = resourcesPort({ listResources });
+    renderResources(
+      port,
+      "/resources?clusters=cluster-1&resources.types=pod",
+      resourcesClusterPort(),
+      vi.fn(),
+      "ko",
+      filterPort,
+    );
+
+    expect(await screen.findByRole("table", { name: "리소스 목록" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "파드, 3개" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "클러스터, 리소스 2개" }));
+    await user.click(screen.getByRole("button", { name: "노드, 2개" }));
+
+    await waitFor(() => expect(listResources).toHaveBeenLastCalledWith(
+      "cluster-1",
+      expect.objectContaining({ resourceType: "node" }),
+      expect.any(AbortSignal),
+    ));
+    expect(await screen.findByText("worker-new")).toBeTruthy();
+    expect(screen.getByTestId("resources-location").textContent).toContain("resources.types=node");
+  });
+
   it("exposes progressive cluster, catalog, and list loading for an explicit selection", async () => {
     const clusters = deferred<typeof CLUSTERS>();
     const catalog = deferred<typeof CATALOG>();
@@ -73,7 +112,7 @@ describe("ResourcesPage scope and collection semantics", () => {
       document.querySelectorAll('[data-slot="product-page-frame"]'),
     ).toHaveLength(1);
     expect(
-      document.querySelector('[data-slot="resources-catalog-loading"]'),
+      document.querySelector('[data-slot="resources-surface-loading"]'),
     ).toBeTruthy();
     expect(port.listResources).not.toHaveBeenCalled();
     await act(async () => {
@@ -123,7 +162,7 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "현재 조회 목록에서 확인할 수 없습니다",
+        name: "클러스터를 찾을 수 없습니다",
       }),
     ).toBeTruthy();
     expect(port.loadCatalog).not.toHaveBeenCalled();
@@ -143,7 +182,7 @@ describe("ResourcesPage scope and collection semantics", () => {
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
     expect(port.loadCatalog).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }),
+      screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }),
     ).toBeNull();
   });
 
@@ -163,7 +202,7 @@ describe("ResourcesPage scope and collection semantics", () => {
 
     await waitFor(() => expect(reportUnauthorized).toHaveBeenCalledOnce());
     expect(
-      screen.queryByRole("heading", { name: "검증된 응답을 읽지 못했습니다" }),
+      screen.queryByRole("heading", { name: "정보를 불러오지 못했습니다" }),
     ).toBeNull();
   });
 
@@ -239,13 +278,13 @@ describe("ResourcesPage scope and collection semantics", () => {
     expect(
       screen.queryByRole("searchbox", { name: "Search displayed results" }),
     ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Include inactive resources" })
-        .className,
-    ).toContain("w-32");
-    expect(
-      screen.getByText("Types observed in the inventory snapshot"),
-    ).toBeTruthy();
+    const includeInactive = screen.getByRole("button", {
+      name: "Include inactive resources",
+    });
+    expect(includeInactive.className).toContain("h-7");
+    expect(includeInactive.closest('[data-slot="resources-graph-toolbar"]')).toBeTruthy();
+    expect(document.querySelector('[aria-label="Resource filters"]')).toBeNull();
+    expect(screen.getByText("Types currently observed in this cluster")).toBeTruthy();
     expect(within(table).getAllByText("Running").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("Pod").length).toBeGreaterThan(0);
   });

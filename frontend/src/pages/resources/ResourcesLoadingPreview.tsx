@@ -15,6 +15,19 @@ export function ResourcesCatalogLoadingPreview() {
   );
 }
 
+export function ResourcesSurfaceLoadingPreview() {
+  return (
+    <div className="grid min-w-0 gap-4 p-4 sm:p-6" data-slot="resources-surface-loading">
+      <div className="flex justify-end">
+        <Skeleton className="size-8" />
+      </div>
+      <Skeleton className="h-12 rounded-xl" />
+      <Skeleton className="h-(--product-graph-height-mobile) rounded-xl sm:h-(--product-graph-height)" />
+      <Skeleton className="h-72 rounded-xl" />
+    </div>
+  );
+}
+
 export function ResourcesListLoadingPreview() {
   return (
     <div

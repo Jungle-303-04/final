@@ -1,17 +1,7 @@
-import {
-  Activity,
-  Boxes,
-  GitBranch,
-  Home,
-  Layers3,
-  Server,
-  Settings,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import { Activity, Settings } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import { useI18n, type MessageKey } from "../shared/i18n";
+import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
 import {
   SidebarMenu,
@@ -44,7 +34,6 @@ import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
   productNavigationForReleasedSurfaces,
   productRouteForPath,
-  type ProductRouteIcon,
   type ProductSurfaceId,
 } from "./productRoutes";
 import { shellShortcutDefinitions } from "./shortcutRegistry";
@@ -62,6 +51,12 @@ import { EMPTY_LOG_STREAM_PORT, type LogStreamPort } from "../features/log-strea
 import { BottomDock } from "./BottomDock";
 import { SidebarProfileMenu } from "../shared/ui/blocks/SidebarProfileMenu";
 import { SidebarWorkspaceSwitcher } from "../shared/ui/blocks/SidebarWorkspaceSwitcher";
+import { navLabelKeys, routeIcons } from "./ProductShellNavigation";
+import { AlertEventsProvider, useAlertEvents } from "../features/alerts/AlertEventsProvider";
+import {
+  EMPTY_ALERT_EVENTS_PORT,
+  type AlertEventsPort,
+} from "../features/alerts/alertEventsContract";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -70,27 +65,8 @@ interface ProductShellProps {
   globalFilterPort?: GlobalFilterPort;
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
+  alertEventsPort?: AlertEventsPort;
 }
-
-const routeIcons: Record<ProductRouteIcon, LucideIcon> = {
-  clusters: Server,
-  home: Home,
-  resources: Boxes,
-  issues: TriangleAlert,
-  applications: Layers3,
-  gitops: GitBranch,
-  settings: Settings,
-};
-
-const navLabelKeys = {
-  clusters: "shell.nav.clusters",
-  applications: "shell.nav.applications",
-  gitops: "shell.nav.gitops",
-  home: "shell.nav.home",
-  issues: "shell.nav.issues",
-  resources: "shell.nav.resources",
-  settings: "shell.nav.settings",
-} satisfies Record<ProductSurfaceId, MessageKey>;
 
 export function ProductShell({
   auth,
@@ -99,18 +75,21 @@ export function ProductShell({
   globalFilterPort = EMPTY_GLOBAL_FILTER_PORT,
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
+  alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
           <BottomDockProvider port={logStreamPort}>
-            <ProductShellFrame
-              auth={auth}
-              aiAssistantPort={aiAssistantPort}
-              globalFilterPort={globalFilterPort}
-              releasedSurfaceIds={releasedSurfaceIds}
-            />
+            <AlertEventsProvider port={alertEventsPort}>
+              <ProductShellFrame
+                auth={auth}
+                aiAssistantPort={aiAssistantPort}
+                globalFilterPort={globalFilterPort}
+                releasedSurfaceIds={releasedSurfaceIds}
+              />
+            </AlertEventsProvider>
           </BottomDockProvider>
         </SidebarProvider>
       </TooltipProvider>
@@ -132,6 +111,7 @@ function ProductShellFrame({
   const { isMobile } = useSidebar();
   const { t } = useI18n();
   const themeController = useProductTheme();
+  const alertEvents = useAlertEvents();
   const navigationRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
   const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
@@ -223,6 +203,14 @@ function ProductShellFrame({
                     >
                       <Icon aria-hidden="true" className="size-4 shrink-0" />
                       <SidebarText>{label}</SidebarText>
+                      {routeDefinition.id === "alerts" && alertEvents.unreadCount > 0 ? (
+                        <span
+                          aria-label={t("alerts.sidebar.unread", { count: alertEvents.unreadCount })}
+                          className="ml-auto min-w-5 rounded-full bg-destructive/15 px-1.5 text-center text-xs font-semibold text-destructive"
+                        >
+                          {alertEvents.unreadCount > 99 ? "99+" : alertEvents.unreadCount}
+                        </span>
+                      ) : null}
                     </SidebarMenuLink>
                   </SidebarMenuItem>
                 );
@@ -231,7 +219,7 @@ function ProductShellFrame({
           </SidebarNavigation>
           {settingsRoute ? (
             <>
-              <Separator className="mx-2 w-auto" />
+              <Separator className="mx-2 data-horizontal:w-auto" />
               <SidebarNavigation
                 aria-label={t("shell.nav.settings")}
                 className="flex-none"
@@ -253,8 +241,9 @@ function ProductShellFrame({
           ) : null}
         </SidebarContent>
 
-        <SidebarFooter className="gap-1">
+        <SidebarFooter className="gap-1.5 overflow-x-hidden">
           <SidebarWorkspaceSwitcher workspaceId={auth.session.workspaceId} />
+          <Separator className="mx-2 data-horizontal:w-auto" />
           <SidebarProfileMenu
             auth={auth}
             settingsHref={filter.navigationHref("/settings")}
@@ -263,16 +252,14 @@ function ProductShellFrame({
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="flex min-h-svh flex-col bg-background text-foreground">
+      <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-background text-foreground">
         <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:flex-nowrap">
           <div className="order-1 flex min-w-0 items-center gap-2">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            {detailWorkspaceOpen
-              ? null
-              : <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />}
+            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <ShortcutHelpDialog
@@ -307,7 +294,6 @@ function ProductShellFrame({
     </>
   );
 }
-
 function isNarrowAiViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 895px)").matches;
 }

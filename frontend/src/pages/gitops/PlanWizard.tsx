@@ -1,6 +1,11 @@
 import { ArrowLeft, ArrowRight, Check, GitBranch, Save, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ReleaseApplication, ReleasePlan } from "../../features/gitops/gitOpsContract";
+import type {
+  ReleaseApplication,
+  ReleaseCluster,
+  ReleasePlan,
+  ReleaseTargetInput,
+} from "../../features/gitops/gitOpsContract";
 import {
   APPROVAL_POLICIES,
   STRATEGIES,
@@ -31,17 +36,23 @@ import {
 export function PlanWizard({
   plan,
   applications,
+  clusters,
   pending,
+  targetPending,
   onChange,
   onCancel,
   onCreate,
+  onCreateTarget,
 }: {
   plan: ReleasePlan;
   applications: ReleaseApplication[];
+  clusters: ReleaseCluster[];
   pending: boolean;
+  targetPending: boolean;
   onChange: (plan: ReleasePlan) => void;
   onCancel: () => void;
   onCreate: () => void;
+  onCreateTarget: (input: ReleaseTargetInput) => Promise<ReleaseApplication | null>;
 }) {
   const { t } = useI18n();
   const [stageIndex, setStageIndex] = useState(0);
@@ -128,8 +139,9 @@ export function PlanWizard({
         </div>
       ) : null}
 
-      <div className="min-h-[26rem] min-w-0">
-        {stage === "basics" ? (
+      <div className="min-h-[26rem] min-w-0 overflow-hidden">
+        <div className="motion-wizard-stage" data-stage={stage} key={stage}>
+          {stage === "basics" ? (
           <WizardSection
             icon={<GitBranch aria-hidden="true" />}
             title={t("workflows.wizard.basicsTitle")}
@@ -165,8 +177,11 @@ export function PlanWizard({
           >
             <PlanWizardTargets
               applications={applications}
+              clusters={clusters}
               onChange={onChange}
-              onTargetAdded={() => setValidation((current) => current.filter((code) => code !== "steps"))}
+              onCreateTarget={onCreateTarget}
+              onTargetChanged={() => setValidation((current) => current.filter((code) => code !== "steps"))}
+              pending={targetPending}
               plan={plan}
             />
           </WizardSection>
@@ -240,7 +255,8 @@ export function PlanWizard({
             <WizardMobileOrder plan={plan} title={t("workflows.overview.order")} />
             <WorkflowGraph applications={applications} className="hidden xl:block" controls={false} plan={plan} />
           </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <footer className="flex min-w-0 flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">

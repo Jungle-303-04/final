@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
@@ -20,7 +20,8 @@ import { resolveResourceType } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 import { useResourcesDetailState } from "./useResourcesDetailState";
 
-const RESOURCES_POLL_INTERVAL_MS = 30_000;
+const RESOURCE_COUNTS_POLL_INTERVAL_MS = 10_000;
+const POD_STATE_POLL_INTERVAL_MS = 5_000;
 export function useResourcesPageState(port: ResourcesPort) {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterScope = useClusterScope();
@@ -74,8 +75,14 @@ export function useResourcesPageState(port: ResourcesPort) {
   const automaticRefreshPaused = hasRetryBlocks(retryBlocks);
   const { refresh: advanceRevision, revision } = useVisibleRefreshClock(
     !automaticRefreshPaused,
-    RESOURCES_POLL_INTERVAL_MS,
+    RESOURCE_COUNTS_POLL_INTERVAL_MS,
   );
+  const { refresh: advancePodRevision, revision: podRevision } = useVisibleRefreshClock(
+    !automaticRefreshPaused && clusterScope.selectedClusterExists,
+    POD_STATE_POLL_INTERVAL_MS,
+  );
+  const observedRevision = useRef(revision);
+  const resumedFromBackground = useRef(false);
   const recordFailure = useCallback(
     (
       target: ResourcesRequestTarget,
@@ -94,9 +101,27 @@ export function useResourcesPageState(port: ResourcesPort) {
     setRetryBlocks((current) => withoutRetryBlock(current, target));
   }, []);
   const refresh = useCallback(() => {
-    refreshClusterScope();
     advanceRevision();
-  }, [advanceRevision, refreshClusterScope]);
+    advancePodRevision();
+  }, [advancePodRevision, advanceRevision]);
+
+  useEffect(() => {
+    if (observedRevision.current === revision) return;
+    observedRevision.current = revision;
+    if (resumedFromBackground.current) {
+      resumedFromBackground.current = false;
+      return;
+    }
+    refreshClusterScope();
+  }, [refreshClusterScope, revision]);
+
+  useEffect(() => {
+    const rememberVisibilityResume = () => {
+      if (document.visibilityState === "visible") resumedFromBackground.current = true;
+    };
+    document.addEventListener("visibilitychange", rememberVisibilityResume);
+    return () => document.removeEventListener("visibilitychange", rememberVisibilityResume);
+  }, []);
 
   useEffect(() => {
     const retryAt = scheduledRateLimitRetryAt(retryBlocks);
@@ -151,13 +176,13 @@ export function useResourcesPageState(port: ResourcesPort) {
       selectedClusterExists,
       selectedResourceType,
       resourceTypeInvalid:
-        canonicalTypes.length > 1 ||
-        (canonicalTypes.length === 0 &&
-          legacyTypeResolution.kind === "invalid"),
+        canonicalTypes.length === 0 &&
+        legacyTypeResolution.kind === "invalid",
       detailIdentity,
       detailRequested,
+      detailFull: filter.detail.full,
       filterProjectionUnsupported:
-        !listFiltersSupported || canonicalTypes.length > 1,
+        !listFiltersSupported,
       view,
       search: filter.state.resources.query,
       namespace,
@@ -172,6 +197,7 @@ export function useResourcesPageState(port: ResourcesPort) {
         recordSuccess("list");
       },
       revision,
+      podRevision,
       refresh,
       selectResourceType,
       cycleResourceType(direction: -1 | 1) {
@@ -254,6 +280,12 @@ export function useResourcesPageState(port: ResourcesPort) {
           "detail-tab",
         );
       },
+      setDetailFull(value: boolean) {
+        filter.updateDetail(
+          (current) => ({ ...current, full: value }),
+          "detail-expand",
+        );
+      },
       openDetail,
       navigateDetail,
       closeDetail,
@@ -279,6 +311,7 @@ export function useResourcesPageState(port: ResourcesPort) {
       selectedClusterId,
       retryBlocks,
       revision,
+      podRevision,
       selectedResourceType,
       selectResourceType,
       canonicalTypes.length,
