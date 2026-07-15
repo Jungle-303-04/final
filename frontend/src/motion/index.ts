@@ -16,6 +16,12 @@ export {
   usePrefersReducedMotion,
 } from "./usePrefersReducedMotion";
 export {
+  scrollIntoViewWithMotionPreference,
+  useMotionAwareScrollIntoView,
+  type MotionAwareScrollIntoViewOptions,
+  type ScrollIntoViewTarget,
+} from "./scrollIntoView";
+export {
   MOTION_DURATION_MS,
   STAGGER_MS,
   podWaveDelay,
