@@ -68,6 +68,7 @@ export function IssuesListPanel({
         {list.data.items.map((issue) => (
           <li key={issue.id}>
             <Button
+              aria-label={issue.symptom ?? issue.currentSubject}
               aria-controls={selected?.id === issue.id ? detailRegionId : undefined}
               aria-current={selected?.id === issue.id ? "true" : undefined}
               className="h-auto w-full min-w-0 items-start justify-start whitespace-normal rounded-lg border px-3 py-2.5 text-left"
