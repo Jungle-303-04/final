@@ -11,21 +11,35 @@ import {
 } from "../../shared/ui/primitives/sheet";
 import { Button } from "../../shared/ui/primitives/button";
 import type { ResourceRef } from "../../shared/parity/referenceParity";
+import {
+  findTimelinePin,
+  timelinePinTargetForEvent,
+  timelinePinTargetKey,
+} from "../../features/timeline/timelinePinTargets";
 import type { TimelineEvent } from "../../features/timeline/timelineContract";
+import type { TimelinePinsController } from "./useTimelinePins";
 
 export function TimelineEventDetailSheet({
   event,
   formatDate,
   onClose,
   onNavigate,
+  pins,
   t,
 }: {
   event: TimelineEvent | null;
   formatDate: I18nController["formatDate"];
   onClose: () => void;
   onNavigate: (direction: -1 | 1) => void;
+  pins: TimelinePinsController | null;
   t: I18nController["t"];
 }) {
+  const pinTarget = event === null ? null : timelinePinTargetForEvent(event);
+  const existingPin = pins?.phase === "ready" && pins.pinSet !== null && pinTarget !== null
+    ? findTimelinePin(pins.pinSet.pins, pinTarget)
+    : null;
+  const targetPending = pinTarget !== null && pins?.pendingTargetKey === timelinePinTargetKey(pinTarget);
+  const removalPending = existingPin !== null && pins?.pendingPinId === existingPin.pinId;
   return (
     <Sheet onOpenChange={(open) => { if (!open) onClose(); }} open={event !== null}>
       {event === null ? null : (
@@ -62,6 +76,25 @@ export function TimelineEventDetailSheet({
               <DetailSection heading={t("timeline.details.subject")}>
                 <DetailRows rows={subjectRows(event, t)} />
               </DetailSection>
+              {pins?.phase === "ready" && pinTarget !== null ? (
+                <DetailSection heading={t("timeline.pins.title")}>
+                  <div>
+                    <Button
+                      disabled={pins.pendingPinId !== null || pins.pendingTargetKey !== null}
+                      onClick={() => {
+                        if (existingPin === null) void pins.add(pinTarget);
+                        else void pins.remove(existingPin);
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      {existingPin === null
+                        ? targetPending ? t("timeline.pins.pendingAdd") : t("timeline.pins.add")
+                        : removalPending ? t("timeline.pins.pendingRemove") : t("timeline.pins.remove")}
+                    </Button>
+                  </div>
+                </DetailSection>
+              ) : null}
               <DetailSection heading={t("timeline.details.resource")}>
                 {event.resource === null
                   ? <p className="text-sm text-muted-foreground">{t("timeline.details.none")}</p>

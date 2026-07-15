@@ -42,6 +42,7 @@ import { TimelineCoverageNotice } from "./TimelineCoverageNotice";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineStrip } from "./TimelineStrip";
 import { useTimelineOverviewFrame } from "./useTimelineOverviewFrame";
+import { useTimelinePins, type TimelinePinsController } from "./useTimelinePins";
 import { filterTimelineEventsForLens, resolveTimelineLens } from "./timelineStripModel";
 import type { TimelineLens } from "../../features/filters/timelineUrlState";
 
@@ -62,11 +63,21 @@ export function TimelineSurface({
     () => normalizeTimelineUrlStateForCapabilities(url.state, capabilities),
     [capabilities, url.state],
   );
+  const pinsSupported = capabilities.controlSurface.pins.availability === "available";
+  const workspaceCacheKey = scopes[0]?.workspaceId;
+  const pins = useTimelinePins({ enabled: pinsSupported, port, workspaceCacheKey });
+  const pinFilterActive = normalizedState.pinnedOnly && pins.phase === "ready";
   useEffect(() => {
     if (!isSameTimelineUrlState(url.state, normalizedState)) {
       url.replaceState(normalizedState);
     }
   }, [normalizedState, url]);
+  useEffect(() => {
+    if (!normalizedState.pinnedOnly) return;
+    if (pins.phase === "forbidden" || pins.phase === "unavailable" || pins.phase === "failed") {
+      url.setPinnedOnly(false);
+    }
+  }, [normalizedState.pinnedOnly, pins.phase, url]);
 
   const overviewQuery = useMemo<TimelineQuery>(() => ({
     scopes,
@@ -79,13 +90,15 @@ export function TimelineSurface({
       // stale or unauthorized dynamic/CRD kind before its catalog arrives.
       kinds: [],
       showDeleted: normalizedState.showDeleted,
-      pinnedOnly: false,
+      // `pinnedOnly` becomes a transport filter only after GET pins has
+      // supplied the authenticated user's server-owned membership.
+      pinnedOnly: pinFilterActive,
       search: normalizedState.search,
       grouping: normalizedState.grouping,
       sort: normalizedState.sort,
       selectedEventKey: normalizedState.selectedEventKey,
     },
-  }), [capabilities, normalizedState, scopes]);
+  }), [capabilities, normalizedState, pinFilterActive, scopes]);
   const overview = useTimelineOverviewFrame(port, overviewQuery);
   const validatedKinds = useMemo(
     () => validateTimelineKinds(
@@ -121,7 +134,10 @@ export function TimelineSurface({
         onShowDeletedChange={url.setShowDeleted}
         onSortChange={url.setSort}
         onViewModeChange={url.setViewMode}
+        onPinnedOnlyChange={url.setPinnedOnly}
         overview={overview.frame}
+        pins={pinsSupported ? pins : null}
+        pinnedOnly={pinFilterActive}
         state={normalizedState}
         t={t}
       />
@@ -148,6 +164,7 @@ export function TimelineSurface({
           grouping={normalizedState.grouping}
           lens={normalizedState.lens}
           coverageSources={overview.frame.phase === "ready" ? overview.frame.overview.coverageSources : []}
+          pins={pinsSupported ? pins : null}
           onRetry={timeline.retry}
           onSelectedEventKeyChange={url.setSelectedEventKey}
           selectedEventKey={normalizedState.selectedEventKey}
@@ -214,6 +231,7 @@ function TimelineDataBoundary({
   grouping,
   lens,
   coverageSources,
+  pins,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -227,6 +245,7 @@ function TimelineDataBoundary({
   grouping: TimelineGrouping;
   lens: TimelineLens;
   coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
+  pins: TimelinePinsController | null;
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -256,6 +275,7 @@ function TimelineDataBoundary({
       grouping={grouping}
       lens={lens}
       coverageSources={coverageSources}
+      pins={pins}
       onRetry={onRetry}
       onSelectedEventKeyChange={onSelectedEventKeyChange}
       selectedEventKey={selectedEventKey}
@@ -273,6 +293,7 @@ function TimelineReadyData({
   grouping,
   lens,
   coverageSources,
+  pins,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -286,6 +307,7 @@ function TimelineReadyData({
   grouping: TimelineGrouping;
   lens: TimelineLens;
   coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
+  pins: TimelinePinsController | null;
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -412,6 +434,7 @@ function TimelineReadyData({
         formatDate={formatDate}
         onClose={closeEvent}
         onNavigate={(direction) => { if (selectedEvent !== null) navigateEvent(selectedEvent, direction); }}
+        pins={pins}
         t={t}
       />
     </>

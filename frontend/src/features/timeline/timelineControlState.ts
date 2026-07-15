@@ -26,6 +26,7 @@ export function normalizeTimelineUrlStateForCapabilities(
   const activity = resolveTimelineActivitySelection(capabilities, state.activityFilter);
   return {
     ...state,
+    pinnedOnly: controls.pins.availability === "available" && state.pinnedOnly,
     viewMode: resolveControlId(controls.views, state.viewMode),
     activityFilter: timelineActivityKeysFromActivities(
       activity.problemsOnly ? activity.option.problemsActivity : activity.option.activity,
@@ -67,6 +68,7 @@ export function isSameTimelineUrlState(left: TimelineUrlState, right: TimelineUr
   return (
     left.viewMode === right.viewMode &&
     left.showDeleted === right.showDeleted &&
+    left.pinnedOnly === right.pinnedOnly &&
     left.search === right.search &&
     left.grouping === right.grouping &&
     left.sort === right.sort &&

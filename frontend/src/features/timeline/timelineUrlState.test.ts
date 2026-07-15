@@ -15,7 +15,7 @@ describe("Timeline URL state", () => {
     customTimeRangeId: "custom",
   } as const;
 
-  it("parses supported URL state and removes the unsupported legacy pin selector", () => {
+  it("round-trips a persistent pinned-only selector without touching foreign parameters", () => {
     const state = parseTimelineUrlState(
       new URLSearchParams(
         "foreign=keep&view=list&window=all&activity=changes,warnings,invalid&kinds=Pod,Deployment&deleted=0&pinnedOnly=1&q=checkout&grouping=owner&sort=recent&event=inventory%3Acheckout%3A7&filter=legacy",
@@ -27,6 +27,7 @@ describe("Timeline URL state", () => {
       viewMode: "list",
       mode: { kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS, all: true },
       showDeleted: false,
+      pinnedOnly: true,
       search: "checkout",
       activityFilter: ["changes", "warnings"],
       kindFilter: ["Pod", "Deployment"],
@@ -51,7 +52,7 @@ describe("Timeline URL state", () => {
     expect(written.get("activity")).toBe("changes,warnings");
     expect(written.get("kinds")).toBe("Pod,Deployment");
     expect(written.get("deleted")).toBe("0");
-    expect(written.get("pinnedOnly")).toBeNull();
+    expect(written.get("pinnedOnly")).toBe("1");
     expect(written.get("q")).toBe("checkout");
     expect(written.get("grouping")).toBe("owner");
     expect(written.get("sort")).toBe("recent");
