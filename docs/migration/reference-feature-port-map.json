@@ -4,7 +4,7 @@
   "sections": {
     "0. 목적과 사용 금지선": {
       "area": "migration-governance",
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "not_applicable",
       "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
       "desktopContract": null,
