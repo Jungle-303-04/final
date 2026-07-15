@@ -18,7 +18,6 @@ from packages.contracts.diagnose import (
     DiagnoseRunTransition,
     DiagnoseTarget,
 )
-
 from packages.contracts.parity import ClusterScope, ResourceRef
 
 
@@ -155,6 +154,12 @@ class UnavailableEngine(AvailableEngine):
         return DiagnoseAgentAvailability(available=False, reason="agent adapter is not configured")
 
 
+class FailingStartEngine(AvailableEngine):
+    async def start(self, run: DiagnoseRun) -> None:
+        self.started.append(run)
+        raise RuntimeError("adapter dispatch failed")
+
+
 def test_service_deduplicates_an_active_target_without_restarting_the_engine() -> None:
     async def run() -> None:
         repository = InMemoryDiagnoseRepository()
@@ -204,5 +209,51 @@ def test_service_reports_an_unavailable_engine_without_inventing_a_diagnosis() -
         assert engine.started == []
         assert [event.payload["status"] for event in stream.events] == ["unavailable"]
         assert {event.kind for event in stream.events}.isdisjoint({"verdict", "closed"})
+
+    asyncio.run(run())
+
+
+def test_service_defaults_to_an_explicit_unavailable_adapter_state() -> None:
+    async def run() -> None:
+        repository = InMemoryDiagnoseRepository()
+        stream = RecordingStream()
+        service = DiagnoseService(
+            repository=repository,
+            stream=stream,
+            run_id_factory=lambda: "run-default-unavailable",
+            now=lambda: datetime(2026, 7, 15, tzinfo=UTC),
+        )
+
+        result = await service.create_run(make_request(), requested_by="operator-a")
+
+        assert result.run.status == "unavailable"
+        assert result.run.status_reason == "no Diagnose engine adapter is configured"
+        assert [event.payload["status"] for event in stream.events] == ["unavailable"]
+
+    asyncio.run(run())
+
+
+def test_service_persists_and_streams_a_start_failure_without_a_success_verdict() -> None:
+    async def run() -> None:
+        repository = InMemoryDiagnoseRepository()
+        stream = RecordingStream()
+        engine = FailingStartEngine()
+        service = DiagnoseService(
+            repository=repository,
+            stream=stream,
+            engine=engine,
+            run_id_factory=lambda: "run-failed",
+            now=lambda: datetime(2026, 7, 15, tzinfo=UTC),
+        )
+
+        result = await service.create_run(make_request(), requested_by="operator-a")
+
+        assert result.run.status == "failed"
+        assert result.run.status_reason == "adapter dispatch failed"
+        assert [(event.kind, event.payload) for event in stream.events] == [
+            ("phase", {"status": "queued"}),
+            ("error", {"code": "engine_start_failed", "status": "failed"}),
+        ]
+        assert not any(event.kind == "verdict" for event in stream.events)
 
     asyncio.run(run())

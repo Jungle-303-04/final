@@ -10,19 +10,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
+
 from packages.contracts.diagnose import (
     DiagnoseActionExecutionRequest,
+    DiagnoseAgentAvailability,
     DiagnoseAgentSelection,
     DiagnoseConsentRequest,
     DiagnoseEvent,
     DiagnoseEventReplay,
     DiagnoseRun,
     DiagnoseRunCreateRequest,
+    DiagnoseRunCreation,
+    DiagnoseRunTransition,
     DiagnoseTarget,
     make_diagnose_target_key,
 )
-from pydantic import ValidationError
-
 from packages.contracts.parity import ClusterScope, CommandRequest, ResourceRef
 
 
@@ -129,6 +132,39 @@ def test_disclosure_consent_never_substitutes_for_command_confirmation() -> None
         )
 
 
+def test_action_execution_is_bound_to_the_run_target_and_unavailable_states_need_reasons() -> None:
+    with pytest.raises(ValidationError, match="requires a reason"):
+        DiagnoseAgentAvailability(available=False)
+
+    with pytest.raises(ValidationError, match="requires a reason"):
+        DiagnoseRun.from_create_request(
+            run_id="run-unavailable",
+            request=make_request(),
+            requested_by="operator-a",
+            status="unavailable",
+        )
+
+    confirmed_for_other_cluster = CommandRequest(
+        scope=ClusterScope(
+            workspace_id="workspace-a",
+            cluster_id="cluster-b",
+            namespaces=("team-a",),
+        ),
+        resource=make_resource(),
+        action="restart",
+        diff={},
+        confirmation=True,
+        reason="recover service",
+    )
+    with pytest.raises(ValidationError, match="command scope"):
+        DiagnoseActionExecutionRequest(
+            run_id="run-1",
+            proposal_id="proposal-1",
+            target=make_target(),
+            command=confirmed_for_other_cluster,
+        )
+
+
 def test_replay_requires_monotonic_events_and_makes_resync_explicit() -> None:
     timestamp = datetime(2026, 7, 15, tzinfo=UTC)
     first = DiagnoseEvent(
@@ -186,3 +222,32 @@ def test_replay_requires_monotonic_events_and_makes_resync_explicit() -> None:
             earliest_available_sequence=5,
             events=(first,),
         )
+
+
+def test_durable_create_and_transition_results_reject_missing_or_cross_run_events() -> None:
+    timestamp = datetime(2026, 7, 15, tzinfo=UTC)
+    run = DiagnoseRun.from_create_request(
+        run_id="run-1",
+        request=make_request(),
+        requested_by="operator-a",
+        occurred_at=timestamp,
+    )
+    event = DiagnoseEvent(
+        run_id="run-1",
+        sequence=1,
+        kind="phase",
+        payload={"status": "queued"},
+        occurred_at=timestamp,
+    )
+
+    assert DiagnoseRunCreation(run=run, created=True, initial_event=event).initial_event == event
+    assert DiagnoseRunTransition(run=run, changed=False).event is None
+
+    with pytest.raises(ValidationError, match="requires an initial event"):
+        DiagnoseRunCreation(run=run, created=True)
+    with pytest.raises(ValidationError, match="must not create another"):
+        DiagnoseRunCreation(run=run, created=False, initial_event=event)
+    with pytest.raises(ValidationError, match="requires a durable event"):
+        DiagnoseRunTransition(run=run, changed=True)
+    with pytest.raises(ValidationError, match="must not emit an event"):
+        DiagnoseRunTransition(run=run, changed=False, event=event)
