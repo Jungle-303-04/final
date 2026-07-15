@@ -30,15 +30,8 @@ export interface TimelineCapabilityDescriptor {
   namespaceFilterPolicy: "not_required" | "required";
 }
 
-/**
- * Existing synchronous surface projection. The API adapter exposes it only
- * after capability bootstrap has completed; it never supplies a fallback.
- */
-export interface TimelineCapabilities {
-  sourceMode: TimelineSourceMode;
-  maxRangeDays: number | null;
-  requiresNamespaceFilter: boolean;
-}
+/** Server descriptor is the only Timeline capability projection used by the UI. */
+export type TimelineCapabilities = TimelineCapabilityDescriptor;
 
 export type TimelineMode =
   | { kind: "live"; widthMs: number; all?: true }
@@ -199,8 +192,11 @@ export interface TimelineStreamSubscription {
  */
 export interface TimelinePort {
   capabilities: TimelineCapabilities;
-  /** Product adapters provide this; static injected ports remain compatible during the route-gate migration. */
-  readCapabilities?(signal?: AbortSignal): Promise<TimelineCapabilityDescriptor>;
+  /**
+   * Product routes fail closed when this bootstrap reader is unavailable.
+   * `workspaceCacheKey` isolates browser memory only; it is never sent to the API.
+   */
+  readCapabilities?(signal?: AbortSignal, workspaceCacheKey?: string): Promise<TimelineCapabilities>;
   readTimeline(query: TimelineQuery, signal?: AbortSignal): Promise<TimelineSnapshot>;
   subscribeTimeline(
     session: TimelineReadSession,

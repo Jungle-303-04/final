@@ -420,9 +420,10 @@ describe("TimelineSurface", () => {
 function timelinePort(overrides: Partial<TimelinePort> = {}): TimelinePort {
   return {
     capabilities: {
-      sourceMode: "retained",
-      maxRangeDays: 7,
-      requiresNamespaceFilter: false,
+      selectedSourceMode: "retained",
+      availableSourceModes: ["retained"],
+      maxRetainedRangeMs: 604_800_000,
+      namespaceFilterPolicy: "not_required",
     },
     readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [event()] })),
     subscribeTimeline: idleStream,
