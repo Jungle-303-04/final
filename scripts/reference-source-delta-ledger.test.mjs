@@ -12,6 +12,7 @@ import {
   assertInventoryRevisionMatchesTarget,
   buildDeltaLedger,
   createDeltaLedger,
+  resolveDeltaLedgerOptions,
   validateDeltaLedger,
   writeDeltaLedger,
 } from './reference-source-delta-ledger.mjs'
@@ -157,6 +158,25 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
   assert.throws(() => assertDeltaLedgerClassified(ledger), /4개 pending/)
 })
 
+test('createDeltaLedger의 부분 옵션은 승인된 base·target·scope 기본값을 보존한다', () => {
+  const options = resolveDeltaLedgerOptions({ repository: '/tmp/source-delta-fixture' })
+
+  assert.deepEqual(
+    {
+      repository: options.repository,
+      baseRevision: options.baseRevision,
+      targetRevision: options.targetRevision,
+      scope: options.scope,
+    },
+    {
+      repository: '/tmp/source-delta-fixture',
+      baseRevision: BASE,
+      targetRevision: TARGET,
+      scope: ['web', 'packages/k8s-ui'],
+    },
+  )
+})
+
 test('분류 완료 파일은 복수의 immutable source interaction과 transport별 realtime·motion reduced-motion 증거를 요구한다', () => {
   const ledger = buildDeltaLedger({
     baseRevision: BASE,
@@ -241,6 +261,42 @@ test('분류 완료 자산은 noninteractive semantic interaction을 명시하�
   component.interactions[0].sourceKey = asset.interactions[0].sourceKey
   assert.deepEqual(validateDeltaLedger(ledger), [
     'web/src/components/timeline/TimelineStrip.tsx: interactions[0]: sourceKey is duplicated',
+  ])
+})
+
+test('분류 interaction은 알려진 legacy alias만 한 번씩 쓰고 motion locator는 비어 있을 수 없지만 alias 없는 최신 interaction은 허용한다', () => {
+  const ledger = buildDeltaLedger({
+    baseRevision: BASE,
+    targetRevision: TARGET,
+    changes: [{ status: 'A', path: 'web/src/components/timeline/TimelineStrip.tsx' }],
+    baseFiles: new Map(),
+    targetFiles: new Map([['web/src/components/timeline/TimelineStrip.tsx', sourceFile(BLOB_B, SHA_B)]]),
+  })
+  const [row] = ledger.files
+  row.classification = 'classified'
+  row.interactions = [
+    classifiedInteraction({ legacyContractIds: ['reference.feature.001'] }),
+    classifiedInteraction({
+      sourceKey: 'upstream-ui:timeline:keyboard-focus:range-jump:v1',
+      interaction: 'keyboard range jump preserves focus and selected time window',
+      legacyContractIds: [],
+      motion: {
+        reducedMotion: 'selection changes without animated movement',
+        evidence: ['web/src/index.css .timeline-range'],
+      },
+    }),
+  ]
+  ledger.pendingCount = 0
+  const validationContext = { knownLegacyContractIds: new Set(['reference.feature.001']) }
+
+  assert.deepEqual(validateDeltaLedger(ledger, validationContext), [])
+
+  row.interactions[1].legacyContractIds = ['reference.feature.001', 'reference.feature.999']
+  row.interactions[1].motion.evidence = ['']
+  assert.deepEqual(validateDeltaLedger(ledger, validationContext), [
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[1]: legacyContractId is duplicated: reference.feature.001',
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[1]: legacyContractId is unknown: reference.feature.999',
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[1]: motion.evidence[0] must be a non-empty locator',
   ])
 })
 
