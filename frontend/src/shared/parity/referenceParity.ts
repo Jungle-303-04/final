@@ -47,10 +47,25 @@ export interface OperationEvent {
   occurredAt: string;
 }
 
+export type OperationStreamFailure = "forbidden" | "invalid" | "unavailable";
+
+export type OperationStreamLifecycle =
+  | { state: "connecting" }
+  | { state: "connected" }
+  | { state: "reconnecting"; attempt: number; retryAfterMs: number }
+  | { state: "closed" }
+  | { state: "failed"; failure: OperationStreamFailure };
+
+export interface OperationEventsSubscription {
+  afterSequence?: number;
+  onLifecycle?: (lifecycle: OperationStreamLifecycle) => void;
+  signal?: AbortSignal;
+}
+
 export interface OperationEventsPort {
   subscribeOperationEvents(
     commandId: string,
-    signal?: AbortSignal,
+    subscription?: OperationEventsSubscription,
   ): AsyncIterable<OperationEvent>;
 }
 

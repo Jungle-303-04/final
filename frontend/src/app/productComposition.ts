@@ -21,6 +21,11 @@ import {
   EMPTY_ALERT_EVENTS_PORT,
   type AlertEventsPort,
 } from "../features/alerts/alertEventsContract";
+import {
+  createOperationStatusStore,
+  type OperationStatusStore,
+} from "../features/operations/OperationStatusStore";
+import { EMPTY_OPERATION_EVENTS_PORT } from "../features/operations/operationEventsContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -34,6 +39,7 @@ export interface ProductComposition {
   aiAssistant: AiAssistantPort;
   logStream: LogStreamPort;
   alertEvents: AlertEventsPort;
+  operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
 }
@@ -46,6 +52,7 @@ export function createProductComposition(
   aiAssistant: AiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStream: LogStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEvents: AlertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  operationStatusStore: OperationStatusStore = createOperationStatusStore(EMPTY_OPERATION_EVENTS_PORT),
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -74,6 +81,7 @@ export function createProductComposition(
     aiAssistant,
     logStream,
     alertEvents,
+    operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
   };

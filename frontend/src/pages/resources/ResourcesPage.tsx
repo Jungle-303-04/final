@@ -16,10 +16,6 @@ import type {
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
-import {
-  EMPTY_OPERATION_EVENTS_PORT,
-  type OperationEventsPort,
-} from "../../features/operations/operationEventsContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -65,7 +61,6 @@ export function ResourcesPage({
   resourceMetricsHistoryPort,
   resourceCapabilitiesPort,
   resourceActionsPort,
-  operationEventsPort = EMPTY_OPERATION_EVENTS_PORT,
   podTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort,
   port,
@@ -79,7 +74,6 @@ export function ResourcesPage({
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
-  operationEventsPort?: OperationEventsPort;
   podTerminalPort?: PodTerminalPort;
   resourceManifestPort?: ResourceManifestPort;
   port: ResourcesPort;
@@ -330,7 +324,6 @@ export function ResourcesPage({
         >
           <ResourceDetailWorkspace
             actionsPort={resourceActionsPort}
-            operationEventsPort={operationEventsPort}
             capabilities={resourceCapabilities}
             detail={state.detail}
             full={state.detailFull}
