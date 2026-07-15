@@ -65,6 +65,7 @@ import {
   upsertTimelinePin,
   getHelmRelease,
   listHelmReleases,
+  getTrafficOverview,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -103,6 +104,8 @@ import { createTimelineAdapter } from "../features/timeline/createTimelineAdapte
 import { createTimelineSurface } from "../pages/timeline/createTimelineSurface";
 import { createHelmAdapter } from "../features/helm/createHelmAdapter";
 import { createHelmSurface } from "../pages/helm/createHelmSurface";
+import { createTrafficAdapter } from "../features/traffic/createTrafficAdapter";
+import { createTrafficSurface } from "../pages/traffic/createTrafficSurface";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -197,6 +200,7 @@ export function createApiComposition() {
     getHelmRelease,
     listHelmReleases,
   });
+  const trafficPort = createTrafficAdapter({ getTrafficOverview });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,
@@ -263,6 +267,10 @@ export function createApiComposition() {
     {
       id: "helm",
       Component: createHelmSurface(helmPort),
+    },
+    {
+      id: "traffic",
+      Component: createTrafficSurface(trafficPort),
     },
     {
       id: "settings",

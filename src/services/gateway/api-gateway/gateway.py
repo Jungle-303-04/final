@@ -58,6 +58,7 @@ from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JO
 from domains.target.router import router as target_router
 from domains.timeline.fanout import InMemoryTimelineEventFanout
 from domains.timeline.router import router as timeline_router
+from domains.traffic.router import router as traffic_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -337,6 +338,9 @@ class ApiGateway:
         app.include_router(
             helm_release_router
         )  # browser Helm storage metadata (session + inventory RBAC)
+        app.include_router(
+            traffic_router
+        )  # browser Traffic availability (session + inventory RBAC)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
         app.include_router(
