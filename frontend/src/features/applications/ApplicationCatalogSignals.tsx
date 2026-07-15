@@ -2,25 +2,27 @@ import {
   AlertTriangle,
   CheckCircle2,
   GitCommitHorizontal,
+  Layers3,
   Siren,
 } from "lucide-react";
 import { cn } from "../../shared/lib/cn";
 import type {
   ApplicationCardModel,
   ApplicationCurrentDeployment,
+  ApplicationDeliveryState,
 } from "./applicationsContract";
 import { shortSha } from "./applicationPresentation";
 
 export function ApplicationReadyBar({
-  health,
+  runtimeReadiness,
   label,
   unavailable,
 }: {
-  health: ApplicationCardModel["health"];
+  runtimeReadiness: ApplicationCardModel["runtimeReadiness"];
   label: string;
   unavailable: string;
 }) {
-  const { readyPods, totalPods } = health;
+  const { readyPods, totalPods } = runtimeReadiness;
   if (readyPods === null || totalPods === null) {
     return (
       <span
@@ -65,6 +67,75 @@ export function ApplicationReadyBar({
       <span className="font-mono text-xs font-medium tabular-nums">
         {readyPods}/{totalPods}
       </span>
+    </span>
+  );
+}
+
+export function ApplicationDeliveryStateChannel({
+  delivery,
+  labels,
+  unavailable,
+}: {
+  delivery: ApplicationDeliveryState;
+  labels: Record<NonNullable<ApplicationDeliveryState["status"]>, string>;
+  unavailable: string;
+}) {
+  if (delivery.availability === "unavailable" || delivery.status === null) {
+    return <UnavailableChannel testId="application-delivery-state-channel" text={unavailable} />;
+  }
+  return (
+    <span
+      className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium"
+      data-testid="application-delivery-state-channel"
+    >
+      <GitCommitHorizontal aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{labels[delivery.status]}</span>
+    </span>
+  );
+}
+
+export function ApplicationBatchRuntimeChannel({
+  batchRuntime,
+  labels,
+  counterLabels,
+  unavailable,
+  partial,
+}: {
+  batchRuntime: ApplicationCardModel["batchRuntime"];
+  labels: Record<NonNullable<ApplicationCardModel["batchRuntime"]["status"]>, string>;
+  counterLabels: {
+    active: string;
+    failed: string;
+    succeeded: string;
+  };
+  unavailable: string;
+  partial: string;
+}) {
+  if (batchRuntime.availability === "unavailable" || batchRuntime.status === null) {
+    return <UnavailableChannel testId="application-batch-runtime-channel" text={unavailable} />;
+  }
+  const counters = [
+    ["active", batchRuntime.activeRuns],
+    ["failed", batchRuntime.failedRuns],
+    ["succeeded", batchRuntime.succeededRuns],
+  ] as const;
+  return (
+    <span
+      className="inline-flex min-w-0 items-center gap-1.5 text-xs"
+      data-testid="application-batch-runtime-channel"
+    >
+      <Layers3 aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate font-medium">{labels[batchRuntime.status]}</span>
+      {counters.some(([, value]) => value !== null) ? (
+        <span className="flex min-w-0 flex-wrap gap-x-1.5 font-mono tabular-nums text-muted-foreground">
+          {counters.map(([key, value]) => value === null ? null : (
+            <span key={key}>{counterLabels[key]} {value}</span>
+          ))}
+        </span>
+      ) : null}
+      {batchRuntime.completeness === "partial" ? (
+        <span className="text-muted-foreground">{partial}</span>
+      ) : null}
     </span>
   );
 }

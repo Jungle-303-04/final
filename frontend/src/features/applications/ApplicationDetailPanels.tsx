@@ -10,28 +10,64 @@ import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import type { ApplicationDetailModel } from "./applicationsContract";
 import { applicationStatusTone, formatObservedTime } from "./applicationPresentation";
+import {
+  ApplicationBatchRuntimeChannel,
+  ApplicationDeliveryStateChannel,
+} from "./ApplicationCatalogSignals";
 
 export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetailModel }) {
   const { locale } = useI18n();
   const copy = applicationsCopy(locale);
+  const deliveryLabels = {
+    succeeded: copy.deliverySucceeded,
+    failed: copy.deliveryFailed,
+    running: copy.deliveryRunning,
+    pending: copy.deliveryPending,
+    unknown: copy.deliveryUnknown,
+  } as const;
+  const batchLabels = {
+    running: copy.batchRunning,
+    failed: copy.batchFailed,
+    succeeded: copy.batchSucceeded,
+    suspended: copy.batchSuspended,
+    unknown: copy.batchUnknown,
+  } as const;
+  const batchCounterLabels = {
+    active: copy.activeRuns,
+    failed: copy.failedRuns,
+    succeeded: copy.succeededRuns,
+  } as const;
   return (
     <div className="grid min-w-0 gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader><CardTitle>{copy.health}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{copy.runtime}</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
-          <Fact label={copy.status} value={<StatusMark label={detail.health.status ?? copy.unknown} tone={applicationStatusTone(detail.health.status)} />} />
+          <Fact label={copy.status} value={<StatusMark label={detail.runtimeReadiness.status} tone={applicationStatusTone(detail.runtimeReadiness.status)} />} />
           <Fact label={copy.pods} value={podRatio(detail, copy.unavailable)} />
-          <Fact label={copy.restarts} value={detail.health.restarts} />
+          <Fact label={copy.restarts} value={detail.runtimeReadiness.restarts} />
         </CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle>{copy.deployment}</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
+          <Fact label={copy.delivery} value={<ApplicationDeliveryStateChannel delivery={detail.delivery} labels={deliveryLabels} unavailable={copy.unavailable} />} />
           <Fact label={copy.version} value={detail.currentDeployment?.version} />
           <Fact label={copy.gitSha} value={detail.currentDeployment?.gitSha ?? null} mono />
           <Fact label={copy.digest} value={detail.currentDeployment?.imageDigest} mono />
           <Fact label={copy.deployedAt} value={formatObservedTime(detail.currentDeployment?.deployedAt ?? null, locale)} />
           <Fact label={copy.deployedBy} value={detail.currentDeployment?.deployedBy} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>{copy.batchRuntime}</CardTitle></CardHeader>
+        <CardContent className="grid gap-3">
+          <ApplicationBatchRuntimeChannel
+            batchRuntime={detail.batchRuntime}
+            counterLabels={batchCounterLabels}
+            labels={batchLabels}
+            partial={copy.partial}
+            unavailable={copy.unavailable}
+          />
         </CardContent>
       </Card>
       <Card>
@@ -155,7 +191,7 @@ function Unavailable() {
 }
 
 function podRatio(detail: ApplicationDetailModel, unavailable: string): string {
-  return detail.health.readyPods === null || detail.health.totalPods === null
+  return detail.runtimeReadiness.readyPods === null || detail.runtimeReadiness.totalPods === null
     ? unavailable
-    : `${detail.health.readyPods}/${detail.health.totalPods}`;
+    : `${detail.runtimeReadiness.readyPods}/${detail.runtimeReadiness.totalPods}`;
 }

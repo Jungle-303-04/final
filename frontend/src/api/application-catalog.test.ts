@@ -13,6 +13,13 @@ const APPLICATION = {
   environments: ["prod"],
   lifecycle_status: "active",
   health: { status: "degraded", ready_pods: 2, total_pods: 3, restarts: 4 },
+  runtime_readiness: {
+    completeness: "exact",
+    status: "degraded",
+    ready_pods: 2,
+    total_pods: 3,
+    restarts: 4,
+  },
   current_deployment: {
     version: "v2.4.1",
     image: "registry/checkout:v2.4.1",
@@ -20,6 +27,20 @@ const APPLICATION = {
     git_sha: "a3f9c2e0123",
     deployed_at: "2026-07-14T09:00:00+00:00",
     deployed_by: "operator",
+  },
+  delivery: {
+    availability: "available",
+    status: "failed",
+    workflow_run_id: "run-2",
+    observed_at: "2026-07-14T10:00:00+00:00",
+  },
+  batch_runtime: {
+    availability: "available",
+    completeness: "exact",
+    status: "running",
+    active_runs: 1,
+    failed_runs: 0,
+    succeeded_runs: 2,
   },
   has_drift: true,
   drift_summary: "spec.replicas differs",
@@ -113,6 +134,18 @@ describe("BQ-039~042 Application product API", () => {
     const invalid = [
       { applications: [{ ...APPLICATION, provider_secret: "do-not-pass" }] },
       { applications: [{ ...APPLICATION, health: { ...APPLICATION.health, ready_pods: 4 } }] },
+      {
+        applications: [{
+          ...APPLICATION,
+          delivery: { ...APPLICATION.delivery, availability: "unavailable" },
+        }],
+      },
+      {
+        applications: [{
+          ...APPLICATION,
+          batch_runtime: { ...APPLICATION.batch_runtime, availability: "unavailable" },
+        }],
+      },
       { applications: [{ ...APPLICATION, has_drift: false }] },
     ];
     for (const payload of invalid) {

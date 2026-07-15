@@ -27,6 +27,101 @@ export const applicationHealthSchema = z.strictObject({
   }
 });
 
+export const applicationRuntimeReadinessSchema = z.strictObject({
+  completeness: filterCountCompletenessSchema,
+  status: z.enum(["healthy", "degraded", "unknown"]),
+  ready_pods: z.number().int().nonnegative().nullable(),
+  total_pods: z.number().int().nonnegative().nullable(),
+  restarts: z.number().int().nonnegative().nullable(),
+}).superRefine((runtime, context) => {
+  if (
+    runtime.ready_pods !== null &&
+    runtime.total_pods !== null &&
+    runtime.ready_pods > runtime.total_pods
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "ready pods cannot exceed total pods",
+      path: ["ready_pods"],
+    });
+  }
+  if (
+    runtime.completeness === "unavailable" &&
+    (runtime.status !== "unknown" ||
+      runtime.ready_pods !== null ||
+      runtime.total_pods !== null ||
+      runtime.restarts !== null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable runtime readiness cannot claim runtime evidence",
+      path: ["completeness"],
+    });
+  }
+});
+
+export const applicationDeliveryStateSchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  status: z.enum(["succeeded", "failed", "running", "pending", "unknown"]).nullable(),
+  workflow_run_id: nullableTextSchema,
+  observed_at: nullableTimestampSchema,
+}).superRefine((delivery, context) => {
+  if (
+    delivery.availability === "unavailable" &&
+    (delivery.status !== null || delivery.workflow_run_id !== null || delivery.observed_at !== null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable delivery cannot claim delivery evidence",
+      path: ["availability"],
+    });
+  }
+  if (
+    delivery.availability === "available" &&
+    (delivery.status === null || delivery.workflow_run_id === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "available delivery requires an observed workflow run",
+      path: ["availability"],
+    });
+  }
+});
+
+export const applicationBatchRuntimeSchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  completeness: filterCountCompletenessSchema,
+  status: z.enum(["running", "failed", "succeeded", "suspended", "unknown"]).nullable(),
+  active_runs: z.number().int().nonnegative().nullable(),
+  failed_runs: z.number().int().nonnegative().nullable(),
+  succeeded_runs: z.number().int().nonnegative().nullable(),
+}).superRefine((batch, context) => {
+  if (
+    batch.availability === "unavailable" &&
+    (batch.completeness !== "unavailable" ||
+      batch.status !== null ||
+      batch.active_runs !== null ||
+      batch.failed_runs !== null ||
+      batch.succeeded_runs !== null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable batch runtime cannot claim batch evidence",
+      path: ["availability"],
+    });
+  }
+  if (
+    batch.availability === "available" &&
+    (batch.completeness === "unavailable" || batch.status === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "available batch runtime requires an observed state",
+      path: ["availability"],
+    });
+  }
+});
+
 export const applicationCurrentDeploymentSchema = z.strictObject({
   version: nullableTextSchema,
   image: nullableTextSchema,
@@ -47,7 +142,10 @@ export const applicationCatalogItemSchema = z.strictObject({
   environments: z.array(z.string().min(1)),
   lifecycle_status: z.string().min(1),
   health: applicationHealthSchema,
+  runtime_readiness: applicationRuntimeReadinessSchema,
   current_deployment: applicationCurrentDeploymentSchema.nullable(),
+  delivery: applicationDeliveryStateSchema,
+  batch_runtime: applicationBatchRuntimeSchema,
   has_drift: z.boolean().nullable(),
   drift_summary: nullableTextSchema,
   resource_counts: z.array(applicationResourceCountSchema).nullable(),

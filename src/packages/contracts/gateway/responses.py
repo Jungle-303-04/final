@@ -2080,8 +2080,16 @@ class AiResourceSummary(StrictModel):
 
 
 ApplicationProjectionCompleteness = Literal["exact", "partial", "unavailable"]
+ApplicationProjectionAvailability = Literal["available", "unavailable"]
 ApplicationHealthStatus = Literal["healthy", "degraded", "unknown"]
 ApplicationDeploymentStatus = Literal["succeeded", "failed", "running", "pending", "unknown"]
+ApplicationBatchRuntimeStatus = Literal[
+    "running",
+    "failed",
+    "succeeded",
+    "suspended",
+    "unknown",
+]
 ApplicationDriftStatus = Literal["in_sync", "drifted", "unknown"]
 ApplicationActivityType = Literal["deployment", "incident", "change"]
 ApplicationDriftScalar = str | int | float | bool | None
@@ -2101,6 +2109,74 @@ class ApplicationHealthSummary(StrictModel):
             and self.ready_pods > self.total_pods
         ):
             raise ValueError("ready pod count cannot exceed total pod count")
+        return self
+
+
+class ApplicationRuntimeReadiness(StrictModel):
+    completeness: ApplicationProjectionCompleteness
+    status: ApplicationHealthStatus
+    ready_pods: int | None = Field(default=None, ge=0)
+    total_pods: int | None = Field(default=None, ge=0)
+    restarts: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_runtime_readiness(self) -> Self:
+        if (
+            self.ready_pods is not None
+            and self.total_pods is not None
+            and self.ready_pods > self.total_pods
+        ):
+            raise ValueError("ready pod count cannot exceed total pod count")
+        if self.completeness == "unavailable" and (
+            self.status != "unknown"
+            or self.ready_pods is not None
+            or self.total_pods is not None
+            or self.restarts is not None
+        ):
+            raise ValueError("unavailable runtime readiness must not claim runtime evidence")
+        return self
+
+
+class ApplicationDeliveryState(StrictModel):
+    availability: ApplicationProjectionAvailability
+    status: ApplicationDeploymentStatus | None = None
+    workflow_run_id: str | None = None
+    observed_at: str | None = None
+
+    @model_validator(mode="after")
+    def validate_delivery_state(self) -> Self:
+        if self.availability == "unavailable" and any(
+            value is not None for value in (self.status, self.workflow_run_id, self.observed_at)
+        ):
+            raise ValueError("unavailable delivery state must not claim delivery evidence")
+        if self.availability == "available" and (
+            self.status is None or self.workflow_run_id is None
+        ):
+            raise ValueError("available delivery state requires an observed workflow run")
+        return self
+
+
+class ApplicationBatchRuntime(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    status: ApplicationBatchRuntimeStatus | None = None
+    active_runs: int | None = Field(default=None, ge=0)
+    failed_runs: int | None = Field(default=None, ge=0)
+    succeeded_runs: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_batch_runtime(self) -> Self:
+        counters = (self.active_runs, self.failed_runs, self.succeeded_runs)
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.status is not None
+            or any(value is not None for value in counters)
+        ):
+            raise ValueError("unavailable batch runtime must not claim batch evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or self.status is None
+        ):
+            raise ValueError("available batch runtime requires an observed batch state")
         return self
 
 
@@ -2127,7 +2203,10 @@ class ApplicationProductCard(StrictModel):
     default_branch: str | None = None
     manifest_path: str | None = None
     health: ApplicationHealthSummary
+    runtime_readiness: ApplicationRuntimeReadiness
     current_deployment: ApplicationCurrentDeployment | None = None
+    delivery: ApplicationDeliveryState
+    batch_runtime: ApplicationBatchRuntime
     has_drift: bool | None = None
     drift_summary: str | None = None
     resource_counts: list[ApplicationResourceKindCount] | None = None

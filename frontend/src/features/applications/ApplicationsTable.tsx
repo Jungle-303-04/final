@@ -15,7 +15,9 @@ import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationCardModel } from "./applicationsContract";
 import { applicationStatusTone } from "./applicationPresentation";
 import {
+  ApplicationBatchRuntimeChannel,
   ApplicationDeploymentChannel,
+  ApplicationDeliveryStateChannel,
   ApplicationDriftChannel,
   ApplicationIncidentChannel,
   ApplicationReadyBar,
@@ -30,15 +32,36 @@ export function ApplicationsTable({
 }) {
   const { locale } = useI18n();
   const copy = applicationsCopy(locale);
+  const deliveryLabels = {
+    succeeded: copy.deliverySucceeded,
+    failed: copy.deliveryFailed,
+    running: copy.deliveryRunning,
+    pending: copy.deliveryPending,
+    unknown: copy.deliveryUnknown,
+  } as const;
+  const batchLabels = {
+    running: copy.batchRunning,
+    failed: copy.batchFailed,
+    succeeded: copy.batchSucceeded,
+    suspended: copy.batchSuspended,
+    unknown: copy.batchUnknown,
+  } as const;
+  const batchCounterLabels = {
+    active: copy.activeRuns,
+    failed: copy.failedRuns,
+    succeeded: copy.succeededRuns,
+  } as const;
   return (
     <div className="rounded-xl border bg-card">
       <Table scrollAreaLabel={copy.title}>
         <TableHeader>
           <TableRow>
             <TableHead>{copy.title}</TableHead>
-            <TableHead>{copy.health}</TableHead>
+            <TableHead>{copy.runtime}</TableHead>
             <TableHead>{copy.pods}</TableHead>
+            <TableHead>{copy.delivery}</TableHead>
             <TableHead>{copy.deployment}</TableHead>
+            <TableHead>{copy.batchRuntime}</TableHead>
             <TableHead>{copy.drift}</TableHead>
             <TableHead>{copy.incidents}</TableHead>
             <TableHead>{copy.resources}</TableHead>
@@ -66,13 +89,19 @@ export function ApplicationsTable({
                 </div>
               </TableCell>
               <TableCell>
-                <StatusMark label={application.health.status ?? copy.unknown} tone={applicationStatusTone(application.health.status)} />
+                <StatusMark label={application.runtimeReadiness.status} tone={applicationStatusTone(application.runtimeReadiness.status)} />
               </TableCell>
               <TableCell>
-                <ApplicationReadyBar health={application.health} label={copy.pods} unavailable={copy.unavailable} />
+                <ApplicationReadyBar runtimeReadiness={application.runtimeReadiness} label={copy.pods} unavailable={copy.unavailable} />
+              </TableCell>
+              <TableCell>
+                <ApplicationDeliveryStateChannel delivery={application.delivery} labels={deliveryLabels} unavailable={copy.unavailable} />
               </TableCell>
               <TableCell>
                 <ApplicationDeploymentChannel deployment={application.currentDeployment} unavailable={copy.unavailable} />
+              </TableCell>
+              <TableCell>
+                <ApplicationBatchRuntimeChannel batchRuntime={application.batchRuntime} counterLabels={batchCounterLabels} labels={batchLabels} partial={copy.partial} unavailable={copy.unavailable} />
               </TableCell>
               <TableCell className="max-w-56">
                 <ApplicationDriftChannel aligned={copy.aligned} application={application} drift={copy.drift} unavailable={copy.unavailable} />

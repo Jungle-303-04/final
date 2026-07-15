@@ -18,7 +18,28 @@ function endpointItem(overrides: Record<string, unknown> = {}) {
     environments: ["prod"],
     lifecycle_status: "active",
     health: { status: "healthy", ready_pods: 2, total_pods: 2, restarts: 0 },
+    runtime_readiness: {
+      completeness: "exact" as const,
+      status: "healthy" as const,
+      ready_pods: 2,
+      total_pods: 2,
+      restarts: 0,
+    },
     current_deployment: null,
+    delivery: {
+      availability: "unavailable" as const,
+      status: null,
+      workflow_run_id: null,
+      observed_at: null,
+    },
+    batch_runtime: {
+      availability: "unavailable" as const,
+      completeness: "unavailable" as const,
+      status: null,
+      active_runs: null,
+      failed_runs: null,
+      succeeded_runs: null,
+    },
     has_drift: false,
     drift_summary: null,
     resource_counts: [{ kind: "Deployment", count: 1 }],
@@ -52,7 +73,18 @@ describe("Applications product adapter", () => {
     const dependencies = api({
       listApplicationCatalog: vi.fn().mockResolvedValue({ applications: [
         endpointItem(),
-        endpointItem({ id: "app-degraded", name: "degraded", health: { status: "degraded", ready_pods: 1, total_pods: 2, restarts: null } }),
+        endpointItem({
+          id: "app-degraded",
+          name: "degraded",
+          health: { status: "degraded", ready_pods: 1, total_pods: 2, restarts: null },
+          runtime_readiness: {
+            completeness: "exact",
+            status: "degraded",
+            ready_pods: 1,
+            total_pods: 2,
+            restarts: null,
+          },
+        }),
         endpointItem({ id: "app-drift", name: "drift", has_drift: true, drift_summary: "replicas differ" }),
         endpointItem({ id: "app-incident", name: "incident", open_incidents: 2 }),
       ] }),
@@ -65,6 +97,12 @@ describe("Applications product adapter", () => {
       "app-incident", "app-drift", "app-degraded", "app-healthy",
     ]);
     expect(result[0]).not.toHaveProperty("provider_secret");
+    expect(result[0]?.delivery).toEqual({
+      availability: "unavailable",
+      status: null,
+      workflowRunId: null,
+      observedAt: null,
+    });
     expect(dependencies.listApplicationCatalog).toHaveBeenCalledWith(FILTER, undefined);
   });
 
@@ -127,7 +165,28 @@ describe("Applications product adapter", () => {
       environments: [],
       lifecycleStatus: "unknown",
       health: { status: "unknown", readyPods: null, totalPods: null, restarts: null },
+      runtimeReadiness: {
+        completeness: "unavailable",
+        status: "unknown",
+        readyPods: null,
+        totalPods: null,
+        restarts: null,
+      },
       currentDeployment: null,
+      delivery: {
+        availability: "unavailable",
+        status: null,
+        workflowRunId: null,
+        observedAt: null,
+      },
+      batchRuntime: {
+        availability: "unavailable",
+        completeness: "unavailable",
+        status: null,
+        activeRuns: null,
+        failedRuns: null,
+        succeededRuns: null,
+      },
       hasDrift: null,
       driftSummary: null,
       resourceCounts: null,
