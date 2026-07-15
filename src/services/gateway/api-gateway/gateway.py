@@ -43,6 +43,7 @@ from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
 from domains.log_stream.router import router as log_stream_router
 from domains.manifest_editor.router import router as manifest_editor_router
+from domains.parity.router import router as parity_router
 from domains.providers.router import router as providers_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
@@ -288,6 +289,7 @@ class ApiGateway:
         self._register_frontend_proxy(app)
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(parity_router)  # 생성형 원본 기능 mapping catalog(세션 범위)
         app.include_router(alert_router)  # 알림 채널 라우팅 룰(admin)
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획

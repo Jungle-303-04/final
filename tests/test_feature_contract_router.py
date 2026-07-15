@@ -4,7 +4,6 @@ import asyncio
 from types import SimpleNamespace
 
 from domains.parity.router import list_feature_contracts
-
 from packages.contracts.reference_feature_catalog import load_feature_contract_catalog
 
 
