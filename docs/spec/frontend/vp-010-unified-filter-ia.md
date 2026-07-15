@@ -51,7 +51,7 @@ Settings
 
 - **Topology·Timeline·Live Traffic 독립 메뉴는 제거**한다. VP-012의 Resources 4층 구조와
   물리 뷰↔관계 뷰가 세 기능을 대체한다.
-- observed traffic 계약이 없는 동안 관계 뷰는 빈 슬롯이다. Service inventory나 Radar 학습
+- observed traffic 계약이 없는 동안 관계 뷰는 빈 슬롯이다. Service inventory나 기준 원본 학습
   경로를 traffic edge로 추측 변환하지 않는다(BQ-034 대기).
 - **Cost 메뉴는 렌더하지 않는다** (백엔드 계약 없음 — BE-Gap).
 

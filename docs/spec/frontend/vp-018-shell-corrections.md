@@ -495,7 +495,7 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 >  아마 우리 코드도 이걸로 만들어진 건데." — 우녕
 
 **써도 된다.**
-- shadcn/ui는 **MIT 라이선스**다. Radar(Apache-2.0)처럼 NOTICE 의무가 없다.
+- shadcn/ui는 **MIT 라이선스**다. 기준 원본(Apache-2.0)처럼 NOTICE 의무가 없다.
 - shadcn은 라이브러리가 아니라 **"코드를 내 저장소로 복사해 오는" 배포 방식**이다.
   가져와서 우리 토큰으로 고치는 것이 **설계된 사용법**이다. 우회가 아니다.
 - **우리 코드가 이미 shadcn 기반이다.** (`shared/ui/primitives/` = shadcn primitive)
@@ -503,7 +503,7 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 
 **규칙:**
 - `npx shadcn@latest add <block>` 으로 **가져온 뒤 우리 토큰으로 다시 칠한다.**
-  가져온 원본의 색·간격을 하드코딩으로 남기지 않는다 (Radar 이식과 같은 규율).
+  가져온 원본의 색·간격을 하드코딩으로 남기지 않는다 (기준 원본 이식과 같은 규율).
 - 가져온 파일은 `shared/ui/primitives/` 또는 `shared/ui/blocks/` 아래에 둔다. **정본은 한 곳뿐.**
 - **먼저 Blocks에 있는지 찾고, 없을 때만 조합한다.** 손으로 짜는 건 마지막 수단이다.
 
@@ -537,13 +537,13 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 - primitive 루트에 `data-slot` 이 없으면 FAIL
 - 컴포넌트별 `.css` 파일이 생기면 FAIL
 
-**Radar 이식도 이 문법을 통과해야 한다.** Radar 원본의 클래스를 그대로 붙여넣지 않는다.
+**기준 원본 이식도 이 문법을 통과해야 한다.** 기준 원본 원본의 클래스를 그대로 붙여넣지 않는다.
 
 **규칙 (이어서):**
 - **shadcn에 있는 것을 손으로 다시 만들지 않는다.** primitive는 `shared/ui/primitives/` 한 곳뿐.
 - **차트는 반드시 `ChartContainer`를 통과한다.** recharts를 직접 쓰지 않는다.
   → 색·툴팁·범례·반응형이 전부 토큰으로 통일된다. 지금 `ResourceSparkline.tsx`는 recharts 직접 사용 → **교정.**
-- Radar에서 이식한 컴포넌트도 **이 primitive 위에 다시 올린다.** (VP-015 §9.1)
+- 기준 원본에서 이식한 컴포넌트도 **이 primitive 위에 다시 올린다.** (VP-015 §9.1)
 
 ### 10.2 크기가 흔들리지 않는다 — **레이아웃 안정성 계약**
 
@@ -570,7 +570,7 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 
 ---
 
-## 11. Radar 이식이 **절반도 안 됐다** ★ (실측)
+## 11. 기준 원본 이식이 **절반도 안 됐다** ★ (실측)
 
 과거 v1.5.7 `88bd1e97…` 스냅샷은 UI 라이브러리(`packages/k8s-ui/src/`)가 실제
 268파일이었다. **P0에서 492파일이 존재하는 `10461f40…` 고정본으로 교체해 완결했다.**
@@ -619,7 +619,7 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 **슬라이스마다 조금씩 가져오는 방식을 폐기한다. 한 번에 다 가져온다.**
 그리고 **224개 파일의 클래스를 손으로 고치지 않는다.**
 
-#### 왜 손으로 안 고쳐도 되나 — Radar의 테마는 **얇은 별칭 레이어**다
+#### 왜 손으로 안 고쳐도 되나 — 기준 원본의 테마는 **얇은 별칭 레이어**다
 
 `theme/tailwind-theme.css` 실측:
 ```css
@@ -635,9 +635,9 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 → **이 한 파일이 가리키는 곳을 우리 shadcn 토큰으로 바꾸면, 224개 파일이 전부 우리 색이 된다.**
 클래스를 1,170번 치환할 필요가 없다.
 
-#### 어댑터 (`shared/ui/radar/radar-theme.css` — **이 파일 하나가 전부다**)
+#### 어댑터 (`shared/ui/reference/reference-theme.css` — **이 파일 하나가 전부다**)
 
-| Radar 별칭 | → shadcn 시맨틱 토큰 |
+| 기준 원본 별칭 | → shadcn 시맨틱 토큰 |
 |---|---|
 | `--color-theme-base` | `var(--background)` |
 | `--color-theme-sidebar` | `var(--sidebar)` |
@@ -655,14 +655,14 @@ brand 로고(§5.1)만 예외 — 그건 아이콘 라이브러리가 아니라 
 | `--color-theme-border-subtle` | `color-mix(in oklch, var(--border) 35%, transparent)` |
 
 **다크/라이트는 자동으로 따라온다.** 우리 `:root` / `.dark` 가 이미 짝을 이루고 있으므로(§6),
-Radar 컴포넌트도 **테마 토글에 그대로 반응한다.** 이게 §6을 먼저 고쳐야 하는 이유다.
+기준 원본 컴포넌트도 **테마 토글에 그대로 반응한다.** 이게 §6을 먼저 고쳐야 하는 이유다.
 
 #### 손으로 고쳐야 하는 것은 **딱 세 가지뿐**
 
-1. **팔레트 직접 사용** — Radar가 `bg-red-500/15` `text-amber-800` 같은 걸 쓰는 곳
+1. **팔레트 직접 사용** — 기준 원본가 `bg-red-500/15` `text-amber-800` 같은 걸 쓰는 곳
    (예: `FilterPill.tsx` 의 `TONE_ACTIVE`). → `bg-destructive/15` `text-warning` 등 시맨틱으로.
    **grep 으로 전부 찾을 수 있다.** `-(red|amber|emerald|rose|sky|zinc|gray|slate)-\d` 패턴.
-2. **`skyhook-*` / `radar-accent` 브랜드 색** → `var(--primary)`
+2. **`원본-제공자-*` / `reference-accent` 브랜드 색** → `var(--primary)`
 3. **`clsx` → `cn()`** (import 한 줄 치환. 동작 동일 + tailwind-merge 이득)
 
 이 셋은 **기계적 치환(codemod)** 으로 한 번에 끝난다. 파일당 판단이 필요 없다.
@@ -671,11 +671,11 @@ Radar 컴포넌트도 **테마 토글에 그대로 반응한다.** 이게 §6을
 
 | 위치 | 문법 |
 |---|---|
-| **`shared/ui/radar/**`** (이식본) | Radar 문법 허용: `theme-*` 별칭 · 원본 구조 유지. **단 팔레트 색·`clsx`·브랜드 색은 금지** |
+| **`shared/ui/reference/**`** (이식본) | 기준 원본 문법 허용: `theme-*` 별칭 · 원본 구조 유지. **단 팔레트 색·`clsx`·브랜드 색은 금지** |
 | **그 외 전부** (우리가 쓰는 코드) | **§10.1-b shadcn 문법 필수**: `cn()` · `cva` · `data-slot` · 시맨틱 토큰만 |
 
-**경계가 폴더 하나로 명확하다.** "어디까지가 Radar 코드냐"를 매번 판단하지 않는다.
-회귀 가드도 이 경계로 건다: `theme-*` 클래스가 `shared/ui/radar/` **밖**에 나타나면 **FAIL**.
+**경계가 폴더 하나로 명확하다.** "어디까지가 기준 원본 코드냐"를 매번 판단하지 않는다.
+회귀 가드도 이 경계로 건다: `theme-*` 클래스가 `shared/ui/reference/` **밖**에 나타나면 **FAIL**.
 
 **새 화면은 우리 문법으로 짜고, 이식본을 부품으로 쓴다.** 이식본을 점진적으로 우리 문법으로
 옮길 수는 있지만 **지금 그걸 하느라 시간을 쓰지 않는다.** 화면이 먼저다.
@@ -683,7 +683,7 @@ Radar 컴포넌트도 **테마 토글에 그대로 반응한다.** 이게 §6을
 #### 이식 순서 (한 슬라이스 = 한 덩어리, 하지만 전부 이번에 끝낸다)
 
 ```
-R0  어댑터 + codemod        radar-theme.css · 팔레트/clsx/브랜드색 치환 · NOTICE
+R0  어댑터 + codemod        reference-theme.css · 팔레트/clsx/브랜드색 치환 · NOTICE
 R1  ui/ 나머지 24  ★         SearchPillInput · SearchBox · Facet · MultiSelectPicker · SelectMenu
                             Input · SortableTh · DistributionBar · SummaryTile · FreshnessControl
                             PageHeader · Collapse · CardSection · FetchResult · RestrictedState
@@ -701,21 +701,21 @@ R9  topology/ 3 · resources/ 51 · utils/ 30 · types/ 4 · assets/ 2 · perf/ 
 **각 R은 그 자체로 배포 가능하다** (부품만 늘어난다. 화면은 안 깨진다).
 **R0 → R1 → R2 를 먼저 한다.** 그래야 C1(상세)·C3(검색)이 원본 부품 위에서 만들어진다.
 
-### 11.5 **헷갈리지 말 것** — Radar에서 가져올 것 / 안 가져올 것
+### 11.5 **헷갈리지 말 것** — 기준 원본에서 가져올 것 / 안 가져올 것
 
 | | 판정 |
 |---|---|
 | **`ui/SearchPillInput.tsx`** | ★ **우리 C3(칩이 입력창 안)의 정본이다.** 이걸 가져온다 |
 | **`ui/FilterPill.tsx`** (이미 착륙함) | **우리 검색 칩이 아니다.** 원본 주석이 명시한다 — *"toggle pattern, not a combobox"*. `aria-pressed` 토글 버튼이다. **혼동 금지.** 심각도 필터 행 같은 데 쓴다 |
-| **Radar의 IA** (왼쪽 필터 사이드바 + `"Filter resources..."` 입력) | **안 가져온다.** 우리는 **1층 통합 태그 검색**이다 (VP-015 §3). **컴포넌트는 가져오되 IA는 우리 것.** |
-| **Radar의 라벨 텍스트** (`Pods` `Deployments` `Services` …) | **가져온다.** kind 표시명·컬럼명·감사 체크명은 Radar 것을 정본으로 쓰고 **한국어로 번역만** 한다. 새로 지어내지 않는다 |
-| **Radar의 `theme-*` 토큰** (`bg-theme-text-primary/10`) | **안 가져온다.** 전부 shadcn 시맨틱 토큰으로 치환 (§10.1-b) |
-| **Radar의 `clsx` 직접 사용** | **안 가져온다.** 우리는 `cn()` |
+| **기준 원본의 IA** (왼쪽 필터 사이드바 + `"Filter resources..."` 입력) | **안 가져온다.** 우리는 **1층 통합 태그 검색**이다 (VP-015 §3). **컴포넌트는 가져오되 IA는 우리 것.** |
+| **기준 원본의 라벨 텍스트** (`Pods` `Deployments` `Services` …) | **가져온다.** kind 표시명·컬럼명·감사 체크명은 기준 원본 것을 정본으로 쓰고 **한국어로 번역만** 한다. 새로 지어내지 않는다 |
+| **기준 원본의 `theme-*` 토큰** (`bg-theme-text-primary/10`) | **안 가져온다.** 전부 shadcn 시맨틱 토큰으로 치환 (§10.1-b) |
+| **기준 원본의 `clsx` 직접 사용** | **안 가져온다.** 우리는 `cn()` |
 | **`dock/LocalTerminalTab`** | 이미 착륙함. **우리는 웹이라 로컬 셸이 불가능하다. 렌더하지 않는다** (VP-015 §5.6) |
 
 ### 11.6 라이선스
 
-Radar는 **Apache-2.0**. 파일별 헤더를 추가하지 않고 루트 `NOTICE`와
+기준 원본는 **Apache-2.0**. 파일별 헤더를 추가하지 않고 루트 `NOTICE`와
 `LICENSE-APACHE-2.0.txt`가 귀속·수정·라이선스를 영구히 담당한다.
 `provider-logos` 는 **상표**다. nominative use이므로 `NOTICE` 에 상표 귀속을 별도로 적는다.
 

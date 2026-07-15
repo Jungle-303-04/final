@@ -299,7 +299,7 @@ $ git merge-base --is-ancestor 97c862da1 origin/woonyong/ui-layer-lab; echo $?
 | `origin/codex/gitops-cache-db-crd` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=462; 2026-07-04; feat: add gitops cache db crd rendering |
 | `origin/codex/headlamptest` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=607; 2026-07-07; feat(frontend): add headlamp network resource views |
 | `origin/codex/platform-foundation` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=555; 2026-07-06; docs: 운영 검증 용어 정리 |
-| `origin/codex/radar` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; ci: dev 푸시 AWS 직접 배포 활성화 |
+| `origin/codex/reference` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-11; ci: dev 푸시 AWS 직접 배포 활성화 |
 | `origin/codex/rca-log-evidence-scope-20260710` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=1; 2026-07-10; fix: RCA 시나리오 가용성 / provider 검증 경계 |
 | `origin/codex/release-flow-frontend-safe-pr-144` | C | 1 | 사람 판단 대기 | 미착륙·비활성; ahead=2; 2026-07-10; feat: add production readiness runner |
 | `origin/codex/release-flow-gate-contract-check-133` | A | 0 | 원격 삭제 완료 | origin/dev ancestor 증명; ahead=0; 2026-07-10; feat: enforce release flow production gate contract |
@@ -741,7 +741,7 @@ import-linter PASS(2 kept, 0 broken), pytest `1711 passed, 3 skipped`; 서비스
 | 경로 | lab 변경 요약 | dev 변경 요약 | 확정 해소안 |
 |---|---|---|---|
 | `.gitignore` | `.env.*`, `.env.example` 예외 | `.env*`, Bruno local/cert 제외 | dev |
-| `Makefile` | optional Radar target | local `smoke`, Actions smoke 제거 | dev |
+| `Makefile` | optional 기준 원본 target | local `smoke`, Actions smoke 제거 | dev |
 | `docs/README.md` | frontend 정본·테마 증거 색인 | backend·OSS·보안·release 색인 | dev |
 | `docs/auto/frontend-pipeline.md` | A/B/C 완료, A2 실행 상태 | 초기 frontend pipeline 상태 | 양측 보존: lab의 최신 상태를 정본으로 유지하고 dev 이력은 Git/night-log로 보존 |
 | `docs/auto/night-log.md` | frontend API·게이트·테마·A2 기록 | backend C/D/H1/H2·OSS 기록 | 양측 고유 블록 전부 보존, KST 시각 순 합성 |
@@ -1500,7 +1500,7 @@ JsonMap, AbortSignal, ID 검증을 완료 앵커 전까지 제품 화면에서 �
 - stat: README와 OSS 문서 12 files, 28 insertions, 26 deletions. 파일 삭제 0건,
   `src/`, `alembic/`, `deploy/`, `tests/`, `frontend/` 변경 0건.
 - 제품 표기: Opsia/opsia, OpsiaBench, `oci://ghcr.io/opsia/charts/opsia`.
-  코드 식별자·event subject·DB schema와 `~/.radar/kubeheal-timeline.db` 저장 경로는 보존했다.
+  코드 식별자·event subject·DB schema와 `~/.reference/kubeheal-timeline.db` 저장 경로는 보존했다.
 - gate: docs index 9 passed; Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
 - 4조건: 전체 그린; merge-tree exit 0/tree `4c354fd97af928d7de65d881dc74540517c9cb6a`;
@@ -2980,17 +2980,17 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
 - `reference-contract-map.md:157-160,353`의 정본상 traffic source/connect/flow API는 모두
   `BE-Gap-060~063`이며, Service inventory를 observed flow로 대체할 수 없고 menu·graph·action 전체가
   미노출이다. 따라서 현재 관계 뷰로 이전할 유의미한 실측 edge 계약도 없다.
-- repo의 Caretta/Prometheus 설명은 `docs/argocd-radar-learning-lab.md`와 `deploy/oss`의 외부 Radar
+- repo의 Caretta/Prometheus 설명은 `docs/argocd-reference-learning-lab.md`와 `deploy/oss`의 외부 기준 원본
   학습 환경이다. 제품 런타임 source가 아니며 `product-state-visual-harness.tsx`의 `traffic` 탭도
   primitive 시각 검증 fixture일 뿐 화면 데이터가 아니다.
 - 결론: mock·synthetic·하드코딩 Live Traffic 제품 화면은 존재하지 않아 제거 대상 0건이다.
   D-028 관계 뷰는 BQ-034가 제공할 provider-neutral observed edge 계약과 앵커 전까지 빈 슬롯으로
-  유지하며, inventory/Prometheus 추측 집계나 Radar 경로 재사용을 금지한다.
+  유지하며, inventory/Prometheus 추측 집계나 기준 원본 경로 재사용을 금지한다.
 
-### 2026-07-14 01:11 KST — D-027 외부 Radar 실측 보강·BQ-034 입력 정정
+### 2026-07-14 01:11 KST — D-027 외부 기준 원본 실측 보강·BQ-034 입력 정정
 
 - 위 결론의 "제품 런타임 source 없음"은 Opsia 코드 경계에 한정한다. 사용자가 보고 있던 현행 화면은
-  `scripts/radar.sh:11-15,70-73,121-132`가 실행한 외부 Radar v1.8.1(`127.0.0.1:9280`)이다.
+  `scripts/reference.sh:11-15,70-73,121-132`가 실행한 외부 기준 원본 v1.8.1(`127.0.0.1:9280`)이다.
   `GET /api/traffic/flows?since=5m` 실측은 HTTP 200, `source=caretta`, 원본 233건·집계 146건이었다.
   즉 화면 데이터는 mock이 아니라 Caretta eBPF→Prometheus 관측값이다.
 - 실측 응답에서 관계 뷰로 이전 가능한 후보는 source/destination의 name·namespace·kind·workload·port,
@@ -3005,7 +3005,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   authorization revision, filter fingerprint, completeness와 unresolved/restricted 사유다.
   `reference-feature-inventory.md:193-194,494,497-498`에 따라 현행은 REST 수동 snapshot이며,
   resume cursor·ordering·idempotency가 없는 stream을 추측 도입하지 않는다.
-- Radar의 virtual Internet/Addon edge, client heuristic grouping, animation threshold는 presentation
+- 기준 원본의 virtual Internet/Addon edge, client heuristic grouping, animation threshold는 presentation
   파생이므로 canonical edge로 이전하지 않는다. BQ-034 착륙 전 Opsia 관계 뷰는 계속 빈 슬롯이다.
 
 ### 2026-07-14 01:15 KST — D-028 독립 메뉴 통합·검증 완료
@@ -3015,7 +3015,7 @@ target preflight·register 네 함수와 strict Zod 계약을 claim했다. 1회�
   이전 사이클에서 이미 Resources graph slot으로 통합되어 독립 surface가 없다.
 - D-028 정본에 따라 Resources가 필터·시간·그래프·표 4층을 소유한다. 그러나 BQ-034 stable
   observed edge 계약과 프론트 API·strict Zod·adapter 앵커 전에는 관계 뷰를 렌더하지 않는다.
-  물리 뷰도 별도 기획·계약 전에는 빈 슬롯이며 Radar DTO·heuristic을 재사용하지 않는다.
+  물리 뷰도 별도 기획·계약 전에는 빈 슬롯이며 기준 원본 DTO·heuristic을 재사용하지 않는다.
 - targeted route/shell/composition 회귀는 17/17 PASS다. `npm run check`는 typecheck·lint,
   134 files/954 tests, design guard 381 files, shadcn audit 482 previews, production build
   14,551 modules까지 exit 0이다.
@@ -3635,7 +3635,7 @@ gone branch 0, `(prunable)` worktree 0이다.
 
 [사이트 복구 후속] 2026-07-14 09:47 KST / production·mTLS route의 in-cluster 정본을 `console-dev`로 manifest·두 workflow·계약 테스트에 고정하고 `dev-k8s.woonyong.org`를 Bruno/API·개발 콘솔용 mTLS endpoint로 명문화 / Cloudflare DNS·원격 ingress는 kubectl 밖의 상태임을 route matrix에 기록하고 매일 09:17 KST scheduled dry-run으로 GitHub API token·account·tunnel 식별자와 drift 검증; 무인증 `dev-k8s` 403은 WAF 정상 동작, nginx resolver+변수 proxy_pass는 기존 dev 실물 재확인 / 다음 한 걸음: product → frontend stash 복원
 
-[VP-015 P1] 2026-07-14 12:58 KST / ui-layer-lab의 VP-014~017·Radar parity·목표 지시·열린 결정·배포 상태·야간 지시를 dev 정본으로 착륙 / 사용자 소유 미추적 파일 보존 / 다음 한 걸음: gate-fast 후 dev push
+[VP-015 P1] 2026-07-14 12:58 KST / ui-layer-lab의 VP-014~017·기준 원본 parity·목표 지시·열린 결정·배포 상태·야간 지시를 dev 정본으로 착륙 / 사용자 소유 미추적 파일 보존 / 다음 한 걸음: gate-fast 후 dev push
 
 [VP-015 P1/P2] 2026-07-14 13:03 KST / `a4ae8a04b` dev 착륙·로컬 gate-fast 981개 통과, GitHub 환경 `AWS_DEV_DEPLOY_ENABLED=1` 활성화 / 첫 Dev Gate `29304915902`는 신규 문서 7개가 `docs/README.md` 색인에 없어 실패했으며 제품·배포 오류가 아님 / 색인 계약과 단일 배포 상태판을 교정해 자동 FULL 재증명
 
@@ -3643,7 +3643,7 @@ gone branch 0, `(prunable)` worktree 0이다.
 
 [VP-015 P2~P4] 2026-07-14 13:22 KST / Dev Gate `29305649957` 성공 뒤 자동 FULL Dev Deploy `29305760596` in_progress로 P2 증명; 기존 FULL `29302233623`의 backend·console digest, public health 200, 고정 관리자 로그인, cluster-1/2 ready·agent 1/1·resource read 재확인 / 레거시 DB 재생성 경로도 `AWS_BOOTSTRAP_ADMIN=1`로 정렬(비밀번호는 secret에만 보존)
 
-[VP-015 P5] 2026-07-14 13:22 KST / Skyhook Radar v1.5.7 고정 커밋 `88bd1e97fa5c10be8735154ae379d50c1ba1df2b` 889파일을 `references/upstream/`에 보존, Apache-2.0 원문·root NOTICE·README 귀속 반영 / 이식 파일은 원본 헤더와 Opsia 수정 사실을 함께 남기는 규율 확정 / 다음 한 걸음: S0 모션 기반
+[VP-015 P5] 2026-07-14 13:22 KST / 원본 제공자 기준 원본 v1.5.7 고정 커밋 `88bd1e97fa5c10be8735154ae379d50c1ba1df2b` 889파일을 `references/upstream/`에 보존, Apache-2.0 원문·root NOTICE·README 귀속 반영 / 이식 파일은 원본 헤더와 Opsia 수정 사실을 함께 남기는 규율 확정 / 다음 한 걸음: S0 모션 기반
 
 [VP-015 S0] 2026-07-14 13:31 KST / `frontend/src/motion/`에 VP-017 exact duration·easing·stagger token, FLIP camera morph(420ms·동시 200 상한), 520ms clamp, reduced-motion CSS/JS 차단을 중앙화 / 컴포넌트 밖 keyframes·animate 회귀 가드와 21개 계약 테스트 추가 / typecheck·lint·design guard·production build 통과, 화면 구조 변화 없음 / 다음 한 걸음: gate-fast→dev push 후 S1 Clusters
 

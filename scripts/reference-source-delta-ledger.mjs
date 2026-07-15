@@ -7,10 +7,12 @@ import process from 'node:process'
 import { spawn } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { PROVENANCE_PATH, referenceProvenance } from './reference-provenance.mjs'
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '..')
-export const DEFAULT_BASE_REVISION = '3ff2b1095151c690bf536e8e6ca685c2703fcd70'
-export const DEFAULT_TARGET_REVISION = 'cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc'
+export const DEFAULT_BASE_REVISION = referenceProvenance.uiBaseRevision
+export const DEFAULT_TARGET_REVISION = referenceProvenance.revision
 const DEFAULT_REPOSITORY = '/tmp/opsia-upstream-verify'
 const DEFAULT_INVENTORY = path.join(REPOSITORY_ROOT, 'docs', 'spec', 'frontend', 'reference-feature-inventory.md')
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-ui-delta-ledger.json')
@@ -21,7 +23,7 @@ const DEFAULT_CLASSIFICATION_INPUT = path.join(
   'migration',
   'reference-ui-delta-classifications.json',
 )
-const DEFAULT_SOURCE_REPOSITORY = 'https://github.com/skyhook-io/radar.git'
+const PROVENANCE_REFERENCE = path.relative(REPOSITORY_ROOT, PROVENANCE_PATH).split(path.sep).join('/')
 const DEFAULT_SCOPE = ['web', 'packages/k8s-ui']
 
 const DELTA_LEDGER_SCHEMA_VERSION = 3
@@ -106,7 +108,7 @@ export function resolveDeltaLedgerOptions(options = {}) {
     repository,
     baseRevision: options.baseRevision ?? DEFAULT_BASE_REVISION,
     targetRevision: options.targetRevision ?? DEFAULT_TARGET_REVISION,
-    sourceRepository: options.sourceRepository ?? DEFAULT_SOURCE_REPOSITORY,
+    sourceProvenance: options.sourceProvenance ?? PROVENANCE_REFERENCE,
     scope: options.scope ?? DEFAULT_SCOPE,
     classificationInput: options.classificationInput ?? (
       repository === DEFAULT_REPOSITORY ? DEFAULT_CLASSIFICATION_INPUT : null
@@ -128,7 +130,7 @@ function applyClassifications(files, classifications) {
 export function buildDeltaLedger({
   baseRevision,
   targetRevision,
-  sourceRepository = DEFAULT_SOURCE_REPOSITORY,
+  sourceProvenance = PROVENANCE_REFERENCE,
   scope = DEFAULT_SCOPE,
   changes,
   baseFiles,
@@ -143,7 +145,7 @@ export function buildDeltaLedger({
   const statusCounts = Object.fromEntries([...CHANGE_STATUSES].map((status) => [status, files.filter((row) => row.status === status).length]))
   const ledger = {
     schemaVersion: DELTA_LEDGER_SCHEMA_VERSION,
-    sourceRepository,
+    sourceProvenance,
     baseRevision,
     targetRevision,
     scope: [...scope].map(normalizedPath),
@@ -322,7 +324,7 @@ function validateMotion(interaction, label, errors) {
 function immutableDeltaEvidence(ledger) {
   return {
     schemaVersion: ledger?.schemaVersion,
-    sourceRepository: ledger?.sourceRepository,
+    sourceProvenance: ledger?.sourceProvenance,
     baseRevision: ledger?.baseRevision,
     targetRevision: ledger?.targetRevision,
     scope: ledger?.scope,
@@ -362,18 +364,18 @@ function assertClassificationEvidenceMatches(current, generated, output) {
   }
 }
 
-export function validateClassificationInput(input, { sourceRepository, targetRevision } = {}) {
+export function validateClassificationInput(input, { sourceProvenance, targetRevision } = {}) {
   const errors = []
   if (!input || typeof input !== 'object' || Array.isArray(input)) return ['classification input must be an object']
   if (input.schemaVersion !== 1) errors.push('classification input schemaVersion must equal 1')
-  if (typeof input.sourceRepository !== 'string' || !input.sourceRepository.startsWith('https://')) {
-    errors.push('classification input sourceRepository must be an HTTPS URL')
+  if (input.sourceProvenance !== PROVENANCE_REFERENCE) {
+    errors.push(`classification input sourceProvenance must equal ${PROVENANCE_REFERENCE}`)
   }
   if (!REVISION.test(input.targetRevision ?? '')) {
     errors.push('classification input targetRevision must be a 40-character lowercase hexadecimal revision')
   }
-  if (sourceRepository && input.sourceRepository !== sourceRepository) {
-    errors.push('classification input sourceRepository must match the generated ledger')
+  if (sourceProvenance && input.sourceProvenance !== sourceProvenance) {
+    errors.push('classification input sourceProvenance must match the generated ledger')
   }
   if (targetRevision && input.targetRevision !== targetRevision) {
     errors.push('classification input targetRevision must match the generated ledger')
@@ -427,7 +429,7 @@ export function validateClassificationInput(input, { sourceRepository, targetRev
   return errors
 }
 
-async function readClassificationInput(classificationInput, { sourceRepository, targetRevision }) {
+async function readClassificationInput(classificationInput, { sourceProvenance, targetRevision }) {
   if (!classificationInput) return null
   let parsed
   try {
@@ -435,7 +437,7 @@ async function readClassificationInput(classificationInput, { sourceRepository, 
   } catch (error) {
     throw new Error(`classification input is not valid JSON: ${classificationInput} (${error instanceof Error ? error.message : String(error)})`)
   }
-  const errors = validateClassificationInput(parsed, { sourceRepository, targetRevision })
+  const errors = validateClassificationInput(parsed, { sourceProvenance, targetRevision })
   if (errors.length > 0) throw new Error(`classification input validation failed:\n${errors.join('\n')}`)
   return parsed
 }
@@ -450,7 +452,7 @@ export function validateDeltaLedger(ledger, {
   if (ledger.schemaVersion !== DELTA_LEDGER_SCHEMA_VERSION) errors.push(`schemaVersion must equal ${DELTA_LEDGER_SCHEMA_VERSION}`)
   if (!REVISION.test(ledger.baseRevision ?? '')) errors.push('baseRevision must be a 40-character lowercase hexadecimal revision')
   if (!REVISION.test(ledger.targetRevision ?? '')) errors.push('targetRevision must be a 40-character lowercase hexadecimal revision')
-  if (typeof ledger.sourceRepository !== 'string' || !ledger.sourceRepository.startsWith('https://')) errors.push('sourceRepository must be an HTTPS URL')
+  if (ledger.sourceProvenance !== PROVENANCE_REFERENCE) errors.push(`sourceProvenance must equal ${PROVENANCE_REFERENCE}`)
   if (!Array.isArray(ledger.scope) || ledger.scope.length === 0) errors.push('scope must be a non-empty array')
   if (!Array.isArray(ledger.files)) return [...errors, 'files must be an array']
   if (ledger.fileCount !== ledger.files.length) errors.push('fileCount must equal files.length')
@@ -757,7 +759,7 @@ export async function writeDeltaLedger({
       throw new Error(`source UI delta ledger is not valid JSON: ${output}`)
     }
     const parsedClassificationInput = await readClassificationInput(classificationInput, {
-      sourceRepository: DEFAULT_SOURCE_REPOSITORY,
+      sourceProvenance: PROVENANCE_REFERENCE,
       targetRevision,
     })
     validationContext = {

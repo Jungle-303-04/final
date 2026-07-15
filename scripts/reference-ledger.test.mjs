@@ -99,11 +99,11 @@ test('원본의 모든 파일을 결정적인 이식 상태와 검증 대상으�
   )
 })
 
-test('ledger는 원격 출처와 파일별 언어·용도를 누락 없이 요구한다', () => {
+test('ledger는 provenance 포인터와 파일별 언어·용도를 누락 없이 요구한다', () => {
   const errors = validateLedger({
     schemaVersion: 2,
     sourceRevision: REVISION,
-    sourceRepository: '',
+    sourceProvenance: '',
     files: [
       {
         path: 'web/src/App.tsx',
@@ -119,7 +119,7 @@ test('ledger는 원격 출처와 파일별 언어·용도를 누락 없이 요�
   })
 
   assert.deepEqual(errors, [
-    'sourceRepository must be an HTTPS URL',
+    'sourceProvenance must equal references/provenance/source.json',
     'web/src/App.tsx: language is required',
     'web/src/App.tsx: purpose is required',
   ])
@@ -129,7 +129,7 @@ test('누락된 해시와 이식 검증 대상을 ledger 오류로 보고한다'
   const errors = validateLedger({
     schemaVersion: 2,
     sourceRevision: REVISION,
-    sourceRepository: 'https://github.com/skyhook-io/radar.git',
+    sourceProvenance: 'references/provenance/source.json',
     files: [
       {
         path: 'web/src/App.tsx',

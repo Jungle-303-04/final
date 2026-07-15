@@ -6,14 +6,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "references" / "upstream"
+PROVENANCE = ROOT / "references" / "provenance" / "source.json"
 SOURCE_LEDGER = ROOT / "docs" / "migration" / "reference-source-ledger.json"
-SOURCE_REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc"
-SOURCE_REPOSITORY = "https://github.com/skyhook-io/radar.git"
 UI_SOURCE_PREFIX = "packages/k8s-ui/src/"
 
 
 def load_source_ledger() -> dict[str, object]:
     return json.loads(SOURCE_LEDGER.read_text(encoding="utf-8"))
+
+
+def load_provenance() -> dict[str, object]:
+    return json.loads(PROVENANCE.read_text(encoding="utf-8"))
 
 
 def source_files() -> dict[str, Path]:
@@ -30,11 +33,12 @@ def sha256(path: Path) -> str:
 
 def test_frozen_upstream_snapshot_matches_committed_source_ledger() -> None:
     ledger = load_source_ledger()
+    provenance = load_provenance()
     rows = ledger["files"]
     assert isinstance(rows, list)
     assert ledger["schemaVersion"] == 2
-    assert ledger["sourceRevision"] == SOURCE_REVISION
-    assert ledger["sourceRepository"] == SOURCE_REPOSITORY
+    assert ledger["sourceRevision"] == provenance["revision"]
+    assert ledger["sourceProvenance"] == "references/provenance/source.json"
     assert ledger["fileCount"] == len(rows)
 
     files = source_files()
@@ -47,7 +51,7 @@ def test_frozen_upstream_snapshot_matches_committed_source_ledger() -> None:
         assert sha256(file_path) == row["sha256"]
 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    assert f"REFERENCE_REVISION ?= {SOURCE_REVISION}" in makefile
+    assert "reference-provenance.mjs revision" in makefile
     assert "node scripts/reference-ledger.mjs" in makefile
 
 
@@ -65,14 +69,17 @@ def test_upstream_ui_snapshot_is_complete_and_neutrally_named() -> None:
 
     assert source.is_dir()
     assert snapshot_paths == ledger_paths
-    assert not (ROOT / "references" / "radar-upstream").exists()
+    provenance = load_provenance()
+    legacy_directory = f"{provenance['legacyProductTerms'][0]}-upstream"
+    assert not (ROOT / "references" / legacy_directory).exists()
 
 
 def test_upstream_license_and_notice_pin_the_audited_source() -> None:
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
+    provenance = load_provenance()
 
     assert (ROOT / "LICENSE-APACHE-2.0.txt").read_bytes() == (UPSTREAM / "LICENSE").read_bytes()
-    assert "https://github.com/skyhook-io/radar" in notice
-    assert SOURCE_REVISION in notice
+    assert str(provenance["repository"]).removesuffix(".git") in notice
+    assert provenance["revision"] in notice
     assert "substantially modified and rewritten" in notice
     assert "nominative use" in notice

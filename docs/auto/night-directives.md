@@ -658,7 +658,7 @@ GAP-002/003/004와 이미 착륙한 계약은 중복 구현하지 않고 새 BQ 
 2. `docs/spec/frontend/vp-015-global-shell.md`   화면 골격 최상위 정본
 3. `docs/spec/frontend/vp-017-motion-spec.md`    모션 규격 (수치가 계약)
 4. `docs/spec/frontend/vp-016-delivery-plan.md`  슬라이스 실행 계획
-5. `docs/spec/frontend/radar-parity-map.md`      레퍼런스 대조
+5. `docs/spec/frontend/reference-parity-map.md`      레퍼런스 대조
 6. `docs/auto/open-decisions-20260714.md`        미확정 6건 — 기본값으로 진행, 격리해 둘 것
 
 **확정 변경 5건 (이전 기획과 다르다):**
@@ -677,9 +677,9 @@ GAP-002/003/004와 이미 착륙한 계약은 중복 구현하지 않고 새 BQ 
 
 **선행 조건 (이게 안 되면 S1을 시작할 수 없다):**
 P1 기획 문서 dev 착륙 · **P2 `AWS_DEV_DEPLOY_ENABLED=1`** · P3 백엔드 FULL 배포 ·
-P4 에이전트 재등록 · P5 Radar 서브트리 + NOTICE (Apache-2.0, 이식 전 필수)
+P4 에이전트 재등록 · P5 기준 원본 서브트리 + NOTICE (Apache-2.0, 이식 전 필수)
 
-**취소된 이전 지시:** `scripts/radar.sh` 삭제 (레퍼런스 실행용. 유지한다)
+**취소된 이전 지시:** `scripts/reference.sh` 삭제 (레퍼런스 실행용. 유지한다)
 
 **슬라이스 순서:** S0(모션 기반) → S1(Clusters) → S2(연결 위자드) → S3(태그 검색) →
 S4(물리 뷰 ★) → S5(표) → S6(전체화면 상세) → S7(AI) → S8(하단 독) → … → S17(Home 위젯)

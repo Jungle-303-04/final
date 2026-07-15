@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -9,6 +10,13 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts" / "commit-msg-gate.sh"
+PROVENANCE = ROOT / "references" / "provenance" / "source.json"
+
+
+def legacy_product_title() -> str:
+    term = json.loads(PROVENANCE.read_text(encoding="utf-8"))["legacyProductTerms"][0]
+    assert isinstance(term, str)
+    return term.title()
 
 
 @pytest.mark.parametrize(
@@ -19,7 +27,7 @@ GATE = ROOT / "scripts" / "commit-msg-gate.sh"
         ("feature: 설정 화면을 연다", "형식이어야 한다"),
         ("fix: 설정 링크를 바로잡는다.", "마침표로 끝내지 않는다"),
         ("chore: 설정 변경", "모호한 단어로 끝내지 않는다"),
-        ("docs: Radar 이식 범위를 기록한다", "커밋 제목에 'radar'"),
+        (f"docs: {legacy_product_title()} 이식 범위를 기록한다", "provenance 금지어"),
     ],
 )
 def test_commit_message_gate_rejects_six_violation_classes(

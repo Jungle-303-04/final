@@ -363,7 +363,7 @@ Bundle route는 200을 반환한다.
   OpsiaBench로 정리했다. Helm OCI 예시는
   `oci://ghcr.io/opsia/charts/opsia`를 사용한다.
 - 보존 경계: 코드 식별자·event subject·DB schema는 변경하지 않았고,
-  `~/.radar/kubeheal-timeline.db` 레거시 저장 경로와 Apache License 원문도 유지했다.
+  `~/.reference/kubeheal-timeline.db` 레거시 저장 경로와 Apache License 원문도 유지했다.
 - 전체 게이트: Ruff lint/format PASS, import-linter 2 kept/0 broken,
   pytest `1838 passed, 3 skipped`; manifest management 69, target 20.
 
