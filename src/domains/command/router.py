@@ -6,6 +6,7 @@ import time
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from domains.command.debug_queries import (
     debug_query_plan,
@@ -59,8 +60,9 @@ from packages.contracts.gateway.responses import (
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
+from packages.contracts.parity import OperationEvent
 from packages.runtime.command_wakeup import WAKEUP
-from packages.runtime.dependencies import get_db, get_events
+from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.retry import async_retry_db_conflict
 
 # 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
@@ -102,6 +104,77 @@ def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> A
         correlation_id=accepted.event.correlation_id,
         command_id=command_id,
     )
+
+
+async def publish_operation_event(
+    operation_events: Any,
+    *,
+    command_id: str | None,
+    status: str,
+    payload: dict[str, object],
+) -> None:
+    """Publish through the injected cross-replica broker when an HTTP route provides it."""
+    if not command_id:
+        return
+    publish = getattr(operation_events, "publish", None)
+    if not callable(publish):
+        return
+    kind = (
+        "completed"
+        if status == CommandStatus.COMPLETED
+        else "failed"
+        if status == CommandStatus.FAILED
+        else "progress"
+    )
+    await publish(
+        command_id=command_id,
+        kind=kind,
+        payload={"status": status, **payload},
+    )
+
+
+async def publish_accepted_operation(
+    operation_events: Any,
+    command: CommandRequestedBody,
+    response: AcceptedResponse,
+) -> None:
+    await publish_operation_event(
+        operation_events,
+        command_id=response.command_id,
+        status=CommandStatus.QUEUED,
+        payload={
+            "cluster_id": command.cluster_id,
+            "action": command.action,
+            "correlation_id": response.correlation_id,
+        },
+    )
+
+
+def command_snapshot_event(row: dict[str, object]) -> OperationEvent:
+    status = str(row["status"])
+    kind = (
+        "completed"
+        if status == CommandStatus.COMPLETED
+        else "failed"
+        if status == CommandStatus.FAILED
+        else "progress"
+    )
+    return OperationEvent(
+        command_id=str(row["command_id"]),
+        sequence=0,
+        kind=kind,
+        payload={
+            "status": status,
+            "cluster_id": str(row["cluster_id"]),
+            "action": str(row["action"]),
+            "correlation_id": str(row["correlation_id"]),
+            "result": dict(row.get("result") or {}),
+        },
+    )
+
+
+def sse_operation_event(event: OperationEvent) -> str:
+    return f"id: {event.sequence}\nevent: operation\ndata: {event.model_dump_json()}\n\n"
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
@@ -188,6 +261,7 @@ async def accept_deployment_control(
     policy_decision_ref: str | None,
     direct_execution: bool,
     direct_execution_confirmed: bool,
+    operation_events: Any,
     current: Any,
     db: Any,
     events: Any,
@@ -228,7 +302,9 @@ async def accept_deployment_control(
         command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return command_accepted_response(command, accepted)
+    response = command_accepted_response(command, accepted)
+    await publish_accepted_operation(operation_events, command, response)
+    return response
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
@@ -275,6 +351,7 @@ async def commands(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
 ) -> AcceptedResponse:
     if payload.action in RCA_TEST_COMMAND_ACTIONS:
         raise HTTPException(
@@ -305,7 +382,9 @@ async def commands(
         command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return command_accepted_response(command, accepted)
+    response = command_accepted_response(command, accepted)
+    await publish_accepted_operation(operation_events, command, response)
+    return response
 
 
 @router.post(gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH, response_model=AcceptedResponse)
@@ -317,6 +396,7 @@ async def scale_deployment(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
 ) -> AcceptedResponse:
     command_payload = {
         "namespace": namespace,
@@ -334,6 +414,7 @@ async def scale_deployment(
         policy_decision_ref=payload.policy_decision_ref,
         direct_execution=payload.direct_execution,
         direct_execution_confirmed=payload.direct_execution_confirmed,
+        operation_events=operation_events,
         current=current,
         db=db,
         events=events,
@@ -349,6 +430,7 @@ async def restart_deployment(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
 ) -> AcceptedResponse:
     command_payload = {
         "namespace": namespace,
@@ -365,6 +447,7 @@ async def restart_deployment(
         policy_decision_ref=payload.policy_decision_ref,
         direct_execution=payload.direct_execution,
         direct_execution_confirmed=payload.direct_execution_confirmed,
+        operation_events=operation_events,
         current=current,
         db=db,
         events=events,
@@ -423,6 +506,40 @@ async def command_status(
     )
 
 
+@router.get(gateway_routes.COMMAND_EVENTS_PATH)
+async def command_events(
+    command_id: str,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
+) -> StreamingResponse:
+    """SSE operation stream: latest durable snapshot followed by brokered state changes."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    row = await db.get_agent_command(command_id, workspace_id)
+    if row is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
+    subscribe = getattr(operation_events, "subscribe", None)
+    if not callable(subscribe):
+        raise HTTPException(status_code=503, detail="operation event stream unavailable")
+    subscription = await subscribe(command_id)
+    snapshot = command_snapshot_event(dict(row))
+
+    async def stream():
+        try:
+            yield sse_operation_event(snapshot)
+            while True:
+                yield sse_operation_event(await subscription.next())
+        finally:
+            await subscription.close()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # agent 라우트 — 각 핸들러의 identity dependency 로 per-cluster 토큰 인증.
 # workspace_id/cluster_id 는 토큰으로 인증된 identity 에서만 취하고 body/query 는 신뢰 안 함.
 agent_router = APIRouter()
@@ -434,12 +551,24 @@ async def poll_command(
     timeout: int = DEFAULT_POLL_SECONDS,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> AgentCommandPollResponse:
     # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
     # cluster_id/workspace_id 는 토큰 identity 에서 — 임의 클러스터/워크스페이스 폴링 차단.
     row = await lease_next_command(
         db, identity.cluster_id, identity.workspace_id, agent_id, timeout
     )
+    if row is not None:
+        await publish_operation_event(
+            operation_events,
+            command_id=str(row["command_id"]),
+            status=CommandStatus.LEASED,
+            payload={
+                "cluster_id": identity.cluster_id,
+                "action": str(row["action"]),
+                "correlation_id": str(row["correlation_id"]),
+            },
+        )
     return AgentCommandPollResponse(command=row)
 
 
@@ -449,6 +578,7 @@ async def command_start(
     payload: CommandStartRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> CommandStartedResponse:
     correlation_id = await async_retry_db_conflict(
         lambda: db.start_agent_command(
@@ -463,6 +593,12 @@ async def command_start(
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    await publish_operation_event(
+        operation_events,
+        command_id=command_id,
+        status=CommandStatus.RUNNING,
+        payload={"cluster_id": identity.cluster_id, "correlation_id": correlation_id},
+    )
     return CommandStartedResponse(accepted=True, correlation_id=correlation_id)
 
 
@@ -474,6 +610,7 @@ async def command_heartbeat(
     payload: CommandHeartbeatRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> CommandHeartbeatResponse:
     correlation_id = await async_retry_db_conflict(
         lambda: db.heartbeat_agent_command(
@@ -487,6 +624,12 @@ async def command_heartbeat(
     )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    await publish_operation_event(
+        operation_events,
+        command_id=command_id,
+        status=CommandStatus.RUNNING,
+        payload={"cluster_id": identity.cluster_id, "correlation_id": correlation_id},
+    )
     return CommandHeartbeatResponse(accepted=True, correlation_id=correlation_id)
 
 
@@ -496,6 +639,7 @@ async def command_result(
     payload: CommandResultRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> EventIdAcceptedResponse:
     command_row = await db.get_agent_command(command_id, identity.workspace_id)
     if command_row is None or str(command_row.get("cluster_id")) != identity.cluster_id:
@@ -526,6 +670,16 @@ async def command_result(
     )
     if completed is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    await publish_operation_event(
+        operation_events,
+        command_id=command_id,
+        status=payload.status,
+        payload={
+            "cluster_id": identity.cluster_id,
+            "correlation_id": str(command_row.get("correlation_id") or ""),
+            "result": result,
+        },
+    )
     if (
         uninstall_result
         and payload.status == CommandStatus.COMPLETED

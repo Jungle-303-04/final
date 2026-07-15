@@ -4,8 +4,6 @@ import asyncio
 
 from packages.runtime.operation_events import InMemoryOperationEventBroker
 
-from packages.contracts.parity import OperationEvent
-
 
 def test_operation_event_broker_fans_out_only_matching_command_events() -> None:
     async def run() -> None:
@@ -19,12 +17,10 @@ def test_operation_event_broker_fans_out_only_matching_command_events() -> None:
             payload={"status": "running"},
         )
 
-        assert published == OperationEvent(
-            command_id="command-1",
-            sequence=1,
-            kind="progress",
-            payload={"status": "running"},
-        )
+        assert published.command_id == "command-1"
+        assert published.sequence == 1
+        assert published.kind == "progress"
+        assert published.payload == {"status": "running"}
         assert await matching.next() == published
         assert other.empty()
         await matching.close()

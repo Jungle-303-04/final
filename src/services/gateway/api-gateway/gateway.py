@@ -78,6 +78,7 @@ from packages.runtime.metrics import (
     render_multi_labeled_gauge,
     render_prometheus_metrics,
 )
+from packages.runtime.operation_events import RedisOperationEventBroker
 from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
@@ -124,6 +125,9 @@ class ApiGateway:
         self.bus = event_bus or NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = session_store or RedisSessionStore(self._session_store_config())
+        self.operation_events = RedisOperationEventBroker(
+            env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL)
+        )
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
@@ -138,6 +142,7 @@ class ApiGateway:
         # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
         self.app.state.db = self.db
         self.app.state.events = self.events
+        self.app.state.operation_events = self.operation_events
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
@@ -269,6 +274,7 @@ class ApiGateway:
         await wait_for_database(self.db)
         await self.sessions.connect()
         await self.bus.connect()
+        await self.operation_events.start()
         # 명령 롱폴 웨이크업 — 직결 URL 이 설정된 경우에만 LISTEN 시작.
         # (pgbouncer transaction pooling 경유로는 LISTEN 불가; 미설정 시 주기 폴링 유지)
         notify_url = env(COMMAND_NOTIFY_DATABASE_URL_ENV, "")
@@ -277,6 +283,7 @@ class ApiGateway:
         try:
             yield
         finally:
+            await self.operation_events.close()
             await WAKEUP.stop()
             await self.bus.close()
             await self.sessions.close()

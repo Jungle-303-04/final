@@ -10,6 +10,7 @@ from domains.command.handler import build_plan
 from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     agent_debug_query,
+    command_events,
     command_heartbeat,
     command_result,
     command_start,
@@ -31,6 +32,7 @@ from packages.contracts.gateway.requests import (
     DeploymentScaleRequest,
 )
 from packages.contracts.gateway.responses import AcceptedResponse
+from packages.runtime.operation_events import InMemoryOperationEventBroker
 
 AGENT_IDENTITY = ClusterAgentIdentity(
     workspace_id="trusted-workspace",
@@ -735,6 +737,31 @@ def test_command_heartbeat_extends_current_lease() -> None:
     asyncio.run(run())
 
 
+def test_command_start_publishes_realtime_operation_event() -> None:
+    async def run() -> None:
+        broker = InMemoryOperationEventBroker()
+        subscription = await broker.subscribe("cmd-1")
+        await command_start(
+            "cmd-1",
+            CommandStartRequest(agent_id="agent-1", lease_id="lease-1"),
+            identity=AGENT_IDENTITY,
+            db=SpyCommandLeaseDb(correlation_id="corr-1"),
+            operation_events=broker,
+        )
+
+        event = await subscription.next()
+        assert event.command_id == "cmd-1"
+        assert event.kind == "progress"
+        assert event.payload == {
+            "status": "running",
+            "cluster_id": "trusted-cluster",
+            "correlation_id": "corr-1",
+        }
+        await subscription.close()
+
+    asyncio.run(run())
+
+
 def test_command_heartbeat_rejects_stale_lease() -> None:
     async def run() -> None:
         try:
@@ -810,6 +837,27 @@ def test_command_status_missing_command_is_not_found() -> None:
             assert exc.status_code == 404
         else:
             raise AssertionError("expected HTTPException")
+
+    asyncio.run(run())
+
+
+def test_command_events_sse_starts_with_authorized_durable_snapshot() -> None:
+    async def run() -> None:
+        broker = InMemoryOperationEventBroker()
+        response = await command_events(
+            "cmd-debug-abc",
+            current=current_session(),
+            db=SpyCommandStatusDb(allowed=True, row=completed_command_row()),
+            operation_events=broker,
+        )
+        stream = response.body_iterator
+        first = await anext(stream)
+
+        assert first.startswith("id: 0\nevent: operation\ndata: ")
+        assert '"command_id":"cmd-debug-abc"' in first
+        assert '"kind":"completed"' in first
+        assert '"status":"completed"' in first
+        await stream.aclose()
 
     asyncio.run(run())
 
