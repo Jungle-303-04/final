@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from domains.rca.report_narrative import (
+    RCA_NARRATIVE_GENERATED,
+    RCA_NARRATIVE_PAYLOAD_KEY,
+    RCA_NARRATIVE_STATUS_KEY,
+    RCA_NARRATIVE_UNAVAILABLE,
+    normalize_rca_narrative,
+)
 from packages.contracts.event_bus.interfaces import JsonObject
 
 
@@ -15,6 +22,7 @@ def rca_report_projection(payload: JsonObject) -> JsonObject:
     """payload 원문에서 외부 노출 가능한 RCA 요약 필드만 뽑는다."""
     incident = payload.get("incident") if isinstance(payload.get("incident"), dict) else {}
     detail = payload.get("rca_detail") if isinstance(payload.get("rca_detail"), dict) else {}
+    narrative = normalize_rca_narrative(payload.get(RCA_NARRATIVE_PAYLOAD_KEY))
     return {
         "incident_id": incident.get("incident_id"),
         "cluster_id": incident.get("cluster_id"),
@@ -33,6 +41,10 @@ def rca_report_projection(payload: JsonObject) -> JsonObject:
         "candidates": _candidate_scores(payload),
         "supporting_evidence_refs": _evidence_refs(detail.get("supporting_evidence_refs"), payload),
         "missing_evidence_checks": _missing_checks(detail.get("missing_evidence_checks")),
+        RCA_NARRATIVE_PAYLOAD_KEY: narrative,
+        RCA_NARRATIVE_STATUS_KEY: (
+            RCA_NARRATIVE_GENERATED if narrative is not None else RCA_NARRATIVE_UNAVAILABLE
+        ),
     }
 
 
@@ -71,7 +83,18 @@ def rca_report_summary(row: JsonObject) -> JsonObject:
         "candidates": _object_list(value("candidates", [])),
         "supporting_evidence_refs": _object_list(value("supporting_evidence_refs", [])),
         "missing_evidence_checks": _object_list(value("missing_evidence_checks", [])),
+        RCA_NARRATIVE_PAYLOAD_KEY: normalize_rca_narrative(value(RCA_NARRATIVE_PAYLOAD_KEY)),
+        RCA_NARRATIVE_STATUS_KEY: _narrative_status(
+            value(RCA_NARRATIVE_STATUS_KEY),
+            value(RCA_NARRATIVE_PAYLOAD_KEY),
+        ),
     }
+
+
+def _narrative_status(value: Any, narrative: Any) -> str:
+    if value == RCA_NARRATIVE_GENERATED and normalize_rca_narrative(narrative) is not None:
+        return RCA_NARRATIVE_GENERATED
+    return RCA_NARRATIVE_UNAVAILABLE
 
 
 def _str_list(value: Any) -> list[str]:

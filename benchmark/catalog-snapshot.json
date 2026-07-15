@@ -4,10 +4,10 @@
     "src/services/ai/agent/causes/catalog/autoscaling.yaml": "de552ee7a6fbf63082a3bd21b134d4f896a00858aa9da52a547c9437f7f44d6a",
     "src/services/ai/agent/causes/catalog/crashloop.yaml": "3ec75199452721f68ea637b4e3a4db603627a1192de93fc6411d30c3bd3f1921",
     "src/services/ai/agent/causes/catalog/image_pull.yaml": "bc8835a14a951064c63d8e10c0a46125e9344de36cf4b762f0f4e68b48262970",
-    "src/services/ai/agent/causes/catalog/readiness.yaml": "e09f2afd27bcbab5a88a7908067d245a469a2ec9b4167aa0450cd18bf1742cf3",
+    "src/services/ai/agent/causes/catalog/readiness.yaml": "571d3aa836db2418804571d2bde695b69eda43d96baa7cf25b7139753045e7d4",
     "src/services/ai/agent/causes/catalog/scheduling.yaml": "8f9b6bfd18ebc1b9d5b3cc14eb90a1146563ce1ae65a885f5666981623f24d28",
     "src/services/ai/agent/causes/catalog/storage_volume.yaml": "312d3de23652bf2f73008482f8947512df026bfb92e7c47f3cf408b8ba5f2334",
-    "src/services/ai/agent/recovery/builtin.py": "97d0491054ececa0b564d585c244a04de905120d4f6fb80e91f19a13f1d472c0"
+    "src/services/ai/agent/recovery/builtin.py": "a36a4119eb69ec21c41bed38a826bf2364fb6f26f263b85f59d5333e63b93951"
   },
   "fallback_actions": [
     "manual_analysis"
@@ -136,7 +136,13 @@
         "ProbeFailed",
         "ReadinessProbeFailed",
         "LivenessProbeFailed",
-        "PodNotReady"
+        "StartupProbeFailed",
+        "PodNotReady",
+        "Readiness probe response failure",
+        "Liveness probe response failure",
+        "Startup probe response failure",
+        "Probe response failure",
+        "Pod readiness failure"
       ],
       "candidates": {
         "probe_path_wrong": [

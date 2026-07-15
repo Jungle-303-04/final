@@ -886,6 +886,93 @@ def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -
     ]
 
 
+def test_regular_kubernetes_snapshot_excludes_events_for_absent_pods_and_scaled_down_replicasets() -> (
+    None
+):
+    _module, kubernetes_module = load_evidence_modules()
+    provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
+
+    snapshot = provider.normalize_payload(
+        {
+            "namespace": "production",
+            "pods": {
+                "items": [
+                    {
+                        "metadata": {
+                            "uid": "uid-current-pod",
+                            "name": "orders-api-current-1",
+                            "namespace": "production",
+                        },
+                        "status": {"containerStatuses": []},
+                    }
+                ]
+            },
+            "events": {
+                "items": [
+                    {
+                        "metadata": {"name": "current", "namespace": "production"},
+                        "type": "Warning",
+                        "reason": "Unhealthy",
+                        "message": "Readiness probe failed: connection refused",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "orders-api-current-1",
+                            "uid": "uid-current-pod",
+                        },
+                    },
+                    {
+                        "metadata": {"name": "deleted-pod", "namespace": "production"},
+                        "type": "Warning",
+                        "reason": "Unhealthy",
+                        "message": "Readiness probe failed: connection refused",
+                        "involvedObject": {
+                            "kind": "Pod",
+                            "name": "orders-api-old-1",
+                            "uid": "uid-old-pod",
+                        },
+                    },
+                    {
+                        "metadata": {"name": "scaled-down-rs", "namespace": "production"},
+                        "type": "Warning",
+                        "reason": "FailedCreate",
+                        "message": "old rollout failed",
+                        "involvedObject": {
+                            "kind": "ReplicaSet",
+                            "name": "orders-api-old",
+                            "uid": "uid-old-rs",
+                        },
+                    },
+                ]
+            },
+            "deployments": {"items": []},
+            "statefulsets": {"items": []},
+            "daemonsets": {"items": []},
+            "replicasets": {
+                "items": [
+                    {
+                        "metadata": {
+                            "uid": "uid-old-rs",
+                            "name": "orders-api-old",
+                            "namespace": "production",
+                        },
+                        "spec": {"replicas": 0},
+                        "status": {"replicas": 0, "readyReplicas": 0},
+                    }
+                ]
+            },
+            "services": {"items": []},
+            "endpointslices": {"items": []},
+        },
+        kubernetes_module.KubernetesSnapshotQuery(
+            "regular_snapshot",
+            "Regular snapshot.",
+            "production",
+        ),
+    )
+
+    assert [item["name"] for item in snapshot["events"]] == ["current"]
+
+
 def test_kubernetes_snapshot_provider_limits_large_payload_before_job_result() -> None:
     _module, kubernetes_module = load_evidence_modules()
     provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")

@@ -119,6 +119,7 @@ DEFAULT_AGENT_ID = "target-agent"
 AGENT_CAPABILITIES = [
     "collector",
     "command_receiver",
+    "pod_exec_stream",
     Command.CATALOG_HELM_INSTALL_CAPABILITY,
 ]
 

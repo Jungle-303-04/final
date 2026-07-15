@@ -26,6 +26,12 @@ SYMPTOM_IMAGE_PULL = "ImagePullBackOff"
 SYMPTOM_CRASHLOOP = "CrashLoopBackOff"
 SYMPTOM_FAILED_SCHEDULING = "FailedScheduling"
 SYMPTOM_INGRESS_5XX = "Ingress 502/503"
+SYMPTOM_READINESS_PROBE_FAILURE = "Readiness probe response failure"
+SYMPTOM_LIVENESS_PROBE_FAILURE = "Liveness probe response failure"
+SYMPTOM_STARTUP_PROBE_FAILURE = "Startup probe response failure"
+SYMPTOM_PROBE_FAILURE = "Probe response failure"
+SYMPTOM_POD_NOT_READY = "Pod readiness failure"
+SYMPTOM_SERVICE_ENDPOINTS_EMPTY = "Service has no ready endpoints"
 
 # 우선순위 근거 — 운영자가 실제로 triage 하는 순서를 그대로 고정한다.
 # 1. image pull: 파드가 아예 뜨지 못하는 배포 산출물/레지스트리 문제. 원인 폭이 가장
@@ -37,16 +43,17 @@ SYMPTOM_INGRESS_5XX = "Ingress 502/503"
 #    카탈로그 증상은 같은 crashloop 룰(oom_killed 후보 포함)로 수렴한다.
 # 4. scheduling: 파드가 노드에 배치되지 못함(FailedScheduling/Pending). 실행이 시작된
 #    워크로드의 장애(1~3)보다 사용자 영향 관측이 늦어 후순위.
-# 5. probe/readiness: 프로세스는 살아있으나 Ready=False/Unhealthy 로 트래픽에서 제외됨.
-#    카탈로그의 ingress_5xx 룰(backend_readiness_failure 후보)이 이 계열을 다룬다.
-# 6. service selector/endpoint: 파드 단 신호가 전혀 없는데 Service 선택자가 어떤 파드도
-#    잡지 못해 endpoint 가 빈 배선 문제. ingress_5xx 룰(upstream_unavailable 후보)로 수렴.
+# 5. probe event: 실제 5xx 관측 없이 Unhealthy 이벤트만 존재할 때는 probe 응답 실패로
+#    표현한다. Ingress 502/503은 실제 application/ingress 5xx 근거가 있을 때만 사용한다.
+# 6. pod readiness: probe 종류를 특정할 이벤트가 없을 때의 일반 Ready=False 신호.
+# 7. service selector/endpoint: ready endpoint가 비어 있는 배선 문제를 그대로 표현한다.
 PRIORITY_IMAGE_PULL = 1
 PRIORITY_CRASHLOOP = 2
 PRIORITY_OOM = 3
 PRIORITY_SCHEDULING = 4
 PRIORITY_PROBE = 5
-PRIORITY_SERVICE_ENDPOINT = 6
+PRIORITY_POD_NOT_READY = 6
+PRIORITY_SERVICE_ENDPOINT = 7
 
 # 컨테이너 waiting reason 중 image pull 계열로 분류하는 값들.
 IMAGE_PULL_WAITING_REASONS = frozenset(
@@ -158,7 +165,7 @@ def collect_signals(kubernetes: JsonObject) -> list[SymptomSignal]:
             continue
         if not event_is_active_for_snapshot(event, pods):
             continue
-        signals.extend(event_signals(event))
+        signals.extend(event_signals(event, pods))
     signals.extend(service_endpoint_signals(kubernetes))
     return signals
 
@@ -250,7 +257,14 @@ def pod_signals(pod: JsonObject) -> list[SymptomSignal]:
     # readiness 신호는 상위 신호가 없는 파드에서만 — crashloop 파드의 Ready=False 는
     # 원인이 아니라 결과라 secondary 노이즈만 만든다.
     if not signals and str(pod.get("phase") or "") == "Running" and pod_not_ready(pod):
-        signals.append(pod_signal(pod, SIGNAL_POD_NOT_READY, SYMPTOM_INGRESS_5XX, PRIORITY_PROBE))
+        signals.append(
+            pod_signal(
+                pod,
+                SIGNAL_POD_NOT_READY,
+                SYMPTOM_POD_NOT_READY,
+                PRIORITY_POD_NOT_READY,
+            )
+        )
     return signals
 
 
@@ -285,7 +299,10 @@ def pod_not_ready(pod: JsonObject) -> bool:
     return False
 
 
-def event_signals(event: JsonObject) -> list[SymptomSignal]:
+def event_signals(
+    event: JsonObject,
+    pods: list[JsonObject] | None = None,
+) -> list[SymptomSignal]:
     """warning 이벤트에서 신호 추출 — reason/message 조합이 근거."""
     reason = str(event.get("reason") or "")
     message = str(event.get("message") or "").lower()
@@ -305,7 +322,13 @@ def event_signals(event: JsonObject) -> list[SymptomSignal]:
         return [event_signal(event, SYMPTOM_CRASHLOOP, SYMPTOM_CRASHLOOP, PRIORITY_CRASHLOOP)]
     if reason == "Unhealthy" and "probe" in message:
         return [
-            event_signal(event, probe_signal_label(message), SYMPTOM_INGRESS_5XX, PRIORITY_PROBE)
+            event_signal(
+                event,
+                probe_signal_label(message),
+                probe_failure_symptom(message),
+                PRIORITY_PROBE,
+                pods=pods,
+            )
         ]
     return []
 
@@ -315,17 +338,51 @@ def probe_signal_label(message: str) -> str:
         return "ReadinessProbeFailed"
     if "liveness probe" in message:
         return "LivenessProbeFailed"
+    if "startup probe" in message:
+        return "StartupProbeFailed"
     return SIGNAL_PROBE_FAILED
 
 
-def event_signal(event: JsonObject, signal: str, symptom: str, priority: int) -> SymptomSignal:
+def probe_failure_symptom(message: str) -> str:
+    if "readiness probe" in message:
+        return SYMPTOM_READINESS_PROBE_FAILURE
+    if "liveness probe" in message:
+        return SYMPTOM_LIVENESS_PROBE_FAILURE
+    if "startup probe" in message:
+        return SYMPTOM_STARTUP_PROBE_FAILURE
+    return SYMPTOM_PROBE_FAILURE
+
+
+def event_signal(
+    event: JsonObject,
+    signal: str,
+    symptom: str,
+    priority: int,
+    *,
+    pods: list[JsonObject] | None = None,
+) -> SymptomSignal:
+    resource_kind = str(event.get("involved_kind") or "Unknown")
+    resource_name = str(event.get("involved_name") or "unknown")
+    namespace = optional_text(event.get("namespace"))
+    if resource_kind == "Pod":
+        current_pod = next(
+            (
+                pod
+                for pod in pods or []
+                if str(pod.get("name") or "") == resource_name
+                and optional_text(pod.get("namespace")) == namespace
+            ),
+            None,
+        )
+        if current_pod is not None:
+            resource_kind, resource_name = pod_resource_hint(current_pod)
     return SymptomSignal(
         signal=signal,
         symptom=symptom,
         priority=priority,
-        resource_kind=str(event.get("involved_kind") or "Unknown"),
-        resource_name=str(event.get("involved_name") or "unknown"),
-        namespace=optional_text(event.get("namespace")),
+        resource_kind=resource_kind,
+        resource_name=resource_name,
+        namespace=namespace,
         source_rank=SOURCE_RANK_EVENT,
         weight=int(event.get("count") or 0),
     )
@@ -355,7 +412,7 @@ def service_endpoint_signals(kubernetes: JsonObject) -> list[SymptomSignal]:
         signals.append(
             SymptomSignal(
                 signal=SIGNAL_SERVICE_ENDPOINTS_EMPTY,
-                symptom=SYMPTOM_INGRESS_5XX,
+                symptom=SYMPTOM_SERVICE_ENDPOINTS_EMPTY,
                 priority=PRIORITY_SERVICE_ENDPOINT,
                 resource_kind="Service",
                 resource_name=str(service.get("name") or "unknown"),

@@ -64,6 +64,9 @@ jobs:
       SMOKE_CLUSTER_ID: ${{ secrets.AWS_DEV_SMOKE_CLUSTER_ID }}
       SMOKE_RCA_CORRELATION_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_CORRELATION_ID }}
       SMOKE_RCA_INCIDENT_ID: ${{ secrets.AWS_DEV_SMOKE_RCA_INCIDENT_ID }}
+      LLM_PROVIDER: ${{ vars.AWS_DEV_LLM_PROVIDER || 'openai' }}
+      LLM_MODEL: ${{ vars.AWS_DEV_LLM_MODEL || 'gpt-4.1' }}
+      LLM_API_KEY: ${{ secrets.AWS_DEV_LLM_API_KEY }}
     steps:
       - name: Check out gated dev SHA
         uses: actions/checkout@v4
@@ -369,7 +372,7 @@ jobs:
           [[ "${admin_id}" =~ ^user-[0-9a-f-]{36}$ ]]
           kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             patch configmap management-runtime-config --type merge \
-            --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\"}}"
+            --patch "{\"data\":{\"TRUSTED_PROXY_AUTH_USER_ID\":\"${admin_id}\",\"CONTROL_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"POD_EXEC_ALLOWED_NAMESPACES\":\"sandbox,color-turf\",\"TARGET_DEFAULT_CONTROL_NAMESPACES\":\"sandbox,color-turf\"}}"
 
           cursor_encoded="$(kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
             get secret management-runtime-secret \
@@ -386,7 +389,21 @@ jobs:
               --patch "{\"data\":{\"FILTER_CURSOR_SIGNING_KEY\":\"${cursor_encoded}\"}}" \
               >/dev/null
           fi
-          unset admin_id cursor_encoded cursor_value
+
+          if [[ -n "${LLM_API_KEY}" ]]; then
+            llm_provider_encoded="$(printf '%s' "${LLM_PROVIDER}" | base64 | tr -d '\n')"
+            llm_model_encoded="$(printf '%s' "${LLM_MODEL}" | base64 | tr -d '\n')"
+            llm_key_encoded="$(printf '%s' "${LLM_API_KEY}" | base64 | tr -d '\n')"
+            llm_patch="$(jq -cn \
+              --arg provider "${llm_provider_encoded}" \
+              --arg model "${llm_model_encoded}" \
+              --arg key "${llm_key_encoded}" \
+              '{data:{LLM_PROVIDER:$provider,LLM_MODEL:$model,LLM_API_KEY:$key}}')"
+            kubectl --context "${MGMT_CONTEXT}" -n "${MGMT_NS}" \
+              patch secret management-runtime-secret --type merge --patch "${llm_patch}" \
+              >/dev/null
+          fi
+          unset admin_id cursor_encoded cursor_value llm_provider_encoded llm_model_encoded llm_key_encoded llm_patch
 
       - name: Pin target agent image in runtime config
         if: env.DEPLOYMENT_SCOPE == 'FULL'

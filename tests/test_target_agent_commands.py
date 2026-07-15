@@ -288,6 +288,35 @@ def test_rollout_restart_keeps_plan_diff_payload() -> None:
     assert restarted["patch"] == module.build_rollout_restart_patch()
 
 
+def test_rollout_restart_requires_recorded_approval_outside_sandbox(monkeypatch) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.ROLLOUT_RESTART_ACTION,
+                "payload": {
+                    "diff": {
+                        "resource": "deployment/color-turf-server",
+                        "namespace": "color-turf",
+                    },
+                    "payload": {},
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "requires approval_ref" in result["message"]
+    assert agent.kubernetes.patches == []
+
+
 def test_catalog_helm_install_command_reports_only_real_runner_success(monkeypatch) -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

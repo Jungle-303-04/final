@@ -350,6 +350,7 @@ def test_list_command_actions_exposes_policy_metadata() -> None:
         "recovery_aliases",
         "allowed_namespaces",
         "requires_approval",
+        "requires_approval_outside_sandbox",
     }
     json.dumps(result)
 

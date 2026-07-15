@@ -6,6 +6,7 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -42,16 +43,52 @@ NODE_READY_STATUS = "Ready"
 DEGRADED_HEALTH = "degraded"
 
 
-def parse_observed_at(value: str | None) -> datetime:
+def live_inventory_snapshot_clause(table: Any) -> Any:
+    """Legacy/normal snapshots are fleet truth; label-scoped RCA snapshots are not."""
+    return func.coalesce(
+        table.c.summary["summary"]["live_inventory"].as_boolean(),
+        True,
+    ).is_(True)
+
+
+def parse_timestamp(value: str | None) -> datetime | None:
     if not value:
-        return datetime.now(UTC)
+        return None
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
-        return datetime.now(UTC)
+        return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed
+
+
+def parse_observed_at(value: str | None) -> datetime:
+    return parse_timestamp(value) or datetime.now(UTC)
+
+
+def inventory_resource_times(
+    resource_type: str,
+    summary: JsonObject,
+    collected_at: datetime,
+) -> tuple[datetime, datetime]:
+    """Return first/last occurrence time without conflating collection time.
+
+    Kubernetes Event objects can remain in the API long after the underlying failure was
+    resolved. Their first/last timestamps describe the event; ``collected_at`` only says
+    when the agent happened to read that object.
+    """
+    if resource_type != EVENT_RESOURCE_TYPE:
+        return collected_at, collected_at
+    parsed_first = parse_timestamp(
+        str(summary.get("first_timestamp")) if summary.get("first_timestamp") else None
+    )
+    parsed_last = parse_timestamp(
+        str(summary.get("last_timestamp")) if summary.get("last_timestamp") else None
+    )
+    first_seen = parsed_first or parsed_last or collected_at
+    last_seen = parsed_last or parsed_first or collected_at
+    return first_seen, last_seen
 
 
 def inventory_resource_key(
@@ -83,6 +120,12 @@ def normalize_inventory_resource(
     kind = str(resource.get("kind") or resource_type)
     namespace = resource.get("namespace")
     name = str(resource.get("name") or resource.get("uid") or f"{resource_type}-resource")
+    summary = dict(resource.get("summary") or {})
+    first_seen_at, last_seen_at = inventory_resource_times(
+        resource_type,
+        summary,
+        observed_at,
+    )
     return {
         "inventory_key": inventory_resource_key(
             workspace_id,
@@ -106,11 +149,11 @@ def normalize_inventory_resource(
         "health": str(resource.get("health") or UNKNOWN_STATUS),
         "labels": dict(resource.get("labels") or {}),
         "annotations": dict(resource.get("annotations") or {}),
-        "summary": dict(resource.get("summary") or {}),
+        "summary": summary,
         "raw": dict(resource.get("raw") or {}),
-        "observed_at": observed_at,
-        "first_seen_at": observed_at,
-        "last_seen_at": observed_at,
+        "observed_at": last_seen_at,
+        "first_seen_at": first_seen_at,
+        "last_seen_at": last_seen_at,
         "deleted_at": None,
     }
 
@@ -319,7 +362,15 @@ class InventoryRepository(DatabaseConnection):
                 conn.execute(
                     insert.on_conflict_do_update(
                         index_elements=[resource_table.c.inventory_key],
-                        set_={**update_columns, "deleted_at": None, "updated_at": func.now()},
+                        set_={
+                            **update_columns,
+                            "first_seen_at": func.least(
+                                resource_table.c.first_seen_at,
+                                insert.excluded.first_seen_at,
+                            ),
+                            "deleted_at": None,
+                            "updated_at": func.now(),
+                        },
                     )
                 )
             if summary["usage"]:
@@ -735,8 +786,21 @@ class InventoryRepository(DatabaseConnection):
         *,
         limit: int = 10,
     ) -> list[JsonObject]:
-        """드릴다운용 최근 경고 이벤트 — Warning 이벤트(health=degraded)만 최신순."""
+        """드릴다운용 현재 경고 이벤트 — 최신 snapshot의 event-time 최신순."""
         table = ClusterInventoryResourceRecord.__table__
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        latest_snapshot_id = (
+            select(snapshots.c.snapshot_id)
+            .where(
+                snapshots.c.workspace_id == workspace_id,
+                snapshots.c.cluster_id == cluster_id,
+                snapshots.c.status != "ignored_stale",
+                live_inventory_snapshot_clause(snapshots),
+            )
+            .order_by(snapshots.c.collected_at.desc(), snapshots.c.created_at.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
         statement = (
             select(table)
             .where(
@@ -745,6 +809,7 @@ class InventoryRepository(DatabaseConnection):
                 table.c.resource_type == EVENT_RESOURCE_TYPE,
                 table.c.health == DEGRADED_HEALTH,
                 table.c.deleted_at.is_(None),
+                table.c.snapshot_id == latest_snapshot_id,
             )
             .order_by(table.c.observed_at.desc())
             .limit(max(1, min(limit, 100)))
@@ -768,7 +833,11 @@ class InventoryRepository(DatabaseConnection):
                 table.c.summary,
                 table.c.created_at,
             )
-            .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                live_inventory_snapshot_clause(table),
+            )
             .order_by(table.c.created_at.desc())
             .limit(1)
         )
@@ -807,6 +876,7 @@ class InventoryRepository(DatabaseConnection):
             .where(
                 table.c.workspace_id == workspace_id,
                 table.c.cluster_id.in_(cluster_ids),
+                live_inventory_snapshot_clause(table),
             )
             .subquery()
         )

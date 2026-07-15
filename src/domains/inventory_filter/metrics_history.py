@@ -22,17 +22,26 @@ def build_resource_metric_history(
     response_reasons: set[str] = set()
     for resource in resources:
         cluster_id = str(resource["cluster_id"])
-        namespace = str(resource["namespace"])
+        resource_type = str(resource.get("resource_type") or "pod")
+        if resource_type not in {"node", "pod"}:
+            continue
+        namespace_value = resource.get("namespace")
+        namespace = str(namespace_value) if namespace_value is not None else None
         name = str(resource["name"])
-        usage_key = f"{namespace}/{name}"
+        usage_key = f"{namespace}/{name}" if resource_type == "pod" else name
+        usage_collection = "pods" if resource_type == "pod" else "nodes"
         points: list[JsonObject] = []
         for sample in samples_by_cluster.get(cluster_id, ()):
             observed_at = sample.get("sampled_at")
             if not observed_at:
                 continue
             usage = sample.get("usage") if isinstance(sample.get("usage"), dict) else {}
-            pods = usage.get("pods") if isinstance(usage.get("pods"), dict) else {}
-            measured = pods.get(usage_key) if isinstance(pods.get(usage_key), dict) else {}
+            measurements = (
+                usage.get(usage_collection) if isinstance(usage.get(usage_collection), dict) else {}
+            )
+            measured = (
+                measurements.get(usage_key) if isinstance(measurements.get(usage_key), dict) else {}
+            )
             points.append(
                 {
                     "observed_at": str(observed_at),
@@ -54,7 +63,7 @@ def build_resource_metric_history(
             {
                 "resource_id": str(resource["resource_id"]),
                 "cluster_id": cluster_id,
-                "resource_type": "pod",
+                "resource_type": resource_type,
                 "namespace": namespace,
                 "name": name,
                 "points": points,

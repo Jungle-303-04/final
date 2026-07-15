@@ -79,6 +79,42 @@ def test_metric_history_without_samples_is_empty_not_zero() -> None:
     assert built["completeness"] == "unavailable"
 
 
+def test_metric_history_preserves_real_node_samples_without_a_namespace() -> None:
+    built = build_resource_metric_history(
+        [
+            {
+                "resource_id": "node-a",
+                "cluster_id": "cluster-a",
+                "resource_type": "node",
+                "namespace": None,
+                "name": "worker-a.internal",
+            }
+        ],
+        {
+            "cluster-a": [
+                {
+                    "sampled_at": "2026-07-15T05:00:00Z",
+                    "usage": {
+                        "nodes": {
+                            "worker-a.internal": {
+                                "cpu_mcores": 640.5,
+                                "mem_mib": 4096,
+                            }
+                        }
+                    },
+                }
+            ]
+        },
+        projection_complete=True,
+    )
+
+    response = ResourceMetricsHistoryResponse(**built, snapshot=_snapshot())
+    assert response.series[0].resource_type == "node"
+    assert response.series[0].namespace is None
+    assert response.series[0].points[0].cpu_mcores == 640.5
+    assert response.series[0].points[0].mem_mib == 4096
+
+
 def test_metric_history_contract_rejects_synthetic_availability() -> None:
     with pytest.raises(ValidationError):
         ResourceMetricHistorySeries(

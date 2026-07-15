@@ -206,6 +206,7 @@ class SpyDb:
         self._returns = returns
         self._workflow_approvals: dict[tuple[str, str], dict[str, Any]] = {}
         self._evidence_payloads: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self._incident_signal_claims: set[tuple[str, str, str]] = set()
 
     async def save_evidence(
         self,
@@ -229,6 +230,29 @@ class SpyDb:
         if configured is not None:
             return configured
         return self._evidence_payloads.get((workspace_id, correlation_id, kind))
+
+    async def claim_incident_signal(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        signal_key: str,
+        correlation_id: str,
+        payload: dict[str, Any],
+    ) -> bool:
+        self.calls.append(
+            (
+                "claim_incident_signal",
+                (workspace_id, cluster_id, signal_key, correlation_id, payload),
+            )
+        )
+        configured = self._returns.get("claim_incident_signal")
+        if configured is not None:
+            return bool(configured)
+        identity = (workspace_id, cluster_id, signal_key)
+        if identity in self._incident_signal_claims:
+            return False
+        self._incident_signal_claims.add(identity)
+        return True
 
     async def request_workflow_approval(self, payload: dict[str, Any]) -> Any:
         self.calls.append(("request_workflow_approval", (payload,)))

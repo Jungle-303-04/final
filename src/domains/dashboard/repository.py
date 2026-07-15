@@ -13,7 +13,10 @@ from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
-from domains.inventory.models import ClusterInventoryResourceRecord
+from domains.inventory.models import (
+    ClusterInventoryResourceRecord,
+    ClusterInventorySnapshotRecord,
+)
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
 from packages.storage.engine import DatabaseConnection
@@ -86,6 +89,56 @@ DEFAULT_PRE_INCIDENT_RETENTION_LIMIT = 1000
 DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_MINUTES = 5
 DEFAULT_EPHEMERAL_INCIDENT_RESOLVE_LIMIT = 500
 EPHEMERAL_INCIDENT_RESOURCE_KINDS: tuple[str, ...] = ("Pod", "ReplicaSet")
+EPHEMERAL_INCIDENT_RESOURCE_KINDS_NORMALIZED = tuple(
+    kind.casefold() for kind in EPHEMERAL_INCIDENT_RESOURCE_KINDS
+)
+
+
+def latest_inventory_snapshot_id_for_incident(timeline: Any) -> Any:
+    snapshots = ClusterInventorySnapshotRecord.__table__
+    return (
+        select(snapshots.c.snapshot_id)
+        .where(
+            snapshots.c.workspace_id == timeline.c.workspace_id,
+            snapshots.c.cluster_id == timeline.c.cluster_id,
+            snapshots.c.status != "ignored_stale",
+            func.coalesce(
+                snapshots.c.summary["summary"]["live_inventory"].as_boolean(),
+                True,
+            ).is_(True),
+        )
+        .order_by(snapshots.c.collected_at.desc(), snapshots.c.created_at.desc())
+        .limit(1)
+        .correlate(timeline)
+        .scalar_subquery()
+    )
+
+
+def live_unhealthy_ephemeral_resource_exists(timeline: Any) -> Any:
+    inventory = ClusterInventoryResourceRecord.__table__
+    return (
+        select(inventory.c.inventory_key)
+        .where(
+            inventory.c.workspace_id == timeline.c.workspace_id,
+            inventory.c.cluster_id == timeline.c.cluster_id,
+            func.lower(inventory.c.kind) == func.lower(timeline.c.incident_resource_kind),
+            func.coalesce(inventory.c.namespace, "")
+            == func.coalesce(timeline.c.incident_namespace, ""),
+            inventory.c.name == timeline.c.incident_resource_name,
+            inventory.c.snapshot_id == latest_inventory_snapshot_id_for_incident(timeline),
+            inventory.c.deleted_at.is_(None),
+            func.lower(inventory.c.health) == "degraded",
+        )
+        .correlate(timeline)
+        .exists()
+    )
+
+
+def incident_is_live_or_non_ephemeral(timeline: Any) -> Any:
+    is_ephemeral = func.lower(func.coalesce(timeline.c.incident_resource_kind, "")).in_(
+        EPHEMERAL_INCIDENT_RESOURCE_KINDS_NORMALIZED
+    )
+    return or_(~is_ephemeral, live_unhealthy_ephemeral_resource_exists(timeline))
 
 
 def _rca_timeline_response_columns() -> tuple[Any, ...]:
@@ -412,6 +465,7 @@ class DashboardRepository(DatabaseConnection):
             table.c.cluster_id.is_not(None),
             table.c.incident_logical_key.is_not(None),
             table.c.status.in_(OPEN_INCIDENT_STATUSES),
+            incident_is_live_or_non_ephemeral(table),
         )
         statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
@@ -437,6 +491,7 @@ class DashboardRepository(DatabaseConnection):
                 RcaTimeline.cluster_id == cluster_id,
                 RcaTimeline.incident_id.is_not(None),
                 RcaTimeline.status.in_(OPEN_INCIDENT_STATUSES),
+                incident_is_live_or_non_ephemeral(RcaTimeline.__table__),
             )
             .order_by(RcaTimeline.updated_at.desc())
             .limit(scan_limit)
@@ -488,6 +543,7 @@ class DashboardRepository(DatabaseConnection):
                 func.lower(RcaTimeline.incident_resource_kind) == resource_kind.lower(),
                 RcaTimeline.incident_id.is_not(None),
                 RcaTimeline.status.in_(OPEN_INCIDENT_STATUSES),
+                incident_is_live_or_non_ephemeral(RcaTimeline.__table__),
                 or_(*filters),
             )
             .order_by(
@@ -587,27 +643,15 @@ class DashboardRepository(DatabaseConnection):
         bounded_minutes = max(1, int(grace_minutes))
         bounded_limit = max(1, min(int(limit), 5000))
         timeline = RcaTimeline.__table__
-        inventory = ClusterInventoryResourceRecord.__table__
-        unhealthy_resource_exists = (
-            select(inventory.c.inventory_key)
-            .where(
-                inventory.c.workspace_id == timeline.c.workspace_id,
-                inventory.c.cluster_id == timeline.c.cluster_id,
-                inventory.c.kind == timeline.c.incident_resource_kind,
-                func.coalesce(inventory.c.namespace, "")
-                == func.coalesce(timeline.c.incident_namespace, ""),
-                inventory.c.name == timeline.c.incident_resource_name,
-                inventory.c.deleted_at.is_(None),
-                func.lower(inventory.c.health) != "healthy",
-            )
-            .exists()
-        )
+        unhealthy_resource_exists = live_unhealthy_ephemeral_resource_exists(timeline)
         candidates = (
             select(timeline.c.id)
             .where(
                 timeline.c.incident_id.is_not(None),
                 timeline.c.status.in_(OPEN_INCIDENT_STATUSES),
-                timeline.c.incident_resource_kind.in_(EPHEMERAL_INCIDENT_RESOURCE_KINDS),
+                func.lower(timeline.c.incident_resource_kind).in_(
+                    EPHEMERAL_INCIDENT_RESOURCE_KINDS_NORMALIZED
+                ),
                 timeline.c.updated_at < func.now() - timedelta(minutes=bounded_minutes),
                 ~unhealthy_resource_exists,
             )

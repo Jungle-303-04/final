@@ -215,6 +215,18 @@ def report_row(row_id: int = 1) -> dict:
                     }
                 ],
             },
+            "narrative_status": "generated",
+            "narrative": {
+                "locale": "ko",
+                "executive_summary": "이미지 풀 실패로 워크로드가 기동하지 못했습니다.",
+                "impact": "checkout-api Pod가 준비 상태에 도달하지 못했습니다.",
+                "reasoning": "이미지 pull 이벤트와 배포 직후 증상이 같은 원인을 지지합니다.",
+                "recommended_action": "승인 후 검증된 이미지 태그로 되돌리고 rollout을 확인합니다.",
+                "recurrence_prevention": [
+                    "배포 전에 레지스트리 이미지 태그 존재 여부를 검증합니다."
+                ],
+                "limitations": ["레지스트리 권한 상태는 추가 확인이 필요합니다."],
+            },
             "evidence_bundle": {
                 "items": [
                     {
@@ -528,6 +540,11 @@ def test_rca_reports_return_summary_without_raw_payload() -> None:
     assert ref["evidence_key"] == "workspace-1:cluster-1:cluster-snapshot:window-1"
     assert ref["agent_id"] == "agent-1"
     assert item["missing_evidence_checks"][0]["check_id"] == "loki:app-logs"
+    assert item["narrative_status"] == "generated"
+    assert item["narrative"]["executive_summary"].startswith("이미지 풀 실패")
+    assert item["narrative"]["recurrence_prevention"] == [
+        "배포 전에 레지스트리 이미지 태그 존재 여부를 검증합니다."
+    ]
     # 후보의 signals DSL 원문·payload 원문(secret 포함 가능)은 응답 어디에도 실리지 않는다.
     assert "signals" not in top
     assert "payload" not in item
@@ -554,6 +571,8 @@ def test_rca_reports_return_summary_from_projection_without_payload() -> None:
     assert item["confidence"] == 0.91
     assert item["supporting_evidence"] == ["kubernetes"]
     assert item["candidates"][0]["candidate_id"] == "image-pull-backoff"
+    assert item["narrative_status"] == "generated"
+    assert item["narrative"]["locale"] == "ko"
     assert "payload" not in item
     assert SECRET_MARKER not in response.text
 

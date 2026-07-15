@@ -63,6 +63,7 @@ MAX_INVENTORY_RESOURCES = 5000
 MAX_INVENTORY_PAYLOAD_BYTES = 16 * 1024 * 1024
 INVENTORY_PAYLOAD_TOO_LARGE_MESSAGE = "inventory payload exceeds size limit"
 MAX_DEPLOYMENT_REPLICAS = 100
+MAX_RESOURCE_MANIFEST_BYTES = 1_048_576
 
 
 class LoginRequest(StrictModel):
@@ -113,6 +114,18 @@ class GitHubWebhookRequest(StrictModel):
     manifest_path: str = DEFAULT_MANIFEST_PATH
     source_type: str = Field(default="", max_length=40)
     force: bool = False
+
+
+class ResourceManifestPreviewRequest(StrictModel):
+    application_id: str = Field(min_length=1, max_length=200)
+    base_sha: str = Field(pattern=r"^[0-9a-f]{40,64}$")
+    source_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    edited_yaml: str = Field(min_length=1, max_length=MAX_RESOURCE_MANIFEST_BYTES)
+
+
+class ResourceManifestApproveRequest(ResourceManifestPreviewRequest):
+    confirmed: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class AgentConnectRequest(StrictModel):

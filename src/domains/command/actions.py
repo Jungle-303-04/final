@@ -12,12 +12,18 @@ class CommandActionSpec:
     recovery_aliases: tuple[str, ...] = ()
     allowed_namespaces: tuple[str, ...] = ()  # 빈 튜플 = 네임스페이스 제한 없음
     requires_approval: bool = False
+    requires_approval_outside_sandbox: bool = False
 
     def matches_recovery_action(self, value: str) -> bool:
         return value == self.action or value in self.recovery_aliases
 
     def allows_namespace(self, namespace: str) -> bool:
         return not self.allowed_namespaces or namespace in self.allowed_namespaces
+
+    def requires_approval_for(self, namespace: str) -> bool:
+        return self.requires_approval or (
+            self.requires_approval_outside_sandbox and namespace != "sandbox"
+        )
 
 
 class CommandCatalog:
@@ -33,8 +39,15 @@ class CommandCatalog:
         recovery_aliases: tuple[str, ...] = (),
         allowed_namespaces: tuple[str, ...] = (),
         requires_approval: bool = False,
+        requires_approval_outside_sandbox: bool = False,
     ) -> Callable[[type], type]:
-        spec = CommandActionSpec(action, recovery_aliases, allowed_namespaces, requires_approval)
+        spec = CommandActionSpec(
+            action=action,
+            recovery_aliases=recovery_aliases,
+            allowed_namespaces=allowed_namespaces,
+            requires_approval=requires_approval,
+            requires_approval_outside_sandbox=requires_approval_outside_sandbox,
+        )
 
         def decorator(marker: type) -> type:
             existing = self._specs.get(action)

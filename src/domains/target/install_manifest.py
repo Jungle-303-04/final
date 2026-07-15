@@ -107,6 +107,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+  # Kubernetes RBAC cannot resourceName-scope create on pods/exec. Runtime
+  # authorization therefore requires exact inventory target, pod.exec, and
+  # POD_EXEC_ALLOWED_NAMESPACES at both gateway and agent boundaries.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
@@ -345,6 +351,11 @@ def control_namespaces_line(payload: TargetRegisterRequest) -> str:
     return f"\n  CONTROL_ALLOWED_NAMESPACES: {yaml_string(value)}"
 
 
+def pod_exec_namespaces_line(payload: TargetRegisterRequest) -> str:
+    value = payload.control_namespaces.strip() or SANDBOX_NAMESPACE
+    return f"\n  POD_EXEC_ALLOWED_NAMESPACES: {yaml_string(value)}"
+
+
 def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
     registration_environment = payload.environment.strip().lower()
     if (
@@ -380,7 +391,7 @@ data:
   PROMETHEUS_BASE_URL: {yaml_string(payload.prometheus_base_url)}
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
-  NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}
+  NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}{pod_exec_namespaces_line(payload)}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(namespace)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"

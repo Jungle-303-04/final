@@ -9,7 +9,17 @@ from typing import Any
 from sqlalchemy import Select, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from domains.rca.models import Evidence, RcaBacklogItem, RcaReport, RecoveryPlanRecord
+from domains.rca.models import (
+    Evidence,
+    IncidentSignalClaim,
+    RcaBacklogItem,
+    RcaReport,
+    RecoveryPlanRecord,
+)
+from domains.rca.report_narrative import (
+    RCA_NARRATIVE_PAYLOAD_KEY,
+    RCA_NARRATIVE_STATUS_KEY,
+)
 from domains.rca.report_projection import rca_report_projection
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.event_bus.subjects import EventSubject
@@ -50,6 +60,8 @@ def _rca_report_summary_columns() -> tuple[Any, ...]:
         table.c.candidates,
         table.c.supporting_evidence_refs,
         table.c.missing_evidence_checks,
+        table.c.payload[RCA_NARRATIVE_PAYLOAD_KEY].label(RCA_NARRATIVE_PAYLOAD_KEY),
+        table.c.payload[RCA_NARRATIVE_STATUS_KEY].astext.label(RCA_NARRATIVE_STATUS_KEY),
         table.c.created_at,
     )
 
@@ -88,6 +100,38 @@ class RcaRepository(DatabaseConnection):
         with self.connection() as conn:
             payload = conn.execute(statement).scalar_one_or_none()
         return payload if isinstance(payload, dict) else None
+
+    def claim_incident_signal(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        signal_key: str,
+        correlation_id: str,
+        payload: JsonObject,
+    ) -> bool:
+        """Atomically claim one concrete termination before emitting an incident.
+
+        PostgreSQL arbitrates concurrent workers through the unique identity.
+        Returning ``False`` means this exact termination was already handled,
+        including by a worker process that has since restarted.
+        """
+        table = IncidentSignalClaim.__table__
+        statement = (
+            pg_insert(table)
+            .values(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                signal_key=signal_key,
+                first_correlation_id=correlation_id,
+                payload=payload,
+            )
+            .on_conflict_do_nothing(
+                constraint="uq_incident_signal_claim_identity",
+            )
+            .returning(table.c.id)
+        )
+        with self.connection() as conn:
+            return conn.execute(statement).scalar_one_or_none() is not None
 
     def upsert_rca_backlog_item(self, body: JsonObject) -> None:
         table = RcaBacklogItem.__table__
@@ -253,6 +297,34 @@ class RcaRepository(DatabaseConnection):
         workspace_id: str,
         plan: JsonObject,
     ) -> None:
+        self.upsert_recovery_plan(
+            correlation_id,
+            workspace_id,
+            plan,
+            status=RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,
+        )
+
+    def upsert_recovery_plan(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        plan: JsonObject,
+        *,
+        status: str,
+        selected_action_id: str | None = None,
+        selected_by: str | None = None,
+    ) -> None:
+        """Persist every generated plan, including the auto-selected path.
+
+        recovery.planned is an operator-visible read model boundary. Previously only
+        selection_requested plans were stored, so a valid recovery.planned audit event
+        could lead to a 404 in the incident detail after automatic selection.
+        """
+        if status not in {
+            RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,
+            RECOVERY_PLAN_STATUS_SELECTED,
+        }:
+            raise ValueError(f"Unsupported recovery plan status: {status}")
         table = RecoveryPlanRecord.__table__
         insert = pg_insert(table).values(
             plan_id=str(plan["plan_id"]),
@@ -260,7 +332,9 @@ class RcaRepository(DatabaseConnection):
             correlation_id=correlation_id,
             incident_id=str(plan["incident_id"]),
             evidence_ref=str(plan["evidence_ref"]),
-            status=RECOVERY_PLAN_STATUS_SELECTION_REQUESTED,
+            status=status,
+            selected_action_id=selected_action_id,
+            selected_by=selected_by,
             payload=plan,
             updated_at=func.now(),
         )
@@ -276,6 +350,20 @@ class RcaRepository(DatabaseConnection):
                         table.c.status,
                     ),
                     else_=insert.excluded.status,
+                ),
+                "selected_action_id": case(
+                    (
+                        table.c.status == RECOVERY_PLAN_STATUS_SELECTED,
+                        table.c.selected_action_id,
+                    ),
+                    else_=insert.excluded.selected_action_id,
+                ),
+                "selected_by": case(
+                    (
+                        table.c.status == RECOVERY_PLAN_STATUS_SELECTED,
+                        table.c.selected_by,
+                    ),
+                    else_=insert.excluded.selected_by,
                 ),
                 "payload": insert.excluded.payload,
                 "updated_at": func.now(),
@@ -369,6 +457,10 @@ class RcaRepository(DatabaseConnection):
     ) -> None:
         table = RcaReport.__table__
         projection = rca_report_projection(body)
+        # Narrative fields remain in the existing JSON payload.  All other
+        # projection keys map to dedicated summary columns.
+        projection.pop(RCA_NARRATIVE_PAYLOAD_KEY, None)
+        projection.pop(RCA_NARRATIVE_STATUS_KEY, None)
         statement = pg_insert(table).values(
             workspace_id=workspace_id,
             correlation_id=correlation_id,

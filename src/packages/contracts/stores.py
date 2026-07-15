@@ -21,6 +21,15 @@ class RcaStore(Protocol):
         self, workspace_id: str, correlation_id: str, kind: str
     ) -> JsonObject | None: ...
 
+    async def claim_incident_signal(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        signal_key: str,
+        correlation_id: str,
+        payload: JsonObject,
+    ) -> bool: ...
+
     async def get_evidence_window(self, evidence_key: str) -> JsonObject | None: ...
 
     async def get_evidence_window_payload(self, evidence_key: str) -> JsonObject | None: ...
@@ -64,6 +73,17 @@ class RcaBacklogStore(Protocol):
 
 
 class RecoveryPlanStore(Protocol):
+    async def upsert_recovery_plan(
+        self,
+        correlation_id: str,
+        workspace_id: str,
+        plan: JsonObject,
+        *,
+        status: str,
+        selected_action_id: str | None = None,
+        selected_by: str | None = None,
+    ) -> None: ...
+
     async def upsert_recovery_selection_request(
         self,
         correlation_id: str,
