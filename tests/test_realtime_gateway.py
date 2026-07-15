@@ -566,70 +566,72 @@ def test_pod_terminal_bridges_real_agent_frames_redacts_and_audits() -> None:
         authorize_browser_terminal=authorize_terminal,
         audit_terminal=audit,
     )
-    client = TestClient(app)
     command = "printf 'password=top-secret\\n'; exit 7"
 
-    with client.websocket_connect(
-        f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
-    ) as agent:
-        agent.receive_json()
+    # One TestClient context owns one ASGI portal. The agent and terminal sockets
+    # must share it because the broker forwards frames directly between them.
+    with TestClient(app) as client:
         with client.websocket_connect(
-            f"/live/terminal?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
-            "&namespace=sandbox&pod=api-0&container=app",
-            headers=browser_headers(),
-        ) as browser:
-            browser.send_json({"type": "terminal.start", "command": command})
-            execute = agent.receive_json()
-            session_id = execute["session_id"]
-            assert execute == {
-                "type": "terminal.exec",
-                "session_id": session_id,
-                "namespace": "sandbox",
-                "pod": "api-0",
-                "container": "app",
-                "command": command,
-                "timeout_seconds": 300,
-                "tty": False,
-            }
-            agent.send_json({"type": "terminal.connected", "session_id": session_id})
-            assert browser.receive_json() == {
-                "type": "terminal.connected",
-                "session_id": session_id,
-            }
-            agent.send_json(
-                {
-                    "type": "terminal.output",
+            f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+        ) as agent:
+            agent.receive_json()
+            with client.websocket_connect(
+                f"/live/terminal?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
+                "&namespace=sandbox&pod=api-0&container=app",
+                headers=browser_headers(),
+            ) as browser:
+                browser.send_json({"type": "terminal.start", "command": command})
+                execute = agent.receive_json()
+                session_id = execute["session_id"]
+                assert execute == {
+                    "type": "terminal.exec",
                     "session_id": session_id,
-                    "stream": "stdout",
-                    "data": "password=top-secret\n",
+                    "namespace": "sandbox",
+                    "pod": "api-0",
+                    "container": "app",
+                    "command": command,
+                    "timeout_seconds": 300,
+                    "tty": False,
                 }
-            )
-            output = browser.receive_json()
-            assert output["type"] == "terminal.output"
-            assert "top-secret" not in output["data"]
-            assert "[REDACTED]" in output["data"]
-            browser.send_json(
-                {"type": "terminal.input", "session_id": session_id, "data": "confirm\n"}
-            )
-            assert agent.receive_json() == {
-                "type": "terminal.input",
-                "session_id": session_id,
-                "data": "confirm\n",
-            }
-            agent.send_json(
-                {
+                agent.send_json({"type": "terminal.connected", "session_id": session_id})
+                assert browser.receive_json() == {
+                    "type": "terminal.connected",
+                    "session_id": session_id,
+                }
+                agent.send_json(
+                    {
+                        "type": "terminal.output",
+                        "session_id": session_id,
+                        "stream": "stdout",
+                        "data": "password=top-secret\n",
+                    }
+                )
+                output = browser.receive_json()
+                assert output["type"] == "terminal.output"
+                assert "top-secret" not in output["data"]
+                assert "[REDACTED]" in output["data"]
+                browser.send_json(
+                    {"type": "terminal.input", "session_id": session_id, "data": "confirm\n"}
+                )
+                assert agent.receive_json() == {
+                    "type": "terminal.input",
+                    "session_id": session_id,
+                    "data": "confirm\n",
+                }
+                agent.send_json(
+                    {
+                        "type": "terminal.end",
+                        "session_id": session_id,
+                        "exit_code": 7,
+                        "reason": "completed",
+                    }
+                )
+                assert browser.receive_json() == {
                     "type": "terminal.end",
                     "session_id": session_id,
                     "exit_code": 7,
                     "reason": "completed",
                 }
-            )
-            assert browser.receive_json() == {
-                "type": "terminal.end",
-                "session_id": session_id,
-                "exit_code": 7,
-                "reason": "completed",
-            }
 
     assert [item[0] for item in audits] == [
         "terminal.session.started",
@@ -641,6 +643,69 @@ def test_pod_terminal_bridges_real_agent_frames_redacts_and_audits() -> None:
     assert command not in str(audits)
     assert "top-secret" not in str(audits)
     assert audits[1][2]["exit_code"] == 7
+
+
+def test_pod_terminal_agent_disconnect_finishes_once_without_command_leakage() -> None:
+    module = load_gateway_module()
+    audits: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def authorize_terminal(
+        _session: object,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str,
+        pod: str,
+        container: str,
+    ) -> bool:
+        return (workspace_id, cluster_id, namespace, pod, container) == (
+            WORKSPACE,
+            CLUSTER,
+            "sandbox",
+            "api-0",
+            "app",
+        )
+
+    async def audit(subject: str, workspace_id: str, payload: dict[str, Any]) -> None:
+        audits.append((subject, workspace_id, payload))
+
+    app = module.create_app(
+        authenticate_agent=stub_authenticator,
+        authenticate_browser=stub_browser_session,
+        authorize_browser_cluster=stub_cluster_authorizer,
+        authorize_browser_terminal=authorize_terminal,
+        audit_terminal=audit,
+    )
+    command = "printf 'token=agent-secret\\n'"
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/live/agent?cluster_id={CLUSTER}", headers={"x-agent-token": GOOD_TOKEN}
+        ) as agent:
+            agent.receive_json()
+            with client.websocket_connect(
+                f"/live/terminal?workspace_id={WORKSPACE}&cluster_id={CLUSTER}"
+                "&namespace=sandbox&pod=api-0&container=app",
+                headers=browser_headers(),
+            ) as browser:
+                browser.send_json({"type": "terminal.start", "command": command})
+                session_id = agent.receive_json()["session_id"]
+                agent.close()
+                assert browser.receive_json() == {
+                    "type": "terminal.error",
+                    "session_id": session_id,
+                    "code": "agent_unavailable",
+                    "message": "Target agent disconnected.",
+                    "retryable": True,
+                }
+
+    assert [subject for subject, _workspace_id, _payload in audits] == [
+        "terminal.session.started",
+        "terminal.session.finished",
+    ]
+    assert audits[1][2]["reason"] == "error"
+    assert audits[1][2]["error_code"] == "agent_unavailable"
+    assert command not in str(audits)
+    assert "agent-secret" not in str(audits)
 
 
 def test_pod_terminal_fails_closed_without_exact_authorization_or_agent() -> None:
