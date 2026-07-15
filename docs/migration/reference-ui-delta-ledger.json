@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 225,
+  "pendingCount": 220,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3277,8 +3277,33 @@
         "blobId": "76234f0dc2deba8aa0f7366ef15467b072395154",
         "sha256": "12dd9b8164afef636775427e91140a7e81780148ee4b71f36ca43c9a5c9da8d9"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:node:evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "K8sResourceNode",
+          "interaction": "a graph node presents its observed resource identity and health, and routes selection only through the product-owned resource detail boundary",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyNode.tsx",
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.graph.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The initial card is driven by typed graph identity and observed status; source-specific issue explainers and workload expansion require additional evidence contracts."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3334,8 +3359,38 @@
         "blobId": "ef1cd4d60b2f53588a83f02edc69adbd5befdffb",
         "sha256": "e180ba22dcd9aaa7e047a39f892b090ac7ba569fe81ff2325340914d9d96e958"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:controls:contract:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyControls",
+          "interaction": "view-mode, grouping, policy-effect, and keyboard menu controls change a typed topology presentation without inventing capabilities in the client",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "control and menu state must remain visible without transition-dependent feedback",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/TopologyControls.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.topology_preferences"
+            ],
+            "plannedTestIds": [
+              "topology.controls.scope"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no typed topology presentation preference, policy-effect projection, or route-owned control catalog, so reproducing the upstream controls would be inert or browser-derived.",
+            "rationale": "The evidence graph is available first; controls will be added only after their scope and capabilities are part of the product contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3349,8 +3404,33 @@
         "blobId": "aefcd0bd6175138402b8f6f7377ee2ae115dff03",
         "sha256": "d8a2b17888683f594a7b524a5d0f3fdff019cac80dde150517f36d867c95cc89"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:filters:kind-visibility:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyFilterSidebar",
+          "interaction": "available resource kinds are derived from the observed graph and can be hidden or restored without fabricating nodes or relationships",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/features/resources/relationTopologyGraphModel.ts"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.graph.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The initial canvas derives visible kinds from the verified graph; category grouping, bulk controls, and large-kind confirmation remain unported."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3364,8 +3444,44 @@
         "blobId": "4f59a850d1c51efbfa343984df89a7e174c8bda0",
         "sha256": "023dcb64a4836e8ca5de7c64e12c9881d8923508cf28c9149c0b8707f7d4966d"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:graph:evidence-graph:v1",
+          "legacyContractIds": [
+            "reference.feature.118"
+          ],
+          "symbol": "TopologyGraph",
+          "interaction": "the scoped topology renders only graph nodes and directed relationships backed by inventory evidence, preserving an explicit partial or unavailable state instead of deriving missing relationships in the browser",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the typed relation read when the selected scope or snapshot revision changes",
+            "backpressure": "abort a superseded read and retain the last verified graph while one server-scheduled refresh is in flight",
+            "merge": "replace the graph only when its normalized authorized scope still matches the active route; unavailable evidence remains an empty graph"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/features/resources/relationTopologyCanonical.ts",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph",
+              "domains.inventory_filter.router",
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.graph.contract",
+              "topology.graph.surface",
+              "topology.graph.freshness"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The initial vertical is evidence-backed and scope-pinned, but source grouping, export, focus, and large-cluster behavior remain separate work items."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -3391,8 +3507,38 @@
         "blobId": "9bd8aeef4b16513e01cfc02e259a43db900c126b",
         "sha256": "a743e309fafa9986b404ba2d48dde1cc00b1a23d431a2af75ccccf18c311e95d"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:search:contract:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologySearch",
+          "interaction": "keyboard-opened topology search selects an authorized graph resource, focuses it, and closes predictably with Escape or outside dismissal",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "search open and close retain a stable focus order without transition-dependent feedback",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/TopologySearch.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.search.scope"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current relationship canvas has no route-owned search/focus controller or keyboard interaction test, so adding a local string filter would not preserve source navigation semantics.",
+            "rationale": "Search is deferred until it can focus the same typed resource identity that is used by the resource detail route."
+          }
+        }
+      ]
     },
     {
       "status": "M",

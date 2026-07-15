@@ -24,6 +24,7 @@ import {
   RelationTopologyNode,
   RelationTopologyNodeCard,
 } from "./RelationTopologyNode";
+import { RelationTopologyEvidenceStatus } from "./RelationTopologyEvidenceStatus";
 import type { RelationGraphNode } from "./relationTopologyGraphTypes";
 import { useGraphRefit } from "./useGraphRefit";
 import { useRelationTopologyLayout } from "./useRelationTopologyLayout";
@@ -130,10 +131,19 @@ export function RelationTopologyCanvas({
     return <div className="h-full animate-pulse bg-muted/30 motion-reduce:animate-none" role="status" aria-label={t("resources.graph.relations.loading")} />;
   }
   if (frame.phase === "failed") {
-    return <GraphMessage title={t("resources.graph.failed.title")} description={t("resources.graph.failed.description")} />;
+    return <GraphMessage
+      title={t("resources.graph.relations.failed.title")}
+      description={t("resources.graph.relations.failed.description")}
+    />;
+  }
+  if (topology?.availability === "unavailable") {
+    return <GraphMessage title={t("resources.graph.unavailable.title")} description={t("resources.graph.unavailable.description")} />;
   }
   if (topology === null || topology.nodes.length === 0 || model === null) {
-    return <GraphMessage title={t("resources.graph.empty.title")} description={t("resources.graph.empty.description")} />;
+    return <GraphMessage
+      title={t("resources.graph.relations.empty.title")}
+      description={t("resources.graph.relations.empty.description")}
+    />;
   }
 
   const visibleCount = model.connected.length + model.disconnected.length;
@@ -201,6 +211,7 @@ export function RelationTopologyCanvas({
             </span>
           </div>
         ) : null}
+        <RelationTopologyEvidenceStatus frame={frame} />
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden" ref={viewportRef}>

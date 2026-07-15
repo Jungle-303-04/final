@@ -3270,16 +3270,29 @@
       "streaming": false,
       "area": "cluster-insights",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.dashboard",
-      "frontendContract": "frontend/src/pages",
+      "backendContract": "packages.contracts.inventory_filter.graph",
+      "frontendContract": "frontend/src/features/resources/relationTopologyContract.ts",
       "desktopContract": "desktop",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_relations_topology_router.py",
+        "tests/test_relations_topology_contract.py",
+        "frontend/src/api/relation-topology.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
+        "frontend/src/pages/resources/useRelationTopologyDataFrame.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_topology",
+          "consumer": "src/domains/inventory_filter/graph.py#build_resource_graph",
+          "test": "tests/test_relations_topology_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/RelationTopologyCanvas.tsx#RelationTopologyCanvas",
+          "consumer": "frontend/src/features/resources/createRelationTopologyAdapter.ts#createRelationTopologyAdapter",
+          "test": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

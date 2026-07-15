@@ -240,6 +240,11 @@ export function resourcesRelationTopologyPort(
 ): RelationTopologyPort {
   return {
     loadRelationTopology: vi.fn().mockResolvedValue({
+      availability: "available",
+      clusterId: "cluster-1",
+      clusterProjectionRevision: 42,
+      graphRevision: "graph-test-support",
+      refreshAfterSeconds: 60,
       nodes: [
         { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
         { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
@@ -249,6 +254,25 @@ export function resourcesRelationTopologyPort(
         { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },
         { from: "service:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "selects" },
       ],
+      counts: {
+        filteredCount: 3,
+        unfilteredCount: 3,
+        filteredCountCompleteness: "exact",
+        unfilteredCountCompleteness: "exact",
+      },
+      relationCompleteness: "exact",
+      partialReasonCodes: [],
+      truncated: false,
+      omittedNodeCount: 0,
+      omittedEdgeCount: 0,
+      snapshot: {
+        snapshotRevision: 42,
+        authorizationRevision: "auth-test",
+        filterFingerprint: "filter-test",
+        observedAt: "2026-07-14T05:00:00Z",
+        stale: false,
+        partialReasonCodes: [],
+      },
     }),
     ...overrides,
   };
