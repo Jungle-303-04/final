@@ -44,6 +44,7 @@ describe("Timeline adapter", () => {
         },
         grouping: "owner",
         sort: "recent",
+        mode: "live",
       }),
     }, undefined);
     expect(result.scopes[0]).toEqual({
@@ -112,6 +113,42 @@ describe("Timeline adapter", () => {
     expect(loaded.session.window).toEqual({ fromMs: 3_000, toMs: 9_000 });
     expect(frames.map((frame) => frame.kind)).toEqual(["error"]);
   });
+
+  it("keeps the opaque cursor when only presentation preferences change", async () => {
+    const subscribeTimelineEvents = vi.fn(() => streamOf(errorFrame("opaque.snapshot")));
+    const adapter = createTimelineAdapter({
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
+      subscribeTimelineEvents,
+      now: () => 10_000,
+    });
+    const loaded = await adapter.readTimeline(timelineQuery());
+    const presentationOnly = {
+      ...loaded.session,
+      query: {
+        ...loaded.session.query,
+        filters: {
+          ...loaded.session.query.filters,
+          grouping: "flat" as const,
+          sort: "name" as const,
+          pinnedOnly: true,
+        },
+      },
+    };
+
+    await collect(adapter.subscribeTimeline(presentationOnly));
+
+    expect(subscribeTimelineEvents).toHaveBeenCalledWith(expect.objectContaining({
+      after: { token: "opaque.snapshot" },
+      query: expect.objectContaining({
+        grouping: "flat",
+        sort: "name",
+        filters: expect.objectContaining({ pinned_only: true }),
+      }),
+    }), expect.objectContaining({
+      onLifecycle: expect.any(Function),
+      signal: undefined,
+    }));
+  });
 });
 
 function timelineQuery(overrides: Partial<TimelineQuery> = {}): TimelineQuery {
@@ -158,6 +195,10 @@ function snapshot(cursor: string): TimelineEndpointSnapshot {
           min_delay_ms: 100,
           max_delay_ms: 200,
           strategy: "full_jitter_exponential",
+        },
+        live_session: {
+          max_age_ms: 30_000,
+          strategy: "replace_with_snapshot",
         },
       },
       events: [event()],

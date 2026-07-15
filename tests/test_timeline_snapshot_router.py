@@ -21,6 +21,7 @@ from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     TimelineEvent,
+    TimelineFilters,
     TimelineQuery,
     TimelineResourceSubject,
     TimelineStreamFrame,
@@ -33,6 +34,7 @@ class TimelineSnapshotDb:
     def __init__(self, *, overflow: bool = False) -> None:
         self.overflow = overflow
         self.snapshot_calls: list[dict[str, Any]] = []
+        self.replay_calls: list[dict[str, Any]] = []
 
     def accessible_resource_ids(
         self,
@@ -74,6 +76,7 @@ class TimelineSnapshotDb:
     def replay_timeline_events(
         self, _read_scope: object, **_kwargs: object
     ) -> TimelineReplayResult:
+        self.replay_calls.append(dict(_kwargs))
         return TimelineReplayResult(
             status="available",
             records=(TimelineLedgerRecord(sequence=8, event=_event()),),
@@ -111,7 +114,7 @@ def _event() -> TimelineEvent:
         source_key="inventory:deployment-uid:7",
         native_id="deployment-uid",
         activity="change",
-        occurred_at=datetime(2026, 7, 15, tzinfo=UTC),
+        occurred_at=datetime.fromtimestamp(1_720_000_030, tz=UTC),
         scope=scope,
         subject=TimelineResourceSubject(resource=resource),
         resource=resource,
@@ -132,6 +135,7 @@ def _query(cluster_id: str = "cluster-a") -> TimelineQuery:
             ),
         ),
         window=TimelineWindow(from_ms=1_720_000_000_000, to_ms=1_720_000_060_000),
+        mode="live",
     )
 
 
@@ -221,3 +225,31 @@ def test_timeline_stream_reuses_snapshot_cursor_as_sse_resume_state() -> None:
     ]
     assert [frame.kind for frame in frames] == ["event", "error"]
     assert all("sequence" not in line for line in response.text.splitlines())
+
+
+def test_snapshot_and_sse_apply_the_same_server_evidence_predicate() -> None:
+    db = TimelineSnapshotDb()
+    query = _query().model_copy(
+        update={"filters": TimelineFilters(activity=("warning",), query="checkout")}
+    )
+    client = _client(db, timeline_fanout=ClosedTimelineFanout())
+    snapshot_response = client.post(
+        "/timeline/snapshots", json={"query": query.model_dump(mode="json")}
+    )
+    snapshot = TimelineStreamFrame.model_validate_json(snapshot_response.text.splitlines()[0])
+
+    assert snapshot.events == ()
+    assert db.snapshot_calls[0]["predicate"].matches(_event()) is False
+
+    response = client.post(
+        "/timeline/stream",
+        json={"query": query.model_dump(mode="json"), "after": snapshot.cursor.model_dump()},
+    )
+    frames = [
+        TimelineStreamFrame.model_validate_json(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+    assert [frame.kind for frame in frames] == ["error"]
+    assert db.replay_calls[0]["predicate"].matches(_event()) is False

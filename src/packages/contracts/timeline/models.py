@@ -35,6 +35,7 @@ TimelineEventType = Literal[
 TimelineSeverity = Literal["info", "warning", "critical", "unknown"]
 TimelineGrouping = Literal["app", "owner", "flat"]
 TimelineSort = Literal["importance", "recent", "name"]
+TimelineReadMode = Literal["live", "frozen"]
 TimelineFrameKind = Literal[
     "snapshot",
     "event",
@@ -85,6 +86,7 @@ class TimelineQuery(StrictModel):
     scopes: tuple[ClusterScope, ...] = Field(min_length=1, max_length=100)
     window: TimelineWindow
     filters: TimelineFilters = Field(default_factory=TimelineFilters)
+    mode: TimelineReadMode
     grouping: TimelineGrouping = "app"
     sort: TimelineSort = "importance"
 

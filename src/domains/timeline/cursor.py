@@ -12,10 +12,55 @@ import json
 
 from domains.inventory_filter.cursor import CursorScope, FilterCursorCodec
 from packages.contracts.gateway.base import StrictModel
-from packages.contracts.timeline import TimelineCursor, TimelineQuery
+from packages.contracts.parity import ClusterScope
+from packages.contracts.timeline import TimelineCursor, TimelineQuery, TimelineWindow
+from packages.contracts.timeline.models import TimelineActivity, TimelineReadMode
 
 TIMELINE_CURSOR_SURFACE = "timeline-replay"
 TIMELINE_SEQUENCE_POSITION = "timeline_sequence"
+
+
+class TimelineEvidenceFilters(StrictModel):
+    """The subset of Timeline filters that changes durable evidence membership.
+
+    ``pinned_only`` is intentionally absent. Pins have no server-backed user
+    contract yet, so treating that UI preference as a durable predicate would
+    create a dishonest empty result. Grouping and sort are presentation-only
+    controls and are likewise excluded by ``TimelineReplayIdentity`` below.
+    """
+
+    activity: tuple[TimelineActivity, ...] = ()
+    kinds: tuple[str, ...] = ()
+    include_deleted: bool = True
+    search: str = ""
+
+
+class TimelineReplayIdentity(StrictModel):
+    """Canonical server-owned identity for a retained timeline replay.
+
+    The identity deliberately contains only evidence-selection fields. A
+    browser may change grouping, ordering, or a not-yet-backed pin preference
+    without invalidating the opaque durable cursor or changing its suffix.
+    """
+
+    scopes: tuple[ClusterScope, ...]
+    window: TimelineWindow
+    mode: TimelineReadMode
+    filters: TimelineEvidenceFilters
+
+    @classmethod
+    def from_query(cls, query: TimelineQuery) -> TimelineReplayIdentity:
+        return cls(
+            scopes=tuple(scope.model_copy(update={"freshness": "live"}) for scope in query.scopes),
+            window=query.window,
+            mode=query.mode,
+            filters=TimelineEvidenceFilters(
+                activity=query.filters.activity,
+                kinds=query.filters.kinds,
+                include_deleted=query.filters.include_deleted,
+                search=query.filters.query.strip(),
+            ),
+        )
 
 
 class TimelineCursorBinding(StrictModel):
@@ -23,16 +68,32 @@ class TimelineCursorBinding(StrictModel):
 
     user_id: str
     authorization_revision: str
-    query: TimelineQuery
+    replay_identity: TimelineReplayIdentity
     snapshot_revision: int = 0
+
+    @classmethod
+    def from_query(
+        cls,
+        *,
+        user_id: str,
+        authorization_revision: str,
+        query: TimelineQuery,
+        snapshot_revision: int = 0,
+    ) -> TimelineCursorBinding:
+        return cls(
+            user_id=user_id,
+            authorization_revision=authorization_revision,
+            replay_identity=TimelineReplayIdentity.from_query(query),
+            snapshot_revision=snapshot_revision,
+        )
 
     def as_filter_scope(self) -> CursorScope:
         return CursorScope(
-            workspace_id=self.query.scopes[0].workspace_id,
+            workspace_id=self.replay_identity.scopes[0].workspace_id,
             user_id=self.user_id,
             authorization_revision=self.authorization_revision,
             surface=TIMELINE_CURSOR_SURFACE,
-            filter_fingerprint=timeline_query_fingerprint(self.query),
+            filter_fingerprint=timeline_replay_identity_fingerprint(self.replay_identity),
             snapshot_revision=self.snapshot_revision,
             facet_query=None,
         )
@@ -63,7 +124,12 @@ class TimelineReplayCursorCodec:
 
 
 def timeline_query_fingerprint(query: TimelineQuery) -> str:
-    """Canonical query identity independent from transient collection freshness."""
+    """Compatibility facade for the explicit server replay identity projection."""
+    return timeline_replay_identity_fingerprint(TimelineReplayIdentity.from_query(query))
+
+
+def timeline_replay_identity_fingerprint(identity: TimelineReplayIdentity) -> str:
+    """Fingerprint only durable evidence selection, never presentation preferences."""
     payload = {
         "scopes": [
             {
@@ -71,12 +137,11 @@ def timeline_query_fingerprint(query: TimelineQuery) -> str:
                 "cluster_id": scope.cluster_id,
                 "namespaces": scope.namespaces,
             }
-            for scope in query.scopes
+            for scope in identity.scopes
         ],
-        "window": query.window.model_dump(mode="json"),
-        "filters": query.filters.model_dump(mode="json"),
-        "grouping": query.grouping,
-        "sort": query.sort,
+        "window": identity.window.model_dump(mode="json"),
+        "mode": identity.mode,
+        "filters": identity.filters.model_dump(mode="json"),
     }
     encoded = json.dumps(
         payload,

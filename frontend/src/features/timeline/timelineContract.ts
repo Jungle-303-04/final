@@ -87,12 +87,19 @@ export interface TimelineRealtimePolicy {
   resume: "cursor";
   hiddenTab: "coalesce";
   reconnect: TimelineReconnectPolicy;
+  liveSession: TimelineLiveSessionPolicy;
 }
 
 export interface TimelineReconnectPolicy {
   minDelayMs: number;
   maxDelayMs: number;
   strategy: "full_jitter_exponential";
+}
+
+/** Server-owned maximum age for a moving live-window cursor/session pair. */
+export interface TimelineLiveSessionPolicy {
+  maxAgeMs: number;
+  strategy: "replace_with_snapshot";
 }
 
 export interface TimelineCoverage {

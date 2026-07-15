@@ -11,6 +11,7 @@ const request = {
       freshness: "live" as const,
     }],
     window: { from_ms: 1_000, to_ms: 2_000 },
+    mode: "live" as const,
     filters: {
       activity: ["change" as const],
       kinds: ["Deployment"],
@@ -117,6 +118,10 @@ function snapshotFrame() {
         min_delay_ms: 500,
         max_delay_ms: 30_000,
         strategy: "full_jitter_exponential",
+      },
+      live_session: {
+        max_age_ms: 30_000,
+        strategy: "replace_with_snapshot",
       },
     },
     events: [event()],

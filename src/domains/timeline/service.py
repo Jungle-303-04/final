@@ -22,6 +22,7 @@ from domains.timeline.access import (
     resolve_authorized_timeline_scope,
 )
 from domains.timeline.cursor import TimelineCursorBinding
+from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import TimelineLedgerReadScope
 from domains.timeline.settings import timeline_max_window_ms, timeline_realtime_policy
 from packages.contracts.parity import ClusterScope, Freshness
@@ -42,6 +43,7 @@ class TimelineReadResolution:
     query: TimelineQuery
     scopes: tuple[ClusterScope, ...]
     read_scope: TimelineLedgerReadScope
+    evidence_predicate: TimelineEvidencePredicate
     cursor_binding: TimelineCursorBinding
     policy: RealtimePolicy
 
@@ -70,7 +72,8 @@ async def resolve_timeline_read(
         application_workflow_ids=authorized.deployment_application_ids,
         gitops_application_ids=authorized.application_ids,
     )
-    binding = TimelineCursorBinding(
+    evidence_predicate = TimelineEvidencePredicate.from_query(read_scope, requested_query)
+    binding = TimelineCursorBinding.from_query(
         user_id=authorized.user_id,
         authorization_revision=authorized.authorization_revision,
         query=requested_query,
@@ -80,6 +83,7 @@ async def resolve_timeline_read(
         query=requested_query,
         scopes=scopes,
         read_scope=read_scope,
+        evidence_predicate=evidence_predicate,
         cursor_binding=binding,
         policy=timeline_realtime_policy(),
     )

@@ -65,6 +65,10 @@ export interface TimelineEndpointPolicy {
     max_delay_ms: number;
     strategy: "full_jitter_exponential";
   };
+  live_session: {
+    max_age_ms: number;
+    strategy: "replace_with_snapshot";
+  };
 }
 
 export interface TimelineEndpointCoverage {
@@ -78,6 +82,7 @@ export interface TimelineEndpointCoverage {
 export interface TimelineEndpointQuery {
   scopes: TimelineEndpointScope[];
   window: { from_ms: number; to_ms: number };
+  mode: "live" | "frozen";
   filters: {
     activity: TimelineEndpointEvent["activity"][];
     kinds: string[];

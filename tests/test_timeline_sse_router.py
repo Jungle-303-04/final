@@ -10,6 +10,7 @@ from domains.inventory_filter.cursor import FilterCursorCodec
 from domains.timeline.access import AuthorizedTimelineScope
 from domains.timeline.cursor import TimelineCursorBinding, TimelineReplayCursorCodec
 from domains.timeline.fanout import TimelineFanoutClosed, TimelineFanoutOverflow
+from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import (
     TimelineLedgerReadScope,
     TimelineLedgerRecord,
@@ -60,9 +61,13 @@ class OverflowThenClosedSubscription(ClosedSubscription):
         raise TimelineFanoutClosed("closed")
 
 
-def _resolution() -> TimelineReadResolution:
+def _resolution(*, mode: str = "live") -> TimelineReadResolution:
     scope = ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a")
-    query = TimelineQuery(scopes=(scope,), window=TimelineWindow(from_ms=1_000, to_ms=2_000))
+    query = TimelineQuery(
+        scopes=(scope,),
+        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        mode=mode,  # type: ignore[arg-type]
+    )
     authorized = AuthorizedTimelineScope(
         workspace_id="workspace-a",
         user_id="user-a",
@@ -72,16 +77,18 @@ def _resolution() -> TimelineReadResolution:
         incident_cluster_ids=frozenset(),
         deployment_application_ids=frozenset(),
     )
+    read_scope = TimelineLedgerReadScope(
+        workspace_id="workspace-a",
+        scopes=(scope,),
+        inventory_cluster_ids=frozenset({"cluster-a"}),
+    )
     return TimelineReadResolution(
         authorized=authorized,
         query=query,
         scopes=(scope,),
-        read_scope=TimelineLedgerReadScope(
-            workspace_id="workspace-a",
-            scopes=(scope,),
-            inventory_cluster_ids=frozenset({"cluster-a"}),
-        ),
-        cursor_binding=TimelineCursorBinding(
+        read_scope=read_scope,
+        evidence_predicate=TimelineEvidencePredicate.from_query(read_scope, query),
+        cursor_binding=TimelineCursorBinding.from_query(
             user_id="user-a",
             authorization_revision=authorized.authorization_revision,
             query=query,
@@ -105,7 +112,7 @@ def _resolution() -> TimelineReadResolution:
     )
 
 
-def _event() -> TimelineEvent:
+def _event(*, occurred_at: datetime | None = None) -> TimelineEvent:
     scope = ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a")
     resource = ResourceRef(kind="Deployment", namespace="payments", name="checkout", uid="uid-a")
     return TimelineEvent(
@@ -114,7 +121,7 @@ def _event() -> TimelineEvent:
         source_key="inventory:event-7",
         native_id="event-7",
         activity="change",
-        occurred_at=datetime(2026, 7, 15, tzinfo=UTC),
+        occurred_at=occurred_at or datetime(1970, 1, 1, 0, 0, 1, 500_000, tzinfo=UTC),
         scope=scope,
         subject=TimelineResourceSubject(resource=resource),
         resource=resource,
@@ -124,11 +131,14 @@ def _event() -> TimelineEvent:
     )
 
 
-def _available(*records: TimelineLedgerRecord) -> TimelineReplayResult:
+def _available(
+    *records: TimelineLedgerRecord,
+    high_water_sequence: int = 7,
+) -> TimelineReplayResult:
     return TimelineReplayResult(
         status="available",
         records=records,
-        high_water_sequence=7,
+        high_water_sequence=high_water_sequence,
         retained_from_sequence=1,
     )
 
@@ -174,14 +184,18 @@ def test_sse_replays_durable_records_then_reports_closed_fanout_without_raw_sequ
     assert cursor_codec.decode(frames[0].cursor, binding=resolution.cursor_binding) == 7
     assert cursor_codec.decode(frames[1].cursor, binding=resolution.cursor_binding) == 7
     assert all("sequence" not in chunk for chunk in chunks)
-    assert reader.calls == [{"after_sequence": 4, "limit": 2}]
+    assert reader.calls[0] == {
+        "after_sequence": 4,
+        "predicate": resolution.evidence_predicate,
+        "limit": 2,
+    }
     assert subscription.closed is True
 
 
 def test_sse_overflow_replays_durable_suffix_and_retention_requires_resync() -> None:
     overflow_reader = ReplayReader(
         [
-            _available(),
+            _available(high_water_sequence=4),
             _available(TimelineLedgerRecord(sequence=7, event=_event())),
             _available(),
         ]
@@ -222,6 +236,45 @@ def test_sse_overflow_replays_durable_suffix_and_retention_requires_resync() -> 
         )
     )
     assert [frame.kind for frame in _frames(resync_chunks)] == ["resync_required"]
+
+
+def test_live_sse_allows_new_events_past_snapshot_upper_bound_but_frozen_does_not() -> None:
+    event_after_snapshot = _event(occurred_at=datetime(1970, 1, 1, 0, 0, 2, 500_000, tzinfo=UTC))
+    live_chunks = asyncio.run(
+        _collect(
+            _timeline_sse_body(
+                replay_reader=ReplayReader(
+                    [
+                        _available(TimelineLedgerRecord(sequence=7, event=event_after_snapshot)),
+                        _available(),
+                    ]
+                ),
+                subscription=ClosedSubscription(),
+                resolution=_resolution(mode="live"),
+                cursor_codec=_cursor_codec(),
+                after_sequence=4,
+            )
+        )
+    )
+    frozen_chunks = asyncio.run(
+        _collect(
+            _timeline_sse_body(
+                replay_reader=ReplayReader(
+                    [
+                        _available(TimelineLedgerRecord(sequence=7, event=event_after_snapshot)),
+                        _available(),
+                    ]
+                ),
+                subscription=ClosedSubscription(),
+                resolution=_resolution(mode="frozen"),
+                cursor_codec=_cursor_codec(),
+                after_sequence=4,
+            )
+        )
+    )
+
+    assert [frame.kind for frame in _frames(live_chunks)] == ["event", "error"]
+    assert [frame.kind for frame in _frames(frozen_chunks)] == ["error"]
 
 
 def test_sse_requires_one_consistent_opaque_resume_cursor() -> None:
