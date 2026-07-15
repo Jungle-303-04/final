@@ -8,13 +8,21 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from domains.inventory_filter.cursor import FilterCursorCodec
-from domains.timeline.cursor import TimelineCursorBinding, TimelineReplayCursorCodec
+from domains.timeline.cursor import (
+    TimelineCursorBinding,
+    TimelineReplayCursorCodec,
+    timeline_query_fingerprint,
+)
 from domains.timeline.mapping import inventory_timeline_event
 from domains.timeline.repository import (
+    TimelineLedgerReadScope,
     TimelineLedgerRepository,
     TimelineReplayResult,
+    TimelineSnapshotLimitExceeded,
+    _timeline_events_statement,
     replay_result,
 )
 from packages.contracts.parity import ClusterScope, ResourceRef
@@ -27,10 +35,23 @@ from packages.contracts.timeline import (
 )
 
 
-def _query(*, cluster_id: str = "cluster-a") -> TimelineQuery:
+def _query(
+    *,
+    workspace_id: str = "workspace-a",
+    cluster_id: str = "cluster-a",
+    freshness: str = "live",
+    from_ms: int = 1_000,
+    to_ms: int = 2_000,
+) -> TimelineQuery:
     return TimelineQuery(
-        scopes=(ClusterScope(workspace_id="workspace-a", cluster_id=cluster_id),),
-        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        scopes=(
+            ClusterScope(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                freshness=freshness,
+            ),
+        ),
+        window=TimelineWindow(from_ms=from_ms, to_ms=to_ms),
     )
 
 
@@ -113,6 +134,36 @@ def test_timeline_cursor_is_bound_to_user_workspace_query_and_authorization_revi
             cursor,
             binding=binding.model_copy(update={"query": _query(cluster_id="cluster-b")}),
         )
+    with pytest.raises(ValueError, match="cursor scope changed"):
+        codec.decode(
+            cursor,
+            binding=binding.model_copy(update={"authorization_revision": "auth-revision-b"}),
+        )
+    with pytest.raises(ValueError, match="cursor scope changed"):
+        codec.decode(
+            cursor,
+            binding=binding.model_copy(update={"query": _query(workspace_id="workspace-b")}),
+        )
+
+
+def test_timeline_cursor_keeps_resume_valid_for_freshness_only_scope_changes() -> None:
+    codec = TimelineReplayCursorCodec(
+        FilterCursorCodec("timeline-cursor-test-secret-32-bytes!!", now=lambda: 1_000)
+    )
+    binding = TimelineCursorBinding(
+        user_id="user-a",
+        authorization_revision="auth-revision-a",
+        query=_query(freshness="live"),
+        snapshot_revision=7,
+    )
+    stale = binding.model_copy(update={"query": _query(freshness="stale")})
+    cursor = codec.encode(binding, sequence=42)
+
+    assert timeline_query_fingerprint(binding.query) == timeline_query_fingerprint(stale.query)
+    assert codec.decode(cursor, binding=stale) == 42
+    assert timeline_query_fingerprint(binding.query) != timeline_query_fingerprint(
+        _query(from_ms=1_001)
+    )
 
 
 def test_expired_timeline_cursor_is_rejected_before_replay_and_retention_requires_resync() -> None:
@@ -235,3 +286,79 @@ def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_curso
     assert connection.last_sequence == 1
     assert len(connection.rows) == 1
     assert connection.lock_count == 2
+
+
+def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates() -> None:
+    statement = _timeline_events_statement(
+        TimelineLedgerReadScope(
+            workspace_id="workspace-a",
+            scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
+        ),
+        after_sequence=0,
+        through_sequence=12,
+        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        limit=2,
+        replay_order=False,
+    )
+    sql = " ".join(
+        str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        .casefold()
+        .split()
+    )
+
+    assert "timeline_events.occurred_at >= '1970-01-01 00:00:01+00:00'" in sql
+    assert "timeline_events.occurred_at < '1970-01-01 00:00:02+00:00'" in sql
+    assert "timeline_events.occurred_at <=" not in sql
+
+
+def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_limit() -> None:
+    class Repository:
+        def __init__(self, events: tuple[TimelineEvent, ...]) -> None:
+            self.events = events
+            self.calls: list[dict[str, object]] = []
+
+        def _cursor_state(self, _workspace_id: str) -> tuple[int, int]:
+            return 12, 9
+
+        def _read_events(self, _read_scope: object, **kwargs: object) -> tuple[TimelineEvent, ...]:
+            self.calls.append(kwargs)
+            return self.events
+
+    scope = TimelineLedgerReadScope(
+        workspace_id="workspace-a",
+        scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
+    )
+    window = TimelineWindow(from_ms=1_000, to_ms=2_000)
+    full = Repository((_resource_event("inventory:9", "event-9"),))
+
+    snapshot = TimelineLedgerRepository.snapshot_timeline_events(
+        full,
+        scope,
+        window=window,
+        limit=1,
+    )
+
+    assert snapshot.events[0].event_id == "event-9"
+    assert full.calls == [
+        {
+            "after_sequence": 8,
+            "through_sequence": 12,
+            "window": window,
+            "limit": 2,
+            "replay_order": False,
+        }
+    ]
+
+    overflow = Repository(
+        (
+            _resource_event("inventory:9", "event-9"),
+            _resource_event("inventory:10", "event-10"),
+        )
+    )
+    with pytest.raises(TimelineSnapshotLimitExceeded, match="limit exceeded"):
+        TimelineLedgerRepository.snapshot_timeline_events(
+            overflow,
+            scope,
+            window=window,
+            limit=1,
+        )
