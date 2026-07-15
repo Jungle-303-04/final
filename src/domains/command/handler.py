@@ -447,9 +447,26 @@ def route_for_plan(plan: Plan) -> Route:
     return Route(channel=plan.routing_constraint.channel, cluster_id=plan.cluster_id)
 
 
-async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
-    await ctx.db.queue_agent_command(
+async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> bool:
+    return await ctx.db.queue_agent_command(
         ctx.correlation_id, plan.to_body(), COMMAND_CONFIG.command_status_queued
+    )
+
+
+async def close_unqueued_operation(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
+    """Persist the terminal lifecycle fact for a command that never reached an agent."""
+    append = getattr(ctx.db, "append_command_operation_event", None)
+    if not callable(append):
+        return
+    await append(
+        plan.workspace_id,
+        plan.command_id,
+        "failed",
+        {
+            "cluster_id": plan.cluster_id,
+            "status": CommandStatus.FAILED,
+            "reason": "agent command could not be queued",
+        },
     )
 
 
@@ -499,7 +516,13 @@ async def handle_command_requested(
 
     plan = build_plan(evt, ctx.correlation_id, approval_evidence)
     yield CommandDispatchedBody(plan=plan, route=route_for_plan(plan))
-    await queue_plan_for_agent(ctx, plan)
+    inserted = await queue_plan_for_agent(ctx, plan)
+    if not inserted:
+        await close_unqueued_operation(ctx, plan)
+        yield CommandRejectedBody(
+            reason="agent command could not be queued", requested=evt.to_body()
+        )
+        return
     yield CommandQueuedForAgentBody(
         command_id=plan.command_id,
         cluster_id=plan.cluster_id,
