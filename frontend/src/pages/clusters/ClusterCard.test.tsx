@@ -40,7 +40,24 @@ describe("ClusterCard", () => {
     expect(screen.getByText("Incidents 1")).toBeTruthy();
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
+    const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).toContain("hover:border-status-healthy");
+    expect(card?.className).toContain("hover:ring-2");
+    expect(card?.className).toContain("hover:ring-status-healthy/30");
+    expect(card?.className).toContain("hover:shadow-status-healthy/30");
     expect(container.querySelectorAll("[data-morph-id]")).toHaveLength(0);
+  });
+
+  it("uses the connection tone for future cluster card hover borders", () => {
+    const { container } = renderCard({
+      ...cluster,
+      connectionState: "stale",
+    });
+
+    const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).toContain("hover:border-status-stale");
+    expect(card?.className).toContain("hover:ring-status-stale/30");
+    expect(card?.className).toContain("hover:shadow-status-stale/30");
   });
 
   it("omits unknown counts instead of presenting them as zero", () => {

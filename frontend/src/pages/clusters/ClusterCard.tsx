@@ -36,6 +36,14 @@ const connectionTones: Record<HomeConnectionState, StatusTone> = {
   unknown: "unknown",
 };
 
+const connectionHoverClasses: Record<HomeConnectionState, string> = {
+  online: "hover:border-status-healthy hover:ring-2 hover:ring-status-healthy/30 hover:shadow-status-healthy/30",
+  stale: "hover:border-status-stale hover:ring-2 hover:ring-status-stale/30 hover:shadow-status-stale/30",
+  pending: "hover:border-status-warning hover:ring-2 hover:ring-status-warning/30 hover:shadow-status-warning/30",
+  offline: "hover:border-status-unknown hover:ring-2 hover:ring-status-unknown/30 hover:shadow-status-unknown/30",
+  unknown: "hover:border-status-unknown hover:ring-2 hover:ring-status-unknown/30 hover:shadow-status-unknown/30",
+};
+
 export function ClusterCard({
   cluster,
   disconnectPhase,
@@ -88,7 +96,8 @@ export function ClusterCard({
   return (
     <Card
       className={cn(
-        "motion-node-land relative min-h-52 overflow-visible transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none",
+        "motion-node-land relative min-h-52 overflow-visible transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transition-none",
+        connectionHoverClasses[cluster.connectionState],
         disconnected && "bg-muted/30 text-muted-foreground saturate-0",
       )}
       data-cluster-id={cluster.id}
