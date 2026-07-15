@@ -1,49 +1,36 @@
-import { useMemo, useRef, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent,
+} from "react";
 import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { Button } from "../../shared/ui/primitives/button";
 import type {
   TimelineEvent,
+  TimelineGrouping,
   TimelinePort,
   TimelineQuery,
-  TimelineSeverity,
-  TimelineSource,
   TimelineStreamLifecycle,
+  TimelineSort,
   TimelineViewMode,
-  TimelineEventType,
 } from "../../features/timeline/timelineContract";
+import { groupTimelineEvents } from "../../features/timeline/timelinePresentation";
 import { DEFAULT_MAX_RANGE_DAYS } from "../../features/timeline/timelineUrlState";
 import { useTimelineUrlState } from "../../features/timeline/useTimelineUrlState";
 import type { ClusterScope } from "../../shared/parity/referenceParity";
 import { useTimelineDataFrame, type TimelineDataFrame } from "./useTimelineDataFrame";
+import { TimelineEventDetailSheet } from "./TimelineEventDetailSheet";
+import {
+  TimelineEventList,
+  TimelineSwimlane,
+  type TimelineEventInteraction,
+} from "./TimelineEventViews";
 
 const VIEW_MODES: readonly TimelineViewMode[] = ["list", "swimlane"];
-
-const SOURCE_LABEL: Record<TimelineSource, MessageKey> = {
-  inventory: "timeline.source.inventory",
-  incident: "timeline.source.incident",
-  application_workflow: "timeline.source.applicationWorkflow",
-  kubernetes_event: "timeline.source.kubernetesEvent",
-  gitops: "timeline.source.gitops",
-};
-
-const TYPE_LABEL: Record<TimelineEventType, MessageKey> = {
-  add: "timeline.type.add",
-  update: "timeline.type.update",
-  delete: "timeline.type.delete",
-  k8s_event: "timeline.type.k8sEvent",
-  incident: "timeline.type.incident",
-  deployment: "timeline.type.deployment",
-  gitops_change: "timeline.type.gitopsChange",
-};
-
-const SEVERITY_LABEL: Record<TimelineSeverity, MessageKey> = {
-  info: "timeline.severity.info",
-  warning: "timeline.severity.warning",
-  critical: "timeline.severity.critical",
-  unknown: "timeline.severity.unknown",
-};
 
 export function TimelineSurface({
   port,
@@ -52,7 +39,7 @@ export function TimelineSurface({
   port: TimelinePort;
   scopes: readonly ClusterScope[];
 }) {
-  const { formatNumber, t } = useI18n();
+  const { formatDate, formatNumber, t } = useI18n();
   const url = useTimelineUrlState({
     isRetained: port.capabilities.sourceMode === "retained",
     maxRangeDays: port.capabilities.maxRangeDays ?? DEFAULT_MAX_RANGE_DAYS,
@@ -69,7 +56,7 @@ export function TimelineSurface({
       search: url.state.search,
       grouping: url.state.grouping,
       sort: url.state.sort,
-      selectedEventId: url.state.selectedEventId,
+      selectedEventKey: url.state.selectedEventKey,
     },
   }), [scopes, url.state]);
   const timeline = useTimelineDataFrame(port, query);
@@ -157,10 +144,14 @@ export function TimelineSurface({
         </div>
       </div>
       <TimelineDataBoundary
+        formatDate={formatDate}
         formatNumber={formatNumber}
         frame={timeline.frame}
+        grouping={url.state.grouping}
         onRetry={timeline.retry}
-        selectedEventId={url.state.selectedEventId}
+        onSelectedEventKeyChange={url.setSelectedEventKey}
+        selectedEventKey={url.state.selectedEventKey}
+        sort={url.state.sort}
         t={t}
         viewMode={url.state.viewMode}
       />
@@ -169,17 +160,25 @@ export function TimelineSurface({
 }
 
 function TimelineDataBoundary({
+  formatDate,
   formatNumber,
   frame,
+  grouping,
   onRetry,
-  selectedEventId,
+  onSelectedEventKeyChange,
+  selectedEventKey,
+  sort,
   t,
   viewMode,
 }: {
+  formatDate: I18nController["formatDate"];
   formatNumber: I18nController["formatNumber"];
   frame: TimelineDataFrame;
+  grouping: TimelineGrouping;
   onRetry: () => void;
-  selectedEventId: string | null;
+  onSelectedEventKeyChange: (sourceKey: string | null) => void;
+  selectedEventKey: string | null;
+  sort: TimelineSort;
   t: I18nController["t"];
   viewMode: TimelineViewMode;
 }) {
@@ -197,35 +196,148 @@ function TimelineDataBoundary({
       </section>
     );
   }
-  const snapshot = frame.snapshot;
   return (
-    <section className="grid min-w-0 gap-3" data-timeline-view={viewMode}>
-      <p aria-live="polite" className="text-sm text-muted-foreground" role="status">
-        {t(
-          snapshot.events.length === 1 ? "timeline.count.one" : "timeline.count.other",
-          { count: formatNumber(snapshot.events.length) },
-        )}
-      </p>
-      {frame.phase === "resyncing" ? (
-        frame.failure === null ? (
-          <p aria-live="polite" className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground" role="status">
-            {t("timeline.stream.resyncing")}
-          </p>
+    <TimelineReadyData
+      formatDate={formatDate}
+      formatNumber={formatNumber}
+      frame={frame}
+      grouping={grouping}
+      onRetry={onRetry}
+      onSelectedEventKeyChange={onSelectedEventKeyChange}
+      selectedEventKey={selectedEventKey}
+      sort={sort}
+      t={t}
+      viewMode={viewMode}
+    />
+  );
+}
+
+function TimelineReadyData({
+  formatDate,
+  formatNumber,
+  frame,
+  grouping,
+  onRetry,
+  onSelectedEventKeyChange,
+  selectedEventKey,
+  sort,
+  t,
+  viewMode,
+}: {
+  formatDate: I18nController["formatDate"];
+  formatNumber: I18nController["formatNumber"];
+  frame: Exclude<TimelineDataFrame, { phase: "loading" } | { phase: "failed" }>;
+  grouping: TimelineGrouping;
+  onRetry: () => void;
+  onSelectedEventKeyChange: (sourceKey: string | null) => void;
+  selectedEventKey: string | null;
+  sort: TimelineSort;
+  t: I18nController["t"];
+  viewMode: TimelineViewMode;
+}) {
+  const snapshot = frame.snapshot;
+  const groups = useMemo(
+    () => groupTimelineEvents(snapshot.events, grouping, sort),
+    [grouping, snapshot.events, sort],
+  );
+  const presentedEvents = useMemo(
+    () => groups.flatMap((group) => group.events),
+    [groups],
+  );
+  const selectedEvent = useMemo(
+    () => presentedEvents.find((event) => event.sourceKey === selectedEventKey) ?? null,
+    [presentedEvents, selectedEventKey],
+  );
+  const controls = useRef(new Map<string, HTMLButtonElement>());
+  const focusOrigin = useRef<HTMLButtonElement | null>(null);
+  const restoreFocus = useRef(false);
+
+  useEffect(() => {
+    if (selectedEventKey !== null || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    const origin = focusOrigin.current;
+    if (origin?.isConnected) origin.focus();
+  }, [selectedEventKey]);
+
+  const registerControl = useCallback((event: TimelineEvent, control: HTMLButtonElement | null) => {
+    if (control === null) controls.current.delete(event.sourceKey);
+    else controls.current.set(event.sourceKey, control);
+  }, []);
+  const selectEvent = useCallback((event: TimelineEvent, origin: HTMLButtonElement) => {
+    focusOrigin.current = origin;
+    onSelectedEventKeyChange(event.sourceKey);
+  }, [onSelectedEventKeyChange]);
+  const navigateEvent = useCallback((event: TimelineEvent, direction: -1 | 1) => {
+    const index = presentedEvents.findIndex((item) => item.sourceKey === event.sourceKey);
+    const target = presentedEvents[index + direction];
+    if (target === undefined) return;
+    focusOrigin.current = controls.current.get(target.sourceKey) ?? focusOrigin.current;
+    onSelectedEventKeyChange(target.sourceKey);
+  }, [onSelectedEventKeyChange, presentedEvents]);
+  const closeEvent = useCallback(() => {
+    restoreFocus.current = true;
+    onSelectedEventKeyChange(null);
+  }, [onSelectedEventKeyChange]);
+  const interaction = useMemo<TimelineEventInteraction>(() => ({
+    selectedEventKey,
+    onNavigate: navigateEvent,
+    onSelect: selectEvent,
+    registerControl,
+  }), [navigateEvent, registerControl, selectEvent, selectedEventKey]);
+
+  return (
+    <>
+      <section className="grid min-w-0 gap-3" data-timeline-view={viewMode}>
+        <p aria-live="polite" className="text-sm text-muted-foreground" role="status">
+          {t(
+            snapshot.events.length === 1 ? "timeline.count.one" : "timeline.count.other",
+            { count: formatNumber(snapshot.events.length) },
+          )}
+        </p>
+        {frame.phase === "resyncing" ? (
+          frame.failure === null ? (
+            <p aria-live="polite" className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground" role="status">
+              {t("timeline.stream.resyncing")}
+            </p>
+          ) : (
+            <TimelineRetryableFailure onRetry={onRetry} t={t} />
+          )
+        ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
+        {snapshot.coverage.length > 0 ? (
+          <aside className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted-foreground" role="status">
+            {t("timeline.coverage")}
+          </aside>
+        ) : null}
+        {snapshot.events.length === 0 ? (
+          <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t("timeline.empty")}</p>
+        ) : viewMode === "list" ? (
+          <TimelineEventList
+            formatDate={formatDate}
+            grouping={grouping}
+            groups={groups}
+            interaction={interaction}
+            sort={sort}
+            t={t}
+          />
         ) : (
-          <TimelineRetryableFailure onRetry={onRetry} t={t} />
-        )
-      ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
-      {snapshot.coverage.length > 0 ? (
-        <aside className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted-foreground" role="status">
-          {t("timeline.coverage")}
-        </aside>
-      ) : null}
-      {snapshot.events.length === 0 ? (
-        <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t("timeline.empty")}</p>
-      ) : (
-        <TimelineEventList events={snapshot.events} selectedEventId={selectedEventId} t={t} />
-      )}
-    </section>
+          <TimelineSwimlane
+            formatDate={formatDate}
+            grouping={grouping}
+            groups={groups}
+            interaction={interaction}
+            sort={sort}
+            t={t}
+          />
+        )}
+      </section>
+      <TimelineEventDetailSheet
+        event={selectedEvent}
+        formatDate={formatDate}
+        onClose={closeEvent}
+        onNavigate={(direction) => { if (selectedEvent !== null) navigateEvent(selectedEvent, direction); }}
+        t={t}
+      />
+    </>
   );
 }
 
@@ -277,50 +389,4 @@ function TimelineRetryableFailure({
       <Button onClick={onRetry} size="sm" type="button" variant="outline">{t("timeline.action.retry")}</Button>
     </section>
   );
-}
-
-function TimelineEventList({
-  events,
-  selectedEventId,
-  t,
-}: {
-  events: readonly TimelineEvent[];
-  selectedEventId: string | null;
-  t: I18nController["t"];
-}) {
-  const { formatDate } = useI18n();
-  return (
-    <ol aria-label={t("timeline.list.label")} className="grid min-w-0 gap-2">
-      {events.map((event) => {
-        const selected = event.id === selectedEventId;
-        return (
-          <li
-            aria-current={selected ? "true" : undefined}
-            className="grid min-w-0 gap-2 rounded-xl border bg-card p-4 shadow-sm"
-            data-selected={selected || undefined}
-            key={`${event.source}:${event.id}`}
-          >
-            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <h3 className="min-w-0 break-words font-medium">{event.title}</h3>
-              <time className="shrink-0 text-xs text-muted-foreground" dateTime={event.occurredAt}>
-                {formatDate(new Date(event.occurredAt), { dateStyle: "medium", timeStyle: "medium" })}
-              </time>
-            </div>
-            <div className="flex min-w-0 flex-wrap gap-1.5 text-xs text-muted-foreground">
-              <span className="rounded-md border px-2 py-0.5">{t(SOURCE_LABEL[event.source])}</span>
-              <span className="rounded-md border px-2 py-0.5">{t(TYPE_LABEL[event.type])}</span>
-              <span className={severityClass(event.severity)}>{t(SEVERITY_LABEL[event.severity])}</span>
-              <span className="min-w-0 break-words py-0.5">{event.scope.clusterId}</span>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function severityClass(severity: TimelineSeverity): string {
-  if (severity === "critical") return "rounded-md border border-destructive/40 bg-destructive/5 px-2 py-0.5 text-destructive";
-  if (severity === "warning") return "rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-0.5 text-amber-700 dark:text-amber-300";
-  return "rounded-md border px-2 py-0.5";
 }

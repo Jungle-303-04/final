@@ -61,7 +61,8 @@ export interface TimelineFilters {
   search: string;
   grouping: TimelineGrouping;
   sort: TimelineSort;
-  selectedEventId: string | null;
+  /** URL `event` contains the ledger-unique source key, not the non-unique event ID. */
+  selectedEventKey: string | null;
 }
 
 export interface TimelineQuery {
