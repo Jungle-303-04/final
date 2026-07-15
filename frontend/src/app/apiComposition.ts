@@ -35,6 +35,7 @@ import {
   login,
   logout,
   executeResourceCapability,
+  subscribeCommandOperationEvents,
   selectRecoveryAction,
   createReleaseFlowClient,
   getAiSuggestions,
@@ -75,6 +76,7 @@ import { createResourceMetricsHistoryAdapter } from "../features/resources/creat
 import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
 import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
 import { createResourceManifestAdapter } from "../features/resources/createResourceManifestAdapter";
+import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -138,6 +140,7 @@ export function createApiComposition() {
       return executeResourceCapability(capability.path, values, signal);
     },
   });
+  const operationEventsPort = createOperationEventsAdapter({ subscribeCommandOperationEvents });
   const podTerminalPort = createPodTerminalAdapter({ openPodTerminal });
   const resourceManifestPort = createResourceManifestAdapter({
     approveResourceManifestEdit,
@@ -203,6 +206,7 @@ export function createApiComposition() {
         resourceMetricsHistoryPort,
         resourceCapabilitiesPort,
         resourceActionsPort,
+        operationEventsPort,
         podTerminalPort,
         resourceManifestPort,
       ),

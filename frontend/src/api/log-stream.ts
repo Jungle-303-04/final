@@ -4,9 +4,9 @@ import {
   type LogStreamEventEndpoint,
 } from "./log-stream-schemas";
 import { encodePathSegment, withQuery } from "./url";
+import { parseSseFrames } from "../shared/streaming/sse";
 
 const SSE_MEDIA_TYPE = "text/event-stream";
-export const MAX_SSE_FRAME_LENGTH = 64 * 1024;
 
 export interface LogStreamEndpointHandlers {
   onEvent: (event: LogStreamEventEndpoint) => void;
@@ -65,10 +65,13 @@ async function consume(
     while (true) {
       const result = await reader.read();
       buffer += decoder.decode(result.value, { stream: !result.done });
-      const parsed = parseFrames(buffer);
+      const parsed = parseSseFrames(buffer);
       buffer = parsed.remainder;
-      for (const payload of parsed.payloads) {
-        const event = parsePayload(payload);
+      for (const frame of parsed.frames) {
+        if (frame.event !== null && frame.event !== "message") {
+          throw invalidFrame("unexpected SSE event name");
+        }
+        const event = parsePayload(frame.data);
         onEvent(event);
         if (event.type === "end" || event.type === "error") {
           await reader.cancel();
@@ -82,30 +85,6 @@ async function consume(
   }
   if (buffer.trim()) throw invalidFrame("unterminated SSE frame");
   throw invalidFrame("log stream ended without a terminal event");
-}
-
-export function parseFrames(
-  source: string,
-): { payloads: string[]; remainder: string } {
-  const payloads: string[] = [];
-  let remainder = source;
-  while (true) {
-    const boundary = /\r\n\r\n|\n\n|\r\r/u.exec(remainder);
-    if (!boundary) break;
-    const frame = remainder.slice(0, boundary.index);
-    if (frame.length > MAX_SSE_FRAME_LENGTH) throw invalidFrame("SSE frame exceeded limit");
-    remainder = remainder.slice(boundary.index + boundary[0].length);
-    const normalized = frame.replace(/\r\n|\r/gu, "\n");
-    const data: string[] = [];
-    for (const line of normalized.split("\n")) {
-      if (!line || line.startsWith(":")) continue;
-      if (!line.startsWith("data:")) throw invalidFrame("unsupported SSE field");
-      data.push(line.slice(5).replace(/^ /u, ""));
-    }
-    if (data.length > 0) payloads.push(data.join("\n"));
-  }
-  if (remainder.length > MAX_SSE_FRAME_LENGTH) throw invalidFrame("SSE frame exceeded limit");
-  return { payloads, remainder };
 }
 
 function parsePayload(payload: string): LogStreamEventEndpoint {

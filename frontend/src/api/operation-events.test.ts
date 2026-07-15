@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { subscribeCommandOperationEvents } from "./operation-events";
 
@@ -16,6 +16,8 @@ function sseResponse(data: unknown): Response {
 }
 
 describe("command operation events API", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
   it("consumes the authenticated SSE operation contract without polling", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(sseResponse({
       command_id: "command-1",
