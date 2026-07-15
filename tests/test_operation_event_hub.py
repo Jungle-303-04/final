@@ -5,6 +5,7 @@ import asyncio
 from packages.runtime.operation_events import (
     DurableOperationEventBroker,
     InMemoryOperationEventBroker,
+    RedisOperationEventBroker,
 )
 
 
@@ -103,6 +104,44 @@ def test_durable_operation_events_are_persisted_before_fanout_and_stop_after_ter
         assert completed is not None
         assert duplicate_terminal is None
         assert [await subscription.next(), await subscription.next()] == [running, completed]
+        await subscription.close()
+
+    asyncio.run(run())
+
+
+def test_redis_publish_failure_keeps_committed_event_available_to_local_subscribers() -> None:
+    """Redis is a wake-up transport, never the success condition of an operation event."""
+
+    class Store:
+        async def append_command_operation_event(
+            self,
+            _workspace_id: str,
+            command_id: str,
+            kind: str,
+            payload: dict[str, object],
+        ) -> object:
+            from packages.contracts.parity import OperationEvent
+
+            return OperationEvent(command_id=command_id, sequence=1, kind=kind, payload=payload)
+
+    class UnavailableRedis:
+        async def publish(self, *_args: object) -> None:
+            raise ConnectionError("redis unavailable")
+
+    async def run() -> None:
+        broker = RedisOperationEventBroker("redis://unused", Store())
+        broker._client = UnavailableRedis()  # type: ignore[assignment]
+        subscription = await broker.subscribe("command-1", workspace_id="workspace-1")
+
+        event = await broker.publish(
+            workspace_id="workspace-1",
+            command_id="command-1",
+            kind="completed",
+            payload={"cluster_id": "cluster-1", "status": "completed"},
+        )
+
+        assert event is not None
+        assert await subscription.next() == event
         await subscription.close()
 
     asyncio.run(run())

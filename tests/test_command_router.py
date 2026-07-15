@@ -904,6 +904,46 @@ def test_command_events_replays_durable_cursor_without_waiting_for_command_row()
     asyncio.run(run())
 
 
+def test_command_events_keeps_a_durable_receipt_cursor_open_before_projection_exists() -> None:
+    """A reconnect after the receipt must not turn an unprojected command into 404."""
+
+    class ReceiptOnlyDb(SpyAccessDb):
+        async def list_command_operation_events(
+            self,
+            workspace_id: str,
+            command_id: str,
+            *,
+            after_sequence: int,
+        ) -> list[object]:
+            assert (workspace_id, command_id, after_sequence) == ("workspace-1", "cmd-accepted", 1)
+            return []
+
+        async def get_command_operation_event_context(
+            self, workspace_id: str, command_id: str
+        ) -> dict[str, object] | None:
+            assert (workspace_id, command_id) == ("workspace-1", "cmd-accepted")
+            return {
+                "cluster_id": "cluster-1",
+                "last_sequence": 1,
+                "terminal_sequence": None,
+            }
+
+        async def get_agent_command(self, *_args: object) -> None:
+            raise AssertionError("durable receipt cursor must not query the delayed projection")
+
+    async def run() -> None:
+        response = await command_events(
+            "cmd-accepted",
+            after=1,
+            current=current_session(),
+            db=ReceiptOnlyDb(allowed=True),
+            operation_events=InMemoryOperationEventBroker(),
+        )
+        await response.body_iterator.aclose()
+
+    asyncio.run(run())
+
+
 def test_command_status_denies_without_cluster_read_access() -> None:
     async def run() -> None:
         db = SpyCommandStatusDb(allowed=False, row=completed_command_row())
