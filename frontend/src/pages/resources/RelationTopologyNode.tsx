@@ -1,55 +1,185 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Box, CircleDot, ServerCog, Waypoints } from "lucide-react";
+import {
+  Box,
+  Boxes,
+  CircleDot,
+  CloudCog,
+  Component,
+  Container,
+  Database,
+  GitBranch,
+  Globe2,
+  Network,
+  ServerCog,
+  Waypoints,
+} from "lucide-react";
+import type { KeyboardEvent } from "react";
 
+import type {
+  RelationHealthTone,
+  RelationTopologyGraphNode,
+} from "../../features/resources/relationTopologyGraphModel";
+import { cn } from "../../shared/lib/cn";
+import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
-import type { RelationTopologyNode as RelationNode } from "../../features/resources/relationTopologyContract";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../shared/ui/primitives/tooltip";
 import type { RelationGraphNode } from "./relationTopologyGraphTypes";
 
 export function RelationTopologyNode({ data }: NodeProps<RelationGraphNode>) {
-  return <RelationTopologyNodeCard resource={data.resource} withHandles />;
+  return (
+    <RelationTopologyNodeCard
+      graphNode={data.graphNode}
+      onSelect={data.onSelect}
+      selected={data.selected}
+      withHandles
+    />
+  );
 }
 
 export function RelationTopologyNodeCard({
-  resource,
+  graphNode,
+  onSelect,
+  selected,
   withHandles = false,
 }: {
-  resource: RelationNode;
+  graphNode: RelationTopologyGraphNode;
+  onSelect: (resourceId: string) => void;
+  selected: boolean;
   withHandles?: boolean;
 }) {
-  const pod = resource.kind.trim().toLocaleLowerCase() === "pod";
+  const { t } = useI18n();
+  const { resource, tone } = graphNode;
+  const pod = normalizedKind(resource.kind) === "pod";
   const status = resource.status || "—";
-  const Icon = pod
-    ? Box
-    : resource.kind.toLocaleLowerCase().includes("service")
-      ? Waypoints
-      : resource.kind.toLocaleLowerCase().includes("node")
-        ? ServerCog
-        : CircleDot;
+  const select = () => onSelect(resource.id);
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    select();
+  };
+
   return (
     <article
       aria-label={`${resource.kind} ${resource.name}, ${status}`}
-      className="motion-node-land grid min-w-44 gap-2 rounded-xl border bg-card/95 px-3 py-3 shadow-sm"
+      aria-pressed={selected}
+      className={cn(
+        "motion-node-land group/relation-node relative grid w-44 min-w-0 cursor-pointer gap-2 overflow-hidden rounded-xl border bg-card/95 px-3 py-3 text-left shadow-sm outline-none transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/40 motion-reduce:transform-none motion-reduce:transition-none",
+        toneClassName(tone),
+        selected && "border-ring shadow-md ring-2 ring-ring/25",
+      )}
+      data-health={tone}
       data-morph-id={pod ? `pod:${resource.id}` : undefined}
+      data-selected={selected ? "true" : "false"}
       data-slot="relation-topology-node"
+      onClick={select}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
     >
       {withHandles ? (
         <Handle className="opacity-0" isConnectable={false} position={Position.Left} type="target" />
       ) : null}
+      <span aria-hidden="true" className={cn(
+        "absolute inset-y-0 left-0 w-0.5",
+        toneRailClassName(tone),
+      )} />
       <div className="flex min-w-0 items-center gap-2">
-        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-          <Icon aria-hidden="true" className="size-3.5" />
+        <span className={cn(
+          "grid size-8 shrink-0 place-items-center rounded-lg border bg-muted/70 text-muted-foreground",
+          tone === "critical" && "border-destructive/25 bg-destructive/10 text-destructive",
+          tone === "warning" && "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        )}>
+          <RelationKindIcon kind={resource.kind} />
         </span>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-muted-foreground">{resource.kind}</p>
-          <h4 className="truncate text-sm font-medium" title={resource.name}>{resource.name}</h4>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+            {resource.kind}
+          </p>
+          <Tooltip>
+            <TooltipTrigger
+              render={<span className="block w-full truncate text-left text-sm font-semibold" />}
+            >
+              {resource.name}
+            </TooltipTrigger>
+            <TooltipContent className="max-w-sm break-all" side="top">
+              {resource.name}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
-      <Badge className="w-fit max-w-36 truncate" title={status} variant="outline">
-        {status}
-      </Badge>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <Badge
+          className={cn(
+            "min-w-0 max-w-28 truncate",
+            tone === "warning" && "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+          )}
+          title={status}
+          variant={tone === "critical" ? "destructive" : "outline"}
+        >
+          <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", toneDotClassName(tone))} />
+          <span className="truncate">{status}</span>
+        </Badge>
+        <span className="shrink-0 text-[0.6875rem] tabular-nums text-muted-foreground">
+          {t("resources.graph.relations.count", { count: graphNode.degree })}
+        </span>
+      </div>
+      {graphNode.hiddenRelationCount > 0 ? (
+        <p className="truncate text-[0.6875rem] text-muted-foreground" title={t(
+          "resources.graph.relations.hidden",
+          { count: graphNode.hiddenRelationCount },
+        )}>
+          {t("resources.graph.relations.hidden", { count: graphNode.hiddenRelationCount })}
+        </p>
+      ) : null}
       {withHandles ? (
         <Handle className="opacity-0" isConnectable={false} position={Position.Right} type="source" />
       ) : null}
     </article>
   );
+}
+
+function normalizedKind(kind: string): string {
+  return kind.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function RelationKindIcon({ kind }: { kind: string }) {
+  const normalized = normalizedKind(kind);
+  const props = { "aria-hidden": true, className: "size-4" } as const;
+  if (normalized === "pod") return <Box {...props} />;
+  if (["deployment", "replicaset", "statefulset", "daemonset"].includes(normalized)) return <Boxes {...props} />;
+  if (["job", "cronjob"].includes(normalized)) return <Container {...props} />;
+  if (normalized === "service") return <Waypoints {...props} />;
+  if (["ingress", "gateway", "httproute"].includes(normalized)) return <Globe2 {...props} />;
+  if (["endpoint", "endpoints", "endpointslice"].includes(normalized)) return <Network {...props} />;
+  if (normalized === "node") return <ServerCog {...props} />;
+  if (["persistentvolume", "persistentvolumeclaim"].includes(normalized)) return <Database {...props} />;
+  if (["configmap", "secret"].includes(normalized)) return <CloudCog {...props} />;
+  if (normalized === "namespace") return <Component {...props} />;
+  if (normalized.includes("controller")) return <GitBranch {...props} />;
+  return <CircleDot {...props} />;
+}
+
+function toneClassName(tone: RelationHealthTone): string {
+  if (tone === "critical") return "border-destructive/45";
+  if (tone === "warning") return "border-amber-500/40";
+  if (tone === "healthy") return "border-emerald-500/25";
+  return "border-border";
+}
+
+function toneRailClassName(tone: RelationHealthTone): string {
+  if (tone === "critical") return "bg-destructive";
+  if (tone === "warning") return "bg-amber-500";
+  if (tone === "healthy") return "bg-emerald-500";
+  return "bg-muted-foreground/35";
+}
+
+function toneDotClassName(tone: RelationHealthTone): string {
+  if (tone === "critical") return "bg-destructive";
+  if (tone === "warning") return "bg-amber-500";
+  if (tone === "healthy") return "bg-emerald-500";
+  return "bg-muted-foreground/45";
 }

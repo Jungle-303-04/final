@@ -27,6 +27,7 @@ import {
   listResourceFilterFacets,
   listResourceLabelFacets,
   connectCluster,
+  reissueClusterConnectCommand,
   getApplicationDrift,
   getApplicationOverview,
   listApplicationCatalog,
@@ -41,12 +42,19 @@ import {
   postAiChat,
   openPodLogStream,
   openWorkloadLogStream,
+  openPodTerminal,
   createRealtimeClient,
   acknowledgeAlertEvent,
   listAlertEvents,
   listApplicationDeployments,
   promoteAlertEvent,
   createAlertRule,
+  deleteAlertRule,
+  listAlertRules,
+  updateAlertRule,
+  approveResourceManifestEdit,
+  getResourceManifestSource,
+  previewResourceManifestEdit,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -67,6 +75,7 @@ import { createChangeTimelineAdapter } from "../features/resources/createChangeT
 import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
 import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
+import { createResourceManifestAdapter } from "../features/resources/createResourceManifestAdapter";
 import { createHomeSurface } from "../pages/home/createHomeSurface";
 import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
 import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
@@ -75,7 +84,9 @@ import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
 import { createSettingsSurface } from "../pages/settings/createSettingsSurface";
 import { createProductComposition } from "./productComposition";
 import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
+import { createPodTerminalAdapter } from "../features/pod-terminal/createPodTerminalAdapter";
 import { createAlertsSurface } from "../pages/alerts/createAlertsSurface";
+import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -88,6 +99,7 @@ export function createApiComposition() {
     connectCluster,
     getClusterConnectionStatus,
     getCommandStatus,
+    reissueClusterConnectCommand,
     unregisterCluster,
   });
   const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
@@ -126,6 +138,12 @@ export function createApiComposition() {
     restartDeployment,
     scaleDeployment,
   });
+  const podTerminalPort = createPodTerminalAdapter({ openPodTerminal });
+  const resourceManifestPort = createResourceManifestAdapter({
+    approveResourceManifestEdit,
+    getResourceManifestSource,
+    previewResourceManifestEdit,
+  });
   const issuesPort = createIssuesAdapter({
     getAuditTimeline,
     getIncidentRecentChanges,
@@ -157,6 +175,12 @@ export function createApiComposition() {
     listAlertEvents,
     promoteAlertEvent,
   });
+  const alertRulesPort = createAlertRulesAdapter({
+    createAlertRule,
+    deleteAlertRule,
+    listAlertRules,
+    updateAlertRule,
+  });
   return createProductComposition([
     {
       id: "clusters",
@@ -179,6 +203,8 @@ export function createApiComposition() {
         resourceMetricsHistoryPort,
         resourceCapabilitiesPort,
         resourceActionsPort,
+        podTerminalPort,
+        resourceManifestPort,
       ),
     },
     {
@@ -187,7 +213,7 @@ export function createApiComposition() {
     },
     {
       id: "alerts",
-      Component: createAlertsSurface(),
+      Component: createAlertsSurface(alertRulesPort),
     },
     {
       id: "applications",

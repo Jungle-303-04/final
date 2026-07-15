@@ -13,6 +13,10 @@ import {
   parseProductFilterUrl,
   serializeProductFilterUrl,
 } from "../../features/filters/filterUrl";
+import {
+  mergeLiveResourceMetricSeries,
+  type ResourceMetricLiveSeries,
+} from "./resourceMetricLiveSeries";
 
 export type ResourceMetricsHistoryFrame =
   | { phase: "idle"; data: null; failure: null }
@@ -28,6 +32,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
   reportUnauthorized: () => void;
   resourceIds: string[];
   snapshotRevision: number | null;
+  liveSeries?: readonly ResourceMetricLiveSeries[];
 }): ResourceMetricsHistoryFrame {
   const {
     active,
@@ -38,6 +43,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
     resourceIds: requestedResourceIds,
     snapshotRevision,
   } = input;
+  const liveSeries = input.liveSeries ?? [];
   const requestSequence = useRef(0);
   const filterKey = useMemo(
     () => serializeProductFilterUrl(filterState),
@@ -95,7 +101,10 @@ export function useResourceMetricsHistoryDataFrame(input: {
   ]);
 
   if (scope === null) return { phase: "idle", data: null, failure: null };
-  return record.scope === scope
+  const frame: ResourceMetricsHistoryFrame = record.scope === scope
     ? record.frame
     : { phase: "loading", data: null, failure: null };
+  return frame.phase === "ready" && liveSeries.length > 0
+    ? { ...frame, data: mergeLiveResourceMetricSeries(frame.data, liveSeries) }
+    : frame;
 }

@@ -15,6 +15,7 @@ import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -44,6 +45,11 @@ import { useResourceTopologyViewController } from "./useResourceTopologyViewCont
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
 import { ResourcesLiveStatus } from "./ResourcesLiveStatus";
+import { selectResourceMetricIds } from "./resourceMetricSelection";
+import {
+  EMPTY_POD_TERMINAL_PORT,
+  type PodTerminalPort,
+} from "../../features/pod-terminal/podTerminalContract";
 
 export function ResourcesPage({
   filterPort,
@@ -55,6 +61,8 @@ export function ResourcesPage({
   resourceMetricsHistoryPort,
   resourceCapabilitiesPort,
   resourceActionsPort,
+  podTerminalPort = EMPTY_POD_TERMINAL_PORT,
+  resourceManifestPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
@@ -66,6 +74,8 @@ export function ResourcesPage({
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
+  podTerminalPort?: PodTerminalPort;
+  resourceManifestPort?: ResourceManifestPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -89,7 +99,8 @@ export function ResourcesPage({
   const relationTopology = useRelationTopologyDataFrame({
     active:
       state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1,
+      filter.state.common.clusters.length === 1 &&
+      topology.view === "relations",
     filterState: filter.state,
     port: relationTopologyPort,
     reportUnauthorized,
@@ -146,18 +157,13 @@ export function ResourcesPage({
     workspaceId: session?.workspaceId ?? null,
   });
   const physicalTopology = physicalRealtime.frame;
-  const detailResourceId = state.detail.phase === "ready"
-    ? state.detail.data.resource.inventoryKey
+  const detailResource = state.detail.phase === "ready"
+    ? state.detail.data.resource
     : null;
+  const detailResourceId = detailResource?.inventoryKey ?? null;
   const metricResourceIds = useMemo(
-    () => Array.from(new Set([
-      ...(detailResourceId ? [detailResourceId] : []),
-      ...(filteredPage?.items ?? [])
-        .map((item) => item.resource)
-        .filter((resource) => resource.resourceType === "pod")
-        .map((resource) => resource.inventoryKey),
-    ])).slice(0, 100),
-    [detailResourceId, filteredPage],
+    () => selectResourceMetricIds(detailResource, currentResourceRows),
+    [currentResourceRows, detailResource],
   );
   const metricHistory = useResourceMetricsHistoryDataFrame({
     active: metricResourceIds.length > 0,
@@ -167,6 +173,7 @@ export function ResourcesPage({
     reportUnauthorized,
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
+    liveSeries: physicalRealtime.metricSeries,
   });
   const resourceCapabilities = useResourceCapabilitiesDataFrame({
     active: state.detailRequested && detailResourceId !== null,
@@ -310,7 +317,7 @@ export function ResourcesPage({
         <div
           className={cn(
             "min-w-0 w-full basis-full shrink-0 bg-background transition-[flex-basis,border-color] duration-300 ease-out motion-reduce:transition-none",
-            state.detailFull ? "border-l-0 lg:basis-full" : "border-l lg:basis-[30rem]",
+            state.detailFull ? "border-l-0 lg:basis-full" : "border-l lg:basis-[42rem]",
           )}
           data-detail-size={state.detailFull ? "full" : "peek"}
           data-slot="resources-detail-column"
@@ -322,10 +329,13 @@ export function ResourcesPage({
             full={state.detailFull}
             identity={state.detailIdentity}
             metricHistory={metricHistory}
+            manifestPort={resourceManifestPort}
+            onUnauthorized={reportUnauthorized}
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
             onTabChange={state.setDetailTab}
             tab={state.detailTab}
+            terminalPort={podTerminalPort}
           />
         </div>
       ) : null}

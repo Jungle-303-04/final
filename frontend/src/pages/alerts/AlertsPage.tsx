@@ -15,10 +15,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primit
 import { cn } from "../../shared/lib/cn";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
+import {
+  EMPTY_ALERT_RULES_PORT,
+  type AlertRulesPort,
+} from "../../features/alerts/alertRulesContract";
+import { AlertRulesPanel } from "./AlertRulesPanel";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 
-export function AlertsPage() {
+export function AlertsPage({ rulesPort = EMPTY_ALERT_RULES_PORT }: { rulesPort?: AlertRulesPort }) {
   const alerts = useAlertEvents();
   const { formatDate, formatNumber, t } = useI18n();
+  const filter = useUnifiedFilter();
+  const selectedTab = filter.detail.tab === "rules" ? "rules" : "events";
+  const selectTab = (tab: "events" | "rules") => {
+    filter.updateDetail((current) => ({
+      ...current,
+      detail: tab === "events" ? null : current.detail,
+      tab: tab === "rules" ? "rules" : null,
+    }), "detail-tab");
+  };
 
   return (
     <ProductPageFrame className="gap-6">
@@ -29,7 +44,7 @@ export function AlertsPage() {
             {t("alerts.description")}
           </p>
         </div>
-        <Button
+        {selectedTab === "events" ? <Button
           aria-label={t("alerts.refresh")}
           onClick={alerts.refresh}
           size="icon"
@@ -37,13 +52,14 @@ export function AlertsPage() {
           variant="outline"
         >
           <RefreshCw aria-hidden="true" />
-        </Button>
+        </Button> : null}
       </header>
 
       <div aria-label={t("alerts.tabs.label")} className="flex items-center gap-1 border-b" role="tablist">
         <button
-          aria-selected="true"
-          className="border-b-2 border-foreground px-3 py-2 text-sm font-medium"
+          aria-selected={selectedTab === "events"}
+          className={cn("px-3 py-2 text-sm font-medium", selectedTab === "events" && "border-b-2 border-foreground")}
+          onClick={() => selectTab("events")}
           role="tab"
           type="button"
         >
@@ -53,10 +69,9 @@ export function AlertsPage() {
           ) : null}
         </button>
         <button
-          aria-disabled="true"
-          aria-selected="false"
-          className="px-3 py-2 text-sm text-muted-foreground"
-          disabled
+          aria-selected={selectedTab === "rules"}
+          className={cn("px-3 py-2 text-sm font-medium", selectedTab === "rules" ? "border-b-2 border-foreground" : "text-muted-foreground")}
+          onClick={() => selectTab("rules")}
           role="tab"
           type="button"
         >
@@ -74,7 +89,9 @@ export function AlertsPage() {
         </button>
       </div>
 
-      {alerts.initialLoading ? (
+      {selectedTab === "rules" ? (
+        <AlertRulesPanel focusRuleId={filter.detail.detail} port={rulesPort} />
+      ) : alerts.initialLoading ? (
         <ProductStateScreen kind="loading" placement="content" />
       ) : alerts.error && alerts.events.length === 0 ? (
         <ProductStateScreen

@@ -252,7 +252,7 @@ function ProductShellFrame({
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="flex min-h-svh flex-col bg-background text-foreground">
+      <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-background text-foreground">
         <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:flex-nowrap">
           <div className="order-1 flex min-w-0 items-center gap-2">
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}

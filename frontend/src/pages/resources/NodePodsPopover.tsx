@@ -13,6 +13,7 @@ import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Button } from "../../shared/ui/primitives/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primitives/popover";
 import { ScrollArea } from "../../shared/ui/primitives/scroll-area";
+import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 type NodePodsPort = Pick<HomePort, "loadNodePods">;
@@ -153,7 +154,7 @@ export function NodePodsPopover({
         {frame.phase === "loading" || frame.phase === "idle" ? (
           <div aria-label={t("resources.graph.server.pods.loading")} className="grid gap-2 p-3" role="status">
             {Array.from({ length: 4 }, (_, index) => (
-              <div className="h-14 animate-pulse rounded-lg bg-muted motion-reduce:animate-none" key={index} />
+              <Skeleton className="h-14 rounded-lg" key={index} />
             ))}
           </div>
         ) : frame.phase === "failed" ? (

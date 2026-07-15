@@ -18,7 +18,9 @@ export function issueStatusTone(status: string): StatusTone {
 }
 
 export function issueEvidenceCount(issue: IssueSummary): number | null {
-  if (issue.supportingEvidence !== null) return issue.supportingEvidence.length;
+  if (issue.supportingEvidence !== null && issue.supportingEvidence.length > 0) {
+    return issue.supportingEvidence.length;
+  }
   return issue.evidenceRef === null ? null : 1;
 }
 

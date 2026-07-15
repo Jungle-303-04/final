@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { HomePort } from "../../features/home/homeContract";
 import { FirstAppearanceMotionBoundary } from "../../motion/useFirstAppearanceMotion";
 import { useI18n } from "../../shared/i18n";
+import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
@@ -42,30 +43,62 @@ export function ResourcesPhysicalTopologyScene({
         <ServerSkeletons clusterId={clusterId} count={skeletonServerCount} />
       ) : frame.phase === "ready" && placements.length > 0 ? (
         <UsageSmoothingBoundary markCount={usageMarkCount}>
-          <div
-            className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-y-auto overflow-x-hidden p-4 sm:p-5"
-            data-slot="physical-topology-grid"
-          >
-            {placements.map((placement, index) => (
-              <PhysicalTopologyServerCard
-                data={{
-                  clusterId,
-                  index,
-                  nodePodsPort,
-                  onNodePodsUnauthorized,
-                  placement,
-                  onOpenPod,
-                  onRevealServer,
-                }}
-                key={placement.server.id}
-              />
-            ))}
+          <div className="grid max-h-[min(65vh,65rem)] min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+            <PhysicalTopologyLegend />
+            <div
+              className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-y-auto overflow-x-hidden p-4 pt-3 sm:p-5 sm:pt-3"
+              data-slot="physical-topology-grid"
+            >
+              {placements.map((placement, index) => (
+                <PhysicalTopologyServerCard
+                  data={{
+                    clusterId,
+                    index,
+                    nodePodsPort,
+                    onNodePodsUnauthorized,
+                    placement,
+                    onOpenPod,
+                    onRevealServer,
+                  }}
+                  key={placement.server.id}
+                />
+              ))}
+            </div>
           </div>
         </UsageSmoothingBoundary>
       ) : (
         <GraphUnavailable failed={frame.phase === "failed"} />
       )}
     </FirstAppearanceMotionBoundary>
+  );
+}
+
+function PhysicalTopologyLegend() {
+  const { t } = useI18n();
+  return (
+    <aside
+      aria-label={t("resources.graph.physical.legend")}
+      className="flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto border-b bg-muted/20 px-4 py-2 text-[0.6875rem] text-muted-foreground sm:px-5"
+      data-slot="physical-topology-legend"
+    >
+      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+        <span
+          aria-hidden="true"
+          className="size-3.5 rounded border border-border bg-[color-mix(in_oklch,var(--status-warning)_32%,var(--card))]"
+        />
+        {t("resources.graph.physical.legend.fill")}
+      </span>
+      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+        <span aria-hidden="true" className="size-3.5 rounded border border-dashed border-border bg-background" />
+        {t("resources.graph.physical.legend.missing")}
+      </span>
+      <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+        <span className="relative size-3.5 rounded border border-border bg-card" aria-hidden="true">
+          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-destructive ring-1 ring-background" />
+        </span>
+        {t("resources.graph.physical.legend.badge")}
+      </span>
+    </aside>
   );
 }
 
@@ -81,19 +114,19 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
       {Array.from({ length: visible }, (_, index) => (
         <div
           aria-hidden="true"
-          className="h-52 w-full animate-pulse rounded-xl border bg-card/85 p-3 motion-reduce:animate-none"
+          className="h-52 w-full rounded-xl border bg-card/85 p-3"
           data-morph-id={`server:${clusterId}:${index}`}
           data-slot="physical-server-skeleton"
           key={index}
         >
-          <div className="h-8 rounded-md bg-muted" />
+          <Skeleton className="h-8" />
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="h-7 rounded bg-muted" />
-            <div className="h-7 rounded bg-muted" />
+            <Skeleton className="h-7" />
+            <Skeleton className="h-7" />
           </div>
           <div className="mt-3 grid grid-cols-6 gap-1.5">
             {Array.from({ length: 12 }, (_, podIndex) => (
-              <div className="size-9 rounded bg-muted" key={podIndex} />
+              <Skeleton className="size-9" key={podIndex} />
             ))}
           </div>
         </div>

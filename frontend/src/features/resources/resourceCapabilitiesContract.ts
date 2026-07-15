@@ -1,6 +1,7 @@
 export type ResourceActionCapabilityId =
   | "deployment.restart"
-  | "deployment.scale";
+  | "deployment.scale"
+  | "pod.exec";
 
 export interface ResourceCapabilitySubject {
   resourceId: string;
@@ -14,7 +15,7 @@ export interface ResourceCapabilitySubject {
 
 export interface ResourceActionCapability {
   capabilityId: ResourceActionCapabilityId;
-  method: "POST";
+  method: "POST" | "WEBSOCKET";
   path: string;
 }
 

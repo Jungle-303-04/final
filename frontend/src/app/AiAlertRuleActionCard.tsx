@@ -1,14 +1,16 @@
 import { BellRing, Check, Pencil, ShieldCheck } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import type {
   AiAlertRuleAction,
   AiAlertRuleActionPayload,
 } from "../features/ai-assistant/aiAssistantContract";
+import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../shared/i18n";
 import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
 import { Badge } from "../shared/ui/primitives/badge";
-import { Button } from "../shared/ui/primitives/button";
+import { Button, buttonVariants } from "../shared/ui/primitives/button";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +31,7 @@ export function AiAlertRuleActionCard({
   onCreate(action: AiAlertRuleAction, signal?: AbortSignal): Promise<{ ruleId: string }>;
 }) {
   const { formatNumber, t } = useI18n();
+  const filter = useUnifiedFilter();
   const [draft, setDraft] = useState(action.payload);
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
@@ -49,6 +52,39 @@ export function AiAlertRuleActionCard({
       setPending(false);
     }
   };
+
+  if (receipt !== null) {
+    const shortReceipt = receipt.length > 14 ? `${receipt.slice(0, 10)}…` : receipt;
+    return (
+      <section
+        aria-label={t("shell.ai.action.title")}
+        className="flex max-w-full min-w-0 animate-in items-center gap-3 overflow-hidden rounded-xl border border-status-healthy/30 bg-status-healthy/5 p-3 fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+        data-action-state="completed"
+        data-action-type={action.type}
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
+          <ShieldCheck aria-hidden="true" className="size-4" />
+        </span>
+        <p className="min-w-0 flex-1 truncate text-sm font-medium" title={receipt}>
+          {t("shell.ai.action.created", { id: shortReceipt })}
+        </p>
+        <Link
+          className={buttonVariants({
+            className: "shrink-0 whitespace-nowrap",
+            size: "sm",
+            variant: "outline",
+          })}
+          to={filter.navigationHref("/alerts", {
+            ...filter.detail,
+            detail: receipt,
+            tab: "rules",
+          })}
+        >
+          {t("shell.ai.action.viewRules")}
+        </Link>
+      </section>
+    );
+  }
 
   return (
     <section

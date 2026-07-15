@@ -4,6 +4,7 @@ import {
   type I18nController,
   type TranslationFunction,
 } from "../../shared/i18n";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 
 export function ResourceFactsPanel({ facts }: { facts: ResourceFacts }) {
   const { formatNumber, t } = useI18n();
@@ -25,11 +26,8 @@ export function DefinitionGrid({ entries }: { entries: Array<[string, string]> }
       {entries.map(([label, value]) => (
         <div className="min-w-0 rounded-lg border bg-background/65 px-3 py-2.5" key={label}>
           <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd
-            className="min-w-0 font-medium [overflow-wrap:anywhere]"
-            data-slot="resource-definition-value"
-          >
-            {value}
+          <dd className="min-w-0" data-slot="resource-definition-value">
+            <OverflowIdentity className="font-medium" value={value} />
           </dd>
         </div>
       ))}

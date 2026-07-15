@@ -23,7 +23,10 @@ export function ResourcesGraphShell({
   breadcrumbs,
   clusterId,
   frame,
+  includeDeleted,
   relationFrame,
+  onSelectRelationResource,
+  selectedRelationResourceId,
   onOpenPod,
   nodePodsPort,
   onNodePodsUnauthorized,
@@ -42,11 +45,15 @@ export function ResourcesGraphShell({
   onTimelineRangeChange,
   collapsed,
   onCollapsedChange,
+  onIncludeDeletedChange,
 }: {
   breadcrumbs: PhysicalGraphBreadcrumb[];
   clusterId: string;
   frame: PhysicalTopologyFrame;
+  includeDeleted: boolean;
   relationFrame: RelationTopologyFrame;
+  onSelectRelationResource: (resourceId: string) => boolean;
+  selectedRelationResourceId: string | null;
   onOpenPod: (pod: PhysicalPodOpenTarget) => void;
   nodePodsPort: Pick<HomePort, "loadNodePods">;
   onNodePodsUnauthorized: () => void;
@@ -65,6 +72,7 @@ export function ResourcesGraphShell({
   onTimelineRangeChange: (value: TimelineRange) => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onIncludeDeletedChange: (value: boolean) => void;
 }) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -177,7 +185,9 @@ export function ResourcesGraphShell({
         breadcrumbs={breadcrumbs}
         collapsed={collapsed}
         displayedView={displayedView}
+        includeDeleted={includeDeleted}
         onCollapsedChange={onCollapsedChange}
+        onIncludeDeletedChange={onIncludeDeletedChange}
         onSelectAll={onSelectAll}
         onTimelineRangeChange={onTimelineRangeChange}
         onTopologyViewChange={changeTopologyView}
@@ -197,7 +207,11 @@ export function ResourcesGraphShell({
             data-slot="topology-canvas"
           >
             {displayedView === "relations" ? (
-              <RelationTopologyCanvas frame={relationSceneFrame} />
+              <RelationTopologyCanvas
+                frame={relationSceneFrame}
+                onSelectResource={onSelectRelationResource}
+                selectedResourceId={selectedRelationResourceId}
+              />
             ) : (
               <ResourcesPhysicalTopologyScene
                 clusterId={clusterId}

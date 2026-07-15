@@ -4,6 +4,9 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import type {
   GitOpsPort,
   GitOpsSyncTarget,
+  ReleaseApplication,
+  ReleaseCluster,
+  ReleaseTargetInput,
 } from "../../features/gitops/gitOpsContract";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
@@ -11,6 +14,7 @@ import { Surface } from "../../shared/ui/Surface";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
+import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
 import {
   Table,
   TableBody,
@@ -24,8 +28,10 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
   const { formatDate, t } = useI18n();
   const [request, setRequest] = useState(0);
   const [rows, setRows] = useState<GitOpsSyncTarget[]>([]);
+  const [clusters, setClusters] = useState<ReleaseCluster[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [targetPending, setTargetPending] = useState(false);
   const [error, setError] = useState(false);
   const refresh = useCallback(() => {
     setLoading(true);
@@ -45,6 +51,28 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
     });
     return () => controller.abort();
   }, [port, request]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void port.listClusters(controller.signal).then(setClusters).catch((reason: unknown) => {
+      if (!isAbortError(reason)) setClusters([]);
+    });
+    return () => controller.abort();
+  }, [port, request]);
+
+  const createTarget = async (input: ReleaseTargetInput): Promise<ReleaseApplication | null> => {
+    if (targetPending) return null;
+    setTargetPending(true);
+    try {
+      const created = await port.connectApplication(input);
+      refresh();
+      return created;
+    } catch {
+      return null;
+    } finally {
+      setTargetPending(false);
+    }
+  };
 
   if (loading && rows.length === 0) {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -67,16 +95,23 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
           <h2 className="text-lg font-semibold">{t("workflows.sync.title")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("workflows.sync.description")}</p>
         </div>
-        <Button
-          aria-label={t("common.action.refresh")}
-          disabled={loading}
-          onClick={refresh}
-          size="icon"
-          type="button"
-          variant="outline"
-        >
-          <RefreshCw aria-hidden="true" className={loading ? "motion-safe:animate-spin" : undefined} />
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <DeploymentTargetDialog
+            clusters={clusters}
+            onCreate={createTarget}
+            pending={targetPending}
+          />
+          <Button
+            aria-label={t("common.action.refresh")}
+            disabled={loading}
+            onClick={refresh}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            <RefreshCw aria-hidden="true" className={loading ? "motion-safe:animate-spin" : undefined} />
+          </Button>
+        </div>
       </div>
       {error ? (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">

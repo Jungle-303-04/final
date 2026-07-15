@@ -3,10 +3,25 @@ import { z } from "zod";
 const auditPayloadSummarySchema = z.record(z.string(), z.unknown());
 
 export const auditTimelineItemSchema = z.strictObject({
+  event_id: z.string().min(1),
   subject: z.string(),
   source: z.string(),
   created_at: z.string(),
   causation_id: z.string().nullable(),
+  journey_stage: z.enum([
+    "alert",
+    "evidence",
+    "rca",
+    "recovery",
+    "command",
+    "pr",
+    "workflow",
+    "cluster",
+    "ai",
+    "notification",
+    "system",
+    "unknown",
+  ]),
   payload_summary: auditPayloadSummarySchema,
 });
 

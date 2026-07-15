@@ -1,6 +1,6 @@
 import type { NodeProps } from "@xyflow/react";
 import { Server } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { useFirstAppearanceMotion } from "../../motion/useFirstAppearanceMotion";
 import { STAGGER_MS, staggerDelay } from "../../motion/useStagger";
@@ -39,7 +39,7 @@ export function PhysicalTopologyServerCard({
   const cardRef = useRef<HTMLElement>(null);
   const entering = useFirstAppearanceMotion(`server:${clusterId}:${server.id}`);
   const delay = staggerDelay(index, STAGGER_MS.node);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const card = cardRef.current;
     if (!card || !entering) return;
     card.style.animationDelay = `${delay}ms`;
@@ -51,7 +51,7 @@ export function PhysicalTopologyServerCard({
     <article
       aria-label={t("resources.graph.server.aria", { name: serverName })}
       className={cn(
-        "grid h-52 w-full grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-xl border bg-card/95 shadow-sm backdrop-blur transition-transform duration-(--motion-quick) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none",
+        "grid h-52 w-full grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-xl border bg-card/95 shadow-sm backdrop-blur transition-transform duration-(--motion-quick) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         entering && "motion-node-land",
       )}
       data-morph-id={placement.unassigned ? undefined : `server:${clusterId}:${server.id}`}
@@ -83,7 +83,10 @@ export function PhysicalTopologyServerCard({
         <MetricBar label={t("resources.graph.metric.memory.short")} value={server.memoryPercent} />
       </div>
 
-      <div className="grid grid-cols-6 content-start gap-1.5 px-3 py-2" data-slot="physical-topology-pods">
+      <div
+        className="grid grid-cols-6 content-start justify-start gap-1.5 px-3 py-2"
+        data-slot="physical-topology-pods"
+      >
         {placement.pods.map((pod, podIndex) => (
           <PhysicalTopologyPod
             key={pod.id}
@@ -128,7 +131,14 @@ export function PhysicalTopologyServerCard({
 function MetricBar({ label, value }: { label: string; value: number | null }) {
   const rounded = value === null ? null : Math.round(value);
   const metricRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLSpanElement>(null);
   const smoothedUsage = useSmoothedUsageColor(value, metricRef);
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (bar === null || smoothedUsage === null) return;
+    bar.style.backgroundColor = usageColor(smoothedUsage);
+    bar.style.transform = `scaleX(${Math.min(Math.max(smoothedUsage, 0), 100) / 100})`;
+  }, [smoothedUsage]);
   return (
     <div
       className="grid min-w-0 gap-1"
@@ -147,14 +157,9 @@ function MetricBar({ label, value }: { label: string; value: number | null }) {
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={rounded === null ? undefined : Math.min(rounded, 100)}
-            className="block h-full rounded-full"
+            className="block h-full w-full origin-left rounded-full"
+            ref={barRef}
             role="progressbar"
-            style={{
-              backgroundColor: usageColor(smoothedUsage),
-              transform: `scaleX(${Math.min(Math.max(smoothedUsage, 0), 100) / 100})`,
-              transformOrigin: "left center",
-              width: "100%",
-            }}
           />
         )}
       </span>

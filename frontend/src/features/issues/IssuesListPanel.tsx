@@ -1,7 +1,10 @@
 import {
+  Bell,
   BrainCircuit,
   ChevronRight,
+  CircleCheckBig,
   Clock3,
+  Cuboid,
   Layers3,
   MapPin,
   TriangleAlert,
@@ -10,6 +13,7 @@ import { cn } from "@/shared/lib/cn";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
+import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import type { IssueList, IssueSummary } from "./issuesContract";
 import { IssueStatusMark } from "./IssueStatusMark";
 import {
@@ -52,7 +56,26 @@ export function IssuesListPanel({
     );
   }
   if (list.data === null || list.data.items.length === 0) {
-    return <p className="py-4 text-sm text-muted-foreground">{copy.listEmpty}</p>;
+    const scope = list.data?.clusterId;
+    const suffix = scope ? `?clusters=${encodeURIComponent(scope)}` : "";
+    return (
+      <div className="mx-auto grid max-w-md justify-items-center gap-2 px-4 py-12 text-center" role="status">
+        <span className="grid size-10 place-items-center rounded-full bg-status-healthy/10 text-status-healthy">
+          <CircleCheckBig aria-hidden="true" className="size-5" />
+        </span>
+        <p className="text-sm font-medium text-foreground">{copy.listEmpty}</p>
+        <div className="mt-2 flex items-center gap-2">
+          <Button render={<a href={`/resources${suffix}`} />} size="sm" variant="outline">
+            <Cuboid aria-hidden="true" />
+            {copy.listBrowseResources}
+          </Button>
+          <Button render={<a href={`/alerts${suffix}`} />} size="sm" variant="ghost">
+            <Bell aria-hidden="true" />
+            {copy.listBrowseAlerts}
+          </Button>
+        </div>
+      </div>
+    );
   }
   return (
     <div className="grid gap-3 py-3">
@@ -61,7 +84,7 @@ export function IssuesListPanel({
         {statusBreakdown(list.data.items).map(([status, count]) => (
           <Badge className="max-w-48" key={status} variant="outline">
             <IssueStatusMark label={status} labelMode="sr-only" tone={issueStatusTone(status)} />
-            <span className="truncate">{status}</span>
+            <span className="truncate">{humanizeFilterValue(status)}</span>
             <span className="tabular-nums text-muted-foreground">{copy.listCount(count)}</span>
           </Badge>
         ))}
@@ -149,12 +172,12 @@ function IssueQueueRow({
               {resource !== null ? (
                 <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                   <Layers3 aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span className="truncate">{resource}</span>
+                  <span className="truncate" title={resource}>{resource}</span>
                 </span>
               ) : null}
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              <IssueStatusMark label={issue.status} tone={tone} />
+              <IssueStatusMark label={humanizeFilterValue(issue.status)} tone={tone} />
               <ChevronRight
                 aria-hidden="true"
                 className={cn(
@@ -168,7 +191,16 @@ function IssueQueueRow({
           {issue.rootCause ? (
             <span className="flex min-w-0 items-start gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-xs leading-relaxed text-foreground/85">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-warning" />
-              <span className="line-clamp-2 break-words">{issue.rootCause}</span>
+              <span className="line-clamp-2 break-words">{humanizeFilterValue(issue.rootCause)}</span>
+            </span>
+          ) : null}
+
+          {issue.errorReason ? (
+            <span className="flex min-w-0 items-start gap-1.5 rounded-md border border-status-warning/25 bg-status-warning/5 px-2 py-1.5 text-xs leading-relaxed text-foreground/80">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-warning" />
+              <span className="line-clamp-2 break-words" title={issue.errorReason}>
+                {humanizeFilterValue(issue.errorReason)}
+              </span>
             </span>
           ) : null}
 

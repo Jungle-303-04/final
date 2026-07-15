@@ -3,6 +3,7 @@ import { z } from "zod";
 export const resourceActionCapabilityIdSchema = z.enum([
   "deployment.restart",
   "deployment.scale",
+  "pod.exec",
 ]);
 
 export const resourceCapabilitySubjectSchema = z.strictObject({
@@ -17,8 +18,8 @@ export const resourceCapabilitySubjectSchema = z.strictObject({
 
 export const resourceActionCapabilitySchema = z.strictObject({
   capability_id: resourceActionCapabilityIdSchema,
-  method: z.literal("POST"),
-  path: z.string().regex(/^\/clusters\/[^?]+$/u),
+  method: z.enum(["POST", "WEBSOCKET"]),
+  path: z.string().regex(/^\/(?:clusters\/[^?]+|live\/terminal)$/u),
 });
 
 export const resourceCapabilitiesSchema = z.strictObject({

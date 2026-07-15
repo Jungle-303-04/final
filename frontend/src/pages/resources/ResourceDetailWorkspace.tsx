@@ -7,18 +7,26 @@ import type {
   ResourceIdentity,
 } from "../../features/resources/resourcesContract";
 import type { ResourceActionsPort } from "../../features/resources/resourceCapabilitiesContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { StatusMark } from "../../shared/ui/StatusMark";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
+import { ResourceManifestEditor } from "./ResourceManifestEditor";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
+import {
+  EMPTY_POD_TERMINAL_PORT,
+  type PodTerminalPort,
+} from "../../features/pod-terminal/podTerminalContract";
+import { PodTerminalDialog } from "./PodTerminalDialog";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -30,7 +38,10 @@ export function ResourceDetailWorkspace({
   onTabChange,
   full,
   metricHistory,
+  manifestPort,
+  onUnauthorized,
   tab,
+  terminalPort = EMPTY_POD_TERMINAL_PORT,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
@@ -41,7 +52,10 @@ export function ResourceDetailWorkspace({
   onTabChange: (tab: string) => void;
   full: boolean;
   metricHistory: ResourceMetricsHistoryFrame;
+  manifestPort?: ResourceManifestPort;
+  onUnauthorized?: () => void;
   tab: string;
+  terminalPort?: PodTerminalPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
@@ -97,6 +111,36 @@ export function ResourceDetailWorkspace({
     >
       <header className="grid min-w-0 gap-3 border-b px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <OverflowIdentity
+              className="font-heading text-lg font-medium"
+              render={<h2 aria-label={title} id="resource-detail-workspace-title" />}
+              value={title}
+            />
+            <OverflowIdentity
+              className="text-sm text-muted-foreground"
+              render={<p />}
+              value={identity
+                ? `${identity.kind} · ${identity.namespace ?? t("resources.detail.clusterScope")}`
+                : t("resources.detail.identityDescription")}
+            />
+          </div>
+          {detail.phase === "ready" ? (
+            <StatusMark
+              label={detail.data.resource.healthStatus}
+              tone={detail.data.resource.health}
+            />
+          ) : null}
+          <Button
+            aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
+            className="relative shrink-0"
+            onClick={() => onFullChange(!full)}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+          </Button>
           <Button
             aria-label={t("resources.detail.close")}
             className="relative shrink-0"
@@ -107,35 +151,6 @@ export function ResourceDetailWorkspace({
             variant="outline"
           >
             <X aria-hidden="true" />
-          </Button>
-          <div className="min-w-0">
-            <h2
-              className="font-heading text-lg font-medium [overflow-wrap:anywhere]"
-              id="resource-detail-workspace-title"
-            >
-              {title}
-            </h2>
-            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
-              {identity
-                ? `${identity.kind} · ${identity.namespace ?? t("resources.detail.clusterScope")}`
-                : t("resources.detail.identityDescription")}
-            </p>
-          </div>
-          {detail.phase === "ready" ? (
-            <StatusMark
-              label={detail.data.resource.healthStatus}
-              tone={detail.data.resource.health}
-            />
-          ) : null}
-          <Button
-            aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
-            className="relative ml-auto shrink-0"
-            onClick={() => onFullChange(!full)}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
           </Button>
         </div>
         <div
@@ -161,11 +176,23 @@ export function ResourceDetailWorkspace({
                 {t("shell.shortcut.resources.openLogs")}
               </Button>
             ) : null}
+            <PodTerminalDialog
+              capabilities={capabilities}
+              detail={detail.data}
+              port={terminalPort}
+            />
             <ResourceDetailActions
               actionsPort={actionsPort}
               capabilities={capabilities}
               detail={detail.data}
             />
+            {manifestPort ? (
+              <ResourceManifestEditor
+                detail={detail.data}
+                onUnauthorized={onUnauthorized}
+                port={manifestPort}
+              />
+            ) : null}
           </div>
         ) : null}
       </header>

@@ -4,10 +4,24 @@ export interface IssueAuditTimelineQuery {
 }
 
 export interface IssueAuditEvent {
+  eventId: string;
   subject: string;
   source: string;
   createdAt: string;
   causationId: string | null;
+  journeyStage:
+    | "alert"
+    | "evidence"
+    | "rca"
+    | "recovery"
+    | "command"
+    | "pr"
+    | "workflow"
+    | "cluster"
+    | "ai"
+    | "notification"
+    | "system"
+    | "unknown";
   payloadSummary: Readonly<Record<string, unknown>>;
 }
 

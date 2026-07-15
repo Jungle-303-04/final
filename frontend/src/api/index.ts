@@ -284,7 +284,11 @@ export {
   type FleetSummary,
   type FleetTotals,
 } from "./schemas";
-export { connectCluster, getClusterConnectStatus } from "./cluster-connect";
+export {
+  connectCluster,
+  getClusterConnectStatus,
+  reissueClusterConnectCommand,
+} from "./cluster-connect";
 export {
   clusterConnectProviderSchema,
   clusterConnectResponseSchema,

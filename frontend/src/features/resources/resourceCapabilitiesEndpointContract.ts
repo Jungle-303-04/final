@@ -10,8 +10,8 @@ export interface ResourceCapabilitiesEndpointResponse {
   };
   revision: string;
   capabilities: Array<{
-    capability_id: "deployment.restart" | "deployment.scale";
-    method: "POST";
+    capability_id: "deployment.restart" | "deployment.scale" | "pod.exec";
+    method: "POST" | "WEBSOCKET";
     path: string;
   }>;
 }

@@ -15,8 +15,8 @@ export interface ResourceMetricHistoryPoint {
 export interface ResourceMetricHistorySeries {
   resourceId: string;
   clusterId: string;
-  resourceType: "pod";
-  namespace: string;
+  resourceType: "pod" | "node";
+  namespace: string | null;
   name: string;
   points: ResourceMetricHistoryPoint[];
   hasSparklinePoints: boolean;

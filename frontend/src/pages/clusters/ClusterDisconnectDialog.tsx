@@ -31,7 +31,7 @@ import {
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 
-type DisconnectPhase =
+export type DisconnectPhase =
   | "confirm"
   | "submitting"
   | "uninstalling"
@@ -41,17 +41,20 @@ type DisconnectPhase =
   | "failed";
 
 const COMMAND_POLL_MS = 1_000;
+const COMMAND_ACK_TIMEOUT_MS = 8_000;
 
 export function ClusterDisconnectDialog({
   cluster,
   onDisconnected,
   onOpenChange,
+  onPhaseChange,
   open,
   port,
 }: {
   cluster: HomeClusterChoice | null;
   onDisconnected: (clusterId: string) => void;
   onOpenChange: (open: boolean) => void;
+  onPhaseChange?: (clusterId: string, phase: DisconnectPhase) => void;
   open: boolean;
   port: ClusterDisconnectPort;
 }) {
@@ -65,13 +68,20 @@ export function ClusterDisconnectDialog({
 
   useEffect(() => () => abort.current?.abort(), []);
 
+  useEffect(() => {
+    if (cluster) onPhaseChange?.(cluster.id, phase);
+  }, [cluster, onPhaseChange, phase]);
+
   if (cluster === null) return null;
   const confirmed = confirmation === cluster.name;
   const pending = phase === "submitting" || phase === "uninstalling";
   const terminal = phase === "succeeded" || phase === "residual-cleanup";
 
   const changeOpen = (nextOpen: boolean) => {
-    if (!nextOpen && pending) return;
+    if (!nextOpen && (pending || phase === "cleanup-required")) {
+      onOpenChange(false);
+      return;
+    }
     if (!nextOpen) {
       abort.current?.abort();
       abort.current = null;
@@ -94,6 +104,7 @@ export function ClusterDisconnectDialog({
     controller: AbortController,
   ): Promise<void> => {
     setPhase("uninstalling");
+    const deadline = Date.now() + COMMAND_ACK_TIMEOUT_MS;
     while (!controller.signal.aborted) {
       const progress = await port.loadDisconnect(commandId, controller.signal);
       if (progress.status === "completed" && progress.cleanupCompleted) {
@@ -101,6 +112,10 @@ export function ClusterDisconnectDialog({
         return;
       }
       if (progress.status === "completed" || progress.status === "failed") {
+        setPhase(uninstallCommand ? "cleanup-required" : "failed");
+        return;
+      }
+      if (Date.now() >= deadline) {
         setPhase(uninstallCommand ? "cleanup-required" : "failed");
         return;
       }
@@ -176,7 +191,7 @@ export function ClusterDisconnectDialog({
       <DialogContent
         className="overflow-hidden sm:max-w-xl"
         closeLabel={t("common.action.close")}
-        showCloseButton={!pending && !terminal}
+        showCloseButton={!terminal}
       >
         <form className="grid min-w-0 gap-5" onSubmit={(event) => void submit(event)}>
           <DialogHeader>
@@ -252,15 +267,20 @@ export function ClusterDisconnectDialog({
             ) : phase === "cleanup-required" ? (
               <Button onClick={() => void confirmCleanup()} type="button">
                 <ShieldCheck aria-hidden="true" />
-                {t("clusters.disconnect.manual.confirm")}
+                {t("clusters.disconnect.manual.force")}
               </Button>
             ) : pending ? (
-              <p className="inline-flex items-center gap-2 text-sm text-muted-foreground" role="status">
-                <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
-                {phase === "submitting"
-                  ? t("clusters.disconnect.submitting")
-                  : t("clusters.disconnect.uninstalling")}
-              </p>
+              <div className="flex w-full items-center justify-between gap-3">
+                <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground" role="status">
+                  <LoaderCircle aria-hidden="true" className="size-4 shrink-0 motion-safe:animate-spin" />
+                  <span className="truncate">{phase === "submitting"
+                    ? t("clusters.disconnect.submitting")
+                    : t("clusters.disconnect.uninstalling")}</span>
+                </p>
+                <Button onClick={() => changeOpen(false)} type="button" variant="outline">
+                  {t("clusters.disconnect.background")}
+                </Button>
+              </div>
             ) : (
               <>
                 <Button onClick={() => changeOpen(false)} type="button" variant="outline">
@@ -281,22 +301,28 @@ export function ClusterDisconnectDialog({
 
 function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: TranslationFunction }) {
   const steps = [
-    { label: t("clusters.disconnect.progress.request"), complete: true },
-    { label: t("clusters.disconnect.progress.agent"), complete: phase === "uninstalling" },
-    { label: t("clusters.disconnect.progress.registration"), complete: false },
+    {
+      label: t("clusters.disconnect.progress.request"),
+      state: phase === "submitting" ? "active" : "complete",
+    },
+    {
+      label: t("clusters.disconnect.progress.agent"),
+      state: phase === "uninstalling" ? "active" : "pending",
+    },
+    { label: t("clusters.disconnect.progress.registration"), state: "pending" },
   ];
   return (
     <ol className="grid gap-2 rounded-xl border bg-muted/30 p-3" aria-label="클러스터 연결 해제 진행">
-      {steps.map((step, index) => (
+      {steps.map((step) => (
         <li className="flex min-w-0 items-center gap-2 text-sm" key={step.label}>
-          {step.complete ? (
+          {step.state === "complete" ? (
             <Check aria-hidden="true" className="size-4 shrink-0 text-emerald-600" />
-          ) : index === 1 || phase === "uninstalling" ? (
+          ) : step.state === "active" ? (
             <LoaderCircle aria-hidden="true" className="size-4 shrink-0 motion-safe:animate-spin" />
           ) : (
             <span aria-hidden="true" className="size-4 shrink-0 rounded-full border" />
           )}
-          <span className="truncate">{step.label}</span>
+          <span className="truncate" data-step-state={step.state}>{step.label}</span>
         </li>
       ))}
     </ol>
@@ -339,7 +365,7 @@ function CleanupCommand({
         <div className="grid min-w-0 gap-2">
           <p className="text-xs font-medium">{commandLabel}</p>
           <div className="flex min-w-0 items-start gap-2 rounded-lg bg-zinc-950 p-3 text-zinc-100">
-            <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre text-xs leading-5">{command}</pre>
+            <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre text-xs leading-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{command}</pre>
             <Button
               aria-label={copyLabel}
               className="shrink-0 text-zinc-100 hover:bg-white/10 hover:text-white"

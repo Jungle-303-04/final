@@ -1,6 +1,7 @@
 import {
   ClustersPortFailure,
   type ClusterConnectProvider,
+  type ClusterConnectReceipt,
   type ClusterConnectStage,
   type ClusterDisconnectProgress,
   type ClusterDisconnectReceipt,
@@ -54,6 +55,10 @@ export interface ClustersEndpointDependencies {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<ClusterConnectionWire>;
+  reissueClusterConnectCommand(
+    clusterId: string,
+    signal?: AbortSignal,
+  ): Promise<ClusterConnectWire>;
   unregisterCluster(
     clusterId: string,
     options?: { manualCleanupAttested?: boolean },
@@ -67,17 +72,7 @@ export function createClustersAdapter(
 ): ClustersPort & ClusterDisconnectPort {
   return {
     async connect(input, signal) {
-      return withFailure(async () => {
-        const response = await endpoints.connectCluster(input, signal);
-        const command = response.install_command.trim();
-        if (!response.cluster_id.trim() || !command || command.includes("\n")) invalidResponse();
-        canonicalTimestamp(response.expires_at);
-        return {
-          clusterId: response.cluster_id,
-          installCommand: command,
-          expiresAt: response.expires_at,
-        };
-      });
+      return withFailure(async () => connectReceipt(await endpoints.connectCluster(input, signal)));
     },
     async loadConnection(clusterId, signal) {
       return withFailure(async () => {
@@ -99,6 +94,11 @@ export function createClustersAdapter(
         } satisfies ClusterConnectionSnapshot;
       });
     },
+    async reissue(clusterId, signal) {
+      return withFailure(async () => connectReceipt(
+        await endpoints.reissueClusterConnectCommand(clusterId, signal),
+      ));
+    },
     async disconnect(clusterId, signal) {
       return withFailure(async () => disconnectReceipt(
         await endpoints.unregisterCluster(clusterId, {}, signal),
@@ -118,6 +118,17 @@ export function createClustersAdapter(
         ),
       ));
     },
+  };
+}
+
+function connectReceipt(response: ClusterConnectWire): ClusterConnectReceipt {
+  const command = response.install_command.trim();
+  if (!response.cluster_id.trim() || !command || command.includes("\n")) invalidResponse();
+  canonicalTimestamp(response.expires_at);
+  return {
+    clusterId: response.cluster_id,
+    installCommand: command,
+    expiresAt: response.expires_at,
   };
 }
 

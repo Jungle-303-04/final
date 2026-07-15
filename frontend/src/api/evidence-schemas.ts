@@ -73,6 +73,16 @@ const rcaMissingCheckSchema = z.strictObject({
   reason: nullableStringSchema,
 });
 
+const rcaNarrativeSchema = z.strictObject({
+  locale: z.literal("ko"),
+  executive_summary: z.string().min(1),
+  impact: z.string().min(1),
+  reasoning: z.string().min(1),
+  recommended_action: z.string().min(1),
+  recurrence_prevention: z.array(z.string().min(1)).min(1),
+  limitations: z.array(z.string().min(1)).min(1),
+});
+
 export const rcaReportSchema = z.strictObject({
   id: z.number().int(),
   workspace_id: z.string().min(1),
@@ -97,6 +107,8 @@ export const rcaReportSchema = z.strictObject({
   candidates: z.array(rcaCandidateScoreSchema),
   supporting_evidence_refs: z.array(rcaEvidenceRefSchema),
   missing_evidence_checks: z.array(rcaMissingCheckSchema),
+  narrative: rcaNarrativeSchema.nullable(),
+  narrative_status: z.enum(["generated", "unavailable"]),
 });
 
 export const rcaReportListSchema = z.strictObject({
