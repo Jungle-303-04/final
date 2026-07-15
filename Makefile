@@ -73,10 +73,10 @@ reference-ledger-check: ## 고정 원본과 ledger의 완전성 확인
 	node scripts/reference-ledger.mjs --source references/upstream --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-source-ledger.json --check
 
 reference-feature-ledger: ## 원본 기능·계약 전수 ledger 생성
-	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json
+	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json
 
 reference-feature-ledger-check: ## 원본 기능 ledger의 완전성 확인
-	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --check
+	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --check
 
 gate: reference-ledger-check reference-feature-ledger-check ## CI용 백엔드·manifest·프론트 전체 게이트
 	bash scripts/test.sh

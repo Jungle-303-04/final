@@ -15,6 +15,13 @@ const DEFAULT_SOURCE = path.join(
   "reference-feature-inventory.md",
 );
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, "docs", "migration", "reference-feature-ledger.json");
+const DEFAULT_CONTRACTS_OUTPUT = path.join(
+  REPOSITORY_ROOT,
+  "src",
+  "packages",
+  "contracts",
+  "reference_feature_catalog.json",
+);
 const DEFAULT_REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
 const BACKEND_CONTRACT = "packages.contracts.parity";
 const FRONTEND_CONTRACT = "frontend/src/shared/parity/referenceParity.ts";
@@ -67,6 +74,7 @@ export function parseReferenceInventory(markdown, sourceRevision) {
     const endpoints = endpointsFor(cells);
     features.push({
       id: `reference-feature-${String(features.length + 1).padStart(3, "0")}`,
+      contractId: `reference.feature.${String(features.length + 1).padStart(3, "0")}`,
       section,
       line: index + 1,
       cells,
@@ -106,6 +114,7 @@ export function validateFeatureLedger(ledger) {
       continue;
     }
     if (!feature.section) errors.push(`${id}: section is required`);
+    if (!feature.contractId) errors.push(`${id}: contractId is required`);
     if (!Number.isInteger(feature.line) || feature.line < 1) errors.push(`${id}: line must be positive`);
     if (!Array.isArray(feature.cells) || feature.cells.length === 0) {
       errors.push(`${id}: cells are required`);
@@ -127,6 +136,7 @@ function parseArguments(argv) {
   const values = {
     source: DEFAULT_SOURCE,
     output: DEFAULT_OUTPUT,
+    contractsOutput: DEFAULT_CONTRACTS_OUTPUT,
     sourceRevision: DEFAULT_REVISION,
     check: false,
   };
@@ -136,28 +146,64 @@ function parseArguments(argv) {
       values.check = true;
       continue;
     }
-    if (!["--source", "--output", "--revision"].includes(flag) || !argv[index + 1]) {
+    if (
+      !["--source", "--output", "--contracts-output", "--revision"].includes(flag)
+      || !argv[index + 1]
+    ) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`);
     }
     const value = argv[index + 1];
     if (flag === "--revision") values.sourceRevision = value;
+    else if (flag === "--contracts-output") values.contractsOutput = path.resolve(value);
     else values[flag.slice(2)] = path.resolve(value);
     index += 1;
   }
   return values;
 }
 
-export async function writeFeatureLedger({ source, output, sourceRevision, check = false }) {
+function contractCatalog(ledger) {
+  return {
+    schemaVersion: ledger.schemaVersion,
+    sourceRevision: ledger.sourceRevision,
+    featureCount: ledger.featureCount,
+    features: ledger.features.map(
+      ({ contractId, id, section, endpoints, streaming, backendContract, frontendContract }) => ({
+      contractId,
+      id,
+      section,
+      endpoints,
+      streaming,
+      backendContract,
+      frontendContract,
+      }),
+    ),
+  };
+}
+
+export async function writeFeatureLedger({
+  source,
+  output,
+  contractsOutput = DEFAULT_CONTRACTS_OUTPUT,
+  sourceRevision,
+  check = false,
+}) {
   const markdown = await readFile(source, "utf8");
   const ledger = parseReferenceInventory(markdown, sourceRevision);
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`;
+  const serializedContracts = `${JSON.stringify(contractCatalog(ledger), null, 2)}\n`;
   if (check) {
     const current = await readFile(output, "utf8").catch(() => null);
     if (current !== serialized) throw new Error(`기능 ledger가 최신 인벤토리와 일치하지 않습니다: ${output}`);
+    const currentContracts = await readFile(contractsOutput, "utf8").catch(() => null);
+    if (currentContracts !== serializedContracts) {
+      throw new Error(`기능 contract catalog가 최신 인벤토리와 일치하지 않습니다: ${contractsOutput}`);
+    }
     return ledger;
   }
   await mkdir(path.dirname(output), { recursive: true });
+  await mkdir(path.dirname(contractsOutput), { recursive: true });
   await writeFile(output, serialized, "utf8");
+  await writeFile(contractsOutput, serializedContracts, "utf8");
   return ledger;
 }
 
