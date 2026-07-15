@@ -9,7 +9,7 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, runtime_checkable
 
 from redis.asyncio import Redis as AsyncRedis
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -68,7 +68,15 @@ class RedisSessionStoreNotConnected(SessionStoreUnavailable):
     pass
 
 
+@runtime_checkable
 class SessionStore(Protocol):
+    @property
+    def available(self) -> bool:
+        """Whether the authoritative session storage is currently usable."""
+
+    async def start_degraded(self) -> bool:
+        """Start reconnecting without creating a substitute session authority."""
+
     async def connect(self) -> None: ...
 
     async def close(self) -> None: ...
