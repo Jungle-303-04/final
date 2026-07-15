@@ -72,7 +72,9 @@ def test_api_to_outbound_gateway_golden_path(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GIT_MANIFEST_PATH", str(manifest_source))
 
     async def run() -> None:
-        db = SpyDb()
+        # 이 골든 경로는 운영 저장소의 정상 insert(True) 경로를 검증한다.
+        # SpyDb의 공용 기본값(None)은 저장 실패를 뜻하므로 여기에서만 명시한다.
+        db = SpyDb(queue_agent_command=True)
         gateway_events = ApiEventGateway(MemoryPublisher(), MemoryRecorder(), "api-gateway")
         accepted = await gateway_events.accept_body(
             GitWebhookReceivedBody(
