@@ -111,6 +111,22 @@ describe("ProductShell keyboard and help interaction", () => {
     expect((input as HTMLInputElement).value).toBe("gi?");
   });
 
+  it("opens the descriptor-backed command palette from Cmd/Ctrl+K and gives honest feedback for an unavailable route", async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.keyboard("{Meta>}k{/Meta}");
+    const dialog = await screen.findByRole("dialog", { name: "명령 팔레트" });
+    expect(dialog.textContent).toContain("토폴로지");
+    expect(dialog.textContent).toContain("준비되지 않음");
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
+
+    await user.keyboard("gt");
+    expect(await screen.findByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeTruthy();
+  });
+
   it("collapses the desktop rail without remounting links and exposes focus tooltips only when slim", async () => {
     const user = userEvent.setup();
     const { container } = renderShell();

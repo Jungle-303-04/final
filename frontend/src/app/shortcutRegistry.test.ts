@@ -11,42 +11,45 @@ afterEach(() => {
 });
 
 describe("shell shortcut registry", () => {
-  it("contains only released route shortcuts plus data-independent global actions", () => {
+  it("keeps all upstream navigation chords discoverable and marks unregistered routes unavailable", () => {
     const definitions = shellShortcutDefinitions(new Set(["home", "issues"]));
 
-    expect(definitions.map((definition) => definition.id)).toEqual([
-      "route:home",
-      "route:issues",
-      "theme",
-      "help",
-    ]);
-    expect(definitions.map((definition) => definition.sequence.join(" "))).toEqual([
-      "g h",
-      "g i",
-      "t",
-      "?",
-    ]);
-    expect(definitions.map((definition) => definition.labelKey)).toEqual([
-      "shell.shortcut.route.home",
-      "shell.shortcut.route.issues",
-      "shell.shortcut.theme",
-      "shell.shortcut.help",
-    ]);
-    expect(definitions.map((definition) => definition.id)).not.toEqual(
-      expect.arrayContaining(["context", "namespace", "command", "diagnostics"]),
-    );
+    expect(definitions.filter((definition) => definition.id.startsWith("route:"))
+      .map((definition) => [definition.id, definition.sequence.join(" "), definition.available]))
+      .toEqual(expect.arrayContaining([
+        ["route:home", "g h", true],
+        ["route:resources", "g r", false],
+        ["route:issues", "g i", true],
+        ["route:topology", "g t", false],
+        ["route:applications", "g a", false],
+        ["route:timeline", "g l", false],
+        ["route:traffic", "g f", false],
+        ["route:helm", "g m", false],
+        ["route:gitops", "g o", false],
+        ["route:checks", "g u", false],
+        ["route:cost", "g c", false],
+      ]));
+    expect(definitions.find((definition) => definition.id === "command"))
+      .toMatchObject({
+        allowInInputs: true,
+        modifier: "meta-or-control",
+        sequence: ["k"],
+      });
   });
 
-  it("matches a route chord and direct actions without dispatching unreleased routes", () => {
+  it("matches an unavailable route chord so the shell can give honest feedback", () => {
     const matcher = createShortcutMatcher(shellShortcutDefinitions(new Set(["home", "issues"])));
     const prefix = keyEvent("g");
 
     expect(matcher.handle(prefix)).toBeNull();
     expect(prefix.preventDefault).toHaveBeenCalledOnce();
     expect(matcher.handle(keyEvent("i"))?.id).toBe("route:issues");
+    matcher.handle(keyEvent("g"));
+    expect(matcher.handle(keyEvent("t"))?.id).toBe("route:topology");
     expect(matcher.handle(keyEvent("t"))?.id).toBe("theme");
     expect(matcher.handle(keyEvent("?", { shiftKey: true }))?.id).toBe("help");
-    expect(matcher.handle(keyEvent("o"))).toBeNull();
+    expect(matcher.handle(keyEvent("k", { metaKey: true }))?.id).toBe("command");
+    expect(matcher.handle(keyEvent("k", { ctrlKey: true }))?.id).toBe("command");
   });
 
   it("owns route and Resources collection chords in one active-surface registry", () => {
@@ -99,19 +102,13 @@ describe("shell shortcut registry", () => {
   it("suppresses shortcuts in editable controls unless explicitly allowed", () => {
     const definitions: readonly ShortcutDefinition[] = [
       ...shellShortcutDefinitions(new Set(["home"])),
-      {
-        id: "command",
-        labelKey: "common.action.open",
-        group: "global",
-        sequence: ["k"],
-        allowInInputs: true,
-      },
     ];
     const matcher = createShortcutMatcher(definitions);
     const input = { tagName: "INPUT", isContentEditable: false };
 
     expect(matcher.handle(keyEvent("t", { target: input }))).toBeNull();
-    expect(matcher.handle(keyEvent("k", { target: input }))?.id).toBe("command");
+    expect(matcher.handle(keyEvent("k", { metaKey: true, target: input }))?.id).toBe("command");
+    expect(matcher.handle(keyEvent("k", { ctrlKey: true, target: input }))?.id).toBe("command");
     expect(matcher.handle(keyEvent("?", {
       shiftKey: true,
       target: { tagName: "DIV", isContentEditable: true },
@@ -166,15 +163,16 @@ describe("shell shortcut registry", () => {
     expect(matcher.handle(keyEvent("h"))).toBeNull();
   });
 
-  it("does not reserve backend-gated shortcuts when no route uses the chord prefix", () => {
+  it("retains source navigation and command access even when no surface is registered", () => {
     const matcher = createShortcutMatcher(shellShortcutDefinitions(new Set()));
     const prefix = keyEvent("g");
     const command = keyEvent("k", { metaKey: true });
 
     expect(matcher.handle(prefix)).toBeNull();
-    expect(prefix.preventDefault).not.toHaveBeenCalled();
-    expect(matcher.handle(command)).toBeNull();
-    expect(command.preventDefault).not.toHaveBeenCalled();
+    expect(prefix.preventDefault).toHaveBeenCalledOnce();
+    expect(matcher.handle(keyEvent("h"))?.id).toBe("route:home");
+    expect(matcher.handle(command)?.id).toBe("command");
+    expect(command.preventDefault).toHaveBeenCalledOnce();
   });
 
   it("detects editable controls through the composed event path", () => {
