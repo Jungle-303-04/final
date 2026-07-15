@@ -49,6 +49,8 @@ class StubAgentCommandQueue:
             "workflow_run_id": "",
             "workspace_id": workspace_id,
             "status": "granted",
+            "decided_by": "approver-1",
+            "expires_at": "2099-01-01T00:00:00Z",
             "details": {
                 "approval_ref": approval_id,
                 "policy_decision_ref": "policy-decision-1",
@@ -57,8 +59,9 @@ class StubAgentCommandQueue:
 
     async def queue_agent_command(
         self, correlation_id: str, plan: dict[str, Any], status: str
-    ) -> None:
+    ) -> bool:
         self.queued.append((correlation_id, plan, status))
+        return True
 
     async def fail_expired_agent_commands(self) -> list[dict[str, Any]]:
         return []  # janitor 대상 없음(AgentCommandStore 계약 충족용)
@@ -105,16 +108,18 @@ def test_recorded_event_client_inherits_current_causation_id() -> None:
     asyncio.run(run())
 
 
-def test_command_subscriber_emits_dispatch_chain() -> None:
+def test_command_subscriber_emits_dispatch_chain(monkeypatch) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,color-turf")
     command = load_service("command/command-worker")
     queue = StubAgentCommandQueue()
     payload = CommandRequestedBody.from_body(
         {
             "cluster_id": "target-cluster-01",
             "action": "rollout_restart",
-            "namespace": "sandbox",
+            "namespace": "color-turf",
+            "environment": "production",
             "reason": "rollout",
-            "diff": command_diff(),
+            "diff": {**command_diff(), "namespace": "color-turf"},
             "approval_ref": "approval-1",
             "policy_decision_ref": "policy-decision-1",
         }
@@ -132,6 +137,8 @@ def test_command_subscriber_emits_dispatch_chain() -> None:
     assert plan["diff"]["resource"] == "deployment/checkout-api"
     assert plan["approval_ref"] == "approval-1"
     assert plan["policy_decision_ref"] == "policy-decision-1"
+    assert plan["approval_decided_by"] == "approver-1"
+    assert plan["approval_expires_at"] == "2099-01-01T00:00:00Z"
     assert plan["idempotency_key"]
     assert status == "queued"
 
