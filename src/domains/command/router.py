@@ -111,7 +111,7 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
     return cast(Diff, Diff.from_body(raw))
 
 
-def require_direct_execution_confirmation(payload: CommandRequest) -> None:
+def require_direct_execution_confirmation(payload: Any) -> None:
     if payload.direct_execution and not payload.direct_execution_confirmed:
         raise HTTPException(
             status_code=UNPROCESSABLE_CODE,
@@ -186,14 +186,21 @@ async def accept_deployment_control(
     payload: JsonObject,
     approval_ref: str | None,
     policy_decision_ref: str | None,
+    direct_execution: bool,
+    direct_execution_confirmed: bool,
     current: Any,
     db: Any,
     events: Any,
 ) -> AcceptedResponse:
     validate_control_namespace(namespace)
+    if direct_execution and not direct_execution_confirmed:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, cluster_id)
-    require_not_management_cluster(db, workspace_id, cluster_id)
+    require_not_management_cluster(db, workspace_id, cluster_id, direct_execution=direct_execution)
     diff = deployment_control_diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
@@ -214,6 +221,8 @@ async def accept_deployment_control(
         requested_by=current.user_id,
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
+        direct_execution=direct_execution,
+        direct_execution_confirmed=direct_execution_confirmed,
     )
     accepted = await events.accept_body(
         command,
@@ -323,6 +332,8 @@ async def scale_deployment(
         payload=command_payload,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
+        direct_execution=payload.direct_execution,
+        direct_execution_confirmed=payload.direct_execution_confirmed,
         current=current,
         db=db,
         events=events,
@@ -352,6 +363,8 @@ async def restart_deployment(
         payload=command_payload,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
+        direct_execution=payload.direct_execution,
+        direct_execution_confirmed=payload.direct_execution_confirmed,
         current=current,
         db=db,
         events=events,

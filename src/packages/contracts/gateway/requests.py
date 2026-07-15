@@ -313,12 +313,16 @@ class DeploymentScaleRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 class DeploymentRestartRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 class AgentDebugQueryRequest(StrictModel):
