@@ -6,17 +6,17 @@ facts returned after this repository's transaction has committed.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import and_, false, or_, select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.timeline.models import TimelineLedgerCursor, TimelineLedgerEvent
+from domains.timeline.predicate import TimelineEvidencePredicate, timeline_evidence_sql_predicate
 from packages.contracts.parity import ClusterScope
-from packages.contracts.timeline import RealtimePolicy, TimelineEvent, TimelineWindow
+from packages.contracts.timeline import RealtimePolicy, TimelineEvent
 from packages.storage.engine import DatabaseConnection
 
 TimelineReplayStatus = Literal["available", "resync_required"]
@@ -201,7 +201,7 @@ class TimelineLedgerRepository(DatabaseConnection):
         self,
         read_scope: TimelineLedgerReadScope,
         *,
-        window: TimelineWindow,
+        predicate: TimelineEvidencePredicate,
         limit: int = 1_000,
     ) -> TimelineLedgerSnapshot:
         """Read one scoped history snapshot in stable evidence order."""
@@ -211,7 +211,8 @@ class TimelineLedgerRepository(DatabaseConnection):
             read_scope,
             after_sequence=cursor_state[1] - 1,
             through_sequence=cursor_state[0],
-            window=window,
+            predicate=predicate,
+            phase="snapshot",
             limit=limit + 1,
             replay_order=False,
         )
@@ -228,6 +229,7 @@ class TimelineLedgerRepository(DatabaseConnection):
         read_scope: TimelineLedgerReadScope,
         *,
         after_sequence: int,
+        predicate: TimelineEvidencePredicate,
         limit: int = 1_000,
     ) -> TimelineReplayResult:
         """Return a scoped suffix, or an explicit resync result after retention expiry."""
@@ -249,7 +251,8 @@ class TimelineLedgerRepository(DatabaseConnection):
                 read_scope,
                 after_sequence=after_sequence,
                 through_sequence=high_water,
-                window=None,
+                predicate=predicate,
+                phase="stream",
                 limit=limit,
                 replay_order=True,
             ),
@@ -313,7 +316,8 @@ class TimelineLedgerRepository(DatabaseConnection):
         *,
         after_sequence: int,
         through_sequence: int,
-        window: TimelineWindow | None,
+        predicate: TimelineEvidencePredicate,
+        phase: Literal["snapshot", "stream"],
         limit: int,
         replay_order: bool,
     ) -> tuple[TimelineLedgerRecord, ...]:
@@ -321,7 +325,8 @@ class TimelineLedgerRepository(DatabaseConnection):
             read_scope,
             after_sequence=after_sequence,
             through_sequence=through_sequence,
-            window=window,
+            predicate=predicate,
+            phase=phase,
             limit=limit,
             replay_order=replay_order,
         )
@@ -335,7 +340,8 @@ def _timeline_events_statement(
     *,
     after_sequence: int,
     through_sequence: int,
-    window: TimelineWindow | None,
+    predicate: TimelineEvidencePredicate,
+    phase: Literal["snapshot", "stream"],
     limit: int,
     replay_order: bool,
 ) -> Any:
@@ -347,16 +353,8 @@ def _timeline_events_statement(
         ledger.c.workspace_id == read_scope.workspace_id,
         ledger.c.sequence > after_sequence,
         ledger.c.sequence <= through_sequence,
-        _read_scope_predicate(ledger, read_scope.scopes),
-        _source_authorization_predicate(ledger, read_scope),
+        timeline_evidence_sql_predicate(ledger, predicate, phase=phase),
     ]
-    if window is not None:
-        conditions.extend(
-            (
-                ledger.c.occurred_at >= _from_datetime(window.from_ms),
-                ledger.c.occurred_at < _to_datetime(window.to_ms),
-            )
-        )
     order_by = (
         (ledger.c.sequence.asc(),)
         if replay_order
@@ -478,69 +476,6 @@ def _event_from_row(row: Any) -> TimelineEvent:
 
 def _record_from_row(row: Any) -> TimelineLedgerRecord:
     return TimelineLedgerRecord(sequence=int(row["sequence"]), event=_event_from_row(row))
-
-
-def _read_scope_predicate(ledger: Any, scopes: Sequence[ClusterScope]) -> Any:
-    predicates: list[Any] = []
-    for scope in scopes:
-        predicate = ledger.c.cluster_id == scope.cluster_id
-        if scope.namespaces:
-            predicate = and_(predicate, ledger.c.namespace.in_(scope.namespaces))
-        predicates.append(predicate)
-    return or_(*predicates)
-
-
-def _source_authorization_predicate(ledger: Any, read_scope: TimelineLedgerReadScope) -> Any:
-    """Require source-native grants in addition to requested cluster/namespace scope."""
-    predicates: list[Any] = []
-    if read_scope.inventory_cluster_ids:
-        predicates.append(
-            and_(
-                ledger.c.source == "inventory",
-                ledger.c.cluster_id.in_(tuple(sorted(read_scope.inventory_cluster_ids))),
-            )
-        )
-    if read_scope.kubernetes_event_cluster_ids:
-        predicates.append(
-            and_(
-                ledger.c.source == "kubernetes_event",
-                ledger.c.cluster_id.in_(tuple(sorted(read_scope.kubernetes_event_cluster_ids))),
-            )
-        )
-    if read_scope.incident_cluster_ids:
-        predicates.append(
-            and_(
-                ledger.c.source == "incident",
-                ledger.c.cluster_id.in_(tuple(sorted(read_scope.incident_cluster_ids))),
-            )
-        )
-    if read_scope.application_workflow_ids:
-        predicates.append(
-            and_(
-                ledger.c.source == "application_workflow",
-                ledger.c.subject["application_id"].astext.in_(
-                    tuple(sorted(read_scope.application_workflow_ids))
-                ),
-            )
-        )
-    if read_scope.gitops_application_ids:
-        predicates.append(
-            and_(
-                ledger.c.source == "gitops",
-                ledger.c.subject["application_id"].astext.in_(
-                    tuple(sorted(read_scope.gitops_application_ids))
-                ),
-            )
-        )
-    return or_(*predicates) if predicates else false()
-
-
-def _from_datetime(milliseconds: int) -> datetime:
-    return datetime.fromtimestamp(milliseconds / 1_000, tz=UTC)
-
-
-def _to_datetime(milliseconds: int) -> datetime:
-    return datetime.fromtimestamp(milliseconds / 1_000, tz=UTC)
 
 
 def _validate_requested_limit(limit: int) -> None:

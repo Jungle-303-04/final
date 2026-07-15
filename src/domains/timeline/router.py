@@ -60,7 +60,7 @@ async def read_timeline_snapshot(
         snapshot = await asyncio.to_thread(
             snapshot_reader,
             resolution.read_scope,
-            window=resolution.query.window,
+            predicate=resolution.evidence_predicate,
             limit=resolution.policy.max_batch_events,
         )
     except TimelineSnapshotLimitExceeded as exc:
@@ -75,7 +75,11 @@ async def read_timeline_snapshot(
             cursor=cursor,
             scopes=resolution.scopes,
             policy=resolution.policy,
-            events=snapshot.events,
+            events=tuple(
+                record.event
+                for record in snapshot.records
+                if resolution.evidence_predicate.matches_snapshot(record.event)
+            ),
         ),
         TimelineStreamFrame(kind="end", cursor=cursor),
     )
@@ -147,6 +151,7 @@ async def _timeline_sse_body(
                 replay_reader,
                 resolution.read_scope,
                 after_sequence=delivered,
+                predicate=resolution.evidence_predicate,
                 limit=resolution.policy.max_batch_events,
             )
             if replay.status == "resync_required":
@@ -162,6 +167,8 @@ async def _timeline_sse_body(
                 if record.sequence <= delivered:
                     continue
                 delivered = record.sequence
+                if not resolution.evidence_predicate.matches_stream(record.event):
+                    continue
                 yield encode_sse_frame(
                     TimelineStreamFrame(
                         kind="event",
@@ -173,6 +180,11 @@ async def _timeline_sse_body(
             # behind it. Drain it before waiting for a wake-up signal.
             if len(replay.records) >= resolution.policy.max_batch_events:
                 continue
+            # The durable reader applied the same predicate, so a short page
+            # proves no remaining matching record exists through this
+            # high-water mark. Advance only the server-local scan boundary;
+            # the browser keeps its last emitted opaque cursor.
+            delivered = max(delivered, replay.high_water_sequence)
             try:
                 await asyncio.wait_for(subscription.next(), timeout=timeline_replay_poll_seconds())
             except TimeoutError:

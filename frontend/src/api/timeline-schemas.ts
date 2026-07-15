@@ -138,6 +138,10 @@ export const timelineRealtimePolicySchema = z.strictObject({
   }).refine((policy) => policy.min_delay_ms <= policy.max_delay_ms, {
     message: "timeline reconnect minimum must not exceed maximum",
   }),
+  live_session: z.strictObject({
+    max_age_ms: z.number().int().min(1_000).max(300_000),
+    strategy: z.literal("replace_with_snapshot"),
+  }),
 });
 
 export const timelineWindowSchema = z.strictObject({
@@ -159,6 +163,7 @@ export const timelineQuerySchema = z.strictObject({
   scopes: z.array(timelineScopeSchema).min(1).max(100),
   window: timelineWindowSchema,
   filters: timelineFiltersSchema,
+  mode: z.enum(["live", "frozen"]),
   grouping: z.enum(["app", "owner", "flat"]),
   sort: z.enum(["importance", "recent", "name"]),
 });

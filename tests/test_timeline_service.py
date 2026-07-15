@@ -59,6 +59,7 @@ def _query(*cluster_ids: str, from_ms: int = 1_000, to_ms: int = 2_000) -> Timel
             for cluster_id in cluster_ids
         ),
         window=TimelineWindow(from_ms=from_ms, to_ms=to_ms),
+        mode="live",
     )
 
 

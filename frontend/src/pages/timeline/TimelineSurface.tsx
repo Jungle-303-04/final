@@ -207,10 +207,14 @@ function TimelineDataBoundary({
         )}
       </p>
       {frame.phase === "resyncing" ? (
-        <p aria-live="polite" className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground" role="status">
-          {t("timeline.stream.resyncing")}
-        </p>
-      ) : <TimelineStreamStatus stream={frame.stream} t={t} />}
+        frame.failure === null ? (
+          <p aria-live="polite" className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground" role="status">
+            {t("timeline.stream.resyncing")}
+          </p>
+        ) : (
+          <TimelineRetryableFailure onRetry={onRetry} t={t} />
+        )
+      ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
       {snapshot.coverage.length > 0 ? (
         <aside className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted-foreground" role="status">
           {t("timeline.coverage")}
@@ -226,9 +230,11 @@ function TimelineDataBoundary({
 }
 
 function TimelineStreamStatus({
+  onRetry,
   stream,
   t,
 }: {
+  onRetry: () => void;
   stream: TimelineStreamLifecycle;
   t: I18nController["t"];
 }) {
@@ -241,16 +247,35 @@ function TimelineStreamStatus({
         : stream.state === "closed"
           ? "timeline.stream.closed"
           : "timeline.stream.failed";
+  if (stream.state === "failed") {
+    return <TimelineRetryableFailure onRetry={onRetry} t={t} />;
+  }
   return (
     <p
       aria-live="polite"
-      className={stream.state === "failed"
-        ? "rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-muted-foreground"
-        : "text-sm text-muted-foreground"}
-      role={stream.state === "failed" ? "alert" : "status"}
+      className="text-sm text-muted-foreground"
+      role="status"
     >
       {t(key)}
     </p>
+  );
+}
+
+function TimelineRetryableFailure({
+  onRetry,
+  t,
+}: {
+  onRetry: () => void;
+  t: I18nController["t"];
+}) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3" role="alert">
+      <div>
+        <h3 className="font-medium">{t("timeline.error.title")}</h3>
+        <p className="text-sm text-muted-foreground">{t("timeline.error.description")}</p>
+      </div>
+      <Button onClick={onRetry} size="sm" type="button" variant="outline">{t("timeline.action.retry")}</Button>
+    </section>
   );
 }
 

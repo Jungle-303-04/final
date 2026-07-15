@@ -84,6 +84,7 @@ def test_timeline_query_canonicalizes_scopes_and_carries_server_realtime_policy(
             _scope("cluster-b", freshness="stale"),
         ],
         window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        mode="live",
         filters={"activity": ["warning", "change"], "kinds": ["Deployment", "Pod"]},
         grouping="app",
         sort="importance",
@@ -138,12 +139,17 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
                 _scope("cluster-b").model_copy(update={"workspace_id": "workspace-b"}),
             ],
             window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+            mode="live",
         )
 
 
 def test_timeline_stream_request_accepts_only_an_opaque_resume_cursor() -> None:
     request = TimelineStreamRequest(
-        query=TimelineQuery(scopes=[_scope()], window=TimelineWindow(from_ms=1_000, to_ms=2_000)),
+        query=TimelineQuery(
+            scopes=[_scope()],
+            window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+            mode="live",
+        ),
         after=_cursor(4),
     )
 
@@ -155,4 +161,12 @@ def test_timeline_stream_request_accepts_only_an_opaque_resume_cursor() -> None:
                 "after": {"token": "opaque"},
                 "sequence": 4,
             }
+        )
+
+
+def test_timeline_query_requires_an_explicit_live_or_frozen_mode() -> None:
+    with pytest.raises(ValidationError, match="mode"):
+        TimelineQuery(
+            scopes=[_scope()],
+            window=TimelineWindow(from_ms=1_000, to_ms=2_000),
         )

@@ -1,7 +1,6 @@
-import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import {
   TimelineFailure,
-  type TimelineCoverage,
   type TimelinePort,
   type TimelineQuery,
   type TimelineSnapshot,
@@ -9,11 +8,19 @@ import {
   type TimelineStreamLifecycle,
 } from "../../features/timeline/timelineContract";
 import { createRafStreamCoalescer } from "../../shared/streaming/rafStreamCoalescer";
+import { timelineEvidenceKey } from "../../features/timeline/timelineEvidenceIdentity";
+import { applyTimelineFrames, normalizeTimelineSnapshot } from "./timelineFrameReducer";
 
 export type TimelineDataFrame =
   | { phase: "loading" }
   | { phase: "ready"; snapshot: TimelineSnapshot; stream: TimelineStreamLifecycle }
-  | { phase: "resyncing"; snapshot: TimelineSnapshot; reason: string }
+  | {
+    phase: "resyncing";
+    snapshot: TimelineSnapshot;
+    reason: string;
+    /** The retained snapshot remains usable while the replacement failed. */
+    failure: TimelineFailure | null;
+  }
   | { phase: "failed"; failure: TimelineFailure };
 
 export interface TimelineDataController {
@@ -22,7 +29,7 @@ export interface TimelineDataController {
 }
 
 interface TimelineDataRecord {
-  queryKey: string | null;
+  evidenceKey: string | null;
   requestKey: string | null;
   frame: TimelineDataFrame;
 }
@@ -35,17 +42,52 @@ export function useTimelineDataFrame(
   port: TimelinePort,
   query: TimelineQuery,
 ): TimelineDataController {
-  const queryKey = useMemo(() => JSON.stringify(query), [query]);
+  const queryRef = useRef(query);
+  const evidenceKey = timelineEvidenceKey(query);
   const [revision, setRevision] = useState(0);
-  const requestKey = `${queryKey}:${revision}`;
+  const requestKey = `${evidenceKey}:${revision}`;
   const [record, setRecord] = useState<TimelineDataRecord>(() => ({
-    queryKey: null,
+    evidenceKey: null,
     requestKey: null,
     frame: { phase: "loading" },
   }));
+  const recordRef = useRef(record);
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+  useEffect(() => {
+    recordRef.current = record;
+  }, [record]);
   const frame: TimelineDataFrame = record.requestKey === requestKey || (
-    record.queryKey === queryKey && record.frame.phase === "resyncing"
+    record.evidenceKey === evidenceKey && record.frame.phase === "resyncing"
   ) ? record.frame : { phase: "loading" };
+
+  const beginRetainedResync = useCallback((reason: string, expectedRequestKey?: string) => {
+    const current = recordRef.current;
+    // A stream can ask for a resync immediately after the initial snapshot;
+    // React has not necessarily committed that queued ready record yet.
+    // Only discard a callback that demonstrably belongs to another evidence set.
+    if (current.evidenceKey !== null && current.evidenceKey !== evidenceKey) return;
+    startTransition(() => {
+      setRecord((latest) => (
+        latest.evidenceKey === evidenceKey
+        && (expectedRequestKey === undefined || latest.requestKey === expectedRequestKey)
+        && (latest.frame.phase === "ready" || latest.frame.phase === "resyncing")
+          ? {
+            evidenceKey,
+            requestKey: latest.requestKey,
+            frame: {
+              phase: "resyncing",
+              snapshot: latest.frame.snapshot,
+              reason,
+              failure: null,
+            },
+          }
+          : latest
+      ));
+      setRevision((value) => value + 1);
+    });
+  }, [evidenceKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,23 +101,41 @@ export function useTimelineDataFrame(
     async function open() {
       let snapshot: TimelineSnapshot;
       try {
-        snapshot = await port.readTimeline(query, controller.signal);
+        snapshot = normalizeTimelineSnapshot(
+          await port.readTimeline(queryRef.current, controller.signal),
+        );
       } catch (error) {
         if (!active || isAbortError(error)) return;
-        setRecord({
-          queryKey,
-          requestKey,
-          frame: { phase: "failed", failure: toTimelineFailure(error) },
-        });
+        const failure = toTimelineFailure(error);
+        setRecord((current) => (
+          current.evidenceKey === evidenceKey && current.frame.phase === "resyncing"
+            ? {
+              evidenceKey,
+              requestKey,
+              frame: { ...current.frame, failure },
+            }
+            : {
+              evidenceKey,
+              requestKey,
+              frame: { phase: "failed", failure },
+            }
+        ));
         return;
       }
       if (!active) return;
       setRecord({
-        queryKey,
+        evidenceKey,
         requestKey,
         frame: { phase: "ready", snapshot, stream: { state: "connecting" } },
       });
 
+      const liveSessionTimer = scheduleLiveSessionReplacement(
+        snapshot,
+        () => {
+          if (!active) return;
+          beginRetainedResync("live_session_rotation", requestKey);
+        },
+      );
       const coalescer = createRafStreamCoalescer<TimelineStreamFrame>({
         opaqueCursor: {
           keyOf: (streamFrame) => `${streamFrame.kind}:${streamFrame.cursor.token}`,
@@ -84,20 +144,11 @@ export function useTimelineDataFrame(
           if (!active) return;
           const resync = frames.find((streamFrame) => streamFrame.kind === "resync_required");
           if (resync?.kind === "resync_required") {
-            startTransition(() => {
-              setRecord((current) => current.requestKey === requestKey && current.frame.phase === "ready"
-                ? {
-                  queryKey,
-                  requestKey: current.requestKey,
-                  frame: { phase: "resyncing", snapshot: current.frame.snapshot, reason: resync.reason },
-                }
-                : current);
-              setRevision((current) => current + 1);
-            });
+            beginRetainedResync(resync.reason, requestKey);
             return;
           }
           startTransition(() => {
-            setRecord((current) => reduceTimelineFrames(current, queryKey, requestKey, frames));
+            setRecord((current) => reduceTimelineFrames(current, evidenceKey, requestKey, frames));
           });
         },
         policy: {
@@ -134,20 +185,21 @@ export function useTimelineDataFrame(
           }
           : current);
       } finally {
+        if (liveSessionTimer !== null) clearTimeout(liveSessionTimer);
         coalescer.dispose();
       }
     }
-  }, [port, query, queryKey, requestKey]);
+  }, [beginRetainedResync, port, evidenceKey, requestKey]);
 
   const retry = useCallback(() => {
-    setRevision((current) => current + 1);
-  }, []);
+    beginRetainedResync("manual_retry");
+  }, [beginRetainedResync]);
   return { frame, retry };
 }
 
 function reduceTimelineFrames(
   record: TimelineDataRecord,
-  queryKey: string,
+  evidenceKey: string,
   requestKey: string,
   frames: readonly TimelineStreamFrame[],
 ): TimelineDataRecord {
@@ -159,47 +211,27 @@ function reduceTimelineFrames(
       frame: { ...record.frame, stream: { state: "failed", failure: "unavailable" } },
     };
   }
-  const events = frames.flatMap((frame) => frame.kind === "event" ? [frame.event] : []);
-  const coverage = frames.flatMap((frame) => frame.kind === "coverage" ? frame.coverage : []);
-  if (events.length === 0 && coverage.length === 0) return record;
+  if (!frames.some((frame) => frame.kind === "event" || frame.kind === "coverage")) return record;
   return {
-    queryKey,
+    evidenceKey,
     requestKey,
     frame: {
       ...record.frame,
-      snapshot: {
-        ...record.frame.snapshot,
-        coverage: mergeCoverage(record.frame.snapshot.coverage, coverage),
-        events: [...record.frame.snapshot.events, ...events],
-      },
+      snapshot: applyTimelineFrames(record.frame.snapshot, frames),
     },
   };
 }
 
-function mergeCoverage(
-  current: readonly TimelineCoverage[],
-  incoming: readonly TimelineCoverage[],
-): readonly TimelineCoverage[] {
-  const known = new Set(current.map(coverageKey));
-  const additions = incoming.filter((coverage) => {
-    const key = coverageKey(coverage);
-    if (known.has(key)) return false;
-    known.add(key);
-    return true;
-  });
-  return additions.length === 0 ? current : [...current, ...additions];
-}
-
-function coverageKey(coverage: TimelineCoverage): string {
-  return [
-    coverage.scope.workspaceId,
-    coverage.scope.clusterId,
-    (coverage.scope.namespaces ?? []).join("\u0000"),
-    coverage.source,
-    coverage.fromMs,
-    coverage.toMs,
-    coverage.reason,
-  ].join("\u0000");
+function scheduleLiveSessionReplacement(
+  snapshot: TimelineSnapshot,
+  replace: () => void,
+): ReturnType<typeof setTimeout> | null {
+  if (snapshot.session.query.mode.kind !== "live") return null;
+  const policy = snapshot.policy.liveSession;
+  if (policy.strategy !== "replace_with_snapshot") {
+    throw new TimelineFailure("invalid-response");
+  }
+  return setTimeout(replace, policy.maxAgeMs);
 }
 
 function toTimelineFailure(error: unknown): TimelineFailure {

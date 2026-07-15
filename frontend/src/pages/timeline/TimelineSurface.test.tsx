@@ -24,6 +24,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -150,6 +151,50 @@ describe("TimelineSurface", () => {
     expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
   });
 
+  it("keeps the retained list mounted while a live session rotates or its replacement fails", async () => {
+    vi.useFakeTimers();
+    const replacement = deferred<TimelineSnapshot>();
+    const readTimeline = vi.fn()
+      .mockResolvedValueOnce(liveSnapshot(1_500))
+      .mockReturnValueOnce(replacement.promise)
+      .mockResolvedValueOnce(liveSnapshot(1_500));
+    renderTimeline(timelinePort({ readTimeline }), "/timeline", "en-US");
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
+    expect(readTimeline).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_499);
+    });
+    expect(readTimeline).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(readTimeline).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
+    expect(screen.queryByText("Loading timeline…")).toBeNull();
+    expect(screen.getByText("Resynchronizing retained timeline data…")).toBeTruthy();
+
+    await act(async () => {
+      replacement.reject(new TimelineFailure("offline"));
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Timeline data is unavailable.");
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Retry timeline" }).click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(readTimeline).toHaveBeenCalledTimes(3);
+    expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
+  });
+
   it.each([
     {
       navigatorLanguage: "en-US",
@@ -228,6 +273,10 @@ function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): T
         maxDelayMs: 200,
         strategy: "full_jitter_exponential" as const,
       },
+      liveSession: {
+        maxAgeMs: 30_000,
+        strategy: "replace_with_snapshot" as const,
+      },
     },
   };
   return {
@@ -238,6 +287,39 @@ function snapshot(overrides: Partial<Omit<TimelineSnapshot, "session">> = {}): T
     coverage: [],
     ...overrides,
   };
+}
+
+function liveSnapshot(maxAgeMs: number): TimelineSnapshot {
+  const retained = snapshot();
+  const policy = {
+    ...retained.policy,
+    liveSession: {
+      ...retained.policy.liveSession,
+      maxAgeMs,
+    },
+  };
+  return {
+    ...retained,
+    policy,
+    session: {
+      ...retained.session,
+      policy,
+      query: {
+        ...retained.session.query,
+        mode: { kind: "live", widthMs: 60_000 },
+      },
+    },
+  };
+}
+
+function deferred<T>() {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, reject, resolve };
 }
 
 async function* idleStream(

@@ -18,6 +18,7 @@ from domains.timeline.cursor import (
     timeline_query_fingerprint,
 )
 from domains.timeline.mapping import inventory_timeline_event
+from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import (
     TimelineLedgerReadScope,
     TimelineLedgerRecord,
@@ -56,6 +57,7 @@ def _query(
             ),
         ),
         window=TimelineWindow(from_ms=from_ms, to_ms=to_ms),
+        mode="live",
     )
 
 
@@ -80,9 +82,10 @@ def _resource_event(source_key: str, event_id: str) -> TimelineEvent:
 def _timeline_sql(scope: TimelineLedgerReadScope) -> str:
     statement = _timeline_events_statement(
         scope,
+        predicate=TimelineEvidencePredicate.from_query(scope, _query()),
         after_sequence=0,
         through_sequence=12,
-        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        phase="snapshot",
         limit=2,
         replay_order=False,
     )
@@ -135,7 +138,7 @@ def test_timeline_cursor_is_bound_to_user_workspace_query_and_authorization_revi
     codec = TimelineReplayCursorCodec(
         FilterCursorCodec("timeline-cursor-test-secret-32-bytes!!", now=lambda: 1_000)
     )
-    binding = TimelineCursorBinding(
+    binding = TimelineCursorBinding.from_query(
         user_id="user-a",
         authorization_revision="auth-revision-a",
         query=_query(),
@@ -152,7 +155,12 @@ def test_timeline_cursor_is_bound_to_user_workspace_query_and_authorization_revi
     with pytest.raises(ValueError, match="cursor scope changed"):
         codec.decode(
             cursor,
-            binding=binding.model_copy(update={"query": _query(cluster_id="cluster-b")}),
+            binding=TimelineCursorBinding.from_query(
+                user_id="user-a",
+                authorization_revision="auth-revision-a",
+                query=_query(cluster_id="cluster-b"),
+                snapshot_revision=7,
+            ),
         )
     with pytest.raises(ValueError, match="cursor scope changed"):
         codec.decode(
@@ -162,7 +170,12 @@ def test_timeline_cursor_is_bound_to_user_workspace_query_and_authorization_revi
     with pytest.raises(ValueError, match="cursor scope changed"):
         codec.decode(
             cursor,
-            binding=binding.model_copy(update={"query": _query(workspace_id="workspace-b")}),
+            binding=TimelineCursorBinding.from_query(
+                user_id="user-a",
+                authorization_revision="auth-revision-a",
+                query=_query(workspace_id="workspace-b"),
+                snapshot_revision=7,
+            ),
         )
 
 
@@ -170,7 +183,7 @@ def test_timeline_cursor_keeps_resume_valid_for_freshness_only_scope_changes() -
     codec = TimelineReplayCursorCodec(
         FilterCursorCodec("timeline-cursor-test-secret-32-bytes!!", now=lambda: 1_000)
     )
-    binding = TimelineCursorBinding(
+    binding = TimelineCursorBinding.from_query(
         user_id="user-a",
         authorization_revision="auth-revision-a",
         query=_query(freshness="live"),
@@ -182,15 +195,23 @@ def test_timeline_cursor_keeps_resume_valid_for_freshness_only_scope_changes() -
             ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a", freshness="stale"),
         ),
         window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        mode="live",
     )
-    stale = binding.model_copy(update={"query": duplicate_freshness})
+    stale = TimelineCursorBinding.from_query(
+        user_id="user-a",
+        authorization_revision="auth-revision-a",
+        query=duplicate_freshness,
+        snapshot_revision=7,
+    )
     cursor = codec.encode(binding, sequence=42)
 
-    assert timeline_query_fingerprint(binding.query) == timeline_query_fingerprint(stale.query)
-    assert len(stale.query.scopes) == 1
-    assert stale.query.scopes[0].freshness == "live"
+    assert timeline_query_fingerprint(_query(freshness="live")) == timeline_query_fingerprint(
+        duplicate_freshness
+    )
+    assert len(stale.replay_identity.scopes) == 1
+    assert stale.replay_identity.scopes[0].freshness == "live"
     assert codec.decode(cursor, binding=stale) == 42
-    assert timeline_query_fingerprint(binding.query) != timeline_query_fingerprint(
+    assert timeline_query_fingerprint(_query(freshness="live")) != timeline_query_fingerprint(
         _query(from_ms=1_001)
     )
 
@@ -204,7 +225,7 @@ def test_expired_timeline_cursor_is_rejected_before_replay_and_retention_require
             now=lambda: now[0],
         )
     )
-    binding = TimelineCursorBinding(
+    binding = TimelineCursorBinding.from_query(
         user_id="user-a",
         authorization_revision="auth-revision-a",
         query=_query(),
@@ -268,11 +289,12 @@ def test_scoped_replay_keeps_internal_sequences_for_opaque_event_cursors_across_
         Repository(),
         scope,
         after_sequence=1,
+        predicate=TimelineEvidencePredicate.from_query(scope, _query()),
     )
     codec = TimelineReplayCursorCodec(
         FilterCursorCodec("timeline-cursor-test-secret-32-bytes!!", now=lambda: 1_000)
     )
-    binding = TimelineCursorBinding(
+    binding = TimelineCursorBinding.from_query(
         user_id="user-a",
         authorization_revision="auth-revision-a",
         query=_query(),
@@ -458,19 +480,21 @@ def test_timeline_sql_requires_source_specific_grants_and_namespace_scope() -> N
     assert "timeline_events.namespace in ('payments')" in incident_sql
     assert "timeline_events.namespace in ('payments')" in application_workflow_sql
     assert "timeline_events.namespace in ('payments')" in gitops_sql
-    assert "where false" in deny_sql
+    assert "and false" in deny_sql
 
 
 def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates() -> None:
+    scope = TimelineLedgerReadScope(
+        workspace_id="workspace-a",
+        scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
+        inventory_cluster_ids=frozenset({"cluster-a"}),
+    )
     statement = _timeline_events_statement(
-        TimelineLedgerReadScope(
-            workspace_id="workspace-a",
-            scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
-            inventory_cluster_ids=frozenset({"cluster-a"}),
-        ),
+        scope,
+        predicate=TimelineEvidencePredicate.from_query(scope, _query()),
         after_sequence=0,
         through_sequence=12,
-        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        phase="snapshot",
         limit=2,
         replay_order=False,
     )
@@ -504,13 +528,13 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
         workspace_id="workspace-a",
         scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
     )
-    window = TimelineWindow(from_ms=1_000, to_ms=2_000)
+    predicate = TimelineEvidencePredicate.from_query(scope, _query())
     full = Repository((TimelineLedgerRecord(9, _resource_event("inventory:9", "event-9")),))
 
     snapshot = TimelineLedgerRepository.snapshot_timeline_events(
         full,
         scope,
-        window=window,
+        predicate=predicate,
         limit=1,
     )
 
@@ -520,7 +544,8 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
         {
             "after_sequence": 8,
             "through_sequence": 12,
-            "window": window,
+            "predicate": predicate,
+            "phase": "snapshot",
             "limit": 2,
             "replay_order": False,
         }
@@ -536,6 +561,6 @@ def test_snapshot_excludes_rows_before_retention_boundary_and_rejects_partial_li
         TimelineLedgerRepository.snapshot_timeline_events(
             overflow,
             scope,
-            window=window,
+            predicate=predicate,
             limit=1,
         )

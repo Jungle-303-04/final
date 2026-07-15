@@ -119,6 +119,7 @@ export function createTimelineEndpointQuery(
   return {
     scopes,
     window: { from_ms: window.fromMs, to_ms: window.toMs },
+    mode: query.mode.kind,
     filters: {
       activity: query.filters.activity.map((activity) => ACTIVITY_BY_URL_KEY[activity]),
       kinds: [...query.filters.kinds],
@@ -305,6 +306,7 @@ function toRealtimePolicy(policy: {
   resume: "cursor";
   hidden_tab: "coalesce";
   reconnect: { min_delay_ms: number; max_delay_ms: number; strategy: "full_jitter_exponential" };
+  live_session: { max_age_ms: number; strategy: "replace_with_snapshot" };
 }): TimelineRealtimePolicy {
   return {
     maxBatchEvents: policy.max_batch_events,
@@ -316,6 +318,10 @@ function toRealtimePolicy(policy: {
       minDelayMs: policy.reconnect.min_delay_ms,
       maxDelayMs: policy.reconnect.max_delay_ms,
       strategy: policy.reconnect.strategy,
+    },
+    liveSession: {
+      maxAgeMs: policy.live_session.max_age_ms,
+      strategy: policy.live_session.strategy,
     },
   };
 }
