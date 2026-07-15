@@ -160,10 +160,11 @@ describe("product-owned Sidebar menu", () => {
     expect(link.className).toContain("hover:text-sidebar-foreground");
     expect(link.className).toContain("focus-visible:bg-sidebar-primary/10");
     expect(link.className).toContain("focus-visible:text-sidebar-foreground");
+    expect(link.className).toContain("data-active:bg-sidebar-primary/15");
+    expect(link.className).toContain("data-active:text-sidebar-accent-foreground");
     expect(link.className).toContain("motion-reduce:transition-none");
     expect(link.className).toContain("forced-colors:hover:bg-[Highlight]");
     expect(link.className).not.toContain("data-active:bg-sidebar-accent");
-    expect(link.className).not.toContain("data-active:text-sidebar-accent-foreground");
     expect(link.className).toContain("forced-colors:focus-visible:outline-[CanvasText]");
     expect(link.className).toContain("forced-colors:aria-disabled:text-[GrayText]");
     expect(link.className).toContain("forced-colors:aria-disabled:opacity-100");

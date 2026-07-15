@@ -33,6 +33,7 @@ import {
   resourceTableSortValue,
   type ResourceTableColumnKey,
 } from "./resourceTableModel";
+import { cn } from "@/shared/lib/cn";
 
 export function ResourcesTable({
   items,
@@ -217,7 +218,7 @@ function ResourceNameButton({
         render={(
           <Button
             aria-label={t("resources.table.openDetail", { name: item.name })}
-            className="h-auto max-w-full justify-start px-0 text-left"
+            className={resourceNameButtonClassName(item)}
             onClick={() => onOpen(identity)}
             ref={(element) => {
               if (element) rowButtons.current.set(item.id, element);
@@ -234,6 +235,18 @@ function ResourceNameButton({
       </TooltipTrigger>
       <TooltipContent className="break-all" side="top">{item.name}</TooltipContent>
     </Tooltip>
+  );
+}
+
+export function resourceNameButtonClassName(item: ResourceSummary): string {
+  return cn(
+    "h-auto max-w-full justify-start px-0 text-left",
+    item.facts.type === "event" && [
+      "text-resource-event-name no-underline",
+      "hover:text-resource-event-name-hover hover:underline",
+      "focus-visible:border-resource-event-name focus-visible:text-resource-event-name-hover",
+      "focus-visible:underline focus-visible:ring-resource-event-name/40",
+    ],
   );
 }
 
