@@ -8,6 +8,7 @@ import {
 import { useI18n, type I18nController } from "../../shared/i18n";
 import type { MessageKey } from "../../shared/i18n/types";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
+import { LiveStatusDot, type LiveStatusDotTone } from "../../shared/ui/LiveStatusDot";
 import { Button } from "../../shared/ui/primitives/button";
 import type {
   TimelineEvent,
@@ -350,27 +351,30 @@ function TimelineStreamStatus({
   stream: TimelineStreamLifecycle;
   t: I18nController["t"];
 }) {
-  const key: MessageKey = stream.state === "connecting"
-    ? "timeline.stream.connecting"
-    : stream.state === "connected"
-      ? "timeline.stream.connected"
-      : stream.state === "reconnecting"
-        ? "timeline.stream.reconnecting"
-        : stream.state === "closed"
-          ? "timeline.stream.closed"
-          : "timeline.stream.failed";
   if (stream.state === "failed") {
     return <TimelineRetryableFailure onRetry={onRetry} t={t} />;
   }
+  const presentation = streamStatusPresentation(stream.state);
   return (
-    <p
+    <div
       aria-live="polite"
-      className="text-sm text-muted-foreground"
+      className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground"
+      data-stream-state={stream.state}
       role="status"
     >
-      {t(key)}
-    </p>
+      <LiveStatusDot state={stream.state} tone={presentation.tone} />
+      <span>{t(presentation.key)}</span>
+    </div>
   );
+}
+
+function streamStatusPresentation(
+  state: Exclude<TimelineStreamLifecycle["state"], "failed">,
+): { key: MessageKey; tone: LiveStatusDotTone } {
+  if (state === "connected") return { key: "timeline.stream.connected", tone: "healthy" };
+  if (state === "connecting") return { key: "timeline.stream.connecting", tone: "warning" };
+  if (state === "reconnecting") return { key: "timeline.stream.reconnecting", tone: "warning" };
+  return { key: "timeline.stream.closed", tone: "stale" };
 }
 
 function TimelineRetryableFailure({

@@ -293,7 +293,39 @@ describe("TimelineSurface", () => {
         "2026-07-15T00:00:00Z",
         "2026-07-15T00:02:00Z",
       ]);
+    expect([...swimlane.querySelectorAll<HTMLElement>("[data-timeline-marker]")]
+      .every((marker) => marker.className.includes("size-6"))).toBe(true);
     expect(swimlane.querySelectorAll("[data-timeline-lane]")).toHaveLength(2);
+  });
+
+  it("exposes overflowed swimlane events through named horizontal controls and keyboard focus", async () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(200);
+    renderTimeline(timelinePort(), "/timeline", "en-US");
+
+    expect(await screen.findByText("More timeline events are available to the right.")).toBeTruthy();
+    const axis = document.querySelector<HTMLElement>('[data-slot="timeline-axis-scroll"]');
+    expect(axis?.tabIndex).toBe(0);
+    expect(screen.getByRole("button", { name: "Show earlier timeline events" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Show later timeline events" })).toHaveProperty("disabled", false);
+  });
+
+  it("shows a shared reduced-motion-safe state dot while reconnecting", async () => {
+    renderTimeline(timelinePort({
+      subscribeTimeline: async function* (_session, subscription) {
+        subscription?.onLifecycle?.({ state: "reconnecting", attempt: 1, retryAfterMs: 100 });
+        await new Promise<void>((resolve) => {
+          subscription?.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+        yield* [] as TimelineStreamFrame[];
+      },
+    }), "/timeline", "en-US");
+
+    expect(await screen.findByText("Reconnecting to live updates…")).toBeTruthy();
+    const dot = document.querySelector<HTMLElement>('[data-slot="live-status-dot"]');
+    expect(dot?.getAttribute("data-state")).toBe("reconnecting");
+    expect(dot?.className).toContain("motion-reduce:transition-none");
+    expect(dot?.className).not.toContain("animate-pulse");
   });
 
   it.each([320, 768, 1440])("keeps timeline event controls reachable at %ipx", async (width) => {
