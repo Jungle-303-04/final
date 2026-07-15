@@ -11,6 +11,11 @@ export function createAiAssistantContext(
   detail: ProductDetailQuery,
   logStreamId: string | null = null,
 ): AiAssistantContext {
+  const resourceTypes = state.resources.types.length > 0
+    ? [...state.resources.types]
+    : screen === "home" && state.common.clusters.length === 1
+      ? ["pod"]
+      : [];
   return {
     screen,
     filters: {
@@ -20,7 +25,7 @@ export function createAiAssistantContext(
       ),
       applications: [...state.common.applications],
       labels: state.common.labels.map(({ key, value }) => `${key}=${value}`),
-      resourceTypes: [...state.resources.types],
+      resourceTypes,
       health: [...state.resources.health],
       query: state.resources.query,
     },

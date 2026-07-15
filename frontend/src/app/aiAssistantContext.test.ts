@@ -53,4 +53,21 @@ describe("AI assistant shell context", () => {
     expect(context.logStreamId).toBe("stream-command-1");
     expect(JSON.stringify(context)).not.toContain("log line");
   });
+
+  it("uses the pods already visible on a single-cluster Home as evidence context", () => {
+    const state = createEmptyUnifiedFilterState();
+    state.common.clusters = ["cluster-2"];
+
+    const context = createAiAssistantContext("home", state, {
+      detail: null,
+      resource: null,
+      resourceKind: null,
+      tab: null,
+      full: false,
+      node: null,
+    });
+
+    expect(context.filters.resourceTypes).toEqual(["pod"]);
+    expect(context.filters.clusters).toEqual(["cluster-2"]);
+  });
 });
