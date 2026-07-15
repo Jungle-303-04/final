@@ -88,6 +88,12 @@ def test_timeline_read_derives_server_freshness_and_preserves_source_grants(
     assert resolution.read_scope.incident_cluster_ids == {"cluster-incident"}
     assert resolution.read_scope.application_workflow_ids == {"application-workflow"}
     assert resolution.read_scope.gitops_application_ids == {"application-gitops"}
+    assert resolution.capabilities.model_dump() == {
+        "selected_source_mode": "retained",
+        "available_source_modes": ("retained",),
+        "max_retained_range_ms": 2_592_000_000,
+        "namespace_filter_policy": "not_required",
+    }
     assert (
         resolution.cursor_binding.authorization_revision
         == resolution.authorized.authorization_revision

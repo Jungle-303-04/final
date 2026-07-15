@@ -24,9 +24,17 @@ from domains.timeline.access import (
 from domains.timeline.cursor import TimelineCursorBinding
 from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import TimelineLedgerReadScope
-from domains.timeline.settings import timeline_max_window_ms, timeline_realtime_policy
+from domains.timeline.settings import (
+    timeline_capability_descriptor,
+    timeline_max_window_ms,
+    timeline_realtime_policy,
+)
 from packages.contracts.parity import ClusterScope, Freshness
-from packages.contracts.timeline import RealtimePolicy, TimelineQuery
+from packages.contracts.timeline import (
+    RealtimePolicy,
+    TimelineCapabilityDescriptor,
+    TimelineQuery,
+)
 
 INVALID_WINDOW_DETAIL = "timeline window exceeds the server read limit"
 SCOPE_NOT_FOUND_DETAIL = "timeline scope not found"
@@ -46,6 +54,7 @@ class TimelineReadResolution:
     evidence_predicate: TimelineEvidencePredicate
     cursor_binding: TimelineCursorBinding
     policy: RealtimePolicy
+    capabilities: TimelineCapabilityDescriptor
 
 
 async def resolve_timeline_read(
@@ -86,6 +95,7 @@ async def resolve_timeline_read(
         evidence_predicate=evidence_predicate,
         cursor_binding=binding,
         policy=timeline_realtime_policy(),
+        capabilities=timeline_capability_descriptor(),
     )
 
 

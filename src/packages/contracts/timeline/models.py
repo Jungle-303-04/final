@@ -36,6 +36,8 @@ TimelineSeverity = Literal["info", "warning", "critical", "unknown"]
 TimelineGrouping = Literal["app", "owner", "flat"]
 TimelineSort = Literal["importance", "recent", "name"]
 TimelineReadMode = Literal["live", "frozen"]
+TimelineSourceMode = Literal["retained", "local"]
+TimelineNamespaceFilterPolicy = Literal["not_required", "required"]
 TimelineFrameKind = Literal[
     "snapshot",
     "event",
@@ -182,6 +184,35 @@ class TimelineCoverage(StrictModel):
         return self
 
 
+class TimelineCapabilityDescriptor(StrictModel):
+    """Server-owned Timeline source and scope constraints for a read session.
+
+    This descriptor is informational only: it never grants a source, cluster,
+    or namespace.  The Timeline service continues to authorize every request
+    before it creates the descriptor and its cursor binding.
+    """
+
+    selected_source_mode: TimelineSourceMode
+    available_source_modes: tuple[TimelineSourceMode, ...] = Field(min_length=1)
+    max_retained_range_ms: int = Field(ge=1_000)
+    namespace_filter_policy: TimelineNamespaceFilterPolicy
+
+    @field_validator("available_source_modes")
+    @classmethod
+    def require_unique_source_modes(
+        cls, source_modes: tuple[TimelineSourceMode, ...]
+    ) -> tuple[TimelineSourceMode, ...]:
+        if len(source_modes) != len(set(source_modes)):
+            raise ValueError("timeline source modes must be unique")
+        return source_modes
+
+    @model_validator(mode="after")
+    def require_selected_source_mode_to_be_available(self) -> TimelineCapabilityDescriptor:
+        if self.selected_source_mode not in self.available_source_modes:
+            raise ValueError("selected source mode must be available")
+        return self
+
+
 class TimelineResourceSubject(StrictModel):
     """A subject backed by an inventory record that has a real Kubernetes UID."""
 
@@ -266,6 +297,7 @@ class TimelineStreamFrame(StrictModel):
     cursor: TimelineCursor
     scopes: tuple[ClusterScope, ...] = ()
     policy: RealtimePolicy | None = None
+    capabilities: TimelineCapabilityDescriptor | None = None
     event: TimelineEvent | None = None
     events: tuple[TimelineEvent, ...] = ()
     coverage: tuple[TimelineCoverage, ...] = ()
@@ -278,9 +310,11 @@ class TimelineStreamFrame(StrictModel):
                 raise ValueError("snapshot frame requires scopes")
             if self.policy is None:
                 raise ValueError("snapshot frame requires policy")
+            if self.capabilities is None:
+                raise ValueError("snapshot frame requires capabilities")
             if self.event is not None or self.reason is not None:
                 raise ValueError(
-                    "snapshot frame may only carry scopes, policy, events, and coverage"
+                    "snapshot frame may only carry scopes, policy, capabilities, events, and coverage"
                 )
             return self
         if self.kind == "event":
@@ -289,6 +323,7 @@ class TimelineStreamFrame(StrictModel):
             if (
                 self.scopes
                 or self.policy is not None
+                or self.capabilities is not None
                 or self.events
                 or self.coverage
                 or self.reason is not None
@@ -300,6 +335,7 @@ class TimelineStreamFrame(StrictModel):
                 not self.coverage
                 or self.scopes
                 or self.policy is not None
+                or self.capabilities is not None
                 or self.event is not None
                 or self.events
                 or self.reason is not None
@@ -311,6 +347,7 @@ class TimelineStreamFrame(StrictModel):
                 not self.reason
                 or self.scopes
                 or self.policy is not None
+                or self.capabilities is not None
                 or self.event is not None
                 or self.events
                 or self.coverage
@@ -320,6 +357,7 @@ class TimelineStreamFrame(StrictModel):
         if (
             self.scopes
             or self.policy is not None
+            or self.capabilities is not None
             or self.event is not None
             or self.events
             or self.coverage

@@ -21,6 +21,7 @@ from domains.timeline.service import TimelineReadResolution
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
+    TimelineCapabilityDescriptor,
     TimelineCoverage,
     TimelineCursor,
     TimelineEvent,
@@ -133,6 +134,12 @@ def _resolution(*, mode: str = "live", event_access: bool = False) -> TimelineRe
                 "max_age_ms": 30_000,
                 "strategy": "replace_with_snapshot",
             },
+        ),
+        capabilities=TimelineCapabilityDescriptor(
+            selected_source_mode="retained",
+            available_source_modes=("retained",),
+            max_retained_range_ms=2_592_000_000,
+            namespace_filter_policy="not_required",
         ),
     )
 

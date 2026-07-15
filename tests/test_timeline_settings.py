@@ -11,6 +11,7 @@ from domains.timeline.settings import (
     TIMELINE_RECONNECT_MIN_DELAY_MS_ENV,
     TIMELINE_REPLAY_POLL_SECONDS_ENV,
     TIMELINE_RETENTION_SECONDS_ENV,
+    timeline_capability_descriptor,
     timeline_max_window_ms,
     timeline_realtime_policy,
     timeline_replay_poll_seconds,
@@ -48,6 +49,12 @@ def test_timeline_realtime_policy_is_server_owned_and_bounded(
         },
     }
     assert timeline_max_window_ms() == 7_200_000
+    assert timeline_capability_descriptor().model_dump() == {
+        "selected_source_mode": "retained",
+        "available_source_modes": ("retained",),
+        "max_retained_range_ms": 7_200_000,
+        "namespace_filter_policy": "not_required",
+    }
     assert timeline_replay_poll_seconds() == 0.25
 
 

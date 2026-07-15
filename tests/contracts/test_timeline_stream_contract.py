@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
+    TimelineCapabilityDescriptor,
     TimelineCoverage,
     TimelineCursor,
     TimelineEvent,
@@ -76,6 +77,15 @@ def _policy() -> RealtimePolicy:
     )
 
 
+def _capabilities() -> TimelineCapabilityDescriptor:
+    return TimelineCapabilityDescriptor(
+        selected_source_mode="retained",
+        available_source_modes=("retained",),
+        max_retained_range_ms=7_200_000,
+        namespace_filter_policy="not_required",
+    )
+
+
 def test_timeline_query_canonicalizes_scopes_and_carries_server_realtime_policy() -> None:
     query = TimelineQuery(
         scopes=[
@@ -113,6 +123,7 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
         cursor=_cursor(0),
         scopes=[_scope()],
         policy=_policy(),
+        capabilities=_capabilities(),
         events=[event],
         coverage=[coverage],
     )
@@ -122,6 +133,7 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
 
     assert snapshot.events == (event,)
     assert snapshot.policy == _policy()
+    assert snapshot.capabilities == _capabilities()
     assert update.event == event
     assert resync.reason == "cursor_expired"
     assert end.is_terminal is True
@@ -130,6 +142,15 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
         TimelineStreamFrame(kind="event", cursor=_cursor(2))
     with pytest.raises(ValidationError, match="snapshot frame requires policy"):
         TimelineStreamFrame(kind="snapshot", cursor=_cursor(0), scopes=[_scope()])
+    with pytest.raises(ValidationError, match="snapshot frame requires capabilities"):
+        TimelineStreamFrame(
+            kind="snapshot",
+            cursor=_cursor(0),
+            scopes=[_scope()],
+            policy=_policy(),
+        )
+    with pytest.raises(ValidationError, match="terminal frame"):
+        TimelineStreamFrame(kind="end", cursor=_cursor(2), capabilities=_capabilities())
     with pytest.raises(ValidationError, match="terminal frame"):
         TimelineStreamFrame(kind="end", cursor=_cursor(2), event=event)
     with pytest.raises(ValidationError, match="same workspace"):
@@ -140,6 +161,23 @@ def test_timeline_stream_frames_are_strict_and_terminal_safe() -> None:
             ],
             window=TimelineWindow(from_ms=1_000, to_ms=2_000),
             mode="live",
+        )
+
+
+def test_timeline_capability_descriptor_never_claims_an_unavailable_source_mode() -> None:
+    with pytest.raises(ValidationError, match="selected source mode"):
+        TimelineCapabilityDescriptor(
+            selected_source_mode="local",
+            available_source_modes=("retained",),
+            max_retained_range_ms=7_200_000,
+            namespace_filter_policy="not_required",
+        )
+    with pytest.raises(ValidationError, match="unique"):
+        TimelineCapabilityDescriptor(
+            selected_source_mode="retained",
+            available_source_modes=("retained", "retained"),
+            max_retained_range_ms=7_200_000,
+            namespace_filter_policy="not_required",
         )
 
 

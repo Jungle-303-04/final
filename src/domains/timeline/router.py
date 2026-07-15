@@ -89,6 +89,7 @@ async def read_timeline_snapshot(
             cursor=cursor,
             scopes=resolution.scopes,
             policy=resolution.policy,
+            capabilities=resolution.capabilities,
             events=tuple(
                 record.event
                 for record in snapshot.records

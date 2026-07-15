@@ -15,6 +15,7 @@ from domains.timeline.streams import (
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
+    TimelineCapabilityDescriptor,
     TimelineCursor,
     TimelineEvent,
     TimelineResourceSubject,
@@ -65,6 +66,12 @@ def _snapshot(sequence: int = 4) -> TimelineStreamFrame:
                 "strategy": "replace_with_snapshot",
             },
         ),
+        capabilities=TimelineCapabilityDescriptor(
+            selected_source_mode="retained",
+            available_source_modes=("retained",),
+            max_retained_range_ms=7_200_000,
+            namespace_filter_policy="not_required",
+        ),
         events=[_event(sequence)] if sequence else [],
     )
 
@@ -106,6 +113,13 @@ def test_snapshot_serializes_the_server_owned_reconnect_budget() -> None:
     assert snapshot.policy.live_session.model_dump() == {
         "max_age_ms": 30_000,
         "strategy": "replace_with_snapshot",
+    }
+    assert snapshot.capabilities is not None
+    assert snapshot.capabilities.model_dump() == {
+        "selected_source_mode": "retained",
+        "available_source_modes": ("retained",),
+        "max_retained_range_ms": 7_200_000,
+        "namespace_filter_policy": "not_required",
     }
 
 
