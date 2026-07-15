@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from functools import cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -24,8 +24,18 @@ class ReferenceFeatureContract(StrictModel):
     section: str = Field(min_length=1)
     endpoints: tuple[str, ...] = ()
     streaming: bool
+    area: str = Field(min_length=1)
+    delivery_status: Literal[
+        "implemented",
+        "in_progress",
+        "planned",
+        "reference_only",
+        "not_applicable",
+    ] = Field(validation_alias="deliveryStatus")
     backend_contract: str = Field(min_length=1, validation_alias="backendContract")
     frontend_contract: str = Field(min_length=1, validation_alias="frontendContract")
+    desktop_contract: str | None = Field(validation_alias="desktopContract")
+    verification: tuple[str, ...] = Field(min_length=1)
 
 
 class ReferenceFeatureContractCatalog(StrictModel):

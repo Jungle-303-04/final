@@ -9,8 +9,16 @@
       "section": "0. 목적과 사용 금지선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.002",
@@ -18,8 +26,16 @@
       "section": "0. 목적과 사용 금지선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.003",
@@ -27,8 +43,16 @@
       "section": "0. 목적과 사용 금지선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.004",
@@ -36,8 +60,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.005",
@@ -45,8 +76,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.006",
@@ -54,8 +92,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.007",
@@ -63,8 +108,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.008",
@@ -74,8 +126,15 @@
         "GET /api/contexts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.009",
@@ -85,8 +144,15 @@
         "GET /api/auth/me"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.010",
@@ -96,8 +162,15 @@
         "GET /api/capabilities"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.011",
@@ -105,8 +178,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.012",
@@ -114,8 +194,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.013",
@@ -123,8 +210,15 @@
       "section": "1. 조사 기준선",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.014",
@@ -132,8 +226,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.015",
@@ -141,8 +242,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.016",
@@ -150,8 +258,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.017",
@@ -159,8 +274,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.018",
@@ -168,8 +290,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.019",
@@ -177,8 +306,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.020",
@@ -186,8 +322,15 @@
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.021",
@@ -195,8 +338,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.022",
@@ -204,8 +354,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.023",
@@ -213,8 +370,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.024",
@@ -222,8 +386,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.025",
@@ -231,8 +402,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.026",
@@ -240,8 +418,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.027",
@@ -249,8 +434,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.028",
@@ -258,8 +450,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.029",
@@ -267,8 +466,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.030",
@@ -276,8 +482,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.031",
@@ -285,8 +498,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.032",
@@ -294,8 +514,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.033",
@@ -303,8 +530,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.034",
@@ -312,8 +546,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.035",
@@ -321,8 +562,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.036",
@@ -330,8 +578,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.037",
@@ -339,8 +594,15 @@
       "section": "3. Route 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.038",
@@ -348,8 +610,15 @@
       "section": "4.1 Home",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.039",
@@ -357,8 +626,15 @@
       "section": "4.1 Home",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.040",
@@ -366,8 +642,15 @@
       "section": "4.1 Home",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.041",
@@ -375,8 +658,15 @@
       "section": "4.1 Home",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.042",
@@ -384,8 +674,15 @@
       "section": "4.1 Home",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.043",
@@ -393,8 +690,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.044",
@@ -402,8 +706,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.045",
@@ -411,8 +722,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.046",
@@ -420,8 +738,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.047",
@@ -429,8 +754,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.048",
@@ -438,8 +770,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.049",
@@ -447,8 +786,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.050",
@@ -456,8 +802,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.051",
@@ -465,8 +818,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.052",
@@ -474,8 +834,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.053",
@@ -483,8 +850,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.054",
@@ -492,8 +866,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.055",
@@ -501,8 +882,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.056",
@@ -510,8 +898,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.057",
@@ -519,8 +914,15 @@
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.058",
@@ -528,8 +930,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.059",
@@ -537,8 +946,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.060",
@@ -546,8 +962,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.061",
@@ -555,8 +978,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.062",
@@ -564,8 +994,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.063",
@@ -573,8 +1010,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.064",
@@ -582,8 +1026,15 @@
       "section": "6.1 SSE",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.065",
@@ -591,8 +1042,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.066",
@@ -600,8 +1058,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.067",
@@ -609,8 +1074,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.068",
@@ -618,8 +1090,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.069",
@@ -627,8 +1106,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.070",
@@ -636,8 +1122,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.071",
@@ -645,8 +1138,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.072",
@@ -654,8 +1154,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.073",
@@ -663,8 +1170,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.074",
@@ -672,8 +1186,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.075",
@@ -681,8 +1202,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.076",
@@ -690,8 +1218,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.077",
@@ -699,8 +1234,15 @@
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.078",
@@ -708,8 +1250,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.079",
@@ -717,8 +1266,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.080",
@@ -726,8 +1282,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.081",
@@ -735,8 +1298,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.082",
@@ -744,8 +1314,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.083",
@@ -753,8 +1330,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.084",
@@ -762,8 +1346,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.085",
@@ -771,8 +1362,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.086",
@@ -780,8 +1378,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.087",
@@ -789,8 +1394,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.088",
@@ -798,8 +1410,15 @@
       "section": "7. API 전수표",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
     },
     {
       "contractId": "reference.feature.089",
@@ -809,8 +1428,15 @@
         "GET /health"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.090",
@@ -820,8 +1446,15 @@
         "GET /diagnostics"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.091",
@@ -831,8 +1464,15 @@
         "GET /auth/me"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.092",
@@ -842,8 +1482,15 @@
         "GET /version-check"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.093",
@@ -853,8 +1500,15 @@
         "GET /connection"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.094",
@@ -864,8 +1518,15 @@
         "POST /connection/retry"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.095",
@@ -875,8 +1536,15 @@
         "GET /cluster-info"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.096",
@@ -886,8 +1554,15 @@
         "GET /capabilities"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.097",
@@ -897,8 +1572,15 @@
         "GET /namespaces"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.098",
@@ -908,8 +1590,15 @@
         "GET /api-resources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.099",
@@ -919,8 +1608,15 @@
         "GET /contexts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.100",
@@ -930,8 +1626,15 @@
         "GET /sessions"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.101",
@@ -941,8 +1644,15 @@
         "POST /contexts/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.102",
@@ -952,8 +1662,15 @@
         "GET /cluster/namespace-scope"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.103",
@@ -963,8 +1680,15 @@
         "POST /cluster/namespace"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.104",
@@ -974,8 +1698,15 @@
         "GET /search"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.105",
@@ -985,8 +1716,15 @@
         "GET /settings"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.106",
@@ -996,8 +1734,15 @@
         "PUT /settings"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.107",
@@ -1007,8 +1752,15 @@
         "GET /github/starred"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.108",
@@ -1019,8 +1771,15 @@
         "POST /github/dismiss"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.109",
@@ -1030,8 +1789,15 @@
         "POST /desktop/open-url"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.110",
@@ -1042,8 +1808,15 @@
         "POST /desktop/open-folder"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.111",
@@ -1053,8 +1826,15 @@
         "POST /desktop/save-file"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.112",
@@ -1066,8 +1846,15 @@
         "POST /desktop/update/apply"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.113",
@@ -1077,8 +1864,15 @@
         "GET /dashboard"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.114",
@@ -1088,8 +1882,15 @@
         "GET /dashboard/crds"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.115",
@@ -1099,8 +1900,15 @@
         "GET /dashboard/helm"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.116",
@@ -1110,8 +1918,15 @@
         "GET /issues"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.117",
@@ -1121,8 +1936,15 @@
         "GET /applications"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.118",
@@ -1132,8 +1954,15 @@
         "GET /topology"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.119",
@@ -1143,8 +1972,15 @@
         "GET /changes"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.120",
@@ -1154,8 +1990,15 @@
         "GET /audit"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.121",
@@ -1165,8 +2008,15 @@
         "GET /settings/audit"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.122",
@@ -1176,8 +2026,15 @@
         "PUT /settings/audit"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.123",
@@ -1187,8 +2044,15 @@
         "GET /secrets/certificate-expiry"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.124",
@@ -1198,8 +2062,15 @@
         "GET /resource-counts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.125",
@@ -1209,8 +2080,15 @@
         "GET /resources/{kind}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.126",
@@ -1220,8 +2098,15 @@
         "GET /resources/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.127",
@@ -1231,8 +2116,15 @@
         "GET /resources/{kind}/{ns-or-_}/{name}/cascade-preview"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.128",
@@ -1242,8 +2134,15 @@
         "GET /issues/resource/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.129",
@@ -1253,8 +2152,15 @@
         "GET /audit/resource/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.130",
@@ -1264,8 +2170,15 @@
         "GET /rbac/subject/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.131",
@@ -1275,8 +2188,15 @@
         "GET /rbac/subject/{kind}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.132",
@@ -1286,8 +2206,15 @@
         "GET /rbac/role/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.133",
@@ -1297,8 +2224,15 @@
         "GET /rbac/namespace/{namespace}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.134",
@@ -1308,8 +2242,15 @@
         "GET /rbac/whoami"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.135",
@@ -1319,8 +2260,15 @@
         "GET /resources/resourcequotas"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.136",
@@ -1330,8 +2278,15 @@
         "GET /images/metadata"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.137",
@@ -1341,8 +2296,15 @@
         "GET /images/inspect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.138",
@@ -1352,8 +2314,15 @@
         "GET /images/file"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.139",
@@ -1363,8 +2332,15 @@
         "GET /pods/{ns}/{name}/files"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.140",
@@ -1374,8 +2350,15 @@
         "GET /pods/{ns}/{name}/files/download"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.141",
@@ -1385,8 +2368,15 @@
         "GET /capi/clusters/{ns}/{name}/kubeconfig"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.142",
@@ -1396,8 +2386,15 @@
         "POST /capi/clusters/{ns}/{name}/connect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.143",
@@ -1407,8 +2404,15 @@
         "GET /metrics/pods/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.144",
@@ -1418,8 +2422,15 @@
         "GET /metrics/nodes/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.145",
@@ -1429,8 +2440,15 @@
         "GET /metrics/pods/{ns}/{name}/history"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.146",
@@ -1440,8 +2458,15 @@
         "GET /metrics/nodes/{name}/history"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.147",
@@ -1451,8 +2476,15 @@
         "GET /metrics/top/pods"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.148",
@@ -1462,8 +2494,15 @@
         "GET /metrics/top/nodes"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.149",
@@ -1473,8 +2512,15 @@
         "GET /prometheus/status"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.150",
@@ -1484,8 +2530,15 @@
         "POST /prometheus/connect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.151",
@@ -1496,8 +2549,15 @@
         "GET /prometheus/resources/{kind}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.152",
@@ -1507,8 +2567,15 @@
         "GET /prometheus/query"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.153",
@@ -1518,8 +2585,15 @@
         "GET /prometheus/pvc/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.154",
@@ -1529,8 +2603,15 @@
         "GET /prometheus/rightsizing/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.155",
@@ -1540,8 +2621,15 @@
         "GET /pods/{ns}/{name}/logs"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.156",
@@ -1551,8 +2639,15 @@
         "SSE /pods/{ns}/{name}/logs/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.157",
@@ -1562,8 +2657,15 @@
         "SSE /workloads/{kind}/{ns}/{name}/logs/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.158",
@@ -1573,8 +2675,15 @@
         "WS /pods/{ns}/{name}/exec"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.159",
@@ -1584,8 +2693,15 @@
         "WS /local-terminal"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.160",
@@ -1595,8 +2711,15 @@
         "GET /portforwards"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.161",
@@ -1606,8 +2729,15 @@
         "GET /portforwards/available/{type}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.162",
@@ -1617,8 +2747,15 @@
         "POST /portforwards"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.163",
@@ -1628,8 +2765,15 @@
         "DELETE /portforwards/{id}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.164",
@@ -1639,8 +2783,15 @@
         "POST /resources/apply"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.165",
@@ -1650,8 +2801,15 @@
         "PUT /resources/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.166",
@@ -1661,8 +2819,15 @@
         "DELETE /resources/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.167",
@@ -1672,8 +2837,15 @@
         "POST /workloads/{kind}/{ns}/{name}/restart"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.168",
@@ -1683,8 +2855,15 @@
         "POST /workloads/{kind}/{ns}/{name}/scale"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.169",
@@ -1694,8 +2873,15 @@
         "GET /workloads/{kind}/{ns}/{name}/revisions"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.170",
@@ -1705,8 +2891,15 @@
         "POST /workloads/{kind}/{ns}/{name}/rollback"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.171",
@@ -1716,8 +2909,15 @@
         "POST /cronjobs/{ns}/{name}/trigger"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.172",
@@ -1728,8 +2928,15 @@
         "POST /cronjobs/{ns}/{name}/resume"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.173",
@@ -1740,8 +2947,15 @@
         "POST /nodes/{name}/uncordon"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.174",
@@ -1751,8 +2965,15 @@
         "POST /nodes/{name}/drain"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.175",
@@ -1762,8 +2983,15 @@
         "POST /pods/{ns}/{name}/debug"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.176",
@@ -1774,8 +3002,15 @@
         "DELETE /nodes/{name}/debug"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.177",
@@ -1785,8 +3020,15 @@
         "POST /curl/service"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.178",
@@ -1796,8 +3038,15 @@
         "GET /traffic/sources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.179",
@@ -1807,8 +3056,15 @@
         "POST /traffic/source"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.180",
@@ -1818,8 +3074,15 @@
         "POST /traffic/connect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.181",
@@ -1829,8 +3092,15 @@
         "GET /traffic/flows"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.182",
@@ -1840,8 +3110,15 @@
         "GET /network-policies/evaluate"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.183",
@@ -1851,8 +3128,15 @@
         "GET /helm/releases"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.184",
@@ -1862,8 +3146,15 @@
         "GET /helm/releases/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.185",
@@ -1873,8 +3164,15 @@
         "GET /helm/releases/{ns}/{name}/manifest"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.186",
@@ -1884,8 +3182,15 @@
         "GET /helm/releases/{ns}/{name}/values"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.187",
@@ -1896,8 +3201,15 @@
         "GET /helm/releases/{ns}/{name}/values/diff"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.188",
@@ -1909,8 +3221,15 @@
         "GET /helm/releases/{ns}/{name}/resources/diff"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.189",
@@ -1920,8 +3239,15 @@
         "GET /helm/releases/{ns}/{name}/upgrade-info"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.190",
@@ -1931,8 +3257,15 @@
         "GET /helm/releases/{ns}/{name}/versions"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.191",
@@ -1942,8 +3275,15 @@
         "GET /helm/upgrade-check"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.192",
@@ -1953,8 +3293,15 @@
         "GET /helm/repositories"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.193",
@@ -1964,8 +3311,15 @@
         "POST /helm/repositories/{name}/update"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.194",
@@ -1975,8 +3329,15 @@
         "GET /helm/oci-sources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.195",
@@ -1987,8 +3348,15 @@
         "DELETE /helm/oci-sources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.196",
@@ -1998,8 +3366,15 @@
         "GET /helm/charts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.197",
@@ -2010,8 +3385,15 @@
         "GET /helm/charts/{repo}/{chart}/{version}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.198",
@@ -2021,8 +3403,15 @@
         "GET /helm/artifacthub/search"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.199",
@@ -2033,8 +3422,15 @@
         "GET /helm/artifacthub/charts/{repo}/{chart}/{version}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.200",
@@ -2044,8 +3440,15 @@
         "POST /helm/releases/install-stream"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.201",
@@ -2055,8 +3458,15 @@
         "POST /helm/releases/{ns}/{name}/upgrade-stream"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.202",
@@ -2066,8 +3476,15 @@
         "POST /helm/releases/{ns}/{name}/rollback-stream"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.203",
@@ -2077,8 +3494,15 @@
         "POST /helm/releases/{ns}/{name}/values/preview"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.204",
@@ -2088,8 +3512,15 @@
         "PUT /helm/releases/{ns}/{name}/values"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.205",
@@ -2099,8 +3530,15 @@
         "DELETE /helm/releases/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.206",
@@ -2112,8 +3550,15 @@
         "GET /resources/{kind}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.207",
@@ -2123,8 +3568,15 @@
         "GET /gitops/tree/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.208",
@@ -2134,8 +3586,15 @@
         "GET /gitops/insights/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.209",
@@ -2145,8 +3604,15 @@
         "POST /gitops/{kind}/{ns}/{name}/reconcile"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.210",
@@ -2156,8 +3622,15 @@
         "POST /gitops/{kind}/{ns}/{name}/sync-with-source"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.211",
@@ -2168,8 +3641,15 @@
         "POST /gitops/{kind}/{ns}/{name}/resume"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.212",
@@ -2179,8 +3659,15 @@
         "POST /gitops/applications/{ns}/{name}/sync"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.213",
@@ -2190,8 +3677,15 @@
         "POST /gitops/applications/{ns}/{name}/refresh"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.214",
@@ -2201,8 +3695,15 @@
         "POST /gitops/applications/{ns}/{name}/rollback"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.215",
@@ -2212,8 +3713,15 @@
         "POST /gitops/applications/{ns}/{name}/terminate"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.216",
@@ -2224,8 +3732,15 @@
         "POST /gitops/applications/{ns}/{name}/resume"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.217",
@@ -2235,8 +3750,15 @@
         "GET /opencost/summary"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.218",
@@ -2246,8 +3768,15 @@
         "GET /opencost/workloads"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.219",
@@ -2257,8 +3786,15 @@
         "GET /opencost/trend"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.220",
@@ -2268,8 +3804,15 @@
         "GET /opencost/nodes"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.221",
@@ -2279,8 +3822,15 @@
         "GET /config"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.222",
@@ -2290,8 +3840,15 @@
         "PUT /config"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.223",
@@ -2301,8 +3858,15 @@
         "PUT /integrations/prometheus"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.224",
@@ -2312,8 +3876,15 @@
         "SSE /events/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.225",
@@ -2326,8 +3897,15 @@
         "GET /metrics/top/resources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.226",
@@ -2338,8 +3916,15 @@
         "GET /argo/destinations"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.227",
@@ -2349,8 +3934,15 @@
         "GET /traffic/flows/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.228",
@@ -2361,8 +3953,15 @@
         "GET /traffic/connection"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.229",
@@ -2372,8 +3971,15 @@
         "GET /changes/{kind}/{ns}/{name}/children"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.230",
@@ -2384,8 +3990,15 @@
         "GET /prometheus/cluster"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.231",
@@ -2396,8 +4009,15 @@
         "GET /workloads/{kind}/{ns}/{name}/logs"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.232",
@@ -2409,8 +4029,15 @@
         "POST /helm/releases/{ns}/{name}/upgrade"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.233",
@@ -2421,8 +4048,15 @@
         "GET /debug/**"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.234",
@@ -2432,8 +4066,15 @@
         "POST /agent/self-upgrade"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.235",
@@ -2441,8 +4082,15 @@
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.236",
@@ -2450,8 +4098,15 @@
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.237",
@@ -2459,8 +4114,15 @@
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.238",
@@ -2468,8 +4130,15 @@
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.239",
@@ -2477,8 +4146,15 @@
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     },
     {
       "contractId": "reference.feature.240",
@@ -2486,8 +4162,15 @@
       "section": "9. RCA 후속 삽입 후보",
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts"
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
     }
   ]
 }

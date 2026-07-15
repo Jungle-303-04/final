@@ -23,6 +23,14 @@ const PORT_MAP = {
       desktopContract: "desktop",
       verification: ["tests/test_feature_contract_router.py"],
     },
+    API: {
+      area: "global-shell",
+      deliveryStatus: "in_progress",
+      backendContract: "domains.catalog",
+      frontendContract: "frontend/src/app",
+      desktopContract: "desktop",
+      verification: ["tests/test_feature_contract_router.py"],
+    },
   },
 };
 
@@ -41,17 +49,32 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
       "| `SSE /events/stream`, `WS /pods/{name}/exec` | 없음 |",
     ].join("\n"),
     REVISION,
+    PORT_MAP,
   );
 
   assert.deepEqual(
-    ledger.features.map(({ id, contractId, section, endpoints, streaming, backendContract, frontendContract }) => ({
+    ledger.features.map(({
       id,
       contractId,
       section,
       endpoints,
       streaming,
+      area,
+      deliveryStatus,
       backendContract,
       frontendContract,
+      desktopContract,
+    }) => ({
+      id,
+      contractId,
+      section,
+      endpoints,
+      streaming,
+      area,
+      deliveryStatus,
+      backendContract,
+      frontendContract,
+      desktopContract,
     })),
     [
       {
@@ -60,8 +83,11 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
         section: "전역 셸",
         endpoints: [],
         streaming: false,
-        backendContract: "packages.contracts.parity",
-        frontendContract: "frontend/src/shared/parity/referenceParity.ts",
+        area: "global-shell",
+        deliveryStatus: "in_progress",
+        backendContract: "domains.catalog",
+        frontendContract: "frontend/src/app",
+        desktopContract: "desktop",
       },
       {
         id: "reference-feature-002",
@@ -69,8 +95,11 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
         section: "API",
         endpoints: ["GET /resources"],
         streaming: false,
-        backendContract: "packages.contracts.parity",
-        frontendContract: "frontend/src/shared/parity/referenceParity.ts",
+        area: "global-shell",
+        deliveryStatus: "in_progress",
+        backendContract: "domains.catalog",
+        frontendContract: "frontend/src/app",
+        desktopContract: "desktop",
       },
       {
         id: "reference-feature-003",
@@ -78,8 +107,11 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
         section: "API",
         endpoints: ["SSE /events/stream", "WS /pods/{name}/exec"],
         streaming: true,
-        backendContract: "packages.contracts.parity",
-        frontendContract: "frontend/src/shared/parity/referenceParity.ts",
+        area: "global-shell",
+        deliveryStatus: "in_progress",
+        backendContract: "domains.catalog",
+        frontendContract: "frontend/src/app",
+        desktopContract: "desktop",
       },
     ],
   );
@@ -146,8 +178,11 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
         cells: ["`GET /health`"],
         endpoints: ["GET /health"],
         streaming: false,
+        area: "api",
+        deliveryStatus: "implemented",
         backendContract: "",
         frontendContract: "",
+        desktopContract: null,
         verification: [],
       },
       {
@@ -158,8 +193,11 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
         cells: ["`GET /readyz`"],
         endpoints: ["GET /readyz"],
         streaming: false,
+        area: "api",
+        deliveryStatus: "implemented",
         backendContract: "packages.contracts.parity",
         frontendContract: "frontend/src/shared/parity/referenceParity.ts",
+        desktopContract: null,
         verification: ["scripts/reference-feature-ledger.test.mjs"],
       },
     ],
@@ -192,6 +230,19 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
       source,
       output,
       contractsOutput,
+      portMap: {
+        schemaVersion: 1,
+        sections: {
+          API: {
+            area: "events",
+            deliveryStatus: "in_progress",
+            backendContract: "packages.runtime.operation_events",
+            frontendContract: "frontend/src/shared/streaming",
+            desktopContract: null,
+            verification: ["tests/test_operation_event_hub.py"],
+          },
+        },
+      },
       sourceRevision: REVISION,
     });
 
@@ -207,8 +258,12 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
           section: "API",
           endpoints: ["SSE /events/stream"],
           streaming: true,
-          backendContract: "packages.contracts.parity",
-          frontendContract: "frontend/src/shared/parity/referenceParity.ts",
+          area: "events",
+          deliveryStatus: "in_progress",
+          backendContract: "packages.runtime.operation_events",
+          frontendContract: "frontend/src/shared/streaming",
+          desktopContract: null,
+          verification: ["tests/test_operation_event_hub.py"],
         },
       ],
     });
