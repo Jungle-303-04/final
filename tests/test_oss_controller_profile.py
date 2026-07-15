@@ -22,6 +22,7 @@ from packages.runtime.controller import (
     load_worker_apps,
 )
 from packages.runtime.discovery import discover_services
+from packages.storage.sessions import RedisSessionStore
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -173,7 +174,7 @@ def test_oss_install_profile_is_three_components_and_has_no_nats_or_redis() -> N
     assert agent_env["AGENT_DIRECT_COMMANDS_ENABLED"] == "false"
 
 
-def test_controller_injects_borrowed_bus_and_memory_sessions_into_gateway(
+def test_controller_injects_borrowed_bus_without_memory_sessions_into_gateway(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
@@ -190,7 +191,8 @@ def test_controller_injects_borrowed_bus_and_memory_sessions_into_gateway(
     app = server.config.app
 
     assert app.state.events.events.publisher is borrowed
-    assert app.state.auth.sessions is sessions
+    assert isinstance(app.state.auth.sessions, RedisSessionStore)
+    assert app.state.auth.sessions is not sessions
     assert server.config.access_log is False
 
 
