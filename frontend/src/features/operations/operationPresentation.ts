@@ -1,6 +1,25 @@
 import type { MessageKey } from "../../shared/i18n";
 import type { StatusTone } from "../../shared/ui/StatusMark";
-import type { OperationStatus } from "./OperationStatusStore";
+import type { OperationStatus, OperationStatusSnapshot } from "./OperationStatusStore";
+
+export interface OperationStatusSummary {
+  attention: number;
+  total: number;
+}
+
+/**
+ * Keeps compact operation indicators derived from the same status model that
+ * drives cards and retry controls. Consumers do not maintain their own
+ * action/status lists.
+ */
+export function summarizeOperationStatuses(
+  snapshots: readonly OperationStatusSnapshot[],
+): OperationStatusSummary {
+  return {
+    attention: snapshots.filter((snapshot) => snapshot.status !== "completed").length,
+    total: snapshots.length,
+  };
+}
 
 export const operationStatusKeys: Record<OperationStatus, MessageKey> = {
   idle: "resources.detail.action.observation.idle",
