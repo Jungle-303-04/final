@@ -38,6 +38,7 @@ describe("TimelineSurface", () => {
     expect(screen.getByRole("radio", { name: "Swimlane" }).getAttribute("aria-checked")).toBe("true");
     expect(port.readTimeline).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        scopes: TIMELINE_SCOPES,
         filters: expect.objectContaining({ search: "restored" }),
       }),
       expect.any(AbortSignal),
@@ -91,12 +92,16 @@ describe("TimelineSurface", () => {
       navigatorLanguage: "en-US",
       title: "Timeline",
       search: "Timeline search",
+      list: "List",
+      swimlane: "Swimlane",
       empty: "No timeline events match this scope.",
     },
     {
       navigatorLanguage: "ko-KR",
       title: "타임라인",
       search: "타임라인 검색",
+      list: "목록",
+      swimlane: "스윔레인",
       empty: "이 범위에 일치하는 타임라인 이벤트가 없습니다.",
     },
   ])("uses typed catalog copy and retains URL behavior for $navigatorLanguage", async (copy) => {
@@ -109,6 +114,8 @@ describe("TimelineSurface", () => {
 
     expect(await screen.findByRole("heading", { name: copy.title })).toBeTruthy();
     expect(await screen.findByText(copy.empty)).toBeTruthy();
+    expect(screen.getByRole("radio", { name: copy.list })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: copy.swimlane })).toBeTruthy();
     await user.type(screen.getByRole("searchbox", { name: copy.search }), "scope-check");
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get("q")).toBe("scope-check");

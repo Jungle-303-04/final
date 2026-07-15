@@ -6,6 +6,7 @@ import { resourcesKo } from "./catalogs/ko/resources";
 import { workflowsKo } from "./catalogs/ko/workflows";
 import { shellKo } from "./catalogs/ko/shell";
 import { alertsKo } from "./catalogs/ko/alerts";
+import { timelineKo } from "./catalogs/ko/timeline";
 
 export const ko = {
   "product.name": "Opsia",
@@ -271,6 +272,7 @@ export const ko = {
   "home.status.connected": "연결됨",
   ...shellKo,
   ...alertsKo,
+  ...timelineKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,
