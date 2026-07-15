@@ -187,6 +187,80 @@ async def append_command_operation_event_in_transaction(
     )
 
 
+def stage_command_operation_event_in_transaction(
+    conn: Any,
+    *,
+    workspace_id: str,
+    command_id: str,
+    kind: OperationEventKind,
+    payload: JsonObject,
+) -> OperationEvent | None:
+    """Sync UoW companion used by the API event outbox receipt transaction."""
+    cluster_id = str(payload.get("cluster_id", "")).strip()
+    if not workspace_id or not command_id or not cluster_id:
+        raise ValueError("operation events require workspace, command, and cluster identity")
+    cursor = CommandOperationEventCursor.__table__
+    event_table = CommandOperationEvent.__table__
+    terminal = kind in {"completed", "failed"}
+    conn.execute(
+        pg_insert(cursor)
+        .values(
+            workspace_id=workspace_id,
+            command_id=command_id,
+            last_sequence=0,
+            terminal_sequence=None,
+        )
+        .on_conflict_do_nothing(index_elements=[cursor.c.workspace_id, cursor.c.command_id])
+    )
+    values: dict[str, Any] = {
+        "last_sequence": cursor.c.last_sequence + 1,
+        "updated_at": func.now(),
+    }
+    if terminal:
+        values["terminal_sequence"] = cursor.c.last_sequence + 1
+    advanced = conn.execute(
+        update(cursor)
+        .where(
+            cursor.c.workspace_id == workspace_id,
+            cursor.c.command_id == command_id,
+            cursor.c.terminal_sequence.is_(None),
+        )
+        .values(**values)
+        .returning(cursor.c.last_sequence)
+    ).scalar_one_or_none()
+    if advanced is None:
+        return None
+    row = (
+        conn.execute(
+            pg_insert(event_table)
+            .values(
+                workspace_id=workspace_id,
+                command_id=command_id,
+                sequence=int(advanced),
+                cluster_id=cluster_id,
+                kind=kind,
+                payload=dict(payload),
+            )
+            .returning(
+                event_table.c.command_id,
+                event_table.c.sequence,
+                event_table.c.kind,
+                event_table.c.payload,
+                event_table.c.occurred_at,
+            )
+        )
+        .mappings()
+        .one()
+    )
+    return OperationEvent(
+        command_id=str(row["command_id"]),
+        sequence=int(row["sequence"]),
+        kind=str(row["kind"]),
+        payload=dict(row["payload"]),
+        occurred_at=row["occurred_at"],
+    )
+
+
 class AgentCommandRepository(DatabaseConnection):
     async def append_command_operation_event(
         self,
