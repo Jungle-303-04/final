@@ -111,6 +111,7 @@ const CAPABILITIES: TimelineCapabilities = {
   availableSourceModes: ["retained"],
   maxRetainedRangeMs: 91_337,
   namespaceFilterPolicy: "not_required",
+  controlSurface: timelineControlSurface(),
 };
 
 function renderTimelineRoute(
@@ -154,9 +155,68 @@ function timelinePort(overrides: Partial<TimelinePort> = {}): TimelinePort {
     capabilities: CAPABILITIES,
     readCapabilities: vi.fn(async () => CAPABILITIES),
     readTimeline: vi.fn(async (query: TimelineQuery) => snapshot(query)),
+    readTimelineOverview: vi.fn(async () => timelineOverview()),
+    readTimelinePins: vi.fn(async () => timelinePinSet()),
+    upsertTimelinePin: vi.fn(async () => timelinePinMutation()),
+    removeTimelinePin: vi.fn(async () => timelinePinMutation()),
     subscribeTimeline: idleStream,
     ...overrides,
   };
+}
+
+function timelineControlSurface() {
+  return {
+    views: [controlOption("list", "List"), controlOption("swimlane", "Swimlane")],
+    groupings: [controlOption("app", "Application"), controlOption("owner", "Owner"), controlOption("flat", "None")],
+    sorts: [controlOption("importance", "Importance"), controlOption("recent", "Recent"), controlOption("name", "Name")],
+    activity: [{ ...controlOption("all", "All"), activity: [], problemsActivity: [] }],
+    deleted: { key: "include_deleted", label: "Show deleted", default: true },
+    kinds: { key: "kinds", label: "Kinds", selection: "multi" as const, emptySelection: "all" as const },
+    timeRanges: [{ ...controlOption("1h", "1h"), durationMs: 3_600_000 }],
+    defaultTimeRangeId: "1h",
+    customTimeRangeId: "custom" as const,
+    lensZoomRungs: [{ ...controlOption("1h", "1h"), durationMs: 3_600_000 }],
+    defaultLensZoomRung: "1h",
+    legend: {
+      key: "legend" as const,
+      label: "Legend",
+      availability: "available" as const,
+      items: [controlOption("change", "Changes")],
+    },
+    pins: {
+      key: "pins" as const,
+      label: "Pinned lanes",
+      availability: "available" as const,
+      storage: "server" as const,
+      revision: "pin_set" as const,
+      subjectKinds: ["resource", "application"] as ["resource", "application"],
+    },
+  };
+}
+
+function controlOption(id: string, label: string) {
+  return { id, label, description: null };
+}
+
+function timelineOverview() {
+  return {
+    window: { fromMs: 1_000, toMs: 2_000 },
+    bucketWidthMs: 1_000,
+    buckets: [{ fromMs: 1_000, toMs: 2_000, eventCount: 0, problemCount: 0 }],
+    coverage: [],
+    coverageSources: [{ source: "inventory" as const, availability: "observed" as const }],
+    facets: { activity: [], kinds: [] },
+    newEvidenceCount: null,
+    pinSetRevision: null,
+  };
+}
+
+function timelinePinSet() {
+  return { revision: 0, pins: [] };
+}
+
+function timelinePinMutation() {
+  return { action: "unchanged" as const, pinSet: timelinePinSet() };
 }
 
 function clusterCollection(): { completeness: "unknown"; clusters: HomeClusterChoice[] } {
@@ -220,6 +280,7 @@ function snapshot(query: TimelineQuery): TimelineSnapshot {
     policy,
     events: [],
     coverage: [],
+    pinSetRevision: null,
   };
 }
 

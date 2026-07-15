@@ -3,9 +3,16 @@ import {
   TimelineFailure,
   type TimelineCapabilities,
   type TimelineCoverage,
+  type TimelineCoverageSourceAvailability,
   type TimelineCursor,
   type TimelineEvent,
   type TimelinePort,
+  type TimelineOverview,
+  type TimelinePin,
+  type TimelinePinMutation,
+  type TimelinePinSet,
+  type TimelinePinTarget,
+  type TimelinePinUpsert,
   type TimelineQuery,
   type TimelineRealtimePolicy,
   type TimelineReadSession,
@@ -19,6 +26,11 @@ import type {
   TimelineEndpointCoverage,
   TimelineEndpointDependencies,
   TimelineEndpointEvent,
+  TimelineEndpointOverview,
+  TimelineEndpointPinMutation,
+  TimelineEndpointPinSet,
+  TimelineEndpointPinTarget,
+  TimelineEndpointPinUpsert,
   TimelineEndpointQuery,
   TimelineEndpointResourceRef,
   TimelineEndpointScope,
@@ -64,6 +76,7 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
           timelineWorkspaceCacheKey(query),
         );
         const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, now));
+        assertControlSelection(preflightCapabilities, request);
         const value = await dependencies.getTimelineSnapshot({ query: request }, signal);
         if (value.snapshot.cursor.token !== value.end.cursor.token) {
           throw new TimelineFailure("invalid-response");
@@ -78,8 +91,71 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
         throw toTimelineFailure(error);
       }
     },
+    async readTimelineOverview(query, signal) {
+      try {
+        const preflightCapabilities = await loadCapabilities(
+          signal,
+          timelineWorkspaceCacheKey(query),
+        );
+        const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, now));
+        assertControlSelection(preflightCapabilities, request);
+        const overview = await dependencies.getTimelineOverview({ query: request }, signal);
+        return toTimelineOverview(overview);
+      } catch (error) {
+        if (isAbortError(error) || error instanceof TimelineFailure) throw error;
+        throw toTimelineFailure(error);
+      }
+    },
+    async readTimelinePins(signal, workspaceCacheKey) {
+      try {
+        const preflightCapabilities = await loadCapabilities(signal, workspaceCacheKey);
+        assertPinsAvailable(preflightCapabilities);
+        return toTimelinePinSet(await dependencies.getTimelinePins(signal));
+      } catch (error) {
+        if (isAbortError(error) || error instanceof TimelineFailure) throw error;
+        throw toTimelineFailure(error);
+      }
+    },
+    async upsertTimelinePin(input, signal, workspaceCacheKey) {
+      try {
+        const preflightCapabilities = await loadCapabilities(signal, workspaceCacheKey);
+        assertPinsAvailable(preflightCapabilities);
+        return toTimelinePinMutation(await dependencies.upsertTimelinePin(
+          toTimelineEndpointPinUpsert(input),
+          signal,
+        ));
+      } catch (error) {
+        if (isAbortError(error) || error instanceof TimelineFailure) throw error;
+        throw toTimelineFailure(error);
+      }
+    },
+    async removeTimelinePin(pinId, expectedRevision, signal, workspaceCacheKey) {
+      try {
+        const preflightCapabilities = await loadCapabilities(signal, workspaceCacheKey);
+        assertPinsAvailable(preflightCapabilities);
+        assertTimelinePinId(pinId);
+        assertPinExpectedRevision(expectedRevision);
+        return toTimelinePinMutation(await dependencies.removeTimelinePin(
+          pinId,
+          expectedRevision,
+          signal,
+        ));
+      } catch (error) {
+        if (isAbortError(error) || error instanceof TimelineFailure) throw error;
+        throw toTimelineFailure(error);
+      }
+    },
     async *subscribeTimeline(session, subscription) {
       const query = createTimelineEndpointQuery(session.query, session.window);
+      const streamCapabilities = capabilitiesByWorkspace.get(timelineWorkspaceCacheKey(session.query))
+        ?? capabilities;
+      if (streamCapabilities === null) {
+        throw new TimelineFailure(
+          "invalid-response",
+          "Timeline stream requires a preflight capability descriptor.",
+        );
+      }
+      assertControlSelection(streamCapabilities, query);
       const { onLifecycle, signal } = subscription ?? {};
       let cursor = session.cursor;
       let attempt = 0;
@@ -174,7 +250,7 @@ export function createTimelineEndpointQuery(
     window: { from_ms: window.fromMs, to_ms: window.toMs },
     mode: query.mode.kind,
     filters: {
-      activity: query.filters.activity.map((activity) => ACTIVITY_BY_URL_KEY[activity]),
+      activity: [...new Set(query.filters.activity.map((activity) => ACTIVITY_BY_URL_KEY[activity]))].sort(),
       kinds: [...query.filters.kinds],
       include_deleted: query.filters.showDeleted,
       pinned_only: query.filters.pinnedOnly,
@@ -182,6 +258,9 @@ export function createTimelineEndpointQuery(
     },
     grouping: query.filters.grouping,
     sort: query.filters.sort,
+    view: query.control.view,
+    range_id: query.control.rangeId,
+    lens_zoom_rung: query.control.lensZoomRung,
   };
 }
 
@@ -221,6 +300,7 @@ function toTimelineSnapshot(
     policy,
     events: endpoint.snapshot.events.map(toEvent),
     coverage: endpoint.snapshot.coverage.map(toCoverage),
+    pinSetRevision: endpoint.snapshot.pin_set_revision,
   };
 }
 
@@ -232,6 +312,76 @@ function toTimelineCapabilityDescriptor(
     availableSourceModes: [...descriptor.available_source_modes],
     maxRetainedRangeMs: descriptor.max_retained_range_ms,
     namespaceFilterPolicy: descriptor.namespace_filter_policy,
+    controlSurface: {
+      views: descriptor.control_surface.views.map(toTimelineControlOption),
+      groupings: descriptor.control_surface.groupings.map(toTimelineControlOption),
+      sorts: descriptor.control_surface.sorts.map(toTimelineControlOption),
+      activity: descriptor.control_surface.activity.map((option) => ({
+        ...toTimelineControlOption(option),
+        activity: [...option.activity],
+        problemsActivity: [...option.problems_activity],
+      })),
+      deleted: { ...descriptor.control_surface.deleted },
+      kinds: {
+        key: descriptor.control_surface.kinds.key,
+        label: descriptor.control_surface.kinds.label,
+        selection: descriptor.control_surface.kinds.selection,
+        emptySelection: descriptor.control_surface.kinds.empty_selection,
+      },
+      timeRanges: descriptor.control_surface.time_ranges.map((option) => ({
+        ...toTimelineControlOption(option),
+        durationMs: option.duration_ms,
+      })),
+      defaultTimeRangeId: descriptor.control_surface.default_time_range_id,
+      customTimeRangeId: descriptor.control_surface.custom_time_range_id,
+      lensZoomRungs: descriptor.control_surface.lens_zoom_rungs.map((option) => ({
+        ...toTimelineControlOption(option),
+        durationMs: option.duration_ms,
+      })),
+      defaultLensZoomRung: descriptor.control_surface.default_lens_zoom_rung,
+      legend: {
+        key: descriptor.control_surface.legend.key,
+        label: descriptor.control_surface.legend.label,
+        availability: descriptor.control_surface.legend.availability,
+        items: descriptor.control_surface.legend.items.map(toTimelineControlOption),
+      },
+      pins: toTimelinePinsControl(descriptor.control_surface.pins),
+    },
+  };
+}
+
+function toTimelinePinsControl(
+  pins: TimelineEndpointCapabilityDescriptor["control_surface"]["pins"],
+): TimelineCapabilities["controlSurface"]["pins"] {
+  if (pins.availability === "available") {
+    return {
+      key: pins.key,
+      label: pins.label,
+      availability: pins.availability,
+      storage: pins.storage,
+      revision: pins.revision,
+      subjectKinds: [...pins.subject_kinds] as ["resource", "application"],
+    };
+  }
+  return {
+    key: pins.key,
+    label: pins.label,
+    availability: pins.availability,
+    storage: pins.storage,
+    revision: pins.revision,
+    subjectKinds: [],
+  };
+}
+
+function toTimelineControlOption(option: {
+  id: string;
+  label: string;
+  description: string | null;
+}) {
+  return {
+    id: option.id,
+    label: option.label,
+    description: option.description,
   };
 }
 
@@ -249,9 +399,62 @@ function assertMatchingCapabilityDescriptors(
     || preflight.namespaceFilterPolicy !== snapshot.namespaceFilterPolicy
     || preflight.availableSourceModes.length !== snapshot.availableSourceModes.length
     || preflight.availableSourceModes.some((mode, index) => mode !== snapshot.availableSourceModes[index])
+    || !strictValueEqual(preflight.controlSurface, snapshot.controlSurface)
   ) {
     throw new TimelineFailure("invalid-response", "Timeline snapshot capabilities disagreed with bootstrap.");
   }
+}
+
+function assertControlSelection(
+  capabilities: TimelineCapabilities,
+  query: TimelineEndpointQuery,
+): void {
+  const controls = capabilities.controlSurface;
+  if (
+    !hasControlId(controls.views, query.view)
+    || !hasControlId(controls.groupings, query.grouping)
+    || !hasControlId(controls.sorts, query.sort)
+    || !hasControlId(controls.lensZoomRungs, query.lens_zoom_rung)
+    || (query.range_id !== controls.customTimeRangeId && !hasControlId(controls.timeRanges, query.range_id))
+    || (query.filters.pinned_only && controls.pins.availability !== "available")
+  ) {
+    throw new TimelineFailure("invalid-request", "Timeline control selection is unavailable.");
+  }
+  const activity = query.filters.activity;
+  const hasActivityProjection = controls.activity.some((option) => (
+    strictValueEqual(option.activity, activity) || strictValueEqual(option.problemsActivity, activity)
+  ));
+  if (!hasActivityProjection) {
+    throw new TimelineFailure("invalid-request", "Timeline activity selection is unavailable.");
+  }
+}
+
+function assertPinsAvailable(capabilities: TimelineCapabilities): void {
+  if (capabilities.controlSurface.pins.availability !== "available") {
+    throw new TimelineFailure("invalid-request", "Timeline pins are unavailable.");
+  }
+}
+
+function hasControlId(options: readonly { id: string }[], id: string): boolean {
+  return options.some((option) => option.id === id);
+}
+
+/** Structural equality intentionally preserves array order for server control catalogs. */
+function strictValueEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== typeof right || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => strictValueEqual(item, right[index]));
+  }
+  if (typeof left !== "object") return false;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(rightRecord, key)
+      && strictValueEqual(leftRecord[key], rightRecord[key]));
 }
 
 function toTimelineStreamFrame(frame: TimelineEndpointStreamFrame): TimelineStreamFrame {
@@ -382,6 +585,123 @@ function toCoverage(coverage: TimelineEndpointCoverage): TimelineCoverage {
   };
 }
 
+function toTimelineOverview(overview: TimelineEndpointOverview): TimelineOverview {
+  return {
+    window: { fromMs: overview.window.from_ms, toMs: overview.window.to_ms },
+    bucketWidthMs: overview.bucket_width_ms,
+    buckets: overview.buckets.map((bucket) => ({
+      fromMs: bucket.from_ms,
+      toMs: bucket.to_ms,
+      eventCount: bucket.event_count,
+      problemCount: bucket.problem_count,
+    })),
+    coverage: overview.coverage.map(toCoverage),
+    coverageSources: overview.coverage_sources.map(toCoverageSourceAvailability),
+    facets: {
+      activity: overview.facets.activity.map((facet) => ({
+        activity: facet.activity,
+        count: facet.count,
+      })),
+      kinds: overview.facets.kinds.map((facet) => ({ kind: facet.kind, count: facet.count })),
+    },
+    newEvidenceCount: overview.new_evidence_count,
+    pinSetRevision: overview.pin_set_revision,
+  };
+}
+
+function toTimelinePinSet(pinSet: TimelineEndpointPinSet): TimelinePinSet {
+  return {
+    revision: pinSet.revision,
+    pins: pinSet.pins.map(toTimelinePin),
+  };
+}
+
+function toTimelinePinMutation(mutation: TimelineEndpointPinMutation): TimelinePinMutation {
+  return { action: mutation.action, pinSet: toTimelinePinSet(mutation.pin_set) };
+}
+
+function toTimelinePin(pin: TimelineEndpointPinSet["pins"][number]): TimelinePin {
+  return {
+    pinId: pin.pin_id,
+    subject: pin.subject.kind === "resource"
+      ? {
+        kind: "resource",
+        scope: toScope(pin.subject.scope),
+        resource: toResourceRef(pin.subject.resource),
+      }
+      : {
+        kind: "application",
+        applicationId: pin.subject.application_id,
+        snapshot: {
+          name: pin.subject.snapshot.name,
+          repositoryId: pin.subject.snapshot.repository_id,
+          manifestPath: pin.subject.snapshot.manifest_path,
+        },
+      },
+    createdAt: pin.created_at,
+  };
+}
+
+function toTimelineEndpointPinUpsert(input: TimelinePinUpsert): TimelineEndpointPinUpsert {
+  assertPinExpectedRevision(input.expectedRevision);
+  return {
+    expected_revision: input.expectedRevision,
+    target: toTimelineEndpointPinTarget(input.target),
+  };
+}
+
+function toTimelineEndpointPinTarget(target: TimelinePinTarget): TimelineEndpointPinTarget {
+  if (target.kind === "application") {
+    const applicationId = target.applicationId.trim();
+    if (!applicationId || applicationId.length > 512) {
+      throw new TimelineFailure("invalid-request", "Timeline application pin target is invalid.");
+    }
+    return { kind: "application", application_id: applicationId };
+  }
+  const [scope] = canonicalScopes([target.scope]);
+  if (scope === undefined) throw new TimelineFailure("invalid-request");
+  return {
+    kind: "resource",
+    scope,
+    resource: toTimelineEndpointResourceRef(target.resource),
+  };
+}
+
+function toTimelineEndpointResourceRef(resource: ResourceRef): TimelineEndpointResourceRef {
+  const kind = resource.kind.trim();
+  const name = resource.name.trim();
+  const uid = resource.uid.trim();
+  if (!kind || !name || !uid) {
+    throw new TimelineFailure("invalid-request", "Timeline resource pin target is invalid.");
+  }
+  return {
+    api_group: resource.apiGroup?.trim() ?? "",
+    version: resource.version?.trim() ?? "",
+    kind,
+    namespace: resource.namespace === null ? null : resource.namespace.trim(),
+    name,
+    uid,
+  };
+}
+
+function assertTimelinePinId(pinId: string): void {
+  if (!pinId.trim() || pinId.length > 128) {
+    throw new TimelineFailure("invalid-request", "Timeline pin identity is invalid.");
+  }
+}
+
+function assertPinExpectedRevision(expectedRevision: number): void {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+    throw new TimelineFailure("invalid-request", "Timeline pin revision is invalid.");
+  }
+}
+
+function toCoverageSourceAvailability(
+  coverage: TimelineEndpointOverview["coverage_sources"][number],
+): TimelineCoverageSourceAvailability {
+  return { source: coverage.source, availability: coverage.availability };
+}
+
 function toRealtimePolicy(policy: {
   max_batch_events: number;
   max_frames_per_second: number;
@@ -416,7 +736,9 @@ function toCursor(cursor: { token: string }): TimelineCursor {
 function toTimelineFailure(error: unknown): TimelineFailure {
   const kind = fieldString(error, "kind");
   const status = fieldNumber(error, "status");
-  const code: TimelineFailure["code"] = status === 503
+  const code: TimelineFailure["code"] = status === 409
+    ? "conflict"
+    : status === 503
     ? "unavailable"
     : kind === "forbidden" || kind === "unauthorized" || kind === "not-found"
       || status === 404 || status === 403 || status === 401

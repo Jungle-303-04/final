@@ -1,6 +1,7 @@
 import type { ClusterScope, ResourceRef } from "../../shared/parity/referenceParity";
 
 export type TimelineFailureCode =
+  | "conflict"
   | "forbidden"
   | "invalid-request"
   | "invalid-response"
@@ -22,12 +23,72 @@ export class TimelineFailure extends Error {
 
 export type TimelineSourceMode = "local" | "retained";
 
+export interface TimelineControlOption {
+  id: string;
+  label: string;
+  description: string | null;
+}
+
+export interface TimelineActivityControlOption extends TimelineControlOption {
+  activity: readonly TimelineActivity[];
+  problemsActivity: readonly TimelineActivity[];
+}
+
+export interface TimelineTimeRangeOption extends TimelineControlOption {
+  durationMs: number;
+}
+
+export interface TimelineLensZoomRung extends TimelineControlOption {
+  durationMs: number;
+}
+
+export interface TimelineControlSurface {
+  views: readonly TimelineControlOption[];
+  groupings: readonly TimelineControlOption[];
+  sorts: readonly TimelineControlOption[];
+  activity: readonly TimelineActivityControlOption[];
+  deleted: { key: string; label: string; default: boolean };
+  kinds: { key: string; label: string; selection: "multi"; emptySelection: "all" };
+  timeRanges: readonly TimelineTimeRangeOption[];
+  defaultTimeRangeId: string;
+  customTimeRangeId: "custom";
+  lensZoomRungs: readonly TimelineLensZoomRung[];
+  defaultLensZoomRung: string;
+  legend: {
+    key: "legend";
+    label: string;
+    availability: "available";
+    items: readonly TimelineControlOption[];
+  };
+  pins: TimelinePinsControl;
+}
+
+/** The server advertises persistent pin capabilities as a discriminated contract. */
+export type TimelinePinsControl =
+  | {
+    key: "pins";
+    label: string;
+    availability: "available";
+    storage: "server";
+    revision: "pin_set";
+    subjectKinds: readonly ["resource", "application"];
+  }
+  | {
+    key: "pins";
+    label: string;
+    availability: "unavailable";
+    storage: null;
+    revision: null;
+    subjectKinds: readonly [];
+  };
+
 /** The exact, server-owned descriptor used to bootstrap one Timeline read. */
 export interface TimelineCapabilityDescriptor {
   selectedSourceMode: TimelineSourceMode;
   availableSourceModes: readonly TimelineSourceMode[];
   maxRetainedRangeMs: number;
   namespaceFilterPolicy: "not_required" | "required";
+  controlSurface: TimelineControlSurface;
 }
 
 /** Server descriptor is the only Timeline capability projection used by the UI. */
@@ -70,9 +131,17 @@ export interface TimelineFilters {
   selectedEventKey: string | null;
 }
 
+/** The selected controls are IDs supplied by the server descriptor, never UI fallbacks. */
+export interface TimelineControlSelection {
+  view: TimelineViewMode;
+  rangeId: string;
+  lensZoomRung: string;
+}
+
 export interface TimelineQuery {
   scopes: readonly ClusterScope[];
   mode: TimelineMode;
+  control: TimelineControlSelection;
   filters: TimelineFilters;
 }
 
@@ -114,6 +183,75 @@ export interface TimelineCoverage {
   fromMs: number;
   toMs: number;
   reason: "collection_gap" | "retention_boundary" | "partial_scope";
+}
+
+export interface TimelineCoverageSourceAvailability {
+  source: TimelineSource;
+  availability: "observed" | "unavailable";
+}
+
+export interface TimelineOverviewBucket {
+  fromMs: number;
+  toMs: number;
+  eventCount: number;
+  problemCount: number;
+}
+
+export interface TimelineOverviewFacets {
+  activity: readonly { activity: TimelineActivity; count: number }[];
+  kinds: readonly { kind: string; count: number }[];
+}
+
+/** Aggregate retained-strip data; unavailable coverage is distinct from an empty gap list. */
+export interface TimelineOverview {
+  window: TimelineWindow;
+  bucketWidthMs: number;
+  buckets: readonly TimelineOverviewBucket[];
+  coverage: readonly TimelineCoverage[];
+  coverageSources: readonly TimelineCoverageSourceAvailability[];
+  facets: TimelineOverviewFacets;
+  newEvidenceCount: number | null;
+  /** Null unless this overview was resolved against a server pin set. */
+  pinSetRevision: number | null;
+}
+
+export type TimelinePinTarget =
+  | { kind: "resource"; scope: ClusterScope; resource: ResourceRef }
+  | { kind: "application"; applicationId: string };
+
+export interface TimelineApplicationPinSnapshot {
+  name: string;
+  repositoryId: string;
+  manifestPath: string;
+}
+
+export type TimelinePinSubject =
+  | { kind: "resource"; scope: ClusterScope; resource: ResourceRef }
+  | {
+    kind: "application";
+    applicationId: string;
+    snapshot: TimelineApplicationPinSnapshot;
+  };
+
+export interface TimelinePin {
+  pinId: string;
+  subject: TimelinePinSubject;
+  createdAt: string;
+}
+
+export interface TimelinePinSet {
+  revision: number;
+  pins: readonly TimelinePin[];
+}
+
+export interface TimelinePinMutation {
+  action: "added" | "unchanged" | "deleted" | "absent";
+  pinSet: TimelinePinSet;
+}
+
+export interface TimelinePinUpsert {
+  expectedRevision: number;
+  target: TimelinePinTarget;
 }
 
 export type TimelineSubject =
@@ -166,6 +304,8 @@ export interface TimelineSnapshot {
   policy: TimelineRealtimePolicy;
   events: readonly TimelineEvent[];
   coverage: readonly TimelineCoverage[];
+  /** The pin revision bound into this snapshot, or null for a non-pinned read. */
+  pinSetRevision: number | null;
 }
 
 export type TimelineStreamFrame =
@@ -198,6 +338,19 @@ export interface TimelinePort {
    */
   readCapabilities?(signal?: AbortSignal, workspaceCacheKey?: string): Promise<TimelineCapabilities>;
   readTimeline(query: TimelineQuery, signal?: AbortSignal): Promise<TimelineSnapshot>;
+  readTimelineOverview(query: TimelineQuery, signal?: AbortSignal): Promise<TimelineOverview>;
+  readTimelinePins(signal?: AbortSignal, workspaceCacheKey?: string): Promise<TimelinePinSet>;
+  upsertTimelinePin(
+    input: TimelinePinUpsert,
+    signal?: AbortSignal,
+    workspaceCacheKey?: string,
+  ): Promise<TimelinePinMutation>;
+  removeTimelinePin(
+    pinId: string,
+    expectedRevision: number,
+    signal?: AbortSignal,
+    workspaceCacheKey?: string,
+  ): Promise<TimelinePinMutation>;
   subscribeTimeline(
     session: TimelineReadSession,
     subscription?: TimelineStreamSubscription,

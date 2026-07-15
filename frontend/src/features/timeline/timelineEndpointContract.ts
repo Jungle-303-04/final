@@ -76,7 +76,56 @@ export interface TimelineEndpointCapabilityDescriptor {
   available_source_modes: readonly ("retained" | "local")[];
   max_retained_range_ms: number;
   namespace_filter_policy: "not_required" | "required";
+  control_surface: TimelineEndpointControlSurface;
 }
+
+export interface TimelineEndpointControlOption {
+  id: string;
+  label: string;
+  description: string | null;
+}
+
+export interface TimelineEndpointControlSurface {
+  views: readonly TimelineEndpointControlOption[];
+  groupings: readonly TimelineEndpointControlOption[];
+  sorts: readonly TimelineEndpointControlOption[];
+  activity: readonly (TimelineEndpointControlOption & {
+    activity: readonly TimelineEndpointEvent["activity"][];
+    problems_activity: readonly TimelineEndpointEvent["activity"][];
+  })[];
+  deleted: { key: string; label: string; default: boolean };
+  kinds: { key: string; label: string; selection: "multi"; empty_selection: "all" };
+  time_ranges: readonly (TimelineEndpointControlOption & { duration_ms: number })[];
+  default_time_range_id: string;
+  custom_time_range_id: "custom";
+  lens_zoom_rungs: readonly (TimelineEndpointControlOption & { duration_ms: number })[];
+  default_lens_zoom_rung: string;
+  legend: {
+    key: "legend";
+    label: string;
+    availability: "available";
+    items: readonly TimelineEndpointControlOption[];
+  };
+  pins: TimelineEndpointPinsControl;
+}
+
+export type TimelineEndpointPinsControl =
+  | {
+    key: "pins";
+    label: string;
+    availability: "available";
+    storage: "server";
+    revision: "pin_set";
+    subject_kinds: readonly ["resource", "application"];
+  }
+  | {
+    key: "pins";
+    label: string;
+    availability: "unavailable";
+    storage: null;
+    revision: null;
+    subject_kinds: readonly [];
+  };
 
 export interface TimelineEndpointCoverage {
   scope: TimelineEndpointScope;
@@ -99,6 +148,72 @@ export interface TimelineEndpointQuery {
   };
   grouping: "app" | "owner" | "flat";
   sort: "importance" | "recent" | "name";
+  view: "list" | "swimlane";
+  range_id: string;
+  lens_zoom_rung: string;
+}
+
+export interface TimelineEndpointOverview {
+  window: { from_ms: number; to_ms: number };
+  bucket_width_ms: number;
+  buckets: readonly {
+    from_ms: number;
+    to_ms: number;
+    event_count: number;
+    problem_count: number;
+  }[];
+  coverage: readonly TimelineEndpointCoverage[];
+  coverage_sources: readonly {
+    source: TimelineEndpointEvent["source"];
+    availability: "observed" | "unavailable";
+  }[];
+  facets: {
+    activity: readonly { activity: TimelineEndpointEvent["activity"]; count: number }[];
+    kinds: readonly { kind: string; count: number }[];
+  };
+  new_evidence_count: number | null;
+  pin_set_revision: number | null;
+}
+
+export type TimelineEndpointPinTarget =
+  | {
+    kind: "resource";
+    scope: TimelineEndpointScope;
+    resource: TimelineEndpointResourceRef;
+  }
+  | { kind: "application"; application_id: string };
+
+export type TimelineEndpointPinSubject =
+  | {
+    kind: "resource";
+    scope: TimelineEndpointScope;
+    resource: TimelineEndpointResourceRef;
+  }
+  | {
+    kind: "application";
+    application_id: string;
+    snapshot: { name: string; repository_id: string; manifest_path: string };
+  };
+
+export interface TimelineEndpointPin {
+  pin_id: string;
+  subject: TimelineEndpointPinSubject;
+  created_at: string;
+}
+
+export interface TimelineEndpointPinSet {
+  revision: number;
+  pins: readonly TimelineEndpointPin[];
+}
+
+export interface TimelineEndpointPinMutation {
+  action: "added" | "unchanged" | "deleted" | "absent";
+  pin_set: TimelineEndpointPinSet;
+}
+
+export interface TimelineEndpointPinUpsert {
+  expected_revision: number;
+  target: TimelineEndpointPinTarget;
 }
 
 export interface TimelineEndpointSnapshot {
@@ -110,19 +225,26 @@ export interface TimelineEndpointSnapshot {
     capabilities: TimelineEndpointCapabilityDescriptor;
     events: readonly TimelineEndpointEvent[];
     coverage: readonly TimelineEndpointCoverage[];
+    pin_set_revision: number | null;
   };
-  end: { kind: "end"; cursor: TimelineEndpointCursor };
+  end: { kind: "end"; cursor: TimelineEndpointCursor; pin_set_revision: null };
 }
 
 export type TimelineEndpointStreamFrame =
-  | { kind: "event"; cursor: TimelineEndpointCursor; event: TimelineEndpointEvent }
+  | {
+    kind: "event";
+    cursor: TimelineEndpointCursor;
+    event: TimelineEndpointEvent;
+    pin_set_revision: null;
+  }
   | {
     kind: "coverage";
     cursor: TimelineEndpointCursor;
     coverage: readonly TimelineEndpointCoverage[];
+    pin_set_revision: null;
   }
-  | { kind: "resync_required"; cursor: TimelineEndpointCursor; reason: string }
-  | { kind: "error"; cursor: TimelineEndpointCursor; reason: string };
+  | { kind: "resync_required"; cursor: TimelineEndpointCursor; reason: string; pin_set_revision: null }
+  | { kind: "error"; cursor: TimelineEndpointCursor; reason: string; pin_set_revision: null };
 
 export interface TimelineEndpointStreamSubscription {
   onLifecycle?: (lifecycle:
@@ -143,6 +265,20 @@ export interface TimelineEndpointDependencies {
     input: { query: TimelineEndpointQuery },
     signal?: AbortSignal,
   ): Promise<TimelineEndpointSnapshot>;
+  getTimelineOverview(
+    input: { query: TimelineEndpointQuery },
+    signal?: AbortSignal,
+  ): Promise<TimelineEndpointOverview>;
+  getTimelinePins(signal?: AbortSignal): Promise<TimelineEndpointPinSet>;
+  upsertTimelinePin(
+    input: TimelineEndpointPinUpsert,
+    signal?: AbortSignal,
+  ): Promise<TimelineEndpointPinMutation>;
+  removeTimelinePin(
+    pinId: string,
+    expectedRevision: number,
+    signal?: AbortSignal,
+  ): Promise<TimelineEndpointPinMutation>;
   subscribeTimelineEvents(
     input: { query: TimelineEndpointQuery; after: TimelineEndpointCursor },
     subscription?: TimelineEndpointStreamSubscription,

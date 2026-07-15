@@ -56,8 +56,12 @@ import {
   getResourceManifestSource,
   previewResourceManifestEdit,
   getTimelineCapabilities,
+  getTimelineOverview,
+  getTimelinePins,
   getTimelineSnapshot,
+  removeTimelinePin,
   subscribeTimelineEvents,
+  upsertTimelinePin,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -137,8 +141,12 @@ export function createApiComposition() {
   const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
   const timelinePort = createTimelineAdapter({
     getTimelineCapabilities,
+    getTimelineOverview,
+    getTimelinePins,
     getTimelineSnapshot,
+    removeTimelinePin,
     subscribeTimelineEvents,
+    upsertTimelinePin,
   });
   const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
     getResourceMetricsHistory,
