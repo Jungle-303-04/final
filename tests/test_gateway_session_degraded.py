@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import secrets
 import time
 from typing import Any
 
+import pytest
 from conftest import ROOT, load_file
 from fastapi.testclient import TestClient
 
@@ -115,8 +117,11 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
     monkeypatch.setattr(operation_events, "OPERATION_EVENT_RECONNECT_MAX_SECONDS", 0.05)
 
     service = gateway.ApiGateway(event_bus=EventBus())
+    valid_session_token = secrets.token_urlsafe(service.sessions.config.token_bytes)
 
     with TestClient(service.app, raise_server_exceptions=False) as client:
+        assert isinstance(service.sessions, session_storage.SessionStore)
+        assert isinstance(service.sessions, session_storage.RedisSessionStore)
         assert session_urls and broker_urls
         assert session_urls[0] == broker_urls[0]
         assert client.get("/healthz").status_code == 200
@@ -124,7 +129,7 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
         assert ready.status_code == 503
         assert ready.json() == {"detail": "session storage unavailable"}
 
-        denied = client.get("/auth/session", headers={"x-session-token": "known-token"})
+        denied = client.get("/auth/session", headers={"x-session-token": valid_session_token})
         assert denied.status_code == 503
         assert denied.json() == {"detail": "session storage unavailable"}
         assert denied.headers["retry-after"] == "1"
@@ -140,7 +145,38 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
         else:
             raise AssertionError("session store and operation broker did not recover")
 
+        assert client.get("/auth/session").status_code == 401
         assert (
-            client.get("/auth/session", headers={"x-session-token": "known-token"}).status_code
+            client.get(
+                "/auth/session", headers={"x-session-token": valid_session_token}
+            ).status_code
             == 401
         )
+
+
+def test_gateway_rejects_memory_session_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The API gateway accepts only stores with the explicit fail-closed lifecycle."""
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@postgresql:5432/service")
+    gateway = load_gateway_module()
+    import packages.storage.sessions as session_storage
+
+    memory_store = session_storage.MemorySessionStore(
+        session_storage.RedisSessionStoreConfig(
+            url="memory://",
+            ttl_seconds=3600,
+            key_prefix="session",
+            token_bytes=32,
+            default_roles=("user",),
+            default_workspace_id="default",
+            rate_limit_key_prefix="rate",
+            rate_limit=120,
+            rate_limit_window_seconds=60,
+            email_verification_key_prefix="email_verify",
+            email_verification_ttl_seconds=3600,
+            email_verification_token_bytes=32,
+        )
+    )
+
+    with pytest.raises(TypeError, match="fail-closed session lifecycle"):
+        gateway.ApiGateway(session_store=memory_store)
