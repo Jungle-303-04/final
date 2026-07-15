@@ -34,7 +34,7 @@ spec:
                   name: management-runtime-secret
                   key: COMMAND_NOTIFY_DATABASE_URL
             - name: MIGRATION_EXPECTED_HEAD
-              value: "20260715_0230"
+              value: "20260715_0250"
           resources:
             requests:
               cpu: 50m
