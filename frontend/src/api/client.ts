@@ -127,9 +127,12 @@ export async function apiStreamResponse(
   path: ApiPath,
   mediaType: string,
   signal?: AbortSignal,
+  extraHeaders?: HeadersInit,
 ): Promise<Response> {
+  const headers = new Headers(extraHeaders);
+  headers.set("accept", mediaType);
   const response = await request(path, {
-    headers: { accept: mediaType },
+    headers,
     signal,
   });
   if (response.ok) return response;

@@ -167,6 +167,8 @@ def test_schema_defines_expected_tables() -> None:
         "rca_reports",
         "pull_requests",
         "agent_commands",
+        "command_operation_event_cursors",
+        "command_operation_events",
         "audit_log",
         "user_accounts",
         "workspaces",
@@ -2447,6 +2449,57 @@ def test_queue_agent_command_reports_insert_and_notifies_only_new_commands() -> 
         recorded[0].compile(dialect=postgresql.dialect())
     )
     assert "pg_notify" in str(recorded[1])
+
+
+def test_operation_event_replay_is_workspace_scoped_and_strictly_ordered() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "command_id": "cmd-1",
+                    "sequence": 2,
+                    "kind": "progress",
+                    "payload": {"cluster_id": "cluster-1", "status": "running"},
+                    "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+                }
+            ]
+
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @asynccontextmanager
+    async def stub_async_connection():
+        yield StubAsyncConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
+
+    events = asyncio.run(
+        repository.list_command_operation_events(
+            "workspace-1",
+            "cmd-1",
+            after_sequence=1,
+        )
+    )
+
+    assert [event.sequence for event in events] == [2]
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "command_operation_events.workspace_id =" in sql
+    assert "command_operation_events.command_id =" in sql
+    assert "command_operation_events.sequence >" in sql
+    assert "ORDER BY command_operation_events.sequence ASC" in sql
+    assert "workspace-1" in compiled.params.values()
+    assert "cmd-1" in compiled.params.values()
 
 
 def test_agent_commands_by_correlation_is_workspace_scoped_newest_and_bounded() -> None:

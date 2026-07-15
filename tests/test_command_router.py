@@ -740,7 +740,7 @@ def test_command_heartbeat_extends_current_lease() -> None:
 def test_command_start_publishes_realtime_operation_event() -> None:
     async def run() -> None:
         broker = InMemoryOperationEventBroker()
-        subscription = await broker.subscribe("cmd-1")
+        subscription = await broker.subscribe("cmd-1", workspace_id="trusted-workspace")
         await command_start(
             "cmd-1",
             CommandStartRequest(agent_id="agent-1", lease_id="lease-1"),
@@ -853,9 +853,51 @@ def test_command_events_sse_starts_with_authorized_durable_snapshot() -> None:
         stream = response.body_iterator
         first = await anext(stream)
 
-        assert first.startswith("id: 0\nevent: operation\ndata: ")
+        assert first.startswith("id: 1\nevent: operation\ndata: ")
         assert '"command_id":"cmd-debug-abc"' in first
         assert '"kind":"completed"' in first
+        assert '"status":"completed"' in first
+        await stream.aclose()
+
+    asyncio.run(run())
+
+
+def test_command_events_replays_durable_cursor_without_waiting_for_command_row() -> None:
+    class DurableEventDb(SpyAccessDb):
+        async def list_command_operation_events(
+            self,
+            workspace_id: str,
+            command_id: str,
+            *,
+            after_sequence: int,
+        ) -> list[object]:
+            assert (workspace_id, command_id, after_sequence) == ("workspace-1", "cmd-accepted", 1)
+            from packages.contracts.parity import OperationEvent
+
+            return [
+                OperationEvent(
+                    command_id="cmd-accepted",
+                    sequence=2,
+                    kind="completed",
+                    payload={"cluster_id": "cluster-1", "status": "completed"},
+                )
+            ]
+
+        async def get_agent_command(self, *_args: object) -> None:
+            raise AssertionError("receipt event must not wait for agent_commands projection")
+
+    async def run() -> None:
+        response = await command_events(
+            "cmd-accepted",
+            after=1,
+            current=current_session(),
+            db=DurableEventDb(allowed=True),
+            operation_events=InMemoryOperationEventBroker(),
+        )
+        stream = response.body_iterator
+        first = await anext(stream)
+
+        assert first.startswith("id: 2\nevent: operation\ndata: ")
         assert '"status":"completed"' in first
         await stream.aclose()
 

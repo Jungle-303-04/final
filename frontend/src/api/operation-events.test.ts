@@ -64,7 +64,7 @@ describe("command operation events API", () => {
   });
 
   it("reconnects transiently from the durable cursor and suppresses replay duplicates", async () => {
-    vi.spyOn(globalThis, "fetch")
+    const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(sseResponse({
         command_id: "command-1",
         sequence: 1,
@@ -101,12 +101,9 @@ describe("command operation events API", () => {
     }
 
     expect(sequences).toEqual([1, 2]);
-    expect(globalThis.fetch).toHaveBeenLastCalledWith(
-      "/api/commands/command-1/events",
-      expect.objectContaining({
-        headers: expect.objectContaining({ "last-event-id": "1" }),
-      }),
-    );
+    const reconnect = fetchMock.mock.calls[1];
+    expect(reconnect?.[0]).toBe("/api/commands/command-1/events");
+    expect(new Headers(reconnect?.[1]?.headers).get("last-event-id")).toBe("1");
   });
 
   it("fails terminally for an authenticated or invalid-request stream error instead of retrying", async () => {
