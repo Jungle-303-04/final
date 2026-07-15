@@ -12,6 +12,7 @@ from domains.command.actions import (
     registered_command_actions,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.target import TARGET_NAMESPACE
 
 
 def test_builtin_actions_registered_with_policy_metadata() -> None:
@@ -23,7 +24,12 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     }
     for spec in actions:
-        assert spec.allowed_namespaces == (Sandbox.NAMESPACE,)
+        expected = (
+            (TARGET_NAMESPACE,)
+            if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION
+            else (Sandbox.NAMESPACE,)
+        )
+        assert spec.allowed_namespaces == expected
 
 
 def test_spec_lookup_and_namespace_policy() -> None:
