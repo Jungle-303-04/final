@@ -1,4 +1,4 @@
-import { Boxes, GitBranch, Grid2X2, List, RefreshCw } from "lucide-react";
+import { Boxes, GitBranch, Grid2X2, List } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
@@ -15,7 +15,7 @@ import {
 } from "../../shared/ui/primitives/empty";
 import { ApplicationCard } from "./ApplicationCard";
 import { ApplicationDetailWorkspace, openApplicationDetail } from "./ApplicationDetailWorkspace";
-import { ApplicationsFailureState } from "./ApplicationsState";
+import { ApplicationsFailureState, ApplicationsRefreshControl } from "./ApplicationsState";
 import { ApplicationsTable } from "./ApplicationsTable";
 import { applicationCatalogFilterFromState } from "./applicationFilters";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
@@ -54,15 +54,13 @@ function ApplicationsCatalog({
   if (catalog.phase === "failed") return <ApplicationsFailureState failure={catalog.failure} onRetry={refresh} />;
   const open = (applicationId: string) => openApplicationDetail(filter, applicationId);
   return (
-    <ProductPageFrame>
+    <ProductPageFrame aria-busy={catalog.refreshing}>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <h2 className="text-2xl font-semibold tracking-tight">{copy.title}</h2>
           <p className="text-sm text-muted-foreground">{copy.description}</p>
         </div>
-        <Button aria-label={copy.refresh} disabled={catalog.refreshing} onClick={refresh} size="icon" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" className={catalog.refreshing ? "motion-safe:animate-spin" : undefined} />
-        </Button>
+        <ApplicationsRefreshControl onRefresh={refresh} resource={catalog} />
       </header>
       <div className="flex min-w-0 items-center justify-end">
         <div className="flex items-center gap-1" role="group" aria-label={copy.title}>

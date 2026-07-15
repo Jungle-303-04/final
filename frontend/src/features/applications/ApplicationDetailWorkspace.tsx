@@ -1,4 +1,4 @@
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -28,7 +28,7 @@ import {
 } from "./ApplicationDetailPanels";
 import { ApplicationDriftPanel } from "./ApplicationDriftPanel";
 import { ApplicationTopologyPanel } from "./ApplicationTopologyPanel";
-import { ApplicationsFailureState } from "./ApplicationsState";
+import { ApplicationsFailureState, ApplicationsRefreshControl } from "./ApplicationsState";
 import {
   applicationGitOpsChangeHref,
   applicationOwnedSurfaceHref,
@@ -136,7 +136,7 @@ export function ApplicationDetailWorkspace({
   const isWorkloadScope = application.scope.selectedScope === "workload";
   const workload = application.workload;
   return (
-    <ProductPageFrame>
+    <ProductPageFrame aria-busy={detail.refreshing}>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Button aria-label={copy.back} onClick={() => closeDetail(filter)} size="icon" type="button" variant="outline">
@@ -166,9 +166,7 @@ export function ApplicationDetailWorkspace({
             />
           </div>
         </div>
-        <Button aria-label={copy.refresh} disabled={detail.refreshing} onClick={refreshDetail} size="icon" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" className={detail.refreshing ? "motion-safe:animate-spin" : undefined} />
-        </Button>
+        <ApplicationsRefreshControl onRefresh={refreshDetail} resource={detail} />
       </header>
       <Tabs
         onValueChange={(value) => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationsFailure } from "./applicationsContract";
@@ -10,6 +10,7 @@ import {
   applicationsPort,
   renderApplications,
 } from "./ApplicationsSurface.testSupport";
+import type { ApplicationCardModel, ApplicationsPort } from "./applicationsContract";
 
 afterEach(cleanup);
 
@@ -60,6 +61,84 @@ describe("S10 Applications surface", () => {
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.getByTestId("location").textContent)
       .toBe("/gitops?clusters=cluster-1&mode=new"));
+  });
+
+  it("keeps the last catalog result visible while a manual refresh reports real progress", async () => {
+    const user = userEvent.setup();
+    const replacement = deferred<readonly ApplicationCardModel[]>();
+    const listApplications = vi.fn<ApplicationsPort["listApplications"]>()
+      .mockResolvedValueOnce([APPLICATION_CARD])
+      .mockReturnValueOnce(replacement.promise);
+    const port = applicationsPort({ listApplications });
+    const view = renderApplications(port);
+
+    expect(await screen.findByText("checkout-api")).toBeTruthy();
+    const refresh = screen.getByRole("button", { name: "Refresh" });
+    const refreshedName = "checkout-api refreshed";
+
+    await user.click(refresh);
+
+    expect(listApplications).toHaveBeenCalledTimes(2);
+    expect((refresh as HTMLButtonElement).disabled).toBe(true);
+    expect(view.container.querySelector('[data-slot="product-page-frame"]')?.getAttribute("aria-busy"))
+      .toBe("true");
+    expect(view.container.querySelector('[data-slot="applications-refresh-feedback"]')?.textContent)
+      .toBe("Refreshing applications.");
+    expect(refresh.querySelector("svg")?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(screen.getByText("checkout-api")).toBeTruthy();
+
+    await user.click(refresh);
+    expect(listApplications).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      replacement.resolve([{ ...APPLICATION_CARD, name: refreshedName }]);
+    });
+
+    expect(await screen.findByText(refreshedName)).toBeTruthy();
+    expect((refresh as HTMLButtonElement).disabled).toBe(false);
+    expect(view.container.querySelector('[data-slot="product-page-frame"]')?.getAttribute("aria-busy"))
+      .toBe("false");
+    expect(view.container.querySelector('[data-slot="applications-refresh-feedback"]')).toBeNull();
+  });
+
+  it("keeps successful catalog data after a background refresh failure and aborts it on unmount", async () => {
+    const user = userEvent.setup();
+    const replacement = deferred<readonly ApplicationCardModel[]>();
+    let refreshSignal: AbortSignal | undefined;
+    const listApplications = vi.fn<ApplicationsPort["listApplications"]>()
+      .mockResolvedValueOnce([APPLICATION_CARD])
+      .mockImplementationOnce((_filter, signal) => {
+        refreshSignal = signal;
+        return replacement.promise;
+      });
+    const port = applicationsPort({ listApplications });
+    const view = renderApplications(port);
+
+    expect(await screen.findByText("checkout-api")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(refreshSignal?.aborted).toBe(false);
+
+    await act(async () => {
+      replacement.reject(new ApplicationsFailure("offline"));
+    });
+
+    const failure = await screen.findByRole("alert");
+    expect(failure.textContent).toBe("Could not refresh applications. Showing the last successful result.");
+    expect(failure.textContent).not.toContain("offline");
+    expect(screen.getByText("checkout-api")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(view.container.querySelector('[data-slot="product-page-frame"]')?.getAttribute("aria-busy"))
+      .toBe("false");
+
+    const pending = deferred<readonly ApplicationCardModel[]>();
+    listApplications.mockImplementationOnce((_filter, signal) => {
+      refreshSignal = signal;
+      return pending.promise;
+    });
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    view.unmount();
+    await Promise.resolve();
+    expect(refreshSignal?.aborted).toBe(true);
   });
 
   it("opens URL-backed detail and keeps overview evidence honest", async () => {
@@ -331,3 +410,13 @@ describe("S10 Applications surface", () => {
     expect(screen.queryByText("checkout-api")).toBeNull();
   });
 });
+
+function deferred<T>() {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
