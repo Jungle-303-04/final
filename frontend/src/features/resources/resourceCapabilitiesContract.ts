@@ -46,10 +46,12 @@ export interface ResourceCapabilitiesPort {
 }
 
 export interface ResourceActionReceipt {
-  accepted: boolean;
+  accepted: true;
   eventId: string;
+  auditEventId: string;
   correlationId: string;
-  commandId: string | null;
+  commandId: string;
+  status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
 }
 
 export interface ResourceActionsPort {

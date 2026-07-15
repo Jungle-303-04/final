@@ -6,12 +6,14 @@ import { executeResourceCapability } from "./resource-capability-actions";
 describe("server-discovered resource action API", () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it("posts only the supplied descriptor path, values, and direct-execution confirmation", async () => {
+  it("posts only the supplied descriptor path, values, and target-impact confirmation", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       accepted: true,
       event_id: "event-1",
+      audit_event_id: "event-1",
       correlation_id: "correlation-1",
       command_id: "command-1",
+      status: "queued",
     }), { status: 200 }));
 
     await expect(executeResourceCapability(
@@ -24,8 +26,7 @@ describe("server-discovered resource action API", () => {
         method: "POST",
         body: JSON.stringify({
           replicas: 4,
-          direct_execution: true,
-          direct_execution_confirmed: true,
+          confirmation: true,
         }),
       }),
     );

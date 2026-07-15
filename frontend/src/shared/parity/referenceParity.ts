@@ -33,9 +33,12 @@ export interface DirectCommandRequest {
 }
 
 export interface CommandReceipt {
-  accepted: boolean;
+  accepted: true;
   commandId: string;
-  auditId: string;
+  eventId: string;
+  /** Immutable request event, later copied to the async audit projection. */
+  auditEventId: string;
+  correlationId: string;
   status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
 }
 

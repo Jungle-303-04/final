@@ -99,6 +99,7 @@ def approval_record(
 def command_request(
     action: str = Command.DEFAULT_ACTION,
     *,
+    command_id: str | None = None,
     approval_ref: str | None = "approval-1",
     policy_decision_ref: str | None = "policy-decision-1",
     approval_decided_by: str | None = "approver-1",
@@ -123,6 +124,7 @@ def command_request(
             workflow_run_id="workflow-1",
         ),
         workspace_id="workspace-1",
+        command_id=command_id,
         workflow_run_id="workflow-1",
         requested_by="user-1",
         actor=actor,
@@ -453,6 +455,32 @@ def test_command_handler_fills_approval_evidence_from_record() -> None:
     assert store.calls[0][1]["approval_decided_by"] == "release-operator-1"
     assert store.calls[0][1]["approval_expires_at"] == "2099-02-01T00:00:00Z"
     assert events[-1].approval_decided_by == "release-operator-1"
+
+
+def test_command_handler_preserves_server_receipt_id_after_approval_evidence() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(
+            approval=approval_record(
+                decided_by="release-operator-1",
+                expires_at="2099-02-01T00:00:00Z",
+            )
+        )
+        request = command_request(
+            Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            command_id="cmd-accepted-before-approval",
+            approval_decided_by=None,
+            approval_expires_at=None,
+        )
+        events = await collect_events(
+            handle_command_requested(request, SimpleNamespace(correlation_id="corr-1", db=store))
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert events[0].plan.command_id == "cmd-accepted-before-approval"
+    assert events[-1].command_id == "cmd-accepted-before-approval"
+    assert store.calls[0][1]["command_id"] == "cmd-accepted-before-approval"
 
 
 def test_command_handler_rejects_not_required_approval_for_production_write() -> None:

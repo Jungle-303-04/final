@@ -15,8 +15,9 @@ export function executeResourceCapability(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       ...values,
-      direct_execution: true,
-      direct_execution_confirmed: true,
+      // The server derives immediate execution from this acknowledgement. Client
+      // mode flags are not an execution authority and are never sent.
+      confirmation: true,
     }),
     signal,
   });

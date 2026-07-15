@@ -304,6 +304,9 @@ class CommandRequest(StrictModel):
     diff: dict[str, Any] | None = None
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    # 사용자가 대상·영향을 확인했다는 입력. 서버만 이 값을 direct execution
+    # 정책으로 승격한다. 아래 legacy 플래그는 실행 권한을 부여하지 않는다.
+    confirmation: Literal[True] | None = None
     direct_execution: bool = False
     direct_execution_confirmed: bool = False
 
@@ -313,6 +316,7 @@ class DeploymentScaleRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    confirmation: Literal[True] | None = None
     direct_execution: bool = False
     direct_execution_confirmed: bool = False
 
@@ -321,6 +325,7 @@ class DeploymentRestartRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    confirmation: Literal[True] | None = None
     direct_execution: bool = False
     direct_execution_confirmed: bool = False
 

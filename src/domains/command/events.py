@@ -27,6 +27,9 @@ class CommandRequestedBody(EventBody):
     namespace: str
     reason: str
     diff: Diff
+    # API 접수 UoW가 생성하는 안정적 trace ID. 과거 이벤트는 None으로 decode되어
+    # worker의 기존 hash 기반 fallback을 유지한다.
+    command_id: str | None = None
     workspace_id: str = DEFAULT_WORKSPACE_ID
     application_id: str = DEFAULT_APPLICATION_ID
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID

@@ -45,9 +45,11 @@ export interface ResourceActionsEndpointDependencies {
     values: Readonly<Record<string, unknown>>,
     signal?: AbortSignal,
   ): Promise<{
-    accepted: boolean;
+    accepted: true;
     event_id: string;
+    audit_event_id: string;
     correlation_id: string;
-    command_id?: string | null;
+    command_id: string;
+    status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
   }>;
 }
