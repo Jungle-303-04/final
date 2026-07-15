@@ -118,6 +118,25 @@ describe("createRafStreamCoalescer", () => {
     expect(coalescer.enqueue(event(2))).toBe("disposed");
   });
 
+  it("can discard a superseded pending event without poisoning later cursor order", () => {
+    const runtime = new FakeRuntime();
+    const received: number[][] = [];
+    const coalescer = createRafStreamCoalescer<StreamEvent>({
+      cursorOf: (event) => event.cursor,
+      onFlush: (events) => received.push(events.map(({ cursor }) => cursor)),
+      policy: { hiddenTab: "coalesce", maxFramesPerSecond: 60 },
+      runtime,
+    });
+
+    coalescer.enqueue(event(1));
+    coalescer.enqueue(event(2));
+    expect(coalescer.discard(({ cursor }) => cursor === 2)).toBe(1);
+    expect(coalescer.enqueue(event(2))).toBe("queued");
+    runtime.fireFrame();
+
+    expect(received).toEqual([[1, 2]]);
+  });
+
   it("keeps semantic event order identical when a consumer requests reduced motion", () => {
     const full = flushWithMotionPreference(false);
     const reduced = flushWithMotionPreference(true);
@@ -201,7 +220,10 @@ class FakeRuntime implements RafStreamCoalescerRuntime {
   fireFrame(): void {
     const frame = this.frame;
     this.frame = null;
-    frame?.callback(this.nowMs);
+    if (!frame) return;
+    frame.callback(this.nowMs);
+    // A real browser never invokes successive rAF callbacks at the same time.
+    this.nowMs += 1_000 / 60;
   }
 
   hasScheduledFrame(): boolean {
