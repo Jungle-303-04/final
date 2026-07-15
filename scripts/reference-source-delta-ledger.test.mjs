@@ -28,6 +28,26 @@ function sourceFile(blobId, sha256) {
   return { blobId, sha256 }
 }
 
+function classifiedInteraction({
+  sourceKey = 'upstream-ui:timeline:retained-history:scrubber-lens:v1',
+  symbol = 'TimelineStrip',
+  interaction = 'lens drag and keyboard zoom preserve the selected time window',
+  legacyContractIds = [],
+  transport = 'none',
+  realtime = null,
+  motion = null,
+} = {}) {
+  return {
+    sourceKey,
+    symbol,
+    interaction,
+    legacyContractIds,
+    transport,
+    realtime,
+    motion,
+  }
+}
+
 async function git(repository, ...args) {
   await execFile('git', ['-C', repository, ...args])
 }
@@ -94,6 +114,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
       path: row.path,
       target: row.target,
       classification: row.classification,
+      interactions: row.interactions,
     })),
     [
       {
@@ -102,6 +123,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
         path: 'packages/k8s-ui/src/components/OldControl.tsx',
         target: null,
         classification: 'pending',
+        interactions: [],
       },
       {
         status: 'M',
@@ -109,6 +131,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
         path: 'web/src/App.tsx',
         target: sourceFile(BLOB_B, SHA_B),
         classification: 'pending',
+        interactions: [],
       },
       {
         status: 'A',
@@ -116,6 +139,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
         path: 'web/src/components/NewSurface.tsx',
         target: sourceFile(BLOB_B, SHA_B),
         classification: 'pending',
+        interactions: [],
       },
       {
         status: 'R',
@@ -123,6 +147,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
         path: 'web/src/NewPanel.tsx',
         target: sourceFile(BLOB_B, SHA_B),
         classification: 'pending',
+        interactions: [],
       },
     ],
   )
@@ -132,7 +157,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
   assert.throws(() => assertDeltaLedgerClassified(ledger), /4개 pending/)
 })
 
-test('분류 완료 행은 immutable sourceKey, transport별 realtime, motion reduced-motion 증거를 모두 요구한다', () => {
+test('분류 완료 파일은 복수의 immutable source interaction과 transport별 realtime·motion reduced-motion 증거를 요구한다', () => {
   const ledger = buildDeltaLedger({
     baseRevision: BASE,
     targetRevision: TARGET,
@@ -142,29 +167,98 @@ test('분류 완료 행은 immutable sourceKey, transport별 realtime, motion re
   })
   const [row] = ledger.files
   row.classification = 'classified'
-  row.sourceKey = 'upstream-ui:timeline:retained-history:scrubber-lens:v1'
-  row.symbol = 'TimelineStrip'
-  row.interaction = 'lens drag and keyboard zoom preserve the selected time window'
-  row.transport = 'ndjson'
-  row.realtime = {
-    resume: 'not-supported',
-    backpressure: 'bounded recent-window fetch',
-    merge: 'last event wins by event id',
-  }
-  row.motion = {
-    reducedMotion: 'no animation; the selected range state remains visible',
-    evidence: ['web/src/index.css @media (prefers-reduced-motion: reduce)'],
-  }
+  row.interactions = [
+    classifiedInteraction({
+      sourceKey: 'upstream-ui:timeline:retained-history:scrubber-lens:v1',
+      transport: 'ndjson',
+      realtime: {
+        resume: 'not-supported',
+        backpressure: 'bounded recent-window fetch',
+        merge: 'last event wins by event id',
+      },
+      motion: {
+        reducedMotion: 'no animation; the selected range state remains visible',
+        evidence: ['web/src/index.css @media (prefers-reduced-motion: reduce)'],
+      },
+    }),
+    classifiedInteraction({
+      sourceKey: 'upstream-ui:timeline:live-events:stream-merge:v1',
+      interaction: 'live event invalidation keeps the selected time range stable',
+      transport: 'sse',
+      realtime: {
+        resume: 'last-event-id',
+        backpressure: 'coalesce to the latest event per resource',
+        merge: 'append in event-time order by event id',
+      },
+    }),
+  ]
   ledger.pendingCount = 0
 
   assert.deepEqual(validateDeltaLedger(ledger), [])
 
-  row.realtime = null
-  row.motion = { reducedMotion: '', evidence: [] }
+  row.interactions[0].realtime = null
+  row.interactions[0].motion = { reducedMotion: '', evidence: [] }
   assert.deepEqual(validateDeltaLedger(ledger), [
-    'web/src/components/timeline/TimelineStrip.tsx: ndjson transport requires realtime policy',
-    'web/src/components/timeline/TimelineStrip.tsx: motion.reducedMotion is required',
-    'web/src/components/timeline/TimelineStrip.tsx: motion.evidence requires at least one item',
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[0]: ndjson transport requires realtime policy',
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[0]: motion.reducedMotion is required',
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[0]: motion.evidence requires at least one item',
+  ])
+})
+
+test('분류 완료 자산은 noninteractive semantic interaction을 명시하고 sourceKey는 모든 파일에서 중복될 수 없다', () => {
+  const ledger = buildDeltaLedger({
+    baseRevision: BASE,
+    targetRevision: TARGET,
+    changes: [
+      { status: 'A', path: 'web/src/assets/argocd.svg' },
+      { status: 'A', path: 'web/src/components/timeline/TimelineStrip.tsx' },
+    ],
+    baseFiles: new Map(),
+    targetFiles: new Map([
+      ['web/src/assets/argocd.svg', sourceFile(BLOB_B, SHA_B)],
+      ['web/src/components/timeline/TimelineStrip.tsx', sourceFile(BLOB_B, SHA_B)],
+    ]),
+  })
+  const [asset, component] = ledger.files
+  asset.classification = 'classified'
+  asset.interactions = [
+    classifiedInteraction({
+      sourceKey: 'upstream-ui:gitops:argocd-logo:static-asset:v1',
+      symbol: 'argocd.svg',
+      interaction: 'noninteractive asset: GitOps provider logo',
+    }),
+  ]
+  component.classification = 'classified'
+  component.interactions = [
+    classifiedInteraction({
+      sourceKey: 'upstream-ui:timeline:retained-history:scrubber-lens:v1',
+    }),
+  ]
+  ledger.pendingCount = 0
+
+  assert.deepEqual(validateDeltaLedger(ledger), [])
+
+  component.interactions[0].sourceKey = asset.interactions[0].sourceKey
+  assert.deepEqual(validateDeltaLedger(ledger), [
+    'web/src/components/timeline/TimelineStrip.tsx: interactions[0]: sourceKey is duplicated',
+  ])
+})
+
+test('pending 파일은 interaction 증거를 전혀 주장할 수 없고 file-level legacy 필드는 허용하지 않는다', () => {
+  const ledger = buildDeltaLedger({
+    baseRevision: BASE,
+    targetRevision: TARGET,
+    changes: [{ status: 'A', path: 'web/src/components/timeline/TimelineStrip.tsx' }],
+    baseFiles: new Map(),
+    targetFiles: new Map([['web/src/components/timeline/TimelineStrip.tsx', sourceFile(BLOB_B, SHA_B)]]),
+  })
+  const [row] = ledger.files
+  row.interactions = [classifiedInteraction()]
+  row.sourceKey = 'upstream-ui:timeline:retained-history:scrubber-lens:v1'
+
+  assert.deepEqual(validateDeltaLedger(ledger), [
+    'web/src/components/timeline/TimelineStrip.tsx: file-level interaction evidence must use interactions[]',
+    'web/src/components/timeline/TimelineStrip.tsx: pending row must not claim interaction evidence',
   ])
 })
 
@@ -226,6 +320,7 @@ test('동결된 최신 UI delta ledger는 276개 경로를 보존하고 pending�
 
   assert.equal(ledger.baseRevision, BASE)
   assert.equal(ledger.targetRevision, TARGET)
+  assert.equal(ledger.schemaVersion, 2)
   assert.equal(ledger.fileCount, 276)
   assert.equal(ledger.pendingCount, 276)
   assert.deepEqual(validateDeltaLedger(ledger), [])
