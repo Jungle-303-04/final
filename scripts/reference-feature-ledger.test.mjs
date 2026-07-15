@@ -12,6 +12,20 @@ import {
 
 const REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
 
+const PORT_MAP = {
+  schemaVersion: 1,
+  sections: {
+    "전역 셸": {
+      area: "global-shell",
+      deliveryStatus: "in_progress",
+      backendContract: "domains.catalog",
+      frontendContract: "frontend/src/app",
+      desktopContract: "desktop",
+      verification: ["tests/test_feature_contract_router.py"],
+    },
+  },
+};
+
 test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약으로 매핑한다", () => {
   const ledger = parseReferenceInventory(
     [
@@ -70,6 +84,52 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
     ],
   );
   assert.deepEqual(validateFeatureLedger(ledger), []);
+});
+
+test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태를 생성한다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 단축키 |",
+    ].join("\n"),
+    REVISION,
+    PORT_MAP,
+  );
+
+  assert.deepEqual(ledger.features[0], {
+    id: "reference-feature-001",
+    contractId: "reference.feature.001",
+    section: "전역 셸",
+    line: 4,
+    cells: ["명령 팔레트", "단축키"],
+    endpoints: [],
+    streaming: false,
+    area: "global-shell",
+    deliveryStatus: "in_progress",
+    backendContract: "domains.catalog",
+    frontendContract: "frontend/src/app",
+    desktopContract: "desktop",
+    verification: ["tests/test_feature_contract_router.py"],
+  });
+});
+
+test("기능 ledger는 이식 경계가 지정되지 않은 원본 섹션을 거부한다", () => {
+  assert.throws(
+    () =>
+      parseReferenceInventory(
+        [
+          "## 누락된 섹션",
+          "| 영역 | 동작 |",
+          "|---|---|",
+          "| 명령 팔레트 | 단축키 |",
+        ].join("\n"),
+        REVISION,
+        PORT_MAP,
+      ),
+    /이식 경계가 없습니다: 누락된 섹션/,
+  );
 });
 
 test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
