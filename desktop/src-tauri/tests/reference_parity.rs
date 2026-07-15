@@ -12,3 +12,12 @@ fn unsupported_native_features_are_honest_capabilities() {
     assert_eq!(format!("{:?}", capabilities.local_terminal.state), "Unsupported");
     assert_eq!(format!("{:?}", capabilities.updater.state), "Unsupported");
 }
+
+#[test]
+fn desktop_build_uses_the_shared_frontend_from_the_desktop_working_directory() {
+    let config = include_str!("../tauri.conf.json");
+
+    assert!(config.contains("\"beforeDevCommand\": \"npm --prefix ../frontend run dev\""));
+    assert!(config.contains("\"beforeBuildCommand\": \"npm --prefix ../frontend run build\""));
+    assert!(config.contains("\"active\": true"));
+}
