@@ -166,3 +166,107 @@ def test_redis_publish_failure_keeps_committed_event_available_to_local_subscrib
         await subscription.close()
 
     asyncio.run(run())
+
+
+def test_redis_broker_starts_in_db_backed_degraded_mode_when_redis_is_unavailable() -> None:
+    """A Redis outage must not stop the gateway's durable operation stream."""
+
+    class Store:
+        async def append_command_operation_event(
+            self,
+            _workspace_id: str,
+            command_id: str,
+            kind: str,
+            payload: dict[str, object],
+        ) -> object:
+            from packages.contracts.parity import OperationEvent
+
+            return OperationEvent(command_id=command_id, sequence=1, kind=kind, payload=payload)
+
+    class UnavailableRedis:
+        async def ping(self) -> None:
+            raise ConnectionError("redis unavailable")
+
+        async def aclose(self) -> None:
+            return None
+
+    async def run() -> None:
+        broker = RedisOperationEventBroker(
+            "redis://unused", Store(), redis_factory=lambda _url: UnavailableRedis()
+        )
+
+        await broker.start()
+        subscription = await broker.subscribe("command-1", workspace_id="workspace-1")
+        event = await broker.publish(
+            workspace_id="workspace-1",
+            command_id="command-1",
+            kind="progress",
+            payload={"cluster_id": "cluster-1", "status": "running"},
+        )
+
+        assert broker._client is None
+        assert event is not None
+        assert await subscription.next() == event
+        await subscription.close()
+        await broker.close()
+
+    asyncio.run(run())
+
+
+def test_redis_broker_reconnects_after_starting_in_degraded_mode(monkeypatch) -> None:
+    import packages.runtime.operation_events as operation_events
+
+    class Store:
+        async def append_command_operation_event(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class PubSub:
+        async def psubscribe(self, *_channels: str) -> None:
+            return None
+
+        async def listen(self):
+            while True:
+                await asyncio.sleep(3600)
+                yield None
+
+        async def aclose(self) -> None:
+            return None
+
+    class Redis:
+        def __init__(self, *, available: bool) -> None:
+            self.available = available
+
+        async def ping(self) -> None:
+            if not self.available:
+                raise ConnectionError("redis unavailable")
+
+        def pubsub(self, **_kwargs: object) -> PubSub:
+            return PubSub()
+
+        async def aclose(self) -> None:
+            return None
+
+    attempts: list[Redis] = []
+
+    def factory(_url: str) -> Redis:
+        client = Redis(available=bool(attempts))
+        attempts.append(client)
+        return client
+
+    monkeypatch.setattr(operation_events, "OPERATION_EVENT_RECONNECT_INITIAL_SECONDS", 0)
+    monkeypatch.setattr(operation_events, "OPERATION_EVENT_RECONNECT_MAX_SECONDS", 0)
+
+    async def run() -> None:
+        broker = RedisOperationEventBroker("redis://unused", Store(), redis_factory=factory)
+        await broker.start()
+
+        for _ in range(10):
+            if broker._client is not None:
+                break
+            await asyncio.sleep(0)
+
+        assert len(attempts) >= 2
+        assert broker._client is attempts[-1]
+        await broker.close()
+
+    asyncio.run(run())
