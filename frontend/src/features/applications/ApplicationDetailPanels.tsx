@@ -70,6 +70,7 @@ export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetail
           />
         </CardContent>
       </Card>
+      <ApplicationSourcePanel source={detail.source} />
       <Card>
         <CardHeader><CardTitle>{copy.endpoints}</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
@@ -103,6 +104,71 @@ export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetail
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export function ApplicationSourcePanel({
+  source,
+}: {
+  source: ApplicationDetailModel["source"];
+}) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  if (source.availability === "unavailable") {
+    return (
+      <Card>
+        <CardHeader><CardTitle>{copy.source}</CardTitle></CardHeader>
+        <CardContent><Unavailable /></CardContent>
+      </Card>
+    );
+  }
+  const conflict = sourceConflictPresentation(source.conflict, copy);
+  return (
+    <Card data-testid="application-source-evidence">
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardTitle>{copy.source}</CardTitle>
+        {source.completeness === "partial" ? <Badge variant="outline">{copy.partial}</Badge> : null}
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <Fact label={copy.status} value={<StatusMark label={conflict.label} tone={conflict.tone} />} />
+        <Fact label={copy.repository} value={source.repositoryRef} />
+        <Fact label={copy.branch} value={source.defaultBranch} />
+        <Fact label={copy.manifest} value={source.manifestPath} mono />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ApplicationHistoryPanel({
+  history,
+}: {
+  history: ApplicationDetailModel["history"];
+}) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  if (history.availability === "unavailable" || history.entries === null) {
+    return <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">{copy.unavailable}</p>;
+  }
+  return (
+    <Card data-testid="application-history-evidence">
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardTitle>{copy.history}</CardTitle>
+        {history.completeness === "partial" ? <Badge variant="outline">{copy.partial}</Badge> : null}
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {history.entries.length === 0 ? <p className="text-sm text-muted-foreground">{copy.noActivity}</p> : history.entries.map((entry, index) => (
+          <div className="grid gap-2" key={entry.id}>
+            {index > 0 ? <Separator /> : null}
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <Badge variant="outline">{entry.type}</Badge>
+              <StatusMark label={entry.status} tone={applicationStatusTone(entry.status)} />
+            </div>
+            <span className="min-w-0 truncate text-sm font-medium">{entry.summary ?? copy.unavailable}</span>
+            <span className="text-xs text-muted-foreground">{formatObservedTime(entry.occurredAt, locale) ?? copy.unavailable}</span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -194,4 +260,13 @@ function podRatio(detail: ApplicationDetailModel, unavailable: string): string {
   return detail.runtimeReadiness.readyPods === null || detail.runtimeReadiness.totalPods === null
     ? unavailable
     : `${detail.runtimeReadiness.readyPods}/${detail.runtimeReadiness.totalPods}`;
+}
+
+function sourceConflictPresentation(
+  conflict: ApplicationDetailModel["source"]["conflict"],
+  copy: ReturnType<typeof applicationsCopy>,
+) {
+  if (conflict === "aligned") return { label: copy.sourceAligned, tone: "healthy" as const };
+  if (conflict === "conflict") return { label: copy.sourceConflict, tone: "critical" as const };
+  return { label: copy.sourceUnknown, tone: "unknown" as const };
 }

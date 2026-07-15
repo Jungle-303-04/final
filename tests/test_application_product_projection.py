@@ -5,6 +5,7 @@ from domains.applications.product_projection import (
     application_detail,
     deployment_history_projection,
     drift_projection,
+    topology_projection,
 )
 
 
@@ -315,6 +316,182 @@ def test_batch_runtime_does_not_coerce_missing_observed_counters_to_zero() -> No
         "failed_runs": None,
         "succeeded_runs": None,
     }
+
+
+def test_detail_projects_authorized_topology_history_and_source_evidence() -> None:
+    context = {
+        "snapshot_revision": 42,
+        "observed_at": "2026-07-14T10:00:00Z",
+        "resources_complete": True,
+        "labels_complete": True,
+        "application_bindings_complete": True,
+        "partial_reason_codes": [],
+    }
+    rows = [
+        {
+            "id": "deployment-1",
+            "cluster_id": "cluster-1",
+            "resource_type": "workload",
+            "api_version": "apps/v1",
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout",
+            "uid": "deployment-uid",
+            "status": "Ready",
+            "health": "healthy",
+            "labels": {"app": "checkout"},
+            "binding_complete": True,
+            "summary": {"selector": {"matchLabels": {"app": "checkout"}}},
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+        {
+            "id": "pod-1",
+            "cluster_id": "cluster-1",
+            "resource_type": "pod",
+            "api_version": "v1",
+            "kind": "Pod",
+            "namespace": "shop",
+            "name": "checkout-1",
+            "uid": "pod-uid",
+            "status": "Running",
+            "health": "healthy",
+            "labels": {"app": "checkout"},
+            "binding_complete": True,
+            "summary": {
+                "owner_kind": "Deployment",
+                "owner_name": "checkout",
+                "owner_uid": "deployment-uid",
+                "owner_references_complete": True,
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "restart_total": 0,
+            },
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+    ]
+    detail = application_detail(
+        _application(),
+        bindings=[{"cluster_id": "cluster-1", "environment": "prod"}],
+        runs=_runs(),
+        inventory_rows=rows,
+        inventory_context=context,
+        incident_evidence={
+            "complete": True,
+            "open_count": 0,
+            "items": [
+                {
+                    "id": "incident-1",
+                    "title": "Checkout latency",
+                    "status": "open",
+                    "started_at": "2026-07-14T10:01:00Z",
+                    "updated_at": "2026-07-14T10:02:00Z",
+                }
+            ],
+        },
+    )
+
+    assert detail["topology"]["completeness"] == "exact"
+    assert detail["topology"]["nodes"] == [
+        {
+            "id": "deployment-1",
+            "cluster_id": "cluster-1",
+            "resource_type": "workload",
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout",
+            "status": "Ready",
+            "health": "healthy",
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+        {
+            "id": "pod-1",
+            "cluster_id": "cluster-1",
+            "resource_type": "pod",
+            "kind": "Pod",
+            "namespace": "shop",
+            "name": "checkout-1",
+            "status": "Running",
+            "health": "healthy",
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+    ]
+    assert detail["topology"]["edges"][0]["type"] == "owns"
+    assert detail["topology"]["edges"][0]["evidence_type"] == "owner_reference"
+    assert detail["history"]["completeness"] == "partial"
+    assert detail["history"]["partial_reason_codes"] == ["bounded_workflow_history"]
+    assert detail["history"]["entries"][0]["type"] == "incident"
+    assert detail["source"] == {
+        "availability": "available",
+        "completeness": "exact",
+        "conflict": "conflict",
+        "repository_ref": "org/checkout",
+        "default_branch": "main",
+        "manifest_path": "deploy/checkout.yaml",
+        "partial_reason_codes": [],
+    }
+    assert "secret" not in str(detail).casefold()
+
+
+def test_unavailable_topology_does_not_claim_empty_relationships() -> None:
+    detail = application_detail(
+        _application(),
+        bindings=[],
+        runs=[],
+        inventory_rows=[],
+        inventory_context={"snapshot_revision": 0},
+        incident_evidence={"complete": False, "open_count": None, "items": []},
+    )
+
+    assert detail["topology"] == {
+        "availability": "unavailable",
+        "completeness": "unavailable",
+        "observed_at": None,
+        "nodes": None,
+        "edges": None,
+        "partial_reason_codes": [],
+    }
+    assert detail["history"]["entries"] == []
+    assert detail["history"]["partial_reason_codes"] == [
+        "bounded_workflow_history",
+        "incident_source_incomplete",
+    ]
+
+
+def test_topology_bounds_multicluster_evidence_without_orphaning_edges() -> None:
+    rows = [
+        {
+            "id": f"pod-{index:03d}",
+            "cluster_id": "cluster-a" if index < 100 else "cluster-b",
+            "resource_type": "pod",
+            "api_version": "v1",
+            "kind": "Pod",
+            "namespace": "shop",
+            "name": f"checkout-{index:03d}",
+            "uid": f"pod-{index:03d}",
+            "status": "Running",
+            "health": "healthy",
+            "labels": {"app": "checkout"},
+            "binding_complete": True,
+            "summary": {},
+            "observed_at": "2026-07-14T10:00:00Z",
+        }
+        for index in range(201)
+    ]
+
+    topology = topology_projection(
+        rows,
+        inventory_context={
+            "snapshot_revision": 42,
+            "resources_complete": True,
+            "labels_complete": True,
+            "application_bindings_complete": True,
+        },
+        application_id="app-1",
+    )
+
+    assert len(topology["nodes"]) == 200
+    assert topology["edges"] == []
+    assert topology["completeness"] == "partial"
+    assert topology["partial_reason_codes"] == ["application_topology_node_budget_exceeded"]
 
 
 def test_deployment_history_does_not_invent_gitops_change_identity() -> None:

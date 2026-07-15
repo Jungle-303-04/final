@@ -115,11 +115,72 @@ export interface ApplicationEndpoint {
   address: string | null;
 }
 
+export interface ApplicationTopologyNode {
+  id: string;
+  clusterId: string;
+  resourceType: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  status: string;
+  health: string;
+  observedAt: string | null;
+}
+
+export interface ApplicationTopologyEdge {
+  id: string;
+  fromId: string;
+  toId: string;
+  type: "owns" | "runs_on" | "selects" | "routes_to";
+  evidenceType: string;
+  authority: "authoritative" | "derived";
+  observedAt: string | null;
+}
+
+export interface ApplicationTopology {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  observedAt: string | null;
+  nodes: readonly ApplicationTopologyNode[] | null;
+  edges: readonly ApplicationTopologyEdge[] | null;
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationHistoryEntry {
+  id: string;
+  type: "delivery" | "incident";
+  status: string;
+  summary: string | null;
+  occurredAt: string | null;
+  workflowRunId: string | null;
+  gitOpsChangeId: string | null;
+}
+
+export interface ApplicationHistory {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  entries: readonly ApplicationHistoryEntry[] | null;
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationSourceEvidence {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  conflict: "aligned" | "conflict" | "unknown" | null;
+  repositoryRef: string | null;
+  defaultBranch: string | null;
+  manifestPath: string | null;
+  partialReasonCodes: readonly string[];
+}
+
 export interface ApplicationDetailModel extends ApplicationCardModel {
   endpoints: readonly ApplicationEndpoint[] | null;
   endpointsCompleteness: "exact" | "partial" | "unavailable";
   recentActivity: readonly ApplicationActivity[];
   recentIncidents: readonly ApplicationIncidentPreview[];
+  topology: ApplicationTopology;
+  history: ApplicationHistory;
+  source: ApplicationSourceEvidence;
 }
 
 export interface ApplicationDeploymentModel {
@@ -259,6 +320,55 @@ export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpoin
     status: string;
     started_at: string | null;
   }[];
+  topology: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    observed_at: string | null;
+    nodes: {
+      id: string;
+      cluster_id: string;
+      resource_type: string;
+      kind: string;
+      namespace: string | null;
+      name: string;
+      status: string;
+      health: string;
+      observed_at: string | null;
+    }[] | null;
+    edges: {
+      id: string;
+      from_id: string;
+      to_id: string;
+      type: "owns" | "runs_on" | "selects" | "routes_to";
+      evidence_type: string;
+      authority: "authoritative" | "derived";
+      observed_at: string | null;
+    }[] | null;
+    partial_reason_codes: string[];
+  };
+  history: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    entries: {
+      id: string;
+      type: "delivery" | "incident";
+      status: string;
+      summary: string | null;
+      occurred_at: string | null;
+      workflow_run_id: string | null;
+      gitops_change_id: string | null;
+    }[] | null;
+    partial_reason_codes: string[];
+  };
+  source: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    conflict: "aligned" | "conflict" | "unknown" | null;
+    repository_ref: string | null;
+    default_branch: string | null;
+    manifest_path: string | null;
+    partial_reason_codes: string[];
+  };
 }
 
 interface ApplicationCatalogEndpoint {

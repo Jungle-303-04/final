@@ -52,13 +52,57 @@ function endpointItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function detailEndpointItem(overrides: Record<string, unknown> = {}) {
+  return {
+    ...endpointItem(),
+    endpoints: [],
+    endpoints_completeness: "exact" as const,
+    recent_activity: [],
+    recent_incidents: [],
+    topology: {
+      availability: "available" as const,
+      completeness: "exact" as const,
+      observed_at: "2026-07-14T09:00:00+00:00",
+      nodes: [
+        {
+          id: "deployment-1",
+          cluster_id: "cluster-1",
+          resource_type: "workload",
+          kind: "Deployment",
+          namespace: "prod",
+          name: "checkout",
+          status: "Ready",
+          health: "healthy",
+          observed_at: "2026-07-14T09:00:00+00:00",
+        },
+      ],
+      edges: [],
+      partial_reason_codes: [],
+    },
+    history: {
+      availability: "available" as const,
+      completeness: "partial" as const,
+      entries: [],
+      partial_reason_codes: ["bounded_workflow_history"],
+    },
+    source: {
+      availability: "available" as const,
+      completeness: "exact" as const,
+      conflict: "aligned" as const,
+      repository_ref: "opsia/checkout",
+      default_branch: "main",
+      manifest_path: "deploy/prod",
+      partial_reason_codes: [],
+    },
+    ...overrides,
+  };
+}
+
 function api(overrides: Partial<ApplicationsApiDependencies> = {}): ApplicationsApiDependencies {
   return {
     listApplicationCatalog: vi.fn().mockResolvedValue({ applications: [endpointItem()] }),
     getApplicationOverview: vi.fn().mockResolvedValue({
-      application: {
-        ...endpointItem(), endpoints: [], endpoints_completeness: "exact", recent_activity: [], recent_incidents: [],
-      },
+      application: detailEndpointItem(),
     }),
     listApplicationDeploymentHistory: vi.fn().mockResolvedValue({ deployments: [] }),
     getApplicationDrift: vi.fn().mockResolvedValue({
@@ -109,13 +153,12 @@ describe("Applications product adapter", () => {
   it("maps detail, deployment links, and semantic drift without inventing values", async () => {
     const dependencies = api({
       getApplicationOverview: vi.fn().mockResolvedValue({
-        application: {
-          ...endpointItem(),
+        application: detailEndpointItem({
           endpoints: null,
           endpoints_completeness: "unavailable",
           recent_activity: [{ id: "activity-1", type: "deployment", summary: "deployed", occurred_at: null }],
           recent_incidents: [],
-        },
+        }),
       }),
       listApplicationDeploymentHistory: vi.fn().mockResolvedValue({ deployments: [{
         id: "deployment-1", environment: "prod", cluster_id: null, git_sha: "abc",
@@ -134,6 +177,9 @@ describe("Applications product adapter", () => {
     await expect(adapter.getApplication("app-healthy")).resolves.toMatchObject({
       endpoints: null,
       recentActivity: [{ id: "activity-1", occurredAt: null }],
+      topology: { nodes: [{ id: "deployment-1" }] },
+      history: { partialReasonCodes: ["bounded_workflow_history"] },
+      source: { conflict: "aligned" },
     });
     await expect(adapter.listDeployments("app-healthy")).resolves.toMatchObject([
       { id: "deployment-1", gitOpsChangeId: "change-42", deployedAt: null },

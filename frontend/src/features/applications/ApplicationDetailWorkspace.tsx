@@ -11,10 +11,12 @@ import type { UnifiedFilterController } from "../filters/filterContract";
 import { ApplicationDeploymentsPanel } from "./ApplicationDeploymentsPanel";
 import {
   ApplicationIncidentsPanel,
+  ApplicationHistoryPanel,
   ApplicationOverviewPanel,
   ApplicationResourcesPanel,
 } from "./ApplicationDetailPanels";
 import { ApplicationDriftPanel } from "./ApplicationDriftPanel";
+import { ApplicationTopologyPanel } from "./ApplicationTopologyPanel";
 import { ApplicationsFailureState } from "./ApplicationsState";
 import {
   applicationGitOpsChangeHref,
@@ -28,7 +30,7 @@ import {
   useApplicationDrift,
 } from "./useApplicationsData";
 
-const APPLICATION_TABS = ["overview", "resources", "deployments", "drift", "incidents"] as const;
+const APPLICATION_TABS = ["overview", "topology", "history", "resources", "deployments", "drift", "incidents"] as const;
 type ApplicationTab = (typeof APPLICATION_TABS)[number];
 
 export function ApplicationDetailWorkspace({
@@ -91,12 +93,16 @@ export function ApplicationDetailWorkspace({
       >
         <TabsList aria-label={copy.details} className="max-w-full overflow-x-auto" variant="line">
           <TabsTrigger value="overview">{copy.overview}</TabsTrigger>
+          <TabsTrigger value="topology">{copy.topology}</TabsTrigger>
+          <TabsTrigger value="history">{copy.history}</TabsTrigger>
           <TabsTrigger value="resources">{copy.resources}</TabsTrigger>
           <TabsTrigger value="deployments">{copy.deployments}</TabsTrigger>
           <TabsTrigger value="drift">{copy.differences}</TabsTrigger>
           <TabsTrigger value="incidents">{copy.incidents}</TabsTrigger>
         </TabsList>
         <TabsContent value="overview"><ApplicationOverviewPanel detail={application} /></TabsContent>
+        <TabsContent value="topology"><ApplicationTopologyPanel topology={application.topology} /></TabsContent>
+        <TabsContent value="history"><ApplicationHistoryPanel history={application.history} /></TabsContent>
         <TabsContent value="resources"><ApplicationResourcesPanel detail={application} href={links.resources} /></TabsContent>
         <TabsContent value="deployments">
           <ApplicationDeploymentsPanel

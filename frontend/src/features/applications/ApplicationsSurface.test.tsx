@@ -65,7 +65,7 @@ describe("S10 Applications surface", () => {
     expect(port.getApplication).toHaveBeenCalledWith("app-checkout", expect.any(AbortSignal));
   });
 
-  it("renders five owned tabs, counts-only drilldowns, deployment links, and semantic drift", async () => {
+  it("renders topology, history, source evidence, counts-only drilldowns, deployment links, and semantic drift", async () => {
     const user = userEvent.setup();
     const port = applicationsPort();
     renderApplications(
@@ -75,7 +75,18 @@ describe("S10 Applications surface", () => {
     await screen.findByText("v2.4.1 deployed");
 
     const tabs = screen.getByRole("tablist", { name: "View details" });
-    expect(within(tabs).getAllByRole("tab")).toHaveLength(5);
+    expect(within(tabs).getAllByRole("tab")).toHaveLength(7);
+    expect(screen.getByTestId("application-source-evidence").textContent).toContain("Aligned with cluster");
+
+    await user.click(within(tabs).getByRole("tab", { name: "Topology" }));
+    expect(await screen.findByTestId("application-topology-nodes")).toBeTruthy();
+    expect(screen.getByText("Deployment/checkout")).toBeTruthy();
+    expect(screen.getByTestId("application-topology-edges").textContent).toContain("owns");
+
+    await user.click(within(tabs).getByRole("tab", { name: "History" }));
+    expect(await screen.findByTestId("application-history-evidence")).toBeTruthy();
+    expect(screen.getByTestId("application-history-evidence").textContent).toContain("v2.4.1 deployed");
+
     await user.click(within(tabs).getByRole("tab", { name: "Resources" }));
     const resourceLink = await screen.findByRole("link", { name: /View all in Resources/ });
     expect(resourceLink.getAttribute("href")).toBe(
@@ -119,6 +130,20 @@ describe("S10 Applications surface", () => {
         ...APPLICATION_DETAIL,
         resourceCounts: null,
         resourceCountsCompleteness: "unavailable",
+        topology: {
+          availability: "unavailable",
+          completeness: "unavailable",
+          observedAt: null,
+          nodes: null,
+          edges: null,
+          partialReasonCodes: [],
+        },
+        history: {
+          availability: "available",
+          completeness: "partial",
+          entries: [],
+          partialReasonCodes: ["bounded_workflow_history"],
+        },
       }),
       listDeployments: vi.fn().mockResolvedValue([]),
       getDrift: vi.fn().mockResolvedValue({
@@ -131,6 +156,10 @@ describe("S10 Applications surface", () => {
     expect(await screen.findByText("No deployment history is available.")).toBeTruthy();
     await user.click(screen.getByRole("tab", { name: "Drift" }));
     expect(await screen.findByText(/currently unavailable/)).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "Topology" }));
+    expect(await screen.findByText("Unavailable")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "History" }));
+    expect(await screen.findByText("No recent activity.")).toBeTruthy();
   });
 
   it("isolates unavailable product projection failures", async () => {

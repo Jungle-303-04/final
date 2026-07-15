@@ -6,8 +6,12 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
+from domains.inventory_filter.graph import build_resource_graph
+
 JsonObject = dict[str, Any]
 Completeness = Literal["exact", "partial", "unavailable"]
+APPLICATION_TOPOLOGY_NODE_LIMIT = 200
+APPLICATION_TOPOLOGY_EDGE_LIMIT = 1000
 
 SENSITIVE_PATH_PARTS = frozenset(
     {"secret", "password", "passwd", "token", "credential", "private_key", "data"}
@@ -88,6 +92,7 @@ def application_detail(
     )
     inventory = inventory_projection(inventory_rows, inventory_context=inventory_context)
     incidents = list(incident_evidence.get("items") or [])[:3]
+    drift = drift_projection(runs)
     return {
         **card,
         "endpoints": inventory["endpoints"],
@@ -102,6 +107,13 @@ def application_detail(
             for item in incidents
         ],
         "recent_activity": recent_activity_projection(runs, incidents),
+        "topology": topology_projection(
+            inventory_rows,
+            inventory_context=inventory_context,
+            application_id=str(application.get("application_id") or ""),
+        ),
+        "history": history_projection(runs, incidents, incident_evidence=incident_evidence),
+        "source": source_evidence_projection(application, drift=drift),
     }
 
 
@@ -305,6 +317,238 @@ def batch_runtime_projection(
         "active_runs": active_runs,
         "failed_runs": failed_runs,
         "succeeded_runs": succeeded_runs,
+    }
+
+
+def topology_projection(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    inventory_context: Mapping[str, Any],
+    application_id: str,
+) -> JsonObject:
+    """Return only server-built, authorized application relationship evidence."""
+
+    revision = _nonnegative_int(inventory_context.get("snapshot_revision")) or 0
+    if revision <= 0:
+        return {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "observed_at": None,
+            "nodes": None,
+            "edges": None,
+            "partial_reason_codes": [],
+        }
+
+    resources_complete = inventory_context.get("resources_complete") is True
+    bindings_complete = inventory_context.get("application_bindings_complete") is True
+    labels_complete = inventory_context.get("labels_complete") is True
+    reasons = {
+        str(reason)
+        for reason in inventory_context.get("partial_reason_codes") or []
+        if _optional_text(reason) is not None
+    }
+    if not resources_complete:
+        reasons.add("source_resources_incomplete")
+    if not bindings_complete:
+        reasons.add("application_bindings_incomplete")
+    if not labels_complete:
+        reasons.add("source_labels_incomplete")
+
+    graphs = []
+    for cluster_id in sorted(
+        {str(row.get("cluster_id") or "") for row in rows if row.get("cluster_id")}
+    ):
+        cluster_rows = [row for row in rows if str(row.get("cluster_id") or "") == cluster_id]
+        graph = build_resource_graph(
+            [_topology_graph_item(row, application_id=application_id) for row in cluster_rows],
+            snapshot_revision=revision,
+            filter_fingerprint=f"application:{application_id}:{cluster_id}",
+            source_complete=resources_complete and bindings_complete,
+            labels_complete=labels_complete,
+            truncated=False,
+            partial_reason_codes=sorted(reasons),
+            cluster={"cluster_id": cluster_id},
+        )
+        graphs.append(graph)
+        reasons.update(str(reason) for reason in graph["partial_reason_codes"])
+
+    all_nodes = [_topology_node(node) for graph in graphs for node in graph["nodes"]]
+    all_edges = [_topology_edge(edge) for graph in graphs for edge in graph["edges"]]
+    nodes = all_nodes[:APPLICATION_TOPOLOGY_NODE_LIMIT]
+    node_ids = {str(node["id"]) for node in nodes}
+    edges = [
+        edge
+        for edge in all_edges
+        if str(edge["from_id"]) in node_ids and str(edge["to_id"]) in node_ids
+    ][:APPLICATION_TOPOLOGY_EDGE_LIMIT]
+    if len(all_nodes) > len(nodes):
+        reasons.add("application_topology_node_budget_exceeded")
+    if len(all_edges) > len(edges):
+        reasons.add("application_topology_edge_budget_exceeded")
+    topology_complete = (
+        bool(graphs)
+        and all(graph["relation_completeness"] == "exact" for graph in graphs)
+        and len(all_nodes) == len(nodes)
+        and len(all_edges) == len(edges)
+    )
+    if not graphs and resources_complete and bindings_complete and labels_complete:
+        topology_complete = True
+    return {
+        "availability": "available",
+        "completeness": "exact" if topology_complete else "partial",
+        "observed_at": _optional_text(inventory_context.get("observed_at")),
+        "nodes": nodes,
+        "edges": edges,
+        "partial_reason_codes": [] if topology_complete else sorted(reasons),
+    }
+
+
+def history_projection(
+    runs: Sequence[Mapping[str, Any]],
+    incidents: Sequence[Mapping[str, Any]],
+    *,
+    incident_evidence: Mapping[str, Any],
+) -> JsonObject:
+    """Keep bounded delivery and incident evidence separate from browser ordering."""
+
+    entries = [
+        {
+            "id": f"delivery:{run_id}",
+            "type": "delivery",
+            "status": _deployment_status(run.get("status")),
+            "summary": _bounded_optional_text(run.get("summary")),
+            "occurred_at": _optional_text(run.get("updated_at")),
+            "workflow_run_id": run_id,
+            "gitops_change_id": _run_change_id(run),
+        }
+        for run in runs
+        if (run_id := _optional_text(run.get("workflow_run_id"))) is not None
+    ]
+    entries.extend(
+        {
+            "id": f"incident:{incident_id}",
+            "type": "incident",
+            "status": str(incident.get("status") or "unknown"),
+            "summary": _bounded_optional_text(incident.get("title")),
+            "occurred_at": _optional_text(incident.get("updated_at") or incident.get("started_at")),
+            "workflow_run_id": None,
+            "gitops_change_id": None,
+        }
+        for incident in incidents
+        if (incident_id := _optional_text(incident.get("id"))) is not None
+    )
+    entries.sort(
+        key=lambda item: (
+            str(item.get("occurred_at") or ""),
+            str(item["type"]),
+            str(item["id"]),
+        ),
+        reverse=True,
+    )
+    reasons = {"bounded_workflow_history"}
+    if incident_evidence.get("complete") is not True:
+        reasons.add("incident_source_incomplete")
+    return {
+        "availability": "available",
+        "completeness": "partial",
+        "entries": entries[:6],
+        "partial_reason_codes": sorted(reasons),
+    }
+
+
+def source_evidence_projection(
+    application: Mapping[str, Any],
+    *,
+    drift: Mapping[str, Any],
+) -> JsonObject:
+    """Expose registered source provenance and observed source-to-runtime conflict."""
+
+    repository_ref = _optional_text(application.get("repo_ref"))
+    default_branch = _optional_text(application.get("default_branch"))
+    manifest_path = _optional_text(application.get("manifest_path"))
+    if repository_ref is None:
+        return {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "conflict": None,
+            "repository_ref": None,
+            "default_branch": None,
+            "manifest_path": None,
+            "partial_reason_codes": [],
+        }
+    reasons = []
+    if default_branch is None:
+        reasons.append("default_branch_unavailable")
+    if manifest_path is None:
+        reasons.append("manifest_path_unavailable")
+    drift_status = str(drift.get("status") or "unknown")
+    conflict = (
+        "conflict"
+        if drift_status == "drifted"
+        else "aligned"
+        if drift_status == "in_sync"
+        else "unknown"
+    )
+    return {
+        "availability": "available",
+        "completeness": "exact" if not reasons else "partial",
+        "conflict": conflict,
+        "repository_ref": repository_ref,
+        "default_branch": default_branch,
+        "manifest_path": manifest_path,
+        "partial_reason_codes": reasons,
+    }
+
+
+def _topology_graph_item(row: Mapping[str, Any], *, application_id: str) -> JsonObject:
+    return {
+        "resource": {
+            "inventory_key": str(row.get("id") or ""),
+            "cluster_id": str(row.get("cluster_id") or ""),
+            "resource_type": str(row.get("resource_type") or ""),
+            "api_version": str(row.get("api_version") or ""),
+            "kind": str(row.get("kind") or ""),
+            "namespace": _optional_text(row.get("namespace")),
+            "name": str(row.get("name") or ""),
+            "uid": _optional_text(row.get("uid")),
+            "status": str(row.get("status") or ""),
+            "health": str(row.get("health") or ""),
+            "labels": _mapping(row.get("labels")),
+            "summary": _mapping(row.get("summary")),
+            "observed_at": _optional_text(row.get("observed_at")),
+        },
+        "application_ids": [application_id] if application_id else [],
+        "application_binding_completeness": (
+            "exact" if row.get("binding_complete") is True else "partial"
+        ),
+    }
+
+
+def _topology_node(node: Mapping[str, Any]) -> JsonObject:
+    identity = _mapping(node.get("identity"))
+    return {
+        "id": str(node.get("node_id") or ""),
+        "cluster_id": str(identity.get("cluster_id") or ""),
+        "resource_type": str(identity.get("resource_type") or ""),
+        "kind": str(identity.get("kind") or ""),
+        "namespace": _optional_text(identity.get("namespace")),
+        "name": str(identity.get("name") or ""),
+        "status": str(node.get("status") or "unknown"),
+        "health": str(node.get("health") or "unknown"),
+        "observed_at": _optional_text(node.get("observed_at")),
+    }
+
+
+def _topology_edge(edge: Mapping[str, Any]) -> JsonObject:
+    evidence = _mapping(edge.get("evidence"))
+    return {
+        "id": str(edge.get("edge_id") or ""),
+        "from_id": str(edge.get("from_node_id") or ""),
+        "to_id": str(edge.get("to_node_id") or ""),
+        "type": str(edge.get("kind") or ""),
+        "evidence_type": str(evidence.get("type") or ""),
+        "authority": str(evidence.get("authority") or ""),
+        "observed_at": _optional_text(evidence.get("observed_at")),
     }
 
 
