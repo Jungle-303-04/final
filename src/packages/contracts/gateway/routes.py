@@ -21,6 +21,9 @@ TARGETS_PATH = "/targets"
 INSTALL_MANIFEST_PATH = "/install/{agent_token}"
 COMMANDS_PATH = "/commands"
 COMMAND_STATUS_PATH = "/commands/{command_id}"
+# 원본 전수 기능 mapping의 생성형 계약 catalog. 제품 UI는 이 경로를 통해
+# 기능·스트리밍 여부를 발견하며, 소스 목록을 다시 하드코딩하지 않는다.
+FEATURE_CONTRACTS_PATH = "/feature-contracts"
 APPROVAL_GRANT_PATH = "/approvals/{approval_id}/grant"
 APPROVAL_REJECT_PATH = "/approvals/{approval_id}/reject"
 DEAD_LETTERS_PATH = "/dead-letters"
