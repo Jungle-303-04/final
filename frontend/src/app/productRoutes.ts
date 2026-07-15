@@ -1,43 +1,70 @@
 export type ProductSurfaceId =
   | "home"
-  | "clusters"
   | "resources"
   | "issues"
-  | "alerts"
+  | "topology"
   | "applications"
+  | "timeline"
+  | "traffic"
+  | "helm"
   | "gitops"
+  | "checks"
+  | "cost"
+  | "clusters"
+  | "alerts"
   | "settings";
 
-export type ProductRouteIcon =
-  | "home"
-  | "clusters"
-  | "resources"
-  | "issues"
-  | "alerts"
-  | "applications"
-  | "gitops"
-  | "settings";
+export type ProductRouteIcon = ProductSurfaceId;
+
+export type ProductRouteFamily = "reference-primary" | "product";
 
 export interface ProductRouteDefinition {
   id: ProductSurfaceId;
   label: string;
   path: `/${string}`;
+  aliases: readonly `/${string}`[];
   icon: ProductRouteIcon;
   shortcut: `g ${string}`;
   match: "exact" | "prefix";
   landing: boolean;
+  family: ProductRouteFamily;
 }
 
+/**
+ * The only product-owned route descriptor. Screens, shortcut handling, aliases,
+ * and unavailable-route feedback must consume this list rather than duplicate
+ * route paths in their own UI code.
+ */
 export const PRODUCT_ROUTE_CATALOG = [
-  route("home", "Home", "/home", "g h", { match: "exact", landing: true }),
+  route("home", "Home", "/home", "g h", { match: "exact", landing: true, family: "reference-primary" }),
+  route("resources", "Resources", "/resources", "g r", { family: "reference-primary" }),
+  route("issues", "Incidents", "/issues", "g i", { family: "reference-primary" }),
+  route("topology", "Topology", "/topology", "g t", { family: "reference-primary" }),
+  route("applications", "Applications", "/applications", "g a", { family: "reference-primary" }),
+  route("timeline", "Timeline", "/timeline", "g l", { family: "reference-primary" }),
+  route("traffic", "Traffic", "/traffic", "g f", { family: "reference-primary" }),
+  route("helm", "Helm", "/helm", "g m", { family: "reference-primary" }),
+  route("gitops", "GitOps", "/gitops", "g o", {
+    aliases: ["/workflows"],
+    family: "reference-primary",
+  }),
+  route("checks", "Checks", "/checks", "g u", {
+    aliases: ["/audit"],
+    family: "reference-primary",
+  }),
+  route("cost", "Cost", "/cost", "g c", { family: "reference-primary" }),
   route("clusters", "Clusters", "/clusters", "g k"),
-  route("resources", "Resources", "/resources", "g r"),
-  route("issues", "Incidents", "/issues", "g i"),
-  route("alerts", "Alerts", "/alerts", "g l"),
-  route("applications", "Applications", "/applications", "g a"),
-  route("gitops", "GitOps", "/gitops", "g o"),
+  route("alerts", "Alerts", "/alerts", "g b"),
   route("settings", "Settings", "/settings", "g s"),
 ] as const satisfies readonly ProductRouteDefinition[];
+
+export function referenceNavigationRoutes(): readonly ProductRouteDefinition[] {
+  return PRODUCT_ROUTE_CATALOG.filter(({ family }) => family === "reference-primary");
+}
+
+export function productKeyboardNavigationRoutes(): readonly ProductRouteDefinition[] {
+  return PRODUCT_ROUTE_CATALOG;
+}
 
 export function productNavigationForReleasedSurfaces(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
@@ -56,6 +83,10 @@ export function landingProductRouteForReleasedSurfaces(
 
 export function productRouteForPath(pathname: string): ProductRouteDefinition | null {
   return PRODUCT_ROUTE_CATALOG.find((routeDefinition) => ownsPath(routeDefinition, pathname)) ?? null;
+}
+
+export function productRoutePaths(routeDefinition: ProductRouteDefinition): readonly `/${string}`[] {
+  return [routeDefinition.path, ...routeDefinition.aliases];
 }
 
 export function resolveProductRoute(pathname: string): ProductRouteDefinition {
@@ -81,14 +112,18 @@ function route(
     id,
     label,
     path,
+    aliases: behavior.aliases ?? [],
     icon: id,
     shortcut,
     match: behavior.match ?? "prefix",
     landing: behavior.landing ?? false,
+    family: behavior.family ?? "product",
   };
 }
 
 interface ProductRouteBehavior {
+  aliases?: readonly `/${string}`[];
+  family?: ProductRouteFamily;
   match?: "exact" | "prefix";
   landing?: boolean;
 }
@@ -100,6 +135,8 @@ function failToResolveLandingRoute(
 }
 
 function ownsPath(routeDefinition: ProductRouteDefinition, pathname: string): boolean {
-  if (routeDefinition.match === "exact") return pathname === routeDefinition.path;
-  return pathname === routeDefinition.path || pathname.startsWith(`${routeDefinition.path}/`);
+  return productRoutePaths(routeDefinition).some((path) => {
+    if (routeDefinition.match === "exact") return pathname === path;
+    return pathname === path || pathname.startsWith(`${path}/`);
+  });
 }
