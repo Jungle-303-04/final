@@ -8,7 +8,7 @@ import pytest
 
 from domains.timeline.streams import TimelineStreamProtocolError, encode_ndjson, encode_sse
 from packages.contracts.parity import ClusterScope, ResourceRef
-from packages.contracts.timeline import TimelineEvent, TimelineStreamFrame
+from packages.contracts.timeline import RealtimePolicy, TimelineEvent, TimelineStreamFrame
 
 
 def _event(cursor: int) -> TimelineEvent:
@@ -24,9 +24,25 @@ def _event(cursor: int) -> TimelineEvent:
     )
 
 
+def _snapshot(cursor: int = 4) -> TimelineStreamFrame:
+    return TimelineStreamFrame(
+        kind="snapshot",
+        cursor=cursor,
+        scopes=[ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a")],
+        policy=RealtimePolicy(
+            max_batch_events=100,
+            max_frames_per_second=60,
+            retention_seconds=86_400,
+            resume="cursor",
+            hidden_tab="coalesce",
+        ),
+        events=[_event(cursor)] if cursor else [],
+    )
+
+
 def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
     frames = (
-        TimelineStreamFrame(kind="snapshot", cursor=4, events=[_event(4)]),
+        _snapshot(),
         TimelineStreamFrame(kind="event", cursor=5, event=_event(5)),
         TimelineStreamFrame(kind="end", cursor=5),
     )
@@ -42,10 +58,10 @@ def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
 @pytest.mark.parametrize(
     ("frames", "message"),
     [
-        ((TimelineStreamFrame(kind="snapshot", cursor=0),), "terminal frame is required"),
+        ((_snapshot(0),), "terminal frame is required"),
         (
             (
-                TimelineStreamFrame(kind="snapshot", cursor=3),
+                _snapshot(3),
                 TimelineStreamFrame(kind="event", cursor=3, event=_event(3)),
                 TimelineStreamFrame(kind="end", cursor=3),
             ),
@@ -53,7 +69,7 @@ def test_ndjson_and_sse_use_one_ordered_terminal_protocol() -> None:
         ),
         (
             (
-                TimelineStreamFrame(kind="snapshot", cursor=3),
+                _snapshot(3),
                 TimelineStreamFrame(kind="end", cursor=3),
                 TimelineStreamFrame(kind="event", cursor=4, event=_event(4)),
             ),
