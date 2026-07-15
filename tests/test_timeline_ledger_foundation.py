@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
 from domains.inventory_filter.cursor import FilterCursorCodec
@@ -29,6 +30,7 @@ from domains.timeline.repository import (
 )
 from packages.contracts.parity import ClusterScope, Freshness, ResourceRef
 from packages.contracts.timeline import (
+    TimelineApplicationWorkflowSubject,
     TimelineEvent,
     TimelineInventoryLocatorSubject,
     TimelineQuery,
@@ -72,6 +74,22 @@ def _resource_event(source_key: str, event_id: str) -> TimelineEvent:
         event_type="update",
         severity="info",
         title="Deployment checkout updated",
+    )
+
+
+def _timeline_sql(scope: TimelineLedgerReadScope) -> str:
+    statement = _timeline_events_statement(
+        scope,
+        after_sequence=0,
+        through_sequence=12,
+        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+        limit=2,
+        replay_order=False,
+    )
+    return " ".join(
+        str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+        .casefold()
+        .split()
     )
 
 
@@ -344,6 +362,86 @@ def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_curso
     assert connection.last_sequence == 1
     assert len(connection.rows) == 1
     assert connection.lock_count == 2
+
+
+def test_application_timeline_sources_require_a_real_application_workflow_subject() -> None:
+    event = _resource_event("inventory:1", "event-1")
+    invalid = event.model_dump()
+    invalid.update(
+        source="application_workflow",
+        source_key="workflow:run-1",
+        native_id="run-1",
+        event_type="deployment",
+    )
+
+    with pytest.raises(ValidationError, match="application workflow subject"):
+        TimelineEvent(**invalid)
+
+    valid = TimelineEvent(
+        event_id="workflow-event-1",
+        source="application_workflow",
+        source_key="workflow:run-1",
+        native_id="run-1",
+        activity="change",
+        occurred_at=datetime(2026, 7, 15, tzinfo=UTC),
+        scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
+        subject=TimelineApplicationWorkflowSubject(
+            application_id="application-owned",
+            binding_id="binding-1",
+            workflow_run_id="run-1",
+        ),
+        event_type="deployment",
+        severity="info",
+        title="Application deployment updated",
+    )
+
+    assert valid.subject.application_id == "application-owned"
+
+
+def test_timeline_sql_requires_source_specific_grants_and_namespace_scope() -> None:
+    requested = (
+        ClusterScope(
+            workspace_id="workspace-a",
+            cluster_id="cluster-a",
+            namespaces=("payments",),
+        ),
+    )
+
+    inventory_sql = _timeline_sql(
+        TimelineLedgerReadScope(
+            workspace_id="workspace-a",
+            scopes=requested,
+            inventory_cluster_ids=frozenset({"cluster-a"}),
+        )
+    )
+    incident_sql = _timeline_sql(
+        TimelineLedgerReadScope(
+            workspace_id="workspace-a",
+            scopes=requested,
+            incident_cluster_ids=frozenset({"cluster-a"}),
+        )
+    )
+    application_sql = _timeline_sql(
+        TimelineLedgerReadScope(
+            workspace_id="workspace-a",
+            scopes=requested,
+            application_ids=frozenset({"application-owned"}),
+        )
+    )
+
+    assert "timeline_events.source = 'inventory'" in inventory_sql
+    assert "'incident'" not in inventory_sql
+    assert "application_id" not in inventory_sql
+    assert "timeline_events.source = 'incident'" in incident_sql
+    assert "'inventory'" not in incident_sql
+    assert "application_id" not in incident_sql
+    assert "timeline_events.source in ('application_workflow', 'gitops')" in application_sql
+    assert (
+        "timeline_events.subject ->> 'application_id' in ('application-owned')" in application_sql
+    )
+    assert "timeline_events.namespace in ('payments')" in inventory_sql
+    assert "timeline_events.namespace in ('payments')" in incident_sql
+    assert "timeline_events.namespace in ('payments')" in application_sql
 
 
 def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates() -> None:
