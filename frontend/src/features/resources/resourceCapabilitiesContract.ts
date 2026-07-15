@@ -38,6 +38,21 @@ export interface ResourceCapabilities {
   capabilities: ResourceActionCapability[];
 }
 
+/**
+ * Lifecycle states shared by resource-action receipts and the operation stream.
+ * Keep the in-progress cancellation states explicit so consumers never coerce a
+ * cancel request into a terminal result before the agent acknowledges it.
+ */
+export type ResourceActionStatus =
+  | "queued"
+  | "leased"
+  | "running"
+  | "cancel_requested"
+  | "cancelling"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
 export interface ResourceCapabilitiesPort {
   loadResourceCapabilities(
     resourceId: string,
@@ -51,7 +66,7 @@ export interface ResourceActionReceipt {
   auditEventId: string;
   correlationId: string;
   commandId: string;
-  status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
+  status: ResourceActionStatus;
 }
 
 export interface ResourceActionsPort {

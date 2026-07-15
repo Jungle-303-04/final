@@ -1,6 +1,7 @@
 import type {
   ResourceCapabilities,
   ResourceActionReceipt,
+  ResourceActionStatus,
 } from "./resourceCapabilitiesContract";
 import type { ResourceCapabilitiesEndpointResponse } from "./resourceCapabilitiesEndpointContract";
 import { ResourcesCanonicalError } from "./resourcesValidation";
@@ -51,7 +52,7 @@ export function toResourceActionReceipt(value: {
   audit_event_id: string;
   correlation_id: string;
   command_id: string;
-  status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
+  status: ResourceActionStatus;
 }): ResourceActionReceipt {
   return {
     accepted: value.accepted,

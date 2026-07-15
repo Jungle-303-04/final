@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./client";
-import { submitCommand } from "./commands";
+import { cancelCommand, retryCommand, submitCommand } from "./commands";
 
 const ACCEPTED = {
   accepted: true,
@@ -10,6 +10,17 @@ const ACCEPTED = {
   correlation_id: "corr-command-1",
   command_id: "cmd-command-1",
   status: "queued",
+};
+
+const CONTROL_ACCEPTED = {
+  accepted: true,
+  action: "cancel",
+  event_id: "evt-control-1",
+  audit_event_id: "evt-control-1",
+  correlation_id: "corr-command-1",
+  command_id: "cmd-command-1",
+  status: "cancel_requested",
+  idempotent: false,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -57,6 +68,35 @@ describe("general command API", () => {
         }),
       }),
     );
+  });
+
+  it("sends cancel and retry controls with a caller-owned idempotency key", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse(CONTROL_ACCEPTED, 202));
+
+    await expect(cancelCommand({
+      commandId: "cmd-command-1",
+      idempotencyKey: "cancel-key-1",
+      reason: "operator stopped rollout",
+    })).resolves.toEqual(CONTROL_ACCEPTED);
+
+    const [cancelPath, cancelRequest] = fetchMock.mock.calls[0] ?? [];
+    expect(cancelPath).toBe("/api/commands/cmd-command-1/cancel");
+    expect(cancelRequest).toMatchObject({ method: "POST" });
+    expect(new Headers((cancelRequest as RequestInit).headers).get("idempotency-key"))
+      .toBe("cancel-key-1");
+
+    vi.mocked(fetchMock).mockResolvedValueOnce(jsonResponse({
+      ...CONTROL_ACCEPTED,
+      action: "retry",
+      status: "queued",
+      attempt_id: "attempt-2",
+    }, 202));
+    await expect(retryCommand({
+      commandId: "cmd-command-1",
+      idempotencyKey: "retry-key-1",
+    })).resolves.toMatchObject({ action: "retry", attempt_id: "attempt-2" });
   });
 
   it("passes an AbortSignal and accepts a command receipt", async () => {

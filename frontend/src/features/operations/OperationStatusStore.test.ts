@@ -66,6 +66,26 @@ describe("operation status store", () => {
     store.dispose();
   });
 
+  it("closes the SSE observation only when the server commits a cancelled terminal event", async () => {
+    const port: OperationEventsPort = {
+      async *subscribeOperationEvents() {
+        yield event(1, "progress");
+        yield event(2, "cancelled");
+        yield event(3, "completed");
+      },
+    };
+    const store = createOperationStatusStore(port);
+
+    store.start("command-1");
+    await eventually(() => expect(store.getSnapshot("command-1").status).toBe("cancelled"));
+
+    expect(store.getSnapshot("command-1")).toMatchObject({
+      status: "cancelled",
+      sequence: 2,
+    });
+    store.dispose();
+  });
+
   it("keeps a failed observation visible and reobserves the stream without replaying the command", async () => {
     let subscriptions = 0;
     const port: OperationEventsPort = {

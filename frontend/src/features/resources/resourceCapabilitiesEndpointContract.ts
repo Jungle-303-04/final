@@ -1,4 +1,7 @@
-import type { ResourceActionCapability } from "./resourceCapabilitiesContract";
+import type {
+  ResourceActionCapability,
+  ResourceActionStatus,
+} from "./resourceCapabilitiesContract";
 
 export interface ResourceCapabilitiesEndpointResponse {
   subject: {
@@ -50,6 +53,6 @@ export interface ResourceActionsEndpointDependencies {
     audit_event_id: string;
     correlation_id: string;
     command_id: string;
-    status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
+    status: ResourceActionStatus;
   }>;
 }

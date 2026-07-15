@@ -168,6 +168,21 @@ export {
   type ResourceActionAccepted,
 } from "./resource-capability-actions-schemas";
 export {
+  cancelCommand,
+  retryCommand,
+  submitCommand,
+  type CommandControlInput,
+  type CommandControlOptions,
+  type SubmitCommandInput,
+  type SubmitCommandOptions,
+} from "./commands";
+export {
+  commandAcceptedSchema,
+  commandControlAcceptedSchema,
+  type CommandAccepted,
+  type CommandControlAccepted,
+} from "./commands-schemas";
+export {
   subscribeCommandOperationEvents,
 } from "./operation-events";
 export {

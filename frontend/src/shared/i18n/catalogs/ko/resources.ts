@@ -261,6 +261,7 @@ export const resourcesKo = {
   "resources.detail.action.observation.reconnecting": "다시 연결 중",
   "resources.detail.action.observation.completed": "완료됨",
   "resources.detail.action.observation.failed": "실패함",
+  "resources.detail.action.observation.cancelled": "취소됨",
   "resources.detail.action.observation.forbidden": "스트림 관찰 권한 없음",
   "resources.detail.action.observation.invalid": "잘못된 명령 스트림",
   "resources.detail.action.observation.unavailable": "스트림 관찰을 사용할 수 없음",

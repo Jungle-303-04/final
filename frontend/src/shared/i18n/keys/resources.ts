@@ -259,6 +259,7 @@ export type ResourcesMessageKey =
   | "resources.detail.action.observation.reconnecting"
   | "resources.detail.action.observation.completed"
   | "resources.detail.action.observation.failed"
+  | "resources.detail.action.observation.cancelled"
   | "resources.detail.action.observation.forbidden"
   | "resources.detail.action.observation.invalid"
   | "resources.detail.action.observation.unavailable"
