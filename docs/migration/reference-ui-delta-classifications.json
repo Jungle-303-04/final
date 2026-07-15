@@ -202,6 +202,18 @@
     "helm.release-contract": {
       "destination": "tests/test_helm_release_router.py",
       "rationale": "The Python HTTP boundary must apply workspace and inventory-read scope before emitting any storage metadata."
+    },
+    "traffic.overview.unavailable": {
+      "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
+      "rationale": "The route must show authorized scope freshness and explicit collector absence; it must never turn unavailable traffic evidence into zero counts or an empty graph."
+    },
+    "traffic.overview.contract": {
+      "destination": "tests/test_traffic_router.py",
+      "rationale": "The Python boundary must apply workspace and inventory-read scope to the normalized overview and keep unavailable flow fields null."
+    },
+    "traffic.filters.collector-gate": {
+      "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
+      "rationale": "Namespace, protocol, and status flow filters remain unavailable until collector-backed flow records and filter facets are specified by the server."
     }
   },
   "classifications": {
@@ -2291,6 +2303,74 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The source uses a stale 30-second release read; this port retains bounded polling and exposes inventory completeness rather than manufacturing release values."
+          }
+        }
+      ]
+    },
+    "web/src/components/traffic/TrafficFilterSidebar.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:traffic:flow-filters:collector-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "TrafficFilterSidebar",
+          "interaction": "namespace, protocol, and status controls refine observed flows only after a collector supplies typed flow records and server-owned facets",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/features/traffic/trafficContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic.observations",
+              "domains.traffic.router"
+            ],
+            "plannedTestIds": [
+              "traffic.filters.collector-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no collector-backed flow records or authoritative filter facets; rendering upstream controls would require browser-derived data.",
+            "rationale": "The initial port preserves the selected namespace scope but intentionally does not render inert protocol or status controls."
+          }
+        }
+      ]
+    },
+    "web/src/components/traffic/TrafficView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:traffic:flow-snapshot:scope-availability:v1",
+          "legacyContractIds": [
+            "reference.feature.181"
+          ],
+          "symbol": "TrafficView observed flow surface",
+          "interaction": "the scoped read presents actual collector availability, selected namespace scope, and freshness before any graph, flow list, or aggregate is rendered",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart a bounded 30-second typed scope read when the visible selection changes",
+            "backpressure": "share one request per normalized scope and abort only after the final consumer releases it",
+            "merge": "replace the overview only when the response belongs to the current authorized scope; unavailable evidence remains null"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/features/traffic/createTrafficAdapter.ts",
+              "src/domains/traffic/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic.observations",
+              "domains.traffic.router"
+            ],
+            "plannedTestIds": [
+              "traffic.overview.unavailable",
+              "traffic.overview.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The collector is not integrated, so the vertical truthfully returns unavailable status and null counts/edges instead of inferred connections or synthetic zero values."
           }
         }
       ]
