@@ -193,6 +193,23 @@ describe("UnifiedFilterBar", () => {
     expect(within(control).queryByText("team=platform")).toBeNull();
   });
 
+  it("closes the non-modal popover when Tab leaves the filter controls", async () => {
+    const user = userEvent.setup();
+    renderFilter(
+      { search: vi.fn(async () => structuralSuggestions) },
+      "/resources?clusters=cluster-a",
+    );
+
+    await user.click(screen.getByRole("textbox", { name: filterPlaceholder }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Clear all filters" }));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Next content" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("aborts superseded requests and never paints a stale response", async () => {
     const user = userEvent.setup();
     const first = deferred<readonly GlobalFilterSuggestion[]>();
@@ -296,6 +313,7 @@ function renderFilter(port: GlobalFilterPort, initialEntry = "/resources") {
             <UnifiedFilterProvider>
               <UnifiedFilterBar port={port} />
               <LocationProbe />
+              <button type="button">Next content</button>
             </UnifiedFilterProvider>
           </I18nProvider>
         ),

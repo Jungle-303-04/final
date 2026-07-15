@@ -229,6 +229,30 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
   });
 
+  it("lets Tab leave the non-modal mobile filter popup for page content", async () => {
+    installMatchMedia(true);
+    vi.stubGlobal("ResizeObserver", class {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    });
+    const user = userEvent.setup();
+    try {
+      renderShell();
+
+      await user.click(screen.getByRole("button", { name: "클러스터, 앱, 라벨, 리소스 필터" }));
+      expect(await screen.findByRole("dialog")).toBeTruthy();
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "모든 필터 지우기" }));
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "화면 입력" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps the narrow header tab order aligned with its visual menu, controls, and filter rows", () => {
     installMatchMedia(true);
     const { container } = renderShell();
