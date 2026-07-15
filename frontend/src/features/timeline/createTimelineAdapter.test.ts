@@ -149,6 +149,62 @@ describe("Timeline adapter", () => {
       signal: undefined,
     }));
   });
+
+  it("maps server-authorized snapshot coverage without reapplying client filters", async () => {
+    const adapter = createTimelineAdapter({
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot", [coverageFrame("opaque.coverage").coverage[0]!]),
+      subscribeTimelineEvents: async function* () {},
+      now: () => 10_000,
+    });
+
+    const loaded = await adapter.readTimeline(timelineQuery({
+      filters: {
+        ...timelineQuery().filters,
+        activity: ["changes"],
+        kinds: ["Deployment"],
+        search: "checkout",
+      },
+    }));
+
+    expect(loaded.coverage).toEqual([{
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: ["payments"],
+        freshness: "live",
+      },
+      source: "kubernetes_event",
+      fromMs: 1_000,
+      toMs: 2_000,
+      reason: "collection_gap",
+    }]);
+  });
+
+  it("keeps a coverage frame non-terminal and resumes from its opaque cursor", async () => {
+    const streams = [
+      streamOf(coverageFrame("opaque.coverage")),
+      streamOf(errorFrame("opaque.coverage")),
+    ];
+    const subscriptions: Parameters<TimelineEndpointDependencies["subscribeTimelineEvents"]>[0][] = [];
+    const subscribeTimelineEvents = vi.fn((input: Parameters<TimelineEndpointDependencies["subscribeTimelineEvents"]>[0]) => {
+      subscriptions.push(input);
+      return streams.shift() ?? streamOf(errorFrame("opaque.coverage"));
+    });
+    const adapter = createTimelineAdapter({
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
+      subscribeTimelineEvents,
+      now: () => 10_000,
+      random: () => 0,
+    });
+    const loaded = await adapter.readTimeline(timelineQuery());
+
+    const frames = await collect(adapter.subscribeTimeline(loaded.session));
+
+    expect(frames.map((frame) => frame.kind)).toEqual(["coverage", "error"]);
+    expect(subscriptions[1]).toEqual(expect.objectContaining({
+      after: { token: "opaque.coverage" },
+    }));
+  });
 });
 
 function timelineQuery(overrides: Partial<TimelineQuery> = {}): TimelineQuery {
@@ -174,7 +230,10 @@ function timelineQuery(overrides: Partial<TimelineQuery> = {}): TimelineQuery {
   };
 }
 
-function snapshot(cursor: string): TimelineEndpointSnapshot {
+function snapshot(
+  cursor: string,
+  coverage: TimelineEndpointSnapshot["snapshot"]["coverage"] = [],
+): TimelineEndpointSnapshot {
   return {
     snapshot: {
       kind: "snapshot",
@@ -202,7 +261,7 @@ function snapshot(cursor: string): TimelineEndpointSnapshot {
         },
       },
       events: [event()],
-      coverage: [],
+      coverage,
     },
     end: { kind: "end", cursor: { token: cursor } },
   };
@@ -214,6 +273,25 @@ function eventFrame(cursor: string): Extract<TimelineEndpointStreamFrame, { kind
 
 function errorFrame(cursor: string): Extract<TimelineEndpointStreamFrame, { kind: "error" }> {
   return { kind: "error", cursor: { token: cursor }, reason: "fanout closed" };
+}
+
+function coverageFrame(cursor: string): Extract<TimelineEndpointStreamFrame, { kind: "coverage" }> {
+  return {
+    kind: "coverage",
+    cursor: { token: cursor },
+    coverage: [{
+      scope: {
+        workspace_id: "workspace-a",
+        cluster_id: "cluster-a",
+        namespaces: ["payments"],
+        freshness: "live",
+      },
+      source: "kubernetes_event",
+      from_ms: 1_000,
+      to_ms: 2_000,
+      reason: "collection_gap",
+    }],
+  };
 }
 
 function event() {

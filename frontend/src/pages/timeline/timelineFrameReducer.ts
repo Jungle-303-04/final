@@ -4,6 +4,7 @@ import type {
   TimelineSnapshot,
   TimelineStreamFrame,
 } from "../../features/timeline/timelineContract";
+import { timelineCoverageKey } from "../../features/timeline/timelineCoverageIdentity";
 
 /** Keeps only server-bounded, arrival-ordered evidence records in browser memory. */
 export function normalizeTimelineSnapshot(snapshot: TimelineSnapshot): TimelineSnapshot {
@@ -68,24 +69,12 @@ function mergeCoverage(
   current: readonly TimelineCoverage[],
   incoming: readonly TimelineCoverage[],
 ): readonly TimelineCoverage[] {
-  const known = new Set(current.map(coverageKey));
+  const known = new Set(current.map(timelineCoverageKey));
   const additions = incoming.filter((coverage) => {
-    const key = coverageKey(coverage);
+    const key = timelineCoverageKey(coverage);
     if (known.has(key)) return false;
     known.add(key);
     return true;
   });
   return additions.length === 0 ? current : [...current, ...additions];
-}
-
-function coverageKey(coverage: TimelineCoverage): string {
-  return [
-    coverage.scope.workspaceId,
-    coverage.scope.clusterId,
-    (coverage.scope.namespaces ?? []).join("\u0000"),
-    coverage.source,
-    coverage.fromMs,
-    coverage.toMs,
-    coverage.reason,
-  ].join("\u0000");
 }

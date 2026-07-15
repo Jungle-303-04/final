@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  TimelineCoverage,
   TimelineEvent,
   TimelineQuery,
   TimelineSnapshot,
@@ -42,9 +43,26 @@ describe("Timeline evidence frame reducer", () => {
       filters: { ...query.filters, search: "changed" },
     })).not.toBe(timelineEvidenceKey(query));
   });
+
+  it("merges snapshot and live coverage deltas once, even across replayed namespace order", () => {
+    const initial = normalizeTimelineSnapshot(snapshot([], [coverage(["payments", "shop"])]));
+    const reduced = applyTimelineFrames(initial, [
+      { kind: "coverage", cursor: { token: "opaque.coverage-replay" }, coverage: [coverage(["shop", "payments"])] },
+      { kind: "coverage", cursor: { token: "opaque.coverage-next" }, coverage: [coverage(["payments"], 2_000, 3_000)] },
+    ]);
+
+    expect(reduced.coverage).toHaveLength(2);
+    expect(reduced.coverage.map((item) => [item.fromMs, item.toMs])).toEqual([
+      [1_000, 2_000],
+      [2_000, 3_000],
+    ]);
+  });
 });
 
-function snapshot(events: readonly TimelineEvent[]): TimelineSnapshot {
+function snapshot(
+  events: readonly TimelineEvent[],
+  coverage: readonly TimelineCoverage[] = [],
+): TimelineSnapshot {
   const query = timelineQuery();
   const policy = {
     maxBatchEvents: 2,
@@ -72,7 +90,21 @@ function snapshot(events: readonly TimelineEvent[]): TimelineSnapshot {
     scopes: query.scopes,
     policy,
     events,
-    coverage: [],
+    coverage,
+  };
+}
+
+function coverage(
+  namespaces: readonly string[],
+  fromMs = 1_000,
+  toMs = 2_000,
+): TimelineCoverage {
+  return {
+    scope: { workspaceId: "workspace-a", clusterId: "cluster-a", namespaces, freshness: "live" },
+    source: "kubernetes_event",
+    fromMs,
+    toMs,
+    reason: "collection_gap",
   };
 }
 

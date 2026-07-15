@@ -92,6 +92,45 @@ describe("Timeline API transport", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ ...request, after: { token: "opaque.snapshot" } });
   });
 
+  it("accepts a coverage delta without ending the live SSE connection", async () => {
+    const coverageRequest = {
+      ...request,
+      query: {
+        ...request.query,
+        filters: {
+          ...request.query.filters,
+          activity: ["k8s_event" as const],
+          kinds: ["Event"],
+          query: "",
+        },
+      },
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
+      `id: opaque.coverage\nevent: coverage\ndata: ${JSON.stringify(coverageFrame("opaque.coverage"))}`,
+      `id: opaque.event\nevent: event\ndata: ${JSON.stringify(eventFrame("opaque.event"))}`,
+      `id: opaque.event\nevent: error\ndata: ${JSON.stringify({
+        kind: "error",
+        cursor: { token: "opaque.event" },
+        reason: "fanout closed",
+      })}`,
+      "",
+    ].join("\n\n"), {
+      headers: { "content-type": "text/event-stream" },
+    }));
+
+    const frames: { kind: string; cursor: { token: string } }[] = [];
+    for await (const frame of subscribeTimelineEvents({
+      ...coverageRequest,
+      after: { token: "opaque.snapshot" },
+    })) {
+      frames.push(frame);
+    }
+
+    expect(frames.map((frame) => frame.kind)).toEqual(["coverage", "event", "error"]);
+    expect(frames[0]?.cursor.token).toBe("opaque.coverage");
+    expect(frames[1]?.cursor.token).toBe("opaque.event");
+  });
+
   it("rejects an SSE frame when its event name or opaque ID disagrees with the decoded frame", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
       `id: opaque.other\nevent: event\ndata: ${JSON.stringify(eventFrame("opaque.next"))}\n\n`,
@@ -130,6 +169,25 @@ function snapshotFrame() {
 
 function eventFrame(cursor: string) {
   return { kind: "event", cursor: { token: cursor }, event: event() };
+}
+
+function coverageFrame(cursor: string) {
+  return {
+    kind: "coverage",
+    cursor: { token: cursor },
+    coverage: [{
+      scope: {
+        workspace_id: "workspace-a",
+        cluster_id: "cluster-a",
+        namespaces: ["payments"],
+        freshness: "live",
+      },
+      source: "kubernetes_event",
+      from_ms: 1_000,
+      to_ms: 2_000,
+      reason: "collection_gap",
+    }],
+  };
 }
 
 function event() {
