@@ -17,8 +17,15 @@ describe("Clusters adapter", () => {
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
-    await expect(port.disconnect("production-a1b2")).resolves.toBeUndefined();
-    expect(endpoints.unregisterCluster).toHaveBeenCalledWith("production-a1b2", undefined);
+    await expect(port.disconnect("production-a1b2")).resolves.toMatchObject({
+      status: "cleanup-required",
+      uninstallCommand: "kubectl delete deployment/cluster-agent",
+    });
+    expect(endpoints.unregisterCluster).toHaveBeenCalledWith(
+      "production-a1b2",
+      {},
+      undefined,
+    );
   });
 
   it("rejects a multiline install command", async () => {
@@ -51,6 +58,26 @@ function dependencies() {
       connect_timeout_seconds: 60,
       connect_expires_at: "2026-07-15T01:03:03Z",
     })),
-    unregisterCluster: vi.fn(async () => undefined),
+    getCommandStatus: vi.fn(async () => ({
+      command_id: "cmd-uninstall-1",
+      cluster_id: "production-a1b2",
+      correlation_id: "corr-uninstall-1",
+      action: "cluster.agent.uninstall",
+      status: "completed" as const,
+      result: { cleanup_completed: true },
+      completed_at: "2026-07-15T01:02:04Z",
+    })),
+    unregisterCluster: vi.fn(async () => ({
+      cluster_id: "production-a1b2",
+      status: "cleanup_required" as const,
+      stage: "manual_cleanup_required" as const,
+      command_id: null,
+      command_status_path: null,
+      uninstall_command: "kubectl delete deployment/cluster-agent",
+      cleanup_verified: false,
+      resources: ["target:deployment/cluster-agent"],
+      residual_resources: ["target:serviceaccount/cluster-agent"],
+      failure_reason: "agent is offline",
+    })),
   };
 }

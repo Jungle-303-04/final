@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { ApiError } from "./client";
 import type { ConnectionStage } from "./cluster-stage-schemas";
-import { listClusters } from "./clusters";
+import { listClusters, unregisterCluster } from "./clusters";
 import type { HomeConnectionStage } from "../features/home/homeContract";
 
 const CLUSTER = {
@@ -121,6 +121,67 @@ describe("clusters API", () => {
       "/api/clusters?limit=100",
       expect.objectContaining({ signal: controller.signal }),
     );
+  });
+
+  it("requests an agent uninstall for an encoded cluster without exposing physical purge", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse({
+        cluster_id: "target/blue",
+        status: "uninstalling",
+        stage: "agent_cleanup_queued",
+        command_id: "cmd-uninstall-1",
+        command_status_path: "/api/commands/cmd-uninstall-1",
+        uninstall_command: "kubectl delete deployment/cluster-agent",
+        cleanup_verified: false,
+        resources: ["target:deployment/cluster-agent"],
+        residual_resources: ["target:serviceaccount/cluster-agent"],
+        failure_reason: null,
+      }, 202),
+    );
+    const controller = new AbortController();
+
+    await expect(unregisterCluster("target/blue", {}, controller.signal)).resolves.toMatchObject({
+      status: "uninstalling",
+      command_id: "cmd-uninstall-1",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/clusters/target%2Fblue?purge=false",
+      expect.objectContaining({
+        credentials: "include",
+        method: "DELETE",
+        signal: controller.signal,
+      }),
+    );
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("x-service-csrf"))
+      .toBe("same-origin");
+  });
+
+  it("sends an explicit operator attestation only after manual cleanup", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "target-blue",
+      status: "disconnected",
+      stage: "registration_revoked",
+      command_id: null,
+      command_status_path: null,
+      uninstall_command: null,
+      cleanup_verified: false,
+      resources: [],
+      residual_resources: [],
+      failure_reason: null,
+    }, 202));
+
+    await unregisterCluster("target-blue", { manualCleanupAttested: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/clusters/target-blue?purge=false&manual_cleanup_attested=true",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("rejects an empty cluster identity before issuing an unregister request", () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    expect(() => unregisterCluster("  ")).toThrow(TypeError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("preserves a 401 response as an unauthorized API error", async () => {
