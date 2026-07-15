@@ -401,13 +401,15 @@ def build_plan(
     key = idempotency_key(command, correlation_id, approval_evidence)
     cluster_id = command.cluster_id or COMMAND_CONFIG.default_cluster_id
     workspace_id = command.workspace_id
+    action = command.action or COMMAND_CONFIG.default_command_action
+    action_spec = command_action_spec(action)
     return Plan(
         # API가 접수 UoW에서 만든 ID는 approval evidence가 나중에 보강돼도 절대
         # 바뀌지 않는다. 과거/외부 이벤트만 기존 hash ID fallback을 유지한다.
         command_id=command.command_id or f"cmd-{key[:32]}",
         idempotency_key=key,
         cluster_id=cluster_id,
-        action=command.action or COMMAND_CONFIG.default_command_action,
+        action=action,
         namespace=command.namespace or COMMAND_CONFIG.default_namespace,
         diff=command.diff.to_body(),
         payload=command.payload,
@@ -417,8 +419,12 @@ def build_plan(
             heartbeat_interval_seconds=COMMAND_CONFIG.heartbeat_interval_seconds,
         ),
         retry_policy=RetryPolicy(
-            max_attempts=COMMAND_CONFIG.retry_max_attempts,
-            retry_delay_seconds=COMMAND_CONFIG.retry_delay_seconds,
+            max_attempts=(
+                action_spec.max_attempts
+                if action_spec is not None and action_spec.supports_manual_retry
+                else 1
+            ),
+            retry_delay_seconds=(action_spec.retry_delay_seconds if action_spec is not None else 0),
         ),
         routing_constraint=RoutingConstraint(
             channel=COMMAND_CONFIG.agent_route_channel,
@@ -457,6 +463,10 @@ async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan)
 
 async def close_operation(ctx: EventContext[AgentCommandStore], plan: Plan, reason: str) -> None:
     """Persist a terminal lifecycle fact when the command cannot reach an agent."""
+    fail_logical = getattr(ctx.db, "fail_logical_command_and_stage_event", None)
+    if callable(fail_logical):
+        await fail_logical(plan.workspace_id, plan.command_id, plan.cluster_id, reason)
+        return
     append = getattr(ctx.db, "append_command_operation_event", None)
     if not callable(append):
         return

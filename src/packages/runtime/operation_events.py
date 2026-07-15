@@ -169,7 +169,7 @@ class InMemoryOperationEventBroker:
             kind=kind,
             payload=payload,
         )
-        if kind in {"completed", "failed"}:
+        if kind in {"completed", "failed", "cancelled"}:
             self._terminal.add(key)
         await self.deliver(event, workspace_id=workspace_id)
         return event

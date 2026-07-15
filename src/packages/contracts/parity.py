@@ -15,8 +15,17 @@ from pydantic import Field, field_validator, model_validator
 from packages.contracts.gateway.base import StrictModel
 
 Freshness = Literal["live", "stale", "partial", "disconnected"]
-CommandStatus = Literal["queued", "leased", "running", "completed", "failed", "cancelled"]
-OperationEventKind = Literal["progress", "log", "completed", "failed"]
+CommandStatus = Literal[
+    "queued",
+    "leased",
+    "running",
+    "cancel_requested",
+    "cancelling",
+    "completed",
+    "failed",
+    "cancelled",
+]
+OperationEventKind = Literal["progress", "log", "completed", "failed", "cancelled"]
 
 
 class ClusterScope(StrictModel):
@@ -86,6 +95,26 @@ class CommandReceipt(StrictModel):
 
     @model_validator(mode="after")
     def audit_event_tracks_the_accepted_event(self) -> CommandReceipt:
+        if self.audit_event_id != self.event_id:
+            raise ValueError("audit_event_id must equal the immutable event_id")
+        return self
+
+
+class CommandControlReceipt(StrictModel):
+    """Receipt for an idempotent cancel or retry control request."""
+
+    accepted: Literal[True] = True
+    command_id: str = Field(min_length=1)
+    action: Literal["cancel", "retry"]
+    event_id: str = Field(min_length=1)
+    audit_event_id: str = Field(min_length=1)
+    correlation_id: str = Field(min_length=1)
+    status: CommandStatus
+    idempotent: bool = False
+    attempt_id: str | None = None
+
+    @model_validator(mode="after")
+    def audit_event_tracks_control_event(self) -> CommandControlReceipt:
         if self.audit_event_id != self.event_id:
             raise ValueError("audit_event_id must equal the immutable event_id")
         return self

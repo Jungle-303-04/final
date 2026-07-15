@@ -153,6 +153,30 @@ class CommandRejectedBody(EventBody):
     requested: JsonObject
 
 
+@event(EventSubject.COMMAND_CANCEL_REQUESTED)
+@dataclass(frozen=True)
+class CommandCancelRequestedBody(EventBody):
+    """Immutable, auditable cancel intent.  The repository owns its state transition."""
+
+    command_id: str
+    workspace_id: str
+    reason: str | None = None
+    requested_by: str | None = None
+    actor: JsonObject | None = None
+
+
+@event(EventSubject.COMMAND_RETRY_REQUESTED)
+@dataclass(frozen=True)
+class CommandRetryRequestedBody(EventBody):
+    """Immutable, auditable manual retry intent for one failed logical command."""
+
+    command_id: str
+    workspace_id: str
+    reason: str | None = None
+    requested_by: str | None = None
+    actor: JsonObject | None = None
+
+
 @event(EventSubject.COMMAND_COMPLETED)
 @dataclass(frozen=True)
 class CommandCompletedBody(EventBody):

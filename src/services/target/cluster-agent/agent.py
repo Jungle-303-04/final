@@ -238,6 +238,7 @@ class AgentConfig:
     AGENT_CAPABILITIES = [
         "collector",
         "command_receiver",
+        "command_control.cancel.v1",
         Command.CATALOG_HELM_INSTALL_CAPABILITY,
     ]
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
@@ -312,7 +313,13 @@ class HttpManagementPlaneClient:
         return response.json().get(Gateway.COMMAND)
 
     async def start_command(
-        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
+        self,
+        command_id: str,
+        cluster_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        attempt_id: str | None = None,
     ) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_start_path(command_id)}",
@@ -321,14 +328,22 @@ class HttpManagementPlaneClient:
                 Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 Gateway.LEASE_ID: lease_id,
+                **({Gateway.ATTEMPT_ID: attempt_id} if attempt_id else {}),
             },
             headers=self.headers,
         )
         response.raise_for_status()
 
     async def heartbeat_command(
-        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
-    ) -> None:
+        self,
+        command_id: str,
+        cluster_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        attempt_id: str | None = None,
+        observed_cancel_generation: int | None = None,
+    ) -> JsonObject:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_heartbeat_path(command_id)}",
             json={
@@ -336,10 +351,18 @@ class HttpManagementPlaneClient:
                 Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 Gateway.LEASE_ID: lease_id,
+                **({Gateway.ATTEMPT_ID: attempt_id} if attempt_id else {}),
+                **(
+                    {Gateway.CANCEL_GENERATION: observed_cancel_generation}
+                    if observed_cancel_generation is not None
+                    else {}
+                ),
             },
             headers=self.headers,
         )
         response.raise_for_status()
+        body = response.json()
+        return body if isinstance(body, dict) else {}
 
     async def complete_command(
         self,
@@ -348,6 +371,7 @@ class HttpManagementPlaneClient:
         lease_id: str,
         agent_id: str,
         result: JsonObject,
+        attempt_id: str | None = None,
     ) -> None:
         response = await self.client.post(
             f"{self.base_url}{gateway_routes.agent_command_result_path(command_id)}",
@@ -356,6 +380,7 @@ class HttpManagementPlaneClient:
                 Gateway.WORKSPACE_ID: workspace_id,
                 Gateway.AGENT_ID: agent_id,
                 Gateway.LEASE_ID: lease_id,
+                **({Gateway.ATTEMPT_ID: attempt_id} if attempt_id else {}),
             },
             headers=self.headers,
         )
@@ -785,6 +810,7 @@ class TargetClusterAgent:
                     command_id = command[Gateway.COMMAND_ID]
                     workspace_id = command.get(Gateway.WORKSPACE_ID, self.workspace_id)
                     lease_id = command[Gateway.LEASE_ID]
+                    attempt_id = command.get(Gateway.ATTEMPT_ID)
                     action = command[Gateway.ACTION]
                     LOGGER.info(
                         "agent_executing_command",
@@ -797,25 +823,37 @@ class TargetClusterAgent:
                             }
                         },
                     )
-                    await client.start_command(
-                        command_id,
-                        self.cluster_id,
-                        str(workspace_id),
-                        lease_id,
-                        self.agent_id,
-                    )
+                    if attempt_id:
+                        await client.start_command(
+                            command_id,
+                            self.cluster_id,
+                            str(workspace_id),
+                            lease_id,
+                            self.agent_id,
+                            str(attempt_id),
+                        )
+                    else:
+                        await client.start_command(
+                            command_id,
+                            self.cluster_id,
+                            str(workspace_id),
+                            lease_id,
+                            self.agent_id,
+                        )
                     result = await self.execute_command_with_heartbeat(
                         client,
                         command,
                         command_id,
                         str(workspace_id),
                         lease_id,
+                        str(attempt_id) if attempt_id else None,
                     )
                     self.command_outbox.enqueue_result(
                         command_id=command_id,
                         workspace_id=str(workspace_id),
                         lease_id=lease_id,
                         agent_id=self.agent_id,
+                        attempt_id=str(attempt_id) if attempt_id else None,
                         result=result,
                     )
                     result_flushed = await self.flush_command_results_once(client)
@@ -849,14 +887,24 @@ class TargetClusterAgent:
         if record is None:
             return False
         try:
-            await client.complete_command(
-                record.command_id,
-                record.workspace_id,
-                record.lease_id,
-                record.agent_id,
-                record.result,
-            )
-            self.command_outbox.mark_sent(record.command_id)
+            if record.attempt_id.startswith("legacy:"):
+                await client.complete_command(
+                    record.command_id,
+                    record.workspace_id,
+                    record.lease_id,
+                    record.agent_id,
+                    record.result,
+                )
+            else:
+                await client.complete_command(
+                    record.command_id,
+                    record.workspace_id,
+                    record.lease_id,
+                    record.agent_id,
+                    record.result,
+                    record.attempt_id,
+                )
+            self.command_outbox.mark_sent(record.command_id, record.attempt_id)
             LOGGER.info(
                 "command_result_flushed",
                 extra={
@@ -879,6 +927,7 @@ class TargetClusterAgent:
                 record.command_id,
                 str(exc),
                 COMMAND_OUTBOX_MAX_ATTEMPTS,
+                record.attempt_id,
             )
             LOGGER.warning(
                 "command_result_flush_failed",
@@ -902,12 +951,24 @@ class TargetClusterAgent:
         command_id: str,
         workspace_id: str,
         lease_id: str,
+        attempt_id: str | None,
     ) -> JsonObject:
+        cancel_requested = asyncio.Event()
         heartbeat = asyncio.create_task(
-            self.heartbeat_command_until_done(client, command_id, workspace_id, lease_id)
+            self.heartbeat_command_until_done(
+                client,
+                command_id,
+                workspace_id,
+                lease_id,
+                attempt_id,
+                cancel_requested,
+            )
         )
         try:
-            return await self.execute_command(command)
+            # The server never kills a local process.  Handlers may observe this
+            # event at safe checkpoints; already-running side effects finish and
+            # report their actual result so completion/cancel races are honest.
+            return await self.execute_command(command, cancel_requested=cancel_requested)
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):
@@ -919,13 +980,36 @@ class TargetClusterAgent:
         command_id: str,
         workspace_id: str,
         lease_id: str,
+        attempt_id: str | None,
+        cancel_requested: asyncio.Event,
     ) -> None:
+        observed_cancel_generation: int | None = None
         while True:
             await asyncio.sleep(AgentConfig.COMMAND_HEARTBEAT_INTERVAL_SECONDS)
             try:
-                await client.heartbeat_command(
-                    command_id, self.cluster_id, workspace_id, lease_id, self.agent_id
-                )
+                if attempt_id is None and observed_cancel_generation is None:
+                    response = await client.heartbeat_command(
+                        command_id,
+                        self.cluster_id,
+                        workspace_id,
+                        lease_id,
+                        self.agent_id,
+                    )
+                else:
+                    response = await client.heartbeat_command(
+                        command_id,
+                        self.cluster_id,
+                        workspace_id,
+                        lease_id,
+                        self.agent_id,
+                        attempt_id,
+                        observed_cancel_generation,
+                    )
+                if isinstance(response, dict) and response.get(Gateway.CANCEL_REQUESTED) is True:
+                    generation = response.get(Gateway.CANCEL_GENERATION)
+                    if isinstance(generation, int) and generation > 0:
+                        observed_cancel_generation = generation
+                        cancel_requested.set()
             except Exception as exc:
                 LOGGER.warning(
                     "command_heartbeat_failed",
@@ -970,7 +1054,23 @@ class TargetClusterAgent:
                 },
             )
 
-    async def execute_command(self, command: CommandRecord) -> JsonObject:
+    async def execute_command(
+        self,
+        command: CommandRecord,
+        *,
+        cancel_requested: asyncio.Event | None = None,
+    ) -> JsonObject:
+        if cancel_requested is not None and cancel_requested.is_set():
+            return {
+                Gateway.STATUS: CommandStatus.CANCELLED,
+                Gateway.CLUSTER_ID: self.cluster_id,
+                Gateway.APPLIED: False,
+                Gateway.MESSAGE: "command cancelled before a safe execution checkpoint",
+                Gateway.RETRYABLE: False,
+                Gateway.RESOURCES: [],
+                Gateway.STDOUT: "",
+                Gateway.STDERR: "",
+            }
         action = str(command.get(Gateway.ACTION, ""))
         payload = self.command_payload(command)
         if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
@@ -1020,6 +1120,7 @@ class TargetClusterAgent:
                         command, Gateway.APPROVAL_EXPIRES_AT
                     ),
                     Gateway.DIRECT_EXECUTION: direct_execution,
+                    "cooperative_cancel_requested": cancel_requested,
                 },
             )
         except Exception as exc:

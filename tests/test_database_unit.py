@@ -2539,11 +2539,14 @@ def test_queue_agent_command_reports_insert_and_notifies_only_new_commands() -> 
 
     assert repository.queue_agent_command("corr-1", plan, "queued") is True
     assert repository.queue_agent_command("corr-1", plan, "queued") is False
-    assert len(recorded) == 3
+    # Worker projection now persists the immutable first execution attempt in
+    # addition to the logical command row before waking the target agent.
+    assert len(recorded) == 4
     assert "RETURNING agent_commands.command_id" in str(
         recorded[0].compile(dialect=postgresql.dialect())
     )
-    assert "pg_notify" in str(recorded[1])
+    assert "agent_command_attempts" in str(recorded[1].compile(dialect=postgresql.dialect()))
+    assert "pg_notify" in str(recorded[2])
 
 
 def test_operation_event_replay_is_workspace_scoped_and_strictly_ordered() -> None:

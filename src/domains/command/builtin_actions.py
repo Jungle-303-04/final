@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from domains.command.actions import command
+from domains.command.policy import (
+    DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+)
 from packages.config.constants import Command, Sandbox
 from packages.contracts.target import TARGET_NAMESPACE
 
@@ -13,6 +17,9 @@ from packages.contracts.target import TARGET_NAMESPACE
     allowed_namespaces=(Sandbox.NAMESPACE, "color-turf"),
     requires_approval=False,
     requires_approval_outside_sandbox=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
 )
 class RolloutRestartCommand:
     pass
@@ -23,6 +30,9 @@ class RolloutRestartCommand:
     recovery_aliases=("apply_manifest",),
     allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
 )
 class ApplyManifestCommand:
     pass
@@ -33,6 +43,9 @@ class ApplyManifestCommand:
     recovery_aliases=("deployment_scale",),
     allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
 )
 class ScaleDeploymentCommand:
     pass

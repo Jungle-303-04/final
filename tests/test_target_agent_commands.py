@@ -1317,6 +1317,28 @@ def test_command_result_outbox_retries_until_gateway_accepts(tmp_path: Path) -> 
     assert client.completed[0]["command_id"] == "cmd-1"
 
 
+def test_command_result_outbox_keeps_distinct_logical_command_attempts(tmp_path: Path) -> None:
+    module = load_agent_module()
+    outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
+    for attempt_id, lease_id in (("attempt-1", "lease-1"), ("attempt-2", "lease-2")):
+        outbox.enqueue_result(
+            command_id="cmd-1",
+            attempt_id=attempt_id,
+            workspace_id="default",
+            lease_id=lease_id,
+            agent_id="agent-1",
+            result={"status": "failed", "cluster_id": "cluster-1"},
+        )
+
+    first = outbox.next_result()
+    assert first is not None
+    assert first.attempt_id == "attempt-1"
+    outbox.mark_sent(first.command_id, first.attempt_id)
+    second = outbox.next_result()
+    assert second is not None
+    assert second.attempt_id == "attempt-2"
+
+
 def test_command_result_outbox_logs_result_summary(tmp_path: Path, caplog) -> None:
     module = load_agent_module()
     outbox = module.CommandResultOutbox(str(tmp_path / "command-outbox.db"))
