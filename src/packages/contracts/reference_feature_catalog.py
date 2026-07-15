@@ -18,6 +18,15 @@ from packages.contracts.gateway.base import StrictModel
 CATALOG_PATH = Path(__file__).with_name("reference_feature_catalog.json")
 
 
+class ReferenceFeatureCoverage(StrictModel):
+    """Per-feature proof links; null means that boundary is not implemented yet."""
+
+    backend: dict[str, str] | None
+    frontend: dict[str, str] | None
+    desktop: dict[str, str] | None
+    realtime: dict[str, str] | Literal["not_required"] | None
+
+
 class ReferenceFeatureContract(StrictModel):
     contract_id: str = Field(min_length=1, validation_alias="contractId")
     id: str = Field(min_length=1)
@@ -36,6 +45,7 @@ class ReferenceFeatureContract(StrictModel):
     frontend_contract: str = Field(min_length=1, validation_alias="frontendContract")
     desktop_contract: str | None = Field(validation_alias="desktopContract")
     verification: tuple[str, ...] = Field(min_length=1)
+    coverage: ReferenceFeatureCoverage
 
 
 class ReferenceFeatureContractCatalog(StrictModel):

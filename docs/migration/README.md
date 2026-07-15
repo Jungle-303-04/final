@@ -17,6 +17,13 @@ feature row and rejects a newly added source section until it has a product
 boundary. This keeps the mapping structured without copying action lists into
 Python or the browser.
 
+When an individual product feature becomes `implemented`, add its contract ID
+to the map's `features` object with independent `coverage` evidence. Backend
+evidence names its route, handler, and test; frontend evidence names its
+consumer and test; desktop evidence names its bridge and test; a streaming row
+also names its transport, replay policy, and test. The release gate rejects an
+`implemented` product row without this per-feature proof.
+
 `make reference-feature-parity-check` is the release-only completion gate. It
 fails until every product feature is `implemented`; reference evidence and
 intentionally non-product server surfaces are the only excluded statuses.

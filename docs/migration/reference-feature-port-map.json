@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "features": {},
   "sections": {
     "0. 목적과 사용 금지선": {
       "area": "migration-governance",

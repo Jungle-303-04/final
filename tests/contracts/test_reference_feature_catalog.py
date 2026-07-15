@@ -18,6 +18,11 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
     assert all(feature.backend_contract for feature in catalog.features)
     assert all(feature.frontend_contract for feature in catalog.features)
     assert all(feature.verification for feature in catalog.features)
+    assert all(
+        feature.coverage.realtime == "not_required"
+        for feature in catalog.features
+        if not feature.streaming
+    )
     assert {feature.delivery_status for feature in catalog.features} >= {
         "implemented",
         "in_progress",

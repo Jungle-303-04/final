@@ -83,6 +83,32 @@ function sectionPortMap(portMap, section) {
   return port;
 }
 
+function featurePortMap(portMap, section, contractId) {
+  const sectionPort = sectionPortMap(portMap, section);
+  const override = portMap.features?.[contractId] ?? {};
+  if (!override || typeof override !== "object" || Array.isArray(override)) {
+    throw new Error(`행별 이식 경계는 객체여야 합니다: ${contractId}`);
+  }
+  const port = { ...sectionPort, ...override };
+  if (!DELIVERY_STATUSES.has(port.deliveryStatus)) {
+    throw new Error(`알 수 없는 이식 상태입니다: ${contractId} (${port.deliveryStatus})`);
+  }
+  return port;
+}
+
+function featureCoverage(port, streaming) {
+  const coverage = port.coverage ?? {};
+  if (!coverage || typeof coverage !== "object" || Array.isArray(coverage)) {
+    throw new Error("행별 이식 증거는 객체여야 합니다");
+  }
+  return {
+    backend: coverage.backend ?? null,
+    frontend: coverage.frontend ?? null,
+    desktop: coverage.desktop ?? null,
+    realtime: streaming ? coverage.realtime ?? null : "not_required",
+  };
+}
+
 export function parseReferenceInventory(markdown, sourceRevision, portMap) {
   if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
     throw new Error("sourceRevision must be a 40-character lowercase hexadecimal revision");
@@ -100,21 +126,25 @@ export function parseReferenceInventory(markdown, sourceRevision, portMap) {
     const cells = tableCells(lines[index]);
     if (isTableSeparator(cells) || isTableSeparator(tableCells(lines[index + 1] ?? ""))) continue;
     const endpoints = endpointsFor(cells);
-    const port = sectionPortMap(portMap, section);
+    const number = String(features.length + 1).padStart(3, "0");
+    const contractId = `reference.feature.${number}`;
+    const streaming = endpoints.some(isStreamingEndpoint);
+    const port = featurePortMap(portMap, section, contractId);
     features.push({
-      id: `reference-feature-${String(features.length + 1).padStart(3, "0")}`,
-      contractId: `reference.feature.${String(features.length + 1).padStart(3, "0")}`,
+      id: `reference-feature-${number}`,
+      contractId,
       section,
       line: index + 1,
       cells,
       endpoints,
-      streaming: endpoints.some(isStreamingEndpoint),
+      streaming,
       area: port.area,
       deliveryStatus: port.deliveryStatus,
       backendContract: port.backendContract,
       frontendContract: port.frontendContract,
       desktopContract: port.desktopContract,
       verification: port.verification,
+      coverage: featureCoverage(port, streaming),
     });
   }
   const ledger = {
@@ -165,6 +195,23 @@ export function validateFeatureLedger(ledger) {
     if (!Array.isArray(feature.verification) || feature.verification.length === 0) {
       errors.push(`${id}: at least one verification target is required`);
     }
+    if (!feature.coverage || typeof feature.coverage !== "object") {
+      errors.push(`${id}: coverage is required`);
+    } else {
+      for (const boundary of ["backend", "frontend", "desktop"]) {
+        const value = feature.coverage[boundary];
+        if (value !== null && (typeof value !== "object" || Array.isArray(value))) {
+          errors.push(`${id}: coverage.${boundary} must be an object or null`);
+        }
+      }
+      const realtime = feature.coverage.realtime;
+      if (feature.streaming && realtime !== null && (typeof realtime !== "object" || Array.isArray(realtime))) {
+        errors.push(`${id}: streaming coverage.realtime must be an object or null`);
+      }
+      if (!feature.streaming && realtime !== "not_required") {
+        errors.push(`${id}: non-streaming coverage.realtime must be not_required`);
+      }
+    }
     if (ids.has(id)) errors.push(`${id}: id is duplicated`);
     ids.add(id);
   }
@@ -176,16 +223,27 @@ export function assertFeatureDeliveryComplete(ledger) {
   if (validationErrors.length > 0) {
     throw new Error(`기능 ledger validation failed:\n${validationErrors.join("\n")}`);
   }
-  const incomplete = ledger.features.filter(
-    (feature) =>
-      !NON_PRODUCT_DELIVERY_STATUSES.has(feature.deliveryStatus)
-      && feature.deliveryStatus !== "implemented",
-  );
+  const incomplete = [];
+  for (const feature of ledger.features) {
+    if (NON_PRODUCT_DELIVERY_STATUSES.has(feature.deliveryStatus)) continue;
+    if (feature.deliveryStatus !== "implemented") {
+      incomplete.push(`${feature.contractId}: ${feature.deliveryStatus}`);
+      continue;
+    }
+    const coverage = feature.coverage;
+    for (const boundary of ["backend", "frontend"]) {
+      if (!coverage[boundary]) incomplete.push(`${feature.contractId}: missing ${boundary} coverage`);
+    }
+    if (feature.desktopContract && !coverage.desktop) {
+      incomplete.push(`${feature.contractId}: missing desktop coverage`);
+    }
+    if (feature.streaming && !coverage.realtime) {
+      incomplete.push(`${feature.contractId}: missing realtime coverage`);
+    }
+  }
   if (incomplete.length > 0) {
     throw new Error(
-      `출하 동등성 미완료 (${incomplete.length}개):\n${incomplete
-        .map((feature) => `${feature.contractId}: ${feature.deliveryStatus}`)
-        .join("\n")}`,
+      `출하 동등성 미완료 (${incomplete.length}개):\n${incomplete.join("\n")}`,
     );
   }
 }
@@ -244,6 +302,7 @@ function contractCatalog(ledger) {
         frontendContract,
         desktopContract,
         verification,
+        coverage,
       }) => ({
         contractId,
         id,
@@ -256,6 +315,7 @@ function contractCatalog(ledger) {
         frontendContract,
         desktopContract,
         verification,
+        coverage,
       }),
     ),
   };
