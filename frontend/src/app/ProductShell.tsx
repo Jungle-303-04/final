@@ -1,5 +1,5 @@
 import { Activity, Settings } from "lucide-react";
-import { useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
@@ -60,9 +60,12 @@ import {
   EMPTY_ALERT_EVENTS_PORT,
   type AlertEventsPort,
 } from "../features/alerts/alertEventsContract";
-import { ProductCommandPalette } from "./ProductCommandPalette";
 import type { ProductRouteDefinition } from "./productRoutes";
 import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
+
+const ProductCommandPalette = lazy(async () => ({
+  default: (await import("./ProductCommandPalette")).ProductCommandPalette,
+}));
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -299,13 +302,17 @@ function ProductShellFrame({
               onOpenChange={setShortcutHelpOpen}
               open={isShortcutHelpOpen}
             />
-            <ProductCommandPalette
-              availableSurfaceIds={releasedSurfaceIds}
-              onOpenChange={setCommandPaletteOpen}
-              onSelectRoute={selectProductRoute}
-              open={isCommandPaletteOpen}
-              routeDefinitions={productKeyboardNavigationRoutes()}
-            />
+            {isCommandPaletteOpen ? (
+              <Suspense fallback={null}>
+                <ProductCommandPalette
+                  availableSurfaceIds={releasedSurfaceIds}
+                  onOpenChange={setCommandPaletteOpen}
+                  onSelectRoute={selectProductRoute}
+                  open
+                  routeDefinitions={productKeyboardNavigationRoutes()}
+                />
+              </Suspense>
+            ) : null}
             <DesktopLocalTerminalEntry />
             <LocaleToggle />
           </div>

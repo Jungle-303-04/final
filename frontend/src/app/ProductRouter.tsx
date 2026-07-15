@@ -9,6 +9,7 @@ import { OperationStatusStoreProvider } from "../features/operations/OperationSt
 import { ProductShell } from "./ProductShell";
 import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
 import type { ProductComposition } from "./productComposition";
+import { RouteSurface } from "./RouteSurface";
 import {
   landingProductRouteForReleasedSurfaces,
   PRODUCT_ROUTE_CATALOG,
@@ -58,11 +59,12 @@ export function ProductRouter({
             />
           )}>
             <Route index element={<ProductFallbackRedirect path={landingRoute.path} />} />
-            {composition.surfaces.flatMap(({ id, Component }) => {
+            {composition.surfaces.flatMap((registration) => {
+              const { id } = registration;
               const routeDefinition = routeDefinitionForSurface(id);
               return [
                 <Route
-                  element={<Component />}
+                  element={<RouteSurface registration={registration} />}
                   key={id}
                   path={routePathForDefinition(routeDefinition, routeDefinition.path)}
                 />,

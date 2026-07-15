@@ -1,215 +1,51 @@
 import {
-  getAuditTimeline,
-  getClusterNodesSummary,
-  getClusterSummary,
-  getRcaIncident,
-  getRecoveryPlanByCorrelation,
-  getInventoryResourceDetail,
-  getIncidentRecentChanges,
-  getInventorySummary,
-  getNodePodsSummary,
-  getClusterConnectionStatus,
-  getCommandStatus,
-  getPhysicalTopology,
-  getRelationTopology,
-  getChangeTimeline,
-  getResourceCapabilities,
-  getResourceMetricsHistory,
-  getSession,
-  listEvidence,
-  listInventoryResourcesByType,
-  listRcaReports,
-  listRcaTimeline,
-  listClusters,
-  unregisterCluster,
-  listGlobalFilterFacets,
-  listFilteredResources,
-  listResourceFilterFacets,
-  listResourceLabelFacets,
-  connectCluster,
-  reissueClusterConnectCommand,
-  getApplicationDrift,
-  getGitOpsApplicationDetail,
-  getApplicationOverview,
-  listApplicationCatalog,
-  listApplicationDeploymentHistory,
-  login,
-  logout,
-  executeResourceCapability,
-  subscribeCommandOperationEvents,
-  selectRecoveryAction,
-  createReleaseFlowClient,
-  getAiSuggestions,
-  postAiChat,
-  openPodLogStream,
-  openWorkloadLogStream,
-  openPodTerminal,
-  createRealtimeClient,
   acknowledgeAlertEvent,
-  listAlertEvents,
-  listApplicationDeployments,
-  promoteAlertEvent,
   createAlertRule,
   deleteAlertRule,
+  getAiSuggestions,
+  getClusterNodesSummary,
+  getClusterSummary,
+  getNodePodsSummary,
+  listAlertEvents,
   listAlertRules,
+  listClusters,
+  listGlobalFilterFacets,
+  openPodLogStream,
+  openWorkloadLogStream,
+  postAiChat,
+  promoteAlertEvent,
+  subscribeCommandOperationEvents,
   updateAlertRule,
-  approveResourceManifestEdit,
-  getResourceManifestSource,
-  previewResourceManifestEdit,
-  getTimelineCapabilities,
-  getTimelineOverview,
-  getTimelinePins,
-  getTimelineSnapshot,
-  removeTimelinePin,
-  subscribeTimelineEvents,
-  upsertTimelinePin,
-  getHelmRelease,
-  listHelmReleases,
-  getTrafficOverview,
-  getCostOverview,
-  getChecksDetail,
-  getChecksOverview,
 } from "../api";
-import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
-import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
-import { createAuthAdapter } from "../features/auth/createAuthAdapter";
-import { createApplicationsAdapter } from "../features/applications/createApplicationsAdapter";
-import { createApplicationsSurface } from "../features/applications/createApplicationsSurface";
-import { createHomeAdapter } from "../features/home/createHomeAdapter";
-import { createClustersAdapter } from "../features/clusters/createClustersAdapter";
+import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
+import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
+import type { AuthPort } from "../features/auth/authContract";
 import { createGlobalFilterAdapter } from "../features/global-filter/createGlobalFilterAdapter";
-import { createIssuesAdapter } from "../features/issues/createIssuesAdapter";
-import { createGitOpsAdapter } from "../features/gitops/createGitOpsAdapter";
-import { createResourcesAdapter } from "../features/resources/createResourcesAdapter";
-import { createResourcesFilterAdapter } from "../features/resources/createResourcesFilterAdapter";
-import { createPhysicalTopologyAdapter } from "../features/resources/createPhysicalTopologyAdapter";
-import { createRelationTopologyAdapter } from "../features/resources/createRelationTopologyAdapter";
-import { createChangeTimelineAdapter } from "../features/resources/createChangeTimelineAdapter";
-import { createResourceMetricsHistoryAdapter } from "../features/resources/createResourceMetricsHistoryAdapter";
-import { createResourceCapabilitiesAdapter } from "../features/resources/createResourceCapabilitiesAdapter";
-import { createResourceActionsAdapter } from "../features/resources/createResourceActionsAdapter";
-import { createResourceManifestAdapter } from "../features/resources/createResourceManifestAdapter";
+import { createHomeAdapter } from "../features/home/createHomeAdapter";
+import { createLogStreamAdapter } from "../features/log-stream/createLogStreamAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
-import { createHomeSurface } from "../pages/home/createHomeSurface";
-import { createIssuesSurface } from "../pages/issues/createIssuesSurface";
-import { createResourcesSurface } from "../pages/resources/createResourcesSurface";
-import { createClustersSurface } from "../pages/clusters/createClustersSurface";
-import { createGitOpsSurface } from "../pages/gitops/createGitOpsSurface";
-import { createSettingsSurface } from "../pages/settings/createSettingsSurface";
-import { createProductComposition } from "./productComposition";
-import { createAlertEventsAdapter } from "../features/alerts/createAlertEventsAdapter";
-import { createPodTerminalAdapter } from "../features/pod-terminal/createPodTerminalAdapter";
-import { createAlertsSurface } from "../pages/alerts/createAlertsSurface";
-import { createAlertRulesAdapter } from "../features/alerts/createAlertRulesAdapter";
-import { createTimelineAdapter } from "../features/timeline/createTimelineAdapter";
-import { createTimelineSurface } from "../pages/timeline/createTimelineSurface";
-import { createHelmAdapter } from "../features/helm/createHelmAdapter";
-import { createHelmSurface } from "../pages/helm/createHelmSurface";
-import { createTrafficAdapter } from "../features/traffic/createTrafficAdapter";
-import { createTrafficSurface } from "../pages/traffic/createTrafficSurface";
-import { createCostAdapter } from "../features/cost/createCostAdapter";
-import { createCostSurface } from "../pages/cost/createCostSurface";
-import { createChecksAdapter } from "../features/checks/createChecksAdapter";
-import { createChecksSurface } from "../pages/checks/createChecksSurface";
+import { createPortRegistry } from "./composition/PortRegistry";
+import { createProductComposition, type ProductComposition } from "./productComposition";
 
-export function createApiComposition() {
+/**
+ * The authenticated composition is intentionally small: global providers and
+ * their one-owner ports are created here, while every page factory is loaded
+ * only through its registered route module.
+ */
+export function createApiComposition(auth: AuthPort): ProductComposition {
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
     getNodePodsSummary,
     listClusters,
   });
-  const clustersPort = createClustersAdapter({
-    connectCluster,
-    getClusterConnectionStatus,
-    getCommandStatus,
-    reissueClusterConnectCommand,
-    unregisterCluster,
-  });
+  const operationStatusStore = createOperationStatusStore(
+    createOperationEventsAdapter({ subscribeCommandOperationEvents }),
+  );
+  const registry = createPortRegistry({ homePort, operationStatusStore });
   const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
-  const resourcesPort = createResourcesAdapter({
-    getInventoryResourceDetail,
-    getInventorySummary,
-    listInventoryResourcesByType,
-  });
-  const resourcesFilterPort = createResourcesFilterAdapter({
-    listFilteredResources,
-    listResourceFilterFacets,
-    listResourceLabelFacets,
-  });
-  const physicalTopologyPort = createPhysicalTopologyAdapter({ getPhysicalTopology });
-  const physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = {
-    connect(subscription, handlers) {
-      const client = createRealtimeClient({
-        subscription,
-        reconnect: { baseDelayMs: 3_000, maxDelayMs: 30_000 },
-        onMessage: handlers.onMessage,
-        onStateChange: (state) => handlers.onStatusChange(state.status),
-      });
-      client.connect();
-      return () => client.close();
-    },
-  };
-  const relationTopologyPort = createRelationTopologyAdapter({ getRelationTopology });
-  const changeTimelinePort = createChangeTimelineAdapter({ getChangeTimeline });
-  const timelinePort = createTimelineAdapter({
-    getTimelineCapabilities,
-    getTimelineOverview,
-    getTimelinePins,
-    getTimelineSnapshot,
-    removeTimelinePin,
-    subscribeTimelineEvents,
-    upsertTimelinePin,
-  });
-  const resourceMetricsHistoryPort = createResourceMetricsHistoryAdapter({
-    getResourceMetricsHistory,
-  });
-  const resourceCapabilitiesPort = createResourceCapabilitiesAdapter({
-    getResourceCapabilities,
-  });
-  const resourceActionsPort = createResourceActionsAdapter({
-    executeResourceCapability(capability, values, signal) {
-      return executeResourceCapability(capability.path, values, signal);
-    },
-  });
-  const operationEventsPort = createOperationEventsAdapter({ subscribeCommandOperationEvents });
-  const operationStatusStore = createOperationStatusStore(operationEventsPort);
-  const podTerminalPort = createPodTerminalAdapter({ openPodTerminal });
-  const resourceManifestPort = createResourceManifestAdapter({
-    approveResourceManifestEdit,
-    getResourceManifestSource,
-    previewResourceManifestEdit,
-  });
-  const issuesPort = createIssuesAdapter({
-    getAuditTimeline,
-    getIncidentRecentChanges,
-    getRcaIncident,
-    getRecoveryPlanByCorrelation,
-    listEvidence,
-    listRcaReports,
-    listRcaTimeline,
-    selectRecoveryAction,
-  });
-  const applicationsPort = createApplicationsAdapter({
-    getApplicationDrift,
-    getApplicationOverview,
-    listApplicationCatalog,
-    listApplicationDeploymentHistory,
-  });
-  const gitOpsPort = createGitOpsAdapter({
-    ...createReleaseFlowClient(),
-    getApplicationDetail: getGitOpsApplicationDetail,
-    listApplicationDeployments,
-  });
-  const helmPort = createHelmAdapter({
-    getHelmRelease,
-    listHelmReleases,
-  });
-  const trafficPort = createTrafficAdapter({ getTrafficOverview });
-  const costPort = createCostAdapter({ getCostOverview });
-  const checksPort = createChecksAdapter({ getChecksDetail, getChecksOverview });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,
@@ -227,75 +63,87 @@ export function createApiComposition() {
     listAlertRules,
     updateAlertRule,
   });
+
   return createProductComposition([
     {
       id: "clusters",
-      Component: createClustersSurface(clustersPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/clusters")).loadClustersSurface(),
+      })),
     },
     {
       id: "home",
-      Component: createHomeSurface(homePort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/home")).loadHomeSurface(registry.homePort),
+      })),
     },
     {
       id: "resources",
-      Component: createResourcesSurface(
-        resourcesPort,
-        resourcesFilterPort,
-        physicalTopologyPort,
-        physicalTopologyRealtimePort,
-        homePort,
-        relationTopologyPort,
-        changeTimelinePort,
-        resourceMetricsHistoryPort,
-        resourceCapabilitiesPort,
-        resourceActionsPort,
-        podTerminalPort,
-        resourceManifestPort,
-      ),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(registry.homePort),
+      })),
     },
     {
       id: "issues",
-      Component: createIssuesSurface(issuesPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(),
+      })),
     },
     {
       id: "timeline",
-      Component: createTimelineSurface(timelinePort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(),
+      })),
     },
     {
       id: "alerts",
-      Component: createAlertsSurface(alertRulesPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/alerts")).loadAlertsSurface(alertRulesPort),
+      })),
     },
     {
       id: "applications",
-      Component: createApplicationsSurface(applicationsPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(),
+      })),
     },
     {
       id: "gitops",
-      Component: createGitOpsSurface(gitOpsPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(),
+      })),
     },
     {
       id: "helm",
-      Component: createHelmSurface(helmPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/helm")).loadHelmSurface(),
+      })),
     },
     {
       id: "traffic",
-      Component: createTrafficSurface(trafficPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/traffic")).loadTrafficSurface(),
+      })),
     },
     {
       id: "cost",
-      Component: createCostSurface(costPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/cost")).loadCostSurface(),
+      })),
     },
     {
       id: "checks",
-      Component: createChecksSurface(checksPort),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/checks")).loadChecksSurface(),
+      })),
     },
     {
       id: "settings",
-      Component: createSettingsSurface(),
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(),
+      })),
     },
-  ], createAuthAdapter({
-    getSession,
-    login,
-    logout,
-  }), homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore);
+  ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
+    registry.dispose();
+  });
 }

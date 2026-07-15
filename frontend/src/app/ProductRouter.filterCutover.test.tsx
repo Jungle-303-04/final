@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { ThemeProvider } from "next-themes";
+import type { ComponentType } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import {
 } from "react-router-dom";
 import { ProductRouter } from "./ProductRouter";
 import { createProductComposition } from "./productComposition";
+import { createProductSurfaceLoader } from "./surfaceLoader";
 import { AuthSessionGateProvider } from "../features/auth/AuthSessionGate";
 import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
@@ -231,11 +233,11 @@ function renderProductRouter(
   includeWorkflows = false,
 ) {
   const composition = createProductComposition([
-    { id: "home", Component: HomeSurface },
-    { id: "clusters", Component: ClustersSurface },
-    { id: "resources", Component: ResourcesSurface },
-    { id: "issues", Component: IssuesSurface },
-    ...(includeWorkflows ? [{ id: "gitops" as const, Component: WorkflowsSurface }] : []),
+    { id: "home", loader: surfaceLoader(HomeSurface) },
+    { id: "clusters", loader: surfaceLoader(ClustersSurface) },
+    { id: "resources", loader: surfaceLoader(ResourcesSurface) },
+    { id: "issues", loader: surfaceLoader(IssuesSurface) },
+    ...(includeWorkflows ? [{ id: "gitops" as const, loader: surfaceLoader(WorkflowsSurface) }] : []),
   ], authPort, clusterScope);
   const router = createMemoryRouter([{
     path: "*",
@@ -255,6 +257,10 @@ function renderProductRouter(
     ...render(<RouterProvider router={router} />),
     router,
   };
+}
+
+function surfaceLoader(Component: ComponentType) {
+  return createProductSurfaceLoader(async () => ({ default: Component }));
 }
 
 function HomeSurface() {
