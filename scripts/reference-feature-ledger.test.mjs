@@ -12,6 +12,7 @@ import {
 } from "./reference-feature-ledger.mjs";
 
 const REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
+const PREVIOUS_REVISION = "3ff2b1095151c690bf536e8e6ca685c2703fcd70";
 
 const PORT_MAP = {
   schemaVersion: 1,
@@ -478,6 +479,67 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
         },
       ],
     });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("strict release는 sourceKey alias manifest가 target revision과 다르면 완전한 기능도 거부한다", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "reference-feature-alias-revision-"));
+  const source = path.join(directory, "inventory.md");
+  const output = path.join(directory, "ledger.json");
+  const contractsOutput = path.join(directory, "reference_feature_catalog.json");
+  const aliases = path.join(directory, "source-key-aliases.json");
+  try {
+    await writeFile(
+      source,
+      [
+        "## API",
+        "| Method·path | 요청 |",
+        "|---|---|",
+        "| `GET /resources` | 없음 |",
+      ].join("\n"),
+    );
+    await writeFile(
+      aliases,
+      JSON.stringify({
+        schemaVersion: 1,
+        sourceRevision: PREVIOUS_REVISION,
+        aliases: {
+          "reference.feature.001": "upstream-ui:resources:list:read:v1",
+        },
+      }),
+    );
+
+    await assert.rejects(
+      () =>
+        writeFeatureLedger({
+          source,
+          output,
+          contractsOutput,
+          sourceKeyAliases: aliases,
+          sourceRevision: REVISION,
+          requireComplete: true,
+          portMap: {
+            schemaVersion: 1,
+            sections: {
+              API: {
+                area: "resources",
+                deliveryStatus: "implemented",
+                backendContract: "domains.resources.router",
+                frontendContract: "frontend/src/pages/resources",
+                desktopContract: null,
+                verification: ["scripts/reference-feature-ledger.test.mjs"],
+                coverage: {
+                  backend: { route: "/api/resources", test: "tests/test_resources.py" },
+                  frontend: { consumer: "ResourcesPage", test: "ResourcesPage.test.tsx" },
+                },
+              },
+            },
+          },
+        }),
+      /sourceKey alias manifest revision .* does not match target/,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
