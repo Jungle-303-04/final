@@ -1,8 +1,9 @@
 # Reference migration ledger
 
 `reference-source-ledger.json` is the machine-generated, complete manifest of
-the pinned upstream source snapshot. Every source file has a SHA-256 digest, a
-disposition, and a verification target.
+the pinned upstream source snapshot. It records the HTTPS source repository and
+revision; every source file has a SHA-256 digest, size, detected language,
+purpose/disposition, product target, and verification target.
 
 `reference-feature-ledger.json` is the matching complete manifest for every
 table row in the source feature inventory. Every row is mapped to one product
@@ -41,6 +42,7 @@ snapshot:
 node scripts/reference-ledger.mjs \
   --source references/upstream \
   --revision cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc \
+  --repository https://github.com/skyhook-io/radar.git \
   --output docs/migration/reference-source-ledger.json
 ```
 

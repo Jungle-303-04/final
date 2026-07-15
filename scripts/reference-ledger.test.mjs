@@ -100,13 +100,16 @@ test('ledger는 원격 출처와 파일별 언어·용도를 누락 없이 요�
 
 test('누락된 해시와 이식 검증 대상을 ledger 오류로 보고한다', () => {
   const errors = validateLedger({
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceRevision: REVISION,
+    sourceRepository: 'https://github.com/skyhook-io/radar.git',
     files: [
       {
         path: 'web/src/App.tsx',
         size: 1,
         sha256: 'missing',
+        language: 'tsx',
+        purpose: 'frontend-port',
         disposition: 'frontend-port',
         target: null,
         verification: null,
