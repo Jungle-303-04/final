@@ -217,3 +217,9 @@ def test_operational_evaluation_loop_recovers_after_one_failed_cycle() -> None:
     asyncio.run(alert.run_alert_evaluation(engine, stopping))
 
     assert engine.calls == 2
+
+
+def test_default_rule_evaluation_interval_is_five_seconds() -> None:
+    alert = load_service("alert/alert-worker")
+
+    assert alert.DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS == "5"

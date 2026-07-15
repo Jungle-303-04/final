@@ -95,6 +95,11 @@ def _clamp_interval(raw: str) -> float:
     )
 
 
+def next_collection_delay(target_interval: float, collection_elapsed: float) -> float:
+    """Keep collection start-to-start cadence at the adaptive target interval."""
+    return max(0.0, target_interval - max(0.0, collection_elapsed))
+
+
 class KubernetesPodSummaryCollector:
     """k8s pod 목록(상한 있음)에서 bounded 요약을 계산함. API 미접근 환경이면 None."""
 
@@ -375,18 +380,25 @@ class LiveSummaryPublisher:
         send_lock: asyncio.Lock,
     ) -> None:
         while True:
+            collection_started = time.monotonic()
             summary = await self.collector()
             if summary is not None:
-                message = LiveSummaryMessage(cluster_id=self.cluster_id, summary=summary)
-                async with send_lock:
-                    await connection.send(message.model_dump_json())
                 drain = getattr(self.collector, "drain_deltas", None)
                 if callable(drain):
                     for delta in drain():
                         async with send_lock:
                             await connection.send(delta.model_dump_json())
+                # gateway는 summary 시점의 최신 delta cut을 replay/alert 저장소에 남긴다.
+                # summary를 먼저 보내면 저장/평가가 항상 한 수집 주기 뒤처진다.
+                message = LiveSummaryMessage(cluster_id=self.cluster_id, summary=summary)
+                async with send_lock:
+                    await connection.send(message.model_dump_json())
             next_interval = getattr(self.collector, "next_interval_seconds", None)
-            delay = next_interval() if callable(next_interval) else self.interval_seconds
+            target_interval = next_interval() if callable(next_interval) else self.interval_seconds
+            delay = next_collection_delay(
+                target_interval,
+                time.monotonic() - collection_started,
+            )
             await asyncio.sleep(delay)
 
 

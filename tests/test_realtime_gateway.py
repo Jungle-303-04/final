@@ -180,7 +180,6 @@ def test_live_summary_persists_agent_observed_pod_metrics() -> None:
             headers={"x-agent-token": GOOD_TOKEN},
         ) as agent:
             agent.receive_json()
-            agent.send_json(summary_payload())
             agent.send_json(
                 {
                     "type": "resource.delta",
@@ -201,8 +200,7 @@ def test_live_summary_persists_agent_observed_pod_metrics() -> None:
                 }
             )
             agent.send_json(summary_payload())
-            assert [browser.receive_json()["type"] for _ in range(3)] == [
-                "live.summary",
+            assert [browser.receive_json()["type"] for _ in range(2)] == [
                 "resource.delta",
                 "live.summary",
             ]

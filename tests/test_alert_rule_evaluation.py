@@ -35,7 +35,12 @@ RULE = {
 }
 
 
-def measurement(value: float, *, name: str = "checkout-0") -> AlertMeasurement:
+def measurement(
+    value: float,
+    *,
+    name: str = "checkout-0",
+    observed_at: datetime = BASE_TIME,
+) -> AlertMeasurement:
     subject = {
         "cluster": "cluster-1",
         "namespace": "shop",
@@ -45,12 +50,12 @@ def measurement(value: float, *, name: str = "checkout-0") -> AlertMeasurement:
     return AlertMeasurement(
         subject=subject,
         observed_value=value,
-        observed_at=BASE_TIME,
+        observed_at=observed_at,
         evidence=(
             {
                 "type": "metric_sample",
                 "metric": "cpu_pct",
-                "observed_at": BASE_TIME.isoformat(),
+                "observed_at": observed_at.isoformat(),
                 "subject": subject,
                 "value": value,
             },
@@ -142,7 +147,7 @@ def run_once(
     notifications: list[dict[str, Any]],
 ) -> None:
     async def load(_rule: dict[str, Any]) -> list[AlertMeasurement]:
-        return [measurement(value)]
+        return [measurement(value, observed_at=now)]
 
     async def notify(transition: dict[str, Any]) -> None:
         notifications.append(transition)
@@ -210,6 +215,47 @@ def test_missing_measurement_does_not_manufacture_a_resolution() -> None:
 
     assert next(iter(db.events.values()))["status"] == "firing"
     assert [item["transition"] for item in notifications] == ["firing"]
+
+
+def test_repeated_sample_does_not_satisfy_duration_or_resolve() -> None:
+    db = StubEvaluationDb()
+    notifications: list[dict[str, Any]] = []
+
+    async def load_high(_rule: dict[str, Any]) -> list[AlertMeasurement]:
+        return [measurement(90, observed_at=BASE_TIME)]
+
+    engine = AlertEvaluationEngine(db, load_measurements=load_high, notify=notifications.append)
+    asyncio.run(engine.evaluate_once(now=BASE_TIME))
+    asyncio.run(engine.evaluate_once(now=BASE_TIME + timedelta(seconds=30)))
+
+    assert db.events == {}
+    state = next(iter(db.states.values()))
+    assert state["condition_since"] == BASE_TIME
+    assert state["last_evaluated_at"] == BASE_TIME
+
+
+def test_duration_uses_real_sample_span_instead_of_worker_clock() -> None:
+    db = StubEvaluationDb()
+    notifications: list[dict[str, Any]] = []
+    samples = iter(
+        (
+            measurement(90, observed_at=BASE_TIME),
+            measurement(91, observed_at=BASE_TIME + timedelta(seconds=19)),
+            measurement(92, observed_at=BASE_TIME + timedelta(seconds=20)),
+        )
+    )
+
+    async def load(_rule: dict[str, Any]) -> list[AlertMeasurement]:
+        return [next(samples)]
+
+    engine = AlertEvaluationEngine(db, load_measurements=load, notify=notifications.append)
+    asyncio.run(engine.evaluate_once(now=BASE_TIME + timedelta(minutes=1)))
+    asyncio.run(engine.evaluate_once(now=BASE_TIME + timedelta(minutes=2)))
+    assert db.events == {}
+    asyncio.run(engine.evaluate_once(now=BASE_TIME + timedelta(minutes=3)))
+
+    assert len(db.events) == 1
+    assert next(iter(db.events.values()))["observed_value"] == 92
 
 
 @pytest.mark.parametrize(

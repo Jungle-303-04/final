@@ -103,6 +103,11 @@ class AlertEvaluationEngine:
             self.db.get_alert_rule_target_state(workspace_id, rule_id, subject_key)
         )
         state = dict(state or {})
+        last_observed_at = _last_observed_at(state)
+        if last_observed_at is not None and measurement.observed_at <= last_observed_at:
+            # 평가 루프가 실측 수집보다 빠르더라도 같은 표본으로 지속 시간을
+            # 인위적으로 채우거나 해소 전이를 만들지 않는다.
+            return None
         state_payload = {
             "workspace_id": workspace_id,
             "rule_id": rule_id,
@@ -146,11 +151,15 @@ class AlertEvaluationEngine:
         if condition_since is None:
             await _await_if_needed(
                 self.db.upsert_alert_rule_target_state(
-                    {**state_payload, "condition_since": evaluated_at, "active_event_id": None}
+                    {
+                        **state_payload,
+                        "condition_since": measurement.observed_at,
+                        "active_event_id": None,
+                    }
                 )
             )
             return None
-        if (evaluated_at - condition_since).total_seconds() < int(rule["for_seconds"]):
+        if (measurement.observed_at - condition_since).total_seconds() < int(rule["for_seconds"]):
             await _await_if_needed(
                 self.db.upsert_alert_rule_target_state(
                     {**state_payload, "condition_since": condition_since, "active_event_id": None}
@@ -237,6 +246,16 @@ def _datetime_or_none(value: object) -> datetime | None:
     if isinstance(value, str) and value:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     return None
+
+
+def _last_observed_at(state: Mapping[str, Any]) -> datetime | None:
+    evidence = state.get("last_evidence")
+    if not isinstance(evidence, list | tuple):
+        return None
+    observed = [
+        _datetime_or_none(item.get("observed_at")) for item in evidence if isinstance(item, Mapping)
+    ]
+    return max((item for item in observed if item is not None), default=None)
 
 
 async def _await_if_needed(value: Any) -> Any:

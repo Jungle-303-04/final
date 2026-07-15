@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+import pytest
 import yaml
 from conftest import ROOT, load_file
 
@@ -268,6 +269,13 @@ def test_publisher_streams_bounded_live_summary_payloads() -> None:
         assert message["type"] == "live.summary"
         assert message["cluster_id"] == CLUSTER
         assert len(message["summary"]["hot_pods"]) <= MAX_HOT_PODS
+
+
+def test_publisher_subtracts_collection_time_from_adaptive_interval() -> None:
+    module = load_live_summary_module()
+
+    assert module.next_collection_delay(1.0, 0.4) == pytest.approx(0.6)
+    assert module.next_collection_delay(1.0, 1.2) == 0.0
 
 
 def test_publisher_disabled_returns_immediately() -> None:
