@@ -39,13 +39,21 @@ export interface CommandReceipt {
   /** Immutable request event, later copied to the async audit projection. */
   auditEventId: string;
   correlationId: string;
-  status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
+  status:
+    | "queued"
+    | "leased"
+    | "running"
+    | "cancel_requested"
+    | "cancelling"
+    | "completed"
+    | "failed"
+    | "cancelled";
 }
 
 export interface OperationEvent {
   commandId: string;
   sequence: number;
-  kind: "progress" | "log" | "completed" | "failed";
+  kind: "progress" | "log" | "completed" | "failed" | "cancelled";
   payload: Record<string, unknown>;
   occurredAt: string;
 }

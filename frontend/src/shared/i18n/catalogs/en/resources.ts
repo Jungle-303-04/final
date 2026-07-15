@@ -261,6 +261,7 @@ export const resourcesEn = {
   "resources.detail.action.observation.reconnecting": "Reconnecting",
   "resources.detail.action.observation.completed": "Completed",
   "resources.detail.action.observation.failed": "Failed",
+  "resources.detail.action.observation.cancelled": "Cancelled",
   "resources.detail.action.observation.forbidden": "Observation forbidden",
   "resources.detail.action.observation.invalid": "Invalid operation stream",
   "resources.detail.action.observation.unavailable": "Observation unavailable",

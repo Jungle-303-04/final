@@ -15,4 +15,14 @@ describe("command operation event schema", () => {
     expect(commandOperationEventSchema.parse(event)).toEqual(event);
     expect(() => commandOperationEventSchema.parse({ ...event, unexpected: true })).toThrow();
   });
+
+  it("accepts a terminal cooperative cancellation event", () => {
+    expect(commandOperationEventSchema.parse({
+      command_id: "command-1",
+      sequence: 2,
+      kind: "cancelled",
+      payload: { status: "cancelled" },
+      occurred_at: "2026-07-16T00:00:00Z",
+    }).kind).toBe("cancelled");
+  });
 });

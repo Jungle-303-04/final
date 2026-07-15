@@ -118,7 +118,11 @@ async function* consume(
         onCursor?.(cursor);
         progressed = true;
         yield event;
-        if (event.kind === "completed" || event.kind === "failed") {
+        if (
+          event.kind === "completed"
+          || event.kind === "failed"
+          || event.kind === "cancelled"
+        ) {
           return { completed: true, cursor, progressed };
         }
       }

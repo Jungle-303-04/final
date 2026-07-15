@@ -22,6 +22,7 @@ export type OperationStatus =
   | "reconnecting"
   | "completed"
   | "failed"
+  | "cancelled"
   | OperationStreamFailure;
 
 export interface OperationStatusSnapshot {
@@ -278,7 +279,9 @@ export function createOperationStatusStore(
       ? "completed"
       : event.kind === "failed"
         ? "failed"
-        : "running";
+        : event.kind === "cancelled"
+          ? "cancelled"
+          : "running";
     update(entry, {
       event,
       failure: null,
@@ -410,7 +413,7 @@ export function createOperationStatusStore(
 }
 
 function isTerminal(status: OperationStatus): boolean {
-  return status === "completed" || status === "failed";
+  return status === "completed" || status === "failed" || status === "cancelled";
 }
 
 function isFinal(status: OperationStatus): boolean {
