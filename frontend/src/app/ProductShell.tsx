@@ -62,6 +62,7 @@ import {
 } from "../features/alerts/alertEventsContract";
 import { ProductCommandPalette } from "./ProductCommandPalette";
 import type { ProductRouteDefinition } from "./productRoutes";
+import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -305,6 +306,7 @@ function ProductShellFrame({
               open={isCommandPaletteOpen}
               routeDefinitions={productKeyboardNavigationRoutes()}
             />
+            <DesktopLocalTerminalEntry />
             <LocaleToggle />
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">

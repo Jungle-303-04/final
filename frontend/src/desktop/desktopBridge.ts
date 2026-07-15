@@ -6,12 +6,17 @@ export const DESKTOP_COMMAND = {
   openSavedFile: "desktop_open_saved_file",
   revealSavedFile: "desktop_reveal_saved_file",
   systemTheme: "desktop_system_theme",
+  localTerminalStart: "desktop_local_terminal_start",
+  localTerminalInput: "desktop_local_terminal_input",
+  localTerminalResize: "desktop_local_terminal_resize",
+  localTerminalClose: "desktop_local_terminal_close",
 } as const;
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "browser";
 export type DesktopCapabilityState = "available" | "unsupported";
 export type DesktopTheme = "light" | "dark" | "unknown";
 export type DesktopMenuAction = "settings" | "reload";
+export const DESKTOP_LOCAL_TERMINAL_EVENT = "desktop:local-terminal";
 
 export interface DesktopCapability {
   state: DesktopCapabilityState;
@@ -49,6 +54,32 @@ export type SaveDesktopFileResult =
   | { kind: "saved"; file: DesktopSavedFile }
   | { kind: "cancelled" };
 
+export interface StartLocalTerminalRequest {
+  columns: number;
+  rows: number;
+}
+
+export interface DesktopLocalTerminalSession {
+  sessionId: string;
+  shell: string;
+}
+
+export interface LocalTerminalInputRequest {
+  sessionId: string;
+  data: string;
+}
+
+export interface LocalTerminalResizeRequest {
+  sessionId: string;
+  columns: number;
+  rows: number;
+}
+
+export type DesktopLocalTerminalEvent =
+  | { sessionId: string; kind: "output"; data: string }
+  | { sessionId: string; kind: "exit"; exitCode: number; message?: string }
+  | { sessionId: string; kind: "error"; message: string };
+
 interface DesktopRuntime {
   core: {
     invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -67,6 +98,16 @@ export interface DesktopBridge {
   openSavedFile: (handleId: string) => Promise<void>;
   revealSavedFile: (handleId: string) => Promise<void>;
   systemTheme: () => Promise<DesktopTheme>;
+  startLocalTerminal: (request: StartLocalTerminalRequest) => Promise<DesktopLocalTerminalSession>;
+  sendLocalTerminalInput: (request: LocalTerminalInputRequest) => Promise<void>;
+  resizeLocalTerminal: (request: LocalTerminalResizeRequest) => Promise<void>;
+  closeLocalTerminal: (sessionId: string) => Promise<void>;
+  /**
+   * Resolves only after the native event listener is installed.  A terminal
+   * must wait for this before starting its PTY so the initial shell prompt is
+   * never lost between process creation and subscription.
+   */
+  onLocalTerminalEvent: (listener: (event: DesktopLocalTerminalEvent) => void) => Promise<() => void>;
   onMenuAction: (listener: (action: DesktopMenuAction) => void) => () => void;
 }
 
@@ -79,7 +120,7 @@ const BROWSER_CAPABILITIES: DesktopCapabilitySet = {
   systemTheme: unsupported("The browser theme follows its own media query."),
   externalUrl: { state: "available" },
   safeFile: unsupported("Native save handles are available only in the desktop shell."),
-  localTerminal: unsupported("Local PTY is desktop-only and is not implemented."),
+  localTerminal: unsupported("Local PTY is available only in the native desktop shell."),
   updater: unsupported("Application updates are available only in a signed desktop release."),
 };
 
@@ -110,6 +151,23 @@ export function createDesktopBridge(runtime: DesktopRuntime | undefined = readDe
       { request: { handleId } },
     ),
     systemTheme: () => runtime.core.invoke<DesktopTheme>(DESKTOP_COMMAND.systemTheme),
+    startLocalTerminal: (request) => runtime.core.invoke<DesktopLocalTerminalSession>(
+      DESKTOP_COMMAND.localTerminalStart,
+      { request },
+    ),
+    sendLocalTerminalInput: (request) => runtime.core.invoke<void>(
+      DESKTOP_COMMAND.localTerminalInput,
+      { request },
+    ),
+    resizeLocalTerminal: (request) => runtime.core.invoke<void>(
+      DESKTOP_COMMAND.localTerminalResize,
+      { request },
+    ),
+    closeLocalTerminal: (sessionId) => runtime.core.invoke<void>(
+      DESKTOP_COMMAND.localTerminalClose,
+      { request: { sessionId } },
+    ),
+    onLocalTerminalEvent: (listener) => subscribeLocalTerminal(runtime, listener),
     onMenuAction: (listener) => subscribeDesktopMenu(runtime, listener),
   };
 }
@@ -135,6 +193,19 @@ function browserDesktopBridge(): DesktopBridge {
       throw new Error(BROWSER_CAPABILITIES.safeFile.reason);
     },
     systemTheme: async () => "unknown",
+    startLocalTerminal: async () => {
+      throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
+    },
+    sendLocalTerminalInput: async () => {
+      throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
+    },
+    resizeLocalTerminal: async () => {
+      throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
+    },
+    closeLocalTerminal: async () => {
+      throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
+    },
+    onLocalTerminalEvent: async () => () => undefined,
     onMenuAction: () => () => undefined,
   };
 }
@@ -158,6 +229,44 @@ function subscribeDesktopMenu(
     disposed = true;
     void unlisten.then((removeListener) => removeListener());
   };
+}
+
+function subscribeLocalTerminal(
+  runtime: DesktopRuntime,
+  listener: (event: DesktopLocalTerminalEvent) => void,
+): Promise<() => void> {
+  if (!runtime.event?.listen) return Promise.resolve(() => undefined);
+  let disposed = false;
+  return runtime.event.listen<unknown>(DESKTOP_LOCAL_TERMINAL_EVENT, ({ payload }) => {
+    const event = parseLocalTerminalEvent(payload);
+    if (!disposed && event) listener(event);
+  }).then((removeListener) => () => {
+    disposed = true;
+    removeListener();
+  });
+}
+
+function parseLocalTerminalEvent(value: unknown): DesktopLocalTerminalEvent | null {
+  if (!isRecord(value) || typeof value.sessionId !== "string" || !value.sessionId) return null;
+  if (value.kind === "output" && typeof value.data === "string") {
+    return { sessionId: value.sessionId, kind: "output", data: value.data };
+  }
+  if (value.kind === "exit" && typeof value.exitCode === "number") {
+    return {
+      sessionId: value.sessionId,
+      kind: "exit",
+      exitCode: value.exitCode,
+      ...(typeof value.message === "string" ? { message: value.message } : {}),
+    };
+  }
+  if (value.kind === "error" && typeof value.message === "string") {
+    return { sessionId: value.sessionId, kind: "error", message: value.message };
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function assertExternalHttpUrl(value: string): void {

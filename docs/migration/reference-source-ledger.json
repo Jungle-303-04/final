@@ -4442,7 +4442,7 @@
       "purpose": "desktop-port",
       "disposition": "desktop-port",
       "target": "desktop",
-      "verification": "desktop/src-tauri/tests/reference_parity.rs"
+      "verification": "desktop/src-tauri/src/local_terminal.rs"
     },
     {
       "path": "internal/server/localterm_unix.go",
@@ -4452,7 +4452,7 @@
       "purpose": "desktop-port",
       "disposition": "desktop-port",
       "target": "desktop",
-      "verification": "desktop/src-tauri/tests/reference_parity.rs"
+      "verification": "desktop/src-tauri/src/local_terminal.rs"
     },
     {
       "path": "internal/server/localterm_windows.go",
@@ -4462,7 +4462,7 @@
       "purpose": "desktop-port",
       "disposition": "desktop-port",
       "target": "desktop",
-      "verification": "desktop/src-tauri/tests/reference_parity.rs"
+      "verification": "desktop/src-tauri/src/local_terminal.rs"
     },
     {
       "path": "internal/server/logs.go",
@@ -5801,8 +5801,8 @@
       "language": "tsx",
       "purpose": "frontend-port",
       "disposition": "frontend-port",
-      "target": "frontend/src",
-      "verification": "frontend/src/reference/referenceParity.test.ts"
+      "target": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+      "verification": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
     },
     {
       "path": "packages/k8s-ui/src/components/dock/NodeTerminalTab.tsx",
@@ -13751,8 +13751,8 @@
       "language": "tsx",
       "purpose": "frontend-port",
       "disposition": "frontend-port",
-      "target": "frontend/src",
-      "verification": "frontend/src/reference/referenceParity.test.ts"
+      "target": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+      "verification": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
     },
     {
       "path": "web/src/components/dock/LogsTab.tsx",

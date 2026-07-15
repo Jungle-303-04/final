@@ -6,6 +6,10 @@ const DESKTOP_COMMANDS: &[&str] = &[
     "desktop_open_saved_file",
     "desktop_reveal_saved_file",
     "desktop_system_theme",
+    "desktop_local_terminal_start",
+    "desktop_local_terminal_input",
+    "desktop_local_terminal_resize",
+    "desktop_local_terminal_close",
 ];
 
 fn main() {

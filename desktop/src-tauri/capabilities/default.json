@@ -11,6 +11,10 @@
     "allow-desktop-save-file",
     "allow-desktop-open-saved-file",
     "allow-desktop-reveal-saved-file",
-    "allow-desktop-system-theme"
+    "allow-desktop-system-theme",
+    "allow-desktop-local-terminal-start",
+    "allow-desktop-local-terminal-input",
+    "allow-desktop-local-terminal-resize",
+    "allow-desktop-local-terminal-close"
   ]
 }
