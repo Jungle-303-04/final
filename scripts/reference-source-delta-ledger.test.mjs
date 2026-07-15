@@ -7,12 +7,12 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import * as sourceDeltaLedger from './reference-source-delta-ledger.mjs'
 import {
   assertDeltaLedgerClassified,
   assertInventoryRevisionMatchesTarget,
   buildDeltaLedger,
   createDeltaLedger,
-  resolveDeltaLedgerOptions,
   validateDeltaLedger,
   writeDeltaLedger,
 } from './reference-source-delta-ledger.mjs'
@@ -159,7 +159,7 @@ test('UI delta의 A/M/D/R 경로는 target 증거와 명시적 pending 상태로
 })
 
 test('createDeltaLedger의 부분 옵션은 승인된 base·target·scope 기본값을 보존한다', () => {
-  const options = resolveDeltaLedgerOptions({ repository: '/tmp/source-delta-fixture' })
+  const options = sourceDeltaLedger.resolveDeltaLedgerOptions({ repository: '/tmp/source-delta-fixture' })
 
   assert.deepEqual(
     {
@@ -362,6 +362,43 @@ test('로컬 Git fixture도 A/M/D/R blob 증거와 check·출하 차단 조건�
     await assert.rejects(
       () => writeDeltaLedger({ ...fixture, output, inventory, check: true, requireRebased: true }),
       /does not match target/,
+    )
+  } finally {
+    await rm(fixture.repository, { recursive: true, force: true })
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('check는 분류 interaction을 보존하면서 feature ledger에 없는 legacy alias를 출하 전에 거부한다', async () => {
+  const fixture = await createDeltaGitFixture()
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'reference-ui-delta-alias-check-'))
+  const output = path.join(directory, 'reference-ui-delta-ledger.json')
+  const featureLedger = path.join(directory, 'reference-feature-ledger.json')
+  try {
+    await writeDeltaLedger({ ...fixture, output })
+    const classified = JSON.parse(await readFile(output, 'utf8'))
+    classified.files.forEach((row, index) => {
+      row.classification = 'classified'
+      row.interactions = [
+        classifiedInteraction({
+          sourceKey: `upstream-ui:fixture:row-${index}:classified:v1`,
+          legacyContractIds: index === 0 ? ['reference.feature.999'] : [],
+        }),
+      ]
+    })
+    classified.pendingCount = 0
+    await writeFile(output, `${JSON.stringify(classified, null, 2)}\n`, 'utf8')
+    await writeFile(featureLedger, JSON.stringify({ features: [{ contractId: 'reference.feature.001' }] }), 'utf8')
+
+    await assert.rejects(
+      () => writeDeltaLedger({ ...fixture, output, featureLedger, check: true, requireClassified: true }),
+      /legacyContractId is unknown: reference\.feature\.999/,
+    )
+
+    classified.files[0].interactions[0].legacyContractIds = []
+    await writeFile(output, `${JSON.stringify(classified, null, 2)}\n`, 'utf8')
+    await assert.doesNotReject(
+      () => writeDeltaLedger({ ...fixture, output, featureLedger, check: true, requireClassified: true }),
     )
   } finally {
     await rm(fixture.repository, { recursive: true, force: true })
