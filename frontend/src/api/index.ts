@@ -22,7 +22,13 @@ export {
   type LoginCredentials,
 } from "./auth";
 export { getFleetSummary } from "./fleet";
-export { listClusters, type ListClustersOptions } from "./clusters";
+export {
+  listClusters,
+  unregisterCluster,
+  type ClusterUnregisterResponse,
+  type ListClustersOptions,
+  type UnregisterClusterOptions,
+} from "./clusters";
 export { getCluster } from "./cluster-detail";
 export { getClusterConnectionStatus } from "./cluster-connection";
 export {

@@ -2,7 +2,16 @@ import { CircleAlert, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
-import type { ClustersPort } from "../../features/clusters/clustersContract";
+import type {
+  ClusterDisconnectPort,
+  ClustersPort,
+} from "../../features/clusters/clustersContract";
+import {
+  activeClusterChoices,
+  canOfferClusterDisconnect,
+  refreshAfterClusterDisconnect,
+} from "../../features/clusters/clusterDisconnectPolicy";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -11,17 +20,19 @@ import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
 import { ClusterCard } from "./ClusterCard";
 import { ClusterConnectDialog } from "./ClusterConnectDialog";
+import { ClusterDisconnectDialog } from "./ClusterDisconnectDialog";
 import { clusterResourcesHref } from "./clusterNavigation";
 
-export function ClustersPage({ port }: { port: ClustersPort }) {
+export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectPort }) {
   const { formatNumber, t } = useI18n();
   const filter = useUnifiedFilter();
   const scope = useClusterScope();
   const session = useOptionalProductSession();
   const [connectOpen, setConnectOpen] = useState(false);
+  const [disconnectCluster, setDisconnectCluster] = useState<HomeClusterChoice | null>(null);
   const canManageClusters = session?.roles.includes("service_admin") ?? false;
   const clusters = scope.collection.phase === "ready"
-    ? scope.collection.data.clusters
+    ? activeClusterChoices(scope.collection.data.clusters)
     : [];
 
   if (scope.collection.phase === "loading" || scope.collection.phase === "idle") {
@@ -110,18 +121,35 @@ export function ClustersPage({ port }: { port: ClustersPort }) {
               href={clusterResourcesHref(filter.state, cluster.id)}
               index={index}
               key={cluster.id}
+              onDisconnect={canOfferClusterDisconnect(session?.roles, cluster)
+                ? () => setDisconnectCluster(cluster)
+                : undefined}
             />
           ))}
         </section>
       )}
 
       {canManageClusters ? (
-        <ClusterConnectDialog
-          onConnected={scope.refresh}
-          onOpenChange={setConnectOpen}
-          open={connectOpen}
-          port={port}
-        />
+        <>
+          <ClusterConnectDialog
+            onConnected={scope.refresh}
+            onOpenChange={setConnectOpen}
+            open={connectOpen}
+            port={port}
+          />
+          <ClusterDisconnectDialog
+            cluster={disconnectCluster}
+            key={disconnectCluster?.id ?? "closed"}
+            onDisconnected={(clusterId) => {
+              refreshAfterClusterDisconnect(scope, clusterId);
+            }}
+            onOpenChange={(open) => {
+              if (!open) setDisconnectCluster(null);
+            }}
+            open={disconnectCluster !== null}
+            port={port}
+          />
+        </>
       ) : null}
     </ProductPageFrame>
   );

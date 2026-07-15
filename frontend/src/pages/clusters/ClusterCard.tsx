@@ -1,5 +1,5 @@
-import { Boxes, Layers3, Server, ShieldCheck, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { Boxes, Ellipsis, Layers3, Server, ShieldCheck, TriangleAlert, Unplug } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ClusterProviderIcon } from "../../features/cluster-scope/ClusterProviderIcon";
 import type {
@@ -10,6 +10,7 @@ import { STAGGER_MS, useStagger } from "../../motion/useStagger";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import { StatusMark, type StatusTone } from "../../shared/ui/StatusMark";
+import { Button } from "../../shared/ui/primitives/button";
 import {
   Card,
   CardContent,
@@ -38,13 +39,18 @@ export function ClusterCard({
   cluster,
   href,
   index,
+  onDisconnect,
 }: {
   cluster: HomeClusterChoice;
   href: string;
   index: number;
+  onDisconnect?: () => void;
 }) {
   const { formatNumber, locale, t } = useI18n();
   const cardRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const delay = useStagger(index, STAGGER_MS.node);
   const disconnected = cluster.connectionState !== "online";
 
@@ -57,22 +63,43 @@ export function ClusterCard({
     };
   }, [delay]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const closeWithKeyboard = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeWithKeyboard);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeWithKeyboard);
+    };
+  }, [menuOpen]);
+
   return (
-    <Link
-      aria-label={t("clusters.card.openResources", { name: cluster.name })}
-      className="block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      onClick={() => captureRouteMorph(document)}
-      to={href}
+    <Card
+      className={cn(
+        "motion-node-land relative min-h-64 overflow-visible transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none",
+        disconnected && "bg-muted/30 text-muted-foreground saturate-0",
+      )}
+      data-cluster-id={cluster.id}
+      ref={cardRef}
     >
-      <Card
-        className={cn(
-          "motion-node-land min-h-64 transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:border-ring/50 hover:shadow-md motion-reduce:transition-none",
-          disconnected && "bg-muted/30 text-muted-foreground saturate-0",
-        )}
-        data-cluster-id={cluster.id}
-        ref={cardRef}
+      <Link
+        aria-label={t("clusters.card.openResources", { name: cluster.name })}
+        className="flex flex-1 flex-col gap-(--card-spacing) rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={() => captureRouteMorph(document)}
+        to={href}
       >
-        <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+        <CardHeader className={cn(
+          "grid-cols-[minmax(0,1fr)_auto] items-start gap-3",
+          onDisconnect && "pr-14",
+        )}>
           <div className="min-w-0">
             <CardTitle className="truncate text-lg">{cluster.name}</CardTitle>
             <p className="mt-1 truncate text-xs text-muted-foreground">{cluster.environment}</p>
@@ -122,7 +149,7 @@ export function ClusterCard({
                   count: formatNumber(cluster.openIncidentCount),
                 })}
               />
-            ) : (
+            ) : disconnected ? null : (
               <ClusterMetric
                 className="text-status-healthy"
                 icon={<ShieldCheck />}
@@ -136,8 +163,45 @@ export function ClusterCard({
             />
           </div>
         </CardContent>
-      </Card>
-    </Link>
+      </Link>
+
+      {onDisconnect ? (
+        <div className="absolute top-2 right-2 z-10" ref={menuRef}>
+          <Button
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            aria-label={t("clusters.card.actions", { name: cluster.name })}
+            onClick={() => setMenuOpen((open) => !open)}
+            ref={menuButtonRef}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Ellipsis aria-hidden="true" />
+          </Button>
+          {menuOpen ? (
+            <div
+              aria-label={t("clusters.card.actions", { name: cluster.name })}
+              className="absolute top-full right-0 mt-1 min-w-36 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+              role="menu"
+            >
+              <button
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-destructive outline-none hover:bg-destructive/10 focus-visible:bg-destructive/10"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDisconnect();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <Unplug aria-hidden="true" className="size-3.5" />
+                {t("clusters.action.disconnect")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
   );
 }
 

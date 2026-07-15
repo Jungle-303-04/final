@@ -9,6 +9,7 @@ import {
   getInventorySummary,
   getNodePodsSummary,
   getClusterConnectionStatus,
+  getCommandStatus,
   getPhysicalTopology,
   getRelationTopology,
   getChangeTimeline,
@@ -86,6 +87,7 @@ export function createApiComposition() {
   const clustersPort = createClustersAdapter({
     connectCluster,
     getClusterConnectionStatus,
+    getCommandStatus,
     unregisterCluster,
   });
   const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
