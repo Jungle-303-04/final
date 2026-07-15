@@ -63,8 +63,16 @@ export function ClusterDisconnectDialog({
   const [receipt, setReceipt] = useState<ClusterDisconnectReceipt | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
+  useEffect(() => () => abort.current?.abort(), []);
+
+  if (cluster === null) return null;
+  const confirmed = confirmation === cluster.name;
+  const pending = phase === "submitting" || phase === "uninstalling";
+  const terminal = phase === "succeeded" || phase === "residual-cleanup";
+
+  const changeOpen = (nextOpen: boolean) => {
+    if (!nextOpen && pending) return;
+    if (!nextOpen) {
       abort.current?.abort();
       abort.current = null;
       setConfirmation("");
@@ -72,14 +80,8 @@ export function ClusterDisconnectDialog({
       setReceipt(null);
       setCopied(false);
     }
-  }, [open]);
-
-  useEffect(() => () => abort.current?.abort(), []);
-
-  if (cluster === null) return null;
-  const confirmed = confirmation === cluster.name;
-  const pending = phase === "submitting" || phase === "uninstalling";
-  const terminal = phase === "succeeded" || phase === "residual-cleanup";
+    onOpenChange(nextOpen);
+  };
 
   const finishDisconnect = (nextPhase: DisconnectPhase) => {
     setPhase(nextPhase);
@@ -168,10 +170,7 @@ export function ClusterDisconnectDialog({
 
   return (
     <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && pending) return;
-        onOpenChange(nextOpen);
-      }}
+      onOpenChange={changeOpen}
       open={open}
     >
       <DialogContent
@@ -247,7 +246,7 @@ export function ClusterDisconnectDialog({
 
           <DialogFooter>
             {terminal ? (
-              <Button onClick={() => onOpenChange(false)} type="button">
+              <Button onClick={() => changeOpen(false)} type="button">
                 {t("common.action.close")}
               </Button>
             ) : phase === "cleanup-required" ? (
@@ -264,7 +263,7 @@ export function ClusterDisconnectDialog({
               </p>
             ) : (
               <>
-                <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+                <Button onClick={() => changeOpen(false)} type="button" variant="outline">
                   {t("common.action.cancel")}
                 </Button>
                 <Button disabled={!confirmed} type="submit" variant="destructive">

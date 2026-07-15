@@ -1,5 +1,5 @@
 import { BellRing, Check, Pencil, ShieldCheck } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type {
   AiAlertRuleAction,
@@ -34,12 +34,6 @@ export function AiAlertRuleActionCard({
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState(false);
   const [receipt, setReceipt] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(action.payload);
-    setReceipt(null);
-    setFailure(false);
-  }, [action]);
 
   const submit = async () => {
     if (pending || receipt !== null) return;
