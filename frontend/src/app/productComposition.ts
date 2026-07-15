@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 import {
   PRODUCT_ROUTE_CATALOG,
   type ProductSurfaceId,
@@ -26,10 +25,11 @@ import {
   type OperationStatusStore,
 } from "../features/operations/OperationStatusStore";
 import { EMPTY_OPERATION_EVENTS_PORT } from "../features/operations/operationEventsContract";
+import type { ProductSurfaceLoader } from "./surfaceLoader";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
-  Component: ComponentType;
+  loader: ProductSurfaceLoader;
 }
 
 export interface ProductComposition {
@@ -42,6 +42,7 @@ export interface ProductComposition {
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
+  dispose(): void;
 }
 
 export function createProductComposition(
@@ -53,6 +54,7 @@ export function createProductComposition(
   logStream: LogStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEvents: AlertEventsPort = EMPTY_ALERT_EVENTS_PORT,
   operationStatusStore: OperationStatusStore = createOperationStatusStore(EMPTY_OPERATION_EVENTS_PORT),
+  dispose: () => void = () => undefined,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -84,5 +86,6 @@ export function createProductComposition(
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
+    dispose,
   };
 }

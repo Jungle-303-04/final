@@ -32,8 +32,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
+        onlyExplicitManualChunks: true,
         manualChunks(id) {
-          if (id.includes("@xyflow/react")) return "flow";
+          if (id.includes("@xyflow/react") || id.includes("elkjs")) return "flow";
           if (id.includes("cmdk")) return "overlays";
           return undefined;
         },

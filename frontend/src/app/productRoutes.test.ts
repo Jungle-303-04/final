@@ -4,6 +4,7 @@ import {
   landingProductRouteForReleasedSurfaces,
   productNavigationForReleasedSurfaces,
   productRouteForPath,
+  productRoutePaths,
   referenceNavigationRoutes,
   resolveProductRoute,
   type ProductSurfaceId,
@@ -91,6 +92,14 @@ describe("product route release registry", () => {
 
   it("keeps the bare root available for the landing redirect", () => {
     expect(productRouteForPath("/")).toBeNull();
+  });
+
+  it("maps every descriptor URL and alias to the surface that owns its deferred loader", () => {
+    for (const routeDefinition of PRODUCT_ROUTE_CATALOG) {
+      for (const path of productRoutePaths(routeDefinition)) {
+        expect(productRouteForPath(path)?.id).toBe(routeDefinition.id);
+      }
+    }
   });
 
   it("falls unknown routes back to Home without treating known upstream screens as retired", () => {

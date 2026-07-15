@@ -1,9 +1,11 @@
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { containsIdentifier, hasNamedExport, isWithin } from "./apiBoundary.testSupport";
+import { collectApiSources, collectScripts, type ApiSource } from "./apiBoundaryFileSupport";
+import { moduleProvidesZodSchema } from "./apiBoundarySchemaSupport";
 
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const productRoot = resolve(appRoot, "..");
@@ -11,6 +13,8 @@ const sourceRoot = productRoot;
 const frontendRoot = resolve(sourceRoot, "..");
 const apiRoot = resolve(productRoot, "api");
 const compositionRoot = resolve(appRoot, "apiComposition.ts");
+const authBootstrapRoot = resolve(appRoot, "authBootstrap.ts");
+const compositionDirectory = resolve(appRoot, "composition");
 const scriptExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 
 interface ApiReference {
@@ -18,19 +22,14 @@ interface ApiReference {
   specifier: string;
 }
 
-interface ApiSource {
-  filePath: string;
-  source: string;
-}
-
 const API_BOUNDARY_TIMEOUT_MS = 30_000;
 
 describe("product API consumption boundary", () => {
-  it("allows product/api references only from the composition root", async () => {
+  it("allows product/api references only from authenticated composition boundaries", async () => {
     const violations: string[] = [];
 
-    for (const filePath of await collectScripts(productRoot)) {
-      if (isWithin(filePath, apiRoot) || filePath === compositionRoot) continue;
+    for (const filePath of await collectScripts(productRoot, scriptExtensions)) {
+      if (isWithin(filePath, apiRoot) || isCompositionBoundary(filePath)) continue;
       const source = await readFile(filePath, "utf8");
       violations.push(...internalImportEscapes(filePath, source).map((specifier) => (
         `${relative(productRoot, filePath)} -> outside-product:${specifier}`
@@ -40,22 +39,37 @@ describe("product API consumption boundary", () => {
       }
     }
 
-    expect(violations, "API references must be isolated behind app/apiComposition.ts").toEqual([]);
+    expect(violations, "API references must be isolated behind authenticated composition boundaries").toEqual([]);
   }, API_BOUNDARY_TIMEOUT_MS);
 
   it("requires current contract tests, public exports, and Zod schemas for composed endpoints", async () => {
-    const [compositionSource, apiSources] = await Promise.all([
-      readFile(compositionRoot, "utf8").catch(() => ""),
-      collectApiSources(),
+    const [compositionSources, apiSources] = await Promise.all([
+      collectCompositionSources(),
+      collectApiSources(await collectScripts(apiRoot, scriptExtensions)),
     ]);
-    const audit = compositionImports(compositionRoot, compositionSource);
-    audit.issues.push(...internalImportEscapes(compositionRoot, compositionSource).map((specifier) => (
-      `outside-product:${specifier}`
-    )));
+    const audits = compositionSources.map(({ filePath, source }) => ({
+      filePath,
+      audit: compositionImports(filePath, source),
+    }));
+    const issues = audits.flatMap(({ filePath, audit }) => [
+      ...audit.issues.map((issue) => `${relative(appRoot, filePath)}:${issue}`),
+      ...internalImportEscapes(filePath, compositionSources.find((source) => source.filePath === filePath)?.source ?? "")
+        .map((specifier) => `${relative(appRoot, filePath)}:outside-product:${specifier}`),
+    ]);
+    const endpointOwners = new Map<string, string>();
+    const names: string[] = [];
+    for (const { filePath, audit } of audits) {
+      for (const name of audit.names) {
+        const owner = endpointOwners.get(name);
+        if (owner) issues.push(`duplicate-owner:${name}:${relative(appRoot, owner)}:${relative(appRoot, filePath)}`);
+        else endpointOwners.set(name, filePath);
+        names.push(name);
+      }
+    }
 
-    expect(audit.issues, "apiComposition.ts must use named value imports from the API barrel").toEqual([]);
+    expect(issues, "composition boundaries must use named API barrel imports with one owner per endpoint").toEqual([]);
     expect(
-      audit.names.flatMap((name) => endpointContractIssues(name, apiSources)),
+      [...new Set(names)].sort().flatMap((name) => endpointContractIssues(name, apiSources)),
       "composed endpoints must have a local contract test, public barrel export, and imported Zod schema",
     ).toEqual([]);
   }, API_BOUNDARY_TIMEOUT_MS);
@@ -116,6 +130,10 @@ function internalImportEscapes(filePath: string, source: string): string[] {
   }
   visit(sourceFile);
   return escapes.sort();
+}
+
+function isCompositionBoundary(filePath: string): boolean {
+  return filePath === compositionRoot || filePath === authBootstrapRoot || isWithin(filePath, compositionDirectory);
 }
 
 function apiModuleReferences(filePath: string, source: string): ApiReference[] {
@@ -240,40 +258,18 @@ function importedZodSchemaModules(implementation: ApiSource, sources: ApiSource[
     const schemaPath = [resolved, `${resolved}.ts`, `${resolved}.tsx`]
       .find((candidate) => sourcesByPath.has(candidate));
     if (!schemaPath) return;
-    if (moduleProvidesZodSchema(schemaPath, sourcesByPath, new Set())) {
+    if (moduleProvidesZodSchema({
+      apiRoot,
+      filePath: schemaPath,
+      isWithin,
+      resolveModuleReference,
+      sourcesByPath,
+      visited: new Set(),
+    })) {
       schemaModules.push(relative(apiRoot, schemaPath));
     }
   });
   return [...new Set(schemaModules)].sort();
-}
-function moduleProvidesZodSchema(
-  filePath: string,
-  sourcesByPath: Map<string, string>,
-  visited: Set<string>,
-): boolean {
-  if (visited.has(filePath)) return false;
-  visited.add(filePath);
-  const source = sourcesByPath.get(filePath) ?? "";
-  if (/from\s+["']zod["']/u.test(source) && /\bz\./u.test(source)) return true;
-  const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
-  let hasTransitiveZodSchema = false;
-  sourceFile.forEachChild((node) => {
-    if (hasTransitiveZodSchema) return;
-    if (!ts.isImportDeclaration(node) || !ts.isStringLiteralLike(node.moduleSpecifier)) return;
-    const bindings = node.importClause?.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings)) return;
-    if (!bindings.elements.some((element) => (
-      !element.isTypeOnly && /Schema$/u.test(element.propertyName?.text ?? element.name.text)
-    ))) return;
-    const resolved = resolveModuleReference(filePath, node.moduleSpecifier.text);
-    if (!resolved || !isWithin(resolved, apiRoot)) return;
-    const importedPath = [resolved, `${resolved}.ts`, `${resolved}.tsx`]
-      .find((candidate) => sourcesByPath.has(candidate));
-    if (importedPath) {
-      hasTransitiveZodSchema = moduleProvidesZodSchema(importedPath, sourcesByPath, visited);
-    }
-  });
-  return hasTransitiveZodSchema;
 }
 function resolveModuleReference(filePath: string, specifier: string): string | null {
   if (specifier.startsWith(".")) return resolve(dirname(filePath), specifier);
@@ -283,18 +279,11 @@ function resolveModuleReference(filePath: string, specifier: string): string | n
   if (specifier.startsWith("/")) return resolve(specifier);
   return null;
 }
-async function collectScripts(directory: string): Promise<string[]> {
-  const files: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const entryPath = resolve(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await collectScripts(entryPath));
-    if (entry.isFile() && scriptExtensions.has(extname(entry.name))) files.push(entryPath);
-  }
-  return files.sort();
-}
-async function collectApiSources(): Promise<ApiSource[]> {
-  return Promise.all((await collectScripts(apiRoot)).map(async (filePath) => ({
-    filePath,
-    source: await readFile(filePath, "utf8"),
-  })));
+async function collectCompositionSources(): Promise<ApiSource[]> {
+  const filePaths = [
+    compositionRoot,
+    authBootstrapRoot,
+    ...await collectScripts(compositionDirectory, scriptExtensions),
+  ].sort();
+  return collectApiSources(filePaths);
 }

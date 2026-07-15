@@ -4,10 +4,10 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { createApiComposition } from "./apiComposition";
 import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import { I18nProvider } from "../shared/i18n";
+import type { AuthPort } from "../features/auth/authContract";
 import {
   installMatchMedia,
   renderShell,
@@ -15,6 +15,12 @@ import {
   testAuth,
   testClusterScope,
 } from "./__tests__/ProductShellInteractionSupport";
+
+const testAuthPort: AuthPort = {
+  loadSession: async () => ({ status: "unauthenticated" }),
+  signIn: async () => { throw new Error("not used"); },
+  signOut: async () => undefined,
+};
 
 beforeEach(() => {
   installMatchMedia(false);
@@ -318,7 +324,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
       const releaseGateComposition = createProductComposition(
         [],
-        createApiComposition().auth,
+        testAuthPort,
         testClusterScope,
       );
       render(

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "lint": "eslint src scripts/product-design-guard.mjs --max-warnings 0",
     "check:design": "node scripts/product-design-guard.mjs",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run check:design && npm run build",
+    "check:bundle": "npm run build && node scripts/check-initial-bundle.mjs",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run check:design && npm run check:bundle",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
