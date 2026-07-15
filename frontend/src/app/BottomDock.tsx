@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Sparkles, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useBottomDock } from "../features/bottom-dock/BottomDockProvider";
 import type { BottomDockTab } from "../features/bottom-dock/bottomDockState";
@@ -24,7 +24,8 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
   const { t } = useI18n();
   const hasLogs = dock.tabs.length > 0 && dock.activeTabId !== null;
   const [operationCenterOpen, setOperationCenterOpen] = useState(!hasLogs);
-  if (!hasLogs && operations.length === 0) return null;
+  const operationCenterRef = useRef<HTMLElement>(null);
+  const restoreOperationFocus = useRef(false);
   const operationSummary = summarizeOperationStatuses(operations);
   const operationSummaryLabel = t("shell.dock.operationSummary", {
     attention: operationSummary.attention,
@@ -34,6 +35,15 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
     ? dock.tabs.find((tab) => tab.id === dock.activeTabId) ?? dock.tabs[0]!
     : null;
   const showingOperations = operations.length > 0 && (!hasLogs || operationCenterOpen);
+
+  useEffect(() => {
+    if (!restoreOperationFocus.current || dock.collapsed || !showingOperations) return;
+    operationCenterRef.current?.focus();
+    restoreOperationFocus.current = false;
+  }, [dock.collapsed, showingOperations]);
+
+  if (!hasLogs && operations.length === 0) return null;
+
   return (
     <section
       aria-label={hasLogs ? t("shell.dock.title") : t("shell.dock.operationCenter")}
@@ -41,6 +51,8 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
       data-collapsed={dock.collapsed || undefined}
       data-height={dock.height}
       data-slot="bottom-dock"
+      ref={operationCenterRef}
+      tabIndex={-1}
     >
       {!dock.collapsed ? (
         <BottomDockResizeHandle height={dock.height} onHeightChange={dock.setHeight} />
@@ -98,6 +110,7 @@ export function BottomDock({ onAskAi }: { onAskAi: () => void }) {
               aria-label={t("shell.dock.reopenOperationCenter")}
               className="shrink-0"
               onClick={() => {
+                restoreOperationFocus.current = true;
                 setOperationCenterOpen(true);
                 dock.setCollapsed(false);
               }}
