@@ -230,7 +230,7 @@ HTTP 라우터의 목록/조회/메시지 추가/삭제 경로는 repository 호
 }
 ```
 
-- `POST /ai/chat`은 위 context와 `message`를 받는다. 응답은 항상 `{answer, evidence:[{type,id,label,link}]}`이다. evidence가 비면 `answer`는 반드시 `그 데이터가 없습니다.`이다.
+- `POST /ai/chat`은 위 context와 `message`를 받는다. 응답은 항상 `{answer, evidence:[{type,id,label,link}], action?}`이다. evidence가 비면 기본 `answer`는 `그 데이터가 없습니다.`이다. 단, 메시지가 현재 필터 범위에서 알림 규칙 생성 의도를 명확히 담고 있으면 inventory 근거가 없어도 `create_alert_rule` action을 제안하고, 실제 알림 규칙은 생성하지 않는다.
 - 동기 facade는 LLM의 추론 결과를 기다리거나 기존 비동기 conversation 응답을 근거 없이 재포장하지 않는다. 현재 권한 범위 inventory의 `status`와 `health`만 문장화한다.
 - `time`이 있으면 현재 projection으로 과거를 가장하지 않고 no-data로 닫는다. 선택 리소스가 없는데 application/label 필터가 있으면 그 축을 inventory 공개 필드로 검증할 수 없으므로 역시 닫는다.
 - AI resource kind allowlist는 `pods`, `deployments`, `statefulsets`, `daemonsets`, `workloads`, `services`, `nodes`, `namespaces`, `events`다. 임의 kind/CRD 조회는 422다.
