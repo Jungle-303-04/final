@@ -35,23 +35,29 @@ export function useApplicationDetail(
   port: ApplicationsPort,
   applicationId: string | null,
   instanceId: string | null,
+  workloadKey: string | null,
 ) {
   const load = useCallback(
     (signal: AbortSignal) => applicationId === null
       ? Promise.resolve(null)
       : instanceId === null
-        ? port.getApplication(applicationId, signal)
-        : port.getApplication(applicationId, signal, instanceId),
-    [applicationId, instanceId, port],
+        ? workloadKey === null
+          ? port.getApplication(applicationId, signal)
+          : port.getApplication(applicationId, signal, undefined, workloadKey)
+        : workloadKey === null
+          ? port.getApplication(applicationId, signal, instanceId)
+          : port.getApplication(applicationId, signal, instanceId, workloadKey),
+    [applicationId, instanceId, port, workloadKey],
   );
   return useApplicationsResource<ApplicationDetailModel | null>(
     port,
-    applicationId === null ? null : `applications:detail:${applicationId}:${instanceId ?? "default"}`,
+    applicationId === null ? null : `applications:detail:${applicationId}:${instanceId ?? "default"}:${workloadKey ?? "application"}`,
     load,
     {
       reuseReady: (data) => data !== null &&
         instanceId !== null &&
-        data.scope.selectedInstanceId === instanceId,
+        data.scope.selectedInstanceId === instanceId &&
+        data.scope.workloadScope.selectedWorkloadKey === workloadKey,
     },
   );
 }

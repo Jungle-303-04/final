@@ -62,11 +62,14 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
     case "detail-open":
     case "drill-in":
     case "detail-instance":
+    case "detail-workload":
       return "push";
     case "detail-close":
     case "detail-expand":
     case "detail-tab":
     case "detail-instance-default":
+    case "detail-workload-default":
+    case "detail-workload-recovery":
     case "topology-view-reset":
       return "replace";
     case "topology-view":

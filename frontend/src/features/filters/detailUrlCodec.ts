@@ -24,6 +24,7 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   appendNullableStableText(pairs, "app", detail.application ?? null);
   if (detail.application !== null && detail.application !== undefined) {
     appendNullableStableText(pairs, "instance", detail.applicationInstance ?? null);
+    appendNullableStableText(pairs, "workload", detail.applicationWorkload ?? null);
   }
   if (detail.detail === null) {
     appendNullableStableText(pairs, "resource", detail.resource);
@@ -58,6 +59,7 @@ export function parseProductDetailQuery(
   const application = readStableText(params, "app");
   if (application !== null) detail.application = application;
   if (application !== null) detail.applicationInstance = readStableText(params, "instance");
+  if (application !== null) detail.applicationWorkload = readStableText(params, "workload");
   detail.resource = readStableText(params, "resource");
   detail.resourceKind = readStableText(params, "resourceKind");
   if (!hasQueryKey(params, "resourceKind") && detail.resource !== null) {

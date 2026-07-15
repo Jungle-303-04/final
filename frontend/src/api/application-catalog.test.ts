@@ -69,6 +69,15 @@ const DETAIL_EVIDENCE = {
       },
     }],
     partial_reason_codes: [],
+    selected_scope: "application",
+    workload_scope: {
+      availability: "available",
+      completeness: "exact",
+      application_scope_available: true,
+      selected_workload_key: null,
+      workloads: [],
+      partial_reason_codes: [],
+    },
   },
   topology: {
     availability: "available",
@@ -132,6 +141,7 @@ const DETAIL_EVIDENCE = {
     manifest_path: "deploy/prod",
     partial_reason_codes: [],
   },
+  workload: null,
 } as const;
 
 function jsonResponse(payload: unknown): Response {
@@ -203,11 +213,11 @@ describe("BQ-039~042 Application product API", () => {
         observed_at: "2026-07-14T09:11:00+00:00",
       }));
 
-    await getApplicationOverview("app/checkout", undefined, "binding-prod");
+    await getApplicationOverview("app/checkout", undefined, "binding-prod", "workload-key");
     await listApplicationDeploymentHistory("app/checkout", undefined, "binding-prod");
     await getApplicationDrift("app/checkout", undefined, "binding-prod");
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      "/api/applications/app%2Fcheckout?instance=binding-prod",
+      "/api/applications/app%2Fcheckout?instance=binding-prod&workload=workload-key",
       "/api/applications/app%2Fcheckout/deployments?instance=binding-prod",
       "/api/applications/app%2Fcheckout/drift?instance=binding-prod",
     ]);
@@ -293,5 +303,7 @@ describe("BQ-039~042 Application product API", () => {
     expect(() => getApplicationOverview(" ")).toThrow("applicationId must not be empty");
     expect(() => getApplicationOverview("app-checkout", undefined, " "))
       .toThrow("instanceId must not be empty");
+    expect(() => getApplicationOverview("app-checkout", undefined, undefined, " "))
+      .toThrow("workloadKey must not be empty");
   });
 });

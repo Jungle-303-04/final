@@ -145,7 +145,17 @@ def _detail_evidence() -> dict[str, object]:
                 }
             ],
             "partial_reason_codes": [],
+            "selected_scope": "application",
+            "workload_scope": {
+                "availability": "available",
+                "completeness": "exact",
+                "application_scope_available": True,
+                "selected_workload_key": None,
+                "workloads": [],
+                "partial_reason_codes": [],
+            },
         },
+        "workload": None,
     }
 
 

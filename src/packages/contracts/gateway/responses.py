@@ -5,6 +5,7 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.parity import ResourceRef
 
 JsonMap = dict[str, Any]
 AuditJourneyStage = Literal[
@@ -2424,6 +2425,98 @@ class ApplicationInstanceScope(StrictModel):
     scope: ApplicationClusterScope
 
 
+class ApplicationWorkloadScopeItem(StrictModel):
+    """One direct, currently observed workload a caller may select.
+
+    ``key`` is an opaque inventory identity.  It is intentionally not a
+    browser-assembled ``kind/namespace/name`` string: the selected deployment
+    binding already fixes the cluster, and the immutable resource reference
+    keeps same-name recreation visible to consumers.
+    """
+
+    key: str = Field(min_length=1, max_length=128)
+    resource: ResourceRef
+    scope: ApplicationClusterScope
+    observed_at: str | None = None
+
+
+class ApplicationWorkloadScope(StrictModel):
+    """Authorized app/workload choices backed by rendered-manifest evidence."""
+
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    application_scope_available: bool
+    selected_workload_key: str | None = None
+    workloads: list[ApplicationWorkloadScopeItem] = Field(default_factory=list, max_length=200)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_workload_scope(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.application_scope_available
+            or self.selected_workload_key is not None
+            or self.workloads
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable workload scope must not claim workload evidence")
+        if self.availability == "available" and self.completeness == "unavailable":
+            raise ValueError("available workload scope requires a completeness value")
+        keys = [item.key for item in self.workloads]
+        if len(keys) != len(set(keys)):
+            raise ValueError("workload scope identities must be unique")
+        if self.selected_workload_key is not None and self.selected_workload_key not in keys:
+            raise ValueError("selected workload must be among server-authorized workloads")
+        if not self.application_scope_available and not (
+            self.completeness == "exact"
+            and len(self.workloads) == 1
+            and self.selected_workload_key == self.workloads[0].key
+        ):
+            raise ValueError("only one exact workload may hide application scope")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact workload scope cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial workload scope requires source reasons")
+        return self
+
+
+class ApplicationUnavailableEvidence(StrictModel):
+    """A deliberately unavailable workload channel with its server reason."""
+
+    availability: Literal["unavailable"] = "unavailable"
+    reason_codes: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def unique_reason_codes(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("unavailable evidence reasons must be unique")
+        if any(not value.strip() for value in values):
+            raise ValueError("unavailable evidence reasons must be non-empty")
+        return values
+
+
+class ApplicationWorkloadDetail(StrictModel):
+    """Only evidence that is genuinely scoped to the selected workload."""
+
+    workload: ApplicationWorkloadScopeItem
+    runtime_readiness: ApplicationRuntimeReadiness
+    resource_counts: list[ApplicationResourceKindCount] | None = None
+    resource_counts_completeness: ApplicationProjectionCompleteness
+    topology: ApplicationTopology
+    history: ApplicationUnavailableEvidence
+    cost: ApplicationUnavailableEvidence
+    actions: ApplicationUnavailableEvidence
+
+    @model_validator(mode="after")
+    def validate_workload_detail(self) -> Self:
+        if self.resource_counts_completeness == "unavailable" and self.resource_counts is not None:
+            raise ValueError("unavailable workload resource counts must be null")
+        if self.resource_counts_completeness != "unavailable" and self.resource_counts is None:
+            raise ValueError("available workload resource counts must be an array")
+        return self
+
+
 class ApplicationDetailScope(StrictModel):
     """Server-authorized environment and instance choices for one application."""
 
@@ -2432,6 +2525,8 @@ class ApplicationDetailScope(StrictModel):
     selected_instance_id: str | None = None
     instances: list[ApplicationInstanceScope] = Field(default_factory=list, max_length=500)
     partial_reason_codes: list[str] = Field(default_factory=list)
+    selected_scope: Literal["application", "workload"] = "application"
+    workload_scope: ApplicationWorkloadScope
 
     @model_validator(mode="after")
     def validate_instance_scope(self) -> Self:
@@ -2455,6 +2550,14 @@ class ApplicationDetailScope(StrictModel):
             raise ValueError("exact instance scope cannot carry partial reasons")
         if self.completeness == "partial" and not self.partial_reason_codes:
             raise ValueError("partial instance scope requires source reasons")
+        if self.selected_scope == "workload" and self.workload_scope.selected_workload_key is None:
+            raise ValueError("workload selection requires a selected workload")
+        if (
+            self.selected_scope == "application"
+            and self.workload_scope.availability == "available"
+            and not self.workload_scope.application_scope_available
+        ):
+            raise ValueError("application selection is not available for one exact workload")
         return self
 
 
@@ -2467,6 +2570,7 @@ class ApplicationProductDetail(ApplicationProductCard):
     history: ApplicationHistory
     source: ApplicationSourceEvidence
     scope: ApplicationDetailScope
+    workload: ApplicationWorkloadDetail | None = None
 
     @model_validator(mode="after")
     def validate_detail_semantics(self) -> Self:
@@ -2474,6 +2578,13 @@ class ApplicationProductDetail(ApplicationProductCard):
             raise ValueError("unavailable endpoints must be null")
         if self.endpoints_completeness != "unavailable" and self.endpoints is None:
             raise ValueError("available endpoints must be an array")
+        selected_workload = self.scope.selected_scope == "workload"
+        if selected_workload != (self.workload is not None):
+            raise ValueError("workload detail must match the selected scope")
+        if self.workload is not None and (
+            self.workload.workload.key != self.scope.workload_scope.selected_workload_key
+        ):
+            raise ValueError("workload detail must match the selected workload")
         return self
 
 

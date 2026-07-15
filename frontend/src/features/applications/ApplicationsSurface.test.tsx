@@ -173,6 +173,107 @@ describe("S10 Applications surface", () => {
     );
   });
 
+  it("switches to server-selected workload evidence without rendering application delivery or action tabs", async () => {
+    const workload = {
+      key: "workload-a",
+      resource: {
+        apiGroup: "apps",
+        version: "v1",
+        kind: "Deployment",
+        namespace: "prod",
+        name: "checkout",
+        uid: "deployment-uid",
+      },
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-1",
+        namespaces: ["prod"],
+        freshness: "live" as const,
+      },
+      observedAt: "2026-07-14T09:00:00+00:00",
+    };
+    const workloadDetail = {
+      ...APPLICATION_DETAIL,
+      scope: {
+        ...APPLICATION_DETAIL.scope,
+        selectedScope: "workload" as const,
+        workloadScope: {
+          availability: "available" as const,
+          completeness: "exact" as const,
+          applicationScopeAvailable: false,
+          selectedWorkloadKey: "workload-a",
+          workloads: [workload],
+          partialReasonCodes: [],
+        },
+      },
+      workload: {
+        workload,
+        runtimeReadiness: {
+          completeness: "exact" as const,
+          status: "healthy" as const,
+          readyPods: 1,
+          totalPods: 1,
+          restarts: 0,
+        },
+        resourceCounts: [{ kind: "Deployment", count: 1 }, { kind: "Pod", count: 1 }],
+        resourceCountsCompleteness: "exact" as const,
+        topology: APPLICATION_DETAIL.topology,
+        history: { availability: "unavailable" as const, reasonCodes: ["workload_history_link_not_persisted"] },
+        cost: { availability: "unavailable" as const, reasonCodes: ["cost_observation_not_integrated"] },
+        actions: { availability: "unavailable" as const, reasonCodes: ["workload_action_capabilities_not_connected"] },
+      },
+    };
+    const getApplication = vi.fn().mockImplementation((
+      _applicationId: string,
+      _signal: AbortSignal,
+      _instanceId?: string | null,
+      workloadKey?: string | null,
+    ) => Promise.resolve(workloadKey === "workload-a" ? workloadDetail : APPLICATION_DETAIL));
+    const port = applicationsPort({ getApplication });
+    renderApplications(port, "/applications?app=app-checkout&instance=binding-prod&workload=workload-a&tab=overview");
+
+    expect(await screen.findByTestId("application-workload-runtime")).toBeTruthy();
+    expect(getApplication).toHaveBeenCalledWith(
+      "app-checkout",
+      expect.any(AbortSignal),
+      "binding-prod",
+      "workload-a",
+    );
+    const tabs = screen.getByRole("tablist", { name: "View details" });
+    expect(within(tabs).getAllByRole("tab")).toHaveLength(3);
+    expect(within(tabs).queryByRole("tab", { name: "Deployments" })).toBeNull();
+    expect(screen.queryByText("v2.4.1 deployed")).toBeNull();
+
+    await userEvent.setup().click(within(tabs).getByRole("tab", { name: "History" }));
+    expect(await screen.findByTestId("application-workload-unavailable-evidence")).toBeTruthy();
+    expect(screen.getByText("Workload-specific history is not connected yet.")).toBeTruthy();
+    expect(screen.queryByText("workload_history_link_not_persisted")).toBeNull();
+  });
+
+  it("canonicalizes an unavailable opaque workload without disclosing it", async () => {
+    const missing = "old-workload-key";
+    const unavailableDetail = {
+      ...APPLICATION_DETAIL,
+      scope: {
+        ...APPLICATION_DETAIL.scope,
+        workloadScope: {
+          availability: "available" as const,
+          completeness: "partial" as const,
+          applicationScopeAvailable: true,
+          selectedWorkloadKey: null,
+          workloads: [],
+          partialReasonCodes: ["requested_workload_unavailable"],
+        },
+      },
+    };
+    const port = applicationsPort({ getApplication: vi.fn().mockResolvedValue(unavailableDetail) });
+    renderApplications(port, `/applications?app=app-checkout&workload=${missing}&tab=overview`);
+
+    await screen.findByText("v2.4.1 deployed");
+    await waitFor(() => expect(screen.getByTestId("location").textContent).not.toContain("workload="));
+    expect(screen.queryByText(missing)).toBeNull();
+  });
+
   it("does not synthesize absent counts, deployments, or drift", async () => {
     const user = userEvent.setup();
     const port = applicationsPort({

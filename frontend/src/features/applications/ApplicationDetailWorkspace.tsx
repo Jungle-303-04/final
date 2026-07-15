@@ -23,6 +23,8 @@ import {
   ApplicationHistoryPanel,
   ApplicationOverviewPanel,
   ApplicationResourcesPanel,
+  ApplicationUnavailableEvidencePanel,
+  ApplicationWorkloadOverviewPanel,
 } from "./ApplicationDetailPanels";
 import { ApplicationDriftPanel } from "./ApplicationDriftPanel";
 import { ApplicationTopologyPanel } from "./ApplicationTopologyPanel";
@@ -32,7 +34,11 @@ import {
   applicationOwnedSurfaceHref,
 } from "./applicationFilters";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
-import type { ApplicationInstanceScope, ApplicationsPort } from "./applicationsContract";
+import type {
+  ApplicationDetailScope,
+  ApplicationInstanceScope,
+  ApplicationsPort,
+} from "./applicationsContract";
 import {
   useApplicationDeployments,
   useApplicationDetail,
@@ -41,6 +47,7 @@ import {
 
 const APPLICATION_TABS = ["overview", "topology", "history", "resources", "deployments", "drift", "incidents"] as const;
 type ApplicationTab = (typeof APPLICATION_TABS)[number];
+const APPLICATION_SCOPE_VALUE = "__application__";
 
 export function ApplicationDetailWorkspace({
   applicationId,
@@ -55,17 +62,24 @@ export function ApplicationDetailWorkspace({
   const copy = applicationsCopy(locale);
   const activeTab = applicationTab(filter.detail.tab);
   const requestedInstanceId = filter.detail.applicationInstance ?? null;
-  const [detail, refreshDetail] = useApplicationDetail(port, applicationId, requestedInstanceId);
+  const requestedWorkloadKey = filter.detail.applicationWorkload ?? null;
+  const [detail, refreshDetail] = useApplicationDetail(
+    port,
+    applicationId,
+    requestedInstanceId,
+    requestedWorkloadKey,
+  );
+  const workloadSelected = detail.phase === "ready" && detail.data?.scope.selectedScope === "workload";
   const [deployments, refreshDeployments] = useApplicationDeployments(
     port,
     applicationId,
-    activeTab === "deployments",
+    activeTab === "deployments" && !workloadSelected,
     requestedInstanceId,
   );
   const [drift, refreshDrift] = useApplicationDrift(
     port,
     applicationId,
-    activeTab === "drift",
+    activeTab === "drift" && !workloadSelected,
     requestedInstanceId,
   );
   const links = useMemo(() => ({
@@ -86,11 +100,41 @@ export function ApplicationDetailWorkspace({
     }, "detail-instance-default");
   }, [applicationId, filter, requestedInstanceId, selectedInstanceId]);
 
+  const selectedWorkloadKey = detail.phase === "ready"
+    ? detail.data?.scope.workloadScope.selectedWorkloadKey ?? null
+    : null;
+  const selectedScope = detail.phase === "ready" ? detail.data?.scope.selectedScope : "application";
+  const workloadRecovery = detail.phase === "ready" &&
+    detail.data?.scope.workloadScope.partialReasonCodes.includes("requested_workload_unavailable") === true;
+
+  useEffect(() => {
+    if (selectedScope === "workload" && requestedWorkloadKey === null && selectedWorkloadKey !== null) {
+      filter.updateDetail((current) => current.application !== applicationId
+        ? current
+        : { ...current, applicationWorkload: selectedWorkloadKey }, "detail-workload-default");
+      return;
+    }
+    if (requestedWorkloadKey !== null && selectedScope === "application" && workloadRecovery) {
+      filter.updateDetail((current) => current.application !== applicationId
+        ? current
+        : { ...current, applicationWorkload: null }, "detail-workload-recovery");
+    }
+  }, [
+    applicationId,
+    filter,
+    requestedWorkloadKey,
+    selectedScope,
+    selectedWorkloadKey,
+    workloadRecovery,
+  ]);
+
   if (detail.phase === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (detail.phase === "failed") return <ApplicationsFailureState failure={detail.failure} onRetry={refreshDetail} />;
   if (detail.data === null) return <ProductStateScreen kind="empty" placement="content" />;
 
   const application = detail.data;
+  const isWorkloadScope = application.scope.selectedScope === "workload";
+  const workload = application.workload;
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -114,6 +158,12 @@ export function ApplicationDetailWorkspace({
               selectedInstanceId={application.scope.selectedInstanceId}
               unavailable={application.scope.availability === "unavailable"}
             />
+            <ApplicationWorkloadScopePicker
+              applicationId={applicationId}
+              copy={copy}
+              filter={filter}
+              scope={application.scope}
+            />
           </div>
         </div>
         <Button aria-label={copy.refresh} disabled={detail.refreshing} onClick={refreshDetail} size="icon" type="button" variant="outline">
@@ -132,24 +182,38 @@ export function ApplicationDetailWorkspace({
           <TabsTrigger value="overview">{copy.overview}</TabsTrigger>
           <TabsTrigger value="topology">{copy.topology}</TabsTrigger>
           <TabsTrigger value="history">{copy.history}</TabsTrigger>
-          <TabsTrigger value="resources">{copy.resources}</TabsTrigger>
-          <TabsTrigger value="deployments">{copy.deployments}</TabsTrigger>
-          <TabsTrigger value="drift">{copy.differences}</TabsTrigger>
-          <TabsTrigger value="incidents">{copy.incidents}</TabsTrigger>
+          {!isWorkloadScope ? <>
+            <TabsTrigger value="resources">{copy.resources}</TabsTrigger>
+            <TabsTrigger value="deployments">{copy.deployments}</TabsTrigger>
+            <TabsTrigger value="drift">{copy.differences}</TabsTrigger>
+            <TabsTrigger value="incidents">{copy.incidents}</TabsTrigger>
+          </> : null}
         </TabsList>
-        <TabsContent value="overview"><ApplicationOverviewPanel detail={application} /></TabsContent>
-        <TabsContent value="topology"><ApplicationTopologyPanel topology={application.topology} /></TabsContent>
-        <TabsContent value="history"><ApplicationHistoryPanel history={application.history} /></TabsContent>
-        <TabsContent value="resources"><ApplicationResourcesPanel detail={application} href={links.resources} /></TabsContent>
-        <TabsContent value="deployments">
-          <ApplicationDeploymentsPanel
-            hrefForChange={(changeId) => applicationGitOpsChangeHref(filter.state, changeId)}
-            resource={deployments}
-            retry={refreshDeployments}
-          />
+        <TabsContent value="overview">
+          {isWorkloadScope && workload !== null
+            ? <ApplicationWorkloadOverviewPanel workload={workload} />
+            : <ApplicationOverviewPanel detail={application} />}
         </TabsContent>
-        <TabsContent value="drift"><ApplicationDriftPanel resource={drift} retry={refreshDrift} /></TabsContent>
-        <TabsContent value="incidents"><ApplicationIncidentsPanel detail={application} href={links.issues} /></TabsContent>
+        <TabsContent value="topology">
+          <ApplicationTopologyPanel topology={isWorkloadScope && workload !== null ? workload.topology : application.topology} />
+        </TabsContent>
+        <TabsContent value="history">
+          {isWorkloadScope && workload !== null
+            ? <ApplicationUnavailableEvidencePanel evidence={workload.history} title={copy.history} />
+            : <ApplicationHistoryPanel history={application.history} />}
+        </TabsContent>
+        {!isWorkloadScope ? <>
+          <TabsContent value="resources"><ApplicationResourcesPanel detail={application} href={links.resources} /></TabsContent>
+          <TabsContent value="deployments">
+            <ApplicationDeploymentsPanel
+              hrefForChange={(changeId) => applicationGitOpsChangeHref(filter.state, changeId)}
+              resource={deployments}
+              retry={refreshDeployments}
+            />
+          </TabsContent>
+          <TabsContent value="drift"><ApplicationDriftPanel resource={drift} retry={refreshDrift} /></TabsContent>
+          <TabsContent value="incidents"><ApplicationIncidentsPanel detail={application} href={links.issues} /></TabsContent>
+        </> : null}
       </Tabs>
     </ProductPageFrame>
   );
@@ -160,6 +224,7 @@ export function openApplicationDetail(filter: UnifiedFilterController, applicati
     ...current,
     application: applicationId,
     applicationInstance: null,
+    applicationWorkload: null,
     tab: "overview",
   }), "detail-open");
 }
@@ -169,6 +234,7 @@ function closeDetail(filter: UnifiedFilterController): void {
     ...current,
     application: null,
     applicationInstance: null,
+    applicationWorkload: null,
     tab: null,
   }), "detail-close");
 }
@@ -207,7 +273,7 @@ function ApplicationInstanceScopePicker({
         if (instanceId === null || instanceId === selectedInstanceId) return;
         filter.updateDetail((current) => current.application !== applicationId
           ? current
-          : { ...current, applicationInstance: instanceId }, "detail-instance");
+          : { ...current, applicationInstance: instanceId, applicationWorkload: null }, "detail-instance");
       }}
       value={selectedInstanceId}
     >
@@ -223,6 +289,73 @@ function ApplicationInstanceScopePicker({
                 <span className="truncate">{instance.environment}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {instance.scope.clusterId}{formatNamespaces(instance.scope.namespaces)} · {freshnessLabel(copy, instance.scope.freshness)}
+                </span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ApplicationWorkloadScopePicker({
+  applicationId,
+  copy,
+  filter,
+  scope,
+}: {
+  applicationId: string;
+  copy: ReturnType<typeof applicationsCopy>;
+  filter: UnifiedFilterController;
+  scope: ApplicationDetailScope;
+}) {
+  const workloadScope = scope.workloadScope;
+  if (workloadScope.availability === "unavailable") return null;
+  const selectedValue = scope.selectedScope === "workload"
+    ? workloadScope.selectedWorkloadKey
+    : APPLICATION_SCOPE_VALUE;
+  if (selectedValue === null) return null;
+  const items = [
+    ...(workloadScope.applicationScopeAvailable
+      ? [{ label: copy.applicationScope, value: APPLICATION_SCOPE_VALUE }]
+      : []),
+    ...workloadScope.workloads.map((workload) => ({
+      label: `${workload.resource.kind}/${workload.resource.name}`,
+      value: workload.key,
+    })),
+  ];
+  if (items.length === 0) return null;
+  return (
+    <Select
+      items={items}
+      onValueChange={(value) => {
+        if (value === null || value === selectedValue) return;
+        filter.updateDetail((current) => current.application !== applicationId
+          ? current
+          : {
+            ...current,
+            applicationWorkload: value === APPLICATION_SCOPE_VALUE ? null : value,
+            tab: "overview",
+          }, "detail-workload");
+      }}
+      value={selectedValue}
+    >
+      <SelectTrigger aria-label={copy.workloadScope} className="max-w-full" size="sm">
+        <SelectValue className="truncate" />
+      </SelectTrigger>
+      <SelectContent align="start" alignItemWithTrigger={false} className="max-w-[min(32rem,calc(100vw-2rem))]">
+        <SelectGroup>
+          <SelectLabel>{copy.workloadScope}</SelectLabel>
+          {workloadScope.applicationScopeAvailable ? (
+            <SelectItem value={APPLICATION_SCOPE_VALUE}>{copy.applicationScope}</SelectItem>
+          ) : null}
+          {workloadScope.workloads.map((workload) => (
+            <SelectItem key={workload.key} value={workload.key}>
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-hidden">
+                <span className="truncate">{workload.resource.kind}/{workload.resource.name}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {workload.scope.clusterId}{formatNamespaces(workload.scope.namespaces)}
                 </span>
               </span>
             </SelectItem>

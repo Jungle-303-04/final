@@ -10,11 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.application_filter.query import ApplicationFilters, parse_application_filters
 from domains.applications.product_projection import (
+    APPLICATION_TOPOLOGY_NODE_LIMIT,
     application_card,
     application_detail,
     deployment_history_projection,
     detail_scope_projection,
     drift_projection,
+    workload_scope_projection,
 )
 from domains.gitops.repository import (
     derive_application_id,
@@ -609,6 +611,7 @@ async def _product_state(
     application: Mapping[str, Any],
     allowed_cluster_ids: set[str],
     requested_instance_id: str | None = None,
+    requested_workload_key: str | None = None,
     select_instance: bool = False,
 ) -> dict[str, Any]:
     application_id = str(application.get("application_id") or "")
@@ -681,6 +684,38 @@ async def _product_state(
             "items": [],
             "scope_partial_reason_codes": ["instance_incident_scope_unavailable"],
         }
+        workload_scope = workload_scope_projection(
+            application,
+            inventory,
+            inventory_context=inventory_context,
+            scope=scope,
+            requested_workload_key=requested_workload_key,
+        )
+        selected_workload_key = str(workload_scope.get("selected_workload_key") or "")
+        workload_runtime_rows: list[dict[str, Any]] = []
+        workload_runtime_truncated = False
+        if selected_workload_key:
+            root = next(
+                (row for row in inventory if str(row.get("id") or "") == selected_workload_key),
+                None,
+            )
+            if root is not None:
+                runtime = await asyncio.to_thread(
+                    db.get_application_workload_runtime_evidence,
+                    workspace_id=workspace_id,
+                    cluster_id=str(root.get("cluster_id") or ""),
+                    namespace=(
+                        str(root.get("namespace")) if root.get("namespace") is not None else None
+                    ),
+                    # One root occupies the same bounded topology response.
+                    pod_limit=max(1, APPLICATION_TOPOLOGY_NODE_LIMIT - 1),
+                )
+                by_id = {str(root.get("id") or ""): dict(root)}
+                for row in runtime.get("rows") or []:
+                    if isinstance(row, Mapping) and str(row.get("id") or ""):
+                        by_id[str(row["id"])] = dict(row)
+                workload_runtime_rows = list(by_id.values())
+                workload_runtime_truncated = bool(runtime.get("truncated"))
     return {
         "bindings": bindings,
         "runs": runs,
@@ -688,6 +723,9 @@ async def _product_state(
         "inventory_context": inventory_context,
         "incident_evidence": incident_evidence,
         **({"scope": scope} if scope is not None else {}),
+        **({"workload_scope": workload_scope} if select_instance else {}),
+        **({"workload_runtime_rows": workload_runtime_rows} if select_instance else {}),
+        **({"workload_runtime_truncated": workload_runtime_truncated} if select_instance else {}),
     }
 
 
@@ -1018,6 +1056,10 @@ async def get_application(
         str | None,
         Query(alias="instance", min_length=1, max_length=200),
     ] = None,
+    workload_key: Annotated[
+        str | None,
+        Query(alias="workload", min_length=1, max_length=128),
+    ] = None,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
 ) -> ApplicationProductDetailResponse:
@@ -1037,6 +1079,7 @@ async def get_application(
         application=application,
         allowed_cluster_ids=allowed_cluster_ids,
         requested_instance_id=instance_id,
+        requested_workload_key=workload_key,
         select_instance=True,
     )
     return ApplicationProductDetailResponse(application=application_detail(application, **state))

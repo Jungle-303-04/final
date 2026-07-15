@@ -86,6 +86,15 @@ export const APPLICATION_DETAIL: ApplicationDetailModel = {
       },
     ],
     partialReasonCodes: [],
+    selectedScope: "application",
+    workloadScope: {
+      availability: "available",
+      completeness: "exact",
+      applicationScopeAvailable: true,
+      selectedWorkloadKey: null,
+      workloads: [],
+      partialReasonCodes: [],
+    },
   },
   endpoints: [{ id: "ingress:checkout", kind: "Ingress", name: "checkout", address: "https://checkout.test" }],
   endpointsCompleteness: "exact",
@@ -163,6 +172,7 @@ export const APPLICATION_DETAIL: ApplicationDetailModel = {
     manifestPath: "deploy/prod",
     partialReasonCodes: [],
   },
+  workload: null,
 };
 
 export function applicationsPort(overrides: Partial<ApplicationsPort> = {}): ApplicationsPort {
