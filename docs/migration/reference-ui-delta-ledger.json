@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 227,
+  "pendingCount": 225,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -5536,8 +5536,34 @@
         "blobId": "29979475836314fc5a4c04e78fe1e098e17ed7f9",
         "sha256": "ece9316dcfaa6f58c1b4d2d59f438af3ce2df2e2f162ee1f9342de2d235ddf97"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:traffic:flow-filters:collector-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "TrafficFilterSidebar",
+          "interaction": "namespace, protocol, and status controls refine observed flows only after a collector supplies typed flow records and server-owned facets",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/features/traffic/trafficContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic.observations",
+              "domains.traffic.router"
+            ],
+            "plannedTestIds": [
+              "traffic.filters.collector-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no collector-backed flow records or authoritative filter facets; rendering upstream controls would require browser-derived data.",
+            "rationale": "The initial port preserves the selected namespace scope but intentionally does not render inert protocol or status controls."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5551,8 +5577,42 @@
         "blobId": "830b8aa47576091ccd4ff2915900969fc8d38d66",
         "sha256": "e5f05df0ecf3719c724d839a5974cadecad469256c4cd83b94ec15aed9484d24"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:traffic:flow-snapshot:scope-availability:v1",
+          "legacyContractIds": [
+            "reference.feature.181"
+          ],
+          "symbol": "TrafficView observed flow surface",
+          "interaction": "the scoped read presents actual collector availability, selected namespace scope, and freshness before any graph, flow list, or aggregate is rendered",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart a bounded 30-second typed scope read when the visible selection changes",
+            "backpressure": "share one request per normalized scope and abort only after the final consumer releases it",
+            "merge": "replace the overview only when the response belongs to the current authorized scope; unavailable evidence remains null"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/features/traffic/createTrafficAdapter.ts",
+              "src/domains/traffic/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic.observations",
+              "domains.traffic.router"
+            ],
+            "plannedTestIds": [
+              "traffic.overview.unavailable",
+              "traffic.overview.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The collector is not integrated, so the vertical truthfully returns unavailable status and null counts/edges instead of inferred connections or synthetic zero values."
+          }
+        }
+      ]
     },
     {
       "status": "M",

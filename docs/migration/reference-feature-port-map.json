@@ -128,6 +128,31 @@
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
+    },
+    "reference.feature.181": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.traffic.observations",
+      "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
+      "verification": [
+        "tests/test_traffic_router.py",
+        "tests/test_traffic_observation_projection.py",
+        "frontend/src/api/traffic-overview.test.ts",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/traffic/router.py#get_traffic_overview",
+          "consumer": "src/domains/traffic/observation_projection.py#traffic_overview",
+          "test": "tests/test_traffic_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficPage",
+          "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        }
+      }
     }
   },
   "sections": {

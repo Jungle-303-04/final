@@ -6410,11 +6410,11 @@
     {
       "id": "reference-feature-181",
       "contractId": "reference.feature.181",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:traffic:flow-snapshot:scope-availability:v1",
       "legacyContractIds": [
         "reference.feature.181"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.7 Live Traffic",
       "line": 494,
       "cells": [
@@ -6430,17 +6430,29 @@
       ],
       "streaming": false,
       "area": "traffic-analysis",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.traffic",
-      "frontendContract": "frontend/src/pages/traffic",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.traffic.observations",
+      "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
       "desktopContract": "desktop",
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_traffic_router.py",
+        "tests/test_traffic_observation_projection.py",
+        "frontend/src/api/traffic-overview.test.ts",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/traffic/router.py#get_traffic_overview",
+          "consumer": "src/domains/traffic/observation_projection.py#traffic_overview",
+          "test": "tests/test_traffic_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficPage",
+          "consumer": "frontend/src/features/traffic/createTrafficAdapter.ts#createTrafficAdapter",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
