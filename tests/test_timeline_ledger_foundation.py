@@ -19,6 +19,7 @@ from domains.timeline.cursor import (
 from domains.timeline.mapping import inventory_timeline_event
 from domains.timeline.repository import (
     TimelineLedgerReadScope,
+    TimelineLedgerRecord,
     TimelineLedgerRepository,
     TimelineReplayResult,
     TimelineSnapshotLimitExceeded,
@@ -215,6 +216,46 @@ def test_replay_records_preserve_ledger_order_and_dedupe_uses_source_key() -> No
 
     assert result.status == "available"
     assert [event.event_id for event in result.events] == ["event-1", "event-2"]
+
+
+def test_scoped_replay_keeps_internal_sequences_for_opaque_event_cursors_across_gaps() -> None:
+    class Repository:
+        def _cursor_state(self, _workspace_id: str) -> tuple[int, int]:
+            return 5, 1
+
+        def _read_records(
+            self, _read_scope: object, **_kwargs: object
+        ) -> tuple[TimelineLedgerRecord, ...]:
+            # Workspace sequence 3 and 4 belong to a different cluster and are not visible here.
+            return (
+                TimelineLedgerRecord(2, _resource_event("inventory:2", "event-2")),
+                TimelineLedgerRecord(5, _resource_event("inventory:5", "event-5")),
+            )
+
+    scope = TimelineLedgerReadScope(
+        workspace_id="workspace-a",
+        scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
+    )
+    replay = TimelineLedgerRepository.replay_timeline_events(
+        Repository(),
+        scope,
+        after_sequence=1,
+    )
+    codec = TimelineReplayCursorCodec(
+        FilterCursorCodec("timeline-cursor-test-secret-32-bytes!!", now=lambda: 1_000)
+    )
+    binding = TimelineCursorBinding(
+        user_id="user-a",
+        authorization_revision="auth-revision-a",
+        query=_query(),
+        snapshot_revision=7,
+    )
+    cursors = tuple(codec.encode(binding, sequence=record.sequence) for record in replay.records)
+
+    assert [record.sequence for record in replay.records] == [2, 5]
+    assert [event.event_id for event in replay.events] == ["event-2", "event-5"]
+    assert [codec.decode(cursor, binding=binding) for cursor in cursors] == [2, 5]
+    assert all(not cursor.token.isdigit() for cursor in cursors)
 
 
 def test_ledger_repository_persists_one_row_for_duplicate_source_key_under_cursor_lock() -> None:
