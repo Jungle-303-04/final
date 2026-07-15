@@ -25,6 +25,8 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
     import packages.storage.sessions as session_storage
 
     recovery_allowed = {"value": False}
+    session_urls: list[str] = []
+    broker_urls: list[str] = []
 
     class UnavailableRedis:
         async def ping(self) -> None:
@@ -60,9 +62,11 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
             return PubSub()
 
     def session_client(_url: str, **_kwargs: object) -> UnavailableRedis | SessionRedis:
+        session_urls.append(_url)
         return SessionRedis() if recovery_allowed["value"] else UnavailableRedis()
 
     def broker_client(_url: str) -> UnavailableRedis | BrokerRedis:
+        broker_urls.append(_url)
         return BrokerRedis() if recovery_allowed["value"] else UnavailableRedis()
 
     class Database:
@@ -113,6 +117,8 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
     service = gateway.ApiGateway(event_bus=EventBus())
 
     with TestClient(service.app, raise_server_exceptions=False) as client:
+        assert session_urls and broker_urls
+        assert session_urls[0] == broker_urls[0]
         assert client.get("/healthz").status_code == 200
         ready = client.get("/readyz")
         assert ready.status_code == 503
@@ -121,6 +127,7 @@ def test_gateway_starts_fail_closed_during_session_redis_outage_and_recovers(
         denied = client.get("/auth/session", headers={"x-session-token": "known-token"})
         assert denied.status_code == 503
         assert denied.json() == {"detail": "session storage unavailable"}
+        assert denied.headers["retry-after"] == "1"
 
         recovery_allowed["value"] = True
         for _ in range(100):
