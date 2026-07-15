@@ -2986,15 +2986,20 @@
       "deliveryStatus": "in_progress",
       "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
         "backend": null,
         "frontend": null,
-        "desktop": null,
+        "desktop": {
+          "state": "in_progress",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_open_external_url",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#openExternalUrl",
+          "test": "frontend/src/desktop/desktopBridge.test.ts"
+        },
         "realtime": "not_required"
       }
     },
@@ -3016,15 +3021,21 @@
       "deliveryStatus": "in_progress",
       "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
         "backend": null,
         "frontend": null,
-        "desktop": null,
+        "desktop": {
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_open_saved_file",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#openSavedFile",
+          "reason": "The foundation permits only opaque handles issued by native save; arbitrary workstation paths from a server response are intentionally prohibited.",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        },
         "realtime": "not_required"
       }
     },
@@ -3045,15 +3056,20 @@
       "deliveryStatus": "in_progress",
       "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
         "backend": null,
         "frontend": null,
-        "desktop": null,
+        "desktop": {
+          "state": "in_progress",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_save_file",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#saveFile",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        },
         "realtime": "not_required"
       }
     },
@@ -3076,15 +3092,21 @@
       "deliveryStatus": "in_progress",
       "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
         "backend": null,
         "frontend": null,
-        "desktop": null,
+        "desktop": {
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "reason": "No signed desktop release manifest, updater keys or updater command are configured; the visible native menu item is disabled.",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        },
         "realtime": "not_required"
       }
     },
@@ -4440,15 +4462,21 @@
       "deliveryStatus": "in_progress",
       "backendContract": "domains.log_stream",
       "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
         "backend": null,
         "frontend": null,
-        "desktop": null,
+        "desktop": {
+          "state": "blocked",
+          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "reason": "The local PTY protocol is intentionally absent. It must be implemented only in Tauri and must never be proxied through the Python gateway or target agent.",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
+        },
         "realtime": null
       }
     },

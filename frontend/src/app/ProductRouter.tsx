@@ -7,6 +7,7 @@ import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProv
 import { UnifiedFilterProvider, useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 import { OperationStatusStoreProvider } from "../features/operations/OperationStatusStore";
 import { ProductShell } from "./ProductShell";
+import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
 import type { ProductComposition } from "./productComposition";
 import {
   landingProductRouteForReleasedSurfaces,
@@ -44,6 +45,7 @@ export function ProductRouter({
           authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
           port={composition.clusterScope}
         >
+          <DesktopRuntimeSync />
           <Routes>
           <Route element={(
             <ProductShell
