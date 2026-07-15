@@ -59,6 +59,32 @@ describe("BottomDockProvider", () => {
       .toBe("checkout: streaming");
     expect(observedReceived.filter((value) => value > 0)).toEqual([2]);
   });
+
+  it("drops a buffered event when its tab closes before the next frame", () => {
+    const handlers: LogStreamHandlers[] = [];
+    const port: LogStreamPort = {
+      open: vi.fn((_target, nextHandlers) => {
+        handlers.push(nextHandlers);
+        return vi.fn();
+      }),
+    };
+    render(
+      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+        <BottomDockProvider port={port}>
+          <DockProbe onRender={() => undefined} />
+        </BottomDockProvider>
+      </AuthSessionGateProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    handlers[0]?.onEvent(line("stale-line"));
+    fireEvent.click(screen.getByRole("button", { name: "close" }));
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    handlers[1]?.onEvent(line("current-line"));
+
+    act(() => scheduledFrame?.(16));
+    expect(screen.getByTestId("received").textContent).toBe("1");
+  });
 });
 
 function DockProbe({ onRender }: { onRender: (received: number) => void }) {
@@ -78,6 +104,13 @@ function DockProbe({ onRender }: { onRender: (received: number) => void }) {
         type="button"
       >
         open
+      </button>
+      <button
+        disabled={!tab}
+        onClick={() => tab && dock.closeTab(tab.id)}
+        type="button"
+      >
+        close
       </button>
       <span data-testid="received">{tab?.received ?? 0}</span>
       <span data-testid="status">{tab?.status ?? "closed"}</span>
