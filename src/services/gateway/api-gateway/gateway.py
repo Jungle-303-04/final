@@ -27,6 +27,7 @@ from domains.command.router import router as command_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
 from domains.diagnostics.router import router as diagnostics_router
+from domains.gitops.detail_router import router as gitops_detail_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
@@ -331,6 +332,7 @@ class ApiGateway:
         app.include_router(gitops_filter_router)  # workspace GitOps 변경·승인 필터·facet
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
+        app.include_router(gitops_detail_router)  # browser GitOps detail (session + RBAC)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
         app.include_router(

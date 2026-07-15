@@ -29,6 +29,7 @@ import {
   connectCluster,
   reissueClusterConnectCommand,
   getApplicationDrift,
+  getGitOpsApplicationDetail,
   getApplicationOverview,
   listApplicationCatalog,
   listApplicationDeploymentHistory,
@@ -185,6 +186,7 @@ export function createApiComposition() {
   });
   const gitOpsPort = createGitOpsAdapter({
     ...createReleaseFlowClient(),
+    getApplicationDetail: getGitOpsApplicationDetail,
     listApplicationDeployments,
   });
   const aiAssistantPort = createAiAssistantAdapter({

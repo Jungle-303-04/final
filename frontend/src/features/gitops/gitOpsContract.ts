@@ -48,6 +48,73 @@ export interface GitOpsSyncTarget {
   observedAt: string | null;
 }
 
+export type GitOpsAvailability = "available" | "partial" | "unavailable";
+export type GitOpsAuthorization = "allowed" | "denied";
+
+export interface GitOpsResourceRef {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+}
+
+export interface GitOpsClusterScope {
+  workspaceId: string;
+  clusterId: string;
+  namespaces: string[];
+  freshness: "live" | "stale" | "partial" | "disconnected";
+}
+
+export interface GitOpsApplicationScope {
+  availability: GitOpsAvailability;
+  scope: GitOpsClusterScope | null;
+  reasonCode: string | null;
+}
+
+export interface GitOpsSource {
+  repositoryRef: string | null;
+  defaultBranch: string | null;
+  manifestPath: string | null;
+}
+
+export interface GitOpsDesiredLiveDiffAvailability {
+  availability: GitOpsAvailability;
+  sourceRevision: string | null;
+  liveObservationRevision: string | null;
+  reasonCode: string | null;
+}
+
+export interface GitOpsOperationObservation {
+  availability: GitOpsAvailability;
+  inProgress: boolean | null;
+  workflowRunId: string | null;
+  status: string | null;
+  observedAt: string | null;
+  reasonCode: string | null;
+}
+
+export interface GitOpsActionCapability {
+  action: "refresh" | "sync";
+  authorization: GitOpsAuthorization;
+  availability: GitOpsAvailability;
+  enabled: boolean;
+  operationBlocked: boolean;
+  reasonCode: string | null;
+}
+
+export interface GitOpsApplicationDetail {
+  applicationId: string;
+  name: string;
+  resource: GitOpsResourceRef;
+  scope: GitOpsApplicationScope;
+  source: GitOpsSource;
+  desiredLiveDiff: GitOpsDesiredLiveDiffAvailability;
+  operation: GitOpsOperationObservation;
+  capabilities: [GitOpsActionCapability, GitOpsActionCapability];
+}
+
 export interface ReleaseTargetInput {
   name: string;
   repository: string;
@@ -223,6 +290,7 @@ export type ReleaseRunAction =
 export interface GitOpsPort {
   listApplications(signal?: AbortSignal): Promise<ReleaseApplication[]>;
   listSyncTargets(signal?: AbortSignal): Promise<GitOpsSyncTarget[]>;
+  getApplicationDetail(applicationId: string, signal?: AbortSignal): Promise<GitOpsApplicationDetail>;
   listClusters(signal?: AbortSignal): Promise<ReleaseCluster[]>;
   listPlans(signal?: AbortSignal): Promise<ReleasePlan[]>;
   listRuns(planId?: string, signal?: AbortSignal): Promise<ReleaseRun[]>;
