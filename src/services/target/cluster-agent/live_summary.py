@@ -132,26 +132,23 @@ class KubernetesPodSummaryCollector:
         )
         self._last_collection_started = collection_started
         async with kubernetes_client(self.transport) as client:
-            for namespace in agent_config.LIVE_SUMMARY_NAMESPACES:
-                continuation = ""
-                while len(pods) < agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT:
-                    params: dict[str, str | int] = {
-                        "limit": agent_config.LIVE_SUMMARY_POD_LIST_LIMIT
-                    }
-                    if continuation:
-                        params["continue"] = continuation
-                    response = await client.get(
-                        f"{base_url}/api/v1/namespaces/{namespace}/pods",
-                        params=params,
-                        headers=headers,
-                    )
-                    response.raise_for_status()
-                    payload = response.json()
-                    remaining = agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT - len(pods)
-                    pods.extend(payload.get("items", [])[:remaining])
-                    continuation = str(payload.get("metadata", {}).get("continue") or "")
-                    if not continuation:
-                        break
+            continuation = ""
+            while len(pods) < agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT:
+                params: dict[str, str | int] = {"limit": agent_config.LIVE_SUMMARY_POD_LIST_LIMIT}
+                if continuation:
+                    params["continue"] = continuation
+                response = await client.get(
+                    f"{base_url}/api/v1/pods",
+                    params=params,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                remaining = agent_config.LIVE_SUMMARY_POD_TOTAL_LIMIT - len(pods)
+                pods.extend(payload.get("items", [])[:remaining])
+                continuation = str(payload.get("metadata", {}).get("continue") or "")
+                if not continuation:
+                    break
             measured = await self.metrics_collector.collect(
                 client,
                 base_url=base_url,

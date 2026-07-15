@@ -8,6 +8,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import yaml
 from conftest import ROOT, load_file
 
@@ -172,6 +173,56 @@ def test_summarize_exposes_adaptive_interval_for_publisher_sleep() -> None:
 
     assert summary.window_ms == 2000
     assert collector.next_interval_seconds() == 2.0
+
+
+def test_collector_reads_pods_across_the_cluster_including_application_namespaces(
+    monkeypatch: Any,
+) -> None:
+    """라이브 요약은 설치용 네임스페이스가 아니라 실제 앱 전체를 관측해야 한다."""
+    module = load_live_summary_module()
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        assert request.url.params["limit"] == str(module.agent_config.LIVE_SUMMARY_POD_LIST_LIMIT)
+        return httpx.Response(
+            200,
+            json={
+                "metadata": {},
+                "items": [
+                    pod(namespace="target", name="cluster-agent"),
+                    pod(namespace="color-turf", name="color-turf-server"),
+                ],
+            },
+        )
+
+    class MetricsCollector:
+        async def collect(self, _client: Any, **kwargs: Any) -> dict[str, dict[str, Any]]:
+            assert {item["metadata"]["namespace"] for item in kwargs["pods"]} == {
+                "target",
+                "color-turf",
+            }
+            return {}
+
+    monkeypatch.setattr(module, "kubernetes_api_base_url", lambda: "https://kube.local")
+    monkeypatch.setattr(module, "service_account_token", lambda: "service-account-token")
+    collector = module.KubernetesPodSummaryCollector(
+        CLUSTER,
+        window_ms=1000,
+        transport=httpx.MockTransport(handler),
+        metrics_collector=MetricsCollector(),
+    )
+
+    summary = asyncio.run(collector())
+    deltas = collector.drain_deltas()
+
+    assert requested_paths == ["/api/v1/pods"]
+    assert summary is not None
+    assert summary.pods_total == 2
+    assert {delta.value["namespace"] for delta in deltas if delta.value} == {
+        "target",
+        "color-turf",
+    }
 
 
 def test_publisher_streams_bounded_live_summary_payloads() -> None:

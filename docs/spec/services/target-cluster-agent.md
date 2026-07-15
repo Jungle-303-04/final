@@ -169,7 +169,7 @@ async def wait_for_deployment_rollout(self, client: httpx.AsyncClient, base_url:
 
 #### `config.py` — 설정 단일 원천
 
-모듈 레벨 상수만 존재(클래스·함수 없음). 전체 목록과 기본값은 [설정](#설정-settings) 표 참조. 앵커: `src/services/target/cluster-agent/config.py`. 관측 스택 기본 URL(`DEFAULT_PROMETHEUS_BASE_URL`, `DEFAULT_LOKI_BASE_URL`, `DEFAULT_TEMPO_BASE_URL`, `DEFAULT_OTEL_SERVICE_NAME`)은 `packages.contracts.gateway.requests`에서 re-export만 한다(중복 정의 금지). `LIVE_SUMMARY_NAMESPACES = (TARGET_NAMESPACE, SANDBOX_NAMESPACE)`.
+모듈 레벨 상수만 존재(클래스·함수 없음). 전체 목록과 기본값은 [설정](#설정-settings) 표 참조. 앵커: `src/services/target/cluster-agent/config.py`. 관측 스택 기본 URL(`DEFAULT_PROMETHEUS_BASE_URL`, `DEFAULT_LOKI_BASE_URL`, `DEFAULT_TEMPO_BASE_URL`, `DEFAULT_OTEL_SERVICE_NAME`)은 `packages.contracts.gateway.requests`에서 re-export만 한다(중복 정의 금지). 라이브 요약은 Kubernetes의 클러스터 범위 `/api/v1/pods`를 페이지 단위로 읽어 애플리케이션 네임스페이스를 누락하지 않으며, 페이지 500개·수집 5,000개 상한과 파드 수 기반 적응형 주기로 규모를 보호한다.
 
 #### `kubernetes_api.py` — in-cluster k8s API 접근 헬퍼
 
@@ -791,4 +791,4 @@ Tempo 트레이스 정규화(`normalize_payload`): query별 결과를 `traces.re
 | `NODE_COLLECTOR_PORT` | int | `9100` | metrics 포트 (Prometheus scrape annotation과 연동) | `node_collector_manager.py` |
 | `NODE_COLLECTOR_COLLECT_INTERVAL_SECONDS` | int | `15` | node-collector 컨테이너 수집 주기 env | `node_collector_manager.py` |
 
-env가 아닌 주요 상수: `DEFAULT_REALTIME_GATEWAY_NODEPORT = 30090`, `LIVE_SUMMARY_POD_LIST_LIMIT = 200`, `LIVE_SUMMARY_NAMESPACES = ("target", "sandbox")`, `MIN/MAX_LIVE_SUMMARY_INTERVAL_SECONDS = 0.25 / 60.0`, `KUBERNETES_SERVICEACCOUNT_TOKEN_PATH = /var/run/secrets/kubernetes.io/serviceaccount/token`, `KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH = .../ca.crt`, `KUBERNETES_DEPLOYMENT_PATCH_ACTION = "k8s.apps.v1.deployments.patch"`, `KUBERNETES_CONFIGMAP_PATCH_ACTION = "k8s.core.v1.configmaps.patch"`, `KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"`, `QUERY_RUN_ACTION = "telemetry.query.run"`.
+env가 아닌 주요 상수: `DEFAULT_REALTIME_GATEWAY_NODEPORT = 30090`, `LIVE_SUMMARY_POD_LIST_LIMIT = 500`, `LIVE_SUMMARY_POD_TOTAL_LIMIT = 5000`, `MIN/MAX_LIVE_SUMMARY_INTERVAL_SECONDS = 0.25 / 60.0`, `KUBERNETES_SERVICEACCOUNT_TOKEN_PATH = /var/run/secrets/kubernetes.io/serviceaccount/token`, `KUBERNETES_SERVICEACCOUNT_CA_CERT_PATH = .../ca.crt`, `KUBERNETES_DEPLOYMENT_PATCH_ACTION = "k8s.apps.v1.deployments.patch"`, `KUBERNETES_CONFIGMAP_PATCH_ACTION = "k8s.core.v1.configmaps.patch"`, `KUBERNETES_DEPLOYMENT_SCALE_ACTION = "k8s.apps.v1.deployments.scale"`, `QUERY_RUN_ACTION = "telemetry.query.run"`.
