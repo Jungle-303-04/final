@@ -23,9 +23,9 @@ export function useTimelineUrlState(
   const currentSearch = searchParams.toString();
   const urlOptions = useMemo(() => ({
     isRetained: options.isRetained,
-    maxRangeDays: options.maxRangeDays,
+    maxRetainedRangeMs: options.maxRetainedRangeMs,
     requiresNamespaceFilter: options.requiresNamespaceFilter,
-  }), [options.isRetained, options.maxRangeDays, options.requiresNamespaceFilter]);
+  }), [options.isRetained, options.maxRetainedRangeMs, options.requiresNamespaceFilter]);
   const state = useMemo(
     () => parseTimelineUrlState(new URLSearchParams(currentSearch), urlOptions),
     [currentSearch, urlOptions],

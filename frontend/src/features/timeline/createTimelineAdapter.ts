@@ -1,7 +1,6 @@
 import type { ClusterScope, ResourceRef } from "../../shared/parity/referenceParity";
 import {
   TimelineFailure,
-  type TimelineCapabilityDescriptor,
   type TimelineCapabilities,
   type TimelineCoverage,
   type TimelineCursor,
@@ -34,7 +33,7 @@ const ACTIVITY_BY_URL_KEY = {
   warnings: "warning",
 } as const;
 
-const MILLISECONDS_PER_DAY = 86_400_000;
+const SESSION_CAPABILITY_CACHE_KEY = "session";
 
 export interface TimelineAdapterDependencies extends TimelineEndpointDependencies {
   now?: () => number;
@@ -44,21 +43,26 @@ export interface TimelineAdapterDependencies extends TimelineEndpointDependencie
 export function createTimelineAdapter(dependencies: TimelineAdapterDependencies): TimelinePort {
   const now = dependencies.now ?? Date.now;
   const random = dependencies.random ?? Math.random;
-  let capabilityDescriptor: TimelineCapabilityDescriptor | null = null;
-  let capabilityRequest: Promise<TimelineCapabilityDescriptor> | null = null;
+  let capabilities: TimelineCapabilities | null = null;
+  let activeCapabilityCacheKey: string | null = null;
+  const capabilitiesByWorkspace = new Map<string, TimelineCapabilities>();
+  const capabilityRequestsByWorkspace = new Map<string, Promise<TimelineCapabilities>>();
   return {
     get capabilities() {
-      if (capabilityDescriptor === null) {
+      if (capabilities === null) {
         throw new TimelineFailure("invalid-response", "Timeline capabilities have not been bootstrapped.");
       }
-      return toTimelineCapabilities(capabilityDescriptor);
+      return capabilities;
     },
-    readCapabilities(signal) {
-      return loadCapabilities(signal);
+    readCapabilities(signal, workspaceCacheKey) {
+      return loadCapabilities(signal, workspaceCacheKey);
     },
     async readTimeline(query, signal) {
       try {
-        const preflightCapabilities = await loadCapabilities(signal);
+        const preflightCapabilities = await loadCapabilities(
+          signal,
+          timelineWorkspaceCacheKey(query),
+        );
         const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, now));
         const value = await dependencies.getTimelineSnapshot({ query: request }, signal);
         if (value.snapshot.cursor.token !== value.end.cursor.token) {
@@ -120,20 +124,36 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
     },
   };
 
-  async function loadCapabilities(signal?: AbortSignal): Promise<TimelineCapabilityDescriptor> {
-    if (capabilityDescriptor !== null) return capabilityDescriptor;
-    const request = capabilityRequest ?? dependencies.getTimelineCapabilities(signal)
+  async function loadCapabilities(
+    signal?: AbortSignal,
+    workspaceCacheKey?: string,
+  ): Promise<TimelineCapabilities> {
+    const cacheKey = workspaceCacheKey === undefined
+      ? activeCapabilityCacheKey ?? SESSION_CAPABILITY_CACHE_KEY
+      : `workspace:${workspaceCacheKey}`;
+    const cached = capabilitiesByWorkspace.get(cacheKey);
+    if (cached !== undefined) {
+      capabilities = cached;
+      activeCapabilityCacheKey = cacheKey;
+      return cached;
+    }
+    const request = capabilityRequestsByWorkspace.get(cacheKey)
+      ?? dependencies.getTimelineCapabilities(signal)
       .then(toTimelineCapabilityDescriptor);
-    capabilityRequest = request;
+    capabilityRequestsByWorkspace.set(cacheKey, request);
     try {
       const resolved = await request;
-      capabilityDescriptor = resolved;
+      capabilities = resolved;
+      activeCapabilityCacheKey = cacheKey;
+      capabilitiesByWorkspace.set(cacheKey, resolved);
       return resolved;
     } catch (error) {
       if (isAbortError(error) || error instanceof TimelineFailure) throw error;
       throw toTimelineFailure(error);
     } finally {
-      if (capabilityRequest === request) capabilityRequest = null;
+      if (capabilityRequestsByWorkspace.get(cacheKey) === request) {
+        capabilityRequestsByWorkspace.delete(cacheKey);
+      }
     }
   }
 }
@@ -206,7 +226,7 @@ function toTimelineSnapshot(
 
 function toTimelineCapabilityDescriptor(
   descriptor: TimelineEndpointCapabilityDescriptor,
-): TimelineCapabilityDescriptor {
+): TimelineCapabilities {
   return {
     selectedSourceMode: descriptor.selected_source_mode,
     availableSourceModes: [...descriptor.available_source_modes],
@@ -215,19 +235,13 @@ function toTimelineCapabilityDescriptor(
   };
 }
 
-function toTimelineCapabilities(
-  descriptor: TimelineCapabilityDescriptor,
-): TimelineCapabilities {
-  return {
-    sourceMode: descriptor.selectedSourceMode,
-    maxRangeDays: descriptor.maxRetainedRangeMs / MILLISECONDS_PER_DAY,
-    requiresNamespaceFilter: descriptor.namespaceFilterPolicy === "required",
-  };
+function timelineWorkspaceCacheKey(query: TimelineQuery): string {
+  return query.scopes[0]?.workspaceId ?? SESSION_CAPABILITY_CACHE_KEY;
 }
 
 function assertMatchingCapabilityDescriptors(
-  preflight: TimelineCapabilityDescriptor,
-  snapshot: TimelineCapabilityDescriptor,
+  preflight: TimelineCapabilities,
+  snapshot: TimelineCapabilities,
 ): void {
   if (
     preflight.selectedSourceMode !== snapshot.selectedSourceMode
@@ -404,7 +418,8 @@ function toTimelineFailure(error: unknown): TimelineFailure {
   const status = fieldNumber(error, "status");
   const code: TimelineFailure["code"] = status === 503
     ? "unavailable"
-    : kind === "forbidden" || kind === "unauthorized" || status === 403 || status === 401
+    : kind === "forbidden" || kind === "unauthorized" || kind === "not-found"
+      || status === 404 || status === 403 || status === 401
       ? "forbidden"
       : kind === "network"
         ? "offline"

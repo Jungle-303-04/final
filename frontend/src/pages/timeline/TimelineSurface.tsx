@@ -21,7 +21,6 @@ import type {
   TimelineViewMode,
 } from "../../features/timeline/timelineContract";
 import { groupTimelineEvents } from "../../features/timeline/timelinePresentation";
-import { DEFAULT_MAX_RANGE_DAYS } from "../../features/timeline/timelineUrlState";
 import { useTimelineUrlState } from "../../features/timeline/useTimelineUrlState";
 import type { ClusterScope } from "../../shared/parity/referenceParity";
 import { useTimelineDataFrame, type TimelineDataFrame } from "./useTimelineDataFrame";
@@ -43,10 +42,11 @@ export function TimelineSurface({
   scopes: readonly ClusterScope[];
 }) {
   const { formatDate, formatNumber, t } = useI18n();
+  const capabilities = port.capabilities;
   const url = useTimelineUrlState({
-    isRetained: port.capabilities.sourceMode === "retained",
-    maxRangeDays: port.capabilities.maxRangeDays ?? DEFAULT_MAX_RANGE_DAYS,
-    requiresNamespaceFilter: port.capabilities.requiresNamespaceFilter,
+    isRetained: capabilities.selectedSourceMode === "retained",
+    maxRetainedRangeMs: capabilities.maxRetainedRangeMs,
+    requiresNamespaceFilter: capabilities.namespaceFilterPolicy === "required",
   });
   const query = useMemo<TimelineQuery>(() => ({
     scopes,
@@ -64,7 +64,7 @@ export function TimelineSurface({
   }), [scopes, url.state]);
   const timeline = useTimelineDataFrame(port, query);
   const viewGroupRef = useRef<HTMLDivElement>(null);
-  const namespaceLocked = port.capabilities.requiresNamespaceFilter;
+  const namespaceLocked = capabilities.namespaceFilterPolicy === "required";
 
   const setViewMode = (viewMode: TimelineViewMode) => {
     if (namespaceLocked && viewMode !== "list") return;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../api/client";
 import { createTimelineAdapter } from "./createTimelineAdapter";
 import type {
   TimelineEndpointDependencies,
@@ -23,6 +24,24 @@ describe("Timeline adapter", () => {
     }));
   });
 
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [404, "not-found"],
+  ] as const)("maps capability HTTP %i to the forbidden product state", async (status, kind) => {
+    const adapter = createTimelineAdapter({
+      getTimelineCapabilities: async () => {
+        throw new ApiError(kind, "hidden", { status });
+      },
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
+      subscribeTimelineEvents: async function* () {},
+    });
+    const readCapabilities = adapter.readCapabilities;
+    if (readCapabilities === undefined) throw new Error("Timeline adapter must expose capability preflight");
+
+    await expect(readCapabilities()).rejects.toMatchObject({ code: "forbidden" });
+  });
+
   it("preflights one server capability descriptor before its first snapshot", async () => {
     const order: string[] = [];
     const adapter = createTimelineAdapter({
@@ -43,17 +62,37 @@ describe("Timeline adapter", () => {
     if (readCapabilities === undefined) throw new Error("Timeline adapter must expose capability preflight");
 
     expect(order).toEqual(["capabilities", "snapshot"]);
-    await expect(readCapabilities()).resolves.toEqual({
+    const descriptor = {
       selectedSourceMode: "retained",
       availableSourceModes: ["retained"],
       maxRetainedRangeMs: 7_200_000,
       namespaceFilterPolicy: "not_required",
+    };
+    await expect(readCapabilities()).resolves.toEqual(descriptor);
+    expect(adapter.capabilities).toEqual(descriptor);
+  });
+
+  it("isolates cached descriptors when the workspace scope changes", async () => {
+    const getTimelineCapabilities = vi.fn(async () => capabilities());
+    const adapter = createTimelineAdapter({
+      getTimelineCapabilities,
+      getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
+      subscribeTimelineEvents: async function* () {},
+      now: () => 10_000,
     });
-    expect(adapter.capabilities).toEqual({
-      sourceMode: "retained",
-      maxRangeDays: 7_200_000 / 86_400_000,
-      requiresNamespaceFilter: false,
-    });
+
+    await adapter.readTimeline(timelineQuery());
+    await adapter.readTimeline(timelineQuery({
+      scopes: [{
+        workspaceId: "workspace-b",
+        clusterId: "cluster-b",
+        namespaces: [],
+        freshness: "live",
+      }],
+    }));
+    await adapter.readTimeline(timelineQuery());
+
+    expect(getTimelineCapabilities).toHaveBeenCalledTimes(2);
   });
 
   it("fails closed when a snapshot descriptor differs from its preflight", async () => {

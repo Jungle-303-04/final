@@ -8,7 +8,6 @@ import type {
 
 export const DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
 export const DEFAULT_LIVE_WINDOW_MILLISECONDS = 60 * 60 * 1000;
-export const DEFAULT_MAX_RANGE_DAYS = 7;
 
 const DEFAULT_VIEW_MODE: TimelineViewMode = "swimlane";
 const DEFAULT_GROUPING: TimelineGrouping = "app";
@@ -40,7 +39,7 @@ const MANAGED_KEYS = [
 
 export interface TimelineUrlOptions {
   isRetained: boolean;
-  maxRangeDays: number;
+  maxRetainedRangeMs: number;
   requiresNamespaceFilter: boolean;
 }
 
@@ -127,10 +126,9 @@ function parseTimelineMode(searchParams: URLSearchParams, options: TimelineUrlOp
   const fromMs = parseSafeInteger(searchParams.get("from"));
   const toMs = parseSafeInteger(searchParams.get("to"));
   if (fromMs !== null && toMs !== null && fromMs > 0 && fromMs < toMs) {
-    const maxRangeMilliseconds = resolveMaxRangeDays(options.maxRangeDays) * DAY_MILLISECONDS;
     return {
       kind: "frozen",
-      fromMs: Math.max(fromMs, toMs - maxRangeMilliseconds),
+      fromMs: Math.max(fromMs, toMs - options.maxRetainedRangeMs),
       toMs,
     };
   }
@@ -183,10 +181,6 @@ function parseSafeInteger(value: string | null): number | null {
   if (value === null) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-function resolveMaxRangeDays(value: number): number {
-  return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_RANGE_DAYS;
 }
 
 function defaultLiveMode(): TimelineMode {

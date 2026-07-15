@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   DAY_MILLISECONDS,
   DEFAULT_LIVE_WINDOW_MILLISECONDS,
-  DEFAULT_MAX_RANGE_DAYS,
   isTimelineHighFrequencyOnlyChange,
   parseTimelineUrlState,
   writeTimelineSearchParams,
@@ -11,7 +10,7 @@ import {
 describe("Timeline URL state", () => {
   const retainedOptions = {
     isRetained: true,
-    maxRangeDays: DEFAULT_MAX_RANGE_DAYS,
+    maxRetainedRangeMs: DAY_MILLISECONDS * 7,
     requiresNamespaceFilter: false,
   } as const;
 
@@ -65,13 +64,27 @@ describe("Timeline URL state", () => {
 
     expect(state.mode).toEqual({
       kind: "frozen",
-      fromMs: tenDays - (DAY_MILLISECONDS * DEFAULT_MAX_RANGE_DAYS),
+      fromMs: tenDays - retainedOptions.maxRetainedRangeMs,
       toMs: tenDays,
     });
     expect(parseTimelineUrlState(
       new URLSearchParams("from=-1&to=bad&window=-100"),
       retainedOptions,
     ).mode).toEqual({ kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS });
+  });
+
+  it("clamps retained URLs with the exact server millisecond limit", () => {
+    const maxRetainedRangeMs = 91_337;
+    const toMs = 1_000_000;
+
+    expect(parseTimelineUrlState(
+      new URLSearchParams(`from=1&to=${toMs}`),
+      { ...retainedOptions, maxRetainedRangeMs },
+    ).mode).toEqual({
+      kind: "frozen",
+      fromMs: toMs - maxRetainedRangeMs,
+      toMs,
+    });
   });
 
   it("does not apply retained time parameters to a local source", () => {
