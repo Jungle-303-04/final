@@ -80,6 +80,8 @@ class TimelineFilters(StrictModel):
 
 
 class TimelineQuery(StrictModel):
+    """A requested timeline identity; freshness is derived by the gateway, not selected by clients."""
+
     scopes: tuple[ClusterScope, ...] = Field(min_length=1, max_length=100)
     window: TimelineWindow
     filters: TimelineFilters = Field(default_factory=TimelineFilters)
@@ -91,15 +93,18 @@ class TimelineQuery(StrictModel):
         workspace_ids = {scope.workspace_id for scope in self.scopes}
         if len(workspace_ids) != 1:
             raise ValueError("timeline scopes must use same workspace")
-        by_key: dict[tuple[str, str, tuple[str, ...], str], ClusterScope] = {}
+        by_key: dict[tuple[str, str, tuple[str, ...]], ClusterScope] = {}
         for scope in self.scopes:
-            key = (scope.workspace_id, scope.cluster_id, scope.namespaces, scope.freshness)
-            by_key[key] = scope
+            key = (scope.workspace_id, scope.cluster_id, scope.namespaces)
+            # ``ClusterScope`` remains wire-compatible with common scope inputs,
+            # but collection freshness is evidence output.  Gateway adapters
+            # replace this deterministic placeholder with server-observed state.
+            by_key[key] = scope.model_copy(update={"freshness": "live"})
         self.scopes = tuple(
             by_key[key]
             for key in sorted(
                 by_key,
-                key=lambda item: (item[1], item[2], item[3]),
+                key=lambda item: (item[1], item[2]),
             )
         )
         return self
