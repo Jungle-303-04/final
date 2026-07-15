@@ -33,6 +33,27 @@ def test_operation_event_broker_fans_out_only_matching_command_events() -> None:
     asyncio.run(run())
 
 
+def test_broker_announces_an_already_staged_event_without_rewriting_its_sequence() -> None:
+    from packages.contracts.parity import OperationEvent
+
+    async def run() -> None:
+        broker = InMemoryOperationEventBroker()
+        subscription = await broker.subscribe("command-1", workspace_id="workspace-1")
+        terminal = OperationEvent(
+            command_id="command-1",
+            sequence=4,
+            kind="completed",
+            payload={"cluster_id": "cluster-1", "status": "completed"},
+        )
+
+        await broker.announce(terminal, workspace_id="workspace-1")
+
+        assert await subscription.next() == terminal
+        await subscription.close()
+
+    asyncio.run(run())
+
+
 def test_durable_operation_events_are_persisted_before_fanout_and_stop_after_terminal() -> None:
     class Store:
         def __init__(self) -> None:
