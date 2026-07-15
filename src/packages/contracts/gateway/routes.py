@@ -22,6 +22,8 @@ INSTALL_MANIFEST_PATH = "/install/{agent_token}"
 COMMANDS_PATH = "/commands"
 COMMAND_STATUS_PATH = "/commands/{command_id}"
 COMMAND_EVENTS_PATH = "/commands/{command_id}/events"
+COMMAND_CANCEL_PATH = "/commands/{command_id}/cancel"
+COMMAND_RETRY_PATH = "/commands/{command_id}/retry"
 # 원본 전수 기능 mapping의 생성형 계약 catalog. 제품 UI는 이 경로를 통해
 # 기능·스트리밍 여부를 발견하며, 소스 목록을 다시 하드코딩하지 않는다.
 FEATURE_CONTRACTS_PATH = "/feature-contracts"

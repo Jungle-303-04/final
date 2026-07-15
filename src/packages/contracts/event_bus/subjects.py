@@ -50,6 +50,8 @@ class EventSubject(StrEnum):
     COMMAND_REJECTED = "command.rejected"  # 정책 위반 거부
     COMMAND_DISPATCHED = "command.dispatched"  # 실행 계획 수립·대상 클러스터로 라우팅
     COMMAND_QUEUED_FOR_AGENT = "command.queued_for_agent"  # 에이전트 큐 적재
+    COMMAND_CANCEL_REQUESTED = "command.cancel.requested"  # 실행 취소 의도 기록
+    COMMAND_RETRY_REQUESTED = "command.retry.requested"  # 실패 명령의 수동 재시도 의도 기록
     COMMAND_COMPLETED = "command.completed"  # 에이전트 실행 완료
 
     # --- 원인 분석/안전 PR(rca-worker) ---

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
 from fastapi import HTTPException
 
 from domains.command.events import CommandRequestedBody
@@ -10,6 +12,7 @@ from domains.command.handler import build_plan
 from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     agent_debug_query,
+    cancel_command,
     command_events,
     command_heartbeat,
     command_result,
@@ -18,12 +21,14 @@ from domains.command.router import (
     commands,
     lease_next_command,
     restart_deployment,
+    retry_command,
     scale_deployment,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
+    CommandControlRequest,
     CommandHeartbeatRequest,
     CommandRequest,
     CommandResultRequest,
@@ -93,6 +98,107 @@ class SpyEvents:
         self.accept_kwargs = kwargs
         event = SimpleNamespace(event_id="evt-1", correlation_id="corr-1")
         return SimpleNamespace(event=event)
+
+
+class ControlStageResult:
+    def __init__(
+        self, *, first: dict[str, object] | None = None, one: dict[str, object] | None = None
+    ):
+        self._first = first
+        self._one = one
+
+    def mappings(self) -> ControlStageResult:
+        return self
+
+    def first(self) -> dict[str, object] | None:
+        return self._first
+
+    def one(self) -> dict[str, object]:
+        assert self._one is not None
+        return self._one
+
+    def scalar_one_or_none(self) -> int:
+        return 1
+
+
+class ControlStageConnection:
+    def __init__(self, command: dict[str, object], *, operation_event_call: int = 6) -> None:
+        self.command = command
+        self.operation_event_call = operation_event_call
+        self.calls = 0
+
+    def execute(self, _statement: object, *_args: object, **_kwargs: object) -> ControlStageResult:
+        self.calls += 1
+        if self.calls == 1:
+            return ControlStageResult(first=self.command)
+        if self.calls == 2:
+            return ControlStageResult(first=None)
+        if self.calls == self.operation_event_call:
+            return ControlStageResult(
+                one={
+                    "command_id": self.command["command_id"],
+                    "sequence": 2,
+                    "kind": "cancelled",
+                    "payload": {
+                        "cluster_id": self.command["cluster_id"],
+                        "status": "cancelled",
+                    },
+                    "occurred_at": datetime(2026, 7, 16, tzinfo=UTC),
+                }
+            )
+        return ControlStageResult()
+
+
+class ControlEvents:
+    def __init__(self, connection: ControlStageConnection) -> None:
+        self.connection = connection
+        self.body: object | None = None
+
+    async def accept_body(self, body: object, **kwargs: object) -> object:
+        self.body = body
+        event = SimpleNamespace(event_id="evt-control-1", correlation_id="corr-1")
+        stage = kwargs["transactional_stage"]
+        assert callable(stage)
+        stage(self.connection, event)
+        return SimpleNamespace(event=event)
+
+
+class DuplicateControlEvents:
+    async def accept_body(self, _body: object, **_kwargs: object) -> object:
+        from domains.command.repository import DuplicateCommandControl
+
+        raise DuplicateCommandControl(
+            {
+                "command_id": "cmd-control-1",
+                "action": "cancel",
+                "event_id": "evt-control-1",
+                "audit_event_id": "evt-control-1",
+                "attempt_id": None,
+                "details": {"correlation_id": "corr-1", "status_after": "cancel_requested"},
+            }
+        )
+
+
+class ControlDb(SpyAccessDb):
+    def __init__(
+        self,
+        command: dict[str, object],
+        *,
+        allowed: bool = True,
+        cluster_role: str = "target",
+    ) -> None:
+        super().__init__(allowed, cluster_role=cluster_role)
+        self.command = command
+
+    async def get_agent_command(
+        self, _command_id: str, _workspace_id: str
+    ) -> dict[str, object] | None:
+        return self.command
+
+    def list_cluster_agent_statuses(
+        self, _workspace_id: str, _cluster_id: str
+    ) -> list[dict[str, object]]:
+        return [{"status": "connected", "capabilities": ["command_receiver"]}]
 
 
 def current_session() -> SimpleNamespace:
@@ -188,6 +294,153 @@ def manual_diff() -> dict[str, str]:
         "actual_image": "img:old",
         "risk": "sandbox-only",
     }
+
+
+def control_command(*, status: str = "queued", direct_execution: bool = False) -> dict[str, object]:
+    return {
+        "command_id": "cmd-control-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "correlation_id": "corr-1",
+        "action": Command.DEFAULT_ACTION,
+        "status": status,
+        "result": {"retryable": True} if status == "failed" else {},
+        "payload": {
+            "action": Command.DEFAULT_ACTION,
+            "namespace": "sandbox",
+            "diff": {},
+            "payload": {},
+            "retry_policy": {"max_attempts": 3, "retry_delay_seconds": 0},
+        },
+        "direct_execution": direct_execution,
+        "confirmation_event_id": "evt-original" if direct_execution else None,
+        "impact_identity": "mismatch" if direct_execution else None,
+        "attempt_count": 1,
+        "active_attempt_id": None,
+        "cancel_generation": 0,
+    }
+
+
+def test_cancel_control_stages_audit_state_and_terminal_sse_before_202() -> None:
+    async def run() -> None:
+        command = control_command()
+        connection = ControlStageConnection(command)
+        events = ControlEvents(connection)
+        response = await cancel_command(
+            "cmd-control-1",
+            CommandControlRequest(reason="operator stopped rollout"),
+            "cancel-key-1",
+            current_session(),
+            ControlDb(command),
+            events,
+            InMemoryOperationEventBroker(),
+        )
+
+        assert response.accepted is True
+        assert response.status == "cancelled"
+        assert response.audit_event_id == response.event_id == "evt-control-1"
+        assert connection.calls == 7
+
+    asyncio.run(run())
+
+
+def test_cancel_control_same_idempotency_key_returns_original_receipt() -> None:
+    async def run() -> None:
+        command = control_command(status="cancel_requested")
+        response = await cancel_command(
+            "cmd-control-1",
+            CommandControlRequest(),
+            "cancel-key-1",
+            current_session(),
+            ControlDb(command),
+            DuplicateControlEvents(),
+            InMemoryOperationEventBroker(),
+        )
+
+        assert response.idempotent is True
+        assert response.status == "cancel_requested"
+        assert response.event_id == "evt-control-1"
+
+    asyncio.run(run())
+
+
+def test_retry_rechecks_current_rbac_before_it_can_reuse_a_failed_command() -> None:
+    async def run() -> None:
+        command = control_command(status="failed")
+        with pytest.raises(HTTPException) as error:
+            await retry_command(
+                "cmd-control-1",
+                CommandControlRequest(),
+                "retry-key-1",
+                current_session(),
+                ControlDb(command, allowed=False),
+                DuplicateControlEvents(),
+                InMemoryOperationEventBroker(),
+            )
+        assert error.value.status_code == 403
+
+    asyncio.run(run())
+
+
+def test_retry_rechecks_current_management_cluster_policy() -> None:
+    async def run() -> None:
+        command = control_command(status="failed")
+        with pytest.raises(HTTPException) as error:
+            await retry_command(
+                "cmd-control-1",
+                CommandControlRequest(),
+                "retry-key-1",
+                current_session(),
+                ControlDb(command, cluster_role="management"),
+                DuplicateControlEvents(),
+                InMemoryOperationEventBroker(),
+            )
+        assert error.value.status_code == 400
+        assert error.value.detail["code"] == "management_readonly"
+
+    asyncio.run(run())
+
+
+def test_direct_retry_rejects_mismatched_impact_without_reusing_confirmation() -> None:
+    async def run() -> None:
+        command = control_command(status="failed", direct_execution=True)
+        with pytest.raises(HTTPException) as error:
+            await retry_command(
+                "cmd-control-1",
+                CommandControlRequest(),
+                "retry-key-1",
+                current_session(),
+                ControlDb(command),
+                DuplicateControlEvents(),
+                InMemoryOperationEventBroker(),
+            )
+        assert error.value.status_code == 409
+        assert "fresh confirmed request" in str(error.value.detail)
+
+    asyncio.run(run())
+
+
+def test_retry_control_creates_a_new_attempt_without_changing_logical_command_id() -> None:
+    from domains.command.repository import stage_command_control_in_transaction
+
+    command = control_command(status="failed")
+    connection = ControlStageConnection(command, operation_event_call=8)
+    staged = stage_command_control_in_transaction(
+        connection,
+        workspace_id="workspace-1",
+        command_id="cmd-control-1",
+        action="retry",
+        idempotency_key="retry-key-1",
+        requested_by="user-1",
+        reason="retry after transient error",
+        event_id="evt-retry-1",
+        audit_event_id="evt-retry-1",
+    )
+
+    assert staged.command_id == "cmd-control-1"
+    assert staged.status == "queued"
+    assert staged.attempt_id is not None
+    assert connection.calls == 9
 
 
 def test_uninstall_completed_ack_revokes_registration() -> None:

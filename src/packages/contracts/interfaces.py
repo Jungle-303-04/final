@@ -191,12 +191,25 @@ class ManagementPlaneClient(Protocol):
     ) -> CommandRecord | None: ...
 
     async def start_command(
-        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
+        self,
+        command_id: str,
+        cluster_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        attempt_id: str | None = None,
     ) -> None: ...
 
     async def heartbeat_command(
-        self, command_id: str, cluster_id: str, workspace_id: str, lease_id: str, agent_id: str
-    ) -> None: ...
+        self,
+        command_id: str,
+        cluster_id: str,
+        workspace_id: str,
+        lease_id: str,
+        agent_id: str,
+        attempt_id: str | None = None,
+        observed_cancel_generation: int | None = None,
+    ) -> JsonObject: ...
 
     async def complete_command(
         self,
@@ -205,6 +218,7 @@ class ManagementPlaneClient(Protocol):
         lease_id: str,
         agent_id: str,
         result: JsonObject,
+        attempt_id: str | None = None,
     ) -> None: ...
 
     async def schedule_evidence_jobs(

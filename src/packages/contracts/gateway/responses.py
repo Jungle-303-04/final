@@ -90,6 +90,8 @@ class CommandStartedResponse(StrictModel):
 class CommandHeartbeatResponse(StrictModel):
     accepted: bool
     correlation_id: str
+    cancel_requested: bool = False
+    cancel_generation: int | None = None
 
 
 class AgentDebugQueryResponse(StrictModel):

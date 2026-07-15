@@ -18,6 +18,7 @@ LOGGER = get_logger(__name__)
 @dataclass(frozen=True)
 class CommandResultRecord:
     command_id: str
+    attempt_id: str
     workspace_id: str
     lease_id: str
     agent_id: str
@@ -62,10 +63,11 @@ class CommandResultOutbox:
 
     def init_schema(self) -> None:
         conn = self.connection()
-        conn.executescript(
+        conn.execute(
             """
             create table if not exists command_results (
-                command_id text primary key,
+                command_id text not null,
+                attempt_id text not null,
                 workspace_id text not null,
                 lease_id text not null,
                 agent_id text not null,
@@ -74,19 +76,55 @@ class CommandResultOutbox:
                 attempt_count integer not null default 0,
                 last_error text,
                 created_at real not null,
-                updated_at real not null
-            );
-
+                updated_at real not null,
+                primary key (command_id, attempt_id)
+            )
+            """
+        )
+        self.ensure_columns()
+        conn.execute(
+            """
             create index if not exists idx_command_results_created
-                on command_results(status, created_at);
+            on command_results(status, created_at)
             """
         )
         conn.commit()
-        self.ensure_columns()
 
     def ensure_columns(self) -> None:
         conn = self.connection()
         columns = {str(row["name"]) for row in conn.execute("pragma table_info(command_results)")}
+        if "attempt_id" not in columns:
+            conn.execute("alter table command_results rename to command_results_legacy")
+            conn.execute(
+                """
+                create table command_results (
+                    command_id text not null,
+                    attempt_id text not null,
+                    workspace_id text not null,
+                    lease_id text not null,
+                    agent_id text not null,
+                    status text not null default 'pending',
+                    result_json text not null,
+                    attempt_count integer not null default 0,
+                    last_error text,
+                    created_at real not null,
+                    updated_at real not null,
+                    primary key (command_id, attempt_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                insert into command_results (
+                    command_id, attempt_id, workspace_id, lease_id, agent_id,
+                    status, result_json, attempt_count, last_error, created_at, updated_at
+                )
+                select command_id, 'legacy:' || command_id, workspace_id, lease_id, agent_id,
+                       status, result_json, attempt_count, last_error, created_at, updated_at
+                from command_results_legacy
+                """
+            )
+            conn.execute("drop table command_results_legacy")
         if "status" not in columns:
             conn.execute(
                 "alter table command_results add column status text not null default 'pending'"
@@ -101,15 +139,18 @@ class CommandResultOutbox:
         lease_id: str,
         agent_id: str,
         result: JsonObject,
+        attempt_id: str | None = None,
         now: float | None = None,
     ) -> None:
         timestamp = time.time() if now is None else now
+        normalized_attempt_id = attempt_id or f"legacy:{command_id}"
         conn = self.connection()
         with conn:
             conn.execute(
                 """
                 insert into command_results (
                     command_id,
+                    attempt_id,
                     workspace_id,
                     lease_id,
                     agent_id,
@@ -120,8 +161,8 @@ class CommandResultOutbox:
                     created_at,
                     updated_at
                 )
-                values (?, ?, ?, ?, ?, ?, 0, null, ?, ?)
-                on conflict (command_id) do update set
+                values (?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?)
+                on conflict (command_id, attempt_id) do update set
                     workspace_id = excluded.workspace_id,
                     lease_id = excluded.lease_id,
                     agent_id = excluded.agent_id,
@@ -131,6 +172,7 @@ class CommandResultOutbox:
                 """,
                 (
                     command_id,
+                    normalized_attempt_id,
                     workspace_id,
                     lease_id,
                     agent_id,
@@ -144,7 +186,13 @@ class CommandResultOutbox:
             "agent_command_result_enqueued",
             extra={
                 CONTEXT_KEY: {
-                    **command_result_log_context(command_id, workspace_id, lease_id, agent_id),
+                    **command_result_log_context(
+                        command_id,
+                        workspace_id,
+                        lease_id,
+                        agent_id,
+                        normalized_attempt_id,
+                    ),
                     **command_result_summary(result),
                 }
             },
@@ -155,7 +203,7 @@ class CommandResultOutbox:
             self.connection()
             .execute(
                 """
-            select command_id, workspace_id, lease_id, agent_id, result_json, attempt_count
+            select command_id, attempt_id, workspace_id, lease_id, agent_id, result_json, attempt_count
             from command_results
             where status = ?
             order by created_at
@@ -172,6 +220,7 @@ class CommandResultOutbox:
             result = {"raw_result": result}
         return CommandResultRecord(
             command_id=str(row["command_id"]),
+            attempt_id=str(row["attempt_id"]),
             workspace_id=str(row["workspace_id"]),
             lease_id=str(row["lease_id"]),
             agent_id=str(row["agent_id"]),
@@ -179,10 +228,13 @@ class CommandResultOutbox:
             attempt_count=int(row["attempt_count"]),
         )
 
-    def mark_sent(self, command_id: str) -> None:
+    def mark_sent(self, command_id: str, attempt_id: str | None = None) -> None:
         conn = self.connection()
         with conn:
-            conn.execute("delete from command_results where command_id = ?", (command_id,))
+            conn.execute(
+                "delete from command_results where command_id = ? and attempt_id = ?",
+                (command_id, attempt_id or f"legacy:{command_id}"),
+            )
         LOGGER.info(
             "agent_command_result_outbox_sent",
             extra={CONTEXT_KEY: {"command_id": command_id}},
@@ -193,6 +245,7 @@ class CommandResultOutbox:
         command_id: str,
         error: str,
         max_attempts: int,
+        attempt_id: str | None = None,
         now: float | None = None,
     ) -> bool:
         timestamp = time.time() if now is None else now
@@ -204,17 +257,23 @@ class CommandResultOutbox:
                 set attempt_count = attempt_count + 1,
                     last_error = ?,
                     updated_at = ?
-                where command_id = ? and status = ?
+                where command_id = ? and attempt_id = ? and status = ?
                 """,
-                (error, timestamp, command_id, COMMAND_RESULT_STATUS_PENDING),
+                (
+                    error,
+                    timestamp,
+                    command_id,
+                    attempt_id or f"legacy:{command_id}",
+                    COMMAND_RESULT_STATUS_PENDING,
+                ),
             )
             row = conn.execute(
                 """
                 select attempt_count
                 from command_results
-                where command_id = ?
+                where command_id = ? and attempt_id = ?
                 """,
-                (command_id,),
+                (command_id, attempt_id or f"legacy:{command_id}"),
             ).fetchone()
             attempt_count = 0 if row is None else int(row["attempt_count"])
             if attempt_count >= max(1, max_attempts):
@@ -222,9 +281,14 @@ class CommandResultOutbox:
                     """
                     update command_results
                     set status = ?, updated_at = ?
-                    where command_id = ?
+                    where command_id = ? and attempt_id = ?
                     """,
-                    (COMMAND_RESULT_STATUS_ABANDONED, timestamp, command_id),
+                    (
+                        COMMAND_RESULT_STATUS_ABANDONED,
+                        timestamp,
+                        command_id,
+                        attempt_id or f"legacy:{command_id}",
+                    ),
                 )
                 LOGGER.warning(
                     "agent_command_result_outbox_abandoned",
@@ -277,12 +341,14 @@ def command_result_log_context(
     workspace_id: str,
     lease_id: str,
     agent_id: str,
+    attempt_id: str | None = None,
 ) -> JsonObject:
     return {
         "command_id": command_id,
         "workspace_id": workspace_id,
         "lease_id": lease_id,
         "agent_id": agent_id,
+        "attempt_id": attempt_id,
     }
 
 

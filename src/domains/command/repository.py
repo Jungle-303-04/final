@@ -8,11 +8,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import DateTime, case, cast, func, or_, select, text, update
+from sqlalchemy import DateTime, and_, case, cast, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.command.actions import command_action_spec
 from domains.command.events import CommandCompletedBody
-from domains.command.models import AgentCommand, CommandOperationEvent, CommandOperationEventCursor
+from domains.command.lifecycle import command_impact_identity, command_terminal_event_kind
+from domains.command.models import (
+    AgentCommand,
+    AgentCommandAttempt,
+    CommandControlAction,
+    CommandOperationEvent,
+    CommandOperationEventCursor,
+)
 from domains.command.policy import DEFAULT_COMMAND_LEASE_SECONDS
 from packages.config.constants import Command, CommandStatus
 from packages.contracts.event_bus.interfaces import EventEnvelope, JsonObject
@@ -50,6 +58,59 @@ class CompletedAgentCommand:
         return self.event.event_id
 
 
+@dataclass(frozen=True)
+class HeartbeatAgentCommand:
+    """Authoritative heartbeat reply, including a reverse cancel control."""
+
+    correlation_id: str
+    cancel_requested: bool
+    cancel_generation: int | None
+    operation_event: OperationEvent | None = None
+
+
+@dataclass(frozen=True)
+class LeasedAgentCommand:
+    command: CommandRecord
+    operation_event: OperationEvent | None
+
+
+@dataclass(frozen=True)
+class StartedAgentCommand:
+    correlation_id: str
+    operation_event: OperationEvent | None
+
+
+@dataclass(frozen=True)
+class StagedCommandControl:
+    """Committed alongside a control event/outbox record before broker announce."""
+
+    control_id: str
+    command_id: str
+    action: str
+    correlation_id: str
+    status: str
+    attempt_id: str | None
+    operation_event: OperationEvent | None
+
+
+class CommandControlError(RuntimeError):
+    """Base for a rejected control transition inside the event UoW."""
+
+
+class CommandControlNotFound(CommandControlError):
+    pass
+
+
+class CommandControlConflict(CommandControlError):
+    pass
+
+
+class DuplicateCommandControl(CommandControlError):
+    def __init__(self, control: JsonObject) -> None:
+        super().__init__("command control idempotency key was already accepted")
+        self.control = control
+
+
 def rca_test_guard_lock_key(
     workspace_id: str,
     cluster_id: str,
@@ -65,37 +126,170 @@ def rca_test_guard_lock_key(
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
+def agent_command_values(
+    *,
+    correlation_id: str,
+    plan: JsonObject,
+    status: str,
+    confirmation_event_id: str | None = None,
+) -> dict[str, Any]:
+    workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
+    cluster_id = str(plan["cluster_id"])
+    priority = int(plan.get("priority") or COMMAND_PRIORITY_HIGH)
+    command_payload = plan.get("payload")
+    payload_body = dict(command_payload) if isinstance(command_payload, dict) else {}
+    namespace = str(plan.get("namespace") or payload_body.get("namespace") or "")
+    return {
+        "command_id": plan["command_id"],
+        "workspace_id": workspace_id,
+        "correlation_id": correlation_id,
+        "cluster_id": cluster_id,
+        "action": plan["action"],
+        "priority": priority,
+        "payload": plan,
+        "status": status,
+        "lease_id": None,
+        "agent_id": None,
+        "leased_until": None,
+        "started_at": None,
+        "completed_at": None,
+        "result": {},
+        "confirmation_event_id": confirmation_event_id,
+        "impact_identity": command_impact_identity(
+            cluster_id=cluster_id,
+            action=str(plan["action"]),
+            namespace=namespace,
+            diff=dict(plan.get("diff") or {}),
+            payload=payload_body,
+        ),
+        "direct_execution": bool(plan.get("direct_execution", False)),
+        "attempt_count": 0,
+        "active_attempt_id": None,
+        "cancel_requested_at": None,
+        "cancel_requested_by": None,
+        "cancel_reason": None,
+        "cancel_accepted_at": None,
+        "cancel_generation": 0,
+        "terminal_event_id": None,
+        "updated_at": func.now(),
+    }
+
+
 def agent_command_insert(
     *,
     correlation_id: str,
     plan: JsonObject,
     status: str,
+    confirmation_event_id: str | None = None,
 ) -> Any:
     table = AgentCommand.__table__
-    workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
-    cluster_id = str(plan["cluster_id"])
-    priority = int(plan.get("priority") or COMMAND_PRIORITY_HIGH)
     return (
         pg_insert(table)
         .values(
-            command_id=plan["command_id"],
-            workspace_id=workspace_id,
-            correlation_id=correlation_id,
-            cluster_id=cluster_id,
-            action=plan["action"],
-            priority=priority,
-            payload=plan,
-            status=status,
-            lease_id=None,
-            agent_id=None,
-            leased_until=None,
-            started_at=None,
-            completed_at=None,
-            result={},
-            updated_at=func.now(),
+            **agent_command_values(
+                correlation_id=correlation_id,
+                plan=plan,
+                status=status,
+                confirmation_event_id=confirmation_event_id,
+            )
         )
         .on_conflict_do_nothing(index_elements=[table.c.command_id])
     )
+
+
+def agent_command_queue_upsert(
+    *,
+    correlation_id: str,
+    plan: JsonObject,
+    status: str,
+    attempt_id: str,
+) -> Any:
+    """Project a worker plan exactly once, including its first execution attempt.
+
+    The API receipt may already have inserted the logical row.  The conflict
+    update intentionally succeeds only for that unprojected (queued/no active
+    attempt) state, so duplicate worker delivery cannot create another attempt.
+    """
+
+    table = AgentCommand.__table__
+    values = agent_command_values(correlation_id=correlation_id, plan=plan, status=status)
+    values.update(attempt_count=1, active_attempt_id=attempt_id)
+    insertion = pg_insert(table).values(**values)
+    return insertion.on_conflict_do_update(
+        index_elements=[table.c.command_id],
+        set_={
+            "attempt_count": 1,
+            "active_attempt_id": attempt_id,
+            "updated_at": func.now(),
+        },
+        where=and_(
+            table.c.status == CommandStatus.QUEUED,
+            table.c.active_attempt_id.is_(None),
+            table.c.attempt_count == 0,
+        ),
+    ).returning(table.c.command_id)
+
+
+def agent_command_attempt_insert(
+    *,
+    attempt_id: str,
+    command_id: str,
+    workspace_id: str,
+    cluster_id: str,
+    attempt_no: int,
+    status: str = CommandStatus.QUEUED,
+    available_at: Any | None = None,
+) -> Any:
+    table = AgentCommandAttempt.__table__
+    values: dict[str, Any] = {
+        "attempt_id": attempt_id,
+        "command_id": command_id,
+        "workspace_id": workspace_id,
+        "cluster_id": cluster_id,
+        "attempt_no": attempt_no,
+        "status": status,
+        "lease_id": None,
+        "agent_id": None,
+        "leased_until": None,
+        "started_at": None,
+        "completed_at": None,
+        "result": {},
+        "updated_at": func.now(),
+    }
+    if available_at is not None:
+        values["available_at"] = available_at
+    return (
+        pg_insert(table)
+        .values(**values)
+        .on_conflict_do_nothing(index_elements=[table.c.attempt_id])
+    )
+
+
+def stage_logical_command_acceptance_in_transaction(
+    conn: Any,
+    *,
+    correlation_id: str,
+    plan: JsonObject,
+    confirmation_event_id: str,
+    status: str = CommandStatus.QUEUED,
+) -> bool:
+    """Create the logical command inside the receipt event/outbox transaction.
+
+    A browser may cancel immediately after receiving the receipt, before the
+    asynchronous command worker runs.  Persisting this row here makes that
+    cancellation authoritative instead of racing a missing queue projection.
+    """
+
+    table = AgentCommand.__table__
+    inserted = conn.execute(
+        agent_command_insert(
+            correlation_id=correlation_id,
+            plan=plan,
+            status=status,
+            confirmation_event_id=confirmation_event_id,
+        ).returning(table.c.command_id)
+    ).scalar_one_or_none()
+    return inserted is not None
 
 
 def notify_agent_command(conn: Any, workspace_id: str, cluster_id: str) -> None:
@@ -123,7 +317,7 @@ async def append_command_operation_event_in_transaction(
         raise ValueError("operation events require workspace, command, and cluster identity")
     cursor = CommandOperationEventCursor.__table__
     event_table = CommandOperationEvent.__table__
-    terminal = kind in {"completed", "failed"}
+    terminal = kind in {"completed", "failed", "cancelled"}
     await conn.execute(
         pg_insert(cursor)
         .values(
@@ -201,7 +395,7 @@ def stage_command_operation_event_in_transaction(
         raise ValueError("operation events require workspace, command, and cluster identity")
     cursor = CommandOperationEventCursor.__table__
     event_table = CommandOperationEvent.__table__
-    terminal = kind in {"completed", "failed"}
+    terminal = kind in {"completed", "failed", "cancelled"}
     conn.execute(
         pg_insert(cursor)
         .values(
@@ -261,7 +455,349 @@ def stage_command_operation_event_in_transaction(
     )
 
 
+def _command_retry_policy(payload: JsonObject) -> tuple[int, int]:
+    policy = payload.get("retry_policy")
+    if not isinstance(policy, dict):
+        return 1, 0
+    try:
+        max_attempts = max(1, int(policy.get("max_attempts", 1)))
+        delay_seconds = max(0, int(policy.get("retry_delay_seconds", 0)))
+    except (TypeError, ValueError):
+        return 1, 0
+    return max_attempts, delay_seconds
+
+
+def _current_control_row(
+    conn: Any, *, workspace_id: str, command_id: str, action: str, idempotency_key: str
+) -> JsonObject | None:
+    controls = CommandControlAction.__table__
+    row = (
+        conn.execute(
+            select(controls).where(
+                controls.c.workspace_id == workspace_id,
+                controls.c.command_id == command_id,
+                controls.c.action == action,
+                controls.c.idempotency_key == idempotency_key,
+            )
+        )
+        .mappings()
+        .first()
+    )
+    return row_dict(row) if row else None
+
+
+def stage_command_control_in_transaction(
+    conn: Any,
+    *,
+    workspace_id: str,
+    command_id: str,
+    action: str,
+    idempotency_key: str,
+    requested_by: str,
+    reason: str | None,
+    event_id: str,
+    audit_event_id: str,
+) -> StagedCommandControl:
+    """Atomically persist one control intent, state fact and browser event.
+
+    The caller is the API event outbox UoW.  A command-row lock serializes
+    controls for the same immutable logical command, and duplicate keys raise
+    before the event transaction can commit a second audit fact.
+    """
+
+    if action not in {"cancel", "retry"}:
+        raise ValueError(f"unsupported command control action: {action}")
+    commands = AgentCommand.__table__
+    attempts = AgentCommandAttempt.__table__
+    controls = CommandControlAction.__table__
+    logical = (
+        conn.execute(
+            select(commands)
+            .where(commands.c.workspace_id == workspace_id, commands.c.command_id == command_id)
+            .with_for_update()
+        )
+        .mappings()
+        .first()
+    )
+    if logical is None:
+        raise CommandControlNotFound("command not found")
+    row = row_dict(logical)
+    duplicate = _current_control_row(
+        conn,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        action=action,
+        idempotency_key=idempotency_key,
+    )
+    if duplicate is not None:
+        raise DuplicateCommandControl(duplicate)
+
+    status = str(row["status"])
+    cluster_id = str(row["cluster_id"])
+    correlation_id = str(row["correlation_id"])
+    active_attempt_id = (
+        str(row["active_attempt_id"]) if row.get("active_attempt_id") is not None else None
+    )
+    control_id = f"ctl-{uuid.uuid4()}"
+    operation_event: OperationEvent | None = None
+    outcome = "accepted"
+    details: JsonObject = {"status_before": status, "correlation_id": correlation_id}
+
+    if action == "cancel":
+        spec = command_action_spec(str(row["action"]))
+        if spec is None or not spec.supports_cancel:
+            raise CommandControlConflict("command action does not support cancellation")
+        if status in {CommandStatus.COMPLETED, CommandStatus.FAILED, CommandStatus.CANCELLED}:
+            raise CommandControlConflict("terminal command cannot be cancelled")
+        if status in {CommandStatus.CANCEL_REQUESTED, CommandStatus.CANCELLING}:
+            outcome = "already_requested"
+            details["cancel_generation"] = int(row.get("cancel_generation") or 0)
+        elif status in {CommandStatus.QUEUED, CommandStatus.LEASED}:
+            result: JsonObject = {
+                "status": CommandStatus.CANCELLED,
+                "applied": False,
+                "message": reason or "command cancelled before execution started",
+            }
+            conn.execute(
+                update(commands)
+                .where(
+                    commands.c.workspace_id == workspace_id,
+                    commands.c.command_id == command_id,
+                    commands.c.status == status,
+                )
+                .values(
+                    status=CommandStatus.CANCELLED,
+                    result=result,
+                    completed_at=func.now(),
+                    cancel_requested_at=func.now(),
+                    cancel_requested_by=requested_by,
+                    cancel_reason=reason,
+                    terminal_event_id=event_id,
+                    updated_at=func.now(),
+                )
+            )
+            if active_attempt_id is not None:
+                conn.execute(
+                    update(attempts)
+                    .where(
+                        attempts.c.attempt_id == active_attempt_id,
+                        attempts.c.workspace_id == workspace_id,
+                        attempts.c.status.in_([CommandStatus.QUEUED, CommandStatus.LEASED]),
+                    )
+                    .values(
+                        status=CommandStatus.CANCELLED,
+                        result=result,
+                        completed_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
+            operation_event = stage_command_operation_event_in_transaction(
+                conn,
+                workspace_id=workspace_id,
+                command_id=command_id,
+                kind="cancelled",
+                payload={
+                    "cluster_id": cluster_id,
+                    "status": CommandStatus.CANCELLED,
+                    "correlation_id": correlation_id,
+                    "control_id": control_id,
+                    "result": result,
+                },
+            )
+            status = CommandStatus.CANCELLED
+        else:
+            generation = int(row.get("cancel_generation") or 0) + 1
+            conn.execute(
+                update(commands)
+                .where(
+                    commands.c.workspace_id == workspace_id,
+                    commands.c.command_id == command_id,
+                    commands.c.status == CommandStatus.RUNNING,
+                )
+                .values(
+                    status=CommandStatus.CANCEL_REQUESTED,
+                    cancel_requested_at=func.now(),
+                    cancel_requested_by=requested_by,
+                    cancel_reason=reason,
+                    cancel_generation=generation,
+                    updated_at=func.now(),
+                )
+            )
+            operation_event = stage_command_operation_event_in_transaction(
+                conn,
+                workspace_id=workspace_id,
+                command_id=command_id,
+                kind="progress",
+                payload={
+                    "cluster_id": cluster_id,
+                    "status": CommandStatus.CANCEL_REQUESTED,
+                    "correlation_id": correlation_id,
+                    "control_id": control_id,
+                    "cancel_generation": generation,
+                },
+            )
+            status = CommandStatus.CANCEL_REQUESTED
+            details["cancel_generation"] = generation
+    else:
+        if status != CommandStatus.FAILED:
+            raise CommandControlConflict("only a failed command may be retried")
+        payload = dict(row.get("payload") or {})
+        spec = command_action_spec(str(row["action"]))
+        max_attempts, retry_delay_seconds = _command_retry_policy(payload)
+        if spec is None or not spec.supports_manual_retry or max_attempts < 2:
+            raise CommandControlConflict("command action retry policy does not allow manual retry")
+        if int(row.get("attempt_count") or 0) >= max_attempts:
+            raise CommandControlConflict("command retry budget is exhausted")
+        previous_result = dict(row.get("result") or {})
+        if previous_result.get("retryable") is not True:
+            raise CommandControlConflict("failed command is not declared retryable")
+        next_attempt_no = int(row.get("attempt_count") or 0) + 1
+        active_attempt_id = f"attempt-{uuid.uuid4()}"
+        available_at = func.now() + text(f"interval '{retry_delay_seconds} seconds'")
+        conn.execute(
+            agent_command_attempt_insert(
+                attempt_id=active_attempt_id,
+                command_id=command_id,
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                attempt_no=next_attempt_no,
+                available_at=available_at,
+            )
+        )
+        conn.execute(
+            update(commands)
+            .where(
+                commands.c.workspace_id == workspace_id,
+                commands.c.command_id == command_id,
+                commands.c.status == CommandStatus.FAILED,
+            )
+            .values(
+                status=CommandStatus.QUEUED,
+                attempt_count=next_attempt_no,
+                active_attempt_id=active_attempt_id,
+                lease_id=None,
+                agent_id=None,
+                leased_until=None,
+                started_at=None,
+                completed_at=None,
+                result={},
+                cancel_requested_at=None,
+                cancel_requested_by=None,
+                cancel_reason=None,
+                cancel_accepted_at=None,
+                terminal_event_id=None,
+                updated_at=func.now(),
+            )
+        )
+        notify_agent_command(conn, workspace_id, cluster_id)
+        operation_event = stage_command_operation_event_in_transaction(
+            conn,
+            workspace_id=workspace_id,
+            command_id=command_id,
+            kind="progress",
+            payload={
+                "cluster_id": cluster_id,
+                "status": CommandStatus.QUEUED,
+                "correlation_id": correlation_id,
+                "control_id": control_id,
+                "attempt_id": active_attempt_id,
+                "attempt_no": next_attempt_no,
+                "available_after_seconds": retry_delay_seconds,
+            },
+        )
+        status = CommandStatus.QUEUED
+        details.update(
+            attempt_no=next_attempt_no,
+            retry_delay_seconds=retry_delay_seconds,
+            max_attempts=max_attempts,
+        )
+
+    details["status_after"] = status
+    conn.execute(
+        pg_insert(controls)
+        .values(
+            control_id=control_id,
+            workspace_id=workspace_id,
+            command_id=command_id,
+            action=action,
+            idempotency_key=idempotency_key,
+            requested_by=requested_by,
+            reason=reason,
+            outcome=outcome,
+            event_id=event_id,
+            audit_event_id=audit_event_id,
+            attempt_id=active_attempt_id,
+            details=details,
+            updated_at=func.now(),
+        )
+        .on_conflict_do_nothing(constraint="uq_command_control_action_idempotency")
+    )
+    return StagedCommandControl(
+        control_id=control_id,
+        command_id=command_id,
+        action=action,
+        correlation_id=correlation_id,
+        status=status,
+        attempt_id=active_attempt_id,
+        operation_event=operation_event,
+    )
+
+
 class AgentCommandRepository(DatabaseConnection):
+    async def fail_logical_command_and_stage_event(
+        self,
+        workspace_id: str,
+        command_id: str,
+        cluster_id: str,
+        reason: str,
+    ) -> OperationEvent | None:
+        """Close a receipt that the policy worker rejected before agent execution."""
+
+        table = AgentCommand.__table__
+        result: JsonObject = {
+            "status": CommandStatus.FAILED,
+            "applied": False,
+            "message": reason,
+            "retryable": False,
+        }
+        async with self.async_engine.begin() as conn:
+            row = (
+                (
+                    await conn.execute(
+                        update(table)
+                        .where(
+                            table.c.workspace_id == workspace_id,
+                            table.c.command_id == command_id,
+                            table.c.cluster_id == cluster_id,
+                            table.c.status == CommandStatus.QUEUED,
+                        )
+                        .values(
+                            status=CommandStatus.FAILED,
+                            result=result,
+                            completed_at=func.now(),
+                            updated_at=func.now(),
+                        )
+                        .returning(table.c.correlation_id)
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                return None
+            return await append_command_operation_event_in_transaction(
+                conn,
+                workspace_id=workspace_id,
+                command_id=command_id,
+                kind="failed",
+                payload={
+                    "cluster_id": cluster_id,
+                    "status": CommandStatus.FAILED,
+                    "correlation_id": str(row["correlation_id"]),
+                    "result": result,
+                },
+            )
+
     async def append_command_operation_event(
         self,
         workspace_id: str,
@@ -371,17 +907,27 @@ class AgentCommandRepository(DatabaseConnection):
             raise ValueError("RCA test inject commands require the atomic reservation guard")
         workspace_id = str(plan.get("workspace_id", DEFAULT_WORKSPACE_ID))
         cluster_id = str(plan["cluster_id"])
-        table = AgentCommand.__table__
+        attempt_id = f"attempt-{uuid.uuid4()}"
         with self.connection() as conn:
             inserted = conn.execute(
-                agent_command_insert(
+                agent_command_queue_upsert(
                     correlation_id=correlation_id,
                     plan=plan,
                     status=status,
-                ).returning(table.c.command_id)
+                    attempt_id=attempt_id,
+                )
             ).scalar_one_or_none()
             if inserted is None:
                 return False
+            conn.execute(
+                agent_command_attempt_insert(
+                    attempt_id=attempt_id,
+                    command_id=str(plan["command_id"]),
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    attempt_no=1,
+                )
+            )
             notify_agent_command(conn, workspace_id, cluster_id)
             return True
 
@@ -450,13 +996,26 @@ class AgentCommandRepository(DatabaseConnection):
             conn.execute(text("select pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
             if int(conn.execute(active_count).scalar_one()) >= max_concurrent_runs:
                 return False
+            attempt_id = f"attempt-{uuid.uuid4()}"
             inserted = conn.execute(
-                agent_command_insert(
-                    correlation_id=correlation_id, plan=plan, status=status
-                ).returning(table.c.command_id)
+                agent_command_queue_upsert(
+                    correlation_id=correlation_id,
+                    plan=plan,
+                    status=status,
+                    attempt_id=attempt_id,
+                )
             ).scalar_one_or_none()
             if inserted is None:
                 return False
+            conn.execute(
+                agent_command_attempt_insert(
+                    attempt_id=attempt_id,
+                    command_id=str(plan["command_id"]),
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    attempt_no=1,
+                )
+            )
             notify_agent_command(conn, workspace_id, cluster_id)
             return True
 
@@ -474,6 +1033,14 @@ class AgentCommandRepository(DatabaseConnection):
             table.c.status,
             table.c.result,
             table.c.completed_at,
+            table.c.confirmation_event_id,
+            table.c.impact_identity,
+            table.c.direct_execution,
+            table.c.attempt_count,
+            table.c.active_attempt_id,
+            table.c.cancel_generation,
+            table.c.cancel_requested_at,
+            table.c.cancel_accepted_at,
         ).where(
             table.c.command_id == command_id,
             table.c.workspace_id == workspace_id,
@@ -522,8 +1089,9 @@ class AgentCommandRepository(DatabaseConnection):
         leased_status: str = CommandStatus.LEASED,
         agent_id: str = UNKNOWN_AGENT_ID,
         lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
-    ) -> CommandRecord | None:
+    ) -> LeasedAgentCommand | None:
         table = AgentCommand.__table__
+        attempts = AgentCommandAttempt.__table__
         now = datetime.now(UTC)
         leased_until = now + timedelta(seconds=lease_seconds)
         lease_id = str(uuid.uuid4())
@@ -538,26 +1106,45 @@ class AgentCommandRepository(DatabaseConnection):
             table.c.lease_id,
             table.c.agent_id,
             table.c.leased_until,
+            table.c.active_attempt_id.label("attempt_id"),
         )
+        # A running lease may have applied side effects before the agent died.
+        # It is deliberately never re-leased: the janitor marks it failed for a
+        # human-reviewed retry instead of silently running the command twice.
         available = or_(
-            table.c.status == queued_status,
-            (table.c.status == leased_status) & (table.c.leased_until < func.now()),
-            (table.c.status == CommandStatus.RUNNING) & (table.c.leased_until < func.now()),
+            (table.c.status == queued_status) & (attempts.c.status == queued_status),
+            (table.c.status == leased_status)
+            & (attempts.c.status == leased_status)
+            & (attempts.c.leased_until < func.now()),
         )
         candidate = (
-            select(table.c.command_id)
+            select(table.c.command_id, attempts.c.attempt_id)
+            .join(attempts, attempts.c.attempt_id == table.c.active_attempt_id)
             .where(
-                table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id, available
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                attempts.c.workspace_id == workspace_id,
+                attempts.c.cluster_id == cluster_id,
+                attempts.c.available_at <= func.now(),
+                available,
             )
             .order_by(table.c.priority.desc(), table.c.created_at)
             .limit(1)
             .with_for_update(skip_locked=True)
-            .scalar_subquery()
         )
         async with self.async_connection() as conn:
+            selected = (await conn.execute(candidate)).mappings().first()
+            if selected is None:
+                return None
+            attempt_id = str(selected["attempt_id"])
             statement = (
                 update(table)
-                .where(table.c.command_id == candidate)
+                .where(
+                    table.c.command_id == str(selected["command_id"]),
+                    table.c.workspace_id == workspace_id,
+                    table.c.active_attempt_id == attempt_id,
+                    table.c.status.in_([queued_status, leased_status]),
+                )
                 .values(
                     status=leased_status,
                     lease_id=lease_id,
@@ -568,7 +1155,38 @@ class AgentCommandRepository(DatabaseConnection):
                 .returning(*columns)
             )
             leased = (await conn.execute(statement)).mappings().first()
-            return serialize_command(row_dict(leased)) if leased else None
+            if leased is None:
+                return None
+            await conn.execute(
+                update(attempts)
+                .where(
+                    attempts.c.attempt_id == attempt_id,
+                    attempts.c.workspace_id == workspace_id,
+                    attempts.c.status.in_([queued_status, leased_status]),
+                )
+                .values(
+                    status=leased_status,
+                    lease_id=lease_id,
+                    agent_id=agent_id,
+                    leased_until=leased_until,
+                    updated_at=func.now(),
+                )
+            )
+            command = serialize_command(row_dict(leased))
+            operation_event = await append_command_operation_event_in_transaction(
+                conn,
+                workspace_id=workspace_id,
+                command_id=str(command["command_id"]),
+                kind="progress",
+                payload={
+                    "cluster_id": cluster_id,
+                    "status": leased_status,
+                    "action": str(command["action"]),
+                    "correlation_id": str(command["correlation_id"]),
+                    "attempt_id": str(command["attempt_id"]),
+                },
+            )
+            return LeasedAgentCommand(command=command, operation_event=operation_event)
 
     async def start_agent_command(
         self,
@@ -579,31 +1197,69 @@ class AgentCommandRepository(DatabaseConnection):
         agent_id: str,
         running_status: str = CommandStatus.RUNNING,
         lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
-    ) -> str | None:
+        attempt_id: str | None = None,
+    ) -> StartedAgentCommand | None:
         table = AgentCommand.__table__
+        attempts = AgentCommandAttempt.__table__
         leased_until = datetime.now(UTC) + timedelta(seconds=lease_seconds)
+        conditions = [
+            table.c.command_id == command_id,
+            table.c.workspace_id == workspace_id,
+            table.c.cluster_id == cluster_id,
+            table.c.lease_id == lease_id,
+            table.c.agent_id == agent_id,
+            table.c.status == CommandStatus.LEASED,
+            table.c.leased_until >= func.now(),
+        ]
+        if attempt_id is not None:
+            conditions.append(table.c.active_attempt_id == attempt_id)
         statement = (
             update(table)
-            .where(
-                table.c.command_id == command_id,
-                table.c.workspace_id == workspace_id,
-                table.c.cluster_id == cluster_id,
-                table.c.lease_id == lease_id,
-                table.c.agent_id == agent_id,
-                table.c.status == CommandStatus.LEASED,
-                table.c.leased_until >= func.now(),
-            )
+            .where(*conditions)
             .values(
                 status=running_status,
                 leased_until=leased_until,
                 started_at=func.now(),
                 updated_at=func.now(),
             )
-            .returning(table.c.correlation_id)
+            .returning(table.c.correlation_id, table.c.active_attempt_id)
         )
-        async with self.async_connection() as conn:
+        async with self.async_engine.begin() as conn:
             row = (await conn.execute(statement)).mappings().first()
-        return row["correlation_id"] if row else None
+            if row and row["active_attempt_id"]:
+                await conn.execute(
+                    update(attempts)
+                    .where(
+                        attempts.c.attempt_id == str(row["active_attempt_id"]),
+                        attempts.c.workspace_id == workspace_id,
+                        attempts.c.lease_id == lease_id,
+                        attempts.c.agent_id == agent_id,
+                        attempts.c.status == CommandStatus.LEASED,
+                    )
+                    .values(
+                        status=running_status,
+                        started_at=func.now(),
+                        leased_until=leased_until,
+                        updated_at=func.now(),
+                    )
+                )
+            if row is None:
+                return None
+            operation_event = await append_command_operation_event_in_transaction(
+                conn,
+                workspace_id=workspace_id,
+                command_id=command_id,
+                kind="progress",
+                payload={
+                    "cluster_id": cluster_id,
+                    "status": running_status,
+                    "correlation_id": str(row["correlation_id"]),
+                    "attempt_id": str(row["active_attempt_id"] or "") or None,
+                },
+            )
+        return StartedAgentCommand(
+            correlation_id=str(row["correlation_id"]), operation_event=operation_event
+        )
 
     async def heartbeat_agent_command(
         self,
@@ -613,26 +1269,101 @@ class AgentCommandRepository(DatabaseConnection):
         lease_id: str,
         agent_id: str,
         lease_seconds: int = DEFAULT_COMMAND_LEASE_SECONDS,
-    ) -> str | None:
+        attempt_id: str | None = None,
+        observed_cancel_generation: int | None = None,
+    ) -> HeartbeatAgentCommand | None:
         table = AgentCommand.__table__
+        attempts = AgentCommandAttempt.__table__
         leased_until = datetime.now(UTC) + timedelta(seconds=lease_seconds)
         statement = (
-            update(table)
+            select(
+                table.c.correlation_id,
+                table.c.status,
+                table.c.active_attempt_id,
+                table.c.cancel_generation,
+            )
             .where(
                 table.c.command_id == command_id,
                 table.c.workspace_id == workspace_id,
                 table.c.cluster_id == cluster_id,
                 table.c.lease_id == lease_id,
                 table.c.agent_id == agent_id,
-                table.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
+                table.c.status.in_(
+                    [
+                        CommandStatus.LEASED,
+                        CommandStatus.RUNNING,
+                        CommandStatus.CANCEL_REQUESTED,
+                        CommandStatus.CANCELLING,
+                    ]
+                ),
                 table.c.leased_until >= func.now(),
             )
-            .values(leased_until=leased_until, updated_at=func.now())
-            .returning(table.c.correlation_id)
+            .with_for_update()
         )
-        async with self.async_connection() as conn:
+        async with self.async_engine.begin() as conn:
             row = (await conn.execute(statement)).mappings().first()
-        return row["correlation_id"] if row else None
+            if row is None:
+                return None
+            active_attempt_id = str(row.get("active_attempt_id") or "")
+            if attempt_id is not None and attempt_id != active_attempt_id:
+                return None
+            status = str(row["status"])
+            generation = int(row["cancel_generation"] or 0)
+            acknowledged = (
+                status == CommandStatus.CANCEL_REQUESTED
+                and observed_cancel_generation is not None
+                and observed_cancel_generation >= generation
+            )
+            next_status = CommandStatus.CANCELLING if acknowledged else status
+            await conn.execute(
+                update(table)
+                .where(
+                    table.c.command_id == command_id,
+                    table.c.workspace_id == workspace_id,
+                    table.c.lease_id == lease_id,
+                    table.c.agent_id == agent_id,
+                    table.c.active_attempt_id == active_attempt_id,
+                )
+                .values(
+                    status=next_status,
+                    leased_until=leased_until,
+                    cancel_accepted_at=(func.now() if acknowledged else table.c.cancel_accepted_at),
+                    updated_at=func.now(),
+                )
+            )
+            if active_attempt_id:
+                await conn.execute(
+                    update(attempts)
+                    .where(
+                        attempts.c.attempt_id == active_attempt_id,
+                        attempts.c.workspace_id == workspace_id,
+                        attempts.c.lease_id == lease_id,
+                        attempts.c.agent_id == agent_id,
+                        attempts.c.status.in_([CommandStatus.LEASED, CommandStatus.RUNNING]),
+                    )
+                    .values(leased_until=leased_until, updated_at=func.now())
+                )
+            operation_event = None
+            if acknowledged:
+                operation_event = await append_command_operation_event_in_transaction(
+                    conn,
+                    workspace_id=workspace_id,
+                    command_id=command_id,
+                    kind="progress",
+                    payload={
+                        "cluster_id": cluster_id,
+                        "status": CommandStatus.CANCELLING,
+                        "correlation_id": str(row["correlation_id"]),
+                        "cancel_generation": generation,
+                    },
+                )
+        return HeartbeatAgentCommand(
+            correlation_id=str(row["correlation_id"]),
+            cancel_requested=next_status
+            in {CommandStatus.CANCEL_REQUESTED, CommandStatus.CANCELLING},
+            cancel_generation=generation if generation else None,
+            operation_event=operation_event,
+        )
 
     async def complete_agent_command_and_stage_event(
         self,
@@ -643,36 +1374,82 @@ class AgentCommandRepository(DatabaseConnection):
         lease_id: str,
         agent_id: str,
         source: str,
+        attempt_id: str | None = None,
     ) -> CompletedAgentCommand | None:
         command_table = AgentCommand.__table__
+        attempts = AgentCommandAttempt.__table__
         event_table = EventModel.__table__
         outbox_table = OutboxModel.__table__
+        conditions = [
+            command_table.c.command_id == command_id,
+            command_table.c.workspace_id == workspace_id,
+            command_table.c.cluster_id == cluster_id,
+            command_table.c.lease_id == lease_id,
+            command_table.c.agent_id == agent_id,
+            command_table.c.status.in_(
+                [
+                    CommandStatus.RUNNING,
+                    CommandStatus.CANCEL_REQUESTED,
+                    CommandStatus.CANCELLING,
+                ]
+            ),
+            command_table.c.leased_until >= func.now(),
+        ]
+        if attempt_id is not None:
+            conditions.append(command_table.c.active_attempt_id == attempt_id)
         statement = (
             update(command_table)
-            .where(
-                command_table.c.command_id == command_id,
-                command_table.c.workspace_id == workspace_id,
-                command_table.c.cluster_id == cluster_id,
-                command_table.c.lease_id == lease_id,
-                command_table.c.agent_id == agent_id,
-                command_table.c.status == CommandStatus.RUNNING,
-                command_table.c.leased_until >= func.now(),
-            )
+            .where(*conditions)
             .values(
                 status=result["status"],
                 result=result,
                 completed_at=func.now(),
                 updated_at=func.now(),
             )
-            .returning(command_table.c.correlation_id)
+            .returning(
+                command_table.c.correlation_id,
+                command_table.c.active_attempt_id,
+                command_table.c.attempt_count,
+                command_table.c.payload,
+            )
         )
         async with self.async_engine.begin() as conn:
             row = (await conn.execute(statement)).mappings().first()
             if not row:
                 return None
+            active_attempt_id = str(row.get("active_attempt_id") or "")
+            if active_attempt_id:
+                await conn.execute(
+                    update(attempts)
+                    .where(
+                        attempts.c.attempt_id == active_attempt_id,
+                        attempts.c.workspace_id == workspace_id,
+                        attempts.c.lease_id == lease_id,
+                        attempts.c.agent_id == agent_id,
+                        attempts.c.status.in_([CommandStatus.RUNNING, CommandStatus.LEASED]),
+                    )
+                    .values(
+                        status=result["status"],
+                        result=result,
+                        completed_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
 
-            operation_kind: OperationEventKind = (
-                "completed" if result["status"] == CommandStatus.COMPLETED else "failed"
+            final_failure = True
+            if result["status"] == CommandStatus.FAILED:
+                payload = dict(row.get("payload") or {})
+                spec = command_action_spec(str(payload.get("action") or ""))
+                max_attempts, _ = _command_retry_policy(payload)
+                final_failure = not (
+                    result.get("retryable") is True
+                    and spec is not None
+                    and spec.supports_manual_retry
+                    and int(row.get("attempt_count") or 0) < max_attempts
+                )
+            operation_kind: OperationEventKind = command_terminal_event_kind(
+                str(result["status"]),
+                final=(str(result["status"]) != CommandStatus.FAILED or final_failure),
             )
             operation_event = await append_command_operation_event_in_transaction(
                 conn,
@@ -684,6 +1461,8 @@ class AgentCommandRepository(DatabaseConnection):
                     "status": str(result["status"]),
                     "correlation_id": str(row["correlation_id"]),
                     "result": result,
+                    "attempt_id": active_attempt_id or None,
+                    "terminal": operation_kind != "progress",
                 },
             )
 
@@ -695,6 +1474,15 @@ class AgentCommandRepository(DatabaseConnection):
                 str(row["correlation_id"]),
                 workspace_id=workspace_id,
             )
+            if operation_kind != "progress":
+                await conn.execute(
+                    update(command_table)
+                    .where(
+                        command_table.c.command_id == command_id,
+                        command_table.c.workspace_id == workspace_id,
+                    )
+                    .values(terminal_event_id=completed.event_id)
+                )
             await conn.execute(
                 pg_insert(event_table)
                 .values(
@@ -740,6 +1528,7 @@ class AgentCommandRepository(DatabaseConnection):
         if grace_seconds < 1 or queue_ttl_seconds < 1:
             raise ValueError("command expiry durations must be positive")
         table = AgentCommand.__table__
+        attempts = AgentCommandAttempt.__table__
         statement = (
             update(table)
             .where(
@@ -784,12 +1573,30 @@ class AgentCommandRepository(DatabaseConnection):
                 table.c.workspace_id,
                 table.c.cluster_id,
                 table.c.correlation_id,
+                table.c.active_attempt_id,
                 table.c.result,
             )
         )
         with self.connection() as conn:
             rows = [row_dict(row) for row in conn.execute(statement).mappings().all()]
             for row in rows:
+                if row.get("active_attempt_id"):
+                    conn.execute(
+                        update(attempts)
+                        .where(
+                            attempts.c.attempt_id == str(row["active_attempt_id"]),
+                            attempts.c.workspace_id == str(row["workspace_id"]),
+                            attempts.c.status.in_(
+                                [CommandStatus.QUEUED, CommandStatus.LEASED, CommandStatus.RUNNING]
+                            ),
+                        )
+                        .values(
+                            status="expired",
+                            result=dict(row["result"]),
+                            completed_at=func.now(),
+                            updated_at=func.now(),
+                        )
+                    )
                 stage_command_operation_event_in_transaction(
                     conn,
                     workspace_id=str(row["workspace_id"]),
