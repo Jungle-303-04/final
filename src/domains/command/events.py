@@ -39,6 +39,8 @@ class CommandRequestedBody(EventBody):
     policy_decision_ref: str | None = None
     approval_decided_by: str | None = None
     approval_expires_at: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
     payload: JsonObject = field(default_factory=dict)
 
 
@@ -93,6 +95,8 @@ class Plan(EventBody):
     policy_decision_ref: str | None = None
     approval_decided_by: str | None = None
     approval_expires_at: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,8 @@ class CommandQueuedForAgentBody(EventBody):
     policy_decision_ref: str | None = None
     approval_decided_by: str | None = None
     approval_expires_at: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 @event(EventSubject.COMMAND_REJECTED)

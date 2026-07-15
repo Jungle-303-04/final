@@ -77,6 +77,7 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
+DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE = "direct command requires explicit confirmation"
 RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
     "RCA test actions are reserved; use the dedicated /rca/test-runs API"
 )
@@ -110,6 +111,14 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
     return cast(Diff, Diff.from_body(raw))
 
 
+def require_direct_execution_confirmation(payload: CommandRequest) -> None:
+    if payload.direct_execution and not payload.direct_execution_confirmed:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+
+
 def validate_control_namespace(namespace: str) -> None:
     if not control_namespace_allowed(namespace):
         raise HTTPException(status_code=UNPROCESSABLE_CODE, detail=CONTROL_NAMESPACE_NOT_ALLOWED)
@@ -128,7 +137,11 @@ def require_cluster_deploy_access(
     )
 
 
-def require_not_management_cluster(db: Any, workspace_id: str, cluster_id: str) -> None:
+def require_not_management_cluster(
+    db: Any, workspace_id: str, cluster_id: str, *, direct_execution: bool = False
+) -> None:
+    if direct_execution:
+        return
     registration_getter = getattr(db, "get_cluster_registration", None)
     registration = (
         registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
@@ -259,9 +272,12 @@ async def commands(
             status_code=UNPROCESSABLE_CODE,
             detail=RCA_TEST_ACTION_DEDICATED_API_REQUIRED,
         )
+    require_direct_execution_confirmation(payload)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
-    require_not_management_cluster(db, workspace_id, payload.cluster_id)
+    require_not_management_cluster(
+        db, workspace_id, payload.cluster_id, direct_execution=payload.direct_execution
+    )
     command = CommandRequestedBody(
         cluster_id=payload.cluster_id,
         action=payload.action,
@@ -273,6 +289,8 @@ async def commands(
         requested_by=current.user_id,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
+        direct_execution=payload.direct_execution,
+        direct_execution_confirmed=payload.direct_execution_confirmed,
     )
     accepted = await events.accept_body(
         command,

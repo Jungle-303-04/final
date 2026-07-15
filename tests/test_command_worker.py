@@ -291,6 +291,7 @@ def test_direct_command_is_queued_for_management_cluster_without_recorded_approv
         workflow_run_id="workflow-1",
         requested_by="user-1",
         direct_execution=True,
+        direct_execution_confirmed=True,
         payload={"namespace": Sandbox.NAMESPACE, "name": "checkout-api", "replicas": 3},
     )
 
