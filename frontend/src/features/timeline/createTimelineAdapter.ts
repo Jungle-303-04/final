@@ -17,6 +17,7 @@ import {
   type TimelineQuery,
   type TimelineRealtimePolicy,
   type TimelineReadSession,
+  type TimelineQueryBounds,
   type TimelineSnapshot,
   type TimelineStreamFrame,
   type TimelineSubject,
@@ -42,12 +43,10 @@ import type {
 const SESSION_CAPABILITY_CACHE_KEY = "session";
 
 export interface TimelineAdapterDependencies extends TimelineEndpointDependencies {
-  now?: () => number;
   random?: () => number;
 }
 
 export function createTimelineAdapter(dependencies: TimelineAdapterDependencies): TimelinePort {
-  const now = dependencies.now ?? Date.now;
   const random = dependencies.random ?? Math.random;
   let capabilities: TimelineCapabilities | null = null;
   let activeCapabilityCacheKey: string | null = null;
@@ -69,7 +68,7 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
           signal,
           timelineWorkspaceCacheKey(query),
         );
-        const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, now));
+        const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, preflightCapabilities.queryBounds));
         assertControlSelection(preflightCapabilities, request);
         const value = await dependencies.getTimelineSnapshot({ query: request }, signal);
         if (value.snapshot.cursor.token !== value.end.cursor.token) {
@@ -91,7 +90,7 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
           signal,
           timelineWorkspaceCacheKey(query),
         );
-        const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, now));
+        const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, preflightCapabilities.queryBounds));
         assertControlSelection(preflightCapabilities, request);
         const overview = await dependencies.getTimelineOverview({ query: request }, signal);
         return toTimelineOverview(overview);
@@ -259,13 +258,13 @@ export function createTimelineEndpointQuery(
 }
 
 /** A live URL is still a finite server request; `all` never becomes an unbounded read. */
-export function resolveTimelineWindow(query: TimelineQuery, now: () => number): TimelineWindow {
+export function resolveTimelineWindow(query: TimelineQuery, bounds: TimelineQueryBounds): TimelineWindow {
   if (query.mode.kind === "frozen") {
     const window = { fromMs: query.mode.fromMs, toMs: query.mode.toMs };
     assertWindow(window);
     return window;
   }
-  const toMs = now();
+  const toMs = bounds.serverNowMs;
   const widthMs = query.mode.widthMs;
   if (!Number.isSafeInteger(toMs) || !Number.isSafeInteger(widthMs) || widthMs <= 0) {
     throw new TimelineFailure("invalid-request");
@@ -305,6 +304,7 @@ function toTimelineCapabilityDescriptor(
     selectedSourceMode: descriptor.selected_source_mode,
     availableSourceModes: [...descriptor.available_source_modes],
     maxRetainedRangeMs: descriptor.max_retained_range_ms,
+    queryBounds: toTimelineQueryBounds(descriptor.query_bounds),
     namespaceFilterPolicy: descriptor.namespace_filter_policy,
     controlSurface: {
       views: descriptor.control_surface.views.map(toTimelineControlOption),
@@ -390,6 +390,7 @@ function assertMatchingCapabilityDescriptors(
   if (
     preflight.selectedSourceMode !== snapshot.selectedSourceMode
     || preflight.maxRetainedRangeMs !== snapshot.maxRetainedRangeMs
+    || !strictValueEqual(preflight.queryBounds, snapshot.queryBounds)
     || preflight.namespaceFilterPolicy !== snapshot.namespaceFilterPolicy
     || preflight.availableSourceModes.length !== snapshot.availableSourceModes.length
     || preflight.availableSourceModes.some((mode, index) => mode !== snapshot.availableSourceModes[index])
@@ -582,6 +583,7 @@ function toCoverage(coverage: TimelineEndpointCoverage): TimelineCoverage {
 function toTimelineOverview(overview: TimelineEndpointOverview): TimelineOverview {
   return {
     window: { fromMs: overview.window.from_ms, toMs: overview.window.to_ms },
+    queryBounds: toTimelineQueryBounds(overview.query_bounds),
     bucketWidthMs: overview.bucket_width_ms,
     buckets: overview.buckets.map((bucket) => ({
       fromMs: bucket.from_ms,
@@ -600,6 +602,14 @@ function toTimelineOverview(overview: TimelineEndpointOverview): TimelineOvervie
     },
     newEvidenceCount: overview.new_evidence_count,
     pinSetRevision: overview.pin_set_revision,
+  };
+}
+
+function toTimelineQueryBounds(bounds: TimelineEndpointCapabilityDescriptor["query_bounds"]) {
+  return {
+    serverNowMs: bounds.server_now_ms,
+    earliestQueryableMs: bounds.earliest_queryable_ms,
+    maxWindowMs: bounds.max_window_ms,
   };
 }
 

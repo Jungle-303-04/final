@@ -71,6 +71,21 @@ describe("Timeline API transport", () => {
     await expect(getTimelineCapabilities()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
 
+  it("fails closed when strict server query bounds are missing or inconsistent", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...capabilityDescriptor(),
+        query_bounds: undefined,
+      }), { headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...capabilityDescriptor(),
+        query_bounds: { server_now_ms: 1_000, earliest_queryable_ms: 1_001, max_window_ms: 1_000 },
+      }), { headers: { "content-type": "application/json" } }));
+
+    await expect(getTimelineCapabilities()).rejects.toMatchObject({ kind: "invalid-payload" });
+    await expect(getTimelineCapabilities()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
   it("posts and strictly decodes a retained NDJSON snapshot", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
       JSON.stringify(snapshotFrame()),
@@ -297,6 +312,7 @@ function capabilityDescriptor() {
     selected_source_mode: "retained",
     available_source_modes: ["retained"],
     max_retained_range_ms: 7_200_000,
+    query_bounds: { server_now_ms: 10_000, earliest_queryable_ms: 2_800, max_window_ms: 7_200_000 },
     namespace_filter_policy: "not_required",
     control_surface: {
       views: [controlOption("list", "List"), controlOption("swimlane", "Swimlane")],
@@ -339,6 +355,7 @@ function controlOption(id: string, label: string) {
 function overview() {
   return {
     window: { from_ms: 1_000, to_ms: 2_000 },
+    query_bounds: { server_now_ms: 10_000, earliest_queryable_ms: 2_800, max_window_ms: 7_200_000 },
     bucket_width_ms: 1_000,
     buckets: [{ from_ms: 1_000, to_ms: 2_000, event_count: 0, problem_count: 0 }],
     coverage: [],

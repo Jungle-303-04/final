@@ -1,4 +1,17 @@
 import type { TimelineEvent, TimelineWindow } from "../../features/timeline/timelineContract";
+import {
+  isTimelineLensWithinWindow,
+  type TimelineLens,
+} from "../../features/filters/timelineUrlState";
+
+/** Resolves a local lens against the server-provided snapshot bounds only. */
+export function resolveTimelineLens(selection: TimelineWindow, lens: TimelineLens): TimelineWindow {
+  if (lens.kind === "selection") return selection;
+  if (lens.kind === "trailing") return timelineLensWindow(selection, lens.widthMs);
+  return isTimelineLensWithinWindow(lens, selection)
+    ? { fromMs: lens.fromMs, toMs: lens.toMs }
+    : selection;
+}
 
 export function timelineLensWindow(window: TimelineWindow, requestedWidthMs: number): TimelineWindow {
   const width = boundedLensWidth(window, requestedWidthMs);
@@ -13,6 +26,21 @@ export function moveTimelineLens(
   const width = lens.toMs - lens.fromMs;
   const lastStart = window.toMs - width;
   const fromMs = Math.min(Math.max(lens.fromMs + deltaMs, window.fromMs), lastStart);
+  return { fromMs, toMs: fromMs + width };
+}
+
+/** Keeps the same visual center where possible when a server zoom rung changes. */
+export function resizeTimelineLens(
+  selection: TimelineWindow,
+  lens: TimelineWindow,
+  requestedWidthMs: number,
+): TimelineWindow {
+  const width = boundedLensWidth(selection, requestedWidthMs);
+  const center = lens.fromMs + (lens.toMs - lens.fromMs) / 2;
+  const fromMs = Math.min(
+    Math.max(Math.round(center - width / 2), selection.fromMs),
+    selection.toMs - width,
+  );
   return { fromMs, toMs: fromMs + width };
 }
 

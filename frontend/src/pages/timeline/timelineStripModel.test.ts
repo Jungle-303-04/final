@@ -3,6 +3,8 @@ import type { TimelineEvent } from "../../features/timeline/timelineContract";
 import {
   filterTimelineEventsForLens,
   moveTimelineLens,
+  resizeTimelineLens,
+  resolveTimelineLens,
   timelineLensAtPosition,
   timelineLensWindow,
 } from "./timelineStripModel";
@@ -15,6 +17,14 @@ describe("timelineStripModel", () => {
     expect(timelineLensAtPosition(window, 300, 0)).toEqual({ fromMs: 1_000, toMs: 1_300 });
     expect(timelineLensAtPosition(window, 300, 1)).toEqual({ fromMs: 1_700, toMs: 2_000 });
     expect(moveTimelineLens(window, { fromMs: 1_700, toMs: 2_000 }, -100)).toEqual({ fromMs: 1_600, toMs: 1_900 });
+  });
+
+  it("keeps the selection and visible lens independent", () => {
+    expect(resolveTimelineLens(window, { kind: "selection" })).toEqual(window);
+    expect(resolveTimelineLens(window, { kind: "trailing", widthMs: 300 })).toEqual({ fromMs: 1_700, toMs: 2_000 });
+    expect(resolveTimelineLens(window, { kind: "window", fromMs: 1_200, toMs: 1_500 })).toEqual({ fromMs: 1_200, toMs: 1_500 });
+    expect(resolveTimelineLens(window, { kind: "window", fromMs: 0, toMs: 100 })).toEqual(window);
+    expect(resizeTimelineLens(window, { fromMs: 1_200, toMs: 1_500 }, 600)).toEqual({ fromMs: 1_050, toMs: 1_650 });
   });
 
   it("filters list and swimlane inputs locally without replacing the snapshot", () => {

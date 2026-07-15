@@ -87,6 +87,7 @@ export interface TimelineCapabilityDescriptor {
   selectedSourceMode: TimelineSourceMode;
   availableSourceModes: readonly TimelineSourceMode[];
   maxRetainedRangeMs: number;
+  queryBounds: TimelineQueryBounds;
   namespaceFilterPolicy: "not_required" | "required";
   controlSurface: TimelineControlSurface;
 }
@@ -185,6 +186,13 @@ export interface TimelineWindow {
   toMs: number;
 }
 
+/** Server-authoritative custom/live/frozen query boundary for one scope. */
+export interface TimelineQueryBounds {
+  serverNowMs: number;
+  earliestQueryableMs: number;
+  maxWindowMs: number;
+}
+
 /** Opaque authorization-bound resume position. It is never a sequence number. */
 export interface TimelineCursor {
   token: string;
@@ -240,6 +248,7 @@ export interface TimelineOverviewFacets {
 /** Aggregate retained-strip data; unavailable coverage is distinct from an empty gap list. */
 export interface TimelineOverview {
   window: TimelineWindow;
+  queryBounds: TimelineQueryBounds;
   bucketWidthMs: number;
   buckets: readonly TimelineOverviewBucket[];
   coverage: readonly TimelineCoverage[];

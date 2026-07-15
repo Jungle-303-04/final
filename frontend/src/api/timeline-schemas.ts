@@ -32,6 +32,15 @@ const timelineLensZoomRungSchema = timelineControlOptionSchema.extend({
   duration_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
 });
 
+/** Exact query limits are computed by the server for the authorized scope. */
+const timelineQueryBoundsSchema = z.strictObject({
+  server_now_ms: timestampMilliseconds,
+  earliest_queryable_ms: timestampMilliseconds,
+  max_window_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
+}).refine((bounds) => bounds.earliest_queryable_ms <= bounds.server_now_ms, {
+  message: "timeline query bounds must not begin after server time",
+});
+
 function uniqueControlIds(
   options: readonly { id: string }[],
   path: (string | number)[],
@@ -119,6 +128,7 @@ export const timelineCapabilityDescriptorSchema = z.strictObject({
   selected_source_mode: timelineSourceModeSchema,
   available_source_modes: z.array(timelineSourceModeSchema).min(1),
   max_retained_range_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
+  query_bounds: timelineQueryBoundsSchema,
   namespace_filter_policy: z.enum(["not_required", "required"]),
   control_surface: timelineControlSurfaceSchema,
 }).superRefine((descriptor, context) => {
@@ -341,6 +351,7 @@ const timelineOverviewFacetsSchema = z.strictObject({
 
 export const timelineOverviewSchema = z.strictObject({
   window: timelineWindowSchema,
+  query_bounds: timelineQueryBoundsSchema,
   bucket_width_ms: z.number().int().min(1_000).max(Number.MAX_SAFE_INTEGER),
   buckets: z.array(timelineOverviewBucketSchema).min(1).max(256),
   coverage: z.array(timelineCoverageSchema),

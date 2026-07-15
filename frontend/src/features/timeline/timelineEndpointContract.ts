@@ -75,8 +75,15 @@ export interface TimelineEndpointCapabilityDescriptor {
   selected_source_mode: "retained" | "local";
   available_source_modes: readonly ("retained" | "local")[];
   max_retained_range_ms: number;
+  query_bounds: TimelineEndpointQueryBounds;
   namespace_filter_policy: "not_required" | "required";
   control_surface: TimelineEndpointControlSurface;
+}
+
+export interface TimelineEndpointQueryBounds {
+  server_now_ms: number;
+  earliest_queryable_ms: number;
+  max_window_ms: number;
 }
 
 export interface TimelineEndpointControlOption {
@@ -155,6 +162,7 @@ export interface TimelineEndpointQuery {
 
 export interface TimelineEndpointOverview {
   window: { from_ms: number; to_ms: number };
+  query_bounds: TimelineEndpointQueryBounds;
   bucket_width_ms: number;
   buckets: readonly {
     from_ms: number;

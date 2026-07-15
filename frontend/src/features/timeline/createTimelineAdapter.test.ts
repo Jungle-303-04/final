@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "../../api/client";
 import { createTimelineAdapter, type TimelineAdapterDependencies } from "./createTimelineAdapter";
 import type {
   TimelineEndpointDependencies,
@@ -12,6 +11,10 @@ import type {
   TimelineEndpointStreamFrame,
 } from "./timelineEndpointContract";
 import type { TimelineQuery } from "./timelineContract";
+
+function endpointError(kind: string, message: string, status: number): Error & { kind: string; status: number } {
+  return Object.assign(new Error(message), { kind, status });
+}
 
 describe("Timeline adapter", () => {
   it("does not publish a synchronous retained/local fallback before preflight", () => {
@@ -34,7 +37,7 @@ describe("Timeline adapter", () => {
   ] as const)("maps capability HTTP %i to the forbidden product state", async (status, kind) => {
     const adapter = adapterFor({
       getTimelineCapabilities: async () => {
-        throw new ApiError(kind, "hidden", { status });
+        throw endpointError(kind, "hidden", status);
       },
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents: async function* () {},
@@ -57,7 +60,6 @@ describe("Timeline adapter", () => {
         return snapshot("opaque.snapshot");
       },
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
 
     await adapter.readTimeline(timelineQuery());
@@ -69,6 +71,7 @@ describe("Timeline adapter", () => {
       selectedSourceMode: "retained",
       availableSourceModes: ["retained"],
       maxRetainedRangeMs: 7_200_000,
+      queryBounds: { serverNowMs: 10_000, earliestQueryableMs: 2_800, maxWindowMs: 7_200_000 },
       namespaceFilterPolicy: "not_required",
       controlSurface: expect.objectContaining({
         defaultTimeRangeId: "1h",
@@ -94,7 +97,6 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities,
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
 
     await adapter.readTimeline(timelineQuery());
@@ -119,7 +121,6 @@ describe("Timeline adapter", () => {
         namespace_filter_policy: "required",
       }),
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
 
     await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
@@ -139,7 +140,6 @@ describe("Timeline adapter", () => {
         },
       }),
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
 
     await expect(adapter.readTimeline(timelineQuery())).rejects.toMatchObject({
@@ -153,7 +153,6 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot,
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
     const query = timelineQuery({
       filters: {
@@ -217,7 +216,6 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents,
-      now: () => 10_000,
       random: () => 0,
     });
     const initial = await adapter.readTimeline(timelineQuery());
@@ -268,7 +266,6 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents,
-      now: () => 10_000,
     });
     const loaded = await adapter.readTimeline(timelineQuery());
     const presentationOnly = {
@@ -304,7 +301,6 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot", [coverageFrame("opaque.coverage").coverage[0]!]),
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
 
     const loaded = await adapter.readTimeline(timelineQuery({
@@ -354,7 +350,6 @@ describe("Timeline adapter", () => {
       getTimelineSnapshot,
       getTimelinePins,
       subscribeTimelineEvents,
-      now: () => 10_000,
     });
     const query = timelineQuery({
       filters: { ...timelineQuery().filters, pinnedOnly: true },
@@ -382,7 +377,6 @@ describe("Timeline adapter", () => {
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       getTimelineOverview,
       subscribeTimelineEvents: async function* () {},
-      now: () => 10_000,
     });
 
     const value = await adapter.readTimelineOverview(timelineQuery());
@@ -396,6 +390,7 @@ describe("Timeline adapter", () => {
     }, undefined);
     expect(value).toEqual({
       window: { fromMs: 9_000, toMs: 10_000 },
+      queryBounds: { serverNowMs: 10_000, earliestQueryableMs: 2_800, maxWindowMs: 7_200_000 },
       bucketWidthMs: 1_000,
       buckets: [{ fromMs: 9_000, toMs: 10_000, eventCount: 0, problemCount: 0 }],
       coverage: [],
@@ -419,7 +414,7 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       getTimelineOverview: async () => {
-        throw new ApiError(kind, "overview failed", { status });
+        throw endpointError(kind, "overview failed", status);
       },
       subscribeTimelineEvents: async function* () {},
     });
@@ -505,7 +500,7 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.pinned", [], capabilities(), 3),
       getTimelinePins: async () => {
-        throw new ApiError("http", "stale pin set", { status: 409 });
+        throw endpointError("http", "stale pin set", 409);
       },
       subscribeTimelineEvents: () => streamOf(),
     });
@@ -518,7 +513,7 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.pinned", [], capabilities(), 3),
       subscribeTimelineEvents: () => {
-        throw new ApiError("invalid-request", "stale pinned cursor", { status: 422 });
+        throw endpointError("invalid-request", "stale pinned cursor", 422);
       },
     });
     const loaded = await replayAdapter.readTimeline(timelineQuery({
@@ -544,7 +539,6 @@ describe("Timeline adapter", () => {
       getTimelineCapabilities: async () => capabilities(),
       getTimelineSnapshot: async () => snapshot("opaque.snapshot"),
       subscribeTimelineEvents,
-      now: () => 10_000,
       random: () => 0,
     });
     const loaded = await adapter.readTimeline(timelineQuery());
@@ -628,6 +622,7 @@ function capabilities(): TimelineEndpointCapabilityDescriptor {
     selected_source_mode: "retained",
     available_source_modes: ["retained"],
     max_retained_range_ms: 7_200_000,
+    query_bounds: { server_now_ms: 10_000, earliest_queryable_ms: 2_800, max_window_ms: 7_200_000 },
     namespace_filter_policy: "not_required",
     control_surface: {
       views: [controlOption("list", "List"), controlOption("swimlane", "Swimlane")],
@@ -670,6 +665,7 @@ function controlOption(id: string, label: string) {
 function overview(): TimelineEndpointOverview {
   return {
     window: { from_ms: 9_000, to_ms: 10_000 },
+    query_bounds: { server_now_ms: 10_000, earliest_queryable_ms: 2_800, max_window_ms: 7_200_000 },
     bucket_width_ms: 1_000,
     buckets: [{ from_ms: 9_000, to_ms: 10_000, event_count: 0, problem_count: 0 }],
     coverage: [],
