@@ -12,7 +12,7 @@ interface StreamEvent {
 
 interface OpaqueTimelineFrame {
   cursor: { token: string };
-  frame: "event" | "snapshot";
+  frame: "end" | "event" | "snapshot";
 }
 
 describe("createRafStreamCoalescer", () => {
@@ -142,12 +142,12 @@ describe("createRafStreamCoalescer", () => {
     expect(received).toEqual([[1, 2]]);
   });
 
-  it("suppresses opaque resume duplicates without sequencing or sorting timeline tokens", () => {
+  it("suppresses opaque resume-frame duplicates without sequencing or sorting timeline tokens", () => {
     const runtime = new FakeRuntime();
     const received: string[][] = [];
     const coalescer = createRafStreamCoalescer<OpaqueTimelineFrame>({
       opaqueCursor: {
-        keyOf: (frame) => frame.cursor.token,
+        keyOf: (frame) => `${frame.frame}:${frame.cursor.token}`,
         equals: (left, right) => left === right,
       },
       onFlush: (frames) => received.push(frames.map((frame) => frame.cursor.token)),
@@ -164,12 +164,13 @@ describe("createRafStreamCoalescer", () => {
 
     expect(received).toEqual([["signed.z-future", "signed.a-past"]]);
     expect(coalescer.enqueue(opaqueFrame("signed.a-past"))).toBe("duplicate");
-    expect(coalescer.enqueue(opaqueFrame("signed.0-next"))).toBe("queued");
+    expect(coalescer.enqueue(opaqueFrame("signed.a-past", "end"))).toBe("queued");
+    expect(coalescer.enqueue(opaqueFrame("signed.a-past", "end"))).toBe("duplicate");
     runtime.fireFrame();
 
     expect(received).toEqual([
       ["signed.z-future", "signed.a-past"],
-      ["signed.0-next"],
+      ["signed.a-past"],
     ]);
   });
 
@@ -203,8 +204,11 @@ function event(cursor: number): StreamEvent {
   return { cursor, value: `event-${cursor}` };
 }
 
-function opaqueFrame(token: string): OpaqueTimelineFrame {
-  return { cursor: { token }, frame: "event" };
+function opaqueFrame(
+  token: string,
+  frame: OpaqueTimelineFrame["frame"] = "event",
+): OpaqueTimelineFrame {
+  return { cursor: { token }, frame };
 }
 
 class FakeRuntime implements RafStreamCoalescerRuntime {
