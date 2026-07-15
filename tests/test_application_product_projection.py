@@ -7,6 +7,7 @@ from domains.applications.product_projection import (
     detail_scope_projection,
     drift_projection,
     topology_projection,
+    workload_scope_projection,
 )
 
 
@@ -567,6 +568,183 @@ def test_unavailable_topology_does_not_claim_empty_relationships() -> None:
         "bounded_workflow_history",
         "incident_source_incomplete",
     ]
+
+
+def test_workload_scope_uses_only_direct_manifest_bound_workloads_and_typed_neighbors() -> None:
+    context = {
+        "snapshot_revision": 42,
+        "observed_at": "2026-07-14T10:00:00Z",
+        "resources_complete": True,
+        "labels_complete": True,
+        "application_bindings_complete": True,
+        "partial_reason_codes": [],
+    }
+    root = {
+        "id": "workload-a",
+        "cluster_id": "cluster-1",
+        "resource_type": "workload",
+        "api_version": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "shop",
+        "name": "checkout",
+        "uid": "deployment-uid",
+        "status": "1/1",
+        "health": "healthy",
+        "labels": {"app": "checkout"},
+        "binding_complete": True,
+        "summary": {"selector": {"matchLabels": {"app": "checkout"}}},
+        "observed_at": "2026-07-14T10:00:00Z",
+    }
+    pod = {
+        "id": "pod-a",
+        "cluster_id": "cluster-1",
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "namespace": "shop",
+        "name": "checkout-a",
+        "uid": "pod-uid",
+        "status": "Running",
+        "health": "healthy",
+        "labels": {"app": "checkout"},
+        "summary": {
+            "owner_kind": "Deployment",
+            "owner_name": "checkout",
+            "owner_uid": "deployment-uid",
+            "owner_references_complete": True,
+            "conditions": [{"type": "Ready", "status": "True"}],
+            "restart_total": 0,
+        },
+        "observed_at": "2026-07-14T10:00:00Z",
+    }
+    scope = _detail_scope()
+    workload_scope = workload_scope_projection(
+        _application() | {"workspace_id": "workspace-a"},
+        [root],
+        inventory_context=context,
+        scope=scope,
+        requested_workload_key=None,
+    )
+
+    assert workload_scope == {
+        "availability": "available",
+        "completeness": "exact",
+        "application_scope_available": False,
+        "selected_workload_key": "workload-a",
+        "workloads": [
+            {
+                "key": "workload-a",
+                "resource": {
+                    "api_group": "apps",
+                    "version": "v1",
+                    "kind": "Deployment",
+                    "namespace": "shop",
+                    "name": "checkout",
+                    "uid": "deployment-uid",
+                },
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-1",
+                    "namespaces": ["shop"],
+                    "freshness": "live",
+                },
+                "observed_at": "2026-07-14T10:00:00Z",
+            }
+        ],
+        "partial_reason_codes": [],
+    }
+    detail = application_detail(
+        _application(),
+        bindings=[{"cluster_id": "cluster-1", "environment": "prod"}],
+        runs=_runs(),
+        inventory_rows=[root],
+        inventory_context=context,
+        incident_evidence={"complete": True, "open_count": 0, "items": []},
+        scope=scope,
+        workload_scope=workload_scope,
+        workload_runtime_rows=[root, pod],
+    )
+
+    assert detail["scope"]["selected_scope"] == "workload"
+    assert detail["workload"]["runtime_readiness"] == {
+        "completeness": "exact",
+        "status": "healthy",
+        "ready_pods": 1,
+        "total_pods": 1,
+        "restarts": 0,
+    }
+    assert detail["workload"]["topology"]["completeness"] == "exact"
+    assert detail["workload"]["topology"]["nodes"] == [
+        {
+            "id": "workload-a",
+            "cluster_id": "cluster-1",
+            "resource_type": "workload",
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout",
+            "status": "1/1",
+            "health": "healthy",
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+        {
+            "id": "pod-a",
+            "cluster_id": "cluster-1",
+            "resource_type": "pod",
+            "kind": "Pod",
+            "namespace": "shop",
+            "name": "checkout-a",
+            "status": "Running",
+            "health": "healthy",
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+    ]
+    assert {edge["type"] for edge in detail["workload"]["topology"]["edges"]} == {"owns", "selects"}
+    assert detail["workload"]["history"] == {
+        "availability": "unavailable",
+        "reason_codes": ["workload_history_link_not_persisted"],
+    }
+    assert detail["history"]["entries"]
+
+
+def test_workload_scope_never_defaults_one_partial_workload_or_echoes_invalid_key() -> None:
+    row = {
+        "id": "workload-a",
+        "cluster_id": "cluster-1",
+        "resource_type": "workload",
+        "api_version": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "shop",
+        "name": "checkout",
+        "uid": "deployment-uid",
+        "binding_complete": True,
+    }
+    base_context = {
+        "snapshot_revision": 42,
+        "resources_complete": True,
+        "application_bindings_complete": True,
+    }
+    invalid = workload_scope_projection(
+        _application(),
+        [row],
+        inventory_context=base_context,
+        scope=_detail_scope(),
+        requested_workload_key="not-authorized",
+    )
+    partial = workload_scope_projection(
+        _application(),
+        [row],
+        inventory_context=base_context | {"resources_complete": False},
+        scope=_detail_scope(),
+        requested_workload_key=None,
+    )
+
+    assert invalid["selected_workload_key"] is None
+    assert invalid["application_scope_available"] is True
+    assert invalid["partial_reason_codes"] == ["requested_workload_unavailable"]
+    assert "not-authorized" not in str(invalid)
+    assert partial["selected_workload_key"] is None
+    assert partial["application_scope_available"] is True
+    assert partial["completeness"] == "partial"
 
 
 def test_topology_bounds_multicluster_evidence_without_orphaning_edges() -> None:

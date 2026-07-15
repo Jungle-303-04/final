@@ -185,12 +185,55 @@ export interface ApplicationInstanceScope {
   };
 }
 
+export interface ApplicationWorkloadResourceRef {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+}
+
+export interface ApplicationWorkloadScopeItem {
+  key: string;
+  resource: ApplicationWorkloadResourceRef;
+  scope: ApplicationInstanceScope["scope"];
+  observedAt: string | null;
+}
+
+export interface ApplicationWorkloadScope {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  applicationScopeAvailable: boolean;
+  selectedWorkloadKey: string | null;
+  workloads: readonly ApplicationWorkloadScopeItem[];
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationUnavailableEvidence {
+  availability: "unavailable";
+  reasonCodes: readonly string[];
+}
+
+export interface ApplicationWorkloadDetail {
+  workload: ApplicationWorkloadScopeItem;
+  runtimeReadiness: ApplicationRuntimeReadiness;
+  resourceCounts: readonly ApplicationResourceCount[] | null;
+  resourceCountsCompleteness: ApplicationProjectionCompleteness;
+  topology: ApplicationTopology;
+  history: ApplicationUnavailableEvidence;
+  cost: ApplicationUnavailableEvidence;
+  actions: ApplicationUnavailableEvidence;
+}
+
 export interface ApplicationDetailScope {
   availability: ApplicationProjectionAvailability;
   completeness: ApplicationProjectionCompleteness;
   selectedInstanceId: string | null;
   instances: readonly ApplicationInstanceScope[];
   partialReasonCodes: readonly string[];
+  selectedScope: "application" | "workload";
+  workloadScope: ApplicationWorkloadScope;
 }
 
 export interface ApplicationDetailModel extends ApplicationCardModel {
@@ -202,6 +245,7 @@ export interface ApplicationDetailModel extends ApplicationCardModel {
   topology: ApplicationTopology;
   history: ApplicationHistory;
   source: ApplicationSourceEvidence;
+  workload: ApplicationWorkloadDetail | null;
 }
 
 export interface ApplicationDeploymentModel {
@@ -244,6 +288,7 @@ export interface ApplicationsPort {
     applicationId: string,
     signal?: AbortSignal,
     instanceId?: string | null,
+    workloadKey?: string | null,
   ): Promise<ApplicationDetailModel>;
   listDeployments(
     applicationId: string,
@@ -275,6 +320,7 @@ export interface ApplicationsApiDependencies {
     applicationId: string,
     signal?: AbortSignal,
     instanceId?: string | null,
+    workloadKey?: string | null,
   ): Promise<ApplicationDetailEndpoint>;
   listApplicationDeploymentHistory(
     applicationId: string,
@@ -355,6 +401,32 @@ export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpoin
       };
     }[];
     partial_reason_codes: string[];
+    selected_scope: "application" | "workload";
+    workload_scope: {
+      availability: ApplicationProjectionAvailability;
+      completeness: ApplicationProjectionCompleteness;
+      application_scope_available: boolean;
+      selected_workload_key: string | null;
+      workloads: {
+        key: string;
+        resource: {
+          api_group: string;
+          version: string;
+          kind: string;
+          namespace: string | null;
+          name: string;
+          uid: string;
+        };
+        scope: {
+          workspace_id: string;
+          cluster_id: string;
+          namespaces: string[];
+          freshness: "live" | "stale" | "partial" | "disconnected";
+        };
+        observed_at: string | null;
+      }[];
+      partial_reason_codes: string[];
+    };
   };
   endpoints: { id: string; kind: string; name: string; url: string }[] | null;
   endpoints_completeness: "exact" | "partial" | "unavailable";
@@ -419,6 +491,39 @@ export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpoin
     manifest_path: string | null;
     partial_reason_codes: string[];
   };
+  workload: {
+    workload: {
+      key: string;
+      resource: {
+        api_group: string;
+        version: string;
+        kind: string;
+        namespace: string | null;
+        name: string;
+        uid: string;
+      };
+      scope: {
+        workspace_id: string;
+        cluster_id: string;
+        namespaces: string[];
+        freshness: "live" | "stale" | "partial" | "disconnected";
+      };
+      observed_at: string | null;
+    };
+    runtime_readiness: {
+      completeness: ApplicationProjectionCompleteness;
+      status: "healthy" | "degraded" | "unknown";
+      ready_pods: number | null;
+      total_pods: number | null;
+      restarts: number | null;
+    };
+    resource_counts: { kind: string; count: number }[] | null;
+    resource_counts_completeness: ApplicationProjectionCompleteness;
+    topology: ApplicationDetailEndpointItem["topology"];
+    history: { availability: "unavailable"; reason_codes: string[] };
+    cost: { availability: "unavailable"; reason_codes: string[] };
+    actions: { availability: "unavailable"; reason_codes: string[] };
+  } | null;
 }
 
 interface ApplicationCatalogEndpoint {

@@ -1157,9 +1157,9 @@
               "applications.detail.scope-tabs",
               "applications.detail.parity"
             ],
-            "state": "blocked",
-            "blockedReason": "The current URL model has only overview/resources/deployments/drift/incidents and no typed workload scope, application topology, history, or optional cost projection contract.",
-            "rationale": "ApplicationsSurface.test.tsx already proves generic URL-backed detail navigation, but it cannot prove the new controlled scope rules until the missing projection and route state exist."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Typed opaque workload scope now comes only from authorized direct manifest-bound inventory; the workspace defaults only one exact workload and canonicalizes unavailable keys without disclosing them. Direct workspace tests prove URL state and app/workload data isolation, while optional cost remains explicitly unavailable."
           }
         },
         {
@@ -1224,9 +1224,9 @@
               "applications.detail.scope-tabs",
               "applications.detail.parity"
             ],
-            "state": "blocked",
-            "blockedReason": "The current detail workspace has a different fixed five-tab model and no normalized workload key, app-scope topology/history view, or application-cost callback.",
-            "rationale": "ApplicationDetailWorkspace is the existing route owner and must be extended rather than importing the upstream shell."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The normalized Python contract and route-owning workspace now provide URL-backed application/workload scope, workload-only overview/topology/history, and strict tab/data isolation. Workload runtime and unavailable history use only workload evidence; optional cost is explicitly unavailable while source-specific cost-tab parity remains in progress."
           }
         },
         {

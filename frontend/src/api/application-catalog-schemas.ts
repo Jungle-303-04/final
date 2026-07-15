@@ -234,12 +234,73 @@ const applicationInstanceScopeSchema = z.strictObject({
   scope: applicationClusterScopeSchema,
 });
 
+const applicationWorkloadResourceRefSchema = z.strictObject({
+  api_group: z.string(),
+  version: z.string(),
+  kind: z.string().min(1),
+  namespace: nullableTextSchema,
+  name: z.string().min(1),
+  uid: z.string().min(1),
+});
+
+const applicationWorkloadScopeItemSchema = z.strictObject({
+  key: z.string().min(1).max(128),
+  resource: applicationWorkloadResourceRefSchema,
+  scope: applicationClusterScopeSchema,
+  observed_at: nullableTimestampSchema,
+});
+
+export const applicationWorkloadScopeSchema = z.strictObject({
+  availability: z.enum(["available", "unavailable"]),
+  completeness: filterCountCompletenessSchema,
+  application_scope_available: z.boolean(),
+  selected_workload_key: nullableTextSchema,
+  workloads: z.array(applicationWorkloadScopeItemSchema).max(200),
+  partial_reason_codes: applicationPartialReasonCodesSchema,
+}).superRefine((scope, context) => {
+  if (
+    scope.availability === "unavailable" &&
+    (scope.completeness !== "unavailable" ||
+      scope.application_scope_available ||
+      scope.selected_workload_key !== null ||
+      scope.workloads.length > 0 ||
+      scope.partial_reason_codes.length > 0)
+  ) {
+    context.addIssue({ code: "custom", message: "unavailable workload scope cannot claim workload evidence", path: ["availability"] });
+  }
+  if (scope.availability === "available" && scope.completeness === "unavailable") {
+    context.addIssue({ code: "custom", message: "available workload scope requires completeness", path: ["completeness"] });
+  }
+  const keys = scope.workloads.map((workload) => workload.key);
+  if (new Set(keys).size !== keys.length) {
+    context.addIssue({ code: "custom", message: "workload identities must be unique", path: ["workloads"] });
+  }
+  if (scope.selected_workload_key !== null && !keys.includes(scope.selected_workload_key)) {
+    context.addIssue({ code: "custom", message: "selected workload must be authorized", path: ["selected_workload_key"] });
+  }
+  if (!scope.application_scope_available && !(
+    scope.completeness === "exact" &&
+    scope.workloads.length === 1 &&
+    scope.selected_workload_key === scope.workloads[0]?.key
+  )) {
+    context.addIssue({ code: "custom", message: "only one exact workload may hide application scope", path: ["application_scope_available"] });
+  }
+  if (scope.completeness === "exact" && scope.partial_reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "exact workload scope has no partial reasons", path: ["partial_reason_codes"] });
+  }
+  if (scope.completeness === "partial" && scope.partial_reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial workload scope requires reasons", path: ["partial_reason_codes"] });
+  }
+});
+
 export const applicationDetailScopeSchema = z.strictObject({
   availability: z.enum(["available", "unavailable"]),
   completeness: filterCountCompletenessSchema,
   selected_instance_id: nullableTextSchema,
   instances: z.array(applicationInstanceScopeSchema).max(500),
   partial_reason_codes: applicationPartialReasonCodesSchema,
+  selected_scope: z.enum(["application", "workload"]),
+  workload_scope: applicationWorkloadScopeSchema,
 }).superRefine((scope, context) => {
   if (
     scope.availability === "unavailable" &&
@@ -287,6 +348,16 @@ export const applicationDetailScopeSchema = z.strictObject({
   }
   if (scope.completeness === "partial" && scope.partial_reason_codes.length === 0) {
     context.addIssue({ code: "custom", message: "partial scope requires source reasons", path: ["partial_reason_codes"] });
+  }
+  if (scope.selected_scope === "workload" && scope.workload_scope.selected_workload_key === null) {
+    context.addIssue({ code: "custom", message: "workload selection requires a workload", path: ["selected_scope"] });
+  }
+  if (
+    scope.selected_scope === "application" &&
+    scope.workload_scope.availability === "available" &&
+    !scope.workload_scope.application_scope_available
+  ) {
+    context.addIssue({ code: "custom", message: "application selection is unavailable", path: ["selected_scope"] });
   }
 });
 
@@ -441,6 +512,33 @@ export const applicationSourceEvidenceSchema = z.strictObject({
   }
 });
 
+const applicationUnavailableEvidenceSchema = z.strictObject({
+  availability: z.literal("unavailable"),
+  reason_codes: z.array(z.string().min(1)).min(1).max(20),
+}).superRefine((evidence, context) => {
+  if (new Set(evidence.reason_codes).size !== evidence.reason_codes.length) {
+    context.addIssue({ code: "custom", message: "unavailable evidence reasons must be unique", path: ["reason_codes"] });
+  }
+});
+
+const applicationWorkloadDetailSchema = z.strictObject({
+  workload: applicationWorkloadScopeItemSchema,
+  runtime_readiness: applicationRuntimeReadinessSchema,
+  resource_counts: z.array(applicationResourceCountSchema).nullable(),
+  resource_counts_completeness: filterCountCompletenessSchema,
+  topology: applicationTopologySchema,
+  history: applicationUnavailableEvidenceSchema,
+  cost: applicationUnavailableEvidenceSchema,
+  actions: applicationUnavailableEvidenceSchema,
+}).superRefine((detail, context) => {
+  if (detail.resource_counts_completeness === "unavailable" && detail.resource_counts !== null) {
+    context.addIssue({ code: "custom", message: "unavailable workload counts must be null", path: ["resource_counts"] });
+  }
+  if (detail.resource_counts_completeness !== "unavailable" && detail.resource_counts === null) {
+    context.addIssue({ code: "custom", message: "available workload counts require an array", path: ["resource_counts"] });
+  }
+});
+
 export const applicationDetailItemSchema = applicationCatalogItemSchema.extend({
   scope: applicationDetailScopeSchema,
   endpoints: z.array(applicationEndpointSchema).nullable(),
@@ -450,12 +548,23 @@ export const applicationDetailItemSchema = applicationCatalogItemSchema.extend({
   topology: applicationTopologySchema,
   history: applicationHistorySchema,
   source: applicationSourceEvidenceSchema,
+  workload: applicationWorkloadDetailSchema.nullable(),
 }).superRefine((item, context) => {
   if (item.endpoints_completeness === "unavailable" && item.endpoints !== null) {
     context.addIssue({ code: "custom", message: "unavailable endpoints must be null", path: ["endpoints"] });
   }
   if (item.endpoints_completeness !== "unavailable" && item.endpoints === null) {
     context.addIssue({ code: "custom", message: "available endpoints must be an array", path: ["endpoints"] });
+  }
+  const workloadSelected = item.scope.selected_scope === "workload";
+  if (workloadSelected !== (item.workload !== null)) {
+    context.addIssue({ code: "custom", message: "workload detail must match selected scope", path: ["workload"] });
+  }
+  if (
+    item.workload !== null &&
+    item.workload.workload.key !== item.scope.workload_scope.selected_workload_key
+  ) {
+    context.addIssue({ code: "custom", message: "workload detail must match selected workload", path: ["workload"] });
   }
 });
 

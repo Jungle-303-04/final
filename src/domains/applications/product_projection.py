@@ -82,6 +82,9 @@ def application_detail(
     inventory_context: Mapping[str, Any],
     incident_evidence: Mapping[str, Any],
     scope: Mapping[str, Any],
+    workload_scope: Mapping[str, Any] | None = None,
+    workload_runtime_rows: Sequence[Mapping[str, Any]] = (),
+    workload_runtime_truncated: bool = False,
 ) -> JsonObject:
     card = application_card(
         application,
@@ -94,6 +97,15 @@ def application_detail(
     inventory = inventory_projection(inventory_rows, inventory_context=inventory_context)
     incidents = list(incident_evidence.get("items") or [])[:3]
     drift = drift_projection(runs)
+    resolved_workload_scope = dict(workload_scope or _unavailable_workload_scope())
+    workload = workload_detail_projection(
+        resolved_workload_scope,
+        runtime_rows=workload_runtime_rows,
+        runtime_truncated=workload_runtime_truncated,
+        inventory_context=inventory_context,
+        application_id=str(application.get("application_id") or ""),
+    )
+    selected_scope = "workload" if workload is not None else "application"
     return {
         **card,
         "endpoints": inventory["endpoints"],
@@ -115,8 +127,396 @@ def application_detail(
         ),
         "history": history_projection(runs, incidents, incident_evidence=incident_evidence),
         "source": source_evidence_projection(application, drift=drift),
-        "scope": dict(scope),
+        "scope": {
+            **dict(scope),
+            "selected_scope": selected_scope,
+            "workload_scope": resolved_workload_scope,
+        },
+        "workload": workload,
     }
+
+
+def _unavailable_workload_scope() -> JsonObject:
+    return {
+        "availability": "unavailable",
+        "completeness": "unavailable",
+        "application_scope_available": False,
+        "selected_workload_key": None,
+        "workloads": [],
+        "partial_reason_codes": [],
+    }
+
+
+def workload_scope_projection(
+    application: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    inventory_context: Mapping[str, Any],
+    scope: Mapping[str, Any],
+    requested_workload_key: str | None,
+) -> JsonObject:
+    """Return only direct rendered-manifest workload choices.
+
+    Application membership is established before this projection by the
+    immutable rendered-manifest to inventory link.  This function deliberately
+    does not discover a workload from labels, owner names, resource prefixes,
+    or a browser-supplied identity.
+    """
+
+    revision = _nonnegative_int(inventory_context.get("snapshot_revision")) or 0
+    if revision <= 0:
+        return {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "application_scope_available": False,
+            "selected_workload_key": None,
+            "workloads": [],
+            "partial_reason_codes": [],
+        }
+
+    selected_instance = _selected_instance_scope(scope)
+    reasons = {
+        str(reason)
+        for reason in inventory_context.get("partial_reason_codes") or []
+        if _optional_text(reason) is not None
+    }
+    source_complete = (
+        inventory_context.get("resources_complete") is True
+        and inventory_context.get("application_bindings_complete") is True
+        and all(row.get("binding_complete") is True for row in rows)
+    )
+    if inventory_context.get("resources_complete") is not True:
+        reasons.add("source_resources_incomplete")
+    if inventory_context.get("application_bindings_complete") is not True:
+        reasons.add("application_bindings_incomplete")
+    if not selected_instance:
+        reasons.add("selected_instance_scope_unavailable")
+
+    workloads: list[JsonObject] = []
+    for row in rows:
+        if str(row.get("resource_type") or "").casefold() != "workload":
+            continue
+        item = _workload_scope_item(row, selected_instance=selected_instance)
+        if item is None:
+            reasons.add("workload_identity_incomplete")
+            continue
+        workloads.append(item)
+    workloads.sort(
+        key=lambda item: (
+            str(_mapping(item.get("resource")).get("kind")).casefold(),
+            str(_mapping(item.get("resource")).get("namespace") or "").casefold(),
+            str(_mapping(item.get("resource")).get("name")).casefold(),
+            str(item.get("key")),
+        )
+    )
+
+    selected = next(
+        (item for item in workloads if item["key"] == requested_workload_key),
+        None,
+    )
+    if requested_workload_key is not None and selected is None:
+        # Never echo a caller-provided opaque key.  This lets the browser
+        # canonicalize an old or unauthorized deep link without disclosing
+        # whether it belongs to another binding, application, or workspace.
+        reasons.add("requested_workload_unavailable")
+
+    exact = source_complete and not reasons
+    if requested_workload_key is None and exact and len(workloads) == 1:
+        selected = workloads[0]
+    selected_key = str(selected["key"]) if selected is not None else None
+    application_scope_available = not (exact and len(workloads) == 1)
+    completeness: Completeness = "exact" if exact else "partial"
+    return {
+        "availability": "available",
+        "completeness": completeness,
+        "application_scope_available": application_scope_available,
+        "selected_workload_key": selected_key,
+        "workloads": workloads,
+        "partial_reason_codes": [] if exact else sorted(reasons),
+    }
+
+
+def workload_detail_projection(
+    workload_scope: Mapping[str, Any],
+    *,
+    runtime_rows: Sequence[Mapping[str, Any]],
+    runtime_truncated: bool,
+    inventory_context: Mapping[str, Any],
+    application_id: str,
+) -> JsonObject | None:
+    """Project a selected workload without borrowing app-level channels."""
+
+    selected_key = _optional_text(workload_scope.get("selected_workload_key"))
+    if selected_key is None:
+        return None
+    workload = next(
+        (
+            item
+            for item in workload_scope.get("workloads") or []
+            if isinstance(item, Mapping) and str(item.get("key") or "") == selected_key
+        ),
+        None,
+    )
+    if workload is None:
+        return None
+
+    topology = workload_topology_projection(
+        runtime_rows,
+        inventory_context=inventory_context,
+        application_id=application_id,
+        root_key=selected_key,
+        truncated=runtime_truncated,
+    )
+    runtime = workload_runtime_projection(
+        runtime_rows,
+        topology=topology,
+        inventory_context=inventory_context,
+    )
+    return {
+        "workload": dict(workload),
+        "runtime_readiness": runtime["runtime_readiness"],
+        "resource_counts": runtime["resource_counts"],
+        "resource_counts_completeness": runtime["resource_counts_completeness"],
+        "topology": topology,
+        "history": {
+            "availability": "unavailable",
+            "reason_codes": ["workload_history_link_not_persisted"],
+        },
+        "cost": {
+            "availability": "unavailable",
+            "reason_codes": ["cost_observation_not_integrated"],
+        },
+        "actions": {
+            "availability": "unavailable",
+            "reason_codes": ["workload_action_capabilities_not_connected"],
+        },
+    }
+
+
+def workload_topology_projection(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    inventory_context: Mapping[str, Any],
+    application_id: str,
+    root_key: str,
+    truncated: bool,
+) -> JsonObject:
+    """Build one workload neighborhood from persisted relationship evidence.
+
+    The only traversal is server-side and follows graph-module ``owns`` and
+    ``selects`` edges away from the selected manifest-bound root, plus a
+    directly attached ``runs_on`` node.  It never guesses by a label, prefix,
+    or unproved name relationship.
+    """
+
+    revision = _nonnegative_int(inventory_context.get("snapshot_revision")) or 0
+    if revision <= 0 or not rows:
+        return {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "observed_at": None,
+            "nodes": None,
+            "edges": None,
+            "partial_reason_codes": [],
+        }
+    reasons = {
+        str(reason)
+        for reason in inventory_context.get("partial_reason_codes") or []
+        if _optional_text(reason) is not None
+    }
+    source_complete = (
+        inventory_context.get("resources_complete") is True
+        and inventory_context.get("application_bindings_complete") is True
+        and not truncated
+    )
+    if inventory_context.get("resources_complete") is not True:
+        reasons.add("source_resources_incomplete")
+    if inventory_context.get("application_bindings_complete") is not True:
+        reasons.add("application_bindings_incomplete")
+    if truncated:
+        reasons.add("workload_runtime_evidence_budget_exceeded")
+    graph = build_resource_graph(
+        [
+            {
+                "resource": _topology_graph_item(row, application_id=application_id)["resource"],
+                "application_ids": [application_id] if application_id else [],
+                "application_binding_completeness": "exact",
+            }
+            for row in rows
+        ],
+        snapshot_revision=revision,
+        filter_fingerprint=f"application-workload:{application_id}:{root_key}",
+        source_complete=source_complete,
+        labels_complete=inventory_context.get("labels_complete") is True,
+        truncated=truncated,
+        node_limit=APPLICATION_TOPOLOGY_NODE_LIMIT,
+        edge_limit=APPLICATION_TOPOLOGY_EDGE_LIMIT,
+        partial_reason_codes=sorted(reasons),
+        cluster={"cluster_id": str(rows[0].get("cluster_id") or "")},
+    )
+    node_ids = {str(node["node_id"]) for node in graph["nodes"]}
+    if root_key not in node_ids:
+        reasons.update(str(reason) for reason in graph["partial_reason_codes"])
+        reasons.add("workload_root_not_in_graph_budget")
+        return {
+            "availability": "available",
+            "completeness": "partial",
+            "observed_at": _optional_text(inventory_context.get("observed_at")),
+            "nodes": [],
+            "edges": [],
+            "partial_reason_codes": sorted(reasons),
+        }
+
+    edges = [dict(edge) for edge in graph["edges"]]
+    selected_nodes = {root_key}
+    changed = True
+    while changed:
+        changed = False
+        for edge in edges:
+            if str(edge.get("from_node_id") or "") in selected_nodes and str(
+                edge.get("kind") or ""
+            ) in {"owns", "selects"}:
+                child = str(edge.get("to_node_id") or "")
+                if child and child not in selected_nodes:
+                    selected_nodes.add(child)
+                    changed = True
+    for edge in edges:
+        if (
+            str(edge.get("from_node_id") or "") in selected_nodes
+            and str(edge.get("kind") or "") == "runs_on"
+        ):
+            node_id = str(edge.get("to_node_id") or "")
+            if node_id:
+                selected_nodes.add(node_id)
+    selected_edges = [
+        edge
+        for edge in edges
+        if str(edge.get("from_node_id") or "") in selected_nodes
+        and str(edge.get("to_node_id") or "") in selected_nodes
+    ]
+    selected_rows = sorted(
+        (node for node in graph["nodes"] if str(node["node_id"]) in selected_nodes),
+        key=lambda node: (
+            str(node["node_id"]) != root_key,
+            str(node["node_id"]),
+        ),
+    )
+    reasons.update(str(reason) for reason in graph["partial_reason_codes"])
+    complete = not reasons
+    return {
+        "availability": "available",
+        "completeness": "exact" if complete else "partial",
+        "observed_at": _optional_text(inventory_context.get("observed_at")),
+        "nodes": [_topology_node(node) for node in selected_rows],
+        "edges": [_topology_edge(edge) for edge in selected_edges],
+        "partial_reason_codes": [] if complete else sorted(reasons),
+    }
+
+
+def workload_runtime_projection(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    topology: Mapping[str, Any],
+    inventory_context: Mapping[str, Any],
+) -> JsonObject:
+    """Use only graph-selected workload/pod records for workload runtime facts."""
+
+    if topology.get("availability") != "available" or topology.get("nodes") is None:
+        return _unavailable_workload_runtime()
+    node_ids = {
+        str(node.get("id") or "")
+        for node in topology.get("nodes") or []
+        if isinstance(node, Mapping)
+    }
+    runtime_rows = [
+        row
+        for row in rows
+        if str(row.get("id") or "") in node_ids
+        and str(row.get("resource_type") or "") in {"workload", "pod"}
+    ]
+    if not runtime_rows:
+        return _unavailable_workload_runtime()
+    complete = topology.get("completeness") == "exact"
+    runtime_context = {
+        "snapshot_revision": inventory_context.get("snapshot_revision"),
+        "resources_complete": complete,
+        "application_bindings_complete": complete,
+    }
+    prepared = [{**dict(row), "binding_complete": complete} for row in runtime_rows]
+    return inventory_projection(prepared, inventory_context=runtime_context)
+
+
+def _unavailable_workload_runtime() -> JsonObject:
+    return {
+        "runtime_readiness": {
+            "completeness": "unavailable",
+            "status": "unknown",
+            "ready_pods": None,
+            "total_pods": None,
+            "restarts": None,
+        },
+        "resource_counts": None,
+        "resource_counts_completeness": "unavailable",
+    }
+
+
+def _selected_instance_scope(scope: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    selected_id = _optional_text(scope.get("selected_instance_id"))
+    if selected_id is None:
+        return None
+    return next(
+        (
+            _mapping(item.get("scope"))
+            for item in scope.get("instances") or []
+            if isinstance(item, Mapping) and str(item.get("id") or "") == selected_id
+        ),
+        None,
+    )
+
+
+def _workload_scope_item(
+    row: Mapping[str, Any],
+    *,
+    selected_instance: Mapping[str, Any] | None,
+) -> JsonObject | None:
+    key = _optional_text(row.get("id"))
+    cluster_id = _optional_text(row.get("cluster_id"))
+    kind = _optional_text(row.get("kind"))
+    name = _optional_text(row.get("name"))
+    uid = _optional_text(row.get("uid"))
+    if None in {key, cluster_id, kind, name, uid} or selected_instance is None:
+        return None
+    api_group, version = _api_group_and_version(_optional_text(row.get("api_version")) or "")
+    namespace = _optional_text(row.get("namespace"))
+    scope_cluster = _optional_text(selected_instance.get("cluster_id"))
+    if scope_cluster != cluster_id:
+        return None
+    namespaces = tuple(str(value) for value in selected_instance.get("namespaces") or [])
+    if namespace is not None and namespaces and namespace not in namespaces:
+        return None
+    return {
+        "key": key,
+        "resource": {
+            "api_group": api_group,
+            "version": version,
+            "kind": kind,
+            "namespace": namespace,
+            "name": name,
+            "uid": uid,
+        },
+        "scope": {
+            "workspace_id": str(selected_instance.get("workspace_id") or ""),
+            "cluster_id": cluster_id,
+            "namespaces": [namespace] if namespace is not None else [],
+            "freshness": str(selected_instance.get("freshness") or "partial"),
+        },
+        "observed_at": _optional_text(row.get("observed_at")),
+    }
+
+
+def _api_group_and_version(api_version: str) -> tuple[str, str]:
+    group, separator, version = api_version.partition("/")
+    return (group, version) if separator else ("", group)
 
 
 def inventory_projection(

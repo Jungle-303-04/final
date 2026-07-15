@@ -8,7 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primit
 import { Separator } from "../../shared/ui/primitives/separator";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
-import type { ApplicationDetailModel } from "./applicationsContract";
+import type {
+  ApplicationDetailModel,
+  ApplicationUnavailableEvidence,
+  ApplicationWorkloadDetail,
+} from "./applicationsContract";
 import { applicationStatusTone, formatObservedTime } from "./applicationPresentation";
 import {
   ApplicationBatchRuntimeChannel,
@@ -104,6 +108,59 @@ export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetail
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export function ApplicationWorkloadOverviewPanel({
+  workload,
+}: {
+  workload: ApplicationWorkloadDetail;
+}) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  return (
+    <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <Card data-testid="application-workload-runtime">
+        <CardHeader><CardTitle>{copy.workloadRuntime}</CardTitle></CardHeader>
+        <CardContent className="grid gap-3">
+          <Fact label={copy.resource} value={`${workload.workload.resource.kind}/${workload.workload.resource.name}`} />
+          <Fact label={copy.status} value={<StatusMark label={workload.runtimeReadiness.status} tone={applicationStatusTone(workload.runtimeReadiness.status)} />} />
+          <Fact label={copy.pods} value={workloadPodRatio(workload, copy.unavailable)} />
+          <Fact label={copy.restarts} value={workload.runtimeReadiness.restarts} />
+          {workload.runtimeReadiness.completeness === "partial" ? <Badge className="w-fit" variant="outline">{copy.partial}</Badge> : null}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>{copy.resources}</CardTitle></CardHeader>
+        <CardContent className="grid gap-3">
+          {workload.resourceCounts === null ? <Unavailable /> : workload.resourceCounts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{copy.unavailable}</p>
+          ) : workload.resourceCounts.map((item) => (
+            <Fact key={item.kind} label={item.kind} value={item.count} />
+          ))}
+          {workload.resourceCountsCompleteness === "partial" ? <Badge className="w-fit" variant="outline">{copy.partial}</Badge> : null}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function ApplicationUnavailableEvidencePanel({
+  evidence,
+  title,
+}: {
+  evidence: ApplicationUnavailableEvidence;
+  title: string;
+}) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  return (
+    <Card data-testid="application-workload-unavailable-evidence">
+      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
+      <CardContent className="grid gap-2">
+        <p className="text-sm text-muted-foreground">{workloadUnavailableMessage(evidence, copy)}</p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -260,6 +317,28 @@ function podRatio(detail: ApplicationDetailModel, unavailable: string): string {
   return detail.runtimeReadiness.readyPods === null || detail.runtimeReadiness.totalPods === null
     ? unavailable
     : `${detail.runtimeReadiness.readyPods}/${detail.runtimeReadiness.totalPods}`;
+}
+
+function workloadPodRatio(workload: ApplicationWorkloadDetail, unavailable: string): string {
+  return workload.runtimeReadiness.readyPods === null || workload.runtimeReadiness.totalPods === null
+    ? unavailable
+    : `${workload.runtimeReadiness.readyPods}/${workload.runtimeReadiness.totalPods}`;
+}
+
+function workloadUnavailableMessage(
+  evidence: ApplicationUnavailableEvidence,
+  copy: ReturnType<typeof applicationsCopy>,
+): string {
+  if (evidence.reasonCodes.includes("workload_history_link_not_persisted")) {
+    return copy.workloadHistoryUnavailable;
+  }
+  if (evidence.reasonCodes.includes("cost_observation_not_integrated")) {
+    return copy.workloadCostUnavailable;
+  }
+  if (evidence.reasonCodes.includes("workload_action_capabilities_not_connected")) {
+    return copy.workloadActionsUnavailable;
+  }
+  return copy.workloadEvidenceUnavailable;
 }
 
 function sourceConflictPresentation(

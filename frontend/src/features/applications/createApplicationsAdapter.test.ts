@@ -71,6 +71,15 @@ function detailEndpointItem(overrides: Record<string, unknown> = {}) {
         },
       }],
       partial_reason_codes: [],
+      selected_scope: "application" as const,
+      workload_scope: {
+        availability: "available" as const,
+        completeness: "exact" as const,
+        application_scope_available: true,
+        selected_workload_key: null,
+        workloads: [],
+        partial_reason_codes: [],
+      },
     },
     endpoints: [],
     endpoints_completeness: "exact" as const,
@@ -111,6 +120,7 @@ function detailEndpointItem(overrides: Record<string, unknown> = {}) {
       manifest_path: "deploy/prod",
       partial_reason_codes: [],
     },
+    workload: null,
     ...overrides,
   };
 }
@@ -214,6 +224,78 @@ describe("Applications product adapter", () => {
       status: "drifted",
       differences: [{ fieldPath: "spec.replicas", oldValue: 3, newValue: 1 }],
     });
+  });
+
+  it("maps a selected workload without reusing application delivery or incident evidence", async () => {
+    const workload = {
+      key: "workload-a",
+      resource: {
+        api_group: "apps",
+        version: "v1",
+        kind: "Deployment",
+        namespace: "prod",
+        name: "checkout",
+        uid: "deployment-uid",
+      },
+      scope: {
+        workspace_id: "workspace-a",
+        cluster_id: "cluster-1",
+        namespaces: ["prod"],
+        freshness: "live" as const,
+      },
+      observed_at: "2026-07-14T09:00:00+00:00",
+    };
+    const dependencies = api({
+      getApplicationOverview: vi.fn().mockResolvedValue({
+        application: detailEndpointItem({
+          scope: {
+            ...detailEndpointItem().scope,
+            selected_scope: "workload",
+            workload_scope: {
+              availability: "available",
+              completeness: "exact",
+              application_scope_available: false,
+              selected_workload_key: "workload-a",
+              workloads: [workload],
+              partial_reason_codes: [],
+            },
+          },
+          workload: {
+            workload,
+            runtime_readiness: {
+              completeness: "exact",
+              status: "healthy",
+              ready_pods: 1,
+              total_pods: 1,
+              restarts: 0,
+            },
+            resource_counts: [{ kind: "Deployment", count: 1 }, { kind: "Pod", count: 1 }],
+            resource_counts_completeness: "exact",
+            topology: detailEndpointItem().topology,
+            history: { availability: "unavailable", reason_codes: ["workload_history_link_not_persisted"] },
+            cost: { availability: "unavailable", reason_codes: ["cost_observation_not_integrated"] },
+            actions: { availability: "unavailable", reason_codes: ["workload_action_capabilities_not_connected"] },
+          },
+        }),
+      }),
+    });
+    const adapter = createApplicationsAdapter(dependencies);
+
+    await expect(adapter.getApplication("app-healthy", undefined, "binding-prod", "workload-a"))
+      .resolves.toMatchObject({
+        scope: { selectedScope: "workload", workloadScope: { selectedWorkloadKey: "workload-a" } },
+        workload: {
+          workload: { resource: { apiGroup: "apps", name: "checkout" } },
+          runtimeReadiness: { readyPods: 1 },
+          history: { reasonCodes: ["workload_history_link_not_persisted"] },
+        },
+      });
+    expect(dependencies.getApplicationOverview).toHaveBeenCalledWith(
+      "app-healthy",
+      undefined,
+      "binding-prod",
+      "workload-a",
+    );
   });
 
   it("preserves aborts and normalizes unavailable/invalid boundaries", async () => {
