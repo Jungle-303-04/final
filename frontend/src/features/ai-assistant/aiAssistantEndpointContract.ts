@@ -18,6 +18,7 @@ export interface AiChatEndpointResponse {
   answer: string;
   evidence: Array<{ type: string; id: string; label: string; link: string }>;
   action?: AiChatActionEndpoint | null;
+  answer_kind?: "capability" | null;
 }
 
 export interface AiAlertRulePayloadEndpoint {

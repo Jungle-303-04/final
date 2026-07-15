@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import urlencode
 
+import httpx
 from fastapi import HTTPException
 
 from domains.ai.alert_actions import AlertActionDecision, propose_alert_rule_action
@@ -67,16 +68,42 @@ _CAPABILITY_QUESTION_PATTERNS = (
     re.compile(r"\b(?:what can you do|who are you|are you connected|help me)\b"),
 )
 
-_CAPABILITY_FACTS = (
-    "Opsia AI can explain current inventory and persisted log evidence that the signed-in user "
-    "is authorized to read.",
-    "Opsia AI can propose one create_alert_rule action from the current screen filters, but it "
-    "does not execute the action; a person must confirm it.",
-    "Opsia AI does not invent cluster state when authorized evidence is unavailable.",
-    "Opsia AI can link evidence back to the relevant product resource view.",
-)
+_CAPABILITY_FACTS = {
+    "en": (
+        "Opsia AI can explain current inventory and persisted log evidence that the signed-in "
+        "user is authorized to read.",
+        "Opsia AI can propose one create_alert_rule action from the current screen filters, but "
+        "it does not execute the action; a person must confirm it.",
+        "Opsia AI does not invent cluster state when authorized evidence is unavailable.",
+        "Opsia AI can link evidence back to the relevant product resource view.",
+    ),
+    "ko": (
+        "Opsia AI는 로그인한 사용자가 읽을 권한이 있는 현재 인벤토리와 저장된 로그 "
+        "근거를 설명할 수 있습니다.",
+        "현재 화면 필터를 바탕으로 알림 규칙 초안을 제안할 수 있지만 실행하지는 않으며, "
+        "실행 전 사용자의 확인이 필요합니다.",
+        "권한으로 확인 가능한 근거가 없으면 클러스터 상태를 지어내지 않습니다.",
+        "확인한 근거를 관련 제품 리소스 화면으로 연결할 수 있습니다.",
+    ),
+}
+
+_LLM_FALLBACK_NOTICE = {
+    "rate_limited": (
+        "AI 생성 응답은 provider 요청 한도(HTTP 429) 때문에 현재 사용할 수 없어, "
+        "수집된 근거를 그대로 안내합니다. "
+    ),
+    "unavailable": ("AI 생성 응답 서비스에 연결하지 못해, 수집된 근거를 그대로 안내합니다. "),
+}
 
 _CONTEXT_CHAT_LLM = build_llm_client()
+
+
+class _ContextLlmUnavailable(RuntimeError):
+    """Sanitized provider failure used only to select an evidence-bound fallback."""
+
+    def __init__(self, kind: Literal["rate_limited", "unavailable"]) -> None:
+        super().__init__(kind)
+        self.kind = kind
 
 
 def get_context_chat_llm() -> Any | None:
@@ -138,11 +165,16 @@ async def answer_from_context(
     if (
         action_decision.action is None
         and action_decision.clarification is None
-        and llm is not None
         and _is_capability_question(message)
     ):
+        answer = _capability_fallback_answer(message)
+        if llm is not None:
+            try:
+                answer = await _complete_capability_answer(llm, message=message)
+            except _ContextLlmUnavailable as exc:
+                answer = _llm_fallback_answer(answer, exc.kind)
         return AiChatResponse(
-            answer=await _complete_capability_answer(llm, message=message),
+            answer=answer,
             evidence=[],
             answer_kind="capability",
         )
@@ -166,8 +198,13 @@ async def answer_from_context(
             for item in evidence
         ]
         fallback_answer = "현재 권한으로 확인한 로그 근거입니다: " + "; ".join(lines)
-        answer = (
-            await _complete_grounded_answer(
+        answer = fallback_answer
+        if (
+            llm is not None
+            and action_decision.action is None
+            and action_decision.clarification is None
+        ):
+            answer = await _complete_grounded_answer_or_fallback(
                 llm,
                 message=message,
                 context=context,
@@ -181,12 +218,8 @@ async def answer_from_context(
                     }
                     for item in evidence
                 ],
+                fallback_answer=fallback_answer,
             )
-            if llm is not None
-            and action_decision.action is None
-            and action_decision.clarification is None
-            else fallback_answer
-        )
         return _chat_response(
             default_answer=answer[:MAX_AI_ANSWER_CHARS],
             action_decision=action_decision,
@@ -223,8 +256,9 @@ async def answer_from_context(
         for item in resources
     )
     fallback_answer = f"현재 관측된 근거 {len(resources)}건입니다: {facts}."
-    answer = (
-        await _complete_grounded_answer(
+    answer = fallback_answer
+    if llm is not None and action_decision.action is None and action_decision.clarification is None:
+        answer = await _complete_grounded_answer_or_fallback(
             llm,
             message=message,
             context=context,
@@ -242,12 +276,8 @@ async def answer_from_context(
                 }
                 for item in resources
             ],
+            fallback_answer=fallback_answer,
         )
-        if llm is not None
-        and action_decision.action is None
-        and action_decision.clarification is None
-        else fallback_answer
-    )
     return _chat_response(
         default_answer=answer,
         action_decision=action_decision,
@@ -285,13 +315,26 @@ def _is_capability_question(message: str) -> bool:
     return any(pattern.search(normalized) for pattern in _CAPABILITY_QUESTION_PATTERNS)
 
 
+def _capability_fallback_answer(message: str) -> str:
+    locale = "ko" if re.search(r"[가-힣]", message) else "en"
+    return " ".join(_CAPABILITY_FACTS[locale])
+
+
+def _llm_fallback_answer(
+    fallback_answer: str,
+    kind: Literal["rate_limited", "unavailable"],
+) -> str:
+    return f"{_LLM_FALLBACK_NOTICE[kind]}{fallback_answer}"[:MAX_AI_ANSWER_CHARS]
+
+
 async def _complete_capability_answer(llm: Any, *, message: str) -> str:
+    capability_facts = _CAPABILITY_FACTS["ko" if re.search(r"[가-힣]", message) else "en"]
     prompt = (
         "You are Opsia AI. Answer the user's capability or connection question in the same "
         "language as the user. Use only the capability contract below. Do not claim a cluster "
         "state, an action execution, or a capability not listed. A successful completion means "
         "the configured LLM response path is available. Be concise and helpful.\n\n"
-        f"Capability contract:\n{json.dumps(_CAPABILITY_FACTS, ensure_ascii=False)}\n\n"
+        f"Capability contract:\n{json.dumps(capability_facts, ensure_ascii=False)}\n\n"
         f"User question:\n{message}"
     )
     return await _complete_llm_text(llm, prompt)
@@ -318,6 +361,25 @@ async def _complete_grounded_answer(
     return await _complete_llm_text(llm, prompt)
 
 
+async def _complete_grounded_answer_or_fallback(
+    llm: Any,
+    *,
+    message: str,
+    context: AiAssistantContext,
+    evidence: list[dict[str, Any]],
+    fallback_answer: str,
+) -> str:
+    try:
+        return await _complete_grounded_answer(
+            llm,
+            message=message,
+            context=context,
+            evidence=evidence,
+        )
+    except _ContextLlmUnavailable as exc:
+        return _llm_fallback_answer(fallback_answer, exc.kind)
+
+
 async def _complete_llm_text(llm: Any, prompt: str) -> str:
     try:
         answer = str(
@@ -328,11 +390,21 @@ async def _complete_llm_text(llm: Any, prompt: str) -> str:
             )
         ).strip()
     except Exception as exc:
-        # Never turn provider/configuration failures into a misleading no-data answer.
-        raise HTTPException(status_code=503, detail="AI 응답 서비스에 연결할 수 없습니다.") from exc
+        raise _ContextLlmUnavailable(_provider_failure_kind(exc)) from exc
     if not answer:
-        raise HTTPException(status_code=503, detail="AI 응답을 생성하지 못했습니다.")
+        raise _ContextLlmUnavailable("unavailable")
     return answer[:MAX_AI_ANSWER_CHARS]
+
+
+def _provider_failure_kind(exc: Exception) -> Literal["rate_limited", "unavailable"]:
+    current: BaseException | None = exc
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        if isinstance(current, httpx.HTTPStatusError) and current.response.status_code == 429:
+            return "rate_limited"
+        current = current.__cause__ or current.__context__
+    return "unavailable"
 
 
 def suggestions_for_context(context: AiAssistantContext) -> AiSuggestionsResponse:

@@ -5,6 +5,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -76,6 +77,16 @@ class FailingContextLlm(StubContextLlm):
     async def complete(self, prompt: str, **_options: Any) -> str:
         self.prompts.append(prompt)
         raise RuntimeError("provider-secret-must-not-leak")
+
+
+class RateLimitedContextLlm(StubContextLlm):
+    async def complete(self, prompt: str, **_options: Any) -> str:
+        self.prompts.append(prompt)
+        request = httpx.Request("POST", "https://provider.invalid/v1/chat")
+        response = httpx.Response(429, request=request)
+        raise httpx.HTTPStatusError(
+            "provider-secret-must-not-leak", request=request, response=response
+        )
 
 
 class StubAiDb:
@@ -192,6 +203,18 @@ def test_context_chat_answers_capability_question_through_actual_llm_without_fak
     assert len(llm.prompts) == 1
 
 
+def test_context_chat_answers_capability_question_without_configured_llm() -> None:
+    response = TestClient(ai_app(StubAiDb(rows=[]))).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "넌 뭘 할 수 있니?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer_kind"] == "capability"
+    assert "현재 인벤토리와 저장된 로그 근거" in response.json()["answer"]
+    assert response.json()["evidence"] == []
+
+
 def test_context_chat_does_not_let_llm_invent_operational_answer_without_evidence() -> None:
     llm = StubContextLlm("근거 없이 지어낸 운영 상태")
 
@@ -205,7 +228,7 @@ def test_context_chat_does_not_let_llm_invent_operational_answer_without_evidenc
     assert llm.prompts == []
 
 
-def test_context_chat_reports_provider_outage_without_leaking_or_claiming_no_data() -> None:
+def test_context_chat_uses_observed_evidence_when_provider_is_unavailable() -> None:
     llm = FailingContextLlm()
 
     response = TestClient(ai_app(StubAiDb(), llm=llm), raise_server_exceptions=False).post(
@@ -213,8 +236,25 @@ def test_context_chat_reports_provider_outage_without_leaking_or_claiming_no_dat
         json={"context": CONTEXT, "message": "현재 파드 상태를 알려줘"},
     )
 
-    assert response.status_code == 503
-    assert response.json() == {"detail": "AI 응답 서비스에 연결할 수 없습니다."}
+    assert response.status_code == 200
+    assert "AI 생성 응답 서비스에 연결하지 못해" in response.json()["answer"]
+    assert "status Running, health healthy" in response.json()["answer"]
+    assert response.json()["evidence"]
+    assert "provider-secret" not in response.text
+
+
+def test_context_chat_distinguishes_provider_429_and_keeps_observed_evidence() -> None:
+    llm = RateLimitedContextLlm()
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm), raise_server_exceptions=False).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "현재 파드 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert "provider 요청 한도(HTTP 429)" in response.json()["answer"]
+    assert "status Running, health healthy" in response.json()["answer"]
+    assert response.json()["evidence"]
     assert "provider-secret" not in response.text
 
 
