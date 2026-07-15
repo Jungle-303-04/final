@@ -24,12 +24,13 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
         if not feature.streaming
     )
     assert {feature.delivery_status for feature in catalog.features} >= {
-        "implemented",
         "in_progress",
         "planned",
         "reference_only",
         "not_applicable",
     }
+    assert all(feature.delivery_status != "implemented" for feature in catalog.features)
+    assert all(feature.delivery_status == "not_applicable" for feature in catalog.features[:3])
     assert any(feature.desktop_contract == "desktop" for feature in catalog.features)
     assert any(feature.streaming for feature in catalog.features)
 
