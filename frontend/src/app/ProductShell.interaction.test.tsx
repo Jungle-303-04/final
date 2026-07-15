@@ -213,6 +213,7 @@ describe("ProductShell keyboard and help interaction", () => {
       "현재 언어: 한국어",
       "클러스터, 앱, 라벨, 리소스 필터",
       "클러스터, 앱, 라벨, 리소스 필터",
+      "모든 필터 지우기",
     ]);
   });
 

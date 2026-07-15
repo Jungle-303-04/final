@@ -48,7 +48,7 @@ function renderClustersPage() {
 }
 
 const clusterScopePort: ClusterScopePort = {
-  listClusterChoices: vi.fn(async () => ({ completeness: "unknown", clusters: [] })),
+  listClusterChoices: vi.fn(async () => ({ completeness: "unknown" as const, clusters: [] })),
 };
 
 const clustersPort: ClustersPort & ClusterDisconnectPort = {
