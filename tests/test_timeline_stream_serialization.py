@@ -55,6 +55,15 @@ def _snapshot(sequence: int = 4) -> TimelineStreamFrame:
             retention_seconds=86_400,
             resume="cursor",
             hidden_tab="coalesce",
+            reconnect={
+                "min_delay_ms": 500,
+                "max_delay_ms": 30_000,
+                "strategy": "full_jitter_exponential",
+            },
+            live_session={
+                "max_age_ms": 30_000,
+                "strategy": "replace_with_snapshot",
+            },
         ),
         events=[_event(sequence)] if sequence else [],
     )
@@ -82,6 +91,22 @@ def test_serialized_timeline_events_keep_their_discriminated_subject_kind() -> N
     snapshot = TimelineStreamFrame.model_validate_json(encoded.splitlines()[0])
 
     assert snapshot.events[0].subject.kind == "resource"
+
+
+def test_snapshot_serializes_the_server_owned_reconnect_budget() -> None:
+    encoded = encode_ndjson((_snapshot(), TimelineStreamFrame(kind="end", cursor=_cursor(4))))
+    snapshot = TimelineStreamFrame.model_validate_json(encoded.splitlines()[0])
+
+    assert snapshot.policy is not None
+    assert snapshot.policy.reconnect.model_dump() == {
+        "min_delay_ms": 500,
+        "max_delay_ms": 30_000,
+        "strategy": "full_jitter_exponential",
+    }
+    assert snapshot.policy.live_session.model_dump() == {
+        "max_age_ms": 30_000,
+        "strategy": "replace_with_snapshot",
+    }
 
 
 def test_live_sse_frame_keeps_opaque_cursor_without_claiming_a_terminal() -> None:
