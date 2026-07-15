@@ -8,12 +8,14 @@ TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
 LOCAL_TEST_ENV ?= .env.local-test
 FAST_TESTS ?= tests/test_dev_gate_contract.py
+REFERENCE_REVISION ?= cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc
 
 export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
+export REFERENCE_REVISION
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check reference-ledger reference-ledger-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -64,7 +66,13 @@ test: ## 린트와 테스트 실행
 manifest-check: ## Kubernetes manifest 렌더/파싱 확인
 	bash scripts/manifest-check.sh
 
-gate: ## CI용 백엔드·manifest·프론트 전체 게이트
+reference-ledger: ## 고정 원본의 해시·이식 상태 ledger 생성
+	node scripts/reference-ledger.mjs --source references/upstream --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-source-ledger.json
+
+reference-ledger-check: ## 고정 원본과 ledger의 완전성 확인
+	node scripts/reference-ledger.mjs --source references/upstream --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-source-ledger.json --check
+
+gate: reference-ledger-check ## CI용 백엔드·manifest·프론트 전체 게이트
 	bash scripts/test.sh
 	bash scripts/manifest-check.sh
 	cd frontend && npm ci --include=dev --no-audit --no-fund
