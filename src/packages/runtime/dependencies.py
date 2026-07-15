@@ -12,6 +12,7 @@ from fastapi import Request
 
 if TYPE_CHECKING:
     from packages.runtime.gateway import ApiEventGateway
+    from packages.runtime.operation_events import OperationEventBroker
     from packages.storage.database import Database
 
 
@@ -21,3 +22,7 @@ def get_db(request: Request) -> Database:
 
 def get_events(request: Request) -> ApiEventGateway:
     return request.app.state.events
+
+
+def get_operation_events(request: Request) -> OperationEventBroker:
+    return request.app.state.operation_events
