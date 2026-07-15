@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, TypeAdapter
@@ -115,6 +116,7 @@ class ResourceDelta(StrictModel):
     op: DeltaOp = "replace"
     key: str = Field(min_length=1)
     value: dict[str, Any] | None = None
+    observed_at: datetime | None = None
 
 
 class PingMessage(StrictModel):

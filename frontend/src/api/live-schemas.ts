@@ -68,6 +68,8 @@ export const resourceDeltaMessageSchema = z.strictObject({
   key: z.string().min(1),
   // Resource payloads are provider-neutral open maps at this wire boundary.
   value: openObjectSchema.nullable(),
+  // Optional during rolling upgrades; new agents stamp the real collection time.
+  observed_at: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
 export const pingMessageSchema = z.strictObject({

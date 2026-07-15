@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from conftest import ROOT, load_file
@@ -71,6 +72,24 @@ def test_delta_replace_and_remove_mutate_snapshot() -> None:
     }
     hub.publish_delta(delta(key, op="remove"))
     assert hub.snapshot_for(Subscription(workspace_id="ws-1")).state["resources"] == {}
+
+
+def test_delta_fanout_preserves_the_agent_observation_time() -> None:
+    hub = make_hub()
+    client = hub.register_browser(Subscription(workspace_id="ws-1"))
+    observed_at = datetime(2026, 7, 15, 3, tzinfo=UTC)
+
+    published = hub.publish_delta(
+        ResourceDelta(
+            op="remove",
+            key=f"{CLUSTER}/sandbox/pod/checkout",
+            value=None,
+            observed_at=observed_at,
+        )
+    )
+
+    assert published.observed_at == observed_at
+    assert client.queue.get_nowait().observed_at == observed_at
 
 
 def test_subscription_filters_cluster_and_namespace() -> None:

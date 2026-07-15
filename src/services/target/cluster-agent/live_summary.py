@@ -13,6 +13,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import httpx
@@ -143,12 +144,14 @@ class KubernetesPodSummaryCollector:
                 pods=pods,
                 actual_interval_seconds=max(actual_interval_seconds, 0.0),
             )
-        return self.summarize(pods, measured)
+        return self.summarize(pods, measured, observed_at=datetime.now(UTC))
 
     def summarize(
         self,
         pods: list[dict[str, Any]],
         pod_metrics: dict[str, dict[str, Any]] | None = None,
+        *,
+        observed_at: datetime | None = None,
     ) -> LiveSummary:
         self._next_interval_seconds = collection_interval_for_pods(len(pods))
         window_ms = int(self._next_interval_seconds * 1000)
@@ -194,7 +197,11 @@ class KubernetesPodSummaryCollector:
                     "health": pod_health(phase, ready, restarts),
                     **metrics,
                 }
-        self._pending_deltas = resource_deltas(self._last_resources, next_resources)
+        self._pending_deltas = resource_deltas(
+            self._last_resources,
+            next_resources,
+            observed_at=observed_at or datetime.now(UTC),
+        )
         self._last_resources = next_resources
         restart_delta = (
             max(0, restart_total - self._last_restart_total)
@@ -362,14 +369,19 @@ def aggregate_metrics_metadata(
 
 
 def resource_deltas(
-    before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]]
+    before: dict[str, dict[str, Any]],
+    after: dict[str, dict[str, Any]],
+    *,
+    observed_at: datetime,
 ) -> list[ResourceDelta]:
     deltas: list[ResourceDelta] = []
     for key, value in after.items():
         if before.get(key) != value:
-            deltas.append(ResourceDelta(op="replace", key=key, value=value))
+            deltas.append(
+                ResourceDelta(op="replace", key=key, value=value, observed_at=observed_at)
+            )
     for key in before.keys() - after.keys():
-        deltas.append(ResourceDelta(op="remove", key=key, value=None))
+        deltas.append(ResourceDelta(op="remove", key=key, value=None, observed_at=observed_at))
     return deltas
 
 
