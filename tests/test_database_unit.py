@@ -10,6 +10,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -2594,6 +2595,17 @@ def test_dashboard_timeline_query_omits_payload_from_select_list() -> None:
     assert "rca_timeline.last_event_id" not in select_list
     assert "rca_timeline.last_event_at" not in select_list
     assert "rca_timeline.updated_at" in select_list
+    assert "rca_timeline.incident_id IS NOT NULL" in sql
+
+
+def test_disconnect_migration_drops_old_unique_index_before_status_conversion() -> None:
+    migration = Path("alembic/versions/20260715_0260_cluster_disconnect_lifecycle.py").read_text()
+
+    drop_offset = migration.index('op.drop_index(INDEX_NAME, table_name="cluster_registrations")')
+    update_offset = migration.index("update cluster_registrations")
+    create_offset = migration.index("op.create_index(")
+
+    assert drop_offset < update_offset < create_offset
 
 
 def test_dashboard_timeline_collapses_repeated_poll_correlations() -> None:

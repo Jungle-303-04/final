@@ -162,6 +162,26 @@ def test_dashboard_worker_ignores_non_incident_detection() -> None:
     assert timeline_update_from_event(evt) is None
 
 
+def test_dashboard_worker_ignores_lifecycle_command_without_incident_id() -> None:
+    dashboard = load_service("projection/dashboard-worker")
+    db = SpyDb()
+    evt = _evt(
+        "approval.recommended",
+        {
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "workflow_run_id": "workflow-uninstall-1",
+            "action": "uninstall_cluster_agent",
+        },
+    )
+
+    outs = run_handler(dashboard.on_event, evt, db=db)
+
+    assert outs == []
+    assert db.calls == []
+    assert timeline_update_from_event(evt) is None
+
+
 def test_incident_projection_logical_key_matches_payload_key() -> None:
     payload_row = {
         "cluster_id": "cluster-1",

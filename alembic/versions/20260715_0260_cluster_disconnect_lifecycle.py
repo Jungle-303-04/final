@@ -22,6 +22,11 @@ INDEX_NAME = "ux_cluster_registrations_workspace_active_name"
 
 
 def upgrade() -> None:
+    # The previous partial unique index still treats ``disconnected`` as an
+    # active name.  Drop it before converting legacy rows; otherwise a stale
+    # disconnected registration can collide with the live registration that
+    # legitimately reused the same name.
+    op.drop_index(INDEX_NAME, table_name="cluster_registrations")
     # 기존 unregister 경로는 토큰을 폐기하면서 install_expired를 기록했다.
     # 토큰이 남은 실제 설치 만료 행과 안전하게 구분해 과거 해제 카드도 숨긴다.
     op.execute(
@@ -34,7 +39,6 @@ def upgrade() -> None:
             """
         )
     )
-    op.drop_index(INDEX_NAME, table_name="cluster_registrations")
     op.create_index(
         INDEX_NAME,
         "cluster_registrations",
