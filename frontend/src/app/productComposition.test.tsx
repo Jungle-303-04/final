@@ -18,7 +18,6 @@ const testClusterScopePort: ClusterScopePort = {
 };
 const testAiAssistantPort: AiAssistantPort = {
   ask: async () => ({ answer: "no data", evidence: [], action: null }),
-  createAlertRule: async () => { throw new Error("not used"); },
   loadSuggestions: async () => [],
   createAlertRule: async () => ({ ruleId: "rule-1" }),
 };

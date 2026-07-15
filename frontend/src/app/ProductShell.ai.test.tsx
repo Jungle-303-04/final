@@ -165,7 +165,6 @@ describe("ProductShell AI panel", () => {
 function assistantPort(overrides: Partial<AiAssistantPort> = {}): AiAssistantPort {
   return {
     ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [], action: null }),
-    createAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     loadSuggestions: vi.fn().mockResolvedValue([]),
     createAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     ...overrides,
