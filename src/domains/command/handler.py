@@ -402,7 +402,9 @@ def build_plan(
     cluster_id = command.cluster_id or COMMAND_CONFIG.default_cluster_id
     workspace_id = command.workspace_id
     return Plan(
-        command_id=f"cmd-{key[:32]}",
+        # API가 접수 UoW에서 만든 ID는 approval evidence가 나중에 보강돼도 절대
+        # 바뀌지 않는다. 과거/외부 이벤트만 기존 hash ID fallback을 유지한다.
+        command_id=command.command_id or f"cmd-{key[:32]}",
         idempotency_key=key,
         cluster_id=cluster_id,
         action=command.action or COMMAND_CONFIG.default_command_action,

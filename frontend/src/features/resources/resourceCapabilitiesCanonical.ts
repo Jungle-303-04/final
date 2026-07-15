@@ -46,15 +46,19 @@ export function toResourceCapabilities(
 }
 
 export function toResourceActionReceipt(value: {
-  accepted: boolean;
+  accepted: true;
   event_id: string;
+  audit_event_id: string;
   correlation_id: string;
-  command_id?: string | null;
+  command_id: string;
+  status: "queued" | "leased" | "running" | "completed" | "failed" | "cancelled";
 }): ResourceActionReceipt {
   return {
     accepted: value.accepted,
     eventId: value.event_id,
+    auditEventId: value.audit_event_id,
     correlationId: value.correlation_id,
-    commandId: value.command_id ?? null,
+    commandId: value.command_id,
+    status: value.status,
   };
 }

@@ -285,20 +285,26 @@ def test_non_approval_command_receipt_matches_worker_command_id() -> None:
 def test_command_receipt_requests_outbox_transactional_operation_staging() -> None:
     async def run() -> None:
         events = SpyEvents()
-        await commands(
+        response = await commands(
             CommandRequest(cluster_id="cluster-1", diff=manual_diff()),
             current_session(),
             SpyAccessDb(allowed=True),
             events,
         )
 
-        assert callable(events.accept_kwargs.get("transactional_stage"))
+        stage = events.accept_kwargs.get("transactional_stage")
+        assert callable(stage)
+        assert isinstance(events.body, CommandRequestedBody)
+        # The exact callback is executed by the event UoW with the durable event
+        # correlation.  Its plan must retain the server-issued receipt ID.
+        assert build_plan(events.body, response.correlation_id).command_id == response.command_id
 
     asyncio.run(run())
 
 
-def test_approval_command_receipt_stays_null_until_worker_resolves_evidence() -> None:
+def test_approval_command_receipt_has_server_trace_before_worker_resolves_evidence() -> None:
     async def run() -> None:
+        events = SpyEvents()
         response = await commands(
             CommandRequest(
                 cluster_id="cluster-1",
@@ -309,10 +315,17 @@ def test_approval_command_receipt_stays_null_until_worker_resolves_evidence() ->
             ),
             current_session(),
             SpyAccessDb(allowed=True),
-            SpyEvents(),
+            events,
         )
 
-        assert response.command_id is None
+        assert response.command_id.startswith("cmd-")
+        assert response.status == "queued"
+        assert response.event_id == "evt-1"
+        assert response.audit_event_id == response.event_id
+        assert response.audit_id is None
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.command_id == response.command_id
+        assert build_plan(events.body, response.correlation_id).command_id == response.command_id
 
     asyncio.run(run())
 
@@ -614,8 +627,7 @@ def test_scale_deployment_direct_execution_accepts_management_cluster_after_conf
             "api",
             DeploymentScaleRequest(
                 replicas=2,
-                direct_execution=True,
-                direct_execution_confirmed=True,
+                confirmation=True,
             ),
             current_session(),
             SpyAccessDb(allowed=True, cluster_role="management"),
@@ -639,8 +651,7 @@ def test_manual_direct_command_accepts_management_cluster_without_recorded_appro
                 action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
                 namespace="sandbox",
                 diff=manual_diff(),
-                direct_execution=True,
-                direct_execution_confirmed=True,
+                confirmation=True,
             ),
             current_session(),
             SpyAccessDb(allowed=True, cluster_role="management"),

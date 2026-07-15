@@ -28,16 +28,20 @@ describe("resource action adapter", () => {
     const executeResourceCapability = vi.fn().mockResolvedValue({
       accepted: true,
       event_id: "event-1",
+      audit_event_id: "event-1",
       correlation_id: "correlation-1",
       command_id: "command-1",
+      status: "queued",
     });
     const port = createResourceActionsAdapter({ executeResourceCapability });
 
     await expect(port.execute(CAPABILITY, { replicas: 4 })).resolves.toEqual({
       accepted: true,
       eventId: "event-1",
+      auditEventId: "event-1",
       correlationId: "correlation-1",
       commandId: "command-1",
+      status: "queued",
     });
     expect(executeResourceCapability).toHaveBeenCalledWith(CAPABILITY, { replicas: 4 }, undefined);
   });

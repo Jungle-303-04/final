@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Annotated, Any, cast
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -15,7 +16,7 @@ from domains.command.debug_queries import (
     queue_debug_query,
 )
 from domains.command.events import CommandRequestedBody
-from domains.command.handler import build_plan, command_requires_recorded_approval
+from domains.command.handler import build_plan
 from domains.command.policy import (
     DEFAULT_COMMAND_LEASE_SECONDS,
 )
@@ -53,7 +54,6 @@ from packages.contracts.gateway.requests import (
     DeploymentScaleRequest,
 )
 from packages.contracts.gateway.responses import (
-    AcceptedResponse,
     AgentCommandPollResponse,
     AgentDebugQueryResponse,
     CommandHeartbeatResponse,
@@ -62,7 +62,7 @@ from packages.contracts.gateway.responses import (
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
-from packages.contracts.parity import OperationEvent
+from packages.contracts.parity import CommandReceipt, OperationEvent
 from packages.runtime.command_wakeup import WAKEUP
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.retry import async_retry_db_conflict
@@ -95,17 +95,23 @@ router = APIRouter()
 __all__ = ["debug_query_plan", "router"]
 
 
-def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> AcceptedResponse:
-    command_id = (
-        None
-        if command_requires_recorded_approval(command)
-        else build_plan(command, accepted.event.correlation_id).command_id
-    )
-    return AcceptedResponse(
+def new_command_id() -> str:
+    """Create a server-owned command trace before the acceptance UoW starts."""
+    return f"cmd-{uuid4()}"
+
+
+def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> CommandReceipt:
+    command_id = command.command_id or build_plan(command, accepted.event.correlation_id).command_id
+    event_id = str(accepted.event.event_id)
+    return CommandReceipt(
         accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
         command_id=command_id,
+        event_id=event_id,
+        # audit worker가 비동기로 audit_log.event_id에 투영하는 immutable source ID.
+        # audit_log.id는 이 시점에 존재하지 않을 수 있어 의도적으로 노출하지 않는다.
+        audit_event_id=event_id,
+        correlation_id=accepted.event.correlation_id,
+        status=CommandStatus.QUEUED,
     )
 
 
@@ -119,9 +125,6 @@ async def accept_command_with_receipt_stage(
     staged: list[OperationEvent | None] = []
 
     def stage(conn: Any, accepted_event: Any) -> None:
-        if command_requires_recorded_approval(command):
-            staged.append(None)
-            return
         plan = build_plan(command, accepted_event.correlation_id)
         staged.append(
             stage_command_operation_event_in_transaction(
@@ -190,7 +193,7 @@ async def announce_staged_operation_event(
 async def publish_accepted_operation(
     operation_events: Any,
     command: CommandRequestedBody,
-    response: AcceptedResponse,
+    response: CommandReceipt,
 ) -> None:
     await publish_operation_event(
         operation_events,
@@ -257,11 +260,26 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
 
 
 def require_direct_execution_confirmation(payload: Any) -> None:
-    if payload.direct_execution and not payload.direct_execution_confirmed:
+    """Reject legacy mode flags unless a real one-time confirmation is present.
+
+    ``direct_execution`` is no longer a client-controlled execution grant.  The
+    server derives that mode solely from the common ``confirmation: true`` field
+    after RBAC, target, and diff validation finish in the route.
+    """
+    legacy_requested = bool(
+        getattr(payload, "direct_execution", False)
+        or getattr(payload, "direct_execution_confirmed", False)
+    )
+    if legacy_requested and getattr(payload, "confirmation", None) is not True:
         raise HTTPException(
             status_code=UNPROCESSABLE_CODE,
             detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
         )
+
+
+def direct_execution_from_confirmation(payload: Any) -> bool:
+    """The only server-side rule that enables immediate agent dispatch."""
+    return getattr(payload, "confirmation", None) is True
 
 
 def validate_control_namespace(namespace: str) -> None:
@@ -331,19 +349,15 @@ async def accept_deployment_control(
     payload: JsonObject,
     approval_ref: str | None,
     policy_decision_ref: str | None,
-    direct_execution: bool,
-    direct_execution_confirmed: bool,
+    execution_request: Any,
     operation_events: Any,
     current: Any,
     db: Any,
     events: Any,
-) -> AcceptedResponse:
+) -> CommandReceipt:
     validate_control_namespace(namespace)
-    if direct_execution and not direct_execution_confirmed:
-        raise HTTPException(
-            status_code=UNPROCESSABLE_CODE,
-            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
-        )
+    require_direct_execution_confirmation(execution_request)
+    direct_execution = direct_execution_from_confirmation(execution_request)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, cluster_id)
     require_not_management_cluster(db, workspace_id, cluster_id, direct_execution=direct_execution)
@@ -361,6 +375,7 @@ async def accept_deployment_control(
         namespace=namespace,
         reason=reason,
         diff=diff,
+        command_id=new_command_id(),
         payload=payload,
         workspace_id=workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
@@ -368,7 +383,7 @@ async def accept_deployment_control(
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
         direct_execution=direct_execution,
-        direct_execution_confirmed=direct_execution_confirmed,
+        direct_execution_confirmed=direct_execution,
     )
     accepted, receipt_event = await accept_command_with_receipt_stage(
         events,
@@ -421,24 +436,29 @@ async def lease_next_command(
     return None
 
 
-@router.post(gateway_routes.COMMANDS_PATH, response_model=AcceptedResponse)
+@router.post(
+    gateway_routes.COMMANDS_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
 async def commands(
     payload: CommandRequest,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
-) -> AcceptedResponse:
+) -> CommandReceipt:
     if payload.action in RCA_TEST_COMMAND_ACTIONS:
         raise HTTPException(
             status_code=UNPROCESSABLE_CODE,
             detail=RCA_TEST_ACTION_DEDICATED_API_REQUIRED,
         )
     require_direct_execution_confirmation(payload)
+    direct_execution = direct_execution_from_confirmation(payload)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
     require_not_management_cluster(
-        db, workspace_id, payload.cluster_id, direct_execution=payload.direct_execution
+        db, workspace_id, payload.cluster_id, direct_execution=direct_execution
     )
     command = CommandRequestedBody(
         cluster_id=payload.cluster_id,
@@ -446,13 +466,14 @@ async def commands(
         namespace=payload.namespace,
         reason=payload.reason or "manual command request",
         diff=command_diff(payload, workspace_id),
+        command_id=new_command_id(),
         workspace_id=workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
         requested_by=current.user_id,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
-        direct_execution=payload.direct_execution,
-        direct_execution_confirmed=payload.direct_execution_confirmed,
+        direct_execution=direct_execution,
+        direct_execution_confirmed=direct_execution,
     )
     accepted, receipt_event = await accept_command_with_receipt_stage(
         events,
@@ -467,7 +488,11 @@ async def commands(
     return response
 
 
-@router.post(gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH, response_model=AcceptedResponse)
+@router.post(
+    gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
 async def scale_deployment(
     cluster_id: str,
     namespace: str,
@@ -477,7 +502,7 @@ async def scale_deployment(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
-) -> AcceptedResponse:
+) -> CommandReceipt:
     command_payload = {
         "namespace": namespace,
         "name": deployment,
@@ -492,8 +517,7 @@ async def scale_deployment(
         payload=command_payload,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
-        direct_execution=payload.direct_execution,
-        direct_execution_confirmed=payload.direct_execution_confirmed,
+        execution_request=payload,
         operation_events=operation_events,
         current=current,
         db=db,
@@ -501,7 +525,11 @@ async def scale_deployment(
     )
 
 
-@router.post(gateway_routes.CLUSTER_DEPLOYMENT_RESTART_PATH, response_model=AcceptedResponse)
+@router.post(
+    gateway_routes.CLUSTER_DEPLOYMENT_RESTART_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
 async def restart_deployment(
     cluster_id: str,
     namespace: str,
@@ -511,7 +539,7 @@ async def restart_deployment(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
-) -> AcceptedResponse:
+) -> CommandReceipt:
     command_payload = {
         "namespace": namespace,
         "name": deployment,
@@ -525,8 +553,7 @@ async def restart_deployment(
         payload=command_payload,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
-        direct_execution=payload.direct_execution,
-        direct_execution_confirmed=payload.direct_execution_confirmed,
+        execution_request=payload,
         operation_events=operation_events,
         current=current,
         db=db,

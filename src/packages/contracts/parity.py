@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -67,10 +67,28 @@ class CommandRequest(StrictModel):
 
 
 class CommandReceipt(StrictModel):
-    accepted: bool
+    """접수 UoW가 보장한 명령 trace receipt.
+
+    ``event_id``/``audit_event_id``는 같은 immutable ``command.requested`` event
+    ID다. audit worker가 비동기로 이 값을 ``audit_log.event_id``에 투영하므로,
+    아직 존재하지 않을 수 있는 ``audit_log.id``를 receipt에 만들어 넣지 않는다.
+    """
+
+    accepted: Literal[True] = True
     command_id: str = Field(min_length=1)
-    audit_id: str = Field(min_length=1)
+    event_id: str = Field(min_length=1)
+    audit_event_id: str = Field(min_length=1)
+    correlation_id: str = Field(min_length=1)
     status: CommandStatus
+    # 이전 parity 소비자 입력을 읽기 위해서만 남긴다. HTTP receipt는 절대 채우지
+    # 않으며, audit_log의 자동증가 PK를 뜻하지 않는다.
+    audit_id: str | None = None
+
+    @model_validator(mode="after")
+    def audit_event_tracks_the_accepted_event(self) -> CommandReceipt:
+        if self.audit_event_id != self.event_id:
+            raise ValueError("audit_event_id must equal the immutable event_id")
+        return self
 
 
 class OperationEvent(StrictModel):

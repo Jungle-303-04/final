@@ -12,6 +12,8 @@ export interface SubmitCommandInput {
   diff?: Record<string, unknown> | null;
   approvalRef?: string | null;
   policyDecisionRef?: string | null;
+  /** One-time acknowledgement of the inspected target and computed impact. */
+  confirmation: true;
 }
 
 export interface SubmitCommandOptions {
@@ -39,6 +41,7 @@ export function submitCommand(
       diff: input.diff,
       approval_ref: input.approvalRef,
       policy_decision_ref: input.policyDecisionRef,
+      confirmation: input.confirmation,
     }),
     signal: options.signal,
   });
