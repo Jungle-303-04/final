@@ -14,11 +14,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -33,11 +36,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -52,11 +58,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -72,12 +81,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -92,12 +103,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -112,12 +125,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -132,12 +147,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -154,12 +171,14 @@
         "GET /api/contexts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -176,12 +195,14 @@
         "GET /api/auth/me"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -198,12 +219,14 @@
         "GET /api/capabilities"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -218,12 +241,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -238,12 +263,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -258,12 +285,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -279,11 +308,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -300,11 +331,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -321,11 +354,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -342,11 +377,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -363,11 +400,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -384,11 +423,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -405,11 +446,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -427,11 +470,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -449,11 +494,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -471,11 +518,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -493,11 +542,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -515,11 +566,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -537,11 +590,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -559,11 +614,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -581,11 +638,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -603,11 +662,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -625,11 +686,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -647,11 +710,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -669,11 +734,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -691,11 +758,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -715,11 +784,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -737,11 +808,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -759,11 +832,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -781,11 +856,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -802,11 +879,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -823,11 +902,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -844,11 +925,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -865,11 +948,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -886,11 +971,13 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -906,10 +993,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -926,10 +1015,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -946,10 +1037,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -966,10 +1059,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -986,10 +1081,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1006,10 +1103,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1026,10 +1125,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1046,10 +1147,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1066,10 +1169,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1086,10 +1191,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1106,10 +1213,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1126,10 +1235,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1146,10 +1257,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1166,10 +1279,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1186,10 +1301,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1206,12 +1323,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1226,12 +1345,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1246,12 +1367,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1266,12 +1389,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1286,12 +1411,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1306,12 +1433,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1326,12 +1455,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -1346,10 +1477,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1366,10 +1499,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1386,10 +1521,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1406,10 +1543,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1426,10 +1565,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1446,10 +1587,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1466,10 +1609,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1486,10 +1631,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1506,10 +1653,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1526,10 +1675,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1546,10 +1697,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1566,10 +1719,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1586,10 +1741,12 @@
       ],
       "endpoints": [],
       "streaming": false,
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
       "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -1605,12 +1762,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1624,12 +1783,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1643,12 +1804,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1662,12 +1825,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1681,12 +1846,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1700,12 +1867,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1719,12 +1888,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1738,12 +1909,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1757,12 +1930,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1776,12 +1951,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1795,12 +1972,14 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
         "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/contracts/test_reference_feature_catalog.py"
       ]
     },
     {
@@ -1819,11 +1998,13 @@
         "GET /health"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1843,11 +2024,13 @@
         "GET /diagnostics"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1867,11 +2050,13 @@
         "GET /auth/me"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1891,11 +2076,13 @@
         "GET /version-check"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1915,11 +2102,13 @@
         "GET /connection"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1939,11 +2128,13 @@
         "POST /connection/retry"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1963,11 +2154,13 @@
         "GET /cluster-info"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -1987,11 +2180,13 @@
         "GET /capabilities"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2011,11 +2206,13 @@
         "GET /namespaces"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2035,11 +2232,13 @@
         "GET /api-resources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2059,11 +2258,13 @@
         "GET /contexts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2083,11 +2284,13 @@
         "GET /sessions"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2107,11 +2310,13 @@
         "POST /contexts/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2131,11 +2336,13 @@
         "GET /cluster/namespace-scope"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2155,11 +2362,13 @@
         "POST /cluster/namespace"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2179,11 +2388,13 @@
         "GET /search"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2203,11 +2414,13 @@
         "GET /settings"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2227,11 +2440,13 @@
         "PUT /settings"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2251,11 +2466,13 @@
         "GET /github/starred"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2276,11 +2493,13 @@
         "POST /github/dismiss"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2300,11 +2519,13 @@
         "POST /desktop/open-url"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2325,11 +2546,13 @@
         "POST /desktop/open-folder"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2349,11 +2572,13 @@
         "POST /desktop/save-file"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2375,11 +2600,13 @@
         "POST /desktop/update/apply"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2399,11 +2626,13 @@
         "GET /dashboard"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2423,11 +2652,13 @@
         "GET /dashboard/crds"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2447,11 +2678,13 @@
         "GET /dashboard/helm"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2471,11 +2704,13 @@
         "GET /issues"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2495,11 +2730,13 @@
         "GET /applications"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2520,11 +2757,13 @@
         "GET /topology"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2544,11 +2783,13 @@
         "GET /changes"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2568,11 +2809,13 @@
         "GET /audit"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2592,11 +2835,13 @@
         "GET /settings/audit"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2616,11 +2861,13 @@
         "PUT /settings/audit"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2640,11 +2887,13 @@
         "GET /secrets/certificate-expiry"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -2664,12 +2913,14 @@
         "GET /resource-counts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2689,12 +2940,14 @@
         "GET /resources/{kind}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2713,12 +2966,14 @@
         "GET /resources/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2737,12 +2992,14 @@
         "GET /resources/{kind}/{ns-or-_}/{name}/cascade-preview"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2761,12 +3018,14 @@
         "GET /issues/resource/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2785,12 +3044,14 @@
         "GET /audit/resource/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2809,12 +3070,14 @@
         "GET /rbac/subject/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2833,12 +3096,14 @@
         "GET /rbac/subject/{kind}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2857,12 +3122,14 @@
         "GET /rbac/role/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2881,12 +3148,14 @@
         "GET /rbac/namespace/{namespace}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2905,12 +3174,14 @@
         "GET /rbac/whoami"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2929,12 +3200,14 @@
         "GET /resources/resourcequotas"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2953,12 +3226,14 @@
         "GET /images/metadata"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -2977,12 +3252,14 @@
         "GET /images/inspect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3001,12 +3278,14 @@
         "GET /images/file"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3025,12 +3304,14 @@
         "GET /pods/{ns}/{name}/files"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3049,12 +3330,14 @@
         "GET /pods/{ns}/{name}/files/download"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3073,12 +3356,14 @@
         "GET /capi/clusters/{ns}/{name}/kubeconfig"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3097,12 +3382,14 @@
         "POST /capi/clusters/{ns}/{name}/connect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3121,12 +3408,14 @@
         "GET /metrics/pods/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3145,12 +3434,14 @@
         "GET /metrics/nodes/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3169,12 +3460,14 @@
         "GET /metrics/pods/{ns}/{name}/history"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3193,12 +3486,14 @@
         "GET /metrics/nodes/{name}/history"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3217,12 +3512,14 @@
         "GET /metrics/top/pods"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3241,12 +3538,14 @@
         "GET /metrics/top/nodes"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3265,12 +3564,14 @@
         "GET /prometheus/status"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3289,12 +3590,14 @@
         "POST /prometheus/connect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3319,12 +3622,14 @@
         "GET /prometheus/resources/{kind}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3343,12 +3648,14 @@
         "GET /prometheus/query"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3367,12 +3674,14 @@
         "GET /prometheus/pvc/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3391,12 +3700,14 @@
         "GET /prometheus/rightsizing/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3415,12 +3726,14 @@
         "GET /pods/{ns}/{name}/logs"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3442,12 +3755,14 @@
         "SSE /pods/{ns}/{name}/logs/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3471,12 +3786,14 @@
         "SSE /workloads/{kind}/{ns}/{name}/logs/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3495,12 +3812,14 @@
         "WS /pods/{ns}/{name}/exec"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3519,12 +3838,14 @@
         "WS /local-terminal"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3543,12 +3864,14 @@
         "GET /portforwards"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3567,12 +3890,14 @@
         "GET /portforwards/available/{type}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3592,12 +3917,14 @@
         "POST /portforwards"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3616,12 +3943,14 @@
         "DELETE /portforwards/{id}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
       ]
     },
     {
@@ -3641,12 +3970,14 @@
         "POST /resources/apply"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3665,12 +3996,14 @@
         "PUT /resources/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3689,12 +4022,14 @@
         "DELETE /resources/{kind}/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3713,12 +4048,14 @@
         "POST /workloads/{kind}/{ns}/{name}/restart"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3737,12 +4074,14 @@
         "POST /workloads/{kind}/{ns}/{name}/scale"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3761,12 +4100,14 @@
         "GET /workloads/{kind}/{ns}/{name}/revisions"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3785,12 +4126,14 @@
         "POST /workloads/{kind}/{ns}/{name}/rollback"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3809,12 +4152,14 @@
         "POST /cronjobs/{ns}/{name}/trigger"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3834,12 +4179,14 @@
         "POST /cronjobs/{ns}/{name}/resume"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3859,12 +4206,14 @@
         "POST /nodes/{name}/uncordon"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3883,12 +4232,14 @@
         "POST /nodes/{name}/drain"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3907,12 +4258,14 @@
         "POST /pods/{ns}/{name}/debug"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3932,12 +4285,14 @@
         "DELETE /nodes/{name}/debug"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3956,12 +4311,14 @@
         "POST /curl/service"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ]
     },
     {
@@ -3980,10 +4337,12 @@
         "GET /traffic/sources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4004,10 +4363,12 @@
         "POST /traffic/source"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4028,10 +4389,12 @@
         "POST /traffic/connect"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4053,10 +4416,12 @@
         "GET /traffic/flows"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4077,10 +4442,12 @@
         "GET /network-policies/evaluate"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4101,10 +4468,12 @@
         "GET /helm/releases"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4125,10 +4494,12 @@
         "GET /helm/releases/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4149,10 +4520,12 @@
         "GET /helm/releases/{ns}/{name}/manifest"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4173,10 +4546,12 @@
         "GET /helm/releases/{ns}/{name}/values"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4198,10 +4573,12 @@
         "GET /helm/releases/{ns}/{name}/values/diff"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4224,10 +4601,12 @@
         "GET /helm/releases/{ns}/{name}/resources/diff"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4248,10 +4627,12 @@
         "GET /helm/releases/{ns}/{name}/upgrade-info"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4272,10 +4653,12 @@
         "GET /helm/releases/{ns}/{name}/versions"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4296,10 +4679,12 @@
         "GET /helm/upgrade-check"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4320,10 +4705,12 @@
         "GET /helm/repositories"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4344,10 +4731,12 @@
         "POST /helm/repositories/{name}/update"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4368,10 +4757,12 @@
         "GET /helm/oci-sources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4393,10 +4784,12 @@
         "DELETE /helm/oci-sources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4417,10 +4810,12 @@
         "GET /helm/charts"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4442,10 +4837,12 @@
         "GET /helm/charts/{repo}/{chart}/{version}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4466,10 +4863,12 @@
         "GET /helm/artifacthub/search"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4491,10 +4890,12 @@
         "GET /helm/artifacthub/charts/{repo}/{chart}/{version}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4515,10 +4916,12 @@
         "POST /helm/releases/install-stream"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4539,10 +4942,12 @@
         "POST /helm/releases/{ns}/{name}/upgrade-stream"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4563,10 +4968,12 @@
         "POST /helm/releases/{ns}/{name}/rollback-stream"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4587,10 +4994,12 @@
         "POST /helm/releases/{ns}/{name}/values/preview"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4611,10 +5020,12 @@
         "PUT /helm/releases/{ns}/{name}/values"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4635,10 +5046,12 @@
         "DELETE /helm/releases/{ns}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4661,11 +5074,13 @@
         "GET /resources/{kind}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4687,11 +5102,13 @@
         "GET /gitops/tree/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4711,11 +5128,13 @@
         "GET /gitops/insights/{kind}/{ns-or-_}/{name}"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4735,11 +5154,13 @@
         "POST /gitops/{kind}/{ns}/{name}/reconcile"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4759,11 +5180,13 @@
         "POST /gitops/{kind}/{ns}/{name}/sync-with-source"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4784,11 +5207,13 @@
         "POST /gitops/{kind}/{ns}/{name}/resume"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4808,11 +5233,13 @@
         "POST /gitops/applications/{ns}/{name}/sync"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4832,11 +5259,13 @@
         "POST /gitops/applications/{ns}/{name}/refresh"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4856,11 +5285,13 @@
         "POST /gitops/applications/{ns}/{name}/rollback"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4880,11 +5311,13 @@
         "POST /gitops/applications/{ns}/{name}/terminate"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4905,11 +5338,13 @@
         "POST /gitops/applications/{ns}/{name}/resume"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/test_feature_contract_router.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -4929,10 +5364,12 @@
         "GET /opencost/summary"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4953,10 +5390,12 @@
         "GET /opencost/workloads"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -4979,10 +5418,12 @@
         "GET /opencost/trend"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5003,10 +5444,12 @@
         "GET /opencost/nodes"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5027,10 +5470,12 @@
         "GET /config"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5051,10 +5496,12 @@
         "PUT /config"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5075,10 +5522,12 @@
         "PUT /integrations/prometheus"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5099,12 +5548,14 @@
         "SSE /events/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
       ]
     },
     {
@@ -5123,11 +5574,13 @@
         "GET /metrics/top/resources"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5145,11 +5598,13 @@
         "GET /argo/destinations"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5166,11 +5621,13 @@
         "GET /traffic/flows/stream"
       ],
       "streaming": true,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5188,11 +5645,13 @@
         "GET /traffic/connection"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5209,11 +5668,13 @@
         "GET /changes/{kind}/{ns}/{name}/children"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5231,11 +5692,13 @@
         "GET /prometheus/cluster"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5253,11 +5716,13 @@
         "GET /workloads/{kind}/{ns}/{name}/logs"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5276,11 +5741,13 @@
         "POST /helm/releases/{ns}/{name}/upgrade"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5298,11 +5765,13 @@
         "GET /debug/**"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5319,11 +5788,13 @@
         "POST /agent/self-upgrade"
       ],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
-        "tests/contracts/test_reference_parity.py",
+        "tests/contracts/test_reference_feature_catalog.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
     },
@@ -5340,10 +5811,12 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5361,10 +5834,12 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5382,10 +5857,12 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5403,10 +5880,12 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5424,10 +5903,12 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]
@@ -5445,10 +5926,12 @@
       ],
       "endpoints": [],
       "streaming": false,
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
       "verification": [
-        "scripts/reference-feature-ledger.test.mjs",
         "tests/contracts/test_reference_parity.py",
         "frontend/src/shared/parity/referenceParity.test.ts"
       ]

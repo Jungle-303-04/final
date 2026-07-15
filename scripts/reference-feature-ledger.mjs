@@ -22,14 +22,20 @@ const DEFAULT_CONTRACTS_OUTPUT = path.join(
   "contracts",
   "reference_feature_catalog.json",
 );
+const DEFAULT_PORT_MAP = path.join(
+  REPOSITORY_ROOT,
+  "docs",
+  "migration",
+  "reference-feature-port-map.json",
+);
 const DEFAULT_REVISION = "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc";
-const BACKEND_CONTRACT = "packages.contracts.parity";
-const FRONTEND_CONTRACT = "frontend/src/shared/parity/referenceParity.ts";
-const VERIFICATION = [
-  "scripts/reference-feature-ledger.test.mjs",
-  "tests/contracts/test_reference_parity.py",
-  "frontend/src/shared/parity/referenceParity.test.ts",
-];
+const DELIVERY_STATUSES = new Set([
+  "implemented",
+  "in_progress",
+  "planned",
+  "reference_only",
+  "not_applicable",
+]);
 
 function tableCells(line) {
   return line
@@ -55,7 +61,28 @@ function isStreamingEndpoint(endpoint) {
   return /^(SSE|WS)\s/.test(endpoint) || /\/stream(?:[/?}]|$)/.test(endpoint);
 }
 
-export function parseReferenceInventory(markdown, sourceRevision) {
+function sectionPortMap(portMap, section) {
+  if (!portMap || typeof portMap !== "object" || portMap.schemaVersion !== 1) {
+    throw new Error("이식 경계 맵의 schemaVersion은 1이어야 합니다");
+  }
+  const port = portMap.sections?.[section];
+  if (!port) throw new Error(`이식 경계가 없습니다: ${section}`);
+  if (!port.area || !port.deliveryStatus || !port.backendContract || !port.frontendContract) {
+    throw new Error(`이식 경계가 불완전합니다: ${section}`);
+  }
+  if (!DELIVERY_STATUSES.has(port.deliveryStatus)) {
+    throw new Error(`알 수 없는 이식 상태입니다: ${section} (${port.deliveryStatus})`);
+  }
+  if (port.desktopContract !== null && typeof port.desktopContract !== "string") {
+    throw new Error(`desktopContract는 문자열 또는 null이어야 합니다: ${section}`);
+  }
+  if (!Array.isArray(port.verification) || port.verification.length === 0) {
+    throw new Error(`검증 대상이 없습니다: ${section}`);
+  }
+  return port;
+}
+
+export function parseReferenceInventory(markdown, sourceRevision, portMap) {
   if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
     throw new Error("sourceRevision must be a 40-character lowercase hexadecimal revision");
   }
@@ -72,6 +99,7 @@ export function parseReferenceInventory(markdown, sourceRevision) {
     const cells = tableCells(lines[index]);
     if (isTableSeparator(cells) || isTableSeparator(tableCells(lines[index + 1] ?? ""))) continue;
     const endpoints = endpointsFor(cells);
+    const port = sectionPortMap(portMap, section);
     features.push({
       id: `reference-feature-${String(features.length + 1).padStart(3, "0")}`,
       contractId: `reference.feature.${String(features.length + 1).padStart(3, "0")}`,
@@ -80,9 +108,12 @@ export function parseReferenceInventory(markdown, sourceRevision) {
       cells,
       endpoints,
       streaming: endpoints.some(isStreamingEndpoint),
-      backendContract: BACKEND_CONTRACT,
-      frontendContract: FRONTEND_CONTRACT,
-      verification: VERIFICATION,
+      area: port.area,
+      deliveryStatus: port.deliveryStatus,
+      backendContract: port.backendContract,
+      frontendContract: port.frontendContract,
+      desktopContract: port.desktopContract,
+      verification: port.verification,
     });
   }
   const ledger = {
@@ -121,8 +152,15 @@ export function validateFeatureLedger(ledger) {
     }
     if (!Array.isArray(feature.endpoints)) errors.push(`${id}: endpoints must be an array`);
     if (typeof feature.streaming !== "boolean") errors.push(`${id}: streaming must be boolean`);
+    if (!feature.area) errors.push(`${id}: area is required`);
+    if (!DELIVERY_STATUSES.has(feature.deliveryStatus)) {
+      errors.push(`${id}: deliveryStatus must be a supported value`);
+    }
     if (!feature.backendContract) errors.push(`${id}: backendContract is required`);
     if (!feature.frontendContract) errors.push(`${id}: frontendContract is required`);
+    if (feature.desktopContract !== null && typeof feature.desktopContract !== "string") {
+      errors.push(`${id}: desktopContract must be a string or null`);
+    }
     if (!Array.isArray(feature.verification) || feature.verification.length === 0) {
       errors.push(`${id}: at least one verification target is required`);
     }
@@ -137,6 +175,7 @@ function parseArguments(argv) {
     source: DEFAULT_SOURCE,
     output: DEFAULT_OUTPUT,
     contractsOutput: DEFAULT_CONTRACTS_OUTPUT,
+    portMap: DEFAULT_PORT_MAP,
     sourceRevision: DEFAULT_REVISION,
     check: false,
   };
@@ -147,7 +186,7 @@ function parseArguments(argv) {
       continue;
     }
     if (
-      !["--source", "--output", "--contracts-output", "--revision"].includes(flag)
+      !["--source", "--output", "--contracts-output", "--port-map", "--revision"].includes(flag)
       || !argv[index + 1]
     ) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`);
@@ -155,6 +194,7 @@ function parseArguments(argv) {
     const value = argv[index + 1];
     if (flag === "--revision") values.sourceRevision = value;
     else if (flag === "--contracts-output") values.contractsOutput = path.resolve(value);
+    else if (flag === "--port-map") values.portMap = path.resolve(value);
     else values[flag.slice(2)] = path.resolve(value);
     index += 1;
   }
@@ -167,14 +207,30 @@ function contractCatalog(ledger) {
     sourceRevision: ledger.sourceRevision,
     featureCount: ledger.featureCount,
     features: ledger.features.map(
-      ({ contractId, id, section, endpoints, streaming, backendContract, frontendContract }) => ({
-      contractId,
-      id,
-      section,
-      endpoints,
-      streaming,
-      backendContract,
-      frontendContract,
+      ({
+        contractId,
+        id,
+        section,
+        endpoints,
+        streaming,
+        area,
+        deliveryStatus,
+        backendContract,
+        frontendContract,
+        desktopContract,
+        verification,
+      }) => ({
+        contractId,
+        id,
+        section,
+        endpoints,
+        streaming,
+        area,
+        deliveryStatus,
+        backendContract,
+        frontendContract,
+        desktopContract,
+        verification,
       }),
     ),
   };
@@ -184,11 +240,16 @@ export async function writeFeatureLedger({
   source,
   output,
   contractsOutput = DEFAULT_CONTRACTS_OUTPUT,
+  portMap = DEFAULT_PORT_MAP,
   sourceRevision,
   check = false,
 }) {
   const markdown = await readFile(source, "utf8");
-  const ledger = parseReferenceInventory(markdown, sourceRevision);
+  const loadedPortMap =
+    typeof portMap === "string"
+      ? JSON.parse(await readFile(portMap, "utf8"))
+      : portMap;
+  const ledger = parseReferenceInventory(markdown, sourceRevision, loadedPortMap);
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`;
   const serializedContracts = `${JSON.stringify(contractCatalog(ledger), null, 2)}\n`;
   if (check) {

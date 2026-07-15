@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "sections": {
+    "0. 목적과 사용 금지선": {
+      "area": "migration-governance",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "1. 조사 기준선": {
+      "area": "upstream-evidence",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
+    },
+    "2.1 레이아웃": {
+      "area": "global-shell",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "3. Route 전수표": {
+      "area": "application-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "4.1 Home": {
+      "area": "dashboard",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages/home",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "5. Keyboard 전수표": {
+      "area": "keyboard-navigation",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "6.1 SSE": {
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
+    },
+    "6.2 주요 REST 갱신 주기": {
+      "area": "freshness-policy",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/shared/api",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7. API 전수표": {
+      "area": "api-index",
+      "deliveryStatus": "reference_only",
+      "backendContract": "packages.contracts.reference_feature_catalog",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "scripts/reference-feature-ledger.test.mjs",
+        "tests/contracts/test_reference_feature_catalog.py"
+      ]
+    },
+    "7.2 Bootstrap·전역 셸·desktop": {
+      "area": "bootstrap-shell-desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/app",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7.3 Home·Issues·Applications·Topology·Timeline": {
+      "area": "cluster-insights",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.dashboard",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7.4 Resource browser·detail·RBAC·compare": {
+      "area": "resource-inventory",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.inventory",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
+    },
+    "7.5 Metrics·logs·dock": {
+      "area": "observability-sessions",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.log_stream",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/log-stream.test.ts"
+      ]
+    },
+    "7.6 Resource·workload mutation": {
+      "area": "resource-commands",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.command",
+      "frontendContract": "frontend/src/features/resources",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_command_router.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+      ]
+    },
+    "7.7 Live Traffic": {
+      "area": "traffic-analysis",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.traffic",
+      "frontendContract": "frontend/src/pages/traffic",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7.8 Helm": {
+      "area": "helm-release-management",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.helm",
+      "frontendContract": "frontend/src/pages/helm",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7.9 GitOps": {
+      "area": "gitops-workspace",
+      "deliveryStatus": "in_progress",
+      "backendContract": "domains.gitops",
+      "frontendContract": "frontend/src/pages/gitops",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_feature_contract_router.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7.10 Cost·Settings·기타 overlay": {
+      "area": "cost-settings",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.catalog",
+      "frontendContract": "frontend/src/pages",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "7.11 실시간 event 계약": {
+      "area": "realtime-events",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.runtime.operation_events",
+      "frontendContract": "frontend/src/shared/streaming",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/test_operation_event_hub.py",
+        "frontend/src/api/operation-events.test.ts"
+      ]
+    },
+    "7.12 server 등록 경로 중 standalone browser 비소비": {
+      "area": "non-product-server-surface",
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.gateway",
+      "frontendContract": "frontend/src/shared/parity/referenceParity.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_reference_feature_catalog.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    },
+    "9. RCA 후속 삽입 후보": {
+      "area": "rca-extension",
+      "deliveryStatus": "planned",
+      "backendContract": "domains.rca",
+      "frontendContract": "frontend/src/features/rca",
+      "desktopContract": "desktop",
+      "verification": [
+        "tests/contracts/test_reference_parity.py",
+        "frontend/src/shared/parity/referenceParity.test.ts"
+      ]
+    }
+  }
+}
