@@ -111,7 +111,6 @@ export function ClusterConnectDialog({
   useEffect(() => {
     if (!open || step !== 2 || phase !== "waiting") return;
     const startedAt = Date.now();
-    setElapsedSeconds(0);
     const interval = window.setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
     }, 1_000);
@@ -139,6 +138,7 @@ export function ClusterConnectDialog({
     if (!name.trim() || phase === "submitting") return;
     const controller = new AbortController();
     connectAbort.current = controller;
+    setElapsedSeconds(0);
     setPhase("submitting");
     try {
       const nextReceipt = await port.connect({ name: name.trim(), provider }, controller.signal);

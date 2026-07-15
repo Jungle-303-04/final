@@ -1,6 +1,5 @@
 import { ApiError, apiRequest, type ApiPath } from "./client";
 import {
-  getCommandStatus,
   pollCommand,
   type MetricCommandSummary,
 } from "./metrics";
@@ -113,5 +112,3 @@ function commandSummary(command: CommandStatus): MetricCommandSummary {
 function invalidTelemetryPayload(message: string, cause?: unknown): ApiError {
   return new ApiError("invalid-payload", message, { cause });
 }
-
-export { getCommandStatus };
