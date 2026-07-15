@@ -32,6 +32,7 @@ from domains.gitops.repository_discovery_router import router as repository_disc
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.gitops_filter.router import router as gitops_filter_router
+from domains.helm.release_router import router as helm_release_router
 from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -333,6 +334,9 @@ class ApiGateway:
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
         app.include_router(gitops_detail_router)  # browser GitOps detail (session + RBAC)
+        app.include_router(
+            helm_release_router
+        )  # browser Helm storage metadata (session + inventory RBAC)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
         app.include_router(

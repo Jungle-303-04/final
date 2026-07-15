@@ -1,0 +1,147 @@
+from datetime import UTC, datetime
+
+from domains.helm.release_projection import helm_release_detail, helm_release_list
+
+
+def _row(
+    *,
+    cluster_id: str = "cluster-a",
+    namespace: str = "storefront",
+    release: str = "storefront",
+    revision: str = "3",
+    status: str = "deployed",
+    observed_at: datetime | None = None,
+) -> dict[str, object]:
+    return {
+        "workspace_id": "workspace-a",
+        "cluster_id": cluster_id,
+        "inventory_key": f"inventory-{cluster_id}-{namespace}-{release}-{revision}",
+        "api_version": "v1",
+        "kind": "Secret",
+        "namespace": namespace,
+        "name": f"sh.helm.release.v1.{release}.v{revision}",
+        "uid": f"uid-{revision}",
+        "labels": {
+            "owner": "helm",
+            "name": release,
+            "version": revision,
+            "status": status,
+        },
+        "observed_at": observed_at or datetime(2026, 7, 16, 9, 0, tzinfo=UTC),
+        "raw": {"data": {"release": "must-not-leak"}},
+    }
+
+
+def _contexts(*cluster_ids: str) -> dict[str, dict[str, object]]:
+    return {
+        cluster_id: {
+            "snapshot_revision": 4,
+            "observed_at": "2026-07-16T09:00:00+00:00",
+            "labels_complete": True,
+            "resources_complete": True,
+            "partial_reason_codes": [],
+        }
+        for cluster_id in cluster_ids
+    }
+
+
+def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revision() -> None:
+    older = _row(revision="2", observed_at=datetime(2026, 7, 16, 8, 0, tzinfo=UTC))
+    latest = _row(revision="3")
+    ignored = _row(release="ignored")
+    ignored["labels"] = {"owner": "not-helm", "name": "ignored"}
+
+    body = helm_release_list(
+        [older, latest, ignored],
+        contexts=_contexts("cluster-a"),
+        selected_cluster_ids=("cluster-a",),
+    ).model_dump(mode="json")
+
+    assert body["coverage"] == {
+        "availability": "available",
+        "observed_at": "2026-07-16T09:00:00+00:00",
+        "reason_codes": [],
+    }
+    assert body["releases"] == [
+        {
+            "scope": {
+                "workspace_id": "workspace-a",
+                "cluster_id": "cluster-a",
+                "namespaces": ["storefront"],
+                "freshness": "live",
+            },
+            "name": "storefront",
+            "storage_namespace": "storefront",
+            "storage": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Secret",
+                "namespace": "storefront",
+                "name": "sh.helm.release.v1.storefront.v3",
+                "uid": "uid-3",
+            },
+            "chart": None,
+            "app_version": None,
+            "status": "deployed",
+            "revision": 3,
+            "observed_at": "2026-07-16T09:00:00+00:00",
+            "resource_health": {
+                "availability": "unavailable",
+                "health": None,
+                "reason_code": "owned_resources_not_correlated",
+            },
+        }
+    ]
+    assert "must-not-leak" not in str(body)
+
+
+def test_incomplete_label_collection_is_partial_so_empty_result_is_not_misleading() -> None:
+    contexts = _contexts("cluster-a")
+    contexts["cluster-a"]["labels_complete"] = False
+    contexts["cluster-a"]["partial_reason_codes"] = ["source_labels_truncated"]
+
+    coverage = helm_release_list(
+        [],
+        contexts=contexts,
+        selected_cluster_ids=("cluster-a",),
+    ).coverage.model_dump(mode="json")
+
+    assert coverage == {
+        "availability": "partial",
+        "observed_at": "2026-07-16T09:00:00+00:00",
+        "reason_codes": ["helm_storage_labels_incomplete", "source_labels_truncated"],
+    }
+
+
+def test_detail_exposes_observed_history_and_explicitly_unavailable_integrations() -> None:
+    response = helm_release_detail(
+        [_row(revision="2"), _row(revision="3")],
+        contexts=_contexts("cluster-a"),
+        selected_cluster_id="cluster-a",
+        namespace="storefront",
+        release_name="storefront",
+    )
+
+    assert response is not None
+    detail = response.model_dump(mode="json")["detail"]
+    assert [entry["revision"] for entry in detail["history"]] == [3, 2]
+    assert detail["manifest"] == {
+        "availability": "unavailable",
+        "reason_code": "helm_manifest_provider_not_integrated",
+    }
+    assert detail["values"]["reason_code"] == "helm_values_provider_not_integrated"
+    assert detail["owned_resources"]["reason_code"] == "owned_resources_not_correlated"
+    assert detail["commands"]["reason_code"] == "agent_helm_executor_not_integrated"
+
+
+def test_detail_returns_none_for_another_cluster_or_namespace() -> None:
+    assert (
+        helm_release_detail(
+            [_row()],
+            contexts=_contexts("cluster-a"),
+            selected_cluster_id="cluster-b",
+            namespace="storefront",
+            release_name="storefront",
+        )
+        is None
+    )

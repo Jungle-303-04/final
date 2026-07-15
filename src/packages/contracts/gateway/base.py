@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from packages.contracts.modeling import StrictModel
 
-
-class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+__all__ = ["StrictModel"]

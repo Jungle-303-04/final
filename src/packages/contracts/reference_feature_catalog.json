@@ -5152,11 +5152,11 @@
     },
     {
       "contractId": "reference.feature.183",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-list:scope-rbac:v1",
       "legacyContractIds": [
         "reference.feature.183"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-183",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5164,28 +5164,40 @@
       ],
       "streaming": false,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": "desktop",
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "tests/test_helm_release_projection.py",
+        "frontend/src/api/helm-releases.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/helm/release_router.py#get_helm_releases",
+          "consumer": "src/domains/helm/release_projection.py#helm_release_list",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmPage",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.184",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
       "legacyContractIds": [
         "reference.feature.184"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-184",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5193,17 +5205,29 @@
       ],
       "streaming": false,
       "area": "helm-release-management",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": "desktop",
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "tests/test_helm_release_projection.py",
+        "frontend/src/api/helm-releases.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/helm/release_router.py#get_helm_release",
+          "consumer": "src/domains/helm/release_projection.py#helm_release_detail",
+          "test": "tests/test_helm_release_projection.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmReleaseDetail",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
