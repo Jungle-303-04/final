@@ -10,6 +10,7 @@ import {
   createOperationStatusStore,
   OperationStatusStoreProvider,
 } from "./OperationStatusStore";
+import { OperationStatusFeedback } from "./OperationStatusFeedback";
 
 afterEach(cleanup);
 
@@ -29,7 +30,17 @@ describe("operation status center", () => {
     const store = createOperationStatusStore(port);
     store.start("command-1");
 
-    render(
+    const view = render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <OperationStatusStoreProvider store={store}>
+          <OperationStatusFeedback commandId="command-1" correlationId="correlation-1" />
+          <BottomDock onAskAi={() => undefined} />
+        </OperationStatusStoreProvider>
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(store.getSnapshot("command-1").status).toBe("completed"));
+    view.rerender(
       <I18nProvider navigatorLanguage="ko-KR" storage={null}>
         <OperationStatusStoreProvider store={store}>
           <BottomDock onAskAi={() => undefined} />
@@ -37,7 +48,6 @@ describe("operation status center", () => {
       </I18nProvider>,
     );
 
-    await waitFor(() => expect(store.getSnapshot("command-1").status).toBe("completed"));
     expect(screen.getByRole("region", { name: "로그 독" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "작업 센터" })).toBeTruthy();
     expect(screen.getByText("command-1")).toBeTruthy();

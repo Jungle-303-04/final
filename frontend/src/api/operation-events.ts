@@ -39,7 +39,15 @@ export async function* subscribeCommandOperationEvents(
   while (!signal?.aborted) {
     onLifecycle?.({ state: "connecting" });
     try {
-      const result = yield* consume(path, cursor, signal, () => onLifecycle?.({ state: "connected" }));
+      const result = yield* consume(
+        path,
+        cursor,
+        signal,
+        () => onLifecycle?.({ state: "connected" }),
+        (sequence) => {
+          cursor = sequence;
+        },
+      );
       cursor = result.cursor;
       attempt = result.progressed ? 0 : attempt + 1;
       if (result.completed || signal?.aborted) {
@@ -71,6 +79,7 @@ async function* consume(
   startingCursor: number,
   signal?: AbortSignal,
   onConnected?: () => void,
+  onCursor?: (sequence: number) => void,
 ): AsyncGenerator<CommandOperationEventEndpoint, { completed: boolean; cursor: number; progressed: boolean }> {
   const response = await apiStreamResponse(
     path,
@@ -106,6 +115,7 @@ async function* consume(
           throw new ApiError("invalid-payload", "Operation event sequence was not contiguous.");
         }
         cursor = event.sequence;
+        onCursor?.(cursor);
         progressed = true;
         yield event;
         if (event.kind === "completed" || event.kind === "failed") {
@@ -144,7 +154,7 @@ function pathCommandId(path: ApiPath): string {
 }
 
 function isTransientStreamError(error: unknown): boolean {
-  if (!(error instanceof ApiError)) return false;
+  if (!(error instanceof ApiError)) return true;
   return ![
     "unauthorized",
     "forbidden",
