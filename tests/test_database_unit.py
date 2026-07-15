@@ -2509,16 +2509,35 @@ def test_completed_command_stages_terminal_operation_event_in_the_same_transacti
     recorded: list[Any] = []
 
     class StubResult:
+        def __init__(self, index: int) -> None:
+            self.index = index
+
         def mappings(self) -> StubResult:
             return self
 
         def first(self) -> dict[str, object]:
             return {"correlation_id": "corr-1"}
 
+        def one(self) -> dict[str, object]:
+            return {
+                "command_id": "cmd-1",
+                "sequence": 1,
+                "kind": "failed",
+                "payload": {"cluster_id": "cluster-1", "status": "failed"},
+                "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+            }
+
+        def scalar_one_or_none(self) -> int:
+            return 1
+
     class StubConnection:
+        def __init__(self) -> None:
+            self.index = 0
+
         async def execute(self, statement: Any) -> StubResult:
             recorded.append(statement)
-            return StubResult()
+            self.index += 1
+            return StubResult(self.index)
 
     @asynccontextmanager
     async def transaction():
