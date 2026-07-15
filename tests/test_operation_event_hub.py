@@ -185,7 +185,9 @@ def test_redis_broker_starts_in_db_backed_degraded_mode_when_redis_is_unavailabl
 
     class UnavailableRedis:
         async def ping(self) -> None:
-            raise ConnectionError("redis unavailable")
+            from redis.exceptions import ConnectionError as RedisConnectionError
+
+            raise RedisConnectionError("redis unavailable")
 
         async def aclose(self) -> None:
             return None
