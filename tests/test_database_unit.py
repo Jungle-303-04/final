@@ -2596,6 +2596,45 @@ def test_dashboard_timeline_query_omits_payload_from_select_list() -> None:
     assert "rca_timeline.updated_at" in select_list
 
 
+def test_dashboard_timeline_collapses_repeated_poll_correlations() -> None:
+    now = datetime(2026, 7, 15, 5, 0, tzinfo=UTC)
+    base = {
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "incident_namespace": "target",
+        "incident_resource_kind": "Pod",
+        "incident_resource_name": "collector-1",
+        "incident_symptom": "FailedScheduling",
+        "incident_logical_key": "cluster-1|target|Pod|collector-1|FailedScheduling",
+        "evidence_ref": None,
+        "current_subject": "incident.detected",
+        "status": "incident_detected",
+        "root_cause": "node_affinity_or_taint_mismatch",
+        "confidence": 1.0,
+        "supporting_evidence": [],
+        "missing_evidence": [],
+        "action_route": None,
+        "command_id": None,
+        "pr_url": None,
+        "error_reason": None,
+        "severity": "medium",
+        "environment": None,
+        "application_ids": None,
+        "labels": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    rows = [
+        {**base, "id": 2, "correlation_id": "corr-new", "incident_id": "incident-new"},
+        {**base, "id": 1, "correlation_id": "corr-old", "incident_id": "incident-old"},
+    ]
+    repository = _repository_with_recorded_sql(DashboardRepository, [], rows=rows)
+
+    items = repository.list_rca_timeline("workspace-1", allowed_cluster_ids=None, limit=10)
+
+    assert [item["correlation_id"] for item in items] == ["corr-new"]
+
+
 def test_rca_backlog_resolve_updates_open_missing_rule_item() -> None:
     recorded: list[Any] = []
     repository = _repository_with_recorded_sql(RcaRepository, recorded, rows=[("backlog-1",)])

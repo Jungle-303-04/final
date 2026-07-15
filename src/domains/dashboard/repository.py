@@ -411,17 +411,33 @@ class DashboardRepository(DatabaseConnection):
     ) -> list[JsonObject]:
         if allowed_cluster_ids == set():
             return []
+        bounded_limit = max(1, min(limit, 100))
+        # A polling evidence source can produce several correlations for the same
+        # still-active symptom. Fetch enough rows to collapse those correlations
+        # without starving other incidents from the operator list.
+        scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
         statement: Select[Any] = (
             select(*_rca_timeline_response_columns())
             .where(RcaTimeline.workspace_id == workspace_id)
             .order_by(RcaTimeline.updated_at.desc())
-            .limit(limit)
+            .limit(scan_limit)
         )
         statement = _exclude_non_incident_detection(statement)
         statement = _apply_cluster_filter(statement, allowed_cluster_ids)
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
-        return [serialize_timeline_row(row) for row in rows]
+        seen: set[str] = set()
+        items: list[JsonObject] = []
+        for row in rows:
+            item = serialize_timeline_row(row)
+            key = incident_logical_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(item)
+            if len(items) >= bounded_limit:
+                break
+        return items
 
     def get_rca_timeline_item(
         self,
