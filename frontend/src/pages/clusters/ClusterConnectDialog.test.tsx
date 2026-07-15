@@ -30,7 +30,7 @@ describe("ClusterConnectDialog", () => {
     const register = screen.getByRole("button", { name: "Generate install command" });
     const spinner = register.querySelector<HTMLElement>('[data-slot="spinner"]');
     expect(register.getAttribute("aria-busy")).toBe("true");
-    expect(spinner?.className).toContain("motion-safe:animate-spin");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
     expect(spinner?.getAttribute("aria-hidden")).toBe("true");
 
     pending.resolve({

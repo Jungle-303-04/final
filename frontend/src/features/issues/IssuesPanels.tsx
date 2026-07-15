@@ -5,7 +5,6 @@ import {
   ChevronsRight,
   CircleCheck,
   DatabaseZap,
-  LoaderCircle,
   ShieldAlert,
   TriangleAlert,
   X,
@@ -17,6 +16,7 @@ import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterVal
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Progress } from "../../shared/ui/primitives/progress";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 import {
   Card,
   CardContent,
@@ -809,7 +809,7 @@ function RecoveryPanel({
                       >
                         {selectionPendingId === candidate.id ? (
                           <>
-                            <LoaderCircle aria-hidden="true" className="animate-spin" />
+                            <Spinner decorative />
                             {copy.selectionPending}
                           </>
                         ) : candidate.title}
@@ -870,10 +870,7 @@ function RecoveryProgress({
         ) : progress.phase === "approval" ? (
           <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
         ) : (
-          <LoaderCircle
-            aria-hidden="true"
-            className="size-4 shrink-0 animate-spin motion-reduce:animate-none"
-          />
+          <Spinner className="size-4 shrink-0" decorative />
         )}
         <p className="min-w-0 flex-1 truncate text-sm font-medium" title={activeLabel}>
           {activeLabel}

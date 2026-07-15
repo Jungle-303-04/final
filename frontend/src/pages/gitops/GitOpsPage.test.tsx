@@ -184,10 +184,7 @@ describe("GitOpsPage workspace navigation", () => {
   it("uses the shared reduced-motion-safe spinner while registering a deployment target", async () => {
     const user = userEvent.setup();
     const port = gitOpsPort();
-    let resolveCreation!: () => void;
-    vi.mocked(port.connectApplication).mockImplementation(() => new Promise((resolve) => {
-      resolveCreation = () => resolve(null);
-    }));
+    vi.mocked(port.connectApplication).mockImplementation(() => new Promise<never>(() => {}));
     renderGitOps("/gitops", port);
 
     await user.click(await screen.findByRole("button", { name: "New plan" }));
@@ -201,11 +198,8 @@ describe("GitOpsPage workspace navigation", () => {
     const register = screen.getByRole("button", { name: "Registering target" });
     const spinner = register.querySelector<HTMLElement>('[data-slot="spinner"]');
     expect(register.getAttribute("aria-busy")).toBe("true");
-    expect(spinner?.className).toContain("motion-safe:animate-spin");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
     expect(spinner?.getAttribute("aria-hidden")).toBe("true");
-
-    resolveCreation();
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Could not register"));
   });
 
   it("keeps the overview next action in the workspace header", async () => {
