@@ -77,6 +77,8 @@ export interface TimelineUrlState {
   viewMode: TimelineViewMode;
   mode: TimelineMode;
   showDeleted: boolean;
+  /** Server-resolved persistent pin membership; never a browser-local list. */
+  pinnedOnly: boolean;
   search: string;
   activityFilter: readonly TimelineActivityKey[];
   kindFilter: readonly string[];
@@ -92,6 +94,7 @@ export const DEFAULT_TIMELINE_URL_STATE: TimelineUrlState = {
   viewMode: DEFAULT_VIEW_MODE,
   mode: { kind: "live", widthMs: DEFAULT_LIVE_WINDOW_MILLISECONDS },
   showDeleted: true,
+  pinnedOnly: false,
   search: "",
   activityFilter: [],
   kindFilter: [],
@@ -115,6 +118,7 @@ export function parseTimelineUrlState(
     showDeleted: searchParams.has("deleted")
       ? searchParams.get("deleted") !== "0"
       : options.defaultShowDeleted ?? true,
+    pinnedOnly: searchParams.get("pinnedOnly") === "1",
     search: searchParams.get("q") ?? "",
     activityFilter: searchParams.has("activity")
       ? parseActivity(searchParams.get("activity"))
@@ -148,6 +152,7 @@ export function writeTimelineSearchParams(
   if (!sameStrings(state.activityFilter, options.defaultActivityFilter ?? [])) params.set("activity", state.activityFilter.join(","));
   if (state.kindFilter.length > 0) params.set("kinds", state.kindFilter.join(","));
   if (state.showDeleted !== (options.defaultShowDeleted ?? true)) params.set("deleted", state.showDeleted ? "1" : "0");
+  if (state.pinnedOnly) params.set("pinnedOnly", "1");
   if (state.search.length > 0) params.set("q", state.search);
   if (state.grouping !== (options.defaultGrouping ?? DEFAULT_GROUPING)) params.set("grouping", state.grouping);
   if (state.sort !== (options.defaultSort ?? DEFAULT_SORT)) params.set("sort", state.sort);

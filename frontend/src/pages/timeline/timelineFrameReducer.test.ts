@@ -25,7 +25,7 @@ describe("Timeline evidence frame reducer", () => {
     expect(reduced.events).toHaveLength(reduced.policy.maxBatchEvents);
   });
 
-  it("does not replace a durable session for grouping, sort, or unsupported pin preferences", () => {
+  it("keeps presentation preferences in one session but replaces it for persistent pin membership", () => {
     const query = timelineQuery();
     const presentationOnly: TimelineQuery = {
       ...query,
@@ -33,11 +33,14 @@ describe("Timeline evidence frame reducer", () => {
         ...query.filters,
         grouping: "flat",
         sort: "name",
-        pinnedOnly: true,
       },
     };
 
     expect(timelineEvidenceKey(presentationOnly)).toBe(timelineEvidenceKey(query));
+    expect(timelineEvidenceKey({
+      ...query,
+      filters: { ...query.filters, pinnedOnly: true },
+    })).not.toBe(timelineEvidenceKey(query));
     expect(timelineEvidenceKey({
       ...query,
       filters: { ...query.filters, search: "changed" },

@@ -23,6 +23,7 @@ export interface TimelineUrlStateController {
   setActivityFilter: (activityFilter: readonly TimelineActivityKey[]) => void;
   setKindFilter: (kindFilter: readonly string[]) => void;
   setShowDeleted: (showDeleted: boolean) => void;
+  setPinnedOnly: (pinnedOnly: boolean) => void;
   setGrouping: (grouping: TimelineGrouping) => void;
   setSort: (sort: TimelineSort) => void;
   setSelectedEventKey: (sourceKey: string | null) => void;
@@ -88,6 +89,7 @@ export function useTimelineUrlState(options: TimelineUrlOptions): TimelineUrlSta
   const setActivityFilter = useCallback((activityFilter: readonly TimelineActivityKey[]) => update({ ...state, activityFilter }), [state, update]);
   const setKindFilter = useCallback((kindFilter: readonly string[]) => update({ ...state, kindFilter }), [state, update]);
   const setShowDeleted = useCallback((showDeleted: boolean) => update({ ...state, showDeleted }), [state, update]);
+  const setPinnedOnly = useCallback((pinnedOnly: boolean) => update({ ...state, pinnedOnly }), [state, update]);
   const setGrouping = useCallback((grouping: TimelineGrouping) => update({ ...state, grouping }), [state, update]);
   const setSort = useCallback((sort: TimelineSort) => update({ ...state, sort }), [state, update]);
   const setSelectedEventKey = useCallback((selectedEventKey: string | null) => update({ ...state, selectedEventKey }), [state, update]);
@@ -120,6 +122,7 @@ export function useTimelineUrlState(options: TimelineUrlOptions): TimelineUrlSta
     setActivityFilter,
     setKindFilter,
     setShowDeleted,
+    setPinnedOnly,
     setGrouping,
     setSort,
     setSelectedEventKey,

@@ -8,6 +8,9 @@ import {
   TimelineFailure,
   type TimelineCoverage,
   type TimelineEvent,
+  type TimelinePin,
+  type TimelinePinMutation,
+  type TimelinePinSet,
   type TimelinePort,
   type TimelineSnapshot,
   type TimelineStreamFrame,
@@ -465,7 +468,141 @@ describe("TimelineSurface", () => {
       expect(params.get("view")).toBe("swimlane");
     });
     expect(screen.getByText("0")).toBeTruthy();
-    expect(screen.queryByText(/Pinned lanes/i)).toBeNull();
+    expect(screen.getByText(/Pinned lanes/i)).toBeTruthy();
+  });
+
+  it("uses the authenticated server pin set for event actions and the pinned-only URL filter", async () => {
+    const user = userEvent.setup();
+    const initialPins = timelinePinSet({ revision: 3 });
+    const savedPin = timelineResourcePin();
+    const upsertTimelinePin = vi.fn().mockResolvedValue(timelinePinMutation(
+      "added",
+      timelinePinSet({ revision: 4, pins: [savedPin] }),
+    ));
+    const readTimeline = vi.fn().mockImplementation(async (query) => ({
+      ...snapshot(),
+      session: { ...snapshot().session, query },
+      pinSetRevision: query.filters.pinnedOnly ? 4 : null,
+    }));
+    const port = timelinePort({
+      readTimeline,
+      readTimelinePins: vi.fn().mockResolvedValue(initialPins),
+      upsertTimelinePin,
+    });
+    const { router } = renderTimeline(port, "/timeline?view=list", "en-US");
+
+    await user.click(await screen.findByRole("button", { name: "Deployment checkout changed" }));
+    const pinAction = await screen.findByRole("button", { name: "Pin subject" });
+    await user.click(pinAction);
+    await waitFor(() => expect(upsertTimelinePin).toHaveBeenCalledWith(
+      {
+        expectedRevision: 3,
+        target: savedPin.subject,
+      },
+      undefined,
+      "workspace-1",
+    ));
+    expect(await screen.findByText("The subject is saved to your pins.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByText("Pinned lanes"));
+    expect(await screen.findByText("Deployment payments/checkout")).toBeTruthy();
+    const pinnedOnly = screen.getByRole("checkbox", { name: "Show pinned events only" });
+    await user.click(pinnedOnly);
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("pinnedOnly")).toBe("1");
+      expect(readTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filters: expect.objectContaining({ pinnedOnly: true }) }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
+  it("refreshes the pin set after a revision conflict without restarting the Timeline stream", async () => {
+    const user = userEvent.setup();
+    const readTimeline = vi.fn().mockResolvedValue(snapshot());
+    const subscribeTimeline = vi.fn(idleStream);
+    const readTimelinePins = vi.fn()
+      .mockResolvedValueOnce(timelinePinSet({ revision: 3 }))
+      .mockResolvedValueOnce(timelinePinSet({ revision: 4, pins: [timelineResourcePin()] }));
+    const upsertTimelinePin = vi.fn().mockRejectedValue(new TimelineFailure("conflict"));
+    const port = timelinePort({ readTimeline, readTimelinePins, subscribeTimeline, upsertTimelinePin });
+    renderTimeline(port, "/timeline?view=list", "en-US");
+
+    await user.click(await screen.findByRole("button", { name: "Deployment checkout changed" }));
+    const snapshotReads = readTimeline.mock.calls.length;
+    const streamSubscriptions = subscribeTimeline.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Pin subject" }));
+
+    expect(await screen.findByText("Your pins changed in another session. The current set has been refreshed.")).toBeTruthy();
+    expect(upsertTimelinePin).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 3 }), undefined, "workspace-1");
+    expect(readTimelinePins).toHaveBeenCalledTimes(2);
+    expect(readTimeline).toHaveBeenCalledTimes(snapshotReads);
+    expect(subscribeTimeline).toHaveBeenCalledTimes(streamSubscriptions);
+  });
+
+  it("removes a pinned-only deep link when pin permission is revoked and never offers a fabricated target", async () => {
+    const user = userEvent.setup();
+    const readTimeline = vi.fn().mockResolvedValue(snapshot());
+    const port = timelinePort({
+      readTimeline,
+      readTimelinePins: vi.fn().mockRejectedValue(new TimelineFailure("forbidden")),
+      readTimelineOverview: vi.fn().mockResolvedValue(timelineOverview()),
+    });
+    const { router } = renderTimeline(port, "/timeline?view=list&pinnedOnly=1", "en-US");
+
+    await screen.findByRole("button", { name: "Deployment checkout changed" });
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("pinnedOnly")).toBeNull();
+      expect(readTimeline).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filters: expect.objectContaining({ pinnedOnly: false }) }),
+        expect.any(AbortSignal),
+      );
+    });
+    await user.click(screen.getByText("Pinned lanes"));
+    expect(await screen.findByText("Pin access was revoked for this workspace.")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Deployment checkout changed" }));
+    expect(screen.queryByRole("button", { name: "Pin subject" })).toBeNull();
+  });
+
+  it("reloads the server pin set only after the user retries a failed read", async () => {
+    const user = userEvent.setup();
+    const readTimelinePins = vi.fn()
+      .mockRejectedValueOnce(new TimelineFailure("offline"))
+      .mockResolvedValueOnce(timelinePinSet({ revision: 8 }));
+    renderTimeline(timelinePort({ readTimelinePins }), "/timeline?view=list", "en-US");
+
+    await screen.findByRole("button", { name: "Deployment checkout changed" });
+    await user.click(screen.getByText("Pinned lanes"));
+    expect(await screen.findByText("Saved pins could not be updated. Your current server state was not changed.")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Retry saved pins" }));
+    await waitFor(() => expect(readTimelinePins).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("checkbox", { name: "Show pinned events only" })).toBeTruthy();
+  });
+
+  it("does not offer a persistent pin for an event without a server pin subject", async () => {
+    const user = userEvent.setup();
+    const nonPinningEvent = event({
+      subject: {
+        kind: "inventory_locator",
+        inventoryKey: "inventory-key",
+        apiGroup: "apps",
+        version: "v1",
+        resourceKind: "Deployment",
+        namespace: "payments",
+        name: "checkout",
+      },
+      resource: null,
+    });
+    const upsertTimelinePin = vi.fn();
+    renderTimeline(timelinePort({
+      readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [nonPinningEvent] })),
+      upsertTimelinePin,
+    }), "/timeline?view=list", "en-US");
+
+    await user.click(await screen.findByRole("button", { name: "Deployment checkout changed" }));
+    expect(screen.queryByRole("button", { name: "Pin subject" })).toBeNull();
+    expect(upsertTimelinePin).not.toHaveBeenCalled();
   });
 
   it("restores an exact frozen deep-link lens without restarting the snapshot or stream", async () => {
@@ -742,6 +879,7 @@ describe("TimelineSurface", () => {
           groupings: [controls.groupings[0]!],
           sorts: [controls.sorts[0]!],
           activity: [controls.activity[0]!],
+          pins: { key: "pins", label: "Pinned lanes", availability: "unavailable", storage: null, revision: null, subjectKinds: [] },
         },
       },
     });
@@ -765,6 +903,7 @@ describe("TimelineSurface", () => {
     expect(screen.queryByRole("radio", { name: "Swimlane" })).toBeNull();
     expect(screen.queryByRole("option", { name: "Owner" })).toBeNull();
     expect(screen.queryByRole("option", { name: "Recent" })).toBeNull();
+    expect(screen.queryByText("Pinned lanes")).toBeNull();
     expect(port.readTimeline).toHaveBeenLastCalledWith(
       expect.objectContaining({
         control: expect.objectContaining({ view: "list" }),
@@ -1074,12 +1213,25 @@ function timelineOverview() {
   };
 }
 
-function timelinePinSet() {
-  return { revision: 0, pins: [] };
+function timelinePinSet(overrides: Partial<TimelinePinSet> = {}): TimelinePinSet {
+  return { revision: 0, pins: [], ...overrides };
 }
 
-function timelinePinMutation() {
-  return { action: "unchanged" as const, pinSet: timelinePinSet() };
+function timelinePinMutation(
+  action: TimelinePinMutation["action"] = "unchanged",
+  pinSet = timelinePinSet(),
+): TimelinePinMutation {
+  return { action, pinSet };
+}
+
+function timelineResourcePin(): TimelinePin {
+  const current = event();
+  if (current.subject.kind !== "resource") throw new Error("Timeline pin test event lost its resource subject.");
+  return {
+    pinId: "pin-deployment-checkout",
+    subject: { kind: "resource", scope: current.scope, resource: current.subject.resource },
+    createdAt: "2026-07-15T00:00:00.000Z",
+  };
 }
 
 function liveSnapshot(maxAgeMs: number): TimelineSnapshot {

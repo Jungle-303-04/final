@@ -36,6 +36,7 @@ describe("Timeline capability route gate", () => {
     expect(await screen.findByRole("heading", { name: "Timeline" })).toBeTruthy();
     await waitFor(() => expect(readCapabilities).toHaveBeenCalledTimes(1));
     expect(readCapabilities).toHaveBeenCalledWith(expect.any(AbortSignal), "workspace-a");
+    await waitFor(() => expect(port.readTimelinePins).toHaveBeenCalledWith(expect.any(AbortSignal), "workspace-a"));
 
     fireEvent.click(screen.getByRole("button", { name: "switch to cluster-b" }));
     await waitFor(() => expect(port.readTimeline).toHaveBeenLastCalledWith(
@@ -45,6 +46,7 @@ describe("Timeline capability route gate", () => {
       expect.any(AbortSignal),
     ));
     expect(readCapabilities).toHaveBeenCalledTimes(1);
+    expect(port.readTimelinePins).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when an injected port has no capability reader", async () => {

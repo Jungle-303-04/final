@@ -13,6 +13,8 @@ import type { TimelineUrlState } from "../../features/timeline/timelineUrlState"
 import type { I18nController } from "../../shared/i18n";
 import { TIMELINE_SOURCE_LABEL } from "./timelineLabels";
 import type { TimelineOverviewFrame } from "./useTimelineOverviewFrame";
+import { TimelinePinsControl } from "./TimelinePinsControl";
+import type { TimelinePinsController } from "./useTimelinePins";
 
 export function TimelineToolbar({
   capabilities,
@@ -23,9 +25,12 @@ export function TimelineToolbar({
   onKindFilterChange,
   onSearchChange,
   onShowDeletedChange,
+  onPinnedOnlyChange,
   onSortChange,
   onViewModeChange,
   t,
+  pins,
+  pinnedOnly,
 }: {
   capabilities: TimelineCapabilities;
   overview: TimelineOverviewFrame;
@@ -35,8 +40,11 @@ export function TimelineToolbar({
   onKindFilterChange: (kinds: readonly string[]) => void;
   onSearchChange: (search: string) => void;
   onShowDeletedChange: (showDeleted: boolean) => void;
+  onPinnedOnlyChange: (pinnedOnly: boolean) => void;
   onSortChange: (sort: TimelineSort) => void;
   onViewModeChange: (viewMode: TimelineViewMode) => void;
+  pins: TimelinePinsController | null;
+  pinnedOnly: boolean;
   t: I18nController["t"];
 }) {
   const controls = capabilities.controlSurface;
@@ -161,6 +169,16 @@ export function TimelineToolbar({
           />
           {controls.deleted.label}
         </label>
+
+        {pins === null ? null : (
+          <TimelinePinsControl
+            label={controls.pins.label}
+            onPinnedOnlyChange={onPinnedOnlyChange}
+            pinnedOnly={pinnedOnly}
+            pins={pins}
+            t={t}
+          />
+        )}
 
         <KindMenu
           frame={overview}

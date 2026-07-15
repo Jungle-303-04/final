@@ -22,6 +22,10 @@ export function timelineEvidenceKey(query: TimelineQuery): string {
       activity: [...new Set(query.filters.activity)].sort(),
       kinds: [...new Set(query.filters.kinds.map((kind) => kind.trim()).filter(Boolean))].sort(),
       includeDeleted: query.filters.showDeleted,
+      // A server pin set changes the evidence predicate itself, so this must
+      // replace the snapshot/SSE session instead of behaving like a display
+      // preference such as grouping or sort.
+      pinnedOnly: query.filters.pinnedOnly,
       search: query.filters.search.trim(),
     },
   });
