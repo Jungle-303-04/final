@@ -9,11 +9,14 @@ import {
   ShieldAlert,
   TriangleAlert,
   X,
+  XCircle,
 } from "lucide-react";
+import { cn } from "@/shared/lib/cn";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import { Progress } from "../../shared/ui/primitives/progress";
 import {
   Card,
   CardContent,
@@ -32,6 +35,7 @@ import type {
   IssueRecoveryPlan,
 } from "./issuesContract";
 import { IssueStatusMark } from "./IssueStatusMark";
+import { issueRecoveryProgress } from "./issueRecoveryProgress";
 import { IssueAuditTimelinePanel } from "./IssueAuditTimelinePanel";
 import { IssueRecentChangesPanel } from "./IssueRecentChangesPanel";
 import { evidenceFallbackLabel } from "./issueEvidencePresentation";
@@ -159,8 +163,11 @@ export function IssuesPanels({
                 copy={copy}
                 onSelect={onSelectRecovery}
                 receipt={state.receipt}
+                selected={selected}
+                selectionFailure={state.selectionFailure}
                 selectionPendingId={state.selectionPendingId}
                 state={state.recovery}
+                audit={state.audit.data}
               />
             </TabsContent>
 
@@ -699,22 +706,49 @@ function ReportEvidenceList({
 }
 
 function RecoveryPanel({
+  audit,
   capability,
   copy,
   onSelect,
   receipt,
+  selected,
+  selectionFailure,
   selectionPendingId,
   state,
 }: {
+  audit: IssuesPanelsProps["state"]["audit"]["data"];
   capability: RecoverySelectionCapability;
   copy: IssuesSurfaceCopy;
   onSelect: (actionId: string) => void;
+  selected: IssuesPanelsProps["selected"];
   receipt: { eventId: string } | null;
+  selectionFailure: IssuesPanelsProps["state"]["selectionFailure"];
   selectionPendingId: string | null;
   state: SectionState<IssueRecoveryPlan>;
 }) {
+  const recoveryProgress = issueRecoveryProgress({
+    audit,
+    plan: state.data,
+    receipt: receipt === null
+      ? null
+      : { accepted: true, correlationId: selected.correlationId, eventId: receipt.eventId },
+    selected,
+    selectionFailed: selectionFailure !== null,
+    selectionPending: selectionPendingId !== null,
+  });
   return (
     <SectionCard title={copy.recoveryLabel}>
+      <RecoveryProgress
+        copy={copy}
+        progress={recoveryProgress}
+        selectionAccepted={receipt !== null && selectionPendingId === null}
+      />
+      {selectionFailure !== null ? (
+        <Alert variant="destructive">
+          <XCircle aria-hidden="true" />
+          <AlertDescription>{copy.failureDetail(selectionFailure.code)}</AlertDescription>
+        </Alert>
+      ) : null}
       {receipt ? (
         <Alert title={receipt.eventId}>
           <AlertDescription>
@@ -797,6 +831,96 @@ function RecoveryPanel({
         )}
       </IssueSectionFrame>
     </SectionCard>
+  );
+}
+
+function RecoveryProgress({
+  copy,
+  progress,
+  selectionAccepted,
+}: {
+  copy: IssuesSurfaceCopy;
+  progress: ReturnType<typeof issueRecoveryProgress>;
+  selectionAccepted: boolean;
+}) {
+  const steps = [
+    copy.recoveryProgressApproval,
+    copy.recoveryProgressSubmission,
+    copy.recoveryProgressExecution,
+    copy.recoveryProgressVerification,
+    copy.recoveryProgressCompletion,
+  ];
+  const activeLabel = progress.phase === "failed"
+    ? copy.recoveryProgressFailed
+    : progress.phase === "approval"
+      ? copy.recoveryProgressApprovalWaiting
+      : progress.phase === "submitting" && selectionAccepted
+        ? copy.recoveryProgressAccepted
+        : steps[progress.activeStep];
+  return (
+    <section
+      aria-live="polite"
+      className="grid min-w-0 gap-3 rounded-xl border bg-muted/15 p-3"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        {progress.phase === "completed" ? (
+          <CircleCheck aria-hidden="true" className="size-4 shrink-0 text-status-healthy" />
+        ) : progress.phase === "failed" ? (
+          <XCircle aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+        ) : progress.phase === "approval" ? (
+          <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-status-warning" />
+        ) : (
+          <LoaderCircle
+            aria-hidden="true"
+            className="size-4 shrink-0 animate-spin motion-reduce:animate-none"
+          />
+        )}
+        <p className="min-w-0 flex-1 truncate text-sm font-medium" title={activeLabel}>
+          {activeLabel}
+        </p>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {progress.phase === "failed" ? copy.recoveryProgressStopped : `${progress.progress}%`}
+        </span>
+      </div>
+      <Progress
+        aria-label={copy.recoveryProgressLabel}
+        value={progress.progress}
+        valueText={activeLabel}
+      />
+      <ol className="grid min-w-0 grid-cols-5 gap-1" aria-label={copy.recoveryProgressLabel}>
+        {steps.map((label, index) => {
+          const completed = progress.phase === "completed" || index < progress.activeStep;
+          const active = index === progress.activeStep;
+          const failed = progress.phase === "failed" && active;
+          return (
+            <li className="grid min-w-0 justify-items-center gap-1 text-center" key={label}>
+              <span className={cn(
+                "grid size-6 place-items-center rounded-full border bg-card text-[10px] font-semibold tabular-nums",
+                completed && "border-status-healthy/50 text-status-healthy",
+                active && !failed && "border-foreground bg-foreground text-background",
+                failed && "border-destructive bg-destructive text-destructive-foreground",
+              )}
+              >
+                {completed ? <CircleCheck aria-hidden="true" className="size-3.5" /> : index + 1}
+              </span>
+              <span className={cn(
+                "w-full truncate text-[10px] leading-4 text-muted-foreground",
+                active && "font-medium text-foreground",
+                failed && "text-destructive",
+              )} title={label}
+              >
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {progress.latestEvent !== null ? (
+        <p className="min-w-0 truncate text-[11px] text-muted-foreground" title={copy.auditEvent(progress.latestEvent.subject)}>
+          {copy.recoveryProgressLatest} · {copy.auditEvent(progress.latestEvent.subject)} · {copy.auditTime(progress.latestEvent.createdAt)}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
