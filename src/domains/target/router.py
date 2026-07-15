@@ -29,6 +29,12 @@ from domains.identity.dependencies import (
 from domains.inventory.kubernetes_snapshot import kubernetes_evidence_to_inventory_snapshot
 from domains.providers.catalog import ProviderCategory, require_available_provider
 from domains.rca.events import ClusterEvidenceReceivedBody, compact_cluster_evidence_payload
+from domains.target.connectivity import (
+    AGENT_STATUS_NEVER_CONNECTED,
+    AGENT_STATUS_ONLINE,
+    cluster_connection_status,
+    parse_timestamp,
+)
 from domains.target.events import (
     ClusterDesiredStateChangedBody,
     EvidenceJobUpdatedBody,
@@ -146,11 +152,6 @@ EVIDENCE_JOB_POLL_SLEEP_SECONDS = int(env(EVIDENCE_JOB_POLL_SLEEP_SECONDS_ENV, "
 NOT_FOUND_CODE = 404
 EVIDENCE_JOB_NOT_FOUND = "evidence job not found"
 RELEASE_WORKFLOW_FAILURE_SOURCE_ID = "release-workflow-failure"
-AGENT_ONLINE_WINDOW_SECONDS_ENV = "AGENT_ONLINE_WINDOW_SECONDS"
-DEFAULT_AGENT_ONLINE_WINDOW_SECONDS = 120
-AGENT_STATUS_NEVER_CONNECTED = "never_connected"
-AGENT_STATUS_ONLINE = "online"
-AGENT_STATUS_STALE = "stale"
 TARGET_AGENT_IMAGE_ENV = "TARGET_AGENT_IMAGE"
 TARGET_DEFAULT_CONTROL_NAMESPACES_ENV = "TARGET_DEFAULT_CONTROL_NAMESPACES"
 GITOPS_WEBHOOK_IMAGE_ENV = "GITOPS_WEBHOOK_IMAGE"
@@ -780,39 +781,6 @@ def install_response(
         connect_expires_at=connect_expires_at,
         connection_stage="token_issued",
         management_access=management_access_response(),
-    )
-
-
-def agent_online_window_seconds() -> int:
-    return max(
-        1,
-        int(env(AGENT_ONLINE_WINDOW_SECONDS_ENV, str(DEFAULT_AGENT_ONLINE_WINDOW_SECONDS))),
-    )
-
-
-def parse_timestamp(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed
-
-
-def cluster_connection_status(agent: dict[str, Any] | None) -> str:
-    if agent is None:
-        return AGENT_STATUS_NEVER_CONNECTED
-    last_seen_at = parse_timestamp(agent.get("last_seen_at"))
-    if last_seen_at is None:
-        return AGENT_STATUS_STALE
-    online_window = timedelta(seconds=agent_online_window_seconds())
-    return (
-        AGENT_STATUS_ONLINE
-        if datetime.now(UTC) - last_seen_at <= online_window
-        else AGENT_STATUS_STALE
     )
 
 
