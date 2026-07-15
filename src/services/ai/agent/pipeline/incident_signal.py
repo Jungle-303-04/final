@@ -10,12 +10,48 @@ from domains.rca.events import Evidence, IncidentRecord
 from packages.contracts.event_bus.interfaces import JsonObject
 
 SIGNAL_IDENTITY_VERSION = "k8s-container-termination-v1"
+EVIDENCE_SIGNAL_IDENTITY_VERSION = "rca-incident-evidence-v1"
 
 
 @dataclass(frozen=True)
 class IncidentSignalIdentity:
     signal_key: str
     payload: JsonObject
+
+
+def incident_claim_identity(
+    evidence: Evidence,
+    incident: IncidentRecord,
+) -> IncidentSignalIdentity | None:
+    """Return a durable claim identity for every confirmed incident candidate.
+
+    A Kubernetes container termination is the strongest identity and is reused
+    when present. Other detected sources use their immutable evidence object
+    reference plus the incident target. They still deduplicate redelivery of
+    that evidence without guessing a resource UID or merging later evidence.
+    """
+    termination = incident_termination_identity(evidence, incident)
+    if termination is not None:
+        return termination
+    object_ref = text(evidence.object_ref)
+    if object_ref is None:
+        return None
+    identity: JsonObject = {
+        "version": EVIDENCE_SIGNAL_IDENTITY_VERSION,
+        "workspace_id": evidence.workspace_id,
+        "cluster_id": evidence.cluster_id,
+        "object_ref": object_ref,
+        "namespace": incident.namespace,
+        "resource_kind": incident.resource_kind,
+        "resource_name": incident.resource_name,
+        "symptom": incident.symptom,
+        "first_seen_at": incident.first_seen_at,
+    }
+    encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    return IncidentSignalIdentity(
+        signal_key=f"{EVIDENCE_SIGNAL_IDENTITY_VERSION}:{hashlib.sha256(encoded).hexdigest()}",
+        payload=identity,
+    )
 
 
 def incident_termination_identity(
