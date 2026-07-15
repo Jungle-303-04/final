@@ -12,7 +12,6 @@ class StubDb:
     def __init__(self) -> None:
         self.swept = 0
         self.queue_ttl_seconds: int | None = None
-        self.operation_events: list[tuple[str, str, str, dict[str, object]]] = []
 
     async def fail_expired_agent_commands(
         self, *, queue_ttl_seconds: int
@@ -32,16 +31,6 @@ class StubDb:
                 },
             }
         ]
-
-    async def append_command_operation_event(
-        self,
-        workspace_id: str,
-        command_id: str,
-        kind: str,
-        payload: dict[str, object],
-    ) -> object:
-        self.operation_events.append((workspace_id, command_id, kind, payload))
-        return object()
 
 
 class StubEvents:
@@ -80,22 +69,6 @@ def test_command_janitor_emits_completion_for_expired_commands(monkeypatch) -> N
     assert count == 1
     assert db.swept == 1
     assert db.queue_ttl_seconds == 900
-    assert db.operation_events == [
-        (
-            "workspace-1",
-            "cmd-1",
-            "failed",
-            {
-                "cluster_id": "cluster-1",
-                "status": "failed",
-                "result": {
-                    "status": "failed",
-                    "applied": False,
-                    "message": "command lease expired",
-                },
-            },
-        )
-    ]
     assert events.emitted == [
         (
             "command.completed",
