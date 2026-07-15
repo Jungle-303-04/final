@@ -61,7 +61,12 @@ describe("ClusterDisconnectDialog", () => {
     await user.click(submit);
 
     expect(disconnect).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
-    expect(screen.getByRole("status").textContent).toContain("연결 해제를 요청하는 중");
+    const pendingStatus = screen.getByRole("status");
+    expect(pendingStatus.textContent).toContain("연결 해제를 요청하는 중");
+    const spinner = pendingStatus.querySelector<HTMLElement>("[data-slot=spinner]");
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.classList.contains("motion-reduce:animate-none")).toBe(true);
     expect(screen.getByRole("button", { name: "백그라운드에서 계속" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
 
