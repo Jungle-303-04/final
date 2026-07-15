@@ -254,6 +254,17 @@ class SpyDb:
         self._incident_signal_claims.add(identity)
         return True
 
+    async def append_timeline_event(self, event: Any) -> Any:
+        """Provide a durable-insert-shaped Timeline result for source worker tests."""
+        from domains.timeline.repository import TimelineLedgerAppend
+
+        self.calls.append(("append_timeline_event", (event,)))
+        configured = self._returns.get("append_timeline_event")
+        if configured is not None:
+            return configured
+        sequence = sum(1 for name, _args in self.calls if name == "append_timeline_event")
+        return TimelineLedgerAppend(event=event, sequence=sequence, inserted=True)
+
     async def request_workflow_approval(self, payload: dict[str, Any]) -> Any:
         self.calls.append(("request_workflow_approval", (payload,)))
         approval_id = str(payload.get("approval_id", ""))
