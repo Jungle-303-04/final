@@ -20,6 +20,7 @@ from domains.timeline.repository import (
 from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
+    TimelineCoverage,
     TimelineEvent,
     TimelineFilters,
     TimelineQuery,
@@ -31,10 +32,17 @@ from packages.runtime.dependencies import get_db, get_timeline_fanout
 
 
 class TimelineSnapshotDb:
-    def __init__(self, *, overflow: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        overflow: bool = False,
+        coverage: tuple[TimelineCoverage, ...] = (),
+    ) -> None:
         self.overflow = overflow
+        self.coverage = coverage
         self.snapshot_calls: list[dict[str, Any]] = []
         self.replay_calls: list[dict[str, Any]] = []
+        self.coverage_calls: list[dict[str, Any]] = []
 
     def accessible_resource_ids(
         self,
@@ -83,6 +91,12 @@ class TimelineSnapshotDb:
             high_water_sequence=8,
             retained_from_sequence=1,
         )
+
+    def snapshot_timeline_coverage(
+        self, read_scope: object, **kwargs: object
+    ) -> tuple[TimelineCoverage, ...]:
+        self.coverage_calls.append({"read_scope": read_scope, **kwargs})
+        return self.coverage
 
 
 class ClosedTimelineFanout:
@@ -181,6 +195,47 @@ def test_timeline_snapshot_is_bounded_ndjson_with_an_opaque_cursor() -> None:
     assert call["limit"] == frames[0].policy.max_batch_events
     assert call["read_scope"].inventory_cluster_ids == {"cluster-a"}
     assert call["read_scope"].incident_cluster_ids == {"cluster-a"}
+
+
+def test_timeline_snapshot_includes_only_durable_authorized_coverage() -> None:
+    coverage = TimelineCoverage(
+        scope=ClusterScope(
+            workspace_id="workspace-a",
+            cluster_id="cluster-a",
+            namespaces=("payments",),
+        ),
+        source="kubernetes_event",
+        from_ms=1_720_000_010_000,
+        to_ms=1_720_000_020_000,
+        reason="collection_gap",
+    )
+    hidden_coverage = coverage.model_copy(
+        update={
+            "scope": ClusterScope(
+                workspace_id="workspace-a",
+                cluster_id="cluster-hidden",
+                namespaces=("payments",),
+            )
+        }
+    )
+    db = TimelineSnapshotDb(coverage=(coverage, hidden_coverage))
+    response = _client(db).post(
+        "/timeline/snapshots", json={"query": _query().model_dump(mode="json")}
+    )
+
+    frame = TimelineStreamFrame.model_validate_json(response.text.splitlines()[0])
+    assert frame.coverage == (coverage,)
+    assert db.coverage_calls[0]["window"] == _query().window
+    assert db.coverage_calls[0]["read_scope"].kubernetes_event_cluster_ids == {"cluster-a"}
+
+    event_hidden_query = _query().model_copy(
+        update={"filters": TimelineFilters(activity=("change",))}
+    )
+    hidden_response = _client(db).post(
+        "/timeline/snapshots", json={"query": event_hidden_query.model_dump(mode="json")}
+    )
+    hidden_frame = TimelineStreamFrame.model_validate_json(hidden_response.text.splitlines()[0])
+    assert hidden_frame.coverage == ()
 
 
 def test_timeline_snapshot_fails_closed_for_unknown_cluster_and_missing_cursor_config() -> None:

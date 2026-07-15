@@ -28,9 +28,10 @@ from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
     sync_inventory_filter_projection,
 )
+from domains.timeline.coverage import project_kubernetes_event_capture_coverage
 from domains.timeline.mapping import inventory_timeline_event
 from packages.contracts.event_bus.interfaces import JsonObject
-from packages.contracts.timeline import TimelineEvent
+from packages.contracts.timeline import TimelineCoverage, TimelineEvent, TimelineWindow
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 # 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한.
@@ -463,6 +464,55 @@ def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
 
 
 class InventoryRepository(DatabaseConnection):
+    def snapshot_timeline_coverage(
+        self,
+        read_scope: Any,
+        *,
+        window: TimelineWindow,
+    ) -> tuple[TimelineCoverage, ...]:
+        """Read durable global Event capture evidence for an authorized Timeline scope.
+
+        Snapshot evidence, rather than the Timeline event ledger, is the source
+        of completeness.  The pure projector proves both failure and recovery
+        bounds and emits no coverage where either bound is unknown.
+        """
+        cluster_ids = frozenset(
+            str(cluster_id).strip()
+            for cluster_id in getattr(read_scope, "kubernetes_event_cluster_ids", frozenset())
+            if str(cluster_id).strip()
+        )
+        if not cluster_ids:
+            return ()
+        workspace_id = str(getattr(read_scope, "workspace_id", "") or "").strip()
+        if not workspace_id:
+            return ()
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(
+                snapshots.c.cluster_id,
+                snapshots.c.status,
+                snapshots.c.summary,
+            )
+            .where(
+                snapshots.c.workspace_id == workspace_id,
+                snapshots.c.cluster_id.in_(tuple(sorted(cluster_ids))),
+                snapshots.c.status != "ignored_stale",
+            )
+            .order_by(
+                snapshots.c.cluster_id.asc(),
+                snapshots.c.collected_at.asc(),
+                snapshots.c.created_at.asc(),
+                snapshots.c.snapshot_id.asc(),
+            )
+        )
+        with self.connection() as conn:
+            rows = tuple(dict(row) for row in conn.execute(statement).mappings())
+        return project_kubernetes_event_capture_coverage(
+            read_scope,
+            window=window,
+            snapshots=rows,
+        )
+
     def save_live_cluster_usage_sample(
         self,
         *,
