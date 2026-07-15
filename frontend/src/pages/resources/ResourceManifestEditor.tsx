@@ -1,4 +1,4 @@
-import { GitPullRequestArrow, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { GitPullRequestArrow, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -23,6 +23,7 @@ import {
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 
 type Phase = "idle" | "loading" | "ready" | "previewing" | "approving" | "failed";
 
@@ -153,7 +154,7 @@ export function ResourceManifestEditor({
           <div className="min-h-0 overflow-y-auto pr-1">
             {phase === "loading" ? (
               <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status">
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                <Spinner className="size-4" decorative />
                 {t("resources.manifest.loading")}
               </p>
             ) : source?.status === "ambiguous" ? (
@@ -275,14 +276,14 @@ export function ResourceManifestEditor({
               </Button>
             ) : null}
             {available && !receipt ? (
-              <Button disabled={busy} onClick={() => void previewEdit()} type="button" variant="outline">
-                {phase === "previewing" ? <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : null}
+              <Button aria-busy={phase === "previewing"} disabled={busy} onClick={() => void previewEdit()} type="button" variant="outline">
+                {phase === "previewing" ? <Spinner decorative /> : null}
                 {t("resources.manifest.preview")}
               </Button>
             ) : null}
             {preview?.valid && !receipt ? (
-              <Button disabled={busy || reason.trim().length < 3} onClick={() => void approve()} type="button">
-                {phase === "approving" ? <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <GitPullRequestArrow aria-hidden="true" />}
+              <Button aria-busy={phase === "approving"} disabled={busy || reason.trim().length < 3} onClick={() => void approve()} type="button">
+                {phase === "approving" ? <Spinner decorative /> : <GitPullRequestArrow aria-hidden="true" />}
                 {t("resources.manifest.approve")}
               </Button>
             ) : null}
