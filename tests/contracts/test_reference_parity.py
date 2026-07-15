@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
+
 from packages.contracts.parity import (
     CapabilitySet,
     ClusterScope,
@@ -9,7 +11,6 @@ from packages.contracts.parity import (
     OperationEvent,
     ResourceRef,
 )
-from pydantic import ValidationError
 
 
 def test_parity_contract_preserves_canonical_scope_resource_and_direct_receipt() -> None:
