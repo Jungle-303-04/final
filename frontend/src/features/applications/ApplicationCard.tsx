@@ -15,7 +15,9 @@ import {
   formatObservedTime,
 } from "./applicationPresentation";
 import {
+  ApplicationBatchRuntimeChannel,
   ApplicationDeploymentChannel,
+  ApplicationDeliveryStateChannel,
   ApplicationDriftChannel,
   ApplicationIncidentChannel,
   ApplicationReadyBar,
@@ -32,6 +34,25 @@ export function ApplicationCard({
   const copy = applicationsCopy(locale);
   const deployment = application.currentDeployment;
   const resourceTotal = application.resourceCounts?.reduce((sum, item) => sum + item.count, 0) ?? null;
+  const deliveryLabels = {
+    succeeded: copy.deliverySucceeded,
+    failed: copy.deliveryFailed,
+    running: copy.deliveryRunning,
+    pending: copy.deliveryPending,
+    unknown: copy.deliveryUnknown,
+  } as const;
+  const batchLabels = {
+    running: copy.batchRunning,
+    failed: copy.batchFailed,
+    succeeded: copy.batchSucceeded,
+    suspended: copy.batchSuspended,
+    unknown: copy.batchUnknown,
+  } as const;
+  const batchCounterLabels = {
+    active: copy.activeRuns,
+    failed: copy.failedRuns,
+    succeeded: copy.succeededRuns,
+  } as const;
   return (
     <button
       aria-label={`${application.name} ${copy.details}`}
@@ -54,21 +75,32 @@ export function ApplicationCard({
           </div>
           <div className="self-start pt-1">
             <StatusMark
-              label={application.health.status ?? copy.unknown}
-              tone={applicationStatusTone(application.health.status)}
+              label={application.runtimeReadiness.status}
+              tone={applicationStatusTone(application.runtimeReadiness.status)}
             />
           </div>
         </CardHeader>
         <CardContent className="grid flex-1 content-start gap-3">
           <div className="flex min-w-0 items-center justify-between gap-3 border-y py-2.5 text-sm">
-            <span className="text-muted-foreground">{copy.pods}</span>
+            <span className="text-muted-foreground">{copy.runtime}</span>
             <ApplicationReadyBar
-              health={application.health}
+              runtimeReadiness={application.runtimeReadiness}
               label={copy.pods}
               unavailable={copy.unavailable}
             />
           </div>
           <div className="grid gap-1 rounded-lg bg-muted/45 px-3 py-2.5 text-sm" data-testid="application-deployment-panel">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {copy.delivery}
+            </span>
+            <ApplicationDeliveryStateChannel
+              delivery={application.delivery}
+              labels={deliveryLabels}
+              unavailable={copy.unavailable}
+            />
+            <span className="pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {copy.deployment}
+            </span>
             <ApplicationDeploymentChannel
               deployment={deployment}
               unavailable={copy.unavailable}
@@ -79,6 +111,18 @@ export function ApplicationCard({
                 {[formatObservedTime(deployment.deployedAt, locale), deployment.deployedBy].filter(Boolean).join(" · ")}
               </span>
             ) : null}
+          </div>
+          <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-background/60 px-2.5 py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {copy.batchRuntime}
+            </span>
+            <ApplicationBatchRuntimeChannel
+              batchRuntime={application.batchRuntime}
+              counterLabels={batchCounterLabels}
+              labels={batchLabels}
+              partial={copy.partial}
+              unavailable={copy.unavailable}
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="grid min-w-0 gap-1 rounded-lg border bg-background/60 px-2.5 py-2">

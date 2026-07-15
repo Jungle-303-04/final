@@ -29,6 +29,8 @@ def application_card(
     inventory = inventory_projection(inventory_rows, inventory_context=inventory_context)
     drift = drift_projection(runs)
     current = current_deployment_projection(runs, inventory=inventory)
+    delivery = delivery_projection(runs)
+    batch_runtime = batch_runtime_projection(inventory_rows, inventory=inventory)
     return {
         "id": str(application.get("application_id") or ""),
         "name": str(application.get("name") or ""),
@@ -44,7 +46,10 @@ def application_card(
         "default_branch": _optional_text(application.get("default_branch")),
         "manifest_path": _optional_text(application.get("manifest_path")),
         "health": inventory["health"],
+        "runtime_readiness": inventory["runtime_readiness"],
         "current_deployment": current,
+        "delivery": delivery,
+        "batch_runtime": batch_runtime,
         "has_drift": (
             True
             if drift["status"] == "drifted"
@@ -114,6 +119,13 @@ def inventory_projection(
                 "total_pods": None,
                 "restarts": None,
             },
+            "runtime_readiness": {
+                "completeness": "unavailable",
+                "status": "unknown",
+                "ready_pods": None,
+                "total_pods": None,
+                "restarts": None,
+            },
             "resource_counts": None,
             "resource_counts_completeness": "unavailable",
             "endpoints": None,
@@ -155,6 +167,13 @@ def inventory_projection(
     digest = image.rsplit("@", 1)[1] if image and "@sha256:" in image else None
     return {
         "health": {
+            "status": health_status,
+            "ready_pods": ready_pods,
+            "total_pods": len(pods) if complete else None,
+            "restarts": restarts,
+        },
+        "runtime_readiness": {
+            "completeness": completeness,
             "status": health_status,
             "ready_pods": ready_pods,
             "total_pods": len(pods) if complete else None,
@@ -205,6 +224,87 @@ def current_deployment_projection(
         "git_sha": str(succeeded.get("commit_sha") or ""),
         "deployed_at": _optional_text(succeeded.get("updated_at")),
         "deployed_by": _run_actor(succeeded),
+    }
+
+
+def delivery_projection(runs: Sequence[Mapping[str, Any]]) -> JsonObject:
+    """Project the latest observed delivery attempt, separate from last success."""
+
+    latest = next(
+        (run for run in runs if _optional_text(run.get("workflow_run_id")) is not None),
+        None,
+    )
+    if latest is None:
+        return {
+            "availability": "unavailable",
+            "status": None,
+            "workflow_run_id": None,
+            "observed_at": None,
+        }
+    return {
+        "availability": "available",
+        "status": _deployment_status(latest.get("status")),
+        "workflow_run_id": _optional_text(latest.get("workflow_run_id")),
+        "observed_at": _optional_text(latest.get("updated_at")),
+    }
+
+
+def batch_runtime_projection(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    inventory: Mapping[str, Any],
+) -> JsonObject:
+    """Expose Job/CronJob counters only when they are actually observed.
+
+    The current collector can omit batch workloads.  An absent batch row is therefore
+    an unavailable signal, never a synthetic idle or zero state.
+    """
+
+    batch_rows = [
+        row for row in rows if str(row.get("kind") or "").casefold() in {"job", "cronjob"}
+    ]
+    if not batch_rows:
+        return {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "status": None,
+            "active_runs": None,
+            "failed_runs": None,
+            "succeeded_runs": None,
+        }
+
+    active_values = [_batch_counter(row, "active", "active_runs") for row in batch_rows]
+    failed_values = [_batch_counter(row, "failed", "failed_runs") for row in batch_rows]
+    succeeded_values = [_batch_counter(row, "succeeded", "succeeded_runs") for row in batch_rows]
+    suspended_values = [_batch_suspended(row) for row in batch_rows]
+    counters_complete = all(
+        value is not None
+        for values in (active_values, failed_values, succeeded_values)
+        for value in values
+    )
+    inventory_complete = inventory.get("resource_counts_completeness") == "exact"
+    completeness: Completeness = "exact" if inventory_complete and counters_complete else "partial"
+    active_runs = _sum_known_counters(active_values, complete=counters_complete)
+    failed_runs = _sum_known_counters(failed_values, complete=counters_complete)
+    succeeded_runs = _sum_known_counters(succeeded_values, complete=counters_complete)
+    status = (
+        "running"
+        if active_runs is not None and active_runs > 0
+        else "failed"
+        if failed_runs is not None and failed_runs > 0
+        else "succeeded"
+        if succeeded_runs is not None and succeeded_runs > 0
+        else "suspended"
+        if any(suspended_values)
+        else "unknown"
+    )
+    return {
+        "availability": "available",
+        "completeness": completeness,
+        "status": status,
+        "active_runs": active_runs,
+        "failed_runs": failed_runs,
+        "succeeded_runs": succeeded_runs,
     }
 
 
@@ -357,6 +457,23 @@ def _pod_ready(row: Mapping[str, Any]) -> bool | None:
             value = str(condition.get("status") or "").casefold()
             return True if value == "true" else False if value == "false" else None
     return None
+
+
+def _batch_counter(row: Mapping[str, Any], *keys: str) -> int | None:
+    summary = _mapping(row.get("summary"))
+    for key in keys:
+        if key in summary:
+            return _nonnegative_int(summary.get(key))
+    return None
+
+
+def _batch_suspended(row: Mapping[str, Any]) -> bool:
+    summary = _mapping(row.get("summary"))
+    return any(summary.get(key) is True for key in ("suspended", "suspend"))
+
+
+def _sum_known_counters(values: Sequence[int | None], *, complete: bool) -> int | None:
+    return sum(value for value in values if value is not None) if complete else None
 
 
 def _run_version(run: Mapping[str, Any]) -> str | None:

@@ -22,6 +22,13 @@ def _card() -> dict[str, object]:
         "default_branch": "main",
         "manifest_path": "deploy/checkout.yaml",
         "health": {"status": "healthy", "ready_pods": 2, "total_pods": 2, "restarts": 0},
+        "runtime_readiness": {
+            "completeness": "exact",
+            "status": "healthy",
+            "ready_pods": 2,
+            "total_pods": 2,
+            "restarts": 0,
+        },
         "current_deployment": {
             "version": "v2.4.1",
             "image": "ghcr.io/org/checkout:v2.4.1@sha256:abc",
@@ -29,6 +36,20 @@ def _card() -> dict[str, object]:
             "git_sha": "abc123",
             "deployed_at": "2026-07-14T10:00:00Z",
             "deployed_by": "user-1",
+        },
+        "delivery": {
+            "availability": "available",
+            "status": "succeeded",
+            "workflow_run_id": "run-1",
+            "observed_at": "2026-07-14T10:00:00Z",
+        },
+        "batch_runtime": {
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "status": None,
+            "active_runs": None,
+            "failed_runs": None,
+            "succeeded_runs": None,
         },
         "has_drift": False,
         "drift_summary": None,
@@ -43,6 +64,7 @@ def test_application_product_contracts_are_strict_and_provider_neutral() -> None
 
     assert routes.APPLICATION_DRIFT_PATH == "/applications/{application_id}/drift"
     assert response.applications[0].health.ready_pods == 2
+    assert response.applications[0].delivery.workflow_run_id == "run-1"
     with pytest.raises(ValidationError):
         ApplicationProductListResponse.model_validate(
             {
@@ -83,6 +105,45 @@ def test_application_detail_requires_honest_completeness_and_bounded_activity() 
                 }
             }
         )
+
+
+def test_application_runtime_delivery_and_batch_contracts_require_honest_availability() -> None:
+    invalid_cards = [
+        _card()
+        | {
+            "runtime_readiness": {
+                "completeness": "unavailable",
+                "status": "healthy",
+                "ready_pods": 1,
+                "total_pods": 1,
+                "restarts": 0,
+            }
+        },
+        _card()
+        | {
+            "delivery": {
+                "availability": "unavailable",
+                "status": "failed",
+                "workflow_run_id": "run-2",
+                "observed_at": None,
+            }
+        },
+        _card()
+        | {
+            "batch_runtime": {
+                "availability": "available",
+                "completeness": "unavailable",
+                "status": None,
+                "active_runs": None,
+                "failed_runs": None,
+                "succeeded_runs": None,
+            }
+        },
+    ]
+
+    for card in invalid_cards:
+        with pytest.raises(ValidationError):
+            ApplicationProductListResponse.model_validate({"applications": [card]})
 
 
 def test_deployment_and_drift_contracts_reject_raw_or_complex_values() -> None:

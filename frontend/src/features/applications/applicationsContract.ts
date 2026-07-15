@@ -33,6 +33,33 @@ export interface ApplicationHealth {
   restarts: number | null;
 }
 
+export type ApplicationProjectionCompleteness = "exact" | "partial" | "unavailable";
+export type ApplicationProjectionAvailability = "available" | "unavailable";
+
+export interface ApplicationRuntimeReadiness {
+  completeness: ApplicationProjectionCompleteness;
+  status: "healthy" | "degraded" | "unknown";
+  readyPods: number | null;
+  totalPods: number | null;
+  restarts: number | null;
+}
+
+export interface ApplicationDeliveryState {
+  availability: ApplicationProjectionAvailability;
+  status: "succeeded" | "failed" | "running" | "pending" | "unknown" | null;
+  workflowRunId: string | null;
+  observedAt: string | null;
+}
+
+export interface ApplicationBatchRuntime {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  status: "running" | "failed" | "succeeded" | "suspended" | "unknown" | null;
+  activeRuns: number | null;
+  failedRuns: number | null;
+  succeededRuns: number | null;
+}
+
 export interface ApplicationCurrentDeployment {
   version: string | null;
   image: string | null;
@@ -53,11 +80,14 @@ export interface ApplicationCardModel {
   environments: readonly string[];
   lifecycleStatus: string;
   health: ApplicationHealth;
+  runtimeReadiness: ApplicationRuntimeReadiness;
   currentDeployment: ApplicationCurrentDeployment | null;
+  delivery: ApplicationDeliveryState;
+  batchRuntime: ApplicationBatchRuntime;
   hasDrift: boolean | null;
   driftSummary: string | null;
   resourceCounts: readonly ApplicationResourceCount[] | null;
-  resourceCountsCompleteness: "exact" | "partial" | "unavailable";
+  resourceCountsCompleteness: ApplicationProjectionCompleteness;
   openIncidents: number | null;
   repositoryRef: string | null;
   defaultBranch: string | null;
@@ -175,6 +205,13 @@ export interface ApplicationCatalogEndpointItem {
     total_pods: number | null;
     restarts: number | null;
   };
+  runtime_readiness: {
+    completeness: ApplicationProjectionCompleteness;
+    status: "healthy" | "degraded" | "unknown";
+    ready_pods: number | null;
+    total_pods: number | null;
+    restarts: number | null;
+  };
   current_deployment: {
     version: string | null;
     image: string | null;
@@ -183,10 +220,24 @@ export interface ApplicationCatalogEndpointItem {
     deployed_at: string | null;
     deployed_by: string | null;
   } | null;
+  delivery: {
+    availability: ApplicationProjectionAvailability;
+    status: "succeeded" | "failed" | "running" | "pending" | "unknown" | null;
+    workflow_run_id: string | null;
+    observed_at: string | null;
+  };
+  batch_runtime: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    status: "running" | "failed" | "succeeded" | "suspended" | "unknown" | null;
+    active_runs: number | null;
+    failed_runs: number | null;
+    succeeded_runs: number | null;
+  };
   has_drift: boolean | null;
   drift_summary: string | null;
   resource_counts: { kind: string; count: number }[] | null;
-  resource_counts_completeness: "exact" | "partial" | "unavailable";
+  resource_counts_completeness: ApplicationProjectionCompleteness;
   open_incidents: number | null;
   repository_ref: string | null;
   default_branch: string | null;

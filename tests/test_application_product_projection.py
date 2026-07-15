@@ -147,6 +147,27 @@ def test_card_and_detail_use_only_allowlisted_observed_evidence() -> None:
         "total_pods": 1,
         "restarts": 2,
     }
+    assert card["runtime_readiness"] == {
+        "completeness": "exact",
+        "status": "healthy",
+        "ready_pods": 1,
+        "total_pods": 1,
+        "restarts": 2,
+    }
+    assert card["delivery"] == {
+        "availability": "available",
+        "status": "succeeded",
+        "workflow_run_id": "run-1",
+        "observed_at": "2026-07-14T10:00:00Z",
+    }
+    assert card["batch_runtime"] == {
+        "availability": "unavailable",
+        "completeness": "unavailable",
+        "status": None,
+        "active_runs": None,
+        "failed_runs": None,
+        "succeeded_runs": None,
+    }
     assert card["current_deployment"]["image_digest"] == "sha256:abc"
     assert detail["endpoints"] == [
         {
@@ -192,10 +213,108 @@ def test_unknown_projection_remains_null_instead_of_inventing_zero_or_sync() -> 
 
     assert card["health"]["status"] == "unknown"
     assert card["health"]["total_pods"] is None
+    assert card["runtime_readiness"]["completeness"] == "unavailable"
     assert card["resource_counts"] is None
     assert card["resource_counts_completeness"] == "unavailable"
     assert card["open_incidents"] is None
     assert card["has_drift"] is None
+    assert card["delivery"]["availability"] == "unavailable"
+    assert card["batch_runtime"]["availability"] == "unavailable"
+
+
+def test_delivery_and_batch_runtime_project_only_observed_latest_signals() -> None:
+    context = {
+        "snapshot_revision": 42,
+        "resources_complete": True,
+        "application_bindings_complete": True,
+    }
+    rows = _inventory() + [
+        {
+            "id": "job-1",
+            "resource_type": "workload",
+            "kind": "Job",
+            "name": "checkout-migrate",
+            "status": "Running",
+            "health": "healthy",
+            "binding_complete": True,
+            "summary": {"active": 1, "failed": 0, "succeeded": 2},
+        },
+        {
+            "id": "cronjob-1",
+            "resource_type": "workload",
+            "kind": "CronJob",
+            "name": "checkout-sweep",
+            "status": "Ready",
+            "health": "healthy",
+            "binding_complete": True,
+            "summary": {"active": 0, "failed": 0, "succeeded": 3, "suspended": False},
+        },
+    ]
+    failed_latest = {
+        **_runs()[0],
+        "workflow_run_id": "run-2",
+        "status": "failed",
+        "updated_at": "2026-07-14T11:00:00Z",
+    }
+    card = application_card(
+        _application(),
+        bindings=[],
+        runs=[failed_latest, *_runs()],
+        inventory_rows=rows,
+        inventory_context=context,
+        incident_evidence={"complete": False, "open_count": None, "items": []},
+    )
+
+    assert card["current_deployment"]["git_sha"] == "abc123"
+    assert card["delivery"] == {
+        "availability": "available",
+        "status": "failed",
+        "workflow_run_id": "run-2",
+        "observed_at": "2026-07-14T11:00:00Z",
+    }
+    assert card["batch_runtime"] == {
+        "availability": "available",
+        "completeness": "exact",
+        "status": "running",
+        "active_runs": 1,
+        "failed_runs": 0,
+        "succeeded_runs": 5,
+    }
+
+
+def test_batch_runtime_does_not_coerce_missing_observed_counters_to_zero() -> None:
+    card = application_card(
+        _application(),
+        bindings=[],
+        runs=[],
+        inventory_rows=[
+            {
+                "id": "job-1",
+                "resource_type": "workload",
+                "kind": "Job",
+                "name": "checkout-migrate",
+                "status": "Unknown",
+                "health": "healthy",
+                "binding_complete": True,
+                "summary": {"active": 0},
+            }
+        ],
+        inventory_context={
+            "snapshot_revision": 42,
+            "resources_complete": True,
+            "application_bindings_complete": True,
+        },
+        incident_evidence={"complete": False, "open_count": None, "items": []},
+    )
+
+    assert card["batch_runtime"] == {
+        "availability": "available",
+        "completeness": "partial",
+        "status": "unknown",
+        "active_runs": None,
+        "failed_runs": None,
+        "succeeded_runs": None,
+    }
 
 
 def test_deployment_history_does_not_invent_gitops_change_identity() -> None:
