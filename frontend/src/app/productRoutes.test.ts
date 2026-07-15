@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PRODUCT_ROUTE_CATALOG,
+  landingProductRouteForReleasedSurfaces,
   productNavigationForReleasedSurfaces,
   productRouteForPath,
   resolveProductRoute,
@@ -43,6 +44,18 @@ describe("product route release registry", () => {
       "issues",
       "settings",
     ]);
+  });
+
+  it("resolves the landing route from declarative route metadata", () => {
+    expect(PRODUCT_ROUTE_CATALOG.find((route) => route.landing)?.id).toBe("home");
+    expect(landingProductRouteForReleasedSurfaces(new Set<ProductSurfaceId>([
+      "home",
+      "clusters",
+    ])).id).toBe("home");
+    expect(landingProductRouteForReleasedSurfaces(new Set<ProductSurfaceId>([
+      "clusters",
+      "resources",
+    ])).id).toBe("clusters");
   });
 
   it.each([
