@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -69,6 +69,20 @@ class WorkflowStepStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+@dataclass(frozen=True)
+class WorkflowMutation:
+    """The outcome of one guarded workflow persistence attempt.
+
+    ``applied`` is true only when PostgreSQL inserted a row or accepted a state
+    transition. ``values`` contains the small, safe identity projection needed
+    by orchestration code; it deliberately excludes summaries, manifests,
+    command results, and JSON metadata.
+    """
+
+    applied: bool
+    values: Mapping[str, str] = field(default_factory=dict)
 
 
 class ApprovalStatus(StrEnum):
