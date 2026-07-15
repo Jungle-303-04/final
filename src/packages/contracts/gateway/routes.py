@@ -152,6 +152,8 @@ CHANGES_PATH = "/changes"
 # Retained, immutable product Timeline history.  Snapshot is NDJSON so a
 # browser/desktop adapter can use the same frame parser as resumable SSE.
 TIMELINE_CAPABILITIES_PATH = "/timeline/capabilities"
+TIMELINE_PINS_PATH = "/timeline/pins"
+TIMELINE_PIN_PATH = "/timeline/pins/{pin_id}"
 TIMELINE_OVERVIEW_PATH = "/timeline/overview"
 TIMELINE_SNAPSHOTS_PATH = "/timeline/snapshots"
 TIMELINE_STREAM_PATH = "/timeline/stream"

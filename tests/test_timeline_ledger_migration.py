@@ -36,7 +36,6 @@ def test_timeline_ledger_migration_creates_replay_and_dedupe_storage(monkeypatch
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == REVISION
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
 
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")

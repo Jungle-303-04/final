@@ -23,6 +23,9 @@ from packages.contracts.timeline import (
     TimelineCoverage,
     TimelineEvent,
     TimelineFilters,
+    TimelinePin,
+    TimelinePinnedResourceSubject,
+    TimelinePinSet,
     TimelineQuery,
     TimelineResourceSubject,
     TimelineStreamFrame,
@@ -97,6 +100,29 @@ class TimelineSnapshotDb:
     ) -> tuple[TimelineCoverage, ...]:
         self.coverage_calls.append({"read_scope": read_scope, **kwargs})
         return self.coverage
+
+
+class PinnedTimelineSnapshotDb(TimelineSnapshotDb):
+    def __init__(self) -> None:
+        super().__init__()
+        event = _event()
+        assert isinstance(event.subject, TimelineResourceSubject)
+        self.pin_set = TimelinePinSet(
+            revision=4,
+            pins=(
+                TimelinePin(
+                    pin_id="pin-resource",
+                    subject=TimelinePinnedResourceSubject(
+                        scope=event.scope,
+                        resource=event.subject.resource,
+                    ),
+                    created_at=datetime(2026, 7, 16, tzinfo=UTC),
+                ),
+            ),
+        )
+
+    def read_timeline_pin_set(self, _workspace_id: str, _user_id: str) -> TimelinePinSet:
+        return self.pin_set
 
 
 class ClosedTimelineFanout:
@@ -287,6 +313,33 @@ def test_timeline_stream_reuses_snapshot_cursor_as_sse_resume_state() -> None:
     ]
     assert [frame.kind for frame in frames] == ["event", "error"]
     assert all("sequence" not in line for line in response.text.splitlines())
+
+
+def test_pinned_snapshot_uses_actual_membership_and_rejects_a_cursor_after_revision_change() -> (
+    None
+):
+    db = PinnedTimelineSnapshotDb()
+    query = _query().model_copy(
+        update={"filters": _query().filters.model_copy(update={"pinned_only": True})}
+    )
+    client = _client(db, timeline_fanout=ClosedTimelineFanout())
+    snapshot_response = client.post(
+        "/timeline/snapshots", json={"query": query.model_dump(mode="json")}
+    )
+
+    snapshot = TimelineStreamFrame.model_validate_json(snapshot_response.text.splitlines()[0])
+    end = TimelineStreamFrame.model_validate_json(snapshot_response.text.splitlines()[1])
+    assert snapshot.pin_set_revision == 4
+    assert [event.event_id for event in snapshot.events] == ["inventory-event-7"]
+    assert end.pin_set_revision is None
+
+    db.pin_set = db.pin_set.model_copy(update={"revision": 5})
+    invalid_resume = client.post(
+        "/timeline/stream",
+        json={"query": query.model_dump(mode="json"), "after": snapshot.cursor.model_dump()},
+    )
+    assert invalid_resume.status_code == 422
+    assert invalid_resume.json() == {"detail": "timeline replay cursor is invalid"}
 
 
 def test_snapshot_and_sse_apply_the_same_server_evidence_predicate() -> None:

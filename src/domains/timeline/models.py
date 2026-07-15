@@ -71,3 +71,37 @@ class TimelineLedgerEvent(Base):
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False)
     occurred_at: Mapped[Any] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     recorded_at: Mapped[Any] = created_at_column()
+
+
+class TimelinePinSetRecord(Base):
+    """One optimistic-concurrency revision for a user's persistent workspace pins."""
+
+    __tablename__ = "timeline_pin_sets"
+
+    workspace_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    created_at: Mapped[Any] = created_at_column()
+    updated_at: Mapped[Any] = updated_at_column()
+
+
+class TimelinePinRecord(Base):
+    """Immutable pin subject snapshot; authorization hides rows but never rewrites them."""
+
+    __tablename__ = "timeline_pins"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "user_id",
+            "subject_key",
+            name="uq_timeline_pins_owner_subject",
+        ),
+        Index("ix_timeline_pins_owner", "workspace_id", "user_id", "created_at", "pin_id"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    pin_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    subject_key: Mapped[str] = text_column()
+    subject: Mapped[dict[str, Any]] = jsonb_column()
+    created_at: Mapped[Any] = created_at_column()

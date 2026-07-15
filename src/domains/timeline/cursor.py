@@ -23,15 +23,15 @@ TIMELINE_SEQUENCE_POSITION = "timeline_sequence"
 class TimelineEvidenceFilters(StrictModel):
     """The subset of Timeline filters that changes durable evidence membership.
 
-    ``pinned_only`` is intentionally absent. Pins have no server-backed user
-    contract yet, so treating that UI preference as a durable predicate would
-    create a dishonest empty result. Grouping and sort are presentation-only
-    controls and are likewise excluded by ``TimelineReplayIdentity`` below.
+    ``pinned_only`` is server-backed. Its actual membership is held outside
+    this public shape, while its pin-set revision is bound below so a resume
+    cannot cross a mutation.
     """
 
     activity: tuple[TimelineActivity, ...] = ()
     kinds: tuple[str, ...] = ()
     include_deleted: bool = True
+    pinned_only: bool = False
     search: str = ""
 
 
@@ -47,9 +47,19 @@ class TimelineReplayIdentity(StrictModel):
     window: TimelineWindow
     mode: TimelineReadMode
     filters: TimelineEvidenceFilters
+    pin_set_revision: int | None = None
 
     @classmethod
-    def from_query(cls, query: TimelineQuery) -> TimelineReplayIdentity:
+    def from_query(
+        cls,
+        query: TimelineQuery,
+        *,
+        pin_set_revision: int | None = None,
+    ) -> TimelineReplayIdentity:
+        if query.filters.pinned_only and pin_set_revision is None:
+            raise ValueError("pinned timeline replay requires a pin-set revision")
+        if pin_set_revision is not None and pin_set_revision < 0:
+            raise ValueError("timeline pin-set revision must be non-negative")
         return cls(
             scopes=tuple(scope.model_copy(update={"freshness": "live"}) for scope in query.scopes),
             window=query.window,
@@ -58,8 +68,10 @@ class TimelineReplayIdentity(StrictModel):
                 activity=query.filters.activity,
                 kinds=query.filters.kinds,
                 include_deleted=query.filters.include_deleted,
+                pinned_only=query.filters.pinned_only,
                 search=query.filters.query.strip(),
             ),
+            pin_set_revision=pin_set_revision if query.filters.pinned_only else None,
         )
 
 
@@ -79,11 +91,14 @@ class TimelineCursorBinding(StrictModel):
         authorization_revision: str,
         query: TimelineQuery,
         snapshot_revision: int = 0,
+        pin_set_revision: int | None = None,
     ) -> TimelineCursorBinding:
         return cls(
             user_id=user_id,
             authorization_revision=authorization_revision,
-            replay_identity=TimelineReplayIdentity.from_query(query),
+            replay_identity=TimelineReplayIdentity.from_query(
+                query, pin_set_revision=pin_set_revision
+            ),
             snapshot_revision=snapshot_revision,
         )
 
@@ -142,6 +157,7 @@ def timeline_replay_identity_fingerprint(identity: TimelineReplayIdentity) -> st
         "window": identity.window.model_dump(mode="json"),
         "mode": identity.mode,
         "filters": identity.filters.model_dump(mode="json"),
+        "pin_set_revision": identity.pin_set_revision,
     }
     encoded = json.dumps(
         payload,

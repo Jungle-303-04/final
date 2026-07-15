@@ -12,7 +12,12 @@ from domains.identity.dependencies import require_session
 from domains.timeline.repository import TimelineOverviewAggregate, TimelineOverviewBucketAggregate
 from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope
-from packages.contracts.timeline import TimelineCoverage, TimelineQuery, TimelineWindow
+from packages.contracts.timeline import (
+    TimelineCoverage,
+    TimelinePinSet,
+    TimelineQuery,
+    TimelineWindow,
+)
 from packages.runtime.dependencies import get_db
 
 
@@ -56,6 +61,9 @@ class TimelineOverviewDb:
             cluster_id: {"last_seen_at": datetime.now(UTC).isoformat()}
             for cluster_id in cluster_ids
         }
+
+    def read_timeline_pin_set(self, _workspace_id: str, _user_id: str) -> TimelinePinSet:
+        return TimelinePinSet(revision=0)
 
     def timeline_overview(self, read_scope: object, **kwargs: object) -> TimelineOverviewAggregate:
         self.overview_calls.append({"read_scope": read_scope, **kwargs})
@@ -145,6 +153,28 @@ def test_timeline_overview_reports_known_gaps_without_claiming_unavailable_sourc
     assert "coverage_count" not in payload
 
 
+def test_pinned_overview_preserves_scope_level_partial_coverage_without_inventing_pin_coverage() -> (
+    None
+):
+    gap = TimelineCoverage(
+        scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
+        source="kubernetes_event",
+        from_ms=1_100,
+        to_ms=1_200,
+        reason="collection_gap",
+    )
+    query = _query().model_copy(
+        update={"filters": _query().filters.model_copy(update={"pinned_only": True})}
+    )
+    response = _client(TimelineOverviewDb(coverage=(gap,))).post(
+        "/timeline/overview", json={"query": query.model_dump(mode="json")}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["pin_set_revision"] == 0
+    assert response.json()["coverage"] == [gap.model_dump(mode="json")]
+
+
 def test_timeline_overview_keeps_empty_buckets_and_independent_zero_facets() -> None:
     db = TimelineOverviewDb(
         aggregate=TimelineOverviewAggregate(
@@ -177,7 +207,7 @@ def test_timeline_overview_counts_later_evidence_only_for_frozen_windows() -> No
     assert response.json()["new_evidence_count"] == 7
 
 
-def test_timeline_overview_fails_closed_for_scope_and_unavailable_controls() -> None:
+def test_timeline_overview_fails_closed_for_scope_and_invalid_controls() -> None:
     db = TimelineOverviewDb()
     client = _client(db)
     forbidden = client.post(
@@ -191,7 +221,9 @@ def test_timeline_overview_fails_closed_for_scope_and_unavailable_controls() -> 
         update={"filters": _query().filters.model_copy(update={"activity": ("change", "warning")})}
     )
     invalid_preset = _query().model_copy(update={"range_id": "1h"})
-    invalid_pin = client.post("/timeline/overview", json={"query": pinned.model_dump(mode="json")})
+    pinned_response = client.post(
+        "/timeline/overview", json={"query": pinned.model_dump(mode="json")}
+    )
     invalid_activity = client.post(
         "/timeline/overview", json={"query": unsupported_activity.model_dump(mode="json")}
     )
@@ -200,11 +232,11 @@ def test_timeline_overview_fails_closed_for_scope_and_unavailable_controls() -> 
     )
 
     assert forbidden.status_code == 404
-    assert invalid_pin.status_code == 422
-    assert invalid_pin.json()["detail"] == "timeline control selection is unavailable"
+    assert pinned_response.status_code == 200
+    assert pinned_response.json()["pin_set_revision"] == 0
     assert invalid_activity.status_code == 422
     assert invalid_range.status_code == 422
-    assert db.overview_calls == []
+    assert len(db.overview_calls) == 1
 
 
 def test_timeline_overview_reports_coverage_unavailability_without_downgrading_to_zero_gaps() -> (

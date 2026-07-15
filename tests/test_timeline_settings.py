@@ -91,7 +91,14 @@ def test_timeline_realtime_policy_is_server_owned_and_bounded(
         ("2h", 7_200_000),
     ]
     assert controls.default_lens_zoom_rung == "1h"
-    assert controls.pins.availability == "unavailable"
+    assert controls.pins.model_dump() == {
+        "key": "pins",
+        "label": "Pinned lanes",
+        "availability": "available",
+        "storage": "server",
+        "revision": "pin_set",
+        "subject_kinds": ("resource", "application"),
+    }
     assert timeline_replay_poll_seconds() == 0.25
 
 

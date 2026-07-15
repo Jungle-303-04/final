@@ -8,6 +8,7 @@ fan-out never exposes an event that the retained read would reject.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -25,6 +26,21 @@ from packages.contracts.timeline import (
 )
 
 
+@dataclass(frozen=True)
+class TimelinePinMembership:
+    """Server-resolved visible membership for one revisioned ``pinned_only`` read."""
+
+    revision: int
+    resource_identities: frozenset[tuple[str, str]] = frozenset()
+    application_ids: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if self.revision < 0:
+            raise ValueError("timeline pin membership revision must be non-negative")
+        if any(not cluster_id or not uid for cluster_id, uid in self.resource_identities):
+            raise ValueError("timeline pin resource identities must be non-empty")
+
+
 class TimelineEvidencePredicate:
     """Authorized scope plus server-owned durable evidence selection."""
 
@@ -33,10 +49,14 @@ class TimelineEvidencePredicate:
         *,
         read_scope: Any,
         replay_identity: TimelineReplayIdentity,
+        pin_membership: TimelinePinMembership | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.read_scope = read_scope
         self.replay_identity = replay_identity
+        if replay_identity.filters.pinned_only and pin_membership is None:
+            raise ValueError("pinned timeline predicate requires resolved pin membership")
+        self.pin_membership = pin_membership
         self._now = now or (lambda: datetime.now(UTC))
 
     @classmethod
@@ -45,11 +65,16 @@ class TimelineEvidencePredicate:
         read_scope: Any,
         query: Any,
         *,
+        pin_membership: TimelinePinMembership | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> TimelineEvidencePredicate:
         return cls(
             read_scope=read_scope,
-            replay_identity=TimelineReplayIdentity.from_query(query),
+            replay_identity=TimelineReplayIdentity.from_query(
+                query,
+                pin_set_revision=(pin_membership.revision if pin_membership is not None else None),
+            ),
+            pin_membership=pin_membership,
             now=now,
         )
 
@@ -60,6 +85,7 @@ class TimelineEvidencePredicate:
             and _source_is_authorized(event, self.read_scope)
             and _is_within_snapshot_window(event, self.replay_identity)
             and _matches_filters(event, self.replay_identity)
+            and _matches_pins(event, self.replay_identity, self.pin_membership)
         )
 
     def matches_stream(self, event: TimelineEvent) -> bool:
@@ -69,6 +95,7 @@ class TimelineEvidencePredicate:
             and _source_is_authorized(event, self.read_scope)
             and _is_within_stream_window(event, self.replay_identity, self._now())
             and _matches_filters(event, self.replay_identity)
+            and _matches_pins(event, self.replay_identity, self.pin_membership)
         )
 
     def matches(self, event: TimelineEvent) -> bool:
@@ -86,11 +113,13 @@ class TimelineEvidencePredicate:
                             "activity": filters.activity,
                             "kinds": filters.kinds,
                             "include_deleted": filters.include_deleted,
+                            "pinned_only": self.replay_identity.filters.pinned_only,
                             "search": filters.query.strip(),
                         }
                     )
                 }
             ),
+            pin_membership=self.pin_membership,
             now=self._now,
         )
 
@@ -113,6 +142,7 @@ class TimelineEvidencePredicate:
                     "mode": "live",
                 }
             ),
+            pin_membership=self.pin_membership,
             now=self._now,
         )
 
@@ -148,6 +178,8 @@ def timeline_evidence_sql_predicate(
         conditions.append(
             or_(*(column.ilike(pattern, escape="\\") for column in _search_columns(ledger)))
         )
+    if filters.pinned_only:
+        conditions.append(_pin_membership_sql_predicate(ledger, predicate.pin_membership))
     return and_(*conditions)
 
 
@@ -212,6 +244,28 @@ def _matches_filters(event: TimelineEvent, identity: TimelineReplayIdentity) -> 
     if not filters.include_deleted and event.event_type == "delete":
         return False
     return not filters.search or _search_matches(event, filters.search)
+
+
+def _matches_pins(
+    event: TimelineEvent,
+    identity: TimelineReplayIdentity,
+    membership: TimelinePinMembership | None,
+) -> bool:
+    if not identity.filters.pinned_only:
+        return True
+    if membership is None:
+        return False
+    resource = event.resource
+    if resource is None and isinstance(event.subject, TimelineResourceSubject):
+        resource = event.subject.resource
+    if (
+        resource is not None
+        and (event.scope.cluster_id, resource.uid) in membership.resource_identities
+    ):
+        return True
+    return isinstance(event.subject, TimelineApplicationWorkflowSubject) and (
+        event.subject.application_id in membership.application_ids
+    )
 
 
 def _resource_kind(event: TimelineEvent) -> str | None:
@@ -307,6 +361,29 @@ def _source_authorization_sql_predicate(ledger: Any, read_scope: Any) -> Any:
                     tuple(sorted(read_scope.gitops_application_ids))
                 ),
             )
+        )
+    return or_(*predicates) if predicates else false()
+
+
+def _pin_membership_sql_predicate(ledger: Any, membership: TimelinePinMembership | None) -> Any:
+    """Match exact stored UIDs/application IDs; an empty visible set is a real empty result."""
+    if membership is None:
+        return false()
+    predicates: list[Any] = []
+    if membership.resource_identities:
+        for cluster_id, uid in sorted(membership.resource_identities):
+            predicates.append(
+                and_(
+                    ledger.c.cluster_id == cluster_id,
+                    or_(
+                        ledger.c.resource["uid"].astext == uid,
+                        ledger.c.subject["resource"]["uid"].astext == uid,
+                    ),
+                )
+            )
+    if membership.application_ids:
+        predicates.append(
+            ledger.c.subject["application_id"].astext.in_(tuple(sorted(membership.application_ids)))
         )
     return or_(*predicates) if predicates else false()
 

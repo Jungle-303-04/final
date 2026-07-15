@@ -97,6 +97,80 @@ class TimelineFilters(StrictModel):
         return tuple(sorted(normalized))
 
 
+class TimelinePinResourceTarget(StrictModel):
+    """One exact, user-selected Kubernetes resource before the server persists it."""
+
+    kind: Literal["resource"] = "resource"
+    scope: ClusterScope
+    resource: ResourceRef
+
+
+class TimelinePinApplicationTarget(StrictModel):
+    """One stable application identity before the server materializes its snapshot."""
+
+    kind: Literal["application"] = "application"
+    application_id: str = Field(min_length=1, max_length=512)
+
+
+TimelinePinTarget = Annotated[
+    TimelinePinResourceTarget | TimelinePinApplicationTarget,
+    Field(discriminator="kind"),
+]
+
+
+class TimelineApplicationPinSnapshot(StrictModel):
+    """Immutable display facts materialized from the currently readable application."""
+
+    name: str = Field(min_length=1, max_length=512)
+    repository_id: str = Field(min_length=1, max_length=512)
+    manifest_path: str = Field(min_length=1, max_length=2_048)
+
+
+class TimelinePinnedResourceSubject(TimelinePinResourceTarget):
+    """The exact resource reference at pin creation; it is never rewritten on rename."""
+
+
+class TimelinePinnedApplicationSubject(TimelinePinApplicationTarget):
+    """The stable application identifier plus immutable server-owned display facts."""
+
+    snapshot: TimelineApplicationPinSnapshot
+
+
+TimelinePinSubject = Annotated[
+    TimelinePinnedResourceSubject | TimelinePinnedApplicationSubject,
+    Field(discriminator="kind"),
+]
+
+
+class TimelinePin(StrictModel):
+    """A persistent user/workspace pin. Hidden pins are omitted, never re-owned or rewritten."""
+
+    pin_id: str = Field(min_length=1, max_length=128)
+    subject: TimelinePinSubject
+    created_at: datetime
+
+
+class TimelinePinSet(StrictModel):
+    """Visible pins for exactly one authenticated user and workspace, plus its optimistic revision."""
+
+    revision: int = Field(ge=0)
+    pins: tuple[TimelinePin, ...] = ()
+
+
+class TimelinePinUpsertRequest(StrictModel):
+    """Idempotent add guarded by the pin-set revision returned by GET."""
+
+    expected_revision: int = Field(ge=0)
+    target: TimelinePinTarget
+
+
+class TimelinePinMutation(StrictModel):
+    """PUT/DELETE result; absent DELETE is intentionally idempotent and does not change revision."""
+
+    action: Literal["added", "unchanged", "deleted", "absent"]
+    pin_set: TimelinePinSet
+
+
 class TimelineQuery(StrictModel):
     """A requested timeline identity; freshness is derived by the gateway, not selected by clients."""
 
@@ -258,11 +332,27 @@ class TimelineFacetControl(StrictModel):
 
 
 class TimelinePinsControl(StrictModel):
-    """Pins are deliberately advertised as unavailable until their own API exists."""
+    """Pins are available only through the authenticated persistent pin-set API."""
 
     key: Literal["pins"] = "pins"
     label: str = Field(min_length=1, max_length=200)
-    availability: Literal["unavailable"]
+    availability: Literal["available", "unavailable"]
+    storage: Literal["server"] | None = None
+    revision: Literal["pin_set"] | None = None
+    subject_kinds: tuple[Literal["resource", "application"], ...] = ()
+
+    @model_validator(mode="after")
+    def validate_persistent_pin_capability(self) -> TimelinePinsControl:
+        if self.availability == "available":
+            if (
+                self.storage != "server"
+                or self.revision != "pin_set"
+                or self.subject_kinds != ("resource", "application")
+            ):
+                raise ValueError("available timeline pins require the persistent pin-set contract")
+        elif self.storage is not None or self.revision is not None or self.subject_kinds:
+            raise ValueError("unavailable timeline pins cannot advertise a storage contract")
+        return self
 
 
 class TimelineLegendControl(StrictModel):
@@ -392,6 +482,7 @@ class TimelineOverview(StrictModel):
     coverage_sources: tuple[TimelineCoverageSourceAvailability, ...] = Field(min_length=1)
     facets: TimelineOverviewFacets
     new_evidence_count: int | None = Field(default=None, ge=0)
+    pin_set_revision: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_bucket_window(self) -> TimelineOverview:
@@ -492,6 +583,7 @@ class TimelineStreamFrame(StrictModel):
     scopes: tuple[ClusterScope, ...] = ()
     policy: RealtimePolicy | None = None
     capabilities: TimelineCapabilityDescriptor | None = None
+    pin_set_revision: int | None = Field(default=None, ge=0)
     event: TimelineEvent | None = None
     events: tuple[TimelineEvent, ...] = ()
     coverage: tuple[TimelineCoverage, ...] = ()
@@ -521,6 +613,7 @@ class TimelineStreamFrame(StrictModel):
                 or self.events
                 or self.coverage
                 or self.reason is not None
+                or self.pin_set_revision is not None
             ):
                 raise ValueError("event frame may only carry one event")
             return self
@@ -533,6 +626,7 @@ class TimelineStreamFrame(StrictModel):
                 or self.event is not None
                 or self.events
                 or self.reason is not None
+                or self.pin_set_revision is not None
             ):
                 raise ValueError("coverage frame requires coverage only")
             return self
@@ -545,6 +639,7 @@ class TimelineStreamFrame(StrictModel):
                 or self.event is not None
                 or self.events
                 or self.coverage
+                or self.pin_set_revision is not None
             ):
                 raise ValueError("resync frame requires reason only")
             return self
@@ -555,6 +650,7 @@ class TimelineStreamFrame(StrictModel):
             or self.event is not None
             or self.events
             or self.coverage
+            or self.pin_set_revision is not None
         ):
             raise ValueError("terminal frame must not carry timeline records")
         if self.kind == "error" and not self.reason:
