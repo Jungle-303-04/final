@@ -25,10 +25,11 @@ export interface ProductRouteDefinition {
   icon: ProductRouteIcon;
   shortcut: `g ${string}`;
   match: "exact" | "prefix";
+  landing: boolean;
 }
 
 export const PRODUCT_ROUTE_CATALOG = [
-  route("home", "Home", "/home", "g h", "exact"),
+  route("home", "Home", "/home", "g h", { match: "exact", landing: true }),
   route("clusters", "Clusters", "/clusters", "g k"),
   route("resources", "Resources", "/resources", "g r"),
   route("issues", "Incidents", "/issues", "g i"),
@@ -42,6 +43,15 @@ export function productNavigationForReleasedSurfaces(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
 ): readonly ProductRouteDefinition[] {
   return PRODUCT_ROUTE_CATALOG.filter((routeDefinition) => releasedSurfaceIds.has(routeDefinition.id));
+}
+
+export function landingProductRouteForReleasedSurfaces(
+  releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
+): ProductRouteDefinition {
+  const releasedRoutes = productNavigationForReleasedSurfaces(releasedSurfaceIds);
+  const landingRoute = releasedRoutes.find((routeDefinition) => routeDefinition.landing);
+  return landingRoute ?? releasedRoutes[0]
+    ?? failToResolveLandingRoute(releasedSurfaceIds);
 }
 
 export function productRouteForPath(pathname: string): ProductRouteDefinition | null {
@@ -65,9 +75,28 @@ function route(
   label: string,
   path: `/${string}`,
   shortcut: `g ${string}`,
-  match: "exact" | "prefix" = "prefix",
+  behavior: ProductRouteBehavior = {},
 ): ProductRouteDefinition {
-  return { id, label, path, icon: id, shortcut, match };
+  return {
+    id,
+    label,
+    path,
+    icon: id,
+    shortcut,
+    match: behavior.match ?? "prefix",
+    landing: behavior.landing ?? false,
+  };
+}
+
+interface ProductRouteBehavior {
+  match?: "exact" | "prefix";
+  landing?: boolean;
+}
+
+function failToResolveLandingRoute(
+  releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
+): never {
+  throw new Error(`cannot resolve landing route without released surfaces: ${[...releasedSurfaceIds].join(",")}`);
 }
 
 function ownsPath(routeDefinition: ProductRouteDefinition, pathname: string): boolean {

@@ -6,7 +6,10 @@ import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProv
 import { UnifiedFilterProvider, useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
 import { ProductShell } from "./ProductShell";
 import type { ProductComposition } from "./productComposition";
-import { routeDefinitionForSurface } from "./productRoutes";
+import {
+  landingProductRouteForReleasedSurfaces,
+  routeDefinitionForSurface,
+} from "./productRoutes";
 
 export function ProductRouter({
   auth,
@@ -24,10 +27,9 @@ export function ProductRouter({
     );
   }
 
-  const fallbackRoute = routeDefinitionForSurface(composition.surfaces[0].id);
-  const landingRoute = composition.releasedSurfaceIds.has("clusters")
-    ? routeDefinitionForSurface("clusters")
-    : fallbackRoute;
+  const landingRoute = landingProductRouteForReleasedSurfaces(
+    composition.releasedSurfaceIds,
+  );
 
   return (
     <UnifiedFilterProvider>
@@ -52,15 +54,12 @@ export function ProductRouter({
               const routePath = routeDefinition.match === "prefix"
                 ? `${routeDefinition.path}/*`
                 : routeDefinition.path;
-              const element = id === "home" && composition.releasedSurfaceIds.has("clusters")
-                ? <ProductFallbackRedirect path="/clusters" />
-                : <Component />;
-              return <Route key={id} path={routePath} element={element} />;
+              return <Route key={id} path={routePath} element={<Component />} />;
             })}
             {composition.releasedSurfaceIds.has("gitops") ? (
               <Route path="/workflows/*" element={<ProductFallbackRedirect path="/gitops" />} />
             ) : null}
-            <Route path="*" element={<ProductFallbackRedirect path={fallbackRoute.path} />} />
+            <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
         </Routes>
       </ClusterScopeProvider>
