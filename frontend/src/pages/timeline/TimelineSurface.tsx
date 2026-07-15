@@ -30,6 +30,7 @@ import {
   TimelineSwimlane,
   type TimelineEventInteraction,
 } from "./TimelineEventViews";
+import { TimelineCoverageNotice } from "./TimelineCoverageNotice";
 
 const VIEW_MODES: readonly TimelineViewMode[] = ["list", "swimlane"];
 
@@ -304,13 +305,9 @@ function TimelineReadyData({
             <TimelineRetryableFailure onRetry={onRetry} t={t} />
           )
         ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
-        {snapshot.coverage.length > 0 ? (
-          <aside className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted-foreground" role="status">
-            {t("timeline.coverage")}
-          </aside>
-        ) : null}
+        <TimelineCoverageNotice coverage={snapshot.coverage} formatDate={formatDate} t={t} />
         {snapshot.events.length === 0 ? (
-          <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t("timeline.empty")}</p>
+          <TimelineEmptyState coverageCount={snapshot.coverage.length} filters={snapshot.session.query.filters} t={t} />
         ) : viewMode === "list" ? (
           <TimelineEventList
             formatDate={formatDate}
@@ -340,6 +337,31 @@ function TimelineReadyData({
       />
     </>
   );
+}
+
+function TimelineEmptyState({
+  coverageCount,
+  filters,
+  t,
+}: {
+  coverageCount: number;
+  filters: TimelineQuery["filters"];
+  t: I18nController["t"];
+}) {
+  const key = coverageCount > 0
+    ? "timeline.empty.coverage"
+    : hasAppliedFilters(filters)
+      ? "timeline.empty.filtered"
+      : "timeline.empty.quiet";
+  return <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">{t(key)}</p>;
+}
+
+function hasAppliedFilters(filters: TimelineQuery["filters"]): boolean {
+  return filters.search.trim().length > 0
+    || filters.activity.length > 0
+    || filters.kinds.length > 0
+    || !filters.showDeleted
+    || filters.pinnedOnly;
 }
 
 function TimelineStreamStatus({

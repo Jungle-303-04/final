@@ -22,7 +22,7 @@ export interface TimelineSnapshotEndpoint {
 
 export type TimelineLiveEndpointStreamFrame = Extract<
   TimelineEndpointStreamFrame,
-  { kind: "event" | "resync_required" | "error" }
+  { kind: "event" | "coverage" | "resync_required" | "error" }
 >;
 
 export type TimelineStreamLifecycle =
@@ -176,7 +176,7 @@ function parseSseTimelineFrame(
   if (frameId !== frame.cursor.token) {
     throw invalidPayload("Timeline SSE ID did not match its opaque cursor.");
   }
-  if (frame.kind === "snapshot" || frame.kind === "coverage" || frame.kind === "end") {
+  if (frame.kind === "snapshot" || frame.kind === "end") {
     throw invalidPayload("Timeline SSE emitted a frame that is invalid for a live subscription.");
   }
   return frame;

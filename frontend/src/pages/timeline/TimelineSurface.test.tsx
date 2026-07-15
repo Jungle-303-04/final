@@ -6,6 +6,7 @@ import { createMemoryRouter, RouterProvider, useLocation } from "react-router-do
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TimelineFailure,
+  type TimelineCoverage,
   type TimelineEvent,
   type TimelinePort,
   type TimelineSnapshot,
@@ -24,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  document.documentElement.classList.remove("dark");
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -83,33 +85,74 @@ describe("TimelineSurface", () => {
     expect(new URLSearchParams(router.state.location.search).get("view")).toBeNull();
   });
 
-  it("distinguishes an empty retained snapshot from coverage and snapshot failures", async () => {
+  it("distinguishes quiet, filtered, coverage-aware, and snapshot failure states", async () => {
     const empty = timelinePort({ readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [] })) });
     const { unmount } = renderTimeline(empty, "/timeline", "en-US");
-    expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
+    expect(await screen.findByText("No timeline facts are available for this scope.")).toBeTruthy();
     unmount();
+
+    const filteredSnapshot = snapshot({ events: [] });
+    const filtered = {
+      ...filteredSnapshot,
+      session: {
+        ...filteredSnapshot.session,
+        query: {
+          ...filteredSnapshot.session.query,
+          filters: { ...filteredSnapshot.session.query.filters, search: "checkout" },
+        },
+      },
+    };
+    const filteredView = renderTimeline(timelinePort({
+      readTimeline: vi.fn().mockResolvedValue(filtered),
+    }), "/timeline?q=checkout", "en-US");
+    expect(await screen.findByText("No timeline facts match the active filters.")).toBeTruthy();
+    filteredView.unmount();
 
     const covered = timelinePort({
       readTimeline: vi.fn().mockResolvedValue(snapshot({
         events: [],
-        coverage: [{
-          scope: TIMELINE_SCOPES[0]!,
-          source: "inventory",
-          fromMs: 1_000,
-          toMs: 2_000,
-          reason: "collection_gap",
-        }],
+        coverage: [coverage()],
       })),
     });
     const coveredView = renderTimeline(covered, "/timeline", "en-US");
-    expect(await screen.findByText("Some timeline history has a collection or retention gap.")).toBeTruthy();
-    expect(screen.getByText("No timeline events match this scope.")).toBeTruthy();
+    const notice = await screen.findByRole("region", { name: "Timeline coverage gaps" });
+    expect(notice.getAttribute("aria-live")).toBe("polite");
+    expect(screen.getByRole("heading", { name: "Historical collection gaps" })).toBeTruthy();
+    expect(notice.textContent).toContain("Kubernetes event");
+    expect(notice.textContent).toContain("Collection gap");
+    expect(notice.textContent).toContain("workspace-1");
+    expect(notice.textContent).toContain("cluster-1");
+    expect(notice.textContent).toContain("shop");
+    expect(notice.querySelector("[data-coverage-from='1000'][data-coverage-to='2000']")).not.toBeNull();
+    expect(screen.getByText("No timeline facts were returned; the intervals above have known collection gaps.")).toBeTruthy();
     coveredView.unmount();
 
     renderTimeline(timelinePort({
       readTimeline: vi.fn().mockRejectedValue(new TimelineFailure("offline")),
     }), "/timeline", "en-US");
     expect((await screen.findByRole("alert")).textContent).toContain("Timeline data is unavailable.");
+  });
+
+  it("merges a live server coverage delta without stopping the stream", async () => {
+    document.documentElement.classList.add("dark");
+    renderTimeline(timelinePort({
+      readTimeline: vi.fn().mockResolvedValue(snapshot({ events: [] })),
+      subscribeTimeline: async function* (_session, subscription) {
+        subscription?.onLifecycle?.({ state: "connected" });
+        yield { kind: "coverage", cursor: { token: "opaque.coverage" }, coverage: [coverage()] };
+        await new Promise<void>((resolve) => {
+          subscription?.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+    }), "/timeline", "en-US");
+
+    const notice = await screen.findByRole("region", { name: "Timeline coverage gaps" });
+    expect(screen.getByText("Live updates connected.")).toBeTruthy();
+    expect(notice.className).toContain("dark:border-amber-400/40");
+    expect(notice.className).not.toContain("animate-");
+    const item = notice.querySelector<HTMLElement>("[data-timeline-coverage]");
+    expect(item?.className).toContain("min-w-0");
+    expect(item?.className).toContain("break-words");
   });
 
   it("retries a snapshot failure and resynchronizes after a server resync frame", async () => {
@@ -148,7 +191,7 @@ describe("TimelineSurface", () => {
 
     expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
     await waitFor(() => expect(resynced).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("No timeline events match this scope.")).toBeTruthy();
+    expect(await screen.findByText("No timeline facts are available for this scope.")).toBeTruthy();
   });
 
   it("keeps the retained list mounted while a live session rotates or its replacement fails", async () => {
@@ -344,7 +387,7 @@ describe("TimelineSurface", () => {
       search: "Timeline search",
       list: "List",
       swimlane: "Swimlane",
-      empty: "No timeline events match this scope.",
+      empty: "No timeline facts are available for this scope.",
     },
     {
       navigatorLanguage: "ko-KR",
@@ -352,7 +395,7 @@ describe("TimelineSurface", () => {
       search: "타임라인 검색",
       list: "목록",
       swimlane: "스윔레인",
-      empty: "이 범위에 일치하는 타임라인 이벤트가 없습니다.",
+      empty: "이 범위에 사용할 수 있는 타임라인 사실이 없습니다.",
     },
   ])("uses typed catalog copy for $navigatorLanguage", async (copy) => {
     const user = userEvent.setup();
@@ -499,6 +542,17 @@ function event(overrides: Partial<TimelineEvent> = {}): TimelineEvent {
     title: "Deployment checkout changed",
     owner: null,
     metadata: {},
+    ...overrides,
+  };
+}
+
+function coverage(overrides: Partial<TimelineCoverage> = {}): TimelineCoverage {
+  return {
+    scope: TIMELINE_SCOPES[0]!,
+    source: "kubernetes_event",
+    fromMs: 1_000,
+    toMs: 2_000,
+    reason: "collection_gap",
     ...overrides,
   };
 }

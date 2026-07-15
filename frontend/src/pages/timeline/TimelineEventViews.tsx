@@ -19,7 +19,6 @@ import type {
   TimelineGrouping,
   TimelineSeverity,
   TimelineSort,
-  TimelineSource,
   TimelineEventType,
 } from "../../features/timeline/timelineContract";
 import type { TimelineEventGroup } from "../../features/timeline/timelinePresentation";
@@ -27,14 +26,7 @@ import {
   chronologicalTimelineEvents,
   timelinePositionPercent,
 } from "../../features/timeline/timelinePresentation";
-
-const SOURCE_LABEL: Record<TimelineSource, MessageKey> = {
-  inventory: "timeline.source.inventory",
-  incident: "timeline.source.incident",
-  application_workflow: "timeline.source.applicationWorkflow",
-  kubernetes_event: "timeline.source.kubernetesEvent",
-  gitops: "timeline.source.gitops",
-};
+import { TIMELINE_SOURCE_LABEL } from "./timelineLabels";
 
 const TYPE_LABEL: Record<TimelineEventType, MessageKey> = {
   add: "timeline.type.add",
@@ -334,7 +326,7 @@ function TimelineEventListItem({
           </time>
         </div>
         <span className="flex min-w-0 flex-wrap gap-1.5 text-xs text-muted-foreground">
-          <span className="rounded-md border px-2 py-0.5">{t(SOURCE_LABEL[event.source])}</span>
+          <span className="rounded-md border px-2 py-0.5">{t(TIMELINE_SOURCE_LABEL[event.source])}</span>
           <span className="rounded-md border px-2 py-0.5">{t(TYPE_LABEL[event.type])}</span>
           <span className={severityClass(event.severity)}>{t(SEVERITY_LABEL[event.severity])}</span>
           <span className="min-w-0 break-words py-0.5">{event.scope.clusterId}</span>

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const nonEmptyString = z.string().min(1);
 const nonNegativeInteger = z.number().int().nonnegative();
+const timestampMilliseconds = nonNegativeInteger.max(8_640_000_000_000_000);
 
 export const timelineScopeSchema = z.strictObject({
   workspace_id: nonEmptyString,
@@ -186,8 +187,8 @@ export const timelineCoverageSchema = z.strictObject({
     "kubernetes_event",
     "gitops",
   ]),
-  from_ms: nonNegativeInteger,
-  to_ms: z.number().int().positive(),
+  from_ms: timestampMilliseconds,
+  to_ms: timestampMilliseconds.positive(),
   reason: z.enum(["collection_gap", "retention_boundary", "partial_scope"]),
 }).refine((coverage) => coverage.from_ms < coverage.to_ms, {
   message: "timeline coverage must have positive width",
