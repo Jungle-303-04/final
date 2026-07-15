@@ -19,6 +19,7 @@ import domains.inventory.models  # noqa: F401
 import domains.rca.models  # noqa: F401
 import domains.scm.models  # noqa: F401
 import domains.target.models  # noqa: F401
+import domains.timeline.models  # noqa: F401
 import packages.storage.schema  # noqa: F401
 from alembic import context
 from packages.storage.base import Base
