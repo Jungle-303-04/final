@@ -131,7 +131,7 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("PUSH");
   });
 
-  it("preserves every filter and drops detail when a route shortcut changes surfaces", async () => {
+  it("preserves every filter and drops detail when the Home shortcut changes surfaces", async () => {
     const user = userEvent.setup();
     const { router } = renderProductRouter(
       `/resources${FILTER_SEARCH}#detail`,
@@ -141,9 +141,9 @@ describe("ProductRouter unified filter cutover", () => {
     await user.keyboard("gh");
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
-    expect(router.state.historyAction).toBe("REPLACE");
+    expect(router.state.historyAction).toBe("PUSH");
   });
 
   it("drops detail when a route shortcut targets the already active surface", async () => {
