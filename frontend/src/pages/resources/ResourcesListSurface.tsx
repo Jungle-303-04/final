@@ -12,6 +12,7 @@ import {
 } from "../../features/resources/relationTopologyGraphModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
+import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
 import { useI18n } from "../../shared/i18n";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
@@ -69,6 +70,7 @@ export function ResourcesListSurface({
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
+  const scrollIntoView = useMotionAwareScrollIntoView();
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
@@ -87,10 +89,7 @@ export function ResourcesListSurface({
       "drill-in",
     );
     requestAnimationFrame(() => {
-      document.getElementById("resources-list-surface")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollIntoView(document.getElementById("resources-list-surface"), { block: "start" });
     });
   };
   const rewindToCluster = () => filter.updateFilters(

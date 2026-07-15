@@ -1,6 +1,7 @@
 import { BellPlus, Pencil, Power, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
 import type {
   AlertRule,
   AlertRuleInput,
@@ -45,6 +46,7 @@ export function AlertRulesPanel({
   const [deleteRule, setDeleteRule] = useState<AlertRule | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const focusedRef = useRef<HTMLDivElement>(null);
+  const scrollIntoView = useMotionAwareScrollIntoView();
 
   const currentScope = useMemo(() => ({
     clusters: [...filter.state.common.clusters],
@@ -67,8 +69,11 @@ export function AlertRulesPanel({
   }, [port]);
   useEffect(() => {
     if (!focusRuleId || loading) return;
-    requestAnimationFrame(() => focusedRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
-  }, [focusRuleId, loading]);
+    const frame = requestAnimationFrame(() => {
+      scrollIntoView(focusedRef.current, { block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusRuleId, loading, scrollIntoView]);
 
   const beginCreate = () => {
     setFailure(false);
