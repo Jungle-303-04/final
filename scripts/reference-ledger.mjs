@@ -11,6 +11,7 @@ const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '..')
 const DEFAULT_SOURCE = path.join(REPOSITORY_ROOT, 'references', 'upstream')
 const DEFAULT_OUTPUT = path.join(REPOSITORY_ROOT, 'docs', 'migration', 'reference-source-ledger.json')
 const DEFAULT_REVISION = 'cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc'
+const DEFAULT_SOURCE_REPOSITORY = 'https://github.com/skyhook-io/radar.git'
 
 const DISPOSITIONS = new Set([
   'frozen',
@@ -42,6 +43,28 @@ const PORT_TARGETS = {
     verification: 'scripts/reference-ledger.test.mjs',
   },
 }
+
+const LANGUAGE_BY_EXTENSION = new Map([
+  ['.go', 'go'],
+  ['.py', 'python'],
+  ['.rs', 'rust'],
+  ['.ts', 'typescript'],
+  ['.tsx', 'tsx'],
+  ['.js', 'javascript'],
+  ['.jsx', 'jsx'],
+  ['.json', 'json'],
+  ['.yaml', 'yaml'],
+  ['.yml', 'yaml'],
+  ['.toml', 'toml'],
+  ['.css', 'css'],
+  ['.scss', 'scss'],
+  ['.html', 'html'],
+  ['.md', 'markdown'],
+  ['.mdx', 'mdx'],
+  ['.sh', 'shell'],
+  ['.sql', 'sql'],
+  ['.proto', 'protobuf'],
+])
 
 function normalizedPath(value) {
   return value.split(path.sep).join('/')
@@ -86,6 +109,14 @@ export function classifyReferencePath(relativePath) {
   return 'frozen'
 }
 
+export function languageForReferencePath(relativePath) {
+  const basename = path.posix.basename(normalizedPath(relativePath)).toLowerCase()
+  if (basename === 'makefile') return 'make'
+  if (basename === 'dockerfile') return 'dockerfile'
+  if (basename === 'license' || basename === 'notice') return 'text'
+  return LANGUAGE_BY_EXTENSION.get(path.posix.extname(basename)) ?? 'asset-or-unknown'
+}
+
 export function buildLedgerRows(files, sourceRevision) {
   if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
     throw new Error('sourceRevision must be a 40-character lowercase hexadecimal revision')
@@ -99,6 +130,8 @@ export function buildLedgerRows(files, sourceRevision) {
         path: filePath,
         size: file.size,
         sha256: file.sha256,
+        language: languageForReferencePath(filePath),
+        purpose: disposition,
         disposition,
         target: port.target,
         verification: port.verification,
@@ -110,9 +143,12 @@ export function buildLedgerRows(files, sourceRevision) {
 export function validateLedger(ledger) {
   const errors = []
   if (!ledger || typeof ledger !== 'object') return ['ledger must be an object']
-  if (ledger.schemaVersion !== 1) errors.push('schemaVersion must equal 1')
+  if (ledger.schemaVersion !== 2) errors.push('schemaVersion must equal 2')
   if (!/^[0-9a-f]{40}$/.test(ledger.sourceRevision ?? '')) {
     errors.push('sourceRevision must be a 40-character lowercase hexadecimal revision')
+  }
+  if (typeof ledger.sourceRepository !== 'string' || !/^https:\/\//.test(ledger.sourceRepository)) {
+    errors.push('sourceRepository must be an HTTPS URL')
   }
   if (!Array.isArray(ledger.files)) return [...errors, 'files must be an array']
 
@@ -128,6 +164,12 @@ export function validateLedger(ledger) {
     if (!Number.isInteger(row.size) || row.size < 0) errors.push(`${rowPath}: size must be a non-negative integer`)
     if (!/^[0-9a-f]{64}$/.test(row.sha256 ?? '')) {
       errors.push(`${rowPath}: sha256 must be a 64-character lowercase hexadecimal value`)
+    }
+    if (typeof row.language !== 'string' || !row.language.trim()) {
+      errors.push(`${rowPath}: language is required`)
+    }
+    if (typeof row.purpose !== 'string' || !row.purpose.trim()) {
+      errors.push(`${rowPath}: purpose is required`)
     }
     if (!DISPOSITIONS.has(row.disposition)) {
       errors.push(`${rowPath}: disposition is not supported`)
@@ -167,12 +209,17 @@ async function walkSourceFiles(root) {
   return files
 }
 
-export async function createLedger({ source = DEFAULT_SOURCE, sourceRevision = DEFAULT_REVISION } = {}) {
+export async function createLedger({
+  source = DEFAULT_SOURCE,
+  sourceRevision = DEFAULT_REVISION,
+  sourceRepository = DEFAULT_SOURCE_REPOSITORY,
+} = {}) {
   await access(source)
   const files = await walkSourceFiles(source)
   const ledger = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceRevision,
+    sourceRepository,
     fileCount: files.length,
     files: buildLedgerRows(files, sourceRevision),
   }
@@ -182,26 +229,33 @@ export async function createLedger({ source = DEFAULT_SOURCE, sourceRevision = D
 }
 
 function parseArguments(argv) {
-  const values = { source: DEFAULT_SOURCE, output: DEFAULT_OUTPUT, sourceRevision: DEFAULT_REVISION, check: false }
+  const values = {
+    source: DEFAULT_SOURCE,
+    output: DEFAULT_OUTPUT,
+    sourceRevision: DEFAULT_REVISION,
+    sourceRepository: DEFAULT_SOURCE_REPOSITORY,
+    check: false,
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     if (flag === '--check') {
       values.check = true
       continue
     }
-    if (!['--source', '--output', '--revision'].includes(flag) || !argv[index + 1]) {
+    if (!['--source', '--output', '--revision', '--repository'].includes(flag) || !argv[index + 1]) {
       throw new Error(`지원하지 않는 인자입니다: ${flag}`)
     }
     const value = argv[index + 1]
     if (flag === '--revision') values.sourceRevision = value
+    else if (flag === '--repository') values.sourceRepository = value
     else values[flag.slice(2)] = path.resolve(value)
     index += 1
   }
   return values
 }
 
-export async function writeLedger({ source, output, sourceRevision, check = false }) {
-  const ledger = await createLedger({ source, sourceRevision })
+export async function writeLedger({ source, output, sourceRevision, sourceRepository, check = false }) {
+  const ledger = await createLedger({ source, sourceRevision, sourceRepository })
   const serialized = `${JSON.stringify(ledger, null, 2)}\n`
   if (check) {
     const current = await readFile(output, 'utf8').catch(() => null)
