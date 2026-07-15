@@ -133,7 +133,7 @@ class TimelinePolicyProvider(Protocol):
 class TimelineEventFanout(Protocol):
     """Optional post-commit announcement boundary; no broker is implemented here."""
 
-    def publish(self, append: TimelineLedgerAppend) -> None: ...
+    async def publish_committed(self, append: TimelineLedgerAppend) -> None: ...
 
 
 class TimelineLedgerRepository(DatabaseConnection):
@@ -365,7 +365,7 @@ def _timeline_events_statement(
     return select(ledger).where(and_(*conditions)).order_by(*order_by).limit(limit)
 
 
-def fanout_committed_timeline_append(
+async def fanout_committed_timeline_append(
     append: TimelineLedgerAppend,
     fanout: TimelineEventFanout | None = None,
 ) -> None:
@@ -376,7 +376,7 @@ def fanout_committed_timeline_append(
     of publishing from inside repository persistence.
     """
     if append.inserted and fanout is not None:
-        fanout.publish(append)
+        await fanout.publish_committed(append)
 
 
 def replay_result(
