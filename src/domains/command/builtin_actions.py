@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from domains.command.actions import command
 from packages.config.constants import Command, Sandbox
+from packages.contracts.target import TARGET_NAMESPACE
 
 
 # rollout restart 는 spec 변경이 없는 비파괴 조치라 자동 실행을 허용한다.
@@ -53,3 +54,12 @@ class RcaTestScenarioInjectCommand:
 )
 class RcaTestScenarioCleanupCommand:
     """현재 run label이 일치하는 RCA 테스트 fixture 정리 명령."""
+
+
+@command.action(
+    Command.CLUSTER_AGENT_UNINSTALL_ACTION,
+    allowed_namespaces=(TARGET_NAMESPACE,),
+    requires_approval=False,
+)
+class ClusterAgentUninstallCommand:
+    """관리자 연결 해제 요청에만 쓰이는 target agent 자가 정리 명령."""

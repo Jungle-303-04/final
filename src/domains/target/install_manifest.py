@@ -39,6 +39,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             priority_class_manifest(),
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
+            cluster_uninstall_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             catalog_install_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -130,6 +131,77 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-agent-read
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def cluster_uninstall_rbac_manifest(namespace: str) -> str:
+    """Exact-name permissions used only after an administrator disconnect request.
+
+    Namespace deletion and broad collection deletion are intentionally absent.
+    The service account cannot touch arbitrary workloads even during uninstall.
+    """
+
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-uninstall
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["target-runtime-config", "target-agent-policy"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["target-runtime-secret"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    resourceNames: ["cluster-agent"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["cluster-agent"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    resourceNames: ["optional-node-collector"]
+    verbs: ["delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles"]
+    resourceNames:
+      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install"]
+    verbs: ["delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    resourceNames:
+      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install"]
+    verbs: ["delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    resourceNames: ["cluster-agent-read"]
+    verbs: ["delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    resourceNames: ["cluster-agent-read"]
+    verbs: ["delete"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    resourceNames: ["gitops-control-critical", "gitops-demo-fast"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-uninstall
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-uninstall
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
