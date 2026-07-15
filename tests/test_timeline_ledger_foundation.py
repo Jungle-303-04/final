@@ -158,10 +158,19 @@ def test_timeline_cursor_keeps_resume_valid_for_freshness_only_scope_changes() -
         query=_query(freshness="live"),
         snapshot_revision=7,
     )
-    stale = binding.model_copy(update={"query": _query(freshness="stale")})
+    duplicate_freshness = TimelineQuery(
+        scopes=(
+            ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a", freshness="live"),
+            ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a", freshness="stale"),
+        ),
+        window=TimelineWindow(from_ms=1_000, to_ms=2_000),
+    )
+    stale = binding.model_copy(update={"query": duplicate_freshness})
     cursor = codec.encode(binding, sequence=42)
 
     assert timeline_query_fingerprint(binding.query) == timeline_query_fingerprint(stale.query)
+    assert len(stale.query.scopes) == 1
+    assert stale.query.scopes[0].freshness == "live"
     assert codec.decode(cursor, binding=stale) == 42
     assert timeline_query_fingerprint(binding.query) != timeline_query_fingerprint(
         _query(from_ms=1_001)
