@@ -4,10 +4,7 @@ import {
   type TimelineActivityControlOption,
   type TimelineCapabilities,
   type TimelineControlOption,
-  type TimelineGrouping,
   type TimelineOverview,
-  type TimelineSort,
-  type TimelineViewMode,
 } from "./timelineContract";
 import type { TimelineUrlState } from "./timelineUrlState";
 
@@ -35,6 +32,8 @@ export function normalizeTimelineUrlStateForCapabilities(
     ),
     grouping: resolveControlId(controls.groupings, state.grouping),
     sort: resolveControlId(controls.sorts, state.sort),
+    lensZoomRung: resolveControlId(controls.lensZoomRungs, state.lensZoomRung),
+    rangeId: resolveTimelineRangeId(state, capabilities),
   };
 }
 
@@ -72,18 +71,32 @@ export function isSameTimelineUrlState(left: TimelineUrlState, right: TimelineUr
     left.grouping === right.grouping &&
     left.sort === right.sort &&
     left.selectedEventKey === right.selectedEventKey &&
+    left.lensZoomRung === right.lensZoomRung &&
+    left.rangeId === right.rangeId &&
     sameStrings(left.activityFilter, right.activityFilter) &&
     sameStrings(left.kindFilter, right.kindFilter) &&
     sameMode(left.mode, right.mode)
   );
 }
 
-function resolveControlId<T extends TimelineViewMode | TimelineGrouping | TimelineSort>(
+function resolveControlId<T extends string>(
   options: readonly TimelineControlOption[],
-  requested: T,
+  requested: T | null,
 ): T {
   const selected = options.find((option) => option.id === requested) ?? requiredControl(options);
   return selected.id as T;
+}
+
+function resolveTimelineRangeId(state: TimelineUrlState, capabilities: TimelineCapabilities): string {
+  const controls = capabilities.controlSurface;
+  const mode = state.mode;
+  if (mode.kind === "frozen") return controls.customTimeRangeId;
+  const selected = state.rangeId === null ? undefined : controls.timeRanges.find((range) => range.id === state.rangeId);
+  if (selected !== undefined && selected.durationMs === mode.widthMs) {
+    return selected.id;
+  }
+  return controls.timeRanges.find((range) => range.durationMs === mode.widthMs)?.id
+    ?? controls.customTimeRangeId;
 }
 
 function requiredControl<T extends TimelineControlOption>(options: readonly T[]): T {
