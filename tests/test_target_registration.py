@@ -188,6 +188,11 @@ class StubUnregisterDb:
         self.unregistered.append((workspace_id, cluster_id))
         return True
 
+    def list_cluster_agent_statuses(
+        self, _workspace_id: str, _cluster_id: str
+    ) -> list[dict[str, object]]:
+        return []
+
     def purge_test_target_cluster_registration(
         self,
         workspace_id: str,
@@ -463,6 +468,25 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     assert 'verbs: ["get", "list", "create", "update", "patch", "delete"]' in manifest
 
 
+def test_target_uninstall_rbac_is_exact_name_scoped_and_cannot_delete_namespaces() -> None:
+    docs = [
+        doc
+        for doc in yaml.safe_load_all(target_install_manifest(target_request(), "agent-secret"))
+        if doc
+    ]
+    role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ClusterRole"
+        and doc.get("metadata", {}).get("name") == "cluster-agent-uninstall"
+    )
+
+    assert all(rule.get("resourceNames") for rule in role["rules"])
+    assert all("namespaces" not in rule.get("resources", []) for rule in role["rules"])
+    assert all("pods" not in rule.get("resources", []) for rule in role["rules"])
+    assert all(rule["verbs"] == ["delete"] for rule in role["rules"])
+
+
 def test_target_install_manifest_uses_agent_proxy_root_for_secure_realtime() -> None:
     request = target_request().model_copy(
         update={"management_base_url": "https://opsia.example.com/api"}
@@ -596,6 +620,7 @@ def test_management_install_manifest_is_read_only() -> None:
     assert "cluster-agent-sandbox-write" not in manifest
     assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
+    assert "cluster-agent-uninstall" not in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
@@ -1848,6 +1873,7 @@ def test_target_cluster_unregister_updates_registration() -> None:
     asyncio.run(
         unregister_cluster(
             "cluster-1",
+            manual_cleanup_attested=True,
             current=SimpleNamespace(workspace_id="default"),
             db=db,
         )
@@ -1865,6 +1891,7 @@ def test_explicit_purge_false_keeps_soft_delete_compatibility(monkeypatch) -> No
         unregister_cluster(
             "cluster-1",
             purge=False,
+            manual_cleanup_attested=True,
             current=SimpleNamespace(workspace_id="default"),
             db=db,
         )
@@ -1873,6 +1900,68 @@ def test_explicit_purge_false_keeps_soft_delete_compatibility(monkeypatch) -> No
     assert db.unregistered == [("default", "cluster-1")]
     assert db.purged == []
     assert db.uow_count == 0
+
+
+def test_offline_target_requires_actual_cleanup_before_registration_revocation() -> None:
+    db = StubUnregisterDb(cluster_role="target")
+
+    response = asyncio.run(
+        unregister_cluster(
+            "cluster-1",
+            current=SimpleNamespace(workspace_id="default", user_id="admin"),
+            db=db,
+        )
+    )
+
+    assert response.status == "cleanup_required"
+    assert response.stage == "manual_cleanup_required"
+    assert "kubectl delete -n target deployment/cluster-agent" in response.uninstall_command
+    assert "namespace/target" not in response.uninstall_command
+    assert "namespace/sandbox" not in response.uninstall_command
+    assert db.unregistered == []
+
+
+class OnlineUnregisterDb(StubUnregisterDb):
+    def __init__(self) -> None:
+        super().__init__(cluster_role="target")
+        self.queued: list[dict[str, object]] = []
+
+    def list_cluster_agent_statuses(
+        self, workspace_id: str, cluster_id: str
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "workspace_id": workspace_id,
+                "cluster_id": cluster_id,
+                "agent_id": "agent-1",
+                "last_seen_at": datetime.now(UTC).isoformat(),
+            }
+        ]
+
+    def queue_agent_command(
+        self, correlation_id: str, plan: dict[str, object], status: str
+    ) -> bool:
+        self.queued.append({"correlation_id": correlation_id, "plan": plan, "status": status})
+        return True
+
+
+def test_online_target_queues_agent_cleanup_and_keeps_registration_until_confirmation() -> None:
+    db = OnlineUnregisterDb()
+
+    response = asyncio.run(
+        unregister_cluster(
+            "cluster-1",
+            current=SimpleNamespace(workspace_id="default", user_id="admin"),
+            db=db,
+        )
+    )
+
+    assert response.status == "uninstalling"
+    assert response.stage == "agent_cleanup_queued"
+    assert response.command_id.startswith("cmd-uninstall-")
+    assert response.command_status_path == f"/commands/{response.command_id}"
+    assert db.queued[0]["plan"]["action"] == "cluster.agent.uninstall"
+    assert db.unregistered == []
 
 
 @pytest.mark.parametrize(
