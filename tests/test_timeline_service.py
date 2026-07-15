@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from domains.target.connectivity import AGENT_ONLINE_WINDOW_SECONDS_ENV
-from domains.timeline.service import resolve_timeline_read
+from domains.timeline.service import resolve_timeline_capabilities, resolve_timeline_read
 from domains.timeline.settings import TIMELINE_MAX_WINDOW_SECONDS_ENV
 from packages.contracts.identity import Permission
 from packages.contracts.parity import ClusterScope
@@ -142,3 +142,40 @@ def test_timeline_read_enforces_server_window_limit(monkeypatch: pytest.MonkeyPa
         )
 
     assert error.value.status_code == 422
+
+
+def test_timeline_capabilities_reuse_the_server_descriptor_without_a_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapabilitiesOnlyDb(TimelineServiceDb):
+        def latest_cluster_agent_statuses(
+            self, _workspace_id: str, _cluster_ids: set[str]
+        ) -> dict[str, dict[str, str]]:
+            raise AssertionError("capabilities read must not observe query freshness")
+
+    monkeypatch.setenv(TIMELINE_MAX_WINDOW_SECONDS_ENV, "7200")
+    capabilities = asyncio.run(resolve_timeline_capabilities(CapabilitiesOnlyDb(), _current()))
+
+    assert capabilities.model_dump() == {
+        "selected_source_mode": "retained",
+        "available_source_modes": ("retained",),
+        "max_retained_range_ms": 7_200_000,
+        "namespace_filter_policy": "not_required",
+    }
+
+
+def test_timeline_capabilities_fail_closed_without_any_readable_source_grant() -> None:
+    class NoTimelineGrantDb(TimelineServiceDb):
+        def accessible_resource_ids(
+            self,
+            _user_id: str,
+            _workspace_id: str,
+            _resource_type: str,
+            _permission: str,
+        ) -> set[str]:
+            return set()
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(resolve_timeline_capabilities(NoTimelineGrantDb(), _current()))
+
+    assert error.value.status_code == 404

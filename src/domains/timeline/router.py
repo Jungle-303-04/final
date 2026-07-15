@@ -24,12 +24,17 @@ from domains.timeline.coverage import (
 from domains.timeline.cursor import TimelineReplayCursorCodec
 from domains.timeline.fanout import TimelineFanoutClosed, TimelineFanoutOverflow
 from domains.timeline.repository import TimelineSnapshotLimitExceeded
-from domains.timeline.service import TimelineReadResolution, resolve_timeline_read
+from domains.timeline.service import (
+    TimelineReadResolution,
+    resolve_timeline_capabilities,
+    resolve_timeline_read,
+)
 from domains.timeline.settings import timeline_replay_poll_seconds
 from domains.timeline.streams import encode_ndjson, encode_sse_frame
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.timeline import (
+    TimelineCapabilityDescriptor,
     TimelineCoverage,
     TimelineCursor,
     TimelineSnapshotRequest,
@@ -49,6 +54,20 @@ STREAM_UNAVAILABLE_DETAIL = "timeline stream is unavailable"
 COVERAGE_UNAVAILABLE_DETAIL = "timeline coverage is unavailable"
 
 router = APIRouter()
+
+
+@router.get(
+    gateway_routes.TIMELINE_CAPABILITIES_PATH,
+    response_model=TimelineCapabilityDescriptor,
+)
+async def read_timeline_capabilities(
+    response: Response,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> TimelineCapabilityDescriptor:
+    """Return server-owned Timeline limits before a browser constructs a query."""
+    response.headers["Cache-Control"] = "no-store"
+    return await resolve_timeline_capabilities(db, current)
 
 
 @router.post(gateway_routes.TIMELINE_SNAPSHOTS_PATH)
