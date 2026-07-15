@@ -4,22 +4,25 @@
 
 - 제품에서 격리한 원본 스냅샷은 `cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc`의
   원격 Git archive와 1,664개 파일, 각 파일의 SHA-256, 크기까지 일치한다.
-- 기존 `reference-feature-inventory.md`의 관찰 근거는
-  `3ff2b1095151c690bf536e8e6ca685c2703fcd70`이다. 이는 최신 고정 revision과
-  동일하지 않다.
+- canonical `reference-feature-inventory.md`의 `source_commit`은 최신 고정
+  revision `cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc`다. 과거 실행 관찰 근거
+  `3ff2b1095151c690bf536e8e6ca685c2703fcd70`은 inventory의 historical
+  observation으로 보존하며, 최신 source proof로 재해석하지 않는다.
 - 두 revision의 tree 차이는 523개 파일이며, 화면·settings·timeline·workload·
   connection·event source·navigation과 공용 style을 포함한다. 따라서 기존 240개
   feature 행은 최신 원본의 완전한 동등성 증거로 판정할 수 없다.
 - UI 범위(`web`, `packages/k8s-ui`)의 최신 delta ledger는 A 94, M 182, D 0,
-  R 0, 총 276개 경로를 source blob ID와 SHA-256으로 동결했다. 모든 항목은
-  분석 전 `pending`이며, 현재 target 기능이나 제품 구현으로 승격하지 않는다.
+  R 0, 총 276개 경로를 source blob ID와 SHA-256으로 동결했다. 이 중 57개만
+  분류됐고 219개는 `pending`이다. 분류 여부와 무관하게 현재 target 기능이나
+  제품 구현 상태로 임의 승격하지 않는다.
 
 ## 상태 규칙
 
 원본 파일 ledger의 동결 상태와 기능 ledger의 이식 상태는 별개다. 전자는 검증됐지만,
-후자는 아래 재기준화가 끝날 때까지 **latest-source verified가 아니다**. 이 사실을
-deliveryStatus를 임의로 `implemented`로 바꾸거나, inventory frontmatter의 revision만
-바꿔 숨기지 않는다.
+후자는 아래 재기준화가 끝날 때까지 **latest-source verified가 아니다**. canonical
+`source_commit`을 최신 target으로 교체할 때는 과거 관측 revision을 historical observation으로
+보존하고, 기존 관찰 행을 latest proof나 `implemented`로
+승격하지 않는다. 즉 기준선 metadata만으로 deliveryStatus를 바꾸거나 미분류 delta를 숨기지 않는다.
 
 ## 재기준화 작업 단위
 
@@ -57,10 +60,10 @@ SHA-256을 별도로 기록한다. 의미가 바뀌면 같은 key를 수정하�
 interaction, legacy alias, transport, realtime, motion evidence를 기록한다.
 따라서 한 파일 안의 여러 사용자 이벤트와 stream을 단일 proof로 축약할 수 없다.
 style·asset은 `noninteractive asset: …`처럼 명시적인 의미 interaction으로 같은
-계약을 사용한다. `--require-classified`는 남은 pending row가 하나라도 있으면
-실패한다. `--require-rebased`는 inventory에 선언된 source revision과 target이
-다르면 실패한다. release target은 두 조건을 모두 사용한다. 따라서 현재는
-일반 hash check는 통과하지만 rebaseline/release check는 의도적으로 실패한다.
+계약을 사용한다. `--require-rebased`는 canonical inventory가 최신 target revision을
+선언하는지 확인한다. 과거 runtime observation revision은 provenance로 남지만 이 비교를
+막지 않는다. `--require-classified`는 남은 pending row가 하나라도 있으면 실패한다.
+release target은 두 조건을 모두 사용하며, 현재 차단 사유는 219개 pending source delta다.
 
 ## 감독관 차단 조건
 
