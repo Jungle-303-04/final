@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../shared/i18n";
 import { PHYSICAL_TOPOLOGY } from "./ResourcesPage.physicalTestSupport";
 import { ResourcesPhysicalTopologyScene } from "./ResourcesPhysicalTopologyScene";
+import { resourcesNodePodsPort } from "./ResourcesPage.testSupport";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 
 afterEach(cleanup);
@@ -53,7 +54,9 @@ function scene(frame: PhysicalTopologyFrame) {
       <ResourcesPhysicalTopologyScene
         clusterId="cluster-1"
         frame={frame}
+        nodePodsPort={resourcesNodePodsPort()}
         onOpenPod={vi.fn()}
+        onNodePodsUnauthorized={vi.fn()}
         onRevealServer={vi.fn()}
         skeletonServerCount={2}
       />

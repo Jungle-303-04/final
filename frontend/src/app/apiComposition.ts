@@ -173,6 +173,7 @@ export function createApiComposition() {
         resourcesFilterPort,
         physicalTopologyPort,
         physicalTopologyRealtimePort,
+        homePort,
         relationTopologyPort,
         changeTimelinePort,
         resourceMetricsHistoryPort,

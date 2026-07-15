@@ -54,6 +54,7 @@ export function renderResources(
   relationTopologyPort: RelationTopologyPort = resourcesRelationTopologyPort(),
   changeTimelinePort: ChangeTimelinePort = resourcesChangeTimelinePort(),
   physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = EMPTY_PHYSICAL_TOPOLOGY_REALTIME_PORT,
+  nodePodsPort: Pick<HomePort, "loadNodePods"> = resourcesNodePodsPort(),
 ) {
   const router = createMemoryRouter(
     [
@@ -75,6 +76,7 @@ export function renderResources(
                       filterPort={filterPort}
                       physicalTopologyPort={physicalTopologyPort}
                       physicalTopologyRealtimePort={physicalTopologyRealtimePort}
+                      nodePodsPort={nodePodsPort}
                       relationTopologyPort={relationTopologyPort}
                       changeTimelinePort={changeTimelinePort}
                       resourceMetricsHistoryPort={resourceMetricsHistoryPort}
@@ -108,6 +110,33 @@ export function resourcesClusterPort(
 ): ClusterPort {
   return {
     listClusterChoices: vi.fn().mockResolvedValue(CLUSTERS),
+    ...overrides,
+  };
+}
+
+export function resourcesNodePodsPort(
+  overrides: Partial<Pick<HomePort, "loadNodePods">> = {},
+): Pick<HomePort, "loadNodePods"> {
+  return {
+    loadNodePods: vi.fn().mockResolvedValue({
+      clusterId: "cluster-1",
+      completeness: "unknown",
+      nodeName: "worker-a",
+      pods: [{
+        id: "pod:cluster-1/worker-a/shop/checkout-api-0",
+        identityStability: "ephemeral",
+        name: "checkout-api-0",
+        namespace: "shop",
+        phase: "Running",
+        health: "healthy",
+        readiness: { ready: 1, total: 1 },
+        restartCount: 0,
+        owner: null,
+        cpuMillicores: 32,
+        memoryMebibytes: 64,
+        incidentCorrelationId: null,
+      }],
+    }),
     ...overrides,
   };
 }

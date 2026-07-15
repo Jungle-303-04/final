@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import type { HomePort } from "../../features/home/homeContract";
 import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
+import type { ResourceSummary } from "../../features/resources/resourcesContract";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
@@ -13,6 +15,7 @@ import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
+import { ResourcesCatalog, ResourcesCatalogMobile } from "./ResourcesCatalog";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
 import { ResourcesListScopeStatus } from "./ResourcesListScopeStatus";
 import {
@@ -26,14 +29,19 @@ import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
+import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
 
 export function ResourcesListSurface({
   filterList,
   listFallback,
   metricHistory,
+  nodePodsPort,
+  onNodePodsUnauthorized,
   onLoadMore,
   physicalTopology,
   relationTopology,
+  replay,
+  selectTableRows,
   state,
   topologyPinned,
   topologyView,
@@ -43,9 +51,13 @@ export function ResourcesListSurface({
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   listFallback: ReactNode;
   metricHistory: ResourceMetricsHistoryFrame;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
+  onNodePodsUnauthorized: () => void;
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
   relationTopology: RelationTopologyFrame;
+  replay: PhysicalTopologyReplayState;
+  selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
   state: ReturnType<typeof useResourcesPageState>;
   topologyPinned: boolean;
   topologyView: ResourceTopologyView;
@@ -163,50 +175,74 @@ export function ResourcesListSurface({
         />
       </Surface>
 
-      <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
-        <ResourcesGraphShell
-          breadcrumbs={breadcrumbs}
-          clusterId={state.selectedClusterId ?? "unknown"}
-          frame={physicalTopology}
-          relationFrame={relationTopology}
-          onOpenPod={openPod}
-          onRevealServer={revealServer}
-          onSelectAll={rewindToAll}
-          skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
-          topologyPinned={topologyPinned}
-          topologyView={topologyView}
-          onTopologyViewChange={onTopologyViewChange}
-          timelineAtMs={filter.detail.timeAt}
-          timelineFrame={timelineFrame}
-          timelineRange={timelineRange}
-          onTimelineAtChange={changeTimelineAt}
-          onTimelineRangeChange={changeTimelineRange}
-          collapsed={filter.detail.graphCollapsed === true}
-          onCollapsedChange={changeGraphCollapsed}
-        />
-      </Surface>
-
-      {listFallback ?? (
-        <Surface
-          aria-labelledby="resources-list-title"
-          className="min-w-0 overflow-hidden"
-          id="resources-list-surface"
-        >
-          <div className="border-b px-4 py-3">
-            <h3 className="font-medium" id="resources-list-title">
-              {filter.state.resources.types.length === 0
-                ? t("resources.list.allTitle")
-                : filter.state.resources.types.map(humanizeFilterValue).join(", ")}
-            </h3>
-          </div>
-          <ResourcesListBody
-            filterList={filterList}
-            metricHistory={metricHistory}
-            onLoadMore={onLoadMore}
-            state={state}
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="sticky top-4 hidden min-w-0 lg:block" data-slot="resources-catalog-rail">
+          <ResourcesCatalog
+            items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
+            onSelect={state.selectResourceType}
+            selectedResourceType={state.selectedResourceType}
           />
-        </Surface>
-      )}
+        </aside>
+        <div className="grid min-w-0 gap-4 overflow-x-hidden">
+          <ResourcesCatalogMobile
+            items={state.catalog.phase === "ready" ? state.catalog.data.items : []}
+            onSelect={state.selectResourceType}
+            selectedResourceType={state.selectedResourceType}
+          />
+          <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
+            <ResourcesGraphShell
+              breadcrumbs={breadcrumbs}
+              clusterId={state.selectedClusterId ?? "unknown"}
+              frame={physicalTopology}
+              relationFrame={relationTopology}
+              onOpenPod={openPod}
+              nodePodsPort={nodePodsPort}
+              onNodePodsUnauthorized={onNodePodsUnauthorized}
+              onRevealServer={revealServer}
+              onSelectAll={rewindToAll}
+              skeletonServerCount={cluster?.serverCount ?? cluster?.nodeCount ?? null}
+              topologyPinned={topologyPinned}
+              topologyView={topologyView}
+              onTopologyViewChange={onTopologyViewChange}
+              timelineAtMs={filter.detail.timeAt}
+              timelineFrame={timelineFrame}
+              timelineRange={timelineRange}
+              timelineReplayStatus={replay.status}
+              timelineReplayWindow={{
+                fromMs: replay.availableFromMs,
+                toMs: replay.availableToMs,
+              }}
+              onTimelineAtChange={changeTimelineAt}
+              onTimelineRangeChange={changeTimelineRange}
+              collapsed={filter.detail.graphCollapsed === true}
+              onCollapsedChange={changeGraphCollapsed}
+            />
+          </Surface>
+
+          {listFallback ?? (
+            <Surface
+              aria-labelledby="resources-list-title"
+              className="min-w-0 overflow-hidden"
+              id="resources-list-surface"
+            >
+              <div className="border-b px-4 py-3">
+                <h3 className="font-medium" id="resources-list-title">
+                  {filter.state.resources.types.length === 0
+                    ? t("resources.list.allTitle")
+                    : filter.state.resources.types.map(humanizeFilterValue).join(", ")}
+                </h3>
+              </div>
+              <ResourcesListBody
+                filterList={filterList}
+                metricHistory={metricHistory}
+                onLoadMore={onLoadMore}
+                selectTableRows={selectTableRows}
+                state={state}
+              />
+            </Surface>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -215,11 +251,13 @@ function ResourcesListBody({
   filterList,
   metricHistory,
   onLoadMore,
+  selectTableRows,
   state,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
   metricHistory: ResourceMetricsHistoryFrame;
   onLoadMore: () => void;
+  selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
   state: ReturnType<typeof useResourcesPageState>;
 }) {
   const { t } = useI18n();
@@ -248,7 +286,7 @@ function ResourcesListBody({
   ) {
     return <UnknownCompletenessEmpty variant="list" />;
   }
-  const items = filterList.data.items.map((item) => item.resource);
+  const items = selectTableRows(filterList.data.items.map((item) => item.resource));
   return (
     <div className="min-w-0">
       <ResourcesListScopeStatus page={filterList.data} />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import type { HomePort } from "../../features/home/homeContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
@@ -47,6 +48,7 @@ export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
   physicalTopologyRealtimePort,
+  nodePodsPort,
   relationTopologyPort,
   changeTimelinePort,
   resourceMetricsHistoryPort,
@@ -57,6 +59,7 @@ export function ResourcesPage({
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
   physicalTopologyRealtimePort: PhysicalTopologyRealtimePort;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
   relationTopologyPort: RelationTopologyPort;
   changeTimelinePort: ChangeTimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
@@ -82,17 +85,6 @@ export function ResourcesPage({
     reportUnauthorized,
     revision: state.podRevision,
   });
-  const physicalRealtime = usePhysicalTopologyRealtime({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      filter.detail.timeAt === undefined,
-    clusterId: state.selectedClusterId,
-    frame: physicalTopologyFrame,
-    port: physicalTopologyRealtimePort,
-    workspaceId: session?.workspaceId ?? null,
-  });
-  const physicalTopology = physicalRealtime.frame;
   const relationTopology = useRelationTopologyDataFrame({
     active:
       state.selectedClusterExists &&
@@ -137,6 +129,22 @@ export function ResourcesPage({
   const filteredPage = filtered.list.phase === "ready"
     ? filtered.list.data
     : null;
+  const currentResourceRows = useMemo(
+    () => (filteredPage?.items ?? []).map((item) => item.resource),
+    [filteredPage],
+  );
+  const physicalRealtime = usePhysicalTopologyRealtime({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    clusterId: state.selectedClusterId,
+    frame: physicalTopologyFrame,
+    port: physicalTopologyRealtimePort,
+    replayAtMs: filter.detail.timeAt,
+    rows: currentResourceRows,
+    workspaceId: session?.workspaceId ?? null,
+  });
+  const physicalTopology = physicalRealtime.frame;
   const detailResourceId = state.detail.phase === "ready"
     ? state.detail.data.resource.inventoryKey
     : null;
@@ -280,10 +288,14 @@ export function ResourcesPage({
                   />
                 ) : null}
                 metricHistory={metricHistory}
+                nodePodsPort={nodePodsPort}
+                onNodePodsUnauthorized={reportUnauthorized}
                 onLoadMore={filtered.loadMoreList}
                 onTopologyViewChange={topology.pin}
                 physicalTopology={physicalTopology}
                 relationTopology={relationTopology}
+                replay={physicalRealtime.replay}
+                selectTableRows={physicalRealtime.selectTableRows}
                 state={state}
                 timelineFrame={changeTimeline}
                 topologyPinned={topology.pinned}
