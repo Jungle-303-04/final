@@ -119,6 +119,41 @@ export type TimelineEventType =
   | "gitops_change";
 export type TimelineSeverity = "info" | "warning" | "critical" | "unknown";
 
+/**
+ * URL activity aliases are a compatibility boundary, not a UI catalog. Both
+ * the transport adapter and Timeline controls use this one mapping so a
+ * server-advertised activity projection is never reimplemented in a screen.
+ */
+const ACTIVITY_BY_URL_KEY: Readonly<Record<TimelineActivityKey, TimelineActivity>> = {
+  changes: "change",
+  k8s_events: "k8s_event",
+  unhealthy: "unhealthy",
+  warnings: "warning",
+};
+
+const URL_KEY_BY_ACTIVITY: Readonly<Record<TimelineActivity, TimelineActivityKey>> = {
+  change: "changes",
+  k8s_event: "k8s_events",
+  unhealthy: "unhealthy",
+  warning: "warnings",
+};
+
+export function isTimelineActivityKey(value: string): value is TimelineActivityKey {
+  return Object.prototype.hasOwnProperty.call(ACTIVITY_BY_URL_KEY, value);
+}
+
+export function timelineActivitiesFromUrlKeys(
+  keys: readonly TimelineActivityKey[],
+): readonly TimelineActivity[] {
+  return keys.map((key) => ACTIVITY_BY_URL_KEY[key]);
+}
+
+export function timelineActivityKeysFromActivities(
+  activities: readonly TimelineActivity[],
+): readonly TimelineActivityKey[] {
+  return activities.map((activity) => URL_KEY_BY_ACTIVITY[activity]);
+}
+
 export interface TimelineFilters {
   activity: readonly TimelineActivityKey[];
   kinds: readonly string[];

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { TimelineViewMode } from "./timelineContract";
+import type {
+  TimelineActivityKey,
+  TimelineGrouping,
+  TimelineSort,
+  TimelineViewMode,
+} from "./timelineContract";
 import {
   isTimelineHighFrequencyOnlyChange,
   parseTimelineUrlState,
@@ -12,8 +17,15 @@ import {
 export interface TimelineUrlStateController {
   state: TimelineUrlState;
   setSearch: (search: string) => void;
+  setActivityFilter: (activityFilter: readonly TimelineActivityKey[]) => void;
+  setKindFilter: (kindFilter: readonly string[]) => void;
+  setShowDeleted: (showDeleted: boolean) => void;
+  setGrouping: (grouping: TimelineGrouping) => void;
+  setSort: (sort: TimelineSort) => void;
   setSelectedEventKey: (sourceKey: string | null) => void;
   setViewMode: (viewMode: TimelineViewMode) => void;
+  /** Capability and facet reconciliation must never create a browser history entry. */
+  replaceState: (state: TimelineUrlState) => void;
 }
 
 export function useTimelineUrlState(
@@ -25,7 +37,21 @@ export function useTimelineUrlState(
     isRetained: options.isRetained,
     maxRetainedRangeMs: options.maxRetainedRangeMs,
     requiresNamespaceFilter: options.requiresNamespaceFilter,
-  }), [options.isRetained, options.maxRetainedRangeMs, options.requiresNamespaceFilter]);
+    defaultViewMode: options.defaultViewMode,
+    defaultShowDeleted: options.defaultShowDeleted,
+    defaultActivityFilter: options.defaultActivityFilter,
+    defaultGrouping: options.defaultGrouping,
+    defaultSort: options.defaultSort,
+  }), [
+    options.isRetained,
+    options.maxRetainedRangeMs,
+    options.requiresNamespaceFilter,
+    options.defaultViewMode,
+    options.defaultShowDeleted,
+    options.defaultActivityFilter,
+    options.defaultGrouping,
+    options.defaultSort,
+  ]);
   const state = useMemo(
     () => parseTimelineUrlState(new URLSearchParams(currentSearch), urlOptions),
     [currentSearch, urlOptions],
@@ -41,20 +67,55 @@ export function useTimelineUrlState(
     }
   }, [currentSearch, normalizedSearch, setSearchParams]);
 
-  const update = useCallback((next: TimelineUrlState) => {
+  const update = useCallback((next: TimelineUrlState, replace?: boolean) => {
     const current = new URLSearchParams(currentSearch);
     const params = writeTimelineSearchParams(current, next, urlOptions);
     setSearchParams(params, {
-      replace: isTimelineHighFrequencyOnlyChange(current, params),
+      replace: replace ?? isTimelineHighFrequencyOnlyChange(current, params),
     });
   }, [currentSearch, setSearchParams, urlOptions]);
 
   const setSearch = useCallback((search: string) => update({ ...state, search }), [state, update]);
+  const setActivityFilter = useCallback(
+    (activityFilter: readonly TimelineActivityKey[]) => update({ ...state, activityFilter }),
+    [state, update],
+  );
+  const setKindFilter = useCallback(
+    (kindFilter: readonly string[]) => update({ ...state, kindFilter }),
+    [state, update],
+  );
+  const setShowDeleted = useCallback(
+    (showDeleted: boolean) => update({ ...state, showDeleted }),
+    [state, update],
+  );
+  const setGrouping = useCallback(
+    (grouping: TimelineGrouping) => update({ ...state, grouping }),
+    [state, update],
+  );
+  const setSort = useCallback(
+    (sort: TimelineSort) => update({ ...state, sort }),
+    [state, update],
+  );
   const setSelectedEventKey = useCallback(
     (selectedEventKey: string | null) => update({ ...state, selectedEventKey }),
     [state, update],
   );
   const setViewMode = useCallback((viewMode: TimelineViewMode) => update({ ...state, viewMode }), [state, update]);
+  const replaceState = useCallback(
+    (next: TimelineUrlState) => update(next, true),
+    [update],
+  );
 
-  return { state, setSearch, setSelectedEventKey, setViewMode };
+  return {
+    state,
+    setSearch,
+    setActivityFilter,
+    setKindFilter,
+    setShowDeleted,
+    setGrouping,
+    setSort,
+    setSelectedEventKey,
+    setViewMode,
+    replaceState,
+  };
 }
