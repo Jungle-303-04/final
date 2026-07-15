@@ -2,6 +2,8 @@ import {
   ClustersPortFailure,
   type ClusterConnectProvider,
   type ClusterConnectStage,
+  type ClusterDisconnectProgress,
+  type ClusterDisconnectReceipt,
   type ClusterDisconnectPort,
   type ClusterConnectionSnapshot,
   type ClustersFailureCode,
@@ -25,6 +27,24 @@ interface ClusterConnectionWire {
   connect_expires_at: string | null;
 }
 
+interface ClusterUnregisterWire {
+  cluster_id: string;
+  status: "uninstalling" | "cleanup_required" | "disconnected" | "purged";
+  stage: string;
+  command_id: string | null;
+  command_status_path: string | null;
+  uninstall_command: string | null;
+  cleanup_verified: boolean;
+  resources: string[];
+  residual_resources: string[];
+  failure_reason: string | null;
+}
+
+interface CommandStatusWire {
+  status: "queued" | "leased" | "running" | "completed" | "failed";
+  result: Record<string, unknown>;
+}
+
 export interface ClustersEndpointDependencies {
   connectCluster(
     input: { name: string; provider: ClusterConnectProvider },
@@ -34,7 +54,12 @@ export interface ClustersEndpointDependencies {
     clusterId: string,
     signal?: AbortSignal,
   ): Promise<ClusterConnectionWire>;
-  unregisterCluster(clusterId: string, signal?: AbortSignal): Promise<void>;
+  unregisterCluster(
+    clusterId: string,
+    options?: { manualCleanupAttested?: boolean },
+    signal?: AbortSignal,
+  ): Promise<ClusterUnregisterWire>;
+  getCommandStatus(commandId: string, signal?: AbortSignal): Promise<CommandStatusWire>;
 }
 
 export function createClustersAdapter(
@@ -75,8 +100,52 @@ export function createClustersAdapter(
       });
     },
     async disconnect(clusterId, signal) {
-      await withFailure(() => endpoints.unregisterCluster(clusterId, signal));
+      return withFailure(async () => disconnectReceipt(
+        await endpoints.unregisterCluster(clusterId, {}, signal),
+      ));
     },
+    async loadDisconnect(commandId, signal) {
+      return withFailure(async () => disconnectProgress(
+        await endpoints.getCommandStatus(commandId, signal),
+      ));
+    },
+    async confirmManualCleanup(clusterId, signal) {
+      return withFailure(async () => disconnectReceipt(
+        await endpoints.unregisterCluster(
+          clusterId,
+          { manualCleanupAttested: true },
+          signal,
+        ),
+      ));
+    },
+  };
+}
+
+function disconnectReceipt(response: ClusterUnregisterWire): ClusterDisconnectReceipt {
+  return {
+    status: response.status === "cleanup_required"
+      ? "cleanup-required"
+      : response.status === "uninstalling"
+        ? "uninstalling"
+        : "disconnected",
+    commandId: response.command_id,
+    uninstallCommand: response.uninstall_command,
+    residualResources: response.residual_resources,
+    failureReason: response.failure_reason,
+  };
+}
+
+function disconnectProgress(response: CommandStatusWire): ClusterDisconnectProgress {
+  const result = response.result;
+  const failureReason = typeof result.failure_reason === "string"
+    ? result.failure_reason
+    : typeof result.message === "string"
+      ? result.message
+      : null;
+  return {
+    status: response.status,
+    cleanupCompleted: result.cleanup_completed === true,
+    failureReason,
   };
 }
 

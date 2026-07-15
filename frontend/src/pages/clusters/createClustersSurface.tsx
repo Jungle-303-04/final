@@ -1,8 +1,11 @@
 import type { ComponentType } from "react";
-import type { ClustersPort } from "../../features/clusters/clustersContract";
+import type {
+  ClusterDisconnectPort,
+  ClustersPort,
+} from "../../features/clusters/clustersContract";
 import { ClustersPage } from "./ClustersPage";
 
-export function createClustersSurface(port: ClustersPort): ComponentType {
+export function createClustersSurface(port: ClustersPort & ClusterDisconnectPort): ComponentType {
   function ClustersSurface() {
     return <ClustersPage port={port} />;
   }

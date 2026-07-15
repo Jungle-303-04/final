@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { I18nProvider } from "../../shared/i18n";
 import { ClusterCard } from "./ClusterCard";
@@ -69,15 +70,40 @@ describe("ClusterCard", () => {
     expect(screen.queryByText("Healthy")).toBeNull();
   });
 
+  it("does not label a pending registration healthy before it connects", () => {
+    renderCard({
+      ...cluster,
+      connectionState: "pending",
+      registrationState: "pending",
+      openIncidentCount: 0,
+    });
+
+    expect(screen.getByText("Waiting for connection")).toBeTruthy();
+    expect(screen.queryByText("Healthy")).toBeNull();
+  });
+
   it("links the whole card to the canonical Resources URL", () => {
     renderCard(cluster);
 
     expect(screen.getByRole("link", { name: "Open resources for Production" })
       .getAttribute("href")).toBe("/resources?clusters=cluster-1");
   });
+
+  it("opens a separate card menu without nesting the disconnect action in navigation", async () => {
+    const user = userEvent.setup();
+    const onDisconnect = vi.fn();
+    renderCard(cluster, 0, onDisconnect);
+
+    await user.click(screen.getByRole("button", { name: "Cluster actions for Production" }));
+    const action = screen.getByRole("menuitem", { name: "Disconnect" });
+    expect(action.closest("a")).toBeNull();
+    await user.click(action);
+    expect(onDisconnect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
 });
 
-function renderCard(value: HomeClusterChoice, index = 0) {
+function renderCard(value: HomeClusterChoice, index = 0, onDisconnect?: () => void) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <MemoryRouter>
@@ -85,6 +111,7 @@ function renderCard(value: HomeClusterChoice, index = 0) {
           cluster={value}
           href="/resources?clusters=cluster-1"
           index={index}
+          onDisconnect={onDisconnect}
         />
       </MemoryRouter>
     </I18nProvider>,
