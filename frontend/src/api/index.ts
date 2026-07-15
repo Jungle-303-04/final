@@ -105,12 +105,15 @@ export {
   getResourceCapabilities,
   RESOURCE_CAPABILITIES_PATH,
 } from "./resource-capabilities";
+export { executeResourceCapability } from "./resource-capability-actions";
 export {
   resourceActionCapabilityIdSchema,
   resourceActionCapabilitySchema,
+  resourceCapabilityInputSchema,
   resourceCapabilitiesSchema,
   resourceCapabilitySubjectSchema,
   type ResourceActionCapabilityId,
+  type ResourceCapabilityInputEndpoint,
   type ResourceCapabilitiesEndpoint,
 } from "./resource-capabilities-schemas";
 export {

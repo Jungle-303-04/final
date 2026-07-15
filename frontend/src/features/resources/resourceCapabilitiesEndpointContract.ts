@@ -1,3 +1,5 @@
+import type { ResourceActionCapability } from "./resourceCapabilitiesContract";
+
 export interface ResourceCapabilitiesEndpointResponse {
   subject: {
     resource_id: string;
@@ -10,7 +12,21 @@ export interface ResourceCapabilitiesEndpointResponse {
   };
   revision: string;
   capabilities: Array<{
-    capability_id: "deployment.restart" | "deployment.scale" | "pod.exec";
+    capability_id: string;
+    label: string;
+    description: string;
+    execution: "command" | "terminal";
+    confirmation_required: boolean;
+    realtime: boolean;
+    input_schema: Array<{
+      key: string;
+      label: string;
+      type: "integer" | "string";
+      required: boolean;
+      minimum: number | null;
+      maximum: number | null;
+      default: number | string | null;
+    }>;
     method: "POST" | "WEBSOCKET";
     path: string;
   }>;
@@ -24,16 +40,14 @@ export interface ResourceCapabilitiesEndpointDependencies {
 }
 
 export interface ResourceActionsEndpointDependencies {
-  restartDeployment(
-    clusterId: string,
-    namespace: string,
-    deployment: string,
-    options?: { signal?: AbortSignal },
-  ): Promise<{ accepted: boolean; event_id: string; correlation_id: string }>;
-  scaleDeployment(
-    clusterId: string,
-    namespace: string,
-    deployment: string,
-    options: { replicas: number; signal?: AbortSignal },
-  ): Promise<{ accepted: boolean; event_id: string; correlation_id: string }>;
+  executeResourceCapability(
+    capability: ResourceActionCapability,
+    values: Readonly<Record<string, unknown>>,
+    signal?: AbortSignal,
+  ): Promise<{
+    accepted: boolean;
+    event_id: string;
+    correlation_id: string;
+    command_id?: string | null;
+  }>;
 }

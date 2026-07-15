@@ -25,6 +25,20 @@ export function toResourceCapabilities(
     revision: value.revision,
     capabilities: value.capabilities.map((item) => ({
       capabilityId: item.capability_id,
+      label: item.label,
+      description: item.description,
+      execution: item.execution,
+      confirmationRequired: item.confirmation_required,
+      realtime: item.realtime,
+      inputSchema: item.input_schema.map((input) => ({
+        key: input.key,
+        label: input.label,
+        type: input.type,
+        required: input.required,
+        minimum: input.minimum,
+        maximum: input.maximum,
+        default: input.default,
+      })),
       method: item.method,
       path: item.path,
     })),
@@ -35,10 +49,12 @@ export function toResourceActionReceipt(value: {
   accepted: boolean;
   event_id: string;
   correlation_id: string;
+  command_id?: string | null;
 }): ResourceActionReceipt {
   return {
     accepted: value.accepted,
     eventId: value.event_id,
     correlationId: value.correlation_id,
+    commandId: value.command_id ?? null,
   };
 }
