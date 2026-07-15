@@ -47,19 +47,69 @@ describe("HelmPage", () => {
     );
   });
 
-  it("renders unsupported provider and executor capabilities as reasons, not action controls", async () => {
+  it("renders safe availability copy without exposing internal provider or executor codes", async () => {
     const port = helmPort();
     renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
 
     expect(await screen.findByRole("heading", { name: "storefront" })).toBeTruthy();
-    expect(screen.getByText("helm_manifest_provider_not_integrated")).toBeTruthy();
-    expect(screen.getByText("agent_helm_executor_not_integrated")).toBeTruthy();
+    expect(screen.getByText("A safe manifest source is not available for this release.")).toBeTruthy();
+    expect(screen.getByText("Helm commands are not available for this release.")).toBeTruthy();
+    for (const reasonCode of [
+      "helm_manifest_provider_not_integrated",
+      "helm_values_provider_not_integrated",
+      "owned_resources_not_correlated",
+      "agent_helm_executor_not_integrated",
+    ]) expect(screen.queryByText(reasonCode)).toBeNull();
     expect(screen.queryByRole("button", { name: /upgrade|rollback|uninstall/i })).toBeNull();
     await waitFor(() => expect(port.getRelease).toHaveBeenCalledWith({
       clusterId: "cluster-a",
       namespace: "storefront",
       releaseName: "storefront",
     }, expect.any(AbortSignal)));
+  });
+
+  it("maps known and unknown coverage reasons to safe copy", async () => {
+    const port = helmPort();
+    port.listReleases.mockResolvedValue({
+      releases: [release()],
+      coverage: {
+        availability: "unavailable",
+        observedAt: "2026-07-16T09:00:00Z",
+        reasonCodes: [
+          "authorization_scope_empty",
+          "inventory_snapshot_unavailable:cluster-a",
+          "source_resources_incomplete",
+          "helm_storage_labels_incomplete",
+          "unknown_internal_helm_reason",
+        ],
+      },
+    });
+    renderRoute("/helm", port);
+
+    expect(await screen.findByText("Release discovery is unavailable for this scope.")).toBeTruthy();
+    expect(screen.getByText("The current authorization scope does not permit release discovery.")).toBeTruthy();
+    expect(screen.getByText("A current inventory observation is not available for this scope.")).toBeTruthy();
+    expect(screen.getByText("Some inventory observations are incomplete for this scope.")).toBeTruthy();
+    expect(screen.getByText("The source did not provide complete release discovery evidence.")).toBeTruthy();
+    for (const reasonCode of [
+      "authorization_scope_empty",
+      "inventory_snapshot_unavailable:cluster-a",
+      "source_resources_incomplete",
+      "helm_storage_labels_incomplete",
+      "unknown_internal_helm_reason",
+    ]) expect(screen.queryByText(reasonCode)).toBeNull();
+  });
+
+  it("uses generic safe copy for an unknown unavailable feature reason", async () => {
+    const port = helmPort();
+    port.getRelease.mockResolvedValue({
+      ...detail(),
+      manifest: unavailable("unknown_internal_helm_feature_reason"),
+    });
+    renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
+
+    expect(await screen.findByText("This release capability is not available from the current source.")).toBeTruthy();
+    expect(screen.queryByText("unknown_internal_helm_feature_reason")).toBeNull();
   });
 });
 
@@ -83,19 +133,23 @@ function helmPort(): HelmPort & { listReleases: ReturnType<typeof vi.fn>; getRel
       releases: [release()],
       coverage: { availability: "available", observedAt: "2026-07-16T09:00:00Z", reasonCodes: [] },
     }),
-    getRelease: vi.fn().mockResolvedValue({
-      release: release(),
-      history: [{
-        storage: release().storage,
-        revision: 3,
-        status: "deployed",
-        observedAt: "2026-07-16T09:00:00Z",
-      }],
-      manifest: unavailable("helm_manifest_provider_not_integrated"),
-      values: unavailable("helm_values_provider_not_integrated"),
-      ownedResources: unavailable("owned_resources_not_correlated"),
-      commands: unavailable("agent_helm_executor_not_integrated"),
-    }),
+    getRelease: vi.fn().mockResolvedValue(detail()),
+  };
+}
+
+function detail() {
+  return {
+    release: release(),
+    history: [{
+      storage: release().storage,
+      revision: 3,
+      status: "deployed",
+      observedAt: "2026-07-16T09:00:00Z",
+    }],
+    manifest: unavailable("helm_manifest_provider_not_integrated"),
+    values: unavailable("helm_values_provider_not_integrated"),
+    ownedResources: unavailable("owned_resources_not_correlated"),
+    commands: unavailable("agent_helm_executor_not_integrated"),
   };
 }
 

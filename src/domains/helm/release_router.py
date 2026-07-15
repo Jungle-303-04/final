@@ -49,6 +49,11 @@ async def get_helm_releases(
         workspace_id=workspace_id,
         cluster_ids=selected_clusters,
     )
+    agent_statuses = await asyncio.to_thread(
+        db.latest_cluster_agent_statuses,
+        workspace_id,
+        set(selected_clusters),
+    )
     storage_rows = await asyncio.to_thread(
         db.list_helm_storage_observations,
         workspace_id=workspace_id,
@@ -58,6 +63,7 @@ async def get_helm_releases(
     return helm_release_list(
         storage_rows,
         contexts=contexts,
+        agent_statuses=agent_statuses,
         selected_cluster_ids=selected_clusters,
     )
 
@@ -92,6 +98,11 @@ async def get_helm_release(
         workspace_id=workspace_id,
         cluster_ids=(selected_cluster,),
     )
+    agent_statuses = await asyncio.to_thread(
+        db.latest_cluster_agent_statuses,
+        workspace_id,
+        {selected_cluster},
+    )
     storage_rows = await asyncio.to_thread(
         db.list_helm_storage_observations,
         workspace_id=workspace_id,
@@ -101,6 +112,7 @@ async def get_helm_release(
     detail = helm_release_detail(
         storage_rows,
         contexts=contexts,
+        agent_statuses=agent_statuses,
         selected_cluster_id=selected_cluster,
         namespace=selected_namespace,
         release_name=selected_release,

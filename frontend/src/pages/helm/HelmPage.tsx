@@ -26,6 +26,13 @@ import {
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
 import { useHelmReleaseDetail, useHelmReleaseList } from "./useHelmReleaseData";
 
+const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
+  helm_manifest_provider_not_integrated: HELM_COPY.manifestUnavailable,
+  helm_values_provider_not_integrated: HELM_COPY.valuesUnavailable,
+  owned_resources_not_correlated: HELM_COPY.resourceHealthUnavailable,
+  agent_helm_executor_not_integrated: HELM_COPY.commandsUnavailable,
+};
+
 export function HelmPage({ port }: { port: HelmPort }) {
   const detailMatch = useMatch(HELM_RELEASE_DETAIL_MATCH);
   const navigate = useNavigate();
@@ -318,7 +325,9 @@ function CoverageNotice({
   return (
     <div className="grid gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm" role="status">
       <span className="font-medium">{availability === "partial" ? HELM_COPY.partialCoverage : HELM_COPY.unavailableCoverage}</span>
-      <span className="break-words text-muted-foreground">{reasons.join(", ")}</span>
+      <ul className="grid gap-0.5 break-words text-muted-foreground">
+        {coverageReasonCopy(reasons).map((message) => <li key={message}>{message}</li>)}
+      </ul>
     </div>
   );
 }
@@ -349,7 +358,26 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function UnavailableFact({ feature, label }: { feature: HelmUnavailableFeature; label: string }) {
-  return <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2"><dt className="text-sm font-medium">{label}</dt><dd className="m-0 break-words text-xs text-muted-foreground">{feature.reasonCode}</dd></div>;
+  return <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2"><dt className="text-sm font-medium">{label}</dt><dd className="m-0 break-words text-xs text-muted-foreground">{featureReasonCopy(feature.reasonCode)}</dd></div>;
+}
+
+function coverageReasonCopy(reasonCodes: readonly string[]): readonly string[] {
+  const messages = new Set<string>();
+  for (const reasonCode of reasonCodes) {
+    if (reasonCode === "authorization_scope_empty") messages.add(HELM_COPY.coverageReasonAuthorization);
+    else if (reasonCode.startsWith("inventory_snapshot_unavailable:")) messages.add(HELM_COPY.coverageReasonUnavailable);
+    else if (reasonCode === "source_resources_incomplete" || reasonCode === "helm_storage_labels_incomplete") {
+      messages.add(HELM_COPY.coverageReasonPartial);
+    } else {
+      messages.add(HELM_COPY.coverageReasonGeneric);
+    }
+  }
+  const safeMessages = Array.from(messages);
+  return safeMessages.length > 0 ? safeMessages : [HELM_COPY.coverageReasonGeneric];
+}
+
+function featureReasonCopy(reasonCode: string): string {
+  return FEATURE_REASON_COPY[reasonCode] ?? HELM_COPY.featureUnavailable;
 }
 
 function StatusBadge({ status }: { status: string | null }) {
