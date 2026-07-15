@@ -213,8 +213,8 @@ route=draft_pr
 | `selector_fix` | `safe_pr_patch` | `draft_pr` | GitOps authority 기반 scalar patch | GitOps authority context, selector/template label mismatch | `gitops_authority_unavailable`, `gitops_authority_mismatch`, `safe_pr_patch_unsupported`, `safe_pr_patch_missing` | 지원 |
 | `gitops_recovery_review` | `safe_pr_review_doc` | `draft_pr` | 복구 검토 문서 PR | GitOps authority context 없이도 review patch 생성 | 없음 | 지원 |
 | `resource_request_tuning` | `safe_pr_review_doc` | `draft_pr` | HPA request 보정 검토 문서 PR | CPU/memory request 누락 근거, 운영자 capacity 확인 | 없음 | 검토 문서 지원 |
-| `config_fix` | `safe_pr_patch` | `draft_pr` | 아직 구조화 patch 없음 | config key/value와 patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
-| `scheduling_constraint_fix` | `safe_pr_patch` | `draft_pr` | 아직 구조화 patch 없음 | node selector, affinity, toleration patch 정책 필요 | `safe_pr_patch_unsupported` | 미지원 |
+| `config_fix` | `safe_pr_review_doc` | `draft_pr` | 설정 보정 검토 문서 PR | config key/value와 patch 정책 확인 | 없음 | 검토 문서 지원 |
+| `scheduling_constraint_fix` | `safe_pr_review_doc` | `draft_pr` | 스케줄링 조건 보정 검토 문서 PR | node selector, affinity, toleration 정책 확인 | 없음 | 검토 문서 지원 |
 
 `resource_request_tuning`은 현재 구조화 manifest patch를 만들지 않는다.
 
@@ -228,6 +228,20 @@ route=draft_pr
 - safe_pr_review_doc으로 복구 검토 문서를 생성한다.
 - 참고 제안값은 cpu=100m, memory=256Mi로 표시한다.
 - 이 값은 자동 적용값이 아니라 운영자가 workload 부하와 node capacity를 확인하기 위한 출발점이다.
+```
+
+`config_fix`와 `scheduling_constraint_fix`도 현재 구조화 manifest patch를 만들지 않는다.
+
+```text
+이유:
+- config_fix는 누락 key와 기대 value를 운영자가 확정해야 한다.
+- scheduling_constraint_fix는 nodeSelector, affinity, toleration, resource, quota 중 어떤 정책을 바꿀지 판단이 필요하다.
+- 둘 다 값 하나를 안전하게 교체하는 scalar patch보다 운영 정책 확인이 먼저다.
+
+처리:
+- safe_pr_review_doc으로 복구 검토 문서를 생성한다.
+- RCA 원인, 대상 리소스, 검증 기준, rollback 계획을 PR에 남긴다.
+- 운영자가 실제 manifest 변경값을 확정한 뒤 별도 patch PR로 이어갈 수 있다.
 ```
 
 따라서 recovery 후보를 추가할 때는 먼저 아래를 확인한다.
