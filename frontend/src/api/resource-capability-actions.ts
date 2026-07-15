@@ -1,20 +1,15 @@
-import { z } from "zod";
-
 import { apiRequest, type ApiPath } from "./client";
-
-const resourceActionAcceptedSchema = z.strictObject({
-  accepted: z.literal(true),
-  event_id: z.string().min(1),
-  correlation_id: z.string().min(1),
-  command_id: z.string().min(1).nullable().optional(),
-});
+import {
+  resourceActionAcceptedSchema,
+  type ResourceActionAccepted,
+} from "./resource-capability-actions-schemas";
 
 /** Submit one server-discovered resource command after the UI confirmation. */
 export function executeResourceCapability(
   path: string,
   values: Readonly<Record<string, unknown>>,
   signal?: AbortSignal,
-): Promise<z.infer<typeof resourceActionAcceptedSchema>> {
+): Promise<ResourceActionAccepted> {
   return apiRequest(toApiPath(path), resourceActionAcceptedSchema, {
     method: "POST",
     headers: { "content-type": "application/json" },

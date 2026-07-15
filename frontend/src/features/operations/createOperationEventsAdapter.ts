@@ -1,12 +1,5 @@
-import type { CommandOperationEventEndpoint } from "../../api/operation-events";
+import type { OperationEventsEndpointDependencies } from "./operationEventsEndpointContract";
 import type { OperationEventsPort } from "./operationEventsContract";
-
-interface OperationEventsEndpointDependencies {
-  subscribeCommandOperationEvents(
-    commandId: string,
-    signal?: AbortSignal,
-  ): AsyncIterable<CommandOperationEventEndpoint>;
-}
 
 export function createOperationEventsAdapter(
   endpoints: OperationEventsEndpointDependencies,

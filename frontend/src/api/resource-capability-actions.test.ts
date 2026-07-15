@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "./client";
 import { executeResourceCapability } from "./resource-capability-actions";
 
 describe("server-discovered resource action API", () => {
@@ -33,5 +34,20 @@ describe("server-discovered resource action API", () => {
   it("rejects paths that cannot be a same-origin API capability", () => {
     expect(() => executeResourceCapability("https://invalid.example/action", {})).toThrow(TypeError);
     expect(() => executeResourceCapability("//invalid.example/action", {})).toThrow(TypeError);
+  });
+
+  it("rejects a malformed direct-execution receipt", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      accepted: true,
+      event_id: "event-1",
+      correlation_id: "correlation-1",
+      unexpected: true,
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    await expect(executeResourceCapability("/clusters/cluster-1/actions/restart", {}))
+      .rejects.toMatchObject({ kind: "invalid-payload", status: 200 } satisfies Partial<ApiError>);
   });
 });
