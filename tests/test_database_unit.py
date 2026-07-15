@@ -2036,6 +2036,101 @@ def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> Non
     assert compiled.params["status"] == "failed"
 
 
+def test_fail_expired_agent_commands_stages_terminal_operation_event_in_same_transaction() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[tuple[int, Any]] = []
+
+    class StubResult:
+        def __init__(
+            self,
+            *,
+            rows: list[dict[str, object]] | None = None,
+            scalar: int | None = None,
+        ) -> None:
+            self.rows = rows or []
+            self.scalar = scalar
+
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self.rows
+
+        def one(self) -> dict[str, object]:
+            return self.rows[0]
+
+        def scalar_one_or_none(self) -> int | None:
+            return self.scalar
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append((id(self), statement))
+            if len(recorded) == 1:
+                return StubResult(
+                    rows=[
+                        {
+                            "command_id": "cmd-expired",
+                            "workspace_id": "workspace-1",
+                            "cluster_id": "cluster-1",
+                            "correlation_id": "corr-expired",
+                            "result": {
+                                "status": "failed",
+                                "applied": False,
+                                "message": "command lease expired",
+                            },
+                        }
+                    ]
+                )
+            if len(recorded) == 3:
+                return StubResult(scalar=2)
+            return StubResult(
+                rows=[
+                    {
+                        "command_id": "cmd-expired",
+                        "sequence": 2,
+                        "kind": "failed",
+                        "payload": {
+                            "cluster_id": "cluster-1",
+                            "status": "failed",
+                        },
+                        "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+                    }
+                ]
+            )
+
+    connection = StubConnection()
+
+    @contextmanager
+    def stub_connection():
+        yield connection
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.fail_expired_agent_commands() == [
+        {
+            "command_id": "cmd-expired",
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "correlation_id": "corr-expired",
+            "result": {
+                "status": "failed",
+                "applied": False,
+                "message": "command lease expired",
+            },
+        }
+    ]
+
+    assert len(recorded) == 4
+    assert {connection_id for connection_id, _ in recorded} == {id(connection)}
+    sql = [str(statement.compile(dialect=postgresql.dialect())) for _, statement in recorded]
+    assert "UPDATE agent_commands" in sql[0]
+    assert "INSERT INTO command_operation_event_cursors" in sql[1]
+    assert "UPDATE command_operation_event_cursors" in sql[2]
+    assert "INSERT INTO command_operation_events" in sql[3]
+
+
 def test_expire_stale_open_rca_incidents_closes_old_rows_atomically() -> None:
     from domains.dashboard.repository import DashboardRepository
 
