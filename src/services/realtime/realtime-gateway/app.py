@@ -8,9 +8,11 @@ agent 인증은 api-gateway 와 동일한 per-cluster 토큰(x-agent-token 해�
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -75,6 +77,7 @@ CLOSE_PROTOCOL_VIOLATION = 1008
 AgentAuthenticator = Callable[[str], Any]
 BrowserSessionAuthenticator = Callable[[str | None], Awaitable[Any]]
 BrowserClusterAuthorizer = Callable[[Any, str, str], Awaitable[bool]]
+LiveUsagePersister = Callable[[str, str, datetime, dict[str, Any]], Any]
 
 REDIS_URL_ENV = "REDIS_URL"
 SESSION_KEY_PREFIX = "session"
@@ -173,6 +176,7 @@ def create_app(
     authorize_browser_cluster: BrowserClusterAuthorizer | None = None,
     authorize_browser_terminal: TerminalAuthorizer | None = None,
     audit_terminal: TerminalAuditor | None = None,
+    persist_live_usage: LiveUsagePersister | None = None,
 ) -> FastAPI:
     if db is None and (authenticate_agent is None or authorize_browser_cluster is None):
         db = Database()
@@ -193,6 +197,23 @@ def create_app(
         )
     if audit_terminal is None:
         audit_terminal = database_terminal_auditor(db) if db is not None else _fail_terminal_audit
+    if persist_live_usage is None and db is not None:
+        save_live_usage = getattr(db, "save_live_cluster_usage_sample", None)
+        if callable(save_live_usage):
+
+            async def persist_live_usage(
+                workspace_id: str,
+                cluster_id: str,
+                sampled_at: datetime,
+                usage: dict[str, Any],
+            ) -> Any:
+                return await asyncio.to_thread(
+                    save_live_usage,
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    sampled_at=sampled_at,
+                    usage=usage,
+                )
 
     hub = RealtimeHub()
     terminal_broker = TerminalSessionBroker(
@@ -249,9 +270,38 @@ def create_app(
                 terminal_result = await terminal_broker.handle_agent_payload(cluster_id, payload)
                 if terminal_result is True:
                     continue
-                if terminal_result is False or not _ingest(hub, cluster_id, payload):
+                message = (
+                    _ingest(hub, cluster_id, payload) if terminal_result is not False else None
+                )
+                if message is None:
                     await websocket.close(code=CLOSE_PROTOCOL_VIOLATION)
                     return
+                if isinstance(message, LiveSummaryMessage) and persist_live_usage is not None:
+                    usage = live_usage_payload(
+                        message.summary.model_dump(mode="json"),
+                        hub.resources_for_cluster(cluster_id),
+                    )
+                    if usage.get("pods"):
+                        try:
+                            saved = persist_live_usage(
+                                str(identity[Gateway.WORKSPACE_ID]),
+                                cluster_id,
+                                datetime.now(UTC),
+                                usage,
+                            )
+                            if inspect.isawaitable(saved):
+                                await saved
+                        except Exception as exc:
+                            # 실시간 fan-out은 저장소 일시 장애와 독립적으로 계속 제공한다.
+                            LOGGER.warning(
+                                "live_usage_persist_failed",
+                                extra={
+                                    CONTEXT_KEY: {
+                                        Gateway.CLUSTER_ID: cluster_id,
+                                        "exception_type": type(exc).__name__,
+                                    }
+                                },
+                            )
         except WebSocketDisconnect:
             LOGGER.info(
                 "agent_stream_disconnected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
@@ -382,28 +432,76 @@ def session_roles(session: Any) -> set[str]:
     return {str(role) for role in raw_roles}
 
 
-def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> bool:
-    """agent 수신 1건 처리. 계약 위반/권한 밖 클러스터는 False(연결 종료)."""
+def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> Any | None:
+    """agent 수신 1건 처리. 계약 위반/권한 밖 클러스터는 None(연결 종료)."""
     try:
         message = parse_realtime_message(payload)
     except ValueError:
         LOGGER.warning(
             "agent_message_invalid", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
         )
-        return False
+        return None
     if isinstance(message, PingMessage):
-        return True
+        return message
     if isinstance(message, LiveSummaryMessage):
         if message.cluster_id != cluster_id or message.summary.cluster_id != cluster_id:
-            return False
+            return None
         hub.publish_summary(message.summary)
-        return True
+        return message
     if isinstance(message, ResourceDelta):
         if delta_key_parts(message.key)[0] != cluster_id:
-            return False
+            return None
         hub.publish_delta(message)
-        return True
-    return False  # hello/snapshot 은 gateway → client 방향 전용
+        return message
+    return None  # hello/snapshot 은 gateway → client 방향 전용
+
+
+def live_usage_payload(
+    summary: dict[str, Any],
+    resources: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Build a replay/evaluation sample exclusively from agent-observed live resource deltas."""
+    pods: dict[str, dict[str, Any]] = {}
+    phases: dict[str, int] = {}
+    restart_total = 0
+    for key, value in resources.items():
+        _cluster, namespace, kind, name = delta_key_parts(key)
+        if kind.casefold() != "pod" or not namespace or not name:
+            continue
+        phase = str(value.get("phase") or "Unknown")
+        phases[phase] = phases.get(phase, 0) + 1
+        restarts = max(0, int(value.get("restarts") or 0))
+        restart_total += restarts
+        measured = {
+            field: value.get(field)
+            for field in (
+                "cpu_mcores",
+                "cpu_request_mcores",
+                "cpu_request_pct",
+                "mem_mib",
+                "mem_request_mib",
+                "mem_request_pct",
+                "ready",
+                "phase",
+                "restarts",
+                "node",
+            )
+            if value.get(field) is not None
+        }
+        if measured:
+            pods[f"{namespace}/{name}"] = measured
+    metadata = summary.get("metrics_metadata")
+    usage: dict[str, Any] = {
+        "pod_total": int(summary.get("pods_total") or len(pods)),
+        "pod_running": phases.get("Running", 0),
+        "pod_pending": phases.get("Pending", 0),
+        "pod_failed": phases.get("Failed", 0),
+        "restart_total": restart_total,
+        "pods": pods,
+    }
+    if isinstance(metadata, dict):
+        usage["metrics_metadata"] = dict(metadata)
+    return usage
 
 
 async def _browser_send_loop(websocket: WebSocket, hub: RealtimeHub, client: BrowserClient) -> None:

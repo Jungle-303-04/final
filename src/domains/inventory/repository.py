@@ -235,6 +235,49 @@ def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
 
 
 class InventoryRepository(DatabaseConnection):
+    def save_live_cluster_usage_sample(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        sampled_at: datetime,
+        usage: JsonObject,
+    ) -> bool:
+        """Persist one real realtime-gateway sample against the current inventory cut.
+
+        The browser live path used to terminate at the gateway's in-memory hub.  That made
+        alert evaluation and replay depend on the much slower evidence snapshot cadence.
+        Reusing the latest authoritative snapshot id keeps the existing temporal join and
+        authorization boundary intact while storing only values the agent actually sent.
+        """
+        if not workspace_id or not cluster_id or not usage:
+            return False
+        snapshot = ClusterInventorySnapshotRecord.__table__
+        samples = ClusterUsageSampleRecord.__table__
+        with self.connection() as conn:
+            snapshot_id = conn.execute(
+                select(snapshot.c.snapshot_id)
+                .where(
+                    snapshot.c.workspace_id == workspace_id,
+                    snapshot.c.cluster_id == cluster_id,
+                    snapshot.c.status != "ignored_stale",
+                )
+                .order_by(snapshot.c.collected_at.desc(), snapshot.c.created_at.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            if snapshot_id is None:
+                return False
+            conn.execute(
+                pg_insert(samples).values(
+                    snapshot_id=str(snapshot_id),
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    sampled_at=sampled_at,
+                    usage=dict(usage),
+                )
+            )
+        return True
+
     def save_inventory_snapshot(
         self,
         *,
