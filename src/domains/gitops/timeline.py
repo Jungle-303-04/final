@@ -15,6 +15,43 @@ from packages.contracts.parity import ClusterScope
 from packages.contracts.timeline import TimelineApplicationWorkflowSubject, TimelineEvent
 
 
+def git_changed_timeline_event(
+    *,
+    source_event_id: str,
+    source_created_at: str,
+    workspace_id: str,
+    cluster_id: str,
+    application_id: str,
+    binding_id: str,
+    workflow_run_id: str,
+) -> TimelineEvent:
+    """Build a retained fact for a confirmed canonical ``git.changed`` event.
+
+    The caller must verify the application, binding, and workflow run against
+    persistence first. Git payloads, manifests, and repository-change lists do
+    not cross this boundary into the retained Timeline ledger.
+    """
+    source_key = ":".join(("gitops", source_event_id, "git.changed", workflow_run_id))
+    return TimelineEvent(
+        event_id=source_key,
+        source="gitops",
+        source_key=source_key,
+        native_id=workflow_run_id,
+        activity="change",
+        occurred_at=workflow_occurred_at(source_created_at),
+        scope=ClusterScope(workspace_id=workspace_id, cluster_id=cluster_id),
+        subject=TimelineApplicationWorkflowSubject(
+            application_id=application_id,
+            binding_id=binding_id,
+            workflow_run_id=workflow_run_id,
+        ),
+        event_type="gitops_change",
+        severity="info",
+        title="Git change confirmed",
+        metadata={"state": "changed"},
+    )
+
+
 def workflow_run_timeline_event(
     *,
     source_event_id: str,

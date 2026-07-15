@@ -6,7 +6,8 @@ from contextlib import contextmanager
 
 from conftest import load_service
 
-from domains.gitops.events import GitWebhookReceivedBody
+from domains.gitops.events import GitChangedBody, GitWebhookReceivedBody
+from domains.timeline.repository import TimelineLedgerAppend
 from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.event_bus.processing import EventProcessingStatus
 from packages.contracts.gitops import WorkflowMutation
@@ -45,11 +46,13 @@ class _DeadLetters:
 class _RollbackStore:
     """A minimal worker store recording the source transaction boundary."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, fail_append_at: int = 1) -> None:
         self.steps: list[str] = []
         self.staged: list[EventEnvelope] = []
         self.fanout: list[object] = []
         self._unit_of_work_count = 0
+        self._append_count = 0
+        self._fail_append_at = fail_append_at
 
     @contextmanager
     def unit_of_work(self):
@@ -95,9 +98,45 @@ class _RollbackStore:
         self.steps.append("run_mutation")
         return WorkflowMutation(applied=True)
 
-    def append_timeline_event(self, _event: object) -> object:
-        self.steps.append("timeline_append")
-        raise RuntimeError("timeline ledger unavailable")
+    def get_deployment_binding(self, _workspace_id: str, _binding_id: str) -> dict[str, object]:
+        return {
+            "workspace_id": "workspace-1",
+            "binding_id": "binding-1",
+            "repository_id": "repo-1",
+            "cluster_id": "target-cluster-01",
+            "environment": "prod",
+            "manifest_path": "deploy/app.yaml",
+            "app_name": "checkout",
+            "status": "active",
+        }
+
+    def get_application(self, _workspace_id: str, _application_id: str) -> dict[str, object]:
+        return {
+            "workspace_id": "workspace-1",
+            "application_id": "app-1",
+            "repository_id": "repo-1",
+            "manifest_path": "deploy/app.yaml",
+            "name": "checkout",
+        }
+
+    def get_workflow_run(self, _workflow_run_id: str) -> dict[str, object]:
+        return {
+            "workspace_id": "workspace-1",
+            "workflow_run_id": "workflow-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "cluster_id": "target-cluster-01",
+            "environment": "prod",
+            "commit_sha": "abc123",
+        }
+
+    def append_timeline_event(self, event: object) -> object:
+        self._append_count += 1
+        source = str(getattr(event, "source", ""))
+        self.steps.append("gitops_timeline_append" if source == "gitops" else "timeline_append")
+        if self._append_count == self._fail_append_at:
+            raise RuntimeError("timeline ledger unavailable")
+        return TimelineLedgerAppend(event=event, sequence=self._append_count, inserted=True)
 
 
 def test_workflow_timeline_append_failure_rolls_back_without_outbox_or_fanout() -> None:
@@ -141,6 +180,60 @@ def test_workflow_timeline_append_failure_rolls_back_without_outbox_or_fanout() 
             "workflow_begin",
             "run_mutation",
             "timeline_append",
+            "workflow_rollback",
+            "retry",
+        ]
+        assert store.staged == []
+        assert store.fanout == []
+        assert message.acked is False
+        assert message.nak_delay == 3
+
+    asyncio.run(run())
+
+
+def test_git_changed_timeline_append_failure_rolls_back_without_outbox_or_fanout() -> None:
+    async def run() -> None:
+        workflow = load_service("gitops/workflow-controller")
+        store = _RollbackStore(fail_append_at=2)
+        handler = workflow.app.handler_spec().handler_factory(object(), store)
+        body = GitChangedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+            cluster_id="target-cluster-01",
+            manifest_path="deploy/app.yaml",
+        )
+        source = event(
+            body.__subject__,
+            "git-pull-worker",
+            body.to_body(),
+            "correlation-1",
+            workspace_id="workspace-1",
+        )
+        message = _Message(source.to_dict())
+        processor = EventProcessor(
+            "workflow-controller",
+            handler,
+            store,  # type: ignore[arg-type]
+            _DeadLetters(),  # type: ignore[arg-type]
+            EventRetryPolicy(max_attempts=2, retry_delay_seconds=3),
+        )
+
+        await processor.process(message)
+
+        assert store.steps == [
+            "claim_begin",
+            "claim_commit",
+            "workflow_begin",
+            "run_mutation",
+            "timeline_append",
+            "gitops_timeline_append",
             "workflow_rollback",
             "retry",
         ]

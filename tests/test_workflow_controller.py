@@ -434,7 +434,47 @@ def test_workflow_controller_does_not_upsert_application_from_resource_diff() ->
 
 def test_workflow_controller_uses_canonical_application_from_repository() -> None:
     workflow = load_service("gitops/workflow-controller")
-    db = workflow_db(upsert_application={"application_id": "app-canonical"})
+    expected_workflow_run_id = derive_workflow_run_id(
+        {
+            "workspace_id": "workspace-1",
+            "repository_id": "repo-1",
+            "repo_ref": "org/checkout",
+            "watch_target_id": "watch-1",
+            "binding_id": "binding-1",
+            "application_id": "app-canonical",
+            "manifest_path": "deploy/app.yaml",
+            "commit_sha": "abc123",
+        }
+    )
+    db = workflow_db(
+        upsert_application={"application_id": "app-canonical"},
+        get_deployment_binding={
+            "workspace_id": "workspace-1",
+            "binding_id": "binding-1",
+            "repository_id": "repo-1",
+            "cluster_id": Target.DEFAULT_CLUSTER_ID,
+            "environment": "sandbox",
+            "manifest_path": "deploy/app.yaml",
+            "app_name": "checkout",
+            "status": "active",
+        },
+        get_application={
+            "workspace_id": "workspace-1",
+            "application_id": "app-canonical",
+            "repository_id": "repo-1",
+            "manifest_path": "deploy/app.yaml",
+            "name": "checkout",
+        },
+        get_workflow_run={
+            "workspace_id": "workspace-1",
+            "workflow_run_id": expected_workflow_run_id,
+            "application_id": "app-canonical",
+            "binding_id": "binding-1",
+            "cluster_id": Target.DEFAULT_CLUSTER_ID,
+            "environment": "sandbox",
+            "commit_sha": "abc123",
+        },
+    )
 
     outs = run_handler(
         workflow.on_git_changed,
@@ -454,23 +494,147 @@ def test_workflow_controller_uses_canonical_application_from_repository() -> Non
         db,
     )
     start_calls = [args[0] for name, args in db.calls if name == "start_workflow_run"]
-    expected_workflow_run_id = derive_workflow_run_id(
-        {
-            "workspace_id": "workspace-1",
-            "repository_id": "repo-1",
-            "repo_ref": "org/checkout",
-            "watch_target_id": "watch-1",
-            "binding_id": "binding-1",
-            "application_id": "app-canonical",
-            "manifest_path": "deploy/app.yaml",
-            "commit_sha": "abc123",
-        }
-    )
-
     assert subjects_of(outs) == ["workflow.step.recorded"]
     assert start_calls[0]["application_id"] == "app-canonical"
     assert start_calls[0]["workflow_run_id"] == expected_workflow_run_id
     assert outs[0].application_id == "app-canonical"
+
+
+def test_git_changed_appends_only_the_persisted_canonical_gitops_fact() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(
+        get_deployment_binding={
+            "workspace_id": "workspace-1",
+            "binding_id": "binding-1",
+            "repository_id": "repo-1",
+            "cluster_id": Target.DEFAULT_CLUSTER_ID,
+            "environment": "prod",
+            "manifest_path": "deploy/app.yaml",
+            "app_name": "checkout",
+            "status": "active",
+        },
+        get_application={
+            "workspace_id": "workspace-1",
+            "application_id": "app-1",
+            "repository_id": "repo-1",
+            "manifest_path": "deploy/app.yaml",
+            "name": "checkout",
+        },
+        get_workflow_run={
+            "workflow_run_id": "workflow-1",
+            "workspace_id": "workspace-1",
+            "application_id": "app-1",
+            "binding_id": "binding-1",
+            "cluster_id": Target.DEFAULT_CLUSTER_ID,
+            "environment": "prod",
+            "commit_sha": "abc123",
+        },
+    )
+
+    outs = run_handler(
+        workflow.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="registry.example/checkout:private-tag",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            repo_ref="org/checkout",
+            branch="main",
+            watch_target_id="watch-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+            cluster_id=Target.DEFAULT_CLUSTER_ID,
+            manifest_path="deploy/app.yaml",
+        ),
+        db,
+    )
+
+    assert subjects_of(outs) == ["workflow.step.recorded"]
+    events = [args[0] for name, args in db.calls if name == "append_timeline_event"]
+    gitops = [event for event in events if event.source == "gitops"]
+    assert len(gitops) == 1
+    event = gitops[0]
+    assert event.subject.kind == "application_workflow"
+    assert event.subject.application_id == "app-1"
+    assert event.subject.binding_id == "binding-1"
+    assert event.subject.workflow_run_id == "workflow-1"
+    assert event.resource is None
+    assert event.title == "Git change confirmed"
+    assert event.metadata == {"state": "changed"}
+    assert "registry.example" not in event.title
+    assert "manifest" not in event.metadata
+    assert "repo_changes" not in event.metadata
+
+
+def test_git_changed_with_unregistered_binding_creates_no_outbox_or_timeline_fact() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(get_deployment_binding=None)
+
+    outs = run_handler(
+        workflow.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-missing",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+            cluster_id=Target.DEFAULT_CLUSTER_ID,
+            manifest_path="deploy/app.yaml",
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert db.called("get_deployment_binding")
+    assert not db.called("upsert_application")
+    assert not db.called("start_workflow_run")
+    assert not db.called("append_timeline_event")
+
+
+def test_duplicate_git_changed_creates_no_timeline_fact_or_outbox() -> None:
+    workflow = load_service("gitops/workflow-controller")
+    db = workflow_db(
+        start_workflow_run=WorkflowMutation(applied=False),
+        get_deployment_binding={
+            "workspace_id": "workspace-1",
+            "binding_id": "binding-1",
+            "repository_id": "repo-1",
+            "cluster_id": Target.DEFAULT_CLUSTER_ID,
+            "environment": "prod",
+            "manifest_path": "deploy/app.yaml",
+            "app_name": "checkout",
+            "status": "active",
+        },
+    )
+
+    outs = run_handler(
+        workflow.on_git_changed,
+        GitChangedBody(
+            commit_sha="abc123",
+            image="checkout:new",
+            replicas=2,
+            workspace_id="workspace-1",
+            repository_id="repo-1",
+            binding_id="binding-1",
+            application_id="app-1",
+            workflow_run_id="workflow-1",
+            environment="prod",
+            cluster_id=Target.DEFAULT_CLUSTER_ID,
+            manifest_path="deploy/app.yaml",
+        ),
+        db,
+    )
+
+    assert outs == []
+    assert db.called("start_workflow_run")
+    assert not db.called("append_timeline_event")
 
 
 def test_workflow_controller_links_command_lifecycle_to_run() -> None:
