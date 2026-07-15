@@ -8,7 +8,7 @@ import {
   getIncidentRecentChanges,
   getInventorySummary,
   getNodePodsSummary,
-  getClusterConnectStatus,
+  getClusterConnectionStatus,
   getPhysicalTopology,
   getRelationTopology,
   getChangeTimeline,
@@ -20,6 +20,7 @@ import {
   listRcaReports,
   listRcaTimeline,
   listClusters,
+  unregisterCluster,
   listGlobalFilterFacets,
   listFilteredResources,
   listResourceFilterFacets,
@@ -82,7 +83,11 @@ export function createApiComposition() {
     getNodePodsSummary,
     listClusters,
   });
-  const clustersPort = createClustersAdapter({ connectCluster, getClusterConnectStatus });
+  const clustersPort = createClustersAdapter({
+    connectCluster,
+    getClusterConnectionStatus,
+    unregisterCluster,
+  });
   const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
   const resourcesPort = createResourcesAdapter({
     getInventoryResourceDetail,

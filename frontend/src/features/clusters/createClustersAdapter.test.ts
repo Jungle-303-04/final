@@ -47,7 +47,7 @@ function dependencies() {
       connection_stage: "agent_connected" as const,
       last_agent_id: "agent-1",
       last_seen_at: "2026-07-15T01:02:03Z",
-      agents: [],
+      agents: [{ details: {} }],
       connect_timeout_seconds: 60,
       connect_expires_at: "2026-07-15T01:03:03Z",
     })),

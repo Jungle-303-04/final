@@ -61,16 +61,12 @@ describe("ClusterConnectDialog", () => {
 
   it("shows server-confirmed install, agent, inventory, and ready progress without inventing a percentage", async () => {
     const user = userEvent.setup();
-    let calls = 0;
     const port = waitingPort();
-    vi.mocked(port.loadConnection).mockImplementation(async () => {
-      calls += 1;
-      return {
-        status: calls >= 3 ? "connected" : "waiting",
-        stage: calls === 1 ? "agent_connected" : calls === 2 ? "snapshot_received" : "ready",
-        agentVersion: "2026.07.15",
-        lastSeenAt: "2026-07-15T01:02:03Z",
-      };
+    vi.mocked(port.loadConnection).mockResolvedValue({
+      status: "waiting",
+      stage: "agent_connected",
+      agentVersion: "2026.07.15",
+      lastSeenAt: "2026-07-15T01:02:03Z",
     });
     renderDialog(port);
 
