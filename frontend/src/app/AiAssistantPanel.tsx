@@ -229,7 +229,9 @@ export function AiAssistantPanel({
                   <p className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
                     {entry.question}
                   </p>
-                  {entry.response.evidence.length === 0 && !entry.response.action ? (
+                  {entry.response.evidence.length === 0
+                    && !entry.response.action
+                    && entry.response.answerKind !== "capability" ? (
                     <p className="mr-auto w-fit max-w-[90%] rounded-2xl rounded-bl-sm border bg-card px-3 py-2 text-sm text-muted-foreground">
                       {t("shell.ai.noEvidence")}
                     </p>

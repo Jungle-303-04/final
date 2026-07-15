@@ -42,6 +42,7 @@ export function createAiAssistantAdapter(
               enabled: response.action.payload.enabled,
             },
           } : null,
+          answerKind: response.answer_kind ?? null,
         };
       });
     },

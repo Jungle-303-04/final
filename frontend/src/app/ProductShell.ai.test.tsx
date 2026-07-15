@@ -84,6 +84,29 @@ describe("ProductShell AI panel", () => {
       .toBe("/issues/event-1");
   });
 
+  it("renders an explicit capability answer without operational evidence", async () => {
+    const user = userEvent.setup();
+    const answer = "현재 인벤토리와 저장된 로그 근거를 설명할 수 있습니다.";
+    renderShell({
+      aiAssistantPort: assistantPort({
+        ask: vi.fn().mockResolvedValue({
+          answer,
+          evidence: [],
+          action: null,
+          answerKind: "capability",
+        }),
+      }),
+    });
+    await user.click(screen.getByRole("button", { name: "Opsia AI 열기" }));
+    const input = screen.getByRole("textbox", { name: "지금 보고 있는 것에 대해 질문하세요…" });
+
+    await user.type(input, "넌 뭘 할 수 있니?");
+    await user.click(screen.getByRole("button", { name: "질문" }));
+
+    expect(await screen.findByText(answer)).toBeTruthy();
+    expect(screen.queryByText("그 답을 뒷받침할 근거 데이터가 없습니다.")).toBeNull();
+  });
+
   it("submits with Enter, keeps Shift+Enter in the input, scrolls, and aborts a pending turn", async () => {
     const user = userEvent.setup();
     const scrollIntoView = vi.fn();

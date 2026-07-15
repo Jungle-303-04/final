@@ -35,6 +35,7 @@ describe("AI assistant adapter", () => {
       answer: "BackOff is observed.",
       evidence: [{ type: "event", id: "1", label: "BackOff", link: "/issues/1" }],
       action: null,
+      answerKind: null,
     });
     expect(postAiChat).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -44,6 +45,23 @@ describe("AI assistant adapter", () => {
       "Why?",
       undefined,
     );
+  });
+
+  it("preserves the explicit capability answer kind", async () => {
+    const port = createAiAssistantAdapter({
+      postAiChat: vi.fn().mockResolvedValue({
+        answer: "I can explain authorized inventory and log evidence.",
+        evidence: [],
+        answer_kind: "capability",
+      }),
+      getAiSuggestions: vi.fn().mockResolvedValue({ suggestions: [] }),
+      createAlertRule: vi.fn(),
+    });
+
+    await expect(port.ask(CONTEXT, "What can you do?")).resolves.toMatchObject({
+      answerKind: "capability",
+      evidence: [],
+    });
   });
 
   it("maps the single allowlisted alert proposal and executes only after confirmation", async () => {

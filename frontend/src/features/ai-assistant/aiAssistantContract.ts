@@ -50,6 +50,7 @@ export interface AiAssistantAnswer {
   answer: string;
   evidence: AiEvidenceLink[];
   action: AiAlertRuleAction | null;
+  answerKind?: "capability" | null;
 }
 
 export interface AiAssistantSuggestion {

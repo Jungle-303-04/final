@@ -44,6 +44,7 @@ export const aiChatResponseSchema = z.strictObject({
   answer: z.string().min(1),
   evidence: z.array(aiEvidenceLinkSchema),
   action: aiChatActionSchema.nullable().optional(),
+  answer_kind: z.literal("capability").nullable().optional(),
 }).superRefine((response, context) => {
   const ids = response.evidence.map((item) => `${item.type}\u001f${item.id}`);
   if (new Set(ids).size !== ids.length) {
