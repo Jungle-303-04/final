@@ -10,13 +10,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import Integer, and_, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.timeline.models import TimelineLedgerCursor, TimelineLedgerEvent
-from domains.timeline.predicate import TimelineEvidencePredicate, timeline_evidence_sql_predicate
+from domains.timeline.predicate import (
+    TimelineEvidencePredicate,
+    timeline_evidence_sql_predicate,
+    timeline_resource_kind_sql,
+)
 from packages.contracts.parity import ClusterScope
-from packages.contracts.timeline import RealtimePolicy, TimelineEvent
+from packages.contracts.timeline import RealtimePolicy, TimelineEvent, TimelineFilters
 from packages.storage.engine import DatabaseConnection
 
 TimelineReplayStatus = Literal["available", "resync_required"]
@@ -122,6 +126,25 @@ class TimelineReplayResult:
     def events(self) -> tuple[TimelineEvent, ...]:
         """Compatibility convenience; cursor issuance must use ``records``."""
         return tuple(record.event for record in self.records)
+
+
+@dataclass(frozen=True)
+class TimelineOverviewBucketAggregate:
+    """One internal aggregate; the HTTP adapter turns indexes into safe ranges."""
+
+    bucket_index: int
+    event_count: int
+    problem_count: int
+
+
+@dataclass(frozen=True)
+class TimelineOverviewAggregate:
+    """No raw evidence crosses this repository aggregate boundary."""
+
+    buckets: tuple[TimelineOverviewBucketAggregate, ...]
+    activity_counts: dict[str, int]
+    kind_counts: dict[str, int]
+    new_evidence_count: int | None
 
 
 class TimelinePolicyProvider(Protocol):
@@ -260,6 +283,82 @@ class TimelineLedgerRepository(DatabaseConnection):
             retained_from_sequence=retained_from,
         )
 
+    def timeline_overview(
+        self,
+        read_scope: TimelineLedgerReadScope,
+        *,
+        predicate: TimelineEvidencePredicate,
+        bucket_width_ms: int,
+    ) -> TimelineOverviewAggregate:
+        """Read a bounded retained-strip aggregate under the snapshot predicate.
+
+        Each statement applies the same scope and source grants as the event
+        reader.  Facet axes remove only their own active filter, which keeps
+        source authorization, namespace, search, deletion, and the opposite
+        facet selection intact.
+        """
+        if bucket_width_ms < 1_000:
+            raise ValueError("timeline overview bucket width is invalid")
+        bucket_rows = self._overview_rows(
+            _timeline_overview_buckets_statement(
+                read_scope,
+                predicate=predicate,
+                bucket_width_ms=bucket_width_ms,
+            )
+        )
+        activity_predicate = predicate.with_filters(
+            TimelineFilters(
+                activity=(),
+                kinds=predicate.replay_identity.filters.kinds,
+                include_deleted=predicate.replay_identity.filters.include_deleted,
+                query=predicate.replay_identity.filters.search,
+            )
+        )
+        activity_rows = self._overview_rows(
+            _timeline_overview_activity_facets_statement(
+                read_scope,
+                predicate=activity_predicate,
+            )
+        )
+        kind_predicate = predicate.with_filters(
+            TimelineFilters(
+                activity=predicate.replay_identity.filters.activity,
+                kinds=(),
+                include_deleted=predicate.replay_identity.filters.include_deleted,
+                query=predicate.replay_identity.filters.search,
+            )
+        )
+        kind_rows = self._overview_rows(
+            _timeline_overview_kind_facets_statement(
+                read_scope,
+                predicate=kind_predicate,
+            )
+        )
+        later_predicate = predicate.after_frozen_window()
+        new_evidence_count = (
+            None
+            if later_predicate is None
+            else self._overview_count(
+                _timeline_overview_later_count_statement(
+                    read_scope,
+                    predicate=later_predicate,
+                )
+            )
+        )
+        return TimelineOverviewAggregate(
+            buckets=tuple(
+                TimelineOverviewBucketAggregate(
+                    bucket_index=int(row["bucket_index"]),
+                    event_count=int(row["event_count"]),
+                    problem_count=int(row["problem_count"]),
+                )
+                for row in bucket_rows
+            ),
+            activity_counts=_overview_counts(activity_rows, key="activity"),
+            kind_counts=_overview_counts(kind_rows, key="kind"),
+            new_evidence_count=new_evidence_count,
+        )
+
     def advance_timeline_retention(self, workspace_id: str, *, retained_from_sequence: int) -> int:
         """Advance the replay boundary without rewriting any ledger event."""
         if not workspace_id or retained_from_sequence < 1:
@@ -334,6 +433,14 @@ class TimelineLedgerRepository(DatabaseConnection):
             rows = conn.execute(statement).mappings()
             return tuple(_record_from_row(row) for row in rows)
 
+    def _overview_rows(self, statement: Any) -> tuple[Any, ...]:
+        with self.connection() as conn:
+            return tuple(conn.execute(statement).mappings())
+
+    def _overview_count(self, statement: Any) -> int:
+        with self.connection() as conn:
+            return int(conn.execute(statement).scalar_one())
+
 
 def _timeline_events_statement(
     read_scope: TimelineLedgerReadScope,
@@ -361,6 +468,111 @@ def _timeline_events_statement(
         else (ledger.c.occurred_at.asc(), ledger.c.sequence.asc())
     )
     return select(ledger).where(and_(*conditions)).order_by(*order_by).limit(limit)
+
+
+def _timeline_overview_buckets_statement(
+    read_scope: TimelineLedgerReadScope,
+    *,
+    predicate: TimelineEvidencePredicate,
+    bucket_width_ms: int,
+) -> Any:
+    """Aggregate the exact snapshot selection without returning event payloads."""
+    ledger = TimelineLedgerEvent.__table__
+    bucket_index = _timeline_overview_bucket_index(ledger, predicate, bucket_width_ms)
+    problem = ledger.c.activity.in_(("warning", "unhealthy"))
+    return (
+        select(
+            bucket_index.label("bucket_index"),
+            func.count().label("event_count"),
+            func.count().filter(problem).label("problem_count"),
+        )
+        .where(
+            and_(
+                ledger.c.workspace_id == read_scope.workspace_id,
+                timeline_evidence_sql_predicate(ledger, predicate, phase="snapshot"),
+            )
+        )
+        .group_by(bucket_index)
+        .order_by(bucket_index.asc())
+    )
+
+
+def _timeline_overview_activity_facets_statement(
+    read_scope: TimelineLedgerReadScope,
+    *,
+    predicate: TimelineEvidencePredicate,
+) -> Any:
+    ledger = TimelineLedgerEvent.__table__
+    return (
+        select(ledger.c.activity.label("activity"), func.count().label("count"))
+        .where(
+            and_(
+                ledger.c.workspace_id == read_scope.workspace_id,
+                timeline_evidence_sql_predicate(ledger, predicate, phase="snapshot"),
+            )
+        )
+        .group_by(ledger.c.activity)
+        .order_by(ledger.c.activity.asc())
+    )
+
+
+def _timeline_overview_kind_facets_statement(
+    read_scope: TimelineLedgerReadScope,
+    *,
+    predicate: TimelineEvidencePredicate,
+) -> Any:
+    ledger = TimelineLedgerEvent.__table__
+    kind = timeline_resource_kind_sql(ledger)
+    return (
+        select(kind.label("kind"), func.count().label("count"))
+        .where(
+            and_(
+                ledger.c.workspace_id == read_scope.workspace_id,
+                timeline_evidence_sql_predicate(ledger, predicate, phase="snapshot"),
+                kind.is_not(None),
+            )
+        )
+        .group_by(kind)
+        .order_by(func.count().desc(), kind.asc())
+    )
+
+
+def _timeline_overview_later_count_statement(
+    read_scope: TimelineLedgerReadScope,
+    *,
+    predicate: TimelineEvidencePredicate,
+) -> Any:
+    """Count frozen-window suffix facts with the same grants and filters."""
+    ledger = TimelineLedgerEvent.__table__
+    return select(func.count()).where(
+        and_(
+            ledger.c.workspace_id == read_scope.workspace_id,
+            timeline_evidence_sql_predicate(ledger, predicate, phase="stream"),
+        )
+    )
+
+
+def _timeline_overview_bucket_index(
+    ledger: Any,
+    predicate: TimelineEvidencePredicate,
+    bucket_width_ms: int,
+) -> Any:
+    from_ms = predicate.replay_identity.window.from_ms
+    elapsed_ms = func.extract("epoch", ledger.c.occurred_at) * 1_000 - from_ms
+    return cast(func.floor(elapsed_ms / bucket_width_ms), Integer)
+
+
+def _overview_counts(rows: tuple[Any, ...], *, key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = row[key]
+        if not isinstance(value, str) or not value.strip():
+            continue
+        count = int(row["count"])
+        if count < 0:
+            raise ValueError("timeline overview count cannot be negative")
+        counts[value] = count
+    return counts
 
 
 async def fanout_committed_timeline_append(

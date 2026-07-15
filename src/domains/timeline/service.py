@@ -27,6 +27,7 @@ from domains.timeline.predicate import TimelineEvidencePredicate
 from domains.timeline.repository import TimelineLedgerReadScope
 from domains.timeline.settings import (
     timeline_capability_descriptor,
+    timeline_control_selection_is_valid,
     timeline_max_window_ms,
     timeline_realtime_policy,
 )
@@ -38,6 +39,7 @@ from packages.contracts.timeline import (
 )
 
 INVALID_WINDOW_DETAIL = "timeline window exceeds the server read limit"
+INVALID_CONTROL_SELECTION_DETAIL = "timeline control selection is unavailable"
 SCOPE_NOT_FOUND_DETAIL = "timeline scope not found"
 FRESHNESS_UNAVAILABLE_DETAIL = "timeline freshness is unavailable"
 
@@ -80,6 +82,7 @@ async def resolve_timeline_read(
 ) -> TimelineReadResolution:
     """Authorize one query and derive freshness only from persisted agent state."""
     _validate_window(requested_query)
+    _validate_control_selection(requested_query)
     authorized = await resolve_authorized_timeline_scope(db, current)
     requested_workspace_id = requested_query.scopes[0].workspace_id
     if requested_workspace_id != authorized.workspace_id:
@@ -118,6 +121,12 @@ async def resolve_timeline_read(
 def _validate_window(query: TimelineQuery) -> None:
     if query.window.to_ms - query.window.from_ms > timeline_max_window_ms():
         raise HTTPException(status_code=422, detail=INVALID_WINDOW_DETAIL)
+
+
+def _validate_control_selection(query: TimelineQuery) -> None:
+    """Reject controls that are absent or unavailable in this deployment."""
+    if not timeline_control_selection_is_valid(query):
+        raise HTTPException(status_code=422, detail=INVALID_CONTROL_SELECTION_DETAIL)
 
 
 async def _observed_scopes(

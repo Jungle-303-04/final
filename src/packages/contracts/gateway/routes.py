@@ -152,6 +152,7 @@ CHANGES_PATH = "/changes"
 # Retained, immutable product Timeline history.  Snapshot is NDJSON so a
 # browser/desktop adapter can use the same frame parser as resumable SSE.
 TIMELINE_CAPABILITIES_PATH = "/timeline/capabilities"
+TIMELINE_OVERVIEW_PATH = "/timeline/overview"
 TIMELINE_SNAPSHOTS_PATH = "/timeline/snapshots"
 TIMELINE_STREAM_PATH = "/timeline/stream"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서

@@ -23,13 +23,17 @@ from domains.timeline.coverage import (
 )
 from domains.timeline.cursor import TimelineReplayCursorCodec
 from domains.timeline.fanout import TimelineFanoutClosed, TimelineFanoutOverflow
-from domains.timeline.repository import TimelineSnapshotLimitExceeded
+from domains.timeline.repository import TimelineOverviewAggregate, TimelineSnapshotLimitExceeded
 from domains.timeline.service import (
     TimelineReadResolution,
     resolve_timeline_capabilities,
     resolve_timeline_read,
 )
-from domains.timeline.settings import timeline_replay_poll_seconds
+from domains.timeline.settings import (
+    timeline_coverage_source_availability,
+    timeline_overview_bucket_width_ms,
+    timeline_replay_poll_seconds,
+)
 from domains.timeline.streams import encode_ndjson, encode_sse_frame
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
@@ -37,6 +41,12 @@ from packages.contracts.timeline import (
     TimelineCapabilityDescriptor,
     TimelineCoverage,
     TimelineCursor,
+    TimelineOverview,
+    TimelineOverviewActivityFacet,
+    TimelineOverviewBucket,
+    TimelineOverviewFacets,
+    TimelineOverviewKindFacet,
+    TimelineOverviewRequest,
     TimelineSnapshotRequest,
     TimelineStreamFrame,
     TimelineStreamRequest,
@@ -52,6 +62,7 @@ REPLAY_CURSOR_REQUIRED_DETAIL = "timeline replay cursor is required"
 REPLAY_CURSOR_CONFLICT_DETAIL = "timeline replay cursor conflicts with Last-Event-ID"
 STREAM_UNAVAILABLE_DETAIL = "timeline stream is unavailable"
 COVERAGE_UNAVAILABLE_DETAIL = "timeline coverage is unavailable"
+OVERVIEW_UNAVAILABLE_DETAIL = "timeline overview is unavailable"
 
 router = APIRouter()
 
@@ -68,6 +79,55 @@ async def read_timeline_capabilities(
     """Return server-owned Timeline limits before a browser constructs a query."""
     response.headers["Cache-Control"] = "no-store"
     return await resolve_timeline_capabilities(db, current)
+
+
+@router.post(
+    gateway_routes.TIMELINE_OVERVIEW_PATH,
+    response_model=TimelineOverview,
+)
+async def read_timeline_overview(
+    body: TimelineOverviewRequest,
+    response: Response,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> TimelineOverview:
+    """Return a bounded retained-strip aggregate without opening a replay cursor."""
+    resolution = await resolve_timeline_read(db, current, body.query)
+    overview_reader = getattr(db, "timeline_overview", None)
+    coverage_reader = getattr(db, "snapshot_timeline_coverage", None)
+    if not callable(overview_reader):
+        raise HTTPException(status_code=503, detail=OVERVIEW_UNAVAILABLE_DETAIL)
+    if not callable(coverage_reader):
+        raise HTTPException(status_code=503, detail=COVERAGE_UNAVAILABLE_DETAIL)
+    bucket_width_ms = timeline_overview_bucket_width_ms(
+        resolution.query.window.to_ms - resolution.query.window.from_ms
+    )
+    try:
+        aggregate = await asyncio.to_thread(
+            overview_reader,
+            resolution.read_scope,
+            predicate=resolution.evidence_predicate,
+            bucket_width_ms=bucket_width_ms,
+        )
+        if not isinstance(aggregate, TimelineOverviewAggregate):
+            raise TypeError("timeline overview reader returned an invalid result")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=OVERVIEW_UNAVAILABLE_DETAIL) from exc
+    try:
+        coverage = await _read_timeline_coverage(coverage_reader, resolution)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=COVERAGE_UNAVAILABLE_DETAIL) from exc
+    try:
+        overview = _timeline_overview_response(
+            resolution,
+            aggregate=aggregate,
+            bucket_width_ms=bucket_width_ms,
+            coverage=coverage,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=OVERVIEW_UNAVAILABLE_DETAIL) from exc
+    response.headers["Cache-Control"] = "no-store"
+    return overview
 
 
 @router.post(gateway_routes.TIMELINE_SNAPSHOTS_PATH)
@@ -317,6 +377,80 @@ async def _read_timeline_coverage(
         resolution.read_scope,
         window=resolution.query.window,
         coverage=raw_coverage,
+    )
+
+
+def _timeline_overview_response(
+    resolution: TimelineReadResolution,
+    *,
+    aggregate: TimelineOverviewAggregate,
+    bucket_width_ms: int,
+    coverage: tuple[TimelineCoverage, ...],
+) -> TimelineOverview:
+    """Turn repository aggregates into a contiguous, strict transport contract."""
+    window = resolution.query.window
+    bucket_count = (window.to_ms - window.from_ms + bucket_width_ms - 1) // bucket_width_ms
+    if bucket_count < 1 or bucket_count > 256:
+        raise ValueError("timeline overview bucket count is invalid")
+    counts_by_index: dict[int, tuple[int, int]] = {}
+    for item in aggregate.buckets:
+        if item.bucket_index < 0 or item.bucket_index >= bucket_count:
+            raise ValueError("timeline overview bucket is outside the requested window")
+        if item.bucket_index in counts_by_index:
+            raise ValueError("timeline overview bucket is duplicated")
+        counts_by_index[item.bucket_index] = (item.event_count, item.problem_count)
+    buckets = tuple(
+        TimelineOverviewBucket(
+            from_ms=window.from_ms + index * bucket_width_ms,
+            to_ms=min(window.from_ms + (index + 1) * bucket_width_ms, window.to_ms),
+            event_count=counts_by_index.get(index, (0, 0))[0],
+            problem_count=counts_by_index.get(index, (0, 0))[1],
+        )
+        for index in range(bucket_count)
+    )
+    activity_values = tuple(
+        sorted(
+            {
+                *(
+                    activity
+                    for option in resolution.capabilities.control_surface.activity
+                    for activity in option.activity
+                ),
+                *(
+                    activity
+                    for option in resolution.capabilities.control_surface.activity
+                    for activity in option.problems_activity
+                ),
+            }
+        )
+    )
+    if resolution.query.mode == "live" and aggregate.new_evidence_count is not None:
+        raise ValueError("live overview cannot report frozen-window evidence")
+    if resolution.query.mode == "frozen" and aggregate.new_evidence_count is None:
+        raise ValueError("frozen overview requires later evidence count")
+    return TimelineOverview(
+        window=window,
+        bucket_width_ms=bucket_width_ms,
+        buckets=buckets,
+        coverage=coverage,
+        coverage_sources=timeline_coverage_source_availability(),
+        facets=TimelineOverviewFacets(
+            activity=tuple(
+                TimelineOverviewActivityFacet(
+                    activity=activity,
+                    count=aggregate.activity_counts.get(activity, 0),
+                )
+                for activity in activity_values
+            ),
+            kinds=tuple(
+                TimelineOverviewKindFacet(kind=kind, count=count)
+                for kind, count in sorted(
+                    aggregate.kind_counts.items(),
+                    key=lambda item: (-item[1], item[0].casefold(), item[0]),
+                )
+            ),
+        ),
+        new_evidence_count=aggregate.new_evidence_count,
     )
 
 

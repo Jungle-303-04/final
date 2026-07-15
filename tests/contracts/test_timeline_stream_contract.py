@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from domains.timeline.settings import timeline_capability_descriptor
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
@@ -83,6 +84,7 @@ def _capabilities() -> TimelineCapabilityDescriptor:
         available_source_modes=("retained",),
         max_retained_range_ms=7_200_000,
         namespace_filter_policy="not_required",
+        control_surface=timeline_capability_descriptor().control_surface,
     )
 
 
@@ -171,6 +173,7 @@ def test_timeline_capability_descriptor_never_claims_an_unavailable_source_mode(
             available_source_modes=("retained",),
             max_retained_range_ms=7_200_000,
             namespace_filter_policy="not_required",
+            control_surface=timeline_capability_descriptor().control_surface,
         )
     with pytest.raises(ValidationError, match="unique"):
         TimelineCapabilityDescriptor(
@@ -178,6 +181,7 @@ def test_timeline_capability_descriptor_never_claims_an_unavailable_source_mode(
             available_source_modes=("retained", "retained"),
             max_retained_range_ms=7_200_000,
             namespace_filter_policy="not_required",
+            control_surface=timeline_capability_descriptor().control_surface,
         )
 
 

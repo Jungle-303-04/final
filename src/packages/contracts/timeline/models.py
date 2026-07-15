@@ -38,6 +38,21 @@ TimelineSort = Literal["importance", "recent", "name"]
 TimelineReadMode = Literal["live", "frozen"]
 TimelineSourceMode = Literal["retained", "local"]
 TimelineNamespaceFilterPolicy = Literal["not_required", "required"]
+TimelineView = Literal["list", "swimlane"]
+TimelineRangeId = Literal["1h", "6h", "24h", "7d", "30d", "custom"]
+TimelineLensZoomRung = Literal[
+    "15m",
+    "30m",
+    "1h",
+    "2h",
+    "6h",
+    "12h",
+    "1d",
+    "2d",
+    "7d",
+    "14d",
+    "30d",
+]
 TimelineFrameKind = Literal[
     "snapshot",
     "event",
@@ -91,6 +106,12 @@ class TimelineQuery(StrictModel):
     mode: TimelineReadMode
     grouping: TimelineGrouping = "app"
     sort: TimelineSort = "importance"
+    # Presentation selections travel with the query so every server endpoint
+    # can validate them against the same capability descriptor.  They are not
+    # part of replay identity because they never alter durable evidence.
+    view: TimelineView = "swimlane"
+    range_id: TimelineRangeId = "custom"
+    lens_zoom_rung: TimelineLensZoomRung = "1h"
 
     @model_validator(mode="after")
     def canonicalize_scopes(self) -> TimelineQuery:
@@ -184,6 +205,112 @@ class TimelineCoverage(StrictModel):
         return self
 
 
+class TimelineControlOption(StrictModel):
+    """One stable, server-owned option rendered by a Timeline control."""
+
+    id: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+def _require_unique_ids(name: str, options: tuple[TimelineControlOption, ...]) -> None:
+    if len({option.id for option in options}) != len(options):
+        raise ValueError(f"timeline {name} must use unique IDs")
+
+
+class TimelineActivityControlOption(TimelineControlOption):
+    """One source chip and its exact normal/problem evidence selections."""
+
+    activity: tuple[TimelineActivity, ...] = ()
+    problems_activity: tuple[TimelineActivity, ...] = ()
+
+    @field_validator("activity", "problems_activity")
+    @classmethod
+    def canonicalize_activity_selection(
+        cls, activity: tuple[TimelineActivity, ...]
+    ) -> tuple[TimelineActivity, ...]:
+        return tuple(sorted(set(activity)))
+
+
+class TimelineRangePreset(TimelineControlOption):
+    """A live, relative retained-history window selected by its stable ID."""
+
+    duration_ms: int = Field(ge=1_000)
+
+
+class TimelineLensZoomOption(TimelineControlOption):
+    """A named retained-strip lens width; UI derives the actual interval."""
+
+    duration_ms: int = Field(ge=1_000)
+
+
+class TimelineBooleanControl(StrictModel):
+    key: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
+    default: bool
+
+
+class TimelineFacetControl(StrictModel):
+    key: str = Field(min_length=1, max_length=100)
+    label: str = Field(min_length=1, max_length=200)
+    selection: Literal["multi"]
+    empty_selection: Literal["all"]
+
+
+class TimelinePinsControl(StrictModel):
+    """Pins are deliberately advertised as unavailable until their own API exists."""
+
+    key: Literal["pins"] = "pins"
+    label: str = Field(min_length=1, max_length=200)
+    availability: Literal["unavailable"]
+
+
+class TimelineLegendControl(StrictModel):
+    key: Literal["legend"] = "legend"
+    label: str = Field(min_length=1, max_length=200)
+    availability: Literal["available"]
+    items: tuple[TimelineControlOption, ...] = Field(min_length=1)
+
+
+class TimelineControlSurface(StrictModel):
+    """Complete retained Timeline toolbar/strip contract owned by the server.
+
+    IDs and labels are transport data.  Browser consumers discover this shape
+    before rendering controls and therefore never need UI-local fallback
+    vocabularies for the retained Timeline surface.
+    """
+
+    views: tuple[TimelineControlOption, ...] = Field(min_length=1)
+    groupings: tuple[TimelineControlOption, ...] = Field(min_length=1)
+    sorts: tuple[TimelineControlOption, ...] = Field(min_length=1)
+    activity: tuple[TimelineActivityControlOption, ...] = Field(min_length=1)
+    deleted: TimelineBooleanControl
+    kinds: TimelineFacetControl
+    time_ranges: tuple[TimelineRangePreset, ...] = Field(min_length=1)
+    default_time_range_id: TimelineRangeId
+    custom_time_range_id: Literal["custom"] = "custom"
+    lens_zoom_rungs: tuple[TimelineLensZoomOption, ...] = Field(min_length=1)
+    default_lens_zoom_rung: TimelineLensZoomRung
+    legend: TimelineLegendControl
+    pins: TimelinePinsControl
+
+    @model_validator(mode="after")
+    def validate_control_ids(self) -> TimelineControlSurface:
+        _require_unique_ids("views", self.views)
+        _require_unique_ids("groupings", self.groupings)
+        _require_unique_ids("sorts", self.sorts)
+        _require_unique_ids("activity", self.activity)
+        _require_unique_ids("time ranges", self.time_ranges)
+        _require_unique_ids("lens zoom rungs", self.lens_zoom_rungs)
+        if self.default_time_range_id == "custom" or self.default_time_range_id not in {
+            option.id for option in self.time_ranges
+        }:
+            raise ValueError("timeline default time range must be an available preset")
+        if self.default_lens_zoom_rung not in {option.id for option in self.lens_zoom_rungs}:
+            raise ValueError("timeline default lens zoom rung must be available")
+        return self
+
+
 class TimelineCapabilityDescriptor(StrictModel):
     """Server-owned Timeline source and scope constraints for a read session.
 
@@ -196,6 +323,7 @@ class TimelineCapabilityDescriptor(StrictModel):
     available_source_modes: tuple[TimelineSourceMode, ...] = Field(min_length=1)
     max_retained_range_ms: int = Field(ge=1_000)
     namespace_filter_policy: TimelineNamespaceFilterPolicy
+    control_surface: TimelineControlSurface
 
     @field_validator("available_source_modes")
     @classmethod
@@ -210,6 +338,72 @@ class TimelineCapabilityDescriptor(StrictModel):
     def require_selected_source_mode_to_be_available(self) -> TimelineCapabilityDescriptor:
         if self.selected_source_mode not in self.available_source_modes:
             raise ValueError("selected source mode must be available")
+        return self
+
+
+class TimelineOverviewBucket(StrictModel):
+    """One server-selected, half-open retained-history aggregate bucket."""
+
+    from_ms: int = Field(ge=0)
+    to_ms: int = Field(gt=0)
+    event_count: int = Field(ge=0)
+    problem_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> TimelineOverviewBucket:
+        if self.from_ms >= self.to_ms:
+            raise ValueError("timeline overview bucket must have positive width")
+        if self.problem_count > self.event_count:
+            raise ValueError("timeline overview problem count cannot exceed event count")
+        return self
+
+
+class TimelineOverviewActivityFacet(StrictModel):
+    activity: TimelineActivity
+    count: int = Field(ge=0)
+
+
+class TimelineOverviewKindFacet(StrictModel):
+    kind: str = Field(min_length=1, max_length=253)
+    count: int = Field(ge=0)
+
+
+class TimelineOverviewFacets(StrictModel):
+    """Axes are computed independently, never by filtering the visible rows twice."""
+
+    activity: tuple[TimelineOverviewActivityFacet, ...]
+    kinds: tuple[TimelineOverviewKindFacet, ...]
+
+
+class TimelineCoverageSourceAvailability(StrictModel):
+    """Absence of a gap is not a synthetic claim that another source was covered."""
+
+    source: TimelineSource
+    availability: Literal["observed", "unavailable"]
+
+
+class TimelineOverview(StrictModel):
+    """Safe retained-strip aggregate.  It contains no raw ledger event payloads."""
+
+    window: TimelineWindow
+    bucket_width_ms: int = Field(ge=1_000)
+    buckets: tuple[TimelineOverviewBucket, ...] = Field(min_length=1, max_length=256)
+    coverage: tuple[TimelineCoverage, ...] = ()
+    coverage_sources: tuple[TimelineCoverageSourceAvailability, ...] = Field(min_length=1)
+    facets: TimelineOverviewFacets
+    new_evidence_count: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_bucket_window(self) -> TimelineOverview:
+        if self.buckets[0].from_ms != self.window.from_ms:
+            raise ValueError("timeline overview buckets must start at the requested window")
+        if self.buckets[-1].to_ms != self.window.to_ms:
+            raise ValueError("timeline overview buckets must end at the requested window")
+        for previous, current in zip(self.buckets, self.buckets[1:], strict=False):
+            if previous.to_ms != current.from_ms:
+                raise ValueError("timeline overview buckets must be contiguous")
+        if len({item.source for item in self.coverage_sources}) != len(self.coverage_sources):
+            raise ValueError("timeline coverage source availability must be unique")
         return self
 
 
