@@ -14,8 +14,10 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.inventory.kubernetes_events import (
-    KubernetesEventCapture,
-    kubernetes_event_timeline_events,
+    EVENT_CAPTURE_REASON_COMPLETE,
+    EVENT_CAPTURE_SUMMARY_KEY,
+    KubernetesEventFactBatch,
+    kubernetes_event_fact_timeline_events,
 )
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
@@ -265,7 +267,8 @@ def inventory_timeline_events(
     previous_rows: Sequence[Mapping[str, object]],
     current_rows: Sequence[Mapping[str, object]],
     resources_complete: bool,
-    event_capture: KubernetesEventCapture | None = None,
+    previous_event_batch: KubernetesEventFactBatch | None = None,
+    current_event_batch: KubernetesEventFactBatch | None = None,
 ) -> tuple[TimelineEvent, ...]:
     """Derive durable inventory and Kubernetes Event facts from one collection cut.
 
@@ -305,14 +308,54 @@ def inventory_timeline_events(
             )
             for event_type, resource in changes
         )
-    event_events = kubernetes_event_timeline_events(
-        workspace_id=workspace_id,
-        cluster_id=cluster_id,
-        previous_rows=previous_rows,
-        current_rows=current_rows,
-        capture=event_capture or KubernetesEventCapture(complete=False, truncated=False),
+    event_events = (
+        kubernetes_event_fact_timeline_events(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            observed_at=observed_at,
+            previous=previous_event_batch,
+            current=current_event_batch,
+        )
+        if current_event_batch is not None
+        else ()
     )
     return inventory_events + event_events
+
+
+def latest_complete_kubernetes_event_batch(
+    conn: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+) -> KubernetesEventFactBatch | None:
+    """Read the newest complete Event fact cut, never an inventory Event resource row."""
+    snapshot = ClusterInventorySnapshotRecord.__table__
+    capture = snapshot.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
+    statement = (
+        select(snapshot.c.summary)
+        .where(
+            snapshot.c.workspace_id == workspace_id,
+            snapshot.c.cluster_id == cluster_id,
+            snapshot.c.status != "ignored_stale",
+            capture["complete"].as_boolean().is_(True),
+            capture["truncated"].as_boolean().is_(False),
+            capture["reason"].astext == EVENT_CAPTURE_REASON_COMPLETE,
+        )
+        .order_by(snapshot.c.collected_at.desc(), snapshot.c.created_at.desc())
+        .limit(1)
+    )
+    rows = conn.execute(statement).mappings().all()
+    row = rows[0] if rows else None
+    if not isinstance(row, Mapping):
+        return None
+    snapshot_summary = row.get("summary")
+    if not isinstance(snapshot_summary, Mapping):
+        return None
+    source_summary = snapshot_summary.get("summary")
+    if not isinstance(source_summary, Mapping):
+        return None
+    batch = KubernetesEventFactBatch.from_snapshot_summary(source_summary)
+    return batch if batch.capture.authoritative else None
 
 
 def is_timeline_inventory_resource(resource: Mapping[str, object]) -> bool:
@@ -516,6 +559,7 @@ class InventoryRepository(DatabaseConnection):
         seen_types = {resource["resource_type"] for resource in normalized}
         marked_deleted = 0
         source_summary = dict(summary.get("summary") or {})
+        current_event_batch = KubernetesEventFactBatch.from_snapshot_summary(source_summary)
         collection_limits = source_summary.get("collection_limits")
         source_truncated = (
             isinstance(collection_limits, dict) and collection_limits.get("truncated") is True
@@ -585,6 +629,17 @@ class InventoryRepository(DatabaseConnection):
                 .mappings()
                 .all()
             ]
+            # A non-authoritative cut cannot emit Event Timeline entries, so avoid
+            # reading an older fact batch that it must never compare or append from.
+            previous_event_batch = (
+                latest_complete_kubernetes_event_batch(
+                    conn,
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                )
+                if current_event_batch.capture.authoritative
+                else None
+            )
             timeline_events = inventory_timeline_events(
                 workspace_id=workspace_id,
                 cluster_id=cluster_id,
@@ -592,7 +647,8 @@ class InventoryRepository(DatabaseConnection):
                 previous_rows=previous_rows,
                 current_rows=normalized,
                 resources_complete=resources_complete,
-                event_capture=KubernetesEventCapture.from_snapshot_summary(source_summary),
+                previous_event_batch=previous_event_batch,
+                current_event_batch=current_event_batch,
             )
             missing_inventory_keys = sorted(
                 {str(row["inventory_key"]) for row in previous_rows}

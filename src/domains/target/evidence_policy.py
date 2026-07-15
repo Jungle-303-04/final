@@ -8,6 +8,10 @@ from packages.contracts.gateway.requests import (
     EvidenceProviderPolicy,
     EvidenceRuntimePolicy,
 )
+from packages.contracts.target import (
+    KUBERNETES_ALL_NAMESPACES_QUERY,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+)
 
 DEFAULT_EVIDENCE_FAILURE_POLICY = "allow_partial"
 DEFAULT_EVIDENCE_PROVIDER_WORKERS = 1
@@ -25,7 +29,13 @@ MANAGEMENT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
                 "in the management namespace."
             ),
             "query": "management",
-        }
+        },
+        {
+            "name": "cluster_wide_event_capture",
+            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
+            "query": KUBERNETES_ALL_NAMESPACES_QUERY,
+            "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
+        },
     ]
 }
 
@@ -52,6 +62,12 @@ DEFAULT_EVIDENCE_PROVIDER_QUERIES: dict[str, list[dict[str, str]]] = {
             "name": "color_turf_namespace_snapshot",
             "description": "Kubernetes pods, events, nodes, workloads, services, and endpoint slices in the color-turf namespace.",
             "query": "color-turf",
+        },
+        {
+            "name": "cluster_wide_event_capture",
+            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
+            "query": KUBERNETES_ALL_NAMESPACES_QUERY,
+            "collection_scope": KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
         },
     ],
     "metrics": [
