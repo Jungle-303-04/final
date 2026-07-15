@@ -33,7 +33,7 @@ export function ChecksPage({ port }: { port: ChecksPort }) {
   if (selection.kind === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (selection.kind === "empty") return <ProductStateScreen kind="empty" placement="content" />;
   if (selection.kind === "error") {
-    return <ProductStateScreen kind="error" issue={{ code: "unknown", safeDetail: selection.detail }} placement="content" />;
+    return <ProductStateScreen kind="error" issue={{ code: "unknown", safeDetail: CHECKS_COPY.scopeSelectionUnavailable }} placement="content" />;
   }
   return <ChecksReadyPage checkId={checkId} clusterIds={selection.clusterIds} namespaces={namespaces} port={port} />;
 }
@@ -125,7 +125,7 @@ function ChecksDetailCard({ response }: { response: ChecksDetailResponse }) {
       </CardHeader>
       <CardContent className="grid min-w-0 gap-2">
         <p className="text-sm text-muted-foreground">{CHECKS_COPY.detailUnavailable}</p>
-        <ReasonCodes reasons={response.detail.reasonCodes} />
+        <AvailabilityReasons reasons={response.detail.reasonCodes} />
       </CardContent>
     </Card>
   );
@@ -148,7 +148,7 @@ function UnavailableCard({
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <p>{children}</p>
-        <ReasonCodes reasons={reasons} />
+        <AvailabilityReasons reasons={reasons} />
       </AlertDescription>
     </Alert>
   );
@@ -167,7 +167,7 @@ function ScopeCard({ coverage }: { coverage: ChecksScopeCoverage }) {
             {coverage.scopes.map((scope) => <ScopeRow key={scope.clusterId} scope={scope} />)}
           </ul>
         )}
-        <ReasonCodes reasons={coverage.reasonCodes} />
+        <AvailabilityReasons reasons={coverage.reasonCodes} />
       </CardContent>
     </Card>
   );
@@ -186,13 +186,26 @@ function ScopeRow({ scope }: { scope: ChecksClusterScope }) {
   );
 }
 
-function ReasonCodes({ reasons }: { reasons: readonly string[] }) {
+function AvailabilityReasons({ reasons }: { reasons: readonly string[] }) {
   if (reasons.length === 0) return null;
   return (
-    <ul className="grid gap-1 pt-1" aria-label="Availability reasons">
-      {reasons.map((reason) => <li className="break-all font-mono text-xs text-muted-foreground" key={reason}>{reason}</li>)}
+    <ul className="grid gap-1 pt-1 text-xs text-muted-foreground" aria-label="Availability reasons">
+      {humanAvailabilityReasons(reasons).map((reason) => <li key={reason}>{reason}</li>)}
     </ul>
   );
+}
+
+function humanAvailabilityReasons(reasons: readonly string[]): readonly string[] {
+  const messages = new Set<string>();
+  for (const reason of reasons) {
+    if (reason === "authorization_scope_empty") messages.add(CHECKS_COPY.scopeReasonAuthorization);
+    else if (reason.startsWith("inventory_snapshot_unavailable:")) messages.add(CHECKS_COPY.scopeReasonUnavailable);
+    else if (reason.startsWith("inventory_snapshot_incomplete:") || reason === "agent_snapshot_truncated") messages.add(CHECKS_COPY.scopeReasonPartial);
+    else if (reason !== "checks_result_projection_not_integrated" && reason !== "checks_catalog_not_integrated") {
+      messages.add(CHECKS_COPY.scopeReasonGeneric);
+    }
+  }
+  return [...messages];
 }
 
 function ChecksFailureScreen({
@@ -221,13 +234,13 @@ function scopeSelection(scope: ReturnType<typeof useClusterScope>):
   | { kind: "ready"; clusterIds: readonly string[] }
   | { kind: "loading"; clusterIds: readonly string[] }
   | { kind: "empty"; clusterIds: readonly string[] }
-  | { kind: "error"; clusterIds: readonly string[]; detail: string } {
+  | { kind: "error"; clusterIds: readonly string[] } {
   if (scope.selection.kind === "resolving") return { kind: "loading", clusterIds: [] };
   if (scope.selection.kind === "empty") return { kind: "empty", clusterIds: [] };
-  if (scope.selection.kind === "unavailable") return { kind: "error", clusterIds: [], detail: scope.selection.failure.code };
-  if (scope.selection.kind === "unknown") return { kind: "error", clusterIds: [], detail: scope.selection.requestedId };
+  if (scope.selection.kind === "unavailable") return { kind: "error", clusterIds: [] };
+  if (scope.selection.kind === "unknown") return { kind: "error", clusterIds: [] };
   if (scope.selection.kind === "multiple" && scope.selection.unresolvedIds.length > 0) {
-    return { kind: "error", clusterIds: [], detail: scope.selection.unresolvedIds.join(", ") };
+    return { kind: "error", clusterIds: [] };
   }
   if (scope.selection.kind === "unfiltered") return { kind: "ready", clusterIds: [] };
   if (scope.selection.kind === "multiple") {
