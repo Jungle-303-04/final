@@ -25,6 +25,24 @@ function sseFramesResponse(frames: readonly { id: number; data: unknown }[]): Re
   });
 }
 
+function sseReadFailureResponse(data: unknown): Response {
+  const frame = `id: 1\nevent: operation\ndata: ${JSON.stringify(data)}\n\n`;
+  let pulls = 0;
+  return new Response(new ReadableStream({
+    pull(controller) {
+      if (pulls === 0) {
+        pulls += 1;
+        controller.enqueue(new TextEncoder().encode(frame));
+        return;
+      }
+      controller.error(new TypeError("native stream disconnected"));
+    },
+  }), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 describe("command operation events API", () => {
   beforeEach(() => vi.restoreAllMocks());
 
@@ -128,6 +146,33 @@ describe("command operation events API", () => {
     expect(sequences).toEqual([1, 2]);
     const reconnect = fetchMock.mock.calls[1];
     expect(reconnect?.[0]).toBe("/api/commands/command-1/events");
+    expect(new Headers(reconnect?.[1]?.headers).get("last-event-id")).toBe("1");
+  });
+
+  it("reconnects native SSE read failures from the last durable event cursor", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(sseReadFailureResponse({
+        command_id: "command-1",
+        sequence: 1,
+        kind: "progress",
+        payload: { status: "running" },
+        occurred_at: "2026-07-15T00:00:00Z",
+      }))
+      .mockResolvedValueOnce(sseResponse({
+        command_id: "command-1",
+        sequence: 2,
+        kind: "completed",
+        payload: { status: "completed" },
+        occurred_at: "2026-07-15T00:00:01Z",
+      }));
+
+    const sequences: number[] = [];
+    for await (const event of subscribeCommandOperationEvents("command-1")) {
+      sequences.push(event.sequence);
+    }
+
+    expect(sequences).toEqual([1, 2]);
+    const reconnect = fetchMock.mock.calls[1];
     expect(new Headers(reconnect?.[1]?.headers).get("last-event-id")).toBe("1");
   });
 
