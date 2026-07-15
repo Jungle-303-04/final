@@ -1306,8 +1306,8 @@ def test_evidence_bundle_skips_empty_change_context_metadata_item() -> None:
     )
 
 
-def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:
-    """dedup — 같은 (workspace, root_cause, 리소스) 리포트가 창 안에 있으면 저장 생략."""
+def test_similar_rca_report_keeps_current_correlation_report() -> None:
+    """상세 조회 키인 새 correlation에도 근거 기반 보고서를 반드시 저장한다."""
     db = SpyDb(
         find_recent_rca_report={
             "id": 1,
@@ -1318,18 +1318,14 @@ def test_duplicate_rca_report_in_window_is_not_saved_again() -> None:
 
     rca_events = run_to_rca(crashloop_payload(), db=db, correlation_id="corr-dup")
 
-    # rca.completed 이벤트는 그대로 발행된다 — 저장(INSERT)만 생략된다.
+    # 비슷한 이전 보고서가 있어도 새 인시던트 상세 조회가 비지 않아야 한다.
     assert rca_events[-1].__subject__ == "rca.completed"
-    assert not db.called("save_rca_report")
-    lookup = next(c for c in db.calls if c[0] == "find_recent_rca_report")
-    workspace_id, root_cause, resource_key, window_seconds = lookup[1]
-    assert workspace_id == "workspace-1"
-    assert root_cause == rca_events[-1].root_cause
-    assert resource_key == "sandbox/deployment/checkout-api"
-    assert window_seconds > 0
+    assert not db.called("find_recent_rca_report")
+    save = next(call for call in db.calls if call[0] == "save_rca_report")
+    assert save[1][0] == "corr-dup"
 
 
-def test_rca_test_report_bypasses_incident_dedup_and_saves_correlation() -> None:
+def test_rca_test_report_saves_correlation() -> None:
     run_pod = "rca-test-crash-app-startup-7f8d9c6b5-x2k4m"
     db = SpyDb(
         find_recent_rca_report={

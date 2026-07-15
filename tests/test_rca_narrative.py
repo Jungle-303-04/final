@@ -233,7 +233,7 @@ def test_rca_worker_bounds_llm_latency_before_persisting_fallback() -> None:
     assert save[1][4]["narrative_status"] == RCA_NARRATIVE_UNAVAILABLE
 
 
-def test_rca_worker_skips_llm_for_deduplicated_report() -> None:
+def test_rca_worker_enriches_each_public_correlation_report() -> None:
     worker = load_service("ai/rca-worker")
     report = _completed_report()
     llm = _ScriptedLlm()
@@ -244,5 +244,6 @@ def test_rca_worker_skips_llm_for_deduplicated_report() -> None:
     events = run_handler(worker.on_candidates_evaluated, _evaluated_input(report), db=db)
 
     assert events == [report]
-    assert llm.prompts == []
-    assert not db.called("save_rca_report")
+    assert len(llm.prompts) == 1
+    save = next(call for call in db.calls if call[0] == "save_rca_report")
+    assert save[1][0] == "corr-1"
