@@ -66,12 +66,12 @@ export function TimelineStrip({
   return (
     <section aria-label={t("timeline.strip.aria")} className="grid min-w-0 gap-3 rounded-xl border bg-card p-3 shadow-sm" data-slot="timeline-strip">
       <div className="flex min-w-0 flex-wrap items-end gap-2">
-        <fieldset className="flex min-w-0 flex-1 flex-wrap gap-1" aria-label={t("timeline.strip.range")}>
+        <fieldset className="flex w-full min-w-0 flex-wrap gap-1 sm:w-auto sm:flex-1" aria-label={t("timeline.strip.range")}>
           <legend className="sr-only">{t("timeline.strip.range")}</legend>
           {controls.timeRanges.map((range) => (
             <button
               aria-pressed={mode.kind === "live" && rangeId === range.id}
-              className="h-auto min-h-8 max-w-full rounded-md border px-2 py-1 text-left text-xs font-medium leading-4 transition-colors aria-pressed:border-primary aria-pressed:bg-secondary motion-reduce:transition-none"
+              className="h-auto min-h-8 max-w-full shrink-0 whitespace-nowrap rounded-md border px-2 py-1 text-left text-xs font-medium leading-4 transition-colors aria-pressed:border-primary aria-pressed:bg-secondary motion-reduce:transition-none"
               key={range.id}
               onClick={() => handleRange(range.id, range.durationMs)}
               title={range.description ?? undefined}
@@ -87,13 +87,13 @@ export function TimelineStrip({
             t={t}
           />
           {mode.kind === "frozen" ? (
-            <button className="h-auto min-h-8 max-w-full rounded-md border px-2 py-1 text-xs font-medium leading-4" onClick={goLive} type="button">
+            <button className="h-auto min-h-8 max-w-full shrink-0 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium leading-4" onClick={goLive} type="button">
               {t("timeline.strip.goLive")}
             </button>
           ) : null}
         </fieldset>
 
-        <label className="grid min-w-0 flex-1 gap-1 text-xs font-medium sm:max-w-48">
+        <label className="grid w-[calc(100%-var(--product-floating-action-inline-clearance))] min-w-0 gap-1 text-xs font-medium sm:w-auto sm:flex-1 sm:max-w-48">
           <span>{t("timeline.strip.zoom")}</span>
           <select
             className="h-8 min-w-0 max-w-full rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"

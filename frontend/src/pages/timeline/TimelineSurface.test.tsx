@@ -378,6 +378,19 @@ describe("TimelineSurface", () => {
     expect(control.closest("li")?.className).toContain("min-w-0");
   });
 
+  it("keeps the mobile lens control in the shared fixed-action inline-safe lane without narrowing range controls", async () => {
+    renderTimeline(timelinePort(), "/timeline?view=list", "en-US");
+
+    const strip = await screen.findByRole("region", { name: "Retained timeline strip" });
+    expect(strip.closest("[data-slot='product-floating-action-avoidance']")).toBeNull();
+    const range = screen.getByRole("group", { name: "Time range" });
+    expect(range.className).toContain("w-full");
+    expect(screen.getByRole("button", { name: "1h" }).className).toContain("whitespace-nowrap");
+    const zoom = screen.getByRole("combobox", { name: "Lens zoom" });
+    expect(zoom.closest("label")?.className)
+      .toContain("w-[calc(100%-var(--product-floating-action-inline-clearance))]");
+  });
+
   it.each([
     {
       navigatorLanguage: "en-US",
