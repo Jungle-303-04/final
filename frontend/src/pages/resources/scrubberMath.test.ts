@@ -46,6 +46,7 @@ describe("timeline scrubber math", () => {
   it("starts immediately before the first incident and advances in bounded steps", () => {
     expect(timelinePlaybackStart(timeline)).toBe(7_000);
     expect(timelinePlaybackStep(timeline)).toBe(1_000);
+    expect(timelinePlaybackStep({ ...timeline, bucketMs: 120_000 })).toBe(1_000);
     expect(timelinePlaybackStart({ ...timeline, events: [] })).toBe(1_000);
   });
 

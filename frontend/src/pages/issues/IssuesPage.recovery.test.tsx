@@ -72,6 +72,47 @@ describe("IssuesPage recovery approval", () => {
       planId: "plan-1",
     }, expect.any(AbortSignal)));
   });
+
+  it("renders operational status and common RCA causes as user-facing Korean", async () => {
+    const baseline = issuesPort();
+    const list = await baseline.listIssues("cluster-1", 50);
+    const detail = await baseline.loadIssue("incident-1", "cluster-1");
+    const localizedIssue = {
+      ...list.items[0]!,
+      status: "approval_recommended",
+      rootCause: "oom_killed",
+    };
+    const port = issuesPort({
+      listIssues: async () => ({ ...list, items: [localizedIssue] }),
+      loadIssue: async () => ({
+        ...detail,
+        status: "approval_recommended",
+        rootCause: "oom_killed",
+      }),
+    });
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <MemoryRouter initialEntries={["/issues?clusters=cluster-1"]}>
+          <AuthSessionGateProvider reportUnauthorized={() => undefined}>
+            <UnifiedFilterProvider>
+              <ClusterScopeProvider authorityKey="default:user" port={clusterScopePort}>
+                <IssuesPage port={port} />
+              </ClusterScopeProvider>
+            </UnifiedFilterProvider>
+          </AuthSessionGateProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    const row = await screen.findByRole("button", { name: "Elevated response latency" });
+    expect(screen.getAllByText("복구 승인 검토 필요").length).toBeGreaterThan(0);
+    expect(screen.getByText("메모리 한도 초과로 종료")).toBeTruthy();
+    fireEvent.click(row);
+    expect((await screen.findAllByText("복구 승인 검토 필요")).length).toBeGreaterThan(1);
+    expect((await screen.findAllByText("메모리 한도 초과로 종료")).length).toBeGreaterThan(1);
+    expect(screen.queryByText("approval_recommended")).toBeNull();
+    expect(screen.queryByText("oom_killed")).toBeNull();
+  });
 });
 
 const clusterScopePort: ClusterScopePort = {

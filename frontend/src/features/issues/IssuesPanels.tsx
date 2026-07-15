@@ -101,7 +101,7 @@ export function IssuesPanels({
               <CardTitle className="min-w-0 break-words">
                 {issueTitle(selected)}
               </CardTitle>
-              <IssueStatusMark label={selected.status} tone={issueStatusTone(selected.status)} />
+              <IssueStatusMark label={copy.statusLabel(selected.status)} tone={issueStatusTone(selected.status)} />
               {confidence !== null ? (
                 <Badge variant="outline">
                   <BrainCircuit aria-hidden="true" />
@@ -193,12 +193,12 @@ function IssueOverview({
 }) {
   const listEvidenceCount = issueEvidenceCount(selected);
   return (
-    <section className="grid min-w-0 gap-4 rounded-xl border bg-muted/15 p-4">
-      <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="@container grid min-w-0 gap-4 rounded-xl border bg-muted/15 p-4">
+      <div className="grid min-w-0 grid-cols-1 gap-2 @md:grid-cols-2 @4xl:grid-cols-4">
         <MetricFact
           icon={<Activity aria-hidden="true" />}
           label={copy.status}
-          value={selected.status}
+          value={copy.statusLabel(selected.status)}
         />
         <MetricFact
           icon={<BrainCircuit aria-hidden="true" />}
@@ -232,7 +232,7 @@ function IssueOverview({
                   <TriangleAlert aria-hidden="true" className="size-4" />
                   {copy.rootCause}
                 </p>
-                <p className="break-words text-sm leading-relaxed">{detail.rootCause}</p>
+                <p className="break-words text-sm leading-relaxed">{copy.causeLabel(detail.rootCause)}</p>
               </div>
             ) : null}
             <EvidenceFacts copy={copy} detail={detail} />
@@ -255,8 +255,8 @@ function MetricFact({
   if (value === null) return null;
   return (
     <div className="min-w-0 rounded-lg border bg-card px-3 py-2.5">
-      <dt className="flex items-center gap-1.5 text-[11px] text-muted-foreground [&>svg]:size-3.5">
-        {icon}{label}
+      <dt className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
+        {icon}<span className="min-w-0 truncate whitespace-nowrap" title={label}>{label}</span>
       </dt>
       <dd className="mt-1 truncate text-sm font-semibold tabular-nums" title={value}>{value}</dd>
     </div>
@@ -396,7 +396,7 @@ function ReportsPanel({
     <SectionCard title={copy.reportsLabel}>
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.reportsUnavailable}>
         {(page) => page.items.length === 0 ? (
-          <IssueEmpty text={copy.sectionEmpty} />
+          <IssueEmpty text={copy.reportsEmpty} />
         ) : (
           <ul className="grid gap-3">
             {page.items.map((report) => (
@@ -421,7 +421,7 @@ function ReportsPanel({
                   <p className="text-xs font-medium text-muted-foreground">{copy.rootCause}</p>
                   <p className="break-words text-base font-semibold leading-relaxed">
                     {report.candidates.find(({ id }) => id === report.selectedCandidateId)?.title
-                      ?? evidenceFallbackLabel(report.rootCause)}
+                      ?? copy.causeLabel(report.rootCause)}
                   </p>
                 </div>
                 <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
@@ -727,7 +727,7 @@ function RecoveryPanel({
       <IssueSectionFrame copy={copy} state={state} unavailable={copy.recoveryUnavailable}>
         {(plan) => (
           <div className="grid gap-3">
-            <Badge variant="outline">{plan.status}</Badge>
+            <Badge variant="outline">{copy.statusLabel(plan.status)}</Badge>
             {plan.candidates.length === 0 ? <IssueEmpty text={copy.sectionEmpty} /> : (
               <ul className="grid gap-3">
                 {plan.candidates.map((candidate) => (

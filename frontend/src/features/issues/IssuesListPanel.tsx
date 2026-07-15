@@ -83,8 +83,8 @@ export function IssuesListPanel({
         <Badge variant="secondary">{copy.listCount(list.data.returned)}</Badge>
         {statusBreakdown(list.data.items).map(([status, count]) => (
           <Badge className="max-w-48" key={status} variant="outline">
-            <IssueStatusMark label={status} labelMode="sr-only" tone={issueStatusTone(status)} />
-            <span className="truncate">{humanizeFilterValue(status)}</span>
+            <IssueStatusMark label={copy.statusLabel(status)} labelMode="sr-only" tone={issueStatusTone(status)} />
+            <span className="truncate">{copy.statusLabel(status)}</span>
             <span className="tabular-nums text-muted-foreground">{copy.listCount(count)}</span>
           </Badge>
         ))}
@@ -177,7 +177,7 @@ function IssueQueueRow({
               ) : null}
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              <IssueStatusMark label={humanizeFilterValue(issue.status)} tone={tone} />
+              <IssueStatusMark label={copy.statusLabel(issue.status)} tone={tone} />
               <ChevronRight
                 aria-hidden="true"
                 className={cn(
@@ -191,7 +191,7 @@ function IssueQueueRow({
           {issue.rootCause ? (
             <span className="flex min-w-0 items-start gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 text-xs leading-relaxed text-foreground/85">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-warning" />
-              <span className="line-clamp-2 break-words">{humanizeFilterValue(issue.rootCause)}</span>
+              <span className="line-clamp-2 break-words">{copy.causeLabel(issue.rootCause)}</span>
             </span>
           ) : null}
 

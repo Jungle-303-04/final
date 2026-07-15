@@ -364,8 +364,8 @@ function CleanupCommand({
       {command ? (
         <div className="grid min-w-0 gap-2">
           <p className="text-xs font-medium">{commandLabel}</p>
-          <div className="flex min-w-0 items-start gap-2 rounded-lg bg-zinc-950 p-3 text-zinc-100">
-            <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre text-xs leading-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{command}</pre>
+          <div className="flex min-w-0 items-start gap-2 overflow-hidden rounded-lg bg-zinc-950 p-3 text-zinc-100">
+            <pre className="min-w-0 flex-1 select-text whitespace-pre-wrap break-all text-xs leading-5 [overflow-wrap:anywhere]">{command}</pre>
             <Button
               aria-label={copyLabel}
               className="shrink-0 text-zinc-100 hover:bg-white/10 hover:text-white"

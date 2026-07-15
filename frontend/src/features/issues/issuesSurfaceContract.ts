@@ -52,6 +52,7 @@ export interface IssuesSurfaceCopy {
   evidenceCollectorLabel: (collector: string) => string;
   evidenceSummaryLabel: (source: string, summary: string) => string;
   reportsLabel: string;
+  reportsEmpty: string;
   recoveryLabel: string;
   sectionLoading: string;
   sectionEmpty: string;
@@ -60,6 +61,8 @@ export interface IssuesSurfaceCopy {
   recoveryUnavailable: string;
   refresh: string;
   status: string;
+  statusLabel: (status: string) => string;
+  causeLabel: (cause: string) => string;
   target: string;
   updated: string;
   confidence: string;

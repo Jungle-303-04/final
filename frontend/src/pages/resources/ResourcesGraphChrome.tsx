@@ -123,7 +123,7 @@ export function TimelineStrip({
       } else {
         onAtChange(next);
       }
-    }, 250);
+    }, 1_000);
     return () => window.clearInterval(interval);
   }, [atMs, onAtChange, playbackEnd, playing, timeline]);
 
@@ -145,7 +145,11 @@ export function TimelineStrip({
   const formatTime = (value: number) => formatDate(value, {
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
   });
+  const selectedPosition = replayAvailable
+    ? timelinePercent(selectedMs, replayFromMs, replayToMs)
+    : 0;
 
   return (
     <div
@@ -205,8 +209,16 @@ export function TimelineStrip({
               {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
             </Button>
           ) : null}
-        <div className="relative h-8 min-w-0 flex-1">
-          <svg aria-hidden="true" className="absolute inset-0 size-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 32">
+        <div className="relative h-16 min-w-0 flex-1 pt-5">
+          <output
+            aria-live="polite"
+            className="pointer-events-none absolute top-0 z-30 -translate-x-1/2 rounded-md border bg-popover px-2 py-0.5 text-[11px] font-medium tabular-nums shadow-sm transition-[border-color,box-shadow] data-[dragging=true]:border-primary data-[dragging=true]:shadow-md motion-reduce:transition-none"
+            data-dragging={dragging ? "true" : "false"}
+            style={{ left: `${Math.min(94, Math.max(6, selectedPosition))}%` }}
+          >
+            {live ? t("resources.timeline.now") : formatTime(selectedMs)}
+          </output>
+          <svg aria-hidden="true" className="absolute inset-x-0 top-5 h-8 w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 32">
             {visibleBuckets.map((bucket) => {
               const x = timelinePercent(
                 Math.max(bucket.startMs, replayFromMs),
@@ -240,7 +252,7 @@ export function TimelineStrip({
               return <rect className="fill-muted" height="28" key={`${gap.from}:${gap.to}`} width={width} x={x} y="0" />;
             })}
           </svg>
-          <svg className="pointer-events-none absolute inset-0 z-20 size-full overflow-visible" viewBox="0 0 100 32">
+          <svg className="pointer-events-none absolute inset-x-0 top-5 z-20 h-8 w-full overflow-visible" viewBox="0 0 100 32">
             {incidentEvents.map((event) => {
               const markerX = timelinePercent(event.occurredMs, replayFromMs, replayToMs);
               const label = t("resources.timeline.incidentMarker", { time: formatTime(event.occurredMs) });
@@ -259,22 +271,10 @@ export function TimelineStrip({
                 </foreignObject>
               );
             })}
-            {dragging ? (
-              <foreignObject
-                height="24"
-                width="20"
-                x={Math.min(80, Math.max(0, timelinePercent(selectedMs, replayFromMs, replayToMs) - 10))}
-                y="-26"
-              >
-                <output className="block size-full rounded-md border bg-popover px-1 py-1 text-center text-xs shadow-sm">
-                  {live ? t("resources.timeline.now") : formatTime(selectedMs)}
-                </output>
-              </foreignObject>
-            ) : null}
           </svg>
           {replayAvailable ? <input
             aria-label={t("resources.timeline.aria")}
-            className="absolute inset-x-0 bottom-0 z-10 h-3 w-full cursor-pointer accent-primary"
+            className="absolute inset-x-0 top-5 z-10 h-8 w-full cursor-pointer appearance-none bg-transparent accent-primary [&::-moz-range-progress]:h-1 [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-primary [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background [&::-moz-range-thumb]:bg-primary [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-muted-foreground/30 [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted-foreground/30 [&::-webkit-slider-thumb]:mt-[-6px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm"
             max={replayToMs}
             min={replayFromMs}
             onChange={(event) => {
@@ -288,6 +288,15 @@ export function TimelineStrip({
             type="range"
             value={selectedMs}
           /> : null}
+          {replayAvailable ? (
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 bottom-0 flex items-center justify-between text-[10px] tabular-nums text-muted-foreground"
+            >
+              <time dateTime={new Date(replayFromMs).toISOString()}>{formatTime(replayFromMs)}</time>
+              <time dateTime={new Date(replayToMs).toISOString()}>{formatTime(replayToMs)}</time>
+            </div>
+          ) : null}
         </div>
         </div>
       ) : null}

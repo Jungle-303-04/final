@@ -65,21 +65,21 @@ export function ConnectionCommandStep({
         <p className="text-sm text-muted-foreground">{t("clusters.connect.command.description")}</p>
       </div>
       <div
-        className="flex min-w-0 max-w-full items-center overflow-hidden rounded-xl border bg-muted"
+        className="flex min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-xl border bg-muted p-2"
         data-command-surface="true"
       >
         <div
           aria-label={t("clusters.connect.command.title")}
-          className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          data-command-scroll="true"
+          className="min-w-0 flex-1 overflow-hidden rounded-lg bg-background/70"
+          data-command-block="true"
           role="region"
           tabIndex={0}
         >
-          <pre className="w-max min-w-full whitespace-pre px-4 py-3 text-xs leading-5"><code>{installCommand}</code></pre>
+          <pre className="select-text whitespace-pre-wrap break-all px-3 py-2.5 text-xs leading-5 [overflow-wrap:anywhere]"><code>{installCommand}</code></pre>
         </div>
         <Button
           aria-label={t(copyState === "copied" ? "clusters.connect.action.copied" : "clusters.connect.action.copy")}
-          className="m-2 shrink-0 bg-background shadow-xs"
+          className="shrink-0 bg-background shadow-xs"
           onClick={onCopy}
           size="sm"
           type="button"

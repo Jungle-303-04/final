@@ -86,7 +86,13 @@ export function usePhysicalTopologyRealtime(input: {
 
   useEffect(() => {
     if (clusterId === null || frame.phase !== "ready") return undefined;
-    const captured = timeline.captureActualView(clusterId, frame.data.pods, rows);
+    const captured = timeline.captureActualView(
+      clusterId,
+      frame.data.pods,
+      rows,
+      frame.data.servers,
+      frame.data.metricsObservedAt,
+    );
     if (captured === 0) return undefined;
     let disposed = false;
     queueMicrotask(() => {
@@ -138,6 +144,8 @@ export function usePhysicalTopologyRealtime(input: {
             clusterId,
             actualView.frame.data.pods,
             actualView.rows,
+            actualView.frame.data.servers,
+            actualView.frame.data.metricsObservedAt,
           );
         }
         const requestedReplayAt = currentReplayAt();
@@ -263,6 +271,11 @@ function selectTimelineFrame(
   void revision;
   if (frame.phase !== "ready" || clusterId === null) return frame;
   const cursor = timeline.getCursor();
+  const serverTopology = timeline.selectServerTopology(
+    clusterId,
+    frame.data.servers,
+    frame.data.metricsObservedAt,
+  );
   return {
     ...frame,
     data: {
@@ -270,6 +283,12 @@ function selectTimelineFrame(
       pods: replay && cursor.mode !== "replay"
         ? []
         : timeline.selectGraphPods(clusterId, frame.data.pods),
+      servers: replay && cursor.mode !== "replay"
+        ? []
+        : serverTopology.servers,
+      metricsObservedAt: replay && cursor.mode !== "replay"
+        ? null
+        : serverTopology.observedAt,
     },
   };
 }
