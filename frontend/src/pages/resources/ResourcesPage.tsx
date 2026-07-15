@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
+import { cn } from "@/shared/lib/cn";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
+import type { HomePort } from "../../features/home/homeContract";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort } from "../../features/resources/resourcesFilterContract";
@@ -47,6 +49,7 @@ export function ResourcesPage({
   filterPort,
   physicalTopologyPort,
   physicalTopologyRealtimePort,
+  nodePodsPort,
   relationTopologyPort,
   changeTimelinePort,
   resourceMetricsHistoryPort,
@@ -57,6 +60,7 @@ export function ResourcesPage({
   filterPort: ResourcesFilterPort;
   physicalTopologyPort: PhysicalTopologyPort;
   physicalTopologyRealtimePort: PhysicalTopologyRealtimePort;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
   relationTopologyPort: RelationTopologyPort;
   changeTimelinePort: ChangeTimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
@@ -82,17 +86,6 @@ export function ResourcesPage({
     reportUnauthorized,
     revision: state.podRevision,
   });
-  const physicalRealtime = usePhysicalTopologyRealtime({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      filter.detail.timeAt === undefined,
-    clusterId: state.selectedClusterId,
-    frame: physicalTopologyFrame,
-    port: physicalTopologyRealtimePort,
-    workspaceId: session?.workspaceId ?? null,
-  });
-  const physicalTopology = physicalRealtime.frame;
   const relationTopology = useRelationTopologyDataFrame({
     active:
       state.selectedClusterExists &&
@@ -137,6 +130,22 @@ export function ResourcesPage({
   const filteredPage = filtered.list.phase === "ready"
     ? filtered.list.data
     : null;
+  const currentResourceRows = useMemo(
+    () => (filteredPage?.items ?? []).map((item) => item.resource),
+    [filteredPage],
+  );
+  const physicalRealtime = usePhysicalTopologyRealtime({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1,
+    clusterId: state.selectedClusterId,
+    frame: physicalTopologyFrame,
+    port: physicalTopologyRealtimePort,
+    replayAtMs: filter.detail.timeAt,
+    rows: currentResourceRows,
+    workspaceId: session?.workspaceId ?? null,
+  });
+  const physicalTopology = physicalRealtime.frame;
   const detailResourceId = state.detail.phase === "ready"
     ? state.detail.data.resource.inventoryKey
     : null;
@@ -208,8 +217,8 @@ export function ResourcesPage({
       <div
         className={state.detailRequested
           ? state.detailFull
-            ? "hidden"
-            : "hidden min-w-0 flex-1 overflow-y-auto lg:block"
+            ? "hidden min-w-0 overflow-y-auto lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
+            : "hidden min-w-0 flex-1 overflow-y-auto lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
           : "min-w-0 flex-1 overflow-y-auto"}
         data-slot="resources-list-column"
       >
@@ -280,10 +289,14 @@ export function ResourcesPage({
                   />
                 ) : null}
                 metricHistory={metricHistory}
+                nodePodsPort={nodePodsPort}
+                onNodePodsUnauthorized={reportUnauthorized}
                 onLoadMore={filtered.loadMoreList}
                 onTopologyViewChange={topology.pin}
                 physicalTopology={physicalTopology}
                 relationTopology={relationTopology}
+                replay={physicalRealtime.replay}
+                selectTableRows={physicalRealtime.selectTableRows}
                 state={state}
                 timelineFrame={changeTimeline}
                 topologyPinned={topology.pinned}
@@ -295,9 +308,11 @@ export function ResourcesPage({
       </div>
       {state.detailRequested ? (
         <div
-          className={state.detailFull
-            ? "min-w-0 flex-1"
-            : "min-w-0 w-full shrink-0 border-l bg-background lg:w-[30rem]"}
+          className={cn(
+            "min-w-0 w-full basis-full shrink-0 bg-background transition-[flex-basis,border-color] duration-300 ease-out motion-reduce:transition-none",
+            state.detailFull ? "border-l-0 lg:basis-full" : "border-l lg:basis-[30rem]",
+          )}
+          data-detail-size={state.detailFull ? "full" : "peek"}
           data-slot="resources-detail-column"
         >
           <ResourceDetailWorkspace

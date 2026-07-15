@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from domains.ai.alert_actions import DEFAULT_ALERT_RULE_FOR_SECONDS
+from domains.ai.context_facade import get_context_chat_llm
 from domains.ai.router import router as ai_router
 from domains.identity.dependencies import require_session
 from packages.contracts.gateway.responses import (
@@ -61,6 +62,22 @@ def inventory_row(**overrides: Any) -> dict[str, Any]:
     return row
 
 
+class StubContextLlm:
+    def __init__(self, reply: str = "실제 모델이 관측 근거를 바탕으로 답했습니다.") -> None:
+        self.reply = reply
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt: str, **_options: Any) -> str:
+        self.prompts.append(prompt)
+        return self.reply
+
+
+class FailingContextLlm(StubContextLlm):
+    async def complete(self, prompt: str, **_options: Any) -> str:
+        self.prompts.append(prompt)
+        raise RuntimeError("provider-secret-must-not-leak")
+
+
 class StubAiDb:
     def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
         self.rows = [inventory_row()] if rows is None else rows
@@ -97,10 +114,17 @@ def current_session() -> SimpleNamespace:
     return SimpleNamespace(user_id="user-1", roles=("user",), workspace_id="ws-1")
 
 
-def ai_app(db: StubAiDb, *, authenticated: bool = True) -> FastAPI:
+def ai_app(
+    db: StubAiDb,
+    *,
+    authenticated: bool = True,
+    llm: StubContextLlm | None = None,
+) -> FastAPI:
     app = FastAPI()
     app.include_router(ai_router)
     app.dependency_overrides[get_db] = lambda: db
+    if llm is not None:
+        app.dependency_overrides[get_context_chat_llm] = lambda: llm
     if authenticated:
         app.dependency_overrides[require_session] = current_session
     else:
@@ -111,6 +135,87 @@ def ai_app(db: StubAiDb, *, authenticated: bool = True) -> FastAPI:
 
         app.state.auth = RejectingAuth()
     return app
+
+
+def test_context_chat_calls_configured_llm_with_only_sanitized_evidence() -> None:
+    llm = StubContextLlm("checkout-api-0 파드는 현재 정상입니다.")
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "이 파드 상태를 설명해 줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "checkout-api-0 파드는 현재 정상입니다."
+    assert response.json()["evidence"]
+    assert len(llm.prompts) == 1
+    assert "checkout-api-0" in llm.prompts[0]
+    assert "must-not-leak" not in llm.prompts[0]
+
+
+def test_context_chat_uses_empty_resource_type_filter_as_all_resources() -> None:
+    llm = StubContextLlm("현재 선택한 클러스터에서 실행 중인 파드를 확인했습니다.")
+    cluster_context = deepcopy(CONTEXT)
+    cluster_context["screen"] = "clusters"
+    cluster_context["selection"] = None
+    cluster_context["filters"]["resource_types"] = []
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm)).post(
+        "/ai/chat",
+        json={"context": cluster_context, "message": "이 클러스터 상태를 알려줘"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["evidence"]
+    assert response.json()["answer"].startswith("현재 선택한 클러스터")
+    assert len(llm.prompts) == 1
+
+
+def test_context_chat_answers_capability_question_through_actual_llm_without_fake_evidence() -> (
+    None
+):
+    llm = StubContextLlm(
+        "저는 현재 화면의 리소스와 로그 근거를 설명하고, 알림 규칙 초안을 제안할 수 있습니다."
+    )
+
+    response = TestClient(ai_app(StubAiDb(rows=[]), llm=llm)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "넌 뭘 할 수 있니?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": llm.reply,
+        "evidence": [],
+        "answer_kind": "capability",
+    }
+    assert len(llm.prompts) == 1
+
+
+def test_context_chat_does_not_let_llm_invent_operational_answer_without_evidence() -> None:
+    llm = StubContextLlm("근거 없이 지어낸 운영 상태")
+
+    response = TestClient(ai_app(StubAiDb(rows=[]), llm=llm)).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "지금 파드가 왜 죽었어?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": AI_NO_DATA_ANSWER, "evidence": []}
+    assert llm.prompts == []
+
+
+def test_context_chat_reports_provider_outage_without_leaking_or_claiming_no_data() -> None:
+    llm = FailingContextLlm()
+
+    response = TestClient(ai_app(StubAiDb(), llm=llm), raise_server_exceptions=False).post(
+        "/ai/chat",
+        json={"context": CONTEXT, "message": "현재 파드 상태를 알려줘"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "AI 응답 서비스에 연결할 수 없습니다."}
+    assert "provider-secret" not in response.text
 
 
 def test_context_chat_returns_only_authorized_sanitized_evidence() -> None:

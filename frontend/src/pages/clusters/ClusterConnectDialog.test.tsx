@@ -44,8 +44,9 @@ describe("ClusterConnectDialog", () => {
     const port = waitingPort();
     vi.mocked(port.loadConnection).mockResolvedValue({
       status: "connected",
+      stage: "ready",
       agentVersion: null,
-      connectedAt: null,
+      lastSeenAt: "2026-07-15T01:02:03Z",
     });
     renderDialog(port, onConnected);
 
@@ -56,6 +57,25 @@ describe("ClusterConnectDialog", () => {
     expect(screen.getByRole("link", { name: "View cluster" }).getAttribute("href"))
       .toBe("/resources?clusters=production-a1b2");
     expect(onConnected).toHaveBeenCalledOnce();
+  });
+
+  it("shows server-confirmed install, agent, inventory, and ready progress without inventing a percentage", async () => {
+    const user = userEvent.setup();
+    const port = waitingPort();
+    vi.mocked(port.loadConnection).mockResolvedValue({
+      status: "waiting",
+      stage: "agent_connected",
+      agentVersion: "2026.07.15",
+      lastSeenAt: "2026-07-15T01:02:03Z",
+    });
+    renderDialog(port);
+
+    await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
+    await user.click(screen.getByRole("button", { name: "Generate install command" }));
+
+    expect(await screen.findByText("Agent connected")).toBeTruthy();
+    expect(screen.getByText("Waiting for the first inventory")).toBeTruthy();
+    expect(screen.queryByText(/%/)).toBeNull();
   });
 });
 
@@ -68,8 +88,9 @@ function waitingPort(): ClustersPort {
     })),
     loadConnection: vi.fn(async () => ({
       status: "waiting" as const,
+      stage: "awaiting_install" as const,
       agentVersion: null,
-      connectedAt: null,
+      lastSeenAt: null,
     })),
   };
 }

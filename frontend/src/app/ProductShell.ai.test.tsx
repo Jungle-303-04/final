@@ -21,7 +21,10 @@ describe("ProductShell AI panel", () => {
         { id: "why", label: "재시작 원인", prompt: "이 파드는 왜 재시작하나요?" },
       ]),
     });
-    renderShell({ aiAssistantPort: port });
+    const { container } = renderShell({ aiAssistantPort: port });
+    const closedPanel = container.querySelector('[data-slot="ai-assistant-panel"]');
+    expect(closedPanel?.getAttribute("aria-hidden")).toBe("true");
+    expect(closedPanel?.hasAttribute("inert")).toBe(true);
     const trigger = screen.getByRole("button", { name: "Opsia AI 열기" });
     expect(trigger.className).toContain("fixed");
     expect(trigger.className).toContain("right-6");
@@ -31,6 +34,8 @@ describe("ProductShell AI panel", () => {
     const panel = screen.getByRole("complementary", { name: "Opsia AI" });
     const inner = panel.querySelector('[data-slot="ai-assistant-inner"]');
     expect(panel.getAttribute("data-side")).toBe("right");
+    expect(panel.getAttribute("aria-hidden")).toBe("false");
+    expect(panel.hasAttribute("inert")).toBe(false);
     expect(panel.getAttribute("data-open")).toBe("true");
     expect(panel.getAttribute("data-width")).toBe("420");
     expect(inner?.getAttribute("data-inner-width")).toBe("420");
@@ -159,7 +164,7 @@ describe("ProductShell AI panel", () => {
 
 function assistantPort(overrides: Partial<AiAssistantPort> = {}): AiAssistantPort {
   return {
-    ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [] }),
+    ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [], action: null }),
     loadSuggestions: vi.fn().mockResolvedValue([]),
     createAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     ...overrides,

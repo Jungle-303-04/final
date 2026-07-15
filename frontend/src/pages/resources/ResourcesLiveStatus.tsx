@@ -7,7 +7,7 @@ export function ResourcesLiveStatus({
 }: {
   state: PhysicalTopologyLiveState;
 }) {
-  const { formatNumber, t } = useI18n();
+  const { formatDate, formatNumber, t } = useI18n();
   if (state.status === "idle") return null;
   const degraded = degradedMessage(state.degradedReason);
   const connected = state.status === "connected";
@@ -25,6 +25,7 @@ export function ResourcesLiveStatus({
       className="flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs"
       data-slot="resources-live-status"
       data-state={state.status}
+      data-updated-at={state.updatedAt > 0 ? state.updatedAt : undefined}
       role="status"
     >
       <span className="flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
@@ -46,6 +47,18 @@ export function ResourcesLiveStatus({
           {t(degraded)}
         </span>
       )}
+      {state.updatedAt > 0 ? (
+        <span
+          className="whitespace-nowrap tabular-nums text-muted-foreground"
+          title={formatDate(state.updatedAt, { dateStyle: "medium", timeStyle: "medium" })}
+        >
+          {t("resources.table.updated")} {formatDate(state.updatedAt, {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </span>
+      ) : null}
     </div>
   );
 }

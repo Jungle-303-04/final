@@ -1,7 +1,6 @@
 import {
   Activity,
   CircleAlert,
-  FileCode2,
   Link2,
   ListTree,
   TriangleAlert,
@@ -81,7 +80,7 @@ export function ResourceDetailBody({
     );
   }
   const resource = detail.data.resource;
-  const selectedTab = ["overview", "yaml", "relations", "metrics", "events"].includes(tab)
+  const selectedTab = ["overview", "relations", "metrics", "events"].includes(tab)
     ? tab
     : "overview";
   return (
@@ -92,7 +91,6 @@ export function ResourceDetailBody({
     >
       <TabsList aria-label={t("resources.detail.tabs.aria")} className="w-full" variant="line">
         <TabsTrigger value="overview">{t("resources.detail.overview")}</TabsTrigger>
-        <TabsTrigger value="yaml">{t("resources.detail.yaml")}</TabsTrigger>
         <TabsTrigger value="relations">
           {t("resources.detail.relatedCount", { count: detail.data.related.length })}
         </TabsTrigger>
@@ -107,11 +105,21 @@ export function ResourceDetailBody({
             {t("resources.detail.refreshFailed.description")}
           </DetailAlert>
         ) : null}
-        <section aria-labelledby="resource-status-title" className="grid gap-3 rounded-lg border p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-medium" id="resource-status-title">
-              {t("resources.detail.status")}
-            </h3>
+        <section
+          aria-labelledby="resource-status-title"
+          className="relative isolate grid gap-4 overflow-hidden rounded-xl border bg-linear-to-br from-primary/8 via-card to-muted/40 p-4 shadow-xs"
+          data-slot="resource-detail-summary"
+        >
+          <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 -z-10 size-48 rounded-full bg-primary/8 blur-3xl" />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="grid gap-1">
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {resource.kind}
+              </p>
+              <h3 className="font-heading text-lg font-semibold [overflow-wrap:anywhere]" id="resource-status-title">
+                {resource.name}
+              </h3>
+            </div>
             <StatusMark label={resource.healthStatus} tone={resource.health} />
           </div>
           <DefinitionGrid entries={[
@@ -131,9 +139,6 @@ export function ResourceDetailBody({
         {hasMetricPoints(metricHistory, resource.inventoryKey)
           ? null
           : <PointInTimeEvidenceUnavailable />}
-      </TabsContent>
-      <TabsContent className="grid gap-3 py-4" value="yaml">
-        <EmptySection icon={FileCode2} text={t("resources.detail.yamlUnavailable")} />
       </TabsContent>
       <TabsContent className="grid gap-3 py-4" value="relations">
         {detail.data.related.length === 0 ? (
@@ -172,7 +177,11 @@ export function ResourceDetailBody({
         {detail.data.events.length === 0 ? (
           <EmptySection icon={ListTree} text={t("resources.detail.eventsEmpty")} />
         ) : detail.data.events.map((event) => (
-          <section className="grid min-w-0 gap-2 rounded-lg border p-4" key={event.id}>
+          <section className="relative grid min-w-0 gap-3 overflow-hidden rounded-xl border bg-card p-4 shadow-xs" key={event.id}>
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 w-1 bg-warning"
+            />
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
               <h3
                 className="min-w-0 font-medium [overflow-wrap:anywhere]"
@@ -191,6 +200,18 @@ export function ResourceDetailBody({
               >
                 {event.facts.message}
               </p>
+            ) : null}
+            {event.facts.type === "event" ? (
+              <div className="flex min-w-0 flex-wrap gap-2 text-xs text-muted-foreground">
+                {event.facts.reportingComponent ? (
+                  <Badge variant="outline">{event.facts.reportingComponent}</Badge>
+                ) : null}
+                {event.facts.occurrenceCount === null ? null : (
+                  <Badge variant="outline">
+                    {t("resources.detail.fact.count")} · {event.facts.occurrenceCount}
+                  </Badge>
+                )}
+              </div>
             ) : null}
             <p className="text-xs text-muted-foreground">
               {formatObservedAt(event.observedAt, formatDate, t)}

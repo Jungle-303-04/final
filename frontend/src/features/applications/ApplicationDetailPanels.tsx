@@ -7,8 +7,9 @@ import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { Separator } from "../../shared/ui/primitives/separator";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import type { ApplicationDetailModel } from "./applicationsContract";
-import { applicationStatusTone, formatObservedTime, shortSha } from "./applicationPresentation";
+import { applicationStatusTone, formatObservedTime } from "./applicationPresentation";
 
 export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetailModel }) {
   const { locale } = useI18n();
@@ -27,7 +28,7 @@ export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetail
         <CardHeader><CardTitle>{copy.deployment}</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
           <Fact label={copy.version} value={detail.currentDeployment?.version} />
-          <Fact label={copy.gitSha} value={shortSha(detail.currentDeployment?.gitSha ?? null)} mono />
+          <Fact label={copy.gitSha} value={detail.currentDeployment?.gitSha ?? null} mono />
           <Fact label={copy.digest} value={detail.currentDeployment?.imageDigest} mono />
           <Fact label={copy.deployedAt} value={formatObservedTime(detail.currentDeployment?.deployedAt ?? null, locale)} />
           <Fact label={copy.deployedBy} value={detail.currentDeployment?.deployedBy} />
@@ -41,7 +42,7 @@ export function ApplicationOverviewPanel({ detail }: { detail: ApplicationDetail
           ) : detail.endpoints.map((endpoint) => (
             <div className="grid min-w-0 gap-1" key={endpoint.id}>
               <span className="text-xs text-muted-foreground">{endpoint.kind} · {endpoint.name}</span>
-              <span className="truncate text-sm" title={endpoint.address ?? undefined}>{endpoint.address ?? copy.unavailable}</span>
+              <OverflowIdentity className="text-sm" value={endpoint.address ?? copy.unavailable} />
             </div>
           ))}
         </CardContent>
@@ -139,7 +140,11 @@ function Fact({ label, mono = false, value }: { label: string; mono?: boolean; v
   return (
     <div className="grid min-w-0 grid-cols-[minmax(7rem,0.35fr)_minmax(0,1fr)] items-start gap-3 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      {value === null || value === undefined ? <Unavailable /> : <span className={mono ? "truncate font-mono text-xs" : "truncate"}>{value}</span>}
+      {value === null || value === undefined
+        ? <Unavailable />
+        : typeof value === "string"
+          ? <OverflowIdentity className={mono ? "font-mono text-xs" : undefined} value={value} />
+          : <span className={mono ? "min-w-0 font-mono text-xs" : "min-w-0"}>{value}</span>}
     </div>
   );
 }

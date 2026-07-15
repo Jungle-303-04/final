@@ -48,6 +48,7 @@ class Command:
     RCA_TEST_SCENARIO_CLEANUP_ACTION: Final[str] = "rca.test.cleanup"
     KUBERNETES_DEPLOYMENT_SCALE_ACTION: Final[str] = "k8s.apps.v1.deployments.scale"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
+    CLUSTER_AGENT_UNINSTALL_ACTION: Final[str] = "cluster.agent.uninstall"
 
 
 RCA_TEST_COMMAND_ACTIONS: Final[frozenset[str]] = frozenset(

@@ -1,0 +1,176 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
+import {
+  ClustersPortFailure,
+  type ClusterDisconnectPort,
+  type ClusterDisconnectReceipt,
+} from "../../features/clusters/clustersContract";
+import type { HomeClusterChoice } from "../../features/home/homeContract";
+import { I18nProvider } from "../../shared/i18n";
+import { ClusterDisconnectDialog } from "./ClusterDisconnectDialog";
+
+const CLUSTER: HomeClusterChoice = {
+  id: "cluster-1",
+  workspaceId: "workspace-main",
+  name: "Production",
+  environment: "production",
+  provider: "eks",
+  connectionStage: "ready",
+  registrationState: "active",
+  connectionState: "online",
+  lastObservedAt: "2026-07-14T01:00:00Z",
+  nodeCount: 3,
+  podCount: 24,
+  incidentCount: 0,
+};
+
+afterEach(cleanup);
+
+describe("ClusterDisconnectDialog", () => {
+  it("requires the exact cluster name and shows the real submit and refresh handoff states", async () => {
+    const user = userEvent.setup();
+    let resolveDisconnect: () => void = () => {
+      // Replaced synchronously by the promise executor below.
+    };
+    const disconnect = vi.fn((_clusterId: string, _signal?: AbortSignal) =>
+      new Promise<ClusterDisconnectReceipt>((resolve) => {
+        resolveDisconnect = () => resolve(uninstallingReceipt());
+      }));
+    const loadDisconnect = vi.fn().mockResolvedValue({
+      status: "completed",
+      cleanupCompleted: true,
+      failureReason: null,
+    });
+    const onDisconnected = vi.fn();
+    renderDialog({ confirmManualCleanup: vi.fn(), disconnect, loadDisconnect }, onDisconnected);
+
+    const submit = screen.getByRole("button", { name: "연결 해제" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "production");
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    await user.clear(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }));
+    await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
+    await user.click(submit);
+
+    expect(disconnect).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
+    expect(screen.getByRole("status").textContent).toContain("연결 해제를 요청하는 중");
+    expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
+
+    resolveDisconnect?.();
+    expect(await screen.findByText("에이전트 실행이 중단되었습니다")).toBeTruthy();
+    expect(screen.getByText("남은 권한 정리 명령")).toBeTruthy();
+    expect(screen.getByText("kubectl delete deployment/cluster-agent")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "닫기" })).toHaveLength(1);
+    expect(onDisconnected).toHaveBeenCalledWith("cluster-1");
+  });
+
+  it("keeps a failed request visible and retryable without inventing completion", async () => {
+    const user = userEvent.setup();
+    const disconnect = vi.fn()
+      .mockRejectedValueOnce(new ClustersPortFailure("offline"))
+      .mockResolvedValueOnce(uninstallingReceipt());
+    const onDisconnected = vi.fn();
+    renderDialog({
+      confirmManualCleanup: vi.fn(),
+      disconnect,
+      loadDisconnect: vi.fn().mockResolvedValue({
+        status: "completed",
+        cleanupCompleted: true,
+        failureReason: null,
+      }),
+    }, onDisconnected);
+    await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
+    await user.click(screen.getByRole("button", { name: "연결 해제" }));
+
+    expect(await screen.findByText("연결을 해제하지 못했습니다")).toBeTruthy();
+    expect(onDisconnected).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "연결 해제" }));
+    expect(await screen.findByText("에이전트 실행이 중단되었습니다")).toBeTruthy();
+  });
+
+  it("forwards an unauthorized mutation to the session gate", async () => {
+    const user = userEvent.setup();
+    const reportUnauthorized = vi.fn();
+    renderDialog(
+      {
+        confirmManualCleanup: vi.fn(),
+        disconnect: vi.fn().mockRejectedValue(new ClustersPortFailure("unauthorized")),
+        loadDisconnect: vi.fn(),
+      },
+      vi.fn(),
+      reportUnauthorized,
+    );
+    await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
+    await user.click(screen.getByRole("button", { name: "연결 해제" }));
+
+    expect(await screen.findByText("연결을 해제하지 못했습니다")).toBeTruthy();
+    expect(reportUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an offline agent visible until the operator runs the exact cleanup command", async () => {
+    const user = userEvent.setup();
+    const confirmManualCleanup = vi.fn().mockResolvedValue({
+      ...cleanupRequiredReceipt(),
+      status: "disconnected",
+    });
+    const onDisconnected = vi.fn();
+    renderDialog({
+      confirmManualCleanup,
+      disconnect: vi.fn().mockResolvedValue(cleanupRequiredReceipt()),
+      loadDisconnect: vi.fn(),
+    }, onDisconnected);
+    await user.type(screen.getByRole("textbox", { name: "확인을 위해 클러스터 이름 입력" }), "Production");
+    await user.click(screen.getByRole("button", { name: "연결 해제" }));
+
+    expect(await screen.findByText("클러스터에서 정리 명령을 실행하세요")).toBeTruthy();
+    expect(onDisconnected).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "정리 완료 확인" }));
+    expect(confirmManualCleanup).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
+    expect(await screen.findByText("연결이 해제되었습니다")).toBeTruthy();
+  });
+});
+
+function uninstallingReceipt() {
+  return {
+    status: "uninstalling" as const,
+    commandId: "cmd-uninstall-1",
+    uninstallCommand: "kubectl delete deployment/cluster-agent",
+    residualResources: ["target:serviceaccount/cluster-agent"],
+    failureReason: null,
+  };
+}
+
+function cleanupRequiredReceipt() {
+  return {
+    status: "cleanup-required" as const,
+    commandId: null,
+    uninstallCommand: "kubectl delete deployment/cluster-agent",
+    residualResources: ["target:serviceaccount/cluster-agent"],
+    failureReason: "agent is offline",
+  };
+}
+
+function renderDialog(
+  port: ClusterDisconnectPort,
+  onDisconnected = vi.fn(),
+  reportUnauthorized = vi.fn(),
+) {
+  return render(
+    <I18nProvider navigatorLanguage="ko" storage={null}>
+      <AuthSessionGateProvider reportUnauthorized={reportUnauthorized}>
+        <ClusterDisconnectDialog
+          cluster={CLUSTER}
+          onDisconnected={onDisconnected}
+          onOpenChange={vi.fn()}
+          open
+          port={port}
+        />
+      </AuthSessionGateProvider>
+    </I18nProvider>,
+  );
+}

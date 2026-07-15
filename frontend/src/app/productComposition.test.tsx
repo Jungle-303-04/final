@@ -17,7 +17,7 @@ const testClusterScopePort: ClusterScopePort = {
   listClusterChoices: async () => ({ completeness: "unknown", clusters: [] }),
 };
 const testAiAssistantPort: AiAssistantPort = {
-  ask: async () => ({ answer: "no data", evidence: [] }),
+  ask: async () => ({ answer: "no data", evidence: [], action: null }),
   loadSuggestions: async () => [],
   createAlertRule: async () => ({ ruleId: "rule-1" }),
 };

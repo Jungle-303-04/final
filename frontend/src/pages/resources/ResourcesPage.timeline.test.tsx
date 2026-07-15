@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_LOG_STREAM_PORT } from "../../features/log-stream/logStreamContract";
@@ -46,7 +46,7 @@ describe("ResourcesPage S11 timeline strip", () => {
     expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
   });
 
-  it("jumps to evidence-backed incidents and persists the historical coordinate", async () => {
+  it("does not expose server incident markers outside the browser measurement buffer", async () => {
     const user = userEvent.setup();
     const timelinePort = resourcesChangeTimelinePort({
       loadChangeTimeline: vi.fn().mockImplementation((_state, options) => {
@@ -76,13 +76,9 @@ describe("ResourcesPage S11 timeline strip", () => {
     renderTimelineResources(timelinePort);
 
     await user.click(await screen.findByRole("button", { name: "Show recorded history" }));
-    const marker = await screen.findByRole("button", { name: /Jump to incident/ });
-    await user.click(marker);
-
-    await waitFor(() => expect(readQuery().has("t.at")).toBe(true));
     expect(screen.getByText("No record in this interval")).toBeTruthy();
-    expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("past");
+    expect(screen.queryByRole("button", { name: /Jump to incident/ })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
     expect(timelinePort.loadChangeTimeline).toHaveBeenCalledWith(
       expect.objectContaining({ common: expect.objectContaining({ clusters: ["cluster-1"] }) }),
       expect.objectContaining({ bucketMs: 120_000 }),
@@ -90,7 +86,7 @@ describe("ResourcesPage S11 timeline strip", () => {
     );
   });
 
-  it("keeps live history collapsed and only offers playback after selecting the past", async () => {
+  it("keeps live history collapsed and does not offer playback without a measured sample", async () => {
     const user = userEvent.setup();
     renderTimelineResources(resourcesChangeTimelinePort());
 
@@ -102,13 +98,13 @@ describe("ResourcesPage S11 timeline strip", () => {
     await user.click(expand);
     expect(screen.getByText("Recorded changes · 2 min intervals")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
-    const slider = screen.getByRole("slider", { name: "Time" });
-    fireEvent.change(slider, { target: { value: slider.getAttribute("min") } });
-    await waitFor(() => expect(readQuery().has("t.at")).toBe(true));
-    await user.click(screen.getByRole("button", { name: "Play resource history" }));
+    expect(screen.queryByRole("slider", { name: "Time" })).toBeNull();
+    expect(screen.getByText("No record in this interval")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play resource history" })).toBeNull();
     expect(document.querySelector('[data-slot="resources-time-scrubber"]')
-      ?.getAttribute("data-state")).toBe("playing");
+      ?.getAttribute("data-replay-status")).toBe("live");
   });
+
 });
 
 function renderTimelineResources(timelinePort: ReturnType<typeof resourcesChangeTimelinePort>) {
@@ -127,9 +123,4 @@ function renderTimelineResources(timelinePort: ReturnType<typeof resourcesChange
     resourcesRelationTopologyPort(),
     timelinePort,
   );
-}
-
-function readQuery(): URLSearchParams {
-  const location = screen.getByTestId("resources-location").textContent ?? "";
-  return new URL(location, "https://product.test").searchParams;
 }

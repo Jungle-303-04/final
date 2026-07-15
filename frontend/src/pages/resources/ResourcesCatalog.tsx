@@ -1,4 +1,6 @@
 import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
+import { ListTree } from "lucide-react";
+import { useState } from "react";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -11,6 +13,14 @@ import {
 import { ScrollArea } from "../../shared/ui/primitives/scroll-area";
 import { Surface } from "../../shared/ui/Surface";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../../shared/ui/primitives/sheet";
+import {
   resourceTypePresentation,
   type ResourceCategoryPresentation,
 } from "./resourcePresentation";
@@ -18,6 +28,48 @@ import {
 interface CatalogGroup {
   category: ResourceCategoryPresentation;
   items: ResourceCatalogItem[];
+}
+
+export function ResourcesCatalogMobile({
+  items,
+  onSelect,
+  selectedResourceType,
+}: {
+  items: ResourceCatalogItem[];
+  onSelect: (resourceType: string) => void;
+  selectedResourceType: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const { t } = useI18n();
+  return (
+    <div className="flex min-w-0 lg:hidden" data-slot="resources-catalog-mobile">
+      <Sheet onOpenChange={setOpen} open={open}>
+        <SheetTrigger render={<Button className="w-full justify-between" variant="outline" />}>
+          <span className="flex items-center gap-2">
+            <ListTree aria-hidden="true" className="size-4" />
+            {t("resources.catalog.mobileOpen")}
+          </span>
+          <Badge variant="secondary">{items.length}</Badge>
+        </SheetTrigger>
+        <SheetContent className="gap-0 overflow-hidden p-0" side="left">
+          <SheetHeader className="border-b pr-12">
+            <SheetTitle>{t("resources.catalog.title")}</SheetTitle>
+            <SheetDescription>{t("resources.catalog.description")}</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-hidden p-3">
+            <ResourcesCatalog
+              items={items}
+              onSelect={(resourceType) => {
+                onSelect(resourceType);
+                setOpen(false);
+              }}
+              selectedResourceType={selectedResourceType}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
 }
 
 export function ResourcesCatalog({

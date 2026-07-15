@@ -8,6 +8,7 @@ import { useI18n } from "../../shared/i18n/I18nProvider";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import {
   Item,
   ItemActions,
@@ -104,8 +105,10 @@ function NodeItem({ node, state }: { node: HomeNodeSummary; state: HomePageState
       <ItemMedia variant="icon">
         <Server aria-hidden="true" />
       </ItemMedia>
-      <ItemContent>
-        <ItemTitle className="max-w-full break-all">{node.name}</ItemTitle>
+      <ItemContent className="min-w-0">
+        <ItemTitle className="max-w-full min-w-0">
+          <OverflowIdentity value={node.name} />
+        </ItemTitle>
         <ItemDescription>
           {t("home.node.description", {
             capacity: formatNumber(node.podsCapacity),
@@ -202,7 +205,9 @@ function PodItem({ pod }: { pod: HomePodSummary }) {
     <Item variant="outline">
       <ItemMedia variant="icon"><Boxes aria-hidden="true" /></ItemMedia>
       <ItemContent>
-        <ItemTitle className="max-w-full break-all">{pod.name}</ItemTitle>
+        <ItemTitle className="max-w-full min-w-0">
+          <OverflowIdentity value={pod.name} />
+        </ItemTitle>
         <ItemDescription>
           {t("home.pod.description", {
             namespace: pod.namespace,

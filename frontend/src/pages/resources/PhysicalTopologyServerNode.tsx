@@ -5,11 +5,13 @@ import { useEffect, useRef } from "react";
 import { useFirstAppearanceMotion } from "../../motion/useFirstAppearanceMotion";
 import { STAGGER_MS, staggerDelay } from "../../motion/useStagger";
 import { useI18n } from "../../shared/i18n";
+import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Button } from "../../shared/ui/primitives/button";
 import { cn } from "@/shared/lib/cn";
 import { PhysicalTopologyPod } from "./PhysicalTopologyPod";
 import type { PhysicalServerNode } from "./physicalTopologyGraphTypes";
 import { usageColor, useSmoothedUsageColor } from "./useSmoothedUsageColor";
+import { NodePodsPopover } from "./NodePodsPopover";
 
 export function PhysicalTopologyServerNode({ data }: NodeProps<PhysicalServerNode>) {
   return <PhysicalTopologyServerCard data={data} />;
@@ -21,7 +23,15 @@ export function PhysicalTopologyServerCard({
   data: PhysicalServerNode["data"];
 }) {
   const { formatNumber, t } = useI18n();
-  const { clusterId, index, onOpenPod, onRevealServer, placement } = data;
+  const {
+    clusterId,
+    index,
+    nodePodsPort,
+    onNodePodsUnauthorized,
+    onOpenPod,
+    onRevealServer,
+    placement,
+  } = data;
   const { server } = placement;
   const serverName = placement.unassigned
     ? t("resources.graph.server.unassigned")
@@ -58,7 +68,9 @@ export function PhysicalTopologyServerCard({
             <p className="text-[0.625rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               {t("resources.graph.server.label")}
             </p>
-            <h3 className="truncate text-xs font-semibold" title={serverName}>{serverName}</h3>
+            <h3 className="min-w-0 text-xs font-semibold">
+              <OverflowIdentity value={serverName} />
+            </h3>
           </div>
         </div>
         <span className="max-w-20 truncate text-[0.625rem] text-muted-foreground" title={server.status}>
@@ -85,7 +97,7 @@ export function PhysicalTopologyServerCard({
 
       <footer className="flex min-h-8 items-center justify-between gap-2 border-t bg-muted/20 px-3 py-1.5 text-[0.6875rem] text-muted-foreground">
         <ServerPodCount placement={placement} />
-        {placement.omittedCount > 0 ? (
+        {placement.omittedCount > 0 && placement.unassigned ? (
           <Button
             className="h-6 px-1.5 text-[0.6875rem]"
             onClick={() => onRevealServer(server.id)}
@@ -97,6 +109,16 @@ export function PhysicalTopologyServerCard({
               count: formatNumber(placement.omittedCount),
             })}
           </Button>
+        ) : placement.omittedCount > 0 ? (
+          <NodePodsPopover
+            clusterId={clusterId}
+            expectedTotal={placement.totalCount ?? placement.pods.length + placement.omittedCount}
+            nodeName={server.name}
+            omittedCount={placement.omittedCount}
+            onOpenPod={onOpenPod}
+            onUnauthorized={onNodePodsUnauthorized}
+            port={nodePodsPort}
+          />
         ) : null}
       </footer>
     </article>
@@ -107,7 +129,6 @@ function MetricBar({ label, value }: { label: string; value: number | null }) {
   const rounded = value === null ? null : Math.round(value);
   const metricRef = useRef<HTMLDivElement>(null);
   const smoothedUsage = useSmoothedUsageColor(value, metricRef);
-  const displayedBarValue = value ?? smoothedUsage;
   return (
     <div
       className="grid min-w-0 gap-1"
@@ -120,7 +141,7 @@ function MetricBar({ label, value }: { label: string; value: number | null }) {
         <span>{rounded === null ? "—" : `${rounded}%`}</span>
       </span>
       <span className="h-1.5 overflow-hidden rounded-full bg-muted">
-        {displayedBarValue === null || smoothedUsage === null ? null : (
+        {smoothedUsage === null ? null : (
           <span
             aria-label={`${label} ${rounded === null ? "—" : `${rounded}%`}`}
             aria-valuemax={100}
@@ -130,7 +151,9 @@ function MetricBar({ label, value }: { label: string; value: number | null }) {
             role="progressbar"
             style={{
               backgroundColor: usageColor(smoothedUsage),
-              width: `${Math.min(Math.max(displayedBarValue, 0), 100)}%`,
+              transform: `scaleX(${Math.min(Math.max(smoothedUsage, 0), 100) / 100})`,
+              transformOrigin: "left center",
+              width: "100%",
             }}
           />
         )}

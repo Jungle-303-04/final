@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,8 +13,27 @@ import type {
 import { LogStreamFailure } from "../features/log-stream/logStreamContract";
 import { installMatchMedia, renderShell } from "./__tests__/ProductShellInteractionSupport";
 
-beforeEach(() => installMatchMedia(false));
-afterEach(() => cleanup());
+vi.mock("react-virtuoso", async () => {
+  const React = await import("react");
+  return {
+    Virtuoso: React.forwardRef((props: Record<string, unknown>, ref) => {
+      React.useImperativeHandle(ref, () => ({ scrollToIndex: vi.fn() }));
+      const data = (props.data ?? []) as Array<{ id: string }>;
+      const itemContent = props.itemContent as (index: number, item: { id: string }) => React.ReactNode;
+      return <div>{data.map((item, index) => (
+        <React.Fragment key={item.id}>{itemContent(index, item)}</React.Fragment>
+      ))}</div>;
+    }),
+  };
+});
+
+beforeEach(() => {
+  installMatchMedia(false);
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("ProductShell bottom log dock", () => {
   it("keeps multiple bounded stream tabs, resizes, collapses, and renders lines as text", async () => {
@@ -27,24 +46,29 @@ describe("ProductShell bottom log dock", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
-    stream.emit("checkout", { type: "connected", streamId: "stream-checkout" });
-    stream.emit("checkout", {
-      type: "log",
-      id: "line-1",
-      observedAt: "2026-07-14T08:00:00+00:00",
-      pod: "checkout",
-      container: "app",
-      line: "<script>alert('never')</script>",
-      lineTruncated: false,
+    flushEventFrame(() => {
+      stream.emit("checkout", { type: "connected", streamId: "stream-checkout" });
+      stream.emit("checkout", {
+        type: "log",
+        id: "line-1",
+        observedAt: "2026-07-14T08:00:00+00:00",
+        pod: "checkout",
+        container: "app",
+        line: "<script>alert('never')</script>",
+        lineTruncated: false,
+      });
     });
     expect(await screen.findByRole("region", { name: "로그 독" })).toBeTruthy();
-    expect(screen.getByText("<script>alert('never')</script>").tagName).toBe("CODE");
+    expect((await screen.findByText("<script>alert('never')</script>")).tagName).toBe("CODE");
     expect([...container.querySelectorAll("script")].every(
       (element) => !element.textContent?.includes("alert('never')"),
     )).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "payment 로그 열기" }));
-    stream.emit("payment", { type: "connected", streamId: "stream-payment" });
+    flushEventFrame(() => stream.emit(
+      "payment",
+      { type: "connected", streamId: "stream-payment" },
+    ));
     expect(screen.getByRole("tab", { name: /로그: checkout/u })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /로그: payment/u })).toBeTruthy();
 
@@ -64,7 +88,7 @@ describe("ProductShell bottom log dock", () => {
     const stream = streamPort();
     const loadSuggestions = vi.fn().mockResolvedValue([]);
     const ai: AiAssistantPort = {
-      ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [] }),
+      ask: vi.fn().mockResolvedValue({ answer: "no data", evidence: [], action: null }),
       loadSuggestions,
       createAlertRule: vi.fn().mockResolvedValue({ ruleId: "rule-1" }),
     };
@@ -75,7 +99,10 @@ describe("ProductShell bottom log dock", () => {
       releasedSurfaceIds: new Set(["home", "resources"]),
     });
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
-    stream.emit("checkout", { type: "connected", streamId: "stream-checkout" });
+    flushEventFrame(() => stream.emit(
+      "checkout",
+      { type: "connected", streamId: "stream-checkout" },
+    ));
     await waitFor(() => expect(screen.getByText("실시간")).toBeTruthy());
     await user.click(screen.getByRole("button", { name: "현재 로그를 Opsia AI에 질문" }));
 
@@ -97,18 +124,30 @@ describe("ProductShell bottom log dock", () => {
 
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
     const first = stream.latest("checkout");
-    first.onEvent({ type: "end", reason: "complete" });
+    flushEventFrame(() => first.onEvent({ type: "end", reason: "complete" }));
     await waitFor(() => expect(screen.getByText("종료됨")).toBeTruthy());
 
     await user.click(screen.getByRole("button", { name: "checkout 로그 열기" }));
     const second = stream.latest("checkout");
     expect(second).not.toBe(first);
     first.onFailure(new LogStreamFailure("offline"));
-    second.onEvent({ type: "connected", streamId: "stream-current" });
+    flushEventFrame(() => second.onEvent({ type: "connected", streamId: "stream-current" }));
     await waitFor(() => expect(screen.getByText("실시간")).toBeTruthy());
     expect(screen.queryByText("연결 실패")).toBeNull();
   });
 });
+
+function flushEventFrame(emit: () => void) {
+  const original = globalThis.requestAnimationFrame;
+  let scheduled: FrameRequestCallback | null = null;
+  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+    scheduled = callback;
+    return 17;
+  }));
+  act(emit);
+  act(() => scheduled?.(performance.now()));
+  vi.stubGlobal("requestAnimationFrame", original);
+}
 
 function streamPort() {
   const handlers = new Map<string, LogStreamHandlers>();

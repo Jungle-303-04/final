@@ -241,8 +241,9 @@ function ProductShellFrame({
           ) : null}
         </SidebarContent>
 
-        <SidebarFooter className="gap-1">
+        <SidebarFooter className="gap-1.5 overflow-x-hidden">
           <SidebarWorkspaceSwitcher workspaceId={auth.session.workspaceId} />
+          <Separator className="mx-2 data-horizontal:w-auto" />
           <SidebarProfileMenu
             auth={auth}
             settingsHref={filter.navigationHref("/settings")}

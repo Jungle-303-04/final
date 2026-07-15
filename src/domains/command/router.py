@@ -466,6 +466,19 @@ async def command_result(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
 ) -> EventIdAcceptedResponse:
+    command_row = await db.get_agent_command(command_id, identity.workspace_id)
+    if command_row is None or str(command_row.get("cluster_id")) != identity.cluster_id:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    uninstall_result = str(command_row.get("action")) == Command.CLUSTER_AGENT_UNINSTALL_ACTION
+    if uninstall_result:
+        registration_getter = getattr(db, "get_cluster_registration", None)
+        registration = (
+            registration_getter(identity.workspace_id, identity.cluster_id)
+            if callable(registration_getter)
+            else None
+        )
+        if is_management_registration(registration):
+            raise HTTPException(status_code=400, detail=management_readonly_detail())
     result = payload.model_dump()
     result["workspace_id"] = identity.workspace_id
     result["cluster_id"] = identity.cluster_id
@@ -482,6 +495,17 @@ async def command_result(
     )
     if completed is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    if (
+        uninstall_result
+        and payload.status == CommandStatus.COMPLETED
+        and payload.cleanup_completed is True
+    ):
+        unregister = getattr(db, "unregister_target_cluster", None)
+        if not callable(unregister) or not unregister(identity.workspace_id, identity.cluster_id):
+            raise HTTPException(
+                status_code=500,
+                detail="agent uninstall ACK was stored but registration revocation failed",
+            )
     return EventIdAcceptedResponse(accepted=True, event_id=completed.event_id)
 
 

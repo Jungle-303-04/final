@@ -1,24 +1,29 @@
 import { Waypoints } from "lucide-react";
 import { useMemo } from "react";
 
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
+import type { HomePort } from "../../features/home/homeContract";
 import { FirstAppearanceMotionBoundary } from "../../motion/useFirstAppearanceMotion";
 import { useI18n } from "../../shared/i18n";
 import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import { UsageSmoothingBoundary } from "./useSmoothedUsageColor";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export function ResourcesPhysicalTopologyScene({
   clusterId,
   frame,
+  nodePodsPort,
   onOpenPod,
+  onNodePodsUnauthorized,
   onRevealServer,
   skeletonServerCount,
 }: {
   clusterId: string;
   frame: PhysicalTopologyFrame;
-  onOpenPod: (pod: PhysicalTopologyPod) => void;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
+  onOpenPod: (pod: PhysicalPodOpenTarget) => void;
+  onNodePodsUnauthorized: () => void;
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;
 }) {
@@ -38,12 +43,20 @@ export function ResourcesPhysicalTopologyScene({
       ) : frame.phase === "ready" && placements.length > 0 ? (
         <UsageSmoothingBoundary markCount={usageMarkCount}>
           <div
-            className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-auto p-4 sm:p-5"
+            className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-y-auto overflow-x-hidden p-4 sm:p-5"
             data-slot="physical-topology-grid"
           >
             {placements.map((placement, index) => (
               <PhysicalTopologyServerCard
-                data={{ clusterId, index, placement, onOpenPod, onRevealServer }}
+                data={{
+                  clusterId,
+                  index,
+                  nodePodsPort,
+                  onNodePodsUnauthorized,
+                  placement,
+                  onOpenPod,
+                  onRevealServer,
+                }}
                 key={placement.server.id}
               />
             ))}
@@ -62,7 +75,7 @@ function ServerSkeletons({ clusterId, count }: { clusterId: string; count: numbe
   return (
     <div
       aria-label={t("resources.graph.loading")}
-      className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(320px,1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
+      className="grid max-h-[min(65vh,65rem)] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] content-start gap-4 overflow-hidden p-4 sm:p-5"
       role="status"
     >
       {Array.from({ length: visible }, (_, index) => (

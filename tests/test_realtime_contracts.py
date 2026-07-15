@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -54,6 +56,7 @@ def test_parses_every_message_type() -> None:
             "op": "replace",
             "key": f"{CLUSTER}/sandbox/pod/checkout",
             "value": {"ready": True},
+            "observed_at": "2026-07-15T03:00:00Z",
         },
         {"type": "ping", "ts": 1720000000.123},
     ]
@@ -63,6 +66,7 @@ def test_parses_every_message_type() -> None:
     assert isinstance(parsed[1], SnapshotMessage)
     assert isinstance(parsed[2], LiveSummaryMessage)
     assert isinstance(parsed[3], ResourceDelta)
+    assert parsed[3].observed_at == datetime(2026, 7, 15, 3, tzinfo=UTC)
     assert isinstance(parsed[4], PingMessage)
 
 

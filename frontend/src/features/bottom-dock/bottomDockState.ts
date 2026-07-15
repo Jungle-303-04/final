@@ -6,7 +6,7 @@ import type {
 
 export const MAX_DOCK_LINES = 2_000;
 export const MAX_DOCK_TABS = 8;
-const MAX_RECENT_LINE_IDS = 256;
+const MAX_RECENT_LINE_IDS = MAX_DOCK_LINES;
 export const MIN_DOCK_HEIGHT = 160;
 export const MAX_DOCK_HEIGHT = 520;
 export const DEFAULT_DOCK_HEIGHT = 280;
@@ -48,6 +48,7 @@ export type BottomDockAction =
   | { type: "close"; id: string }
   | { type: "select"; id: string }
   | { type: "event"; id: string; event: LogStreamEvent }
+  | { type: "events"; batches: Array<{ id: string; events: LogStreamEvent[] }> }
   | { type: "failure"; id: string; code: LogStreamFailureCode }
   | { type: "retry"; id: string }
   | { type: "collapse"; collapsed: boolean }
@@ -97,11 +98,23 @@ export function bottomDockReducer(
       } : tab),
     };
   }
+  if (action.type === "events") {
+    if (action.batches.length === 0) return state;
+    const batches = new Map(action.batches.map((batch) => [batch.id, batch.events]));
+    return {
+      ...state,
+      tabs: state.tabs.map((tab) => {
+        const events = batches.get(tab.id);
+        if (!events?.length) return tab;
+        return applyEvents(tab, events, state.activeTabId === tab.id);
+      }),
+    };
+  }
   return {
     ...state,
     tabs: state.tabs.map((tab) => tab.id === action.id
       ? action.type === "event"
-        ? applyEvent(tab, action.event, state.activeTabId === action.id)
+        ? applyEvents(tab, [action.event], state.activeTabId === action.id)
         : {
             ...tab,
             status: "failed",
@@ -112,44 +125,87 @@ export function bottomDockReducer(
   };
 }
 
-function applyEvent(tab: BottomDockTab, event: LogStreamEvent, active: boolean): BottomDockTab {
-  if (event.type === "connected") {
-    return { ...tab, status: "streaming", streamId: event.streamId };
+function applyEvents(
+  tab: BottomDockTab,
+  events: readonly LogStreamEvent[],
+  active: boolean,
+): BottomDockTab {
+  if (events.length === 0) return tab;
+
+  const knownLineIds = new Set(tab.recentLineIds);
+  const appendedLines: BottomDockLine[] = [];
+  let pods: Set<string> | null = null;
+  let status = tab.status;
+  let streamId = tab.streamId;
+  let endReason = tab.endReason;
+  let failureCode = tab.failureCode;
+  let retryable = tab.retryable;
+  let metadataChanged = false;
+
+  for (const event of events) {
+    if (event.type === "log") {
+      if (knownLineIds.has(event.id)) continue;
+      knownLineIds.add(event.id);
+      appendedLines.push({
+        id: event.id,
+        observedAt: event.observedAt,
+        pod: event.pod,
+        container: event.container,
+        line: event.line,
+        lineTruncated: event.lineTruncated,
+      });
+      continue;
+    }
+    metadataChanged = true;
+    if (event.type === "connected") {
+      status = "streaming";
+      streamId = event.streamId;
+    } else if (event.type === "pod-added" || event.type === "pod-removed") {
+      pods ??= new Set(tab.pods);
+      if (event.type === "pod-added") pods.add(event.pod);
+      else pods.delete(event.pod);
+    } else if (event.type === "end") {
+      status = "ended";
+      endReason = event.reason;
+      retryable = false;
+    } else {
+      status = "failed";
+      failureCode = event.code;
+      retryable = event.retryable;
+    }
   }
-  if (event.type === "log") {
-    if (tab.recentLineIds.includes(event.id)) return tab;
-    const lines = [...tab.lines, {
-      id: event.id,
-      observedAt: event.observedAt,
-      pod: event.pod,
-      container: event.container,
-      line: event.line,
-      lineTruncated: event.lineTruncated,
-    }];
-    const overflow = Math.max(0, lines.length - MAX_DOCK_LINES);
-    return {
-      ...tab,
-      lines: overflow ? lines.slice(overflow) : lines,
-      recentLineIds: [...tab.recentLineIds, event.id].slice(-MAX_RECENT_LINE_IDS),
-      received: tab.received + 1,
-      dropped: tab.dropped + overflow,
-      unseen: active ? 0 : tab.unseen + 1,
-    };
-  }
-  if (event.type === "pod-added" || event.type === "pod-removed") {
-    const pods = new Set(tab.pods);
-    if (event.type === "pod-added") pods.add(event.pod);
-    else pods.delete(event.pod);
-    return { ...tab, pods: [...pods].sort() };
-  }
-  if (event.type === "end") {
-    return { ...tab, status: "ended", endReason: event.reason, retryable: false };
-  }
+
+  if (appendedLines.length === 0 && !metadataChanged) return tab;
+
+  const combinedLineCount = tab.lines.length + appendedLines.length;
+  const overflow = Math.max(0, combinedLineCount - MAX_DOCK_LINES);
+  const lines = appendedLines.length >= MAX_DOCK_LINES
+    ? appendedLines.slice(-MAX_DOCK_LINES)
+    : [...tab.lines.slice(Math.min(overflow, tab.lines.length)), ...appendedLines];
+  const appendedIds = appendedLines.map((line) => line.id);
+  const recentLineIds = appendedIds.length >= MAX_RECENT_LINE_IDS
+    ? appendedIds.slice(-MAX_RECENT_LINE_IDS)
+    : [
+        ...tab.recentLineIds.slice(Math.max(
+          0,
+          tab.recentLineIds.length + appendedIds.length - MAX_RECENT_LINE_IDS,
+        )),
+        ...appendedIds,
+      ];
+
   return {
     ...tab,
-    status: "failed",
-    failureCode: event.code,
-    retryable: event.retryable,
+    status,
+    streamId,
+    lines,
+    recentLineIds,
+    received: tab.received + appendedLines.length,
+    dropped: tab.dropped + overflow,
+    unseen: appendedLines.length === 0 ? tab.unseen : active ? 0 : tab.unseen + appendedLines.length,
+    pods: pods === null ? tab.pods : [...pods].sort(),
+    endReason,
+    failureCode,
+    retryable,
   };
 }
 

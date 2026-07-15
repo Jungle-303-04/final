@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import suppress
+from datetime import UTC, datetime
 from typing import Any
 
 import yaml
@@ -144,6 +145,23 @@ def test_summarize_emits_measured_resource_delta_and_aggregate_metric_metadata()
     assert delta.value["mem_request_mib"] == 256.0
     assert delta.value["cpu_request_pct"] == 80.0
     assert delta.value["metrics_metadata"] == summary.metrics_metadata.model_dump()
+
+
+def test_resource_removal_delta_uses_the_actual_collection_observation_time() -> None:
+    module = load_live_summary_module()
+    collector = module.KubernetesPodSummaryCollector(CLUSTER, window_ms=1000)
+    first_observed_at = datetime(2026, 7, 15, 3, tzinfo=UTC)
+    removed_at = datetime(2026, 7, 15, 3, 0, 1, tzinfo=UTC)
+
+    collector.summarize([pod()], observed_at=first_observed_at)
+    created = collector.drain_deltas()[0]
+    collector.summarize([], observed_at=removed_at)
+    removed = collector.drain_deltas()[0]
+
+    assert created.observed_at == first_observed_at
+    assert removed.op == "remove"
+    assert removed.value is None
+    assert removed.observed_at == removed_at
 
 
 def test_summarize_exposes_adaptive_interval_for_publisher_sleep() -> None:

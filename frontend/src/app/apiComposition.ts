@@ -8,7 +8,8 @@ import {
   getIncidentRecentChanges,
   getInventorySummary,
   getNodePodsSummary,
-  getClusterConnectStatus,
+  getClusterConnectionStatus,
+  getCommandStatus,
   getPhysicalTopology,
   getRelationTopology,
   getChangeTimeline,
@@ -20,6 +21,7 @@ import {
   listRcaReports,
   listRcaTimeline,
   listClusters,
+  unregisterCluster,
   listGlobalFilterFacets,
   listFilteredResources,
   listResourceFilterFacets,
@@ -82,7 +84,12 @@ export function createApiComposition() {
     getNodePodsSummary,
     listClusters,
   });
-  const clustersPort = createClustersAdapter({ connectCluster, getClusterConnectStatus });
+  const clustersPort = createClustersAdapter({
+    connectCluster,
+    getClusterConnectionStatus,
+    getCommandStatus,
+    unregisterCluster,
+  });
   const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
   const resourcesPort = createResourcesAdapter({
     getInventoryResourceDetail,
@@ -140,13 +147,9 @@ export function createApiComposition() {
     listApplicationDeployments,
   });
   const aiAssistantPort = createAiAssistantAdapter({
+    createAlertRule,
     getAiSuggestions,
     postAiChat,
-    postAlertRule: async (payload, signal) => ({
-      ruleId: (
-        await createAlertRule(payload as Parameters<typeof createAlertRule>[0], signal)
-      ).rule_id,
-    }),
   });
   const logStreamPort = createLogStreamAdapter({ openPodLogStream, openWorkloadLogStream });
   const alertEventsPort = createAlertEventsAdapter({
@@ -170,6 +173,7 @@ export function createApiComposition() {
         resourcesFilterPort,
         physicalTopologyPort,
         physicalTopologyRealtimePort,
+        homePort,
         relationTopologyPort,
         changeTimelinePort,
         resourceMetricsHistoryPort,

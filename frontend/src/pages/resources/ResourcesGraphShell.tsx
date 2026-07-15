@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
+import type { HomePort } from "../../features/home/homeContract";
 import type { TimelineRange } from "../../features/filters/filterContract";
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { useCameraMorph } from "../../motion/useCameraMorph";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -15,6 +15,7 @@ import { ResourcesGraphHeader, ResourcesGraphResizeHandle } from "./ResourcesGra
 import { ResourcesPhysicalTopologyScene } from "./ResourcesPhysicalTopologyScene";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResizableGraphHeight } from "./useResizableGraphHeight";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export type PhysicalGraphBreadcrumb = PhysicalGraphBreadcrumbItem;
 
@@ -24,6 +25,8 @@ export function ResourcesGraphShell({
   frame,
   relationFrame,
   onOpenPod,
+  nodePodsPort,
+  onNodePodsUnauthorized,
   onSelectAll,
   onRevealServer,
   skeletonServerCount,
@@ -33,6 +36,8 @@ export function ResourcesGraphShell({
   timelineAtMs,
   timelineFrame,
   timelineRange,
+  timelineReplayStatus,
+  timelineReplayWindow,
   onTimelineAtChange,
   onTimelineRangeChange,
   collapsed,
@@ -42,7 +47,9 @@ export function ResourcesGraphShell({
   clusterId: string;
   frame: PhysicalTopologyFrame;
   relationFrame: RelationTopologyFrame;
-  onOpenPod: (pod: PhysicalTopologyPod) => void;
+  onOpenPod: (pod: PhysicalPodOpenTarget) => void;
+  nodePodsPort: Pick<HomePort, "loadNodePods">;
+  onNodePodsUnauthorized: () => void;
   onSelectAll: () => void;
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;
@@ -52,6 +59,8 @@ export function ResourcesGraphShell({
   timelineAtMs: number | undefined;
   timelineFrame: ChangeTimelineFrame;
   timelineRange: TimelineRange;
+  timelineReplayStatus: "live" | "ready" | "gap";
+  timelineReplayWindow: { fromMs: number | null; toMs: number | null };
   onTimelineAtChange: (value: number | undefined) => void;
   onTimelineRangeChange: (value: TimelineRange) => void;
   collapsed: boolean;
@@ -193,7 +202,9 @@ export function ResourcesGraphShell({
               <ResourcesPhysicalTopologyScene
                 clusterId={clusterId}
                 frame={physicalSceneFrame}
+                nodePodsPort={nodePodsPort}
                 onOpenPod={onOpenPod}
+                onNodePodsUnauthorized={onNodePodsUnauthorized}
                 onRevealServer={onRevealServer}
                 skeletonServerCount={skeletonServerCount}
               />
@@ -221,7 +232,13 @@ export function ResourcesGraphShell({
             ) : null}
           </div>
 
-          <TimelineStrip atMs={timelineAtMs} frame={timelineFrame} onAtChange={onTimelineAtChange} />
+          <TimelineStrip
+            atMs={timelineAtMs}
+            frame={timelineFrame}
+            onAtChange={onTimelineAtChange}
+            replayStatus={timelineReplayStatus}
+            replayWindow={timelineReplayWindow}
+          />
           {displayedView === "relations" ? (
             <ResourcesGraphResizeHandle
               height={height}

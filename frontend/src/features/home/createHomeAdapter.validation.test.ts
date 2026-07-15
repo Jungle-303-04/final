@@ -106,6 +106,24 @@ describe("canonical Home adapter validation", () => {
       .rejects.toMatchObject({ code: "invalid-response" });
   });
 
+  it("preserves node counts when the observed running count exceeds scheduling capacity", async () => {
+    const dependencies = endpoints({
+      getClusterNodesSummary: vi.fn().mockResolvedValue({
+        ...NODE_COLLECTION,
+        nodes: [{
+          ...NODE_COLLECTION.nodes[0],
+          pods_running: 34,
+          pods_capacity: 29,
+        }],
+      }),
+    });
+
+    await expect(createHomeAdapter(dependencies).loadNodes("cluster-1"))
+      .resolves.toMatchObject({
+        nodes: [{ podsRunning: 34, podsCapacity: 29 }],
+      });
+  });
+
   it.each([
     ["usage running count", { ...CLUSTER_OVERVIEW.usage, pods_running: 19 }],
     ["negative usage percent", { ...CLUSTER_OVERVIEW.usage, cpu_pct: -1 }],

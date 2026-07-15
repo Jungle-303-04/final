@@ -13,6 +13,8 @@ import type {
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
+import { shortIdentity } from "../../shared/presentation/shortIdentity";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../shared/ui/primitives/tooltip";
 import {
   Table,
   TableBody,
@@ -210,21 +212,28 @@ function ResourceNameButton({
 }) {
   const { t } = useI18n();
   return (
-    <Button
-      aria-label={t("resources.table.openDetail", { name: item.name })}
-      className="h-auto max-w-full justify-start px-0 text-left"
-      onClick={() => onOpen(identity)}
-      ref={(element) => {
-        if (element) rowButtons.current.set(item.id, element);
-        else rowButtons.current.delete(item.id);
-        registerRowButton(identity, element);
-      }}
-      type="button"
-      variant="link"
-    >
-      <span className="truncate" title={item.name}>{item.name}</span>
-      <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={(
+          <Button
+            aria-label={t("resources.table.openDetail", { name: item.name })}
+            className="h-auto max-w-full justify-start px-0 text-left"
+            onClick={() => onOpen(identity)}
+            ref={(element) => {
+              if (element) rowButtons.current.set(item.id, element);
+              else rowButtons.current.delete(item.id);
+              registerRowButton(identity, element);
+            }}
+            type="button"
+            variant="link"
+          />
+        )}
+      >
+        <span className="truncate">{shortIdentity(item.name)}</span>
+        <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
+      </TooltipTrigger>
+      <TooltipContent className="break-all" side="top">{item.name}</TooltipContent>
+    </Tooltip>
   );
 }
 

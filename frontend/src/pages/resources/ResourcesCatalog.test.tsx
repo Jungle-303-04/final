@@ -70,7 +70,7 @@ describe("ResourcesCatalog responsive disclosure", () => {
       </I18nProvider>,
     );
 
-    const description = screen.getByText("Types observed in the inventory snapshot");
+    const description = screen.getByText("Types currently observed in this cluster");
     expect(description.className).toContain("min-h-8");
     expect(description.className).toContain("line-clamp-2");
     expect(screen.getByRole("region", { name: "Resource type list" })).toBeTruthy();
