@@ -37,6 +37,14 @@ function classifiedInteraction({
   transport = 'none',
   realtime = null,
   motion = null,
+  opsiaPort = {
+    destinations: ['frontend/src/pages/timeline/TimelineSurface.tsx'],
+    requiredBackendContracts: ['packages.contracts.timeline.models'],
+    plannedTestIds: ['timeline.fixture.classified-interaction'],
+    state: 'in_progress',
+    blockedReason: null,
+    rationale: 'fixture mapping for source-ledger validation',
+  },
 } = {}) {
   return {
     sourceKey,
@@ -46,6 +54,7 @@ function classifiedInteraction({
     transport,
     realtime,
     motion,
+    opsiaPort,
   }
 }
 
@@ -318,6 +327,60 @@ test('pending 파일은 interaction 증거를 전혀 주장할 수 없고 file-l
   ])
 })
 
+test('분류 interaction은 현재 Opsia 목적지, 선언된 테스트, backend 계약, 상태별 사유를 빠짐없이 요구한다', () => {
+  const ledger = buildDeltaLedger({
+    baseRevision: BASE,
+    targetRevision: TARGET,
+    changes: [{ status: 'A', path: 'web/src/components/timeline/TimelineStrip.tsx' }],
+    baseFiles: new Map(),
+    targetFiles: new Map([['web/src/components/timeline/TimelineStrip.tsx', sourceFile(BLOB_B, SHA_B)]]),
+  })
+  const [row] = ledger.files
+  row.classification = 'classified'
+  row.interactions = [
+    classifiedInteraction({
+      opsiaPort: {
+        destinations: [],
+        requiredBackendContracts: [],
+        plannedTestIds: [],
+        state: 'blocked',
+        blockedReason: null,
+        rationale: '',
+      },
+    }),
+  ]
+  row.pendingCount = 0
+  ledger.pendingCount = 0
+
+  const errors = validateDeltaLedger(ledger)
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.destinations: must contain at least 1 item'))
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.requiredBackendContracts: must contain at least 1 item'))
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.plannedTestIds: must contain at least 1 item'))
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: blocked opsiaPort requires blockedReason'))
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.rationale is required'))
+})
+
+test('분류 interaction은 등록되지 않은 Opsia 목적지와 테스트 ID를 check context에서 거부한다', () => {
+  const ledger = buildDeltaLedger({
+    baseRevision: BASE,
+    targetRevision: TARGET,
+    changes: [{ status: 'A', path: 'web/src/components/timeline/TimelineStrip.tsx' }],
+    baseFiles: new Map(),
+    targetFiles: new Map([['web/src/components/timeline/TimelineStrip.tsx', sourceFile(BLOB_B, SHA_B)]]),
+  })
+  const [row] = ledger.files
+  row.classification = 'classified'
+  row.interactions = [classifiedInteraction()]
+  ledger.pendingCount = 0
+
+  const errors = validateDeltaLedger(ledger, {
+    knownOpsiaDestinations: new Set(),
+    knownPlannedTestIds: new Set(),
+  })
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.destinations[0]: is not a known Opsia destination'))
+  assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.plannedTestIds[0]: is not declared by classification input'))
+})
+
 test('inventory 선언 revision과 target revision 불일치는 rebaseline gate에서 숨기지 않는다', () => {
   const oldInventory = '| source | tag `v1.8.1`, commit `3ff2b1095151c690bf536e8e6ca685c2703fcd70` | evidence |'
   assert.throws(
@@ -406,16 +469,16 @@ test('check는 분류 interaction을 보존하면서 feature ledger에 없는 le
   }
 })
 
-test('동결된 최신 UI delta ledger는 276개 경로를 보존하고 pending을 출하 완료로 위장하지 않는다', async () => {
+test('동결된 최신 UI delta ledger는 Timeline 분류만 생성 입력에서 반영하고 나머지 pending을 출하 완료로 위장하지 않는다', async () => {
   const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
   const ledgerPath = path.join(scriptDirectory, '..', 'docs', 'migration', 'reference-ui-delta-ledger.json')
   const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'))
 
   assert.equal(ledger.baseRevision, BASE)
   assert.equal(ledger.targetRevision, TARGET)
-  assert.equal(ledger.schemaVersion, 2)
+  assert.equal(ledger.schemaVersion, 3)
   assert.equal(ledger.fileCount, 276)
-  assert.equal(ledger.pendingCount, 276)
+  assert.equal(ledger.pendingCount, 249)
   assert.deepEqual(validateDeltaLedger(ledger), [])
-  assert.throws(() => assertDeltaLedgerClassified(ledger), /276개 pending/)
+  assert.throws(() => assertDeltaLedgerClassified(ledger), /249개 pending/)
 })

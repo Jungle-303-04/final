@@ -18,7 +18,7 @@ feature row and rejects a newly added source section until it has a product
 boundary. This keeps the mapping structured without copying action lists into
 Python or the browser.
 
-`reference-ui-delta-ledger.json` is a separate schema-v2 immutable-evidence
+`reference-ui-delta-ledger.json` is a separate schema-v3 immutable-evidence
 ledger for the latest UI rebaseline. It enumerates every A/M/D/R path between the observed
 inventory revision and the frozen target revision, including source blob IDs and
 SHA-256 values. A row begins as explicit `pending`; it cannot be counted as
@@ -33,6 +33,15 @@ explicit noninteractive semantic interaction (for example, `noninteractive
 asset: provider logo`) and `transport: none`/`realtime: null`. File-level
 interaction fields are rejected so an analysis cannot collapse several source
 behaviors into one row.
+
+`reference-ui-delta-classifications.json` is the editable, generator-owned
+classification input for the delta ledger. Every classified interaction maps to
+one or more current Opsia destinations, required Python contracts, a declared
+test plan ID, an `in_progress` or `blocked` state, and a rationale. A blocked
+interaction must name its concrete blocker. The checker rejects unknown
+tracked destinations, undeclared test IDs, missing contracts, missing reasons,
+or drift between this input and the generated ledger; it never permits manual
+classification edits in the generated JSON.
 
 `reference-feature-source-aliases.json` is the compatibility bridge for the
 old positional `reference.feature.NNN` IDs. Those IDs remain aliases for
@@ -75,7 +84,7 @@ rebaseline gate:
 - `make reference-ui-delta-rebaseline-check` additionally requires the feature
   inventory's declared source revision to equal the target and requires every
   delta row to be classified. It currently fails honestly: the inventory still
-  declares `3ff2…` and all 276 UI rows are pending.
+  declares `3ff2…`, and 249 of 276 UI rows remain pending.
 - `make reference-feature-parity-check` depends on that rebaseline gate, so a
   release cannot claim latest-source parity before the mismatch and pending
   analysis are resolved.
@@ -83,7 +92,7 @@ rebaseline gate:
 The `Dev Deploy` workflow prepares the approved upstream Git objects and runs
 `make release-governance` before either service or console image build. This is
 intentionally blocking today: the inventory and empty sourceKey alias manifest
-still declare `3ff2…`, and the 276 UI delta files are pending. A successful PR
+still declare `3ff2…`, and 249 UI delta files are pending. A successful PR
 diagnostic gate is therefore not authorization to deploy until those latest
 source proofs are complete.
 
@@ -123,5 +132,6 @@ node scripts/reference-source-delta-ledger.mjs \
   --base 3ff2b1095151c690bf536e8e6ca685c2703fcd70 \
   --target cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc \
   --inventory docs/spec/frontend/reference-feature-inventory.md \
+  --classification-input docs/migration/reference-ui-delta-classifications.json \
   --output docs/migration/reference-ui-delta-ledger.json
 ```
