@@ -19,6 +19,7 @@ class Settings:
     COMMAND_NOT_FOUND_STATUS_CODE = 404
     CONFLICT_STATUS_CODE = 409
     GATEWAY_ERROR_STATUS_CODE = 500
+    SESSION_STORAGE_UNAVAILABLE_STATUS_CODE = 503
 
     COMMAND_NOT_FOUND_MESSAGE = "command not found"
     DEAD_LETTER_NOT_FOUND_MESSAGE = "dead letter not found"
@@ -92,6 +93,7 @@ class Settings:
     METRICS_TOKEN_NOT_CONFIGURED_MESSAGE = "metrics token is not configured"
     RATE_LIMIT_EXCEEDED_MESSAGE = "rate limit exceeded"
     AUTHENTICATION_REQUIRED_MESSAGE = "authentication required"
+    SESSION_STORAGE_UNAVAILABLE_MESSAGE = "session storage unavailable"
     REDIS_NOT_CONNECTED_MESSAGE = "Redis session store is not connected"
     INVALID_CREDENTIALS_MESSAGE = "invalid email or password"
     EMAIL_VERIFICATION_REQUIRED_MESSAGE = "email verification required"
