@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.timeline.models import TimelineLedgerCursor, TimelineLedgerEvent
@@ -34,10 +34,19 @@ class TimelineSnapshotLimitExceeded(ValueError):
 
 @dataclass(frozen=True)
 class TimelineLedgerReadScope:
-    """An already-authorized read boundary; HTTP authorization is intentionally external."""
+    """An already-authorized read boundary; HTTP authorization is intentionally external.
+
+    Every source has an independent grant set.  Empty sets are deny-by-default
+    rather than a fallback to the selected cluster scope.
+    """
 
     workspace_id: str
     scopes: tuple[ClusterScope, ...]
+    inventory_cluster_ids: frozenset[str] = frozenset()
+    kubernetes_event_cluster_ids: frozenset[str] = frozenset()
+    incident_cluster_ids: frozenset[str] = frozenset()
+    application_workflow_ids: frozenset[str] = frozenset()
+    gitops_application_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.workspace_id:
@@ -46,6 +55,20 @@ class TimelineLedgerReadScope:
             raise ValueError("timeline ledger scope requires at least one cluster scope")
         if any(scope.workspace_id != self.workspace_id for scope in self.scopes):
             raise ValueError("timeline ledger scopes must use the authorized workspace")
+        for attribute in (
+            "inventory_cluster_ids",
+            "kubernetes_event_cluster_ids",
+            "incident_cluster_ids",
+            "application_workflow_ids",
+            "gitops_application_ids",
+        ):
+            values = getattr(self, attribute)
+            if any(not isinstance(value, str) for value in values):
+                raise ValueError(f"timeline {attribute} must contain text identities")
+            normalized = frozenset(value.strip() for value in values if value.strip())
+            if len(normalized) != len(values):
+                raise ValueError(f"timeline {attribute} must contain non-empty identities")
+            object.__setattr__(self, attribute, normalized)
 
 
 @dataclass(frozen=True)
@@ -325,6 +348,7 @@ def _timeline_events_statement(
         ledger.c.sequence > after_sequence,
         ledger.c.sequence <= through_sequence,
         _read_scope_predicate(ledger, read_scope.scopes),
+        _source_authorization_predicate(ledger, read_scope),
     ]
     if window is not None:
         conditions.extend(
@@ -464,6 +488,51 @@ def _read_scope_predicate(ledger: Any, scopes: Sequence[ClusterScope]) -> Any:
             predicate = and_(predicate, ledger.c.namespace.in_(scope.namespaces))
         predicates.append(predicate)
     return or_(*predicates)
+
+
+def _source_authorization_predicate(ledger: Any, read_scope: TimelineLedgerReadScope) -> Any:
+    """Require source-native grants in addition to requested cluster/namespace scope."""
+    predicates: list[Any] = []
+    if read_scope.inventory_cluster_ids:
+        predicates.append(
+            and_(
+                ledger.c.source == "inventory",
+                ledger.c.cluster_id.in_(tuple(sorted(read_scope.inventory_cluster_ids))),
+            )
+        )
+    if read_scope.kubernetes_event_cluster_ids:
+        predicates.append(
+            and_(
+                ledger.c.source == "kubernetes_event",
+                ledger.c.cluster_id.in_(tuple(sorted(read_scope.kubernetes_event_cluster_ids))),
+            )
+        )
+    if read_scope.incident_cluster_ids:
+        predicates.append(
+            and_(
+                ledger.c.source == "incident",
+                ledger.c.cluster_id.in_(tuple(sorted(read_scope.incident_cluster_ids))),
+            )
+        )
+    if read_scope.application_workflow_ids:
+        predicates.append(
+            and_(
+                ledger.c.source == "application_workflow",
+                ledger.c.subject["application_id"].astext.in_(
+                    tuple(sorted(read_scope.application_workflow_ids))
+                ),
+            )
+        )
+    if read_scope.gitops_application_ids:
+        predicates.append(
+            and_(
+                ledger.c.source == "gitops",
+                ledger.c.subject["application_id"].astext.in_(
+                    tuple(sorted(read_scope.gitops_application_ids))
+                ),
+            )
+        )
+    return or_(*predicates) if predicates else false()
 
 
 def _from_datetime(milliseconds: int) -> datetime:

@@ -421,13 +421,21 @@ def test_timeline_sql_requires_source_specific_grants_and_namespace_scope() -> N
             incident_cluster_ids=frozenset({"cluster-a"}),
         )
     )
-    application_sql = _timeline_sql(
+    application_workflow_sql = _timeline_sql(
         TimelineLedgerReadScope(
             workspace_id="workspace-a",
             scopes=requested,
-            application_ids=frozenset({"application-owned"}),
+            application_workflow_ids=frozenset({"deployment-owned"}),
         )
     )
+    gitops_sql = _timeline_sql(
+        TimelineLedgerReadScope(
+            workspace_id="workspace-a",
+            scopes=requested,
+            gitops_application_ids=frozenset({"application-read-owned"}),
+        )
+    )
+    deny_sql = _timeline_sql(TimelineLedgerReadScope(workspace_id="workspace-a", scopes=requested))
 
     assert "timeline_events.source = 'inventory'" in inventory_sql
     assert "'incident'" not in inventory_sql
@@ -435,13 +443,22 @@ def test_timeline_sql_requires_source_specific_grants_and_namespace_scope() -> N
     assert "timeline_events.source = 'incident'" in incident_sql
     assert "'inventory'" not in incident_sql
     assert "application_id" not in incident_sql
-    assert "timeline_events.source in ('application_workflow', 'gitops')" in application_sql
+    assert "timeline_events.source = 'application_workflow'" in application_workflow_sql
     assert (
-        "timeline_events.subject ->> 'application_id' in ('application-owned')" in application_sql
+        "(timeline_events.subject ->> 'application_id') in ('deployment-owned')"
+        in application_workflow_sql
     )
+    assert "'gitops'" not in application_workflow_sql
+    assert "timeline_events.source = 'gitops'" in gitops_sql
+    assert (
+        "(timeline_events.subject ->> 'application_id') in ('application-read-owned')" in gitops_sql
+    )
+    assert "'application_workflow'" not in gitops_sql
     assert "timeline_events.namespace in ('payments')" in inventory_sql
     assert "timeline_events.namespace in ('payments')" in incident_sql
-    assert "timeline_events.namespace in ('payments')" in application_sql
+    assert "timeline_events.namespace in ('payments')" in application_workflow_sql
+    assert "timeline_events.namespace in ('payments')" in gitops_sql
+    assert "where false" in deny_sql
 
 
 def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates() -> None:
@@ -449,6 +466,7 @@ def test_history_window_query_is_half_open_to_avoid_adjacent_window_duplicates()
         TimelineLedgerReadScope(
             workspace_id="workspace-a",
             scopes=(ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),),
+            inventory_cluster_ids=frozenset({"cluster-a"}),
         ),
         after_sequence=0,
         through_sequence=12,
