@@ -39,7 +39,11 @@ from domains.gitops.repository import (
     derive_watch_target_id,
     derive_workflow_run_id,
 )
-from domains.gitops.timeline import workflow_run_timeline_event, workflow_step_timeline_event
+from domains.gitops.timeline import (
+    git_changed_timeline_event,
+    workflow_run_timeline_event,
+    workflow_step_timeline_event,
+)
 from domains.scm.events import SafePrCreatedBody, SafePrFailedBody
 from domains.target.events import ClusterDesiredStateChangedBody
 from domains.target.management_guard import is_management_registration
@@ -51,6 +55,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gitops import (
     DEFAULT_ENVIRONMENT,
     ApprovalStatus,
+    DeploymentBindingStatus,
     WorkflowMutation,
     WorkflowRunStatus,
     WorkflowStepName,
@@ -317,6 +322,95 @@ async def append_workflow_timeline_event(
     return append.inserted
 
 
+async def registered_git_changed_binding(
+    ctx: EventContext[WorkflowStore],
+    payload: JsonObject,
+) -> JsonObject | None:
+    """Return only the active stored binding named by the canonical event."""
+    binding = await ctx.db.get_deployment_binding(
+        str(payload["workspace_id"]),
+        str(payload["binding_id"]),
+    )
+    if not isinstance(binding, Mapping):
+        return None
+    expected = {
+        "workspace_id": str(payload["workspace_id"]),
+        "binding_id": str(payload["binding_id"]),
+        "repository_id": str(payload["repository_id"]),
+        "cluster_id": str(payload["cluster_id"]),
+        "environment": str(payload["environment"]),
+        "manifest_path": str(payload.get("manifest_path", "")),
+    }
+    if not stored_identity_matches(binding, expected):
+        return None
+    if str(binding.get("status", "")) != DeploymentBindingStatus.ACTIVE.value:
+        return None
+    return dict(binding)
+
+
+async def git_changed_target_is_persisted(
+    ctx: EventContext[WorkflowStore],
+    run: JsonObject,
+    binding: JsonObject,
+) -> bool:
+    """Confirm the three persisted identities before retaining a GitOps fact."""
+    application = await ctx.db.get_application(
+        str(run["workspace_id"]),
+        str(run["application_id"]),
+    )
+    workflow_run = await ctx.db.get_workflow_run(str(run["workflow_run_id"]))
+    if not isinstance(application, Mapping) or not isinstance(workflow_run, Mapping):
+        return False
+    application_matches = stored_identity_matches(
+        application,
+        {
+            "workspace_id": str(run["workspace_id"]),
+            "application_id": str(run["application_id"]),
+            "repository_id": str(run["repository_id"]),
+        },
+    )
+    workflow_matches = stored_identity_matches(
+        workflow_run,
+        {
+            "workspace_id": str(run["workspace_id"]),
+            "workflow_run_id": str(run["workflow_run_id"]),
+            "application_id": str(run["application_id"]),
+            "binding_id": str(run["binding_id"]),
+            "cluster_id": str(run["cluster_id"]),
+            "environment": str(run["environment"]),
+            "commit_sha": str(run.get("commit_sha", "")),
+        },
+    )
+    binding_matches_application = str(binding.get("repository_id", "")) == str(
+        application.get("repository_id", "")
+    ) and (
+        str(binding.get("app_name", "")) == str(application.get("name", ""))
+        or str(binding.get("manifest_path", "")) == str(application.get("manifest_path", ""))
+    )
+    return application_matches and workflow_matches and binding_matches_application
+
+
+def stored_identity_matches(record: Mapping[str, object], expected: dict[str, str]) -> bool:
+    """Require a complete stored identity rather than trusting an event field."""
+    return all(str(record.get(field, "")) == value for field, value in expected.items())
+
+
+async def append_git_changed_timeline(
+    ctx: EventContext[WorkflowStore],
+    run: JsonObject,
+) -> bool:
+    event = git_changed_timeline_event(
+        source_event_id=ctx.event_id,
+        source_created_at=ctx.created_at,
+        workspace_id=str(run["workspace_id"]),
+        cluster_id=str(run["cluster_id"]),
+        application_id=str(run["application_id"]),
+        binding_id=str(run["binding_id"]),
+        workflow_run_id=str(run["workflow_run_id"]),
+    )
+    return await append_workflow_timeline_event(ctx, event)
+
+
 def approval_payload(payload: JsonObject, reason: str, status: str) -> JsonObject:
     run = normalize_payload(payload)
     approval_id = derive_approval_id(str(run["workflow_run_id"]))
@@ -385,15 +479,23 @@ async def on_git_webhook(
 async def on_git_changed(
     evt: GitChangedBody, ctx: EventContext[WorkflowStore]
 ) -> AsyncIterator[EventBody]:
+    payload = gitops_payload(evt)
+    binding = await registered_git_changed_binding(ctx, payload)
+    if binding is None:
+        return
     run = await ensure_run(
         ctx,
-        gitops_payload(evt),
+        payload,
         WorkflowRunStatus.RENDERING.value,
         WorkflowStepName.RENDER.value,
         "git change confirmed; rendering manifest",
         {"commit_sha": evt.commit_sha, "branch": evt.branch},
     )
     if run is None:
+        return
+    if not await git_changed_target_is_persisted(ctx, run, binding):
+        return
+    if not await append_git_changed_timeline(ctx, run):
         return
     step = await record_step(
         ctx,
