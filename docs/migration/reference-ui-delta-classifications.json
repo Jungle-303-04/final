@@ -1284,19 +1284,24 @@
             "destinations": [
               "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
               "frontend/src/features/applications/applicationFilters.ts",
-              "frontend/src/features/applications/applicationsContract.ts"
+              "frontend/src/features/applications/applicationsContract.ts",
+              "frontend/src/features/applications/createApplicationsAdapter.ts",
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "src/domains/applications/product_projection.py",
+              "src/domains/applications/router.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
-              "domains.applications.product_projection"
+              "domains.applications.product_projection",
+              "domains.applications.router"
             ],
             "plannedTestIds": [
               "applications.detail.identity-switcher",
               "applications.detail.scope-tabs"
             ],
-            "state": "blocked",
-            "blockedReason": "ApplicationProductDetail currently supplies a flat environments string list, not immutable instance identities, environment ordering/evidence, promotion-lag evidence, or workload descriptors for a searchable scope selector.",
-            "rationale": "The route can already write URL detail keys, but must never manufacture application siblings or workload addresses from display labels."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python detail contract now projects only authorized immutable deployment-binding identities with workspace, cluster, namespace, and freshness evidence. The typed adapter and URL-backed selector scope detail, deployments, and drift reads to that server-selected identity; searchable large-list UX, promotion-lag evidence, and workload scope parity remain in progress."
           }
         }
       ]

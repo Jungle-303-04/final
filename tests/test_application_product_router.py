@@ -75,7 +75,22 @@ class ProductApplicationsDb:
         limit: int,
     ) -> list[dict[str, object]]:
         assert (workspace_id, application_id, limit) == ("workspace-a", "app-a", 500)
-        return [{"cluster_id": "cluster-a", "environment": "prod"}]
+        return [
+            {
+                "binding_id": "binding-prod-a",
+                "cluster_id": "cluster-a",
+                "namespace": "shop",
+                "environment": "prod",
+                "status": "active",
+            },
+            {
+                "binding_id": "binding-hidden-b",
+                "cluster_id": "cluster-b",
+                "namespace": "shop",
+                "environment": "stage",
+                "status": "active",
+            },
+        ]
 
     def list_application_workflow_runs(
         self,
@@ -90,6 +105,7 @@ class ProductApplicationsDb:
         return [
             {
                 "workflow_run_id": "run-a",
+                "binding_id": "binding-prod-a",
                 "cluster_id": "cluster-a",
                 "environment": "prod",
                 "commit_sha": "abc123",
@@ -256,15 +272,58 @@ def test_product_application_reads_are_strict_allowlisted_and_linkable() -> None
         "resource_counts_completeness",
         "open_incidents",
     }
-    assert detail.json()["application"]["recent_incidents"][0]["id"] == "incident-a"
+    assert detail.json()["application"]["recent_incidents"] == []
+    assert detail.json()["application"]["scope"] == {
+        "availability": "available",
+        "completeness": "exact",
+        "selected_instance_id": "binding-prod-a",
+        "instances": [
+            {
+                "id": "binding-prod-a",
+                "environment": "prod",
+                "status": "active",
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-a",
+                    "namespaces": ["shop"],
+                    "freshness": "disconnected",
+                },
+            }
+        ],
+        "partial_reason_codes": [],
+    }
     assert detail.json()["application"]["topology"]["availability"] == "available"
     assert detail.json()["application"]["history"]["partial_reason_codes"] == [
-        "bounded_workflow_history"
+        "bounded_workflow_history",
+        "incident_source_incomplete",
+        "instance_incident_scope_unavailable",
     ]
     assert detail.json()["application"]["source"]["repository_ref"] == "org/checkout"
     assert deployments.json()["deployments"][0]["id"] == "run-a"
     assert drift.json()["differences"][0]["field_path"] == "spec.replicas"
     assert "must-not-leak" not in " ".join((listed.text, detail.text, deployments.text, drift.text))
+
+
+def test_product_application_instance_scope_rejects_unavailable_direct_urls() -> None:
+    client = _client(ProductApplicationsDb())
+
+    selected = client.get("/applications/app-a", params={"instance": "binding-prod-a"})
+    denied = client.get("/applications/app-a", params={"instance": "binding-hidden-b"})
+    denied_deployments = client.get(
+        "/applications/app-a/deployments",
+        params={"instance": "binding-hidden-b"},
+    )
+    denied_drift = client.get(
+        "/applications/app-a/drift",
+        params={"instance": "binding-hidden-b"},
+    )
+
+    assert selected.status_code == 200
+    assert selected.json()["application"]["scope"]["selected_instance_id"] == "binding-prod-a"
+    assert denied.status_code == 404
+    assert "binding-hidden-b" not in denied.text
+    assert denied_deployments.status_code == denied_drift.status_code == 404
+    assert "binding-hidden-b" not in (denied_deployments.text + denied_drift.text)
 
 
 def test_product_application_filter_scope_fails_closed_before_projection_query() -> None:
@@ -302,9 +361,13 @@ def test_product_application_openapi_exposes_four_strict_bq_contracts() -> None:
     assert schema["paths"]["/applications/{application_id}"]["get"]["responses"]["200"]["content"][
         "application/json"
     ]["schema"]["$ref"].endswith("ApplicationProductDetailResponse")
-    assert {"topology", "history", "source"}.issubset(
+    assert {"scope", "topology", "history", "source"}.issubset(
         schema["components"]["schemas"]["ApplicationProductDetail"]["properties"]
     )
+    assert {
+        parameter["name"]
+        for parameter in schema["paths"]["/applications/{application_id}"]["get"]["parameters"]
+    } >= {"application_id", "instance"}
     assert schema["paths"]["/applications/{application_id}/deployments"]["get"]["responses"]["200"][
         "content"
     ]["application/json"]["schema"]["$ref"].endswith("ApplicationDeploymentHistoryResponse")

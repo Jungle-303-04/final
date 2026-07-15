@@ -4,6 +4,7 @@ from domains.applications.product_projection import (
     application_card,
     application_detail,
     deployment_history_projection,
+    detail_scope_projection,
     drift_projection,
     topology_projection,
 )
@@ -104,6 +105,28 @@ def _runs() -> list[dict[str, object]]:
     ]
 
 
+def _detail_scope() -> dict[str, object]:
+    return {
+        "availability": "available",
+        "completeness": "exact",
+        "selected_instance_id": "binding-prod-a",
+        "instances": [
+            {
+                "id": "binding-prod-a",
+                "environment": "prod",
+                "status": "active",
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-1",
+                    "namespaces": ["shop"],
+                    "freshness": "live",
+                },
+            }
+        ],
+        "partial_reason_codes": [],
+    }
+
+
 def test_card_and_detail_use_only_allowlisted_observed_evidence() -> None:
     context = {
         "snapshot_revision": 42,
@@ -138,6 +161,7 @@ def test_card_and_detail_use_only_allowlisted_observed_evidence() -> None:
         inventory_rows=_inventory(),
         inventory_context=context,
         incident_evidence=incidents,
+        scope=_detail_scope(),
     )
 
     assert card["has_drift"] is True
@@ -318,6 +342,87 @@ def test_batch_runtime_does_not_coerce_missing_observed_counters_to_zero() -> No
     }
 
 
+def test_detail_scope_uses_authorized_binding_identity_and_cluster_freshness() -> None:
+    scope = detail_scope_projection(
+        _application() | {"workspace_id": "workspace-a"},
+        [
+            {
+                "binding_id": "binding-prod-b",
+                "cluster_id": "cluster-b",
+                "namespace": "shop",
+                "environment": "prod",
+                "status": "active",
+            },
+            {
+                "binding_id": "binding-stage-a",
+                "cluster_id": "cluster-a",
+                "namespace": "shop",
+                "environment": "stage",
+                "status": "paused",
+            },
+        ],
+        requested_instance_id="binding-stage-a",
+        freshness_by_cluster={"cluster-a": "stale", "cluster-b": "live"},
+    )
+
+    assert scope == {
+        "availability": "available",
+        "completeness": "exact",
+        "selected_instance_id": "binding-stage-a",
+        "instances": [
+            {
+                "id": "binding-prod-b",
+                "environment": "prod",
+                "status": "active",
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-b",
+                    "namespaces": ["shop"],
+                    "freshness": "live",
+                },
+            },
+            {
+                "id": "binding-stage-a",
+                "environment": "stage",
+                "status": "paused",
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-a",
+                    "namespaces": ["shop"],
+                    "freshness": "stale",
+                },
+            },
+        ],
+        "partial_reason_codes": [],
+    }
+
+
+def test_detail_scope_marks_incomplete_binding_identity_as_partial() -> None:
+    scope = detail_scope_projection(
+        _application() | {"workspace_id": "workspace-a"},
+        [
+            {
+                "binding_id": "binding-prod-a",
+                "cluster_id": "cluster-a",
+                "namespace": "shop",
+                "environment": "prod",
+                "status": "active",
+            },
+            {
+                "binding_id": "binding-without-environment",
+                "cluster_id": "cluster-a",
+                "namespace": "shop",
+            },
+        ],
+        requested_instance_id="binding-prod-a",
+        freshness_by_cluster={"cluster-a": "live"},
+    )
+
+    assert scope["completeness"] == "partial"
+    assert scope["selected_instance_id"] == "binding-prod-a"
+    assert scope["partial_reason_codes"] == ["deployment_binding_identity_incomplete"]
+
+
 def test_detail_projects_authorized_topology_history_and_source_evidence() -> None:
     context = {
         "snapshot_revision": 42,
@@ -387,6 +492,7 @@ def test_detail_projects_authorized_topology_history_and_source_evidence() -> No
                 }
             ],
         },
+        scope=_detail_scope(),
     )
 
     assert detail["topology"]["completeness"] == "exact"
@@ -439,6 +545,13 @@ def test_unavailable_topology_does_not_claim_empty_relationships() -> None:
         inventory_rows=[],
         inventory_context={"snapshot_revision": 0},
         incident_evidence={"complete": False, "open_count": None, "items": []},
+        scope={
+            "availability": "unavailable",
+            "completeness": "unavailable",
+            "selected_instance_id": None,
+            "instances": [],
+            "partial_reason_codes": [],
+        },
     )
 
     assert detail["topology"] == {

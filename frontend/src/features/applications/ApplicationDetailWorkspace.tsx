@@ -1,11 +1,20 @@
 import { ArrowLeft, RefreshCw } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useI18n } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "../../shared/ui/primitives/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/primitives/tabs";
 import type { UnifiedFilterController } from "../filters/filterContract";
 import { ApplicationDeploymentsPanel } from "./ApplicationDeploymentsPanel";
@@ -23,7 +32,7 @@ import {
   applicationOwnedSurfaceHref,
 } from "./applicationFilters";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
-import type { ApplicationsPort } from "./applicationsContract";
+import type { ApplicationInstanceScope, ApplicationsPort } from "./applicationsContract";
 import {
   useApplicationDeployments,
   useApplicationDetail,
@@ -45,17 +54,37 @@ export function ApplicationDetailWorkspace({
   const { locale } = useI18n();
   const copy = applicationsCopy(locale);
   const activeTab = applicationTab(filter.detail.tab);
-  const [detail, refreshDetail] = useApplicationDetail(port, applicationId);
+  const requestedInstanceId = filter.detail.applicationInstance ?? null;
+  const [detail, refreshDetail] = useApplicationDetail(port, applicationId, requestedInstanceId);
   const [deployments, refreshDeployments] = useApplicationDeployments(
     port,
     applicationId,
     activeTab === "deployments",
+    requestedInstanceId,
   );
-  const [drift, refreshDrift] = useApplicationDrift(port, applicationId, activeTab === "drift");
+  const [drift, refreshDrift] = useApplicationDrift(
+    port,
+    applicationId,
+    activeTab === "drift",
+    requestedInstanceId,
+  );
   const links = useMemo(() => ({
     resources: applicationOwnedSurfaceHref("/resources", filter.state, applicationId),
     issues: applicationOwnedSurfaceHref("/issues", filter.state, applicationId),
   }), [applicationId, filter.state]);
+  const selectedInstanceId = detail.phase === "ready"
+    ? detail.data?.scope.selectedInstanceId ?? null
+    : null;
+
+  useEffect(() => {
+    if (requestedInstanceId !== null || selectedInstanceId === null) return;
+    filter.updateDetail((current) => {
+      if (current.application !== applicationId || current.applicationInstance === selectedInstanceId) {
+        return current;
+      }
+      return { ...current, applicationInstance: selectedInstanceId };
+    }, "detail-instance-default");
+  }, [applicationId, filter, requestedInstanceId, selectedInstanceId]);
 
   if (detail.phase === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (detail.phase === "failed") return <ApplicationsFailureState failure={detail.failure} onRetry={refreshDetail} />;
@@ -77,6 +106,14 @@ export function ApplicationDetailWorkspace({
             <p className="min-w-0 text-sm text-muted-foreground">
               <OverflowIdentity value={application.id} />
             </p>
+            <ApplicationInstanceScopePicker
+              applicationId={applicationId}
+              copy={copy}
+              filter={filter}
+              instances={application.scope.instances}
+              selectedInstanceId={application.scope.selectedInstanceId}
+              unavailable={application.scope.availability === "unavailable"}
+            />
           </div>
         </div>
         <Button aria-label={copy.refresh} disabled={detail.refreshing} onClick={refreshDetail} size="icon" type="button" variant="outline">
@@ -122,6 +159,7 @@ export function openApplicationDetail(filter: UnifiedFilterController, applicati
   filter.updateDetail((current) => ({
     ...current,
     application: applicationId,
+    applicationInstance: null,
     tab: "overview",
   }), "detail-open");
 }
@@ -130,6 +168,7 @@ function closeDetail(filter: UnifiedFilterController): void {
   filter.updateDetail((current) => ({
     ...current,
     application: null,
+    applicationInstance: null,
     tab: null,
   }), "detail-close");
 }
@@ -140,4 +179,72 @@ function applicationTab(value: string | null): ApplicationTab {
 
 function isApplicationTab(value: string): value is ApplicationTab {
   return APPLICATION_TABS.some((tab) => tab === value);
+}
+
+function ApplicationInstanceScopePicker({
+  applicationId,
+  copy,
+  filter,
+  instances,
+  selectedInstanceId,
+  unavailable,
+}: {
+  applicationId: string;
+  copy: ReturnType<typeof applicationsCopy>;
+  filter: UnifiedFilterController;
+  instances: readonly ApplicationInstanceScope[];
+  selectedInstanceId: string | null;
+  unavailable: boolean;
+}) {
+  if (unavailable || selectedInstanceId === null) {
+    return <p className="text-xs text-muted-foreground">{copy.scopeUnavailable}</p>;
+  }
+
+  return (
+    <Select
+      items={instances.map((instance) => ({ label: instance.environment, value: instance.id }))}
+      onValueChange={(instanceId) => {
+        if (instanceId === null || instanceId === selectedInstanceId) return;
+        filter.updateDetail((current) => current.application !== applicationId
+          ? current
+          : { ...current, applicationInstance: instanceId }, "detail-instance");
+      }}
+      value={selectedInstanceId}
+    >
+      <SelectTrigger aria-label={copy.instanceScope} className="max-w-full" size="sm">
+        <SelectValue className="truncate" />
+      </SelectTrigger>
+      <SelectContent align="start" alignItemWithTrigger={false} className="max-w-[min(32rem,calc(100vw-2rem))]">
+        <SelectGroup>
+          <SelectLabel>{copy.instanceScope}</SelectLabel>
+          {instances.map((instance) => (
+            <SelectItem key={instance.id} value={instance.id}>
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-hidden">
+                <span className="truncate">{instance.environment}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {instance.scope.clusterId}{formatNamespaces(instance.scope.namespaces)} · {freshnessLabel(copy, instance.scope.freshness)}
+                </span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function formatNamespaces(namespaces: readonly string[]): string {
+  return namespaces.length === 0 ? "" : `/${namespaces.join(",")}`;
+}
+
+function freshnessLabel(
+  copy: ReturnType<typeof applicationsCopy>,
+  freshness: ApplicationInstanceScope["scope"]["freshness"],
+): string {
+  switch (freshness) {
+    case "live": return copy.scopeLive;
+    case "stale": return copy.scopeStale;
+    case "partial": return copy.scopePartial;
+    case "disconnected": return copy.scopeDisconnected;
+  }
 }

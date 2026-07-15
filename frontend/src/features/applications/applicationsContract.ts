@@ -173,7 +173,28 @@ export interface ApplicationSourceEvidence {
   partialReasonCodes: readonly string[];
 }
 
+export interface ApplicationInstanceScope {
+  id: string;
+  environment: string;
+  status: string;
+  scope: {
+    workspaceId: string;
+    clusterId: string;
+    namespaces: readonly string[];
+    freshness: "live" | "stale" | "partial" | "disconnected";
+  };
+}
+
+export interface ApplicationDetailScope {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  selectedInstanceId: string | null;
+  instances: readonly ApplicationInstanceScope[];
+  partialReasonCodes: readonly string[];
+}
+
 export interface ApplicationDetailModel extends ApplicationCardModel {
+  scope: ApplicationDetailScope;
   endpoints: readonly ApplicationEndpoint[] | null;
   endpointsCompleteness: "exact" | "partial" | "unavailable";
   recentActivity: readonly ApplicationActivity[];
@@ -219,12 +240,21 @@ export interface ApplicationsPort {
     filter: ApplicationCatalogFilter,
     signal?: AbortSignal,
   ): Promise<readonly ApplicationCardModel[]>;
-  getApplication(applicationId: string, signal?: AbortSignal): Promise<ApplicationDetailModel>;
+  getApplication(
+    applicationId: string,
+    signal?: AbortSignal,
+    instanceId?: string | null,
+  ): Promise<ApplicationDetailModel>;
   listDeployments(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<readonly ApplicationDeploymentModel[]>;
-  getDrift(applicationId: string, signal?: AbortSignal): Promise<ApplicationDriftModel>;
+  getDrift(
+    applicationId: string,
+    signal?: AbortSignal,
+    instanceId?: string | null,
+  ): Promise<ApplicationDriftModel>;
 }
 
 export interface ApplicationsApiDependencies {
@@ -244,14 +274,17 @@ export interface ApplicationsApiDependencies {
   getApplicationOverview(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<ApplicationDetailEndpoint>;
   listApplicationDeploymentHistory(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<ApplicationDeploymentHistoryEndpoint>;
   getApplicationDrift(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<ApplicationDriftEndpoint>;
 }
 
@@ -306,6 +339,23 @@ export interface ApplicationCatalogEndpointItem {
 }
 
 export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpointItem {
+  scope: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    selected_instance_id: string | null;
+    instances: {
+      id: string;
+      environment: string;
+      status: string;
+      scope: {
+        workspace_id: string;
+        cluster_id: string;
+        namespaces: string[];
+        freshness: "live" | "stale" | "partial" | "disconnected";
+      };
+    }[];
+    partial_reason_codes: string[];
+  };
   endpoints: { id: string; kind: string; name: string; url: string }[] | null;
   endpoints_completeness: "exact" | "partial" | "unavailable";
   recent_activity: {

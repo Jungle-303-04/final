@@ -61,10 +61,12 @@ export function detailHistoryMode(intent: DetailMutationIntent): FilterHistoryMo
   switch (intent) {
     case "detail-open":
     case "drill-in":
+    case "detail-instance":
       return "push";
     case "detail-close":
     case "detail-expand":
     case "detail-tab":
+    case "detail-instance-default":
     case "topology-view-reset":
       return "replace";
     case "topology-view":

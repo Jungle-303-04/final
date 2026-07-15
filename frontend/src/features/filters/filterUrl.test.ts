@@ -280,6 +280,22 @@ describe("VP-010 unified filter URL", () => {
       "&resources.types=Pod&issues.status=open",
     );
   });
+  it("round-trips an application instance only with its application detail", () => {
+    const parsed = parseProductFilterUrl(
+      "?clusters=cluster-a&app=app-checkout&instance=binding-prod&tab=overview",
+    );
+
+    expect(parsed.detail).toMatchObject({
+      application: "app-checkout",
+      applicationInstance: "binding-prod",
+      tab: "overview",
+    });
+    expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe(
+      "?clusters=cluster-a&app=app-checkout&instance=binding-prod&tab=overview",
+    );
+    expect(canonicalizeProductFilterUrl("?detail=change-42&instance=binding-prod"))
+      .toBe("?detail=change-42");
+  });
   it("uses push for explicit filter changes and replace for typing or migration", () => {
     expect(filterHistoryMode("chip-add")).toBe("push");
     expect(filterHistoryMode("chip-remove")).toBe("push");
@@ -293,8 +309,10 @@ describe("VP-010 unified filter URL", () => {
   it("uses explicit history policies for detail navigation", () => {
     expect(detailHistoryMode("detail-open")).toBe("push");
     expect(detailHistoryMode("drill-in")).toBe("push");
+    expect(detailHistoryMode("detail-instance")).toBe("push");
     expect(detailHistoryMode("detail-close")).toBe("replace");
     expect(detailHistoryMode("detail-tab")).toBe("replace");
     expect(detailHistoryMode("detail-expand")).toBe("replace");
+    expect(detailHistoryMode("detail-instance-default")).toBe("replace");
   });
 });

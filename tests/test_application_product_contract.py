@@ -127,6 +127,25 @@ def _detail_evidence() -> dict[str, object]:
             "manifest_path": "deploy/checkout.yaml",
             "partial_reason_codes": [],
         },
+        "scope": {
+            "availability": "available",
+            "completeness": "exact",
+            "selected_instance_id": "binding-prod-a",
+            "instances": [
+                {
+                    "id": "binding-prod-a",
+                    "environment": "prod",
+                    "status": "active",
+                    "scope": {
+                        "workspace_id": "workspace-a",
+                        "cluster_id": "cluster-a",
+                        "namespaces": ["shop"],
+                        "freshness": "live",
+                    },
+                }
+            ],
+            "partial_reason_codes": [],
+        },
     }
 
 
@@ -239,6 +258,7 @@ def test_application_detail_topology_history_and_source_require_authorized_evide
             | {"entries": [detail["history"]["entries"][0] | {"workflow_run_id": None}]}
         },
         detail | {"source": detail["source"] | {"availability": "unavailable"}},
+        detail | {"scope": detail["scope"] | {"selected_instance_id": "missing"}},
     ]
 
     for invalid_detail in invalid_details:

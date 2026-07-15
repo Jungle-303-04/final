@@ -53,6 +53,23 @@ const APPLICATION = {
 } as const;
 
 const DETAIL_EVIDENCE = {
+  scope: {
+    availability: "available",
+    completeness: "exact",
+    selected_instance_id: "binding-prod",
+    instances: [{
+      id: "binding-prod",
+      environment: "prod",
+      status: "active",
+      scope: {
+        workspace_id: "workspace-a",
+        cluster_id: "cluster-1",
+        namespaces: ["prod"],
+        freshness: "live",
+      },
+    }],
+    partial_reason_codes: [],
+  },
   topology: {
     availability: "available",
     completeness: "exact",
@@ -186,13 +203,13 @@ describe("BQ-039~042 Application product API", () => {
         observed_at: "2026-07-14T09:11:00+00:00",
       }));
 
-    await getApplicationOverview("app/checkout");
-    await listApplicationDeploymentHistory("app/checkout");
-    await getApplicationDrift("app/checkout");
+    await getApplicationOverview("app/checkout", undefined, "binding-prod");
+    await listApplicationDeploymentHistory("app/checkout", undefined, "binding-prod");
+    await getApplicationDrift("app/checkout", undefined, "binding-prod");
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      "/api/applications/app%2Fcheckout",
-      "/api/applications/app%2Fcheckout/deployments",
-      "/api/applications/app%2Fcheckout/drift",
+      "/api/applications/app%2Fcheckout?instance=binding-prod",
+      "/api/applications/app%2Fcheckout/deployments?instance=binding-prod",
+      "/api/applications/app%2Fcheckout/drift?instance=binding-prod",
     ]);
   });
 
@@ -237,6 +254,20 @@ describe("BQ-039~042 Application product API", () => {
       .rejects.toMatchObject({ kind: "invalid-payload" });
 
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
+      application: {
+        ...APPLICATION,
+        endpoints: [],
+        endpoints_completeness: "exact",
+        recent_activity: [],
+        recent_incidents: [],
+        ...DETAIL_EVIDENCE,
+        scope: { ...DETAIL_EVIDENCE.scope, selected_instance_id: "binding-hidden" },
+      },
+    }));
+    await expect(getApplicationOverview("app-checkout"))
+      .rejects.toMatchObject({ kind: "invalid-payload" });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({
       status: "drifted",
       summary: null,
       differences: [],
@@ -260,5 +291,7 @@ describe("BQ-039~042 Application product API", () => {
       expect.objectContaining({ signal: controller.signal }),
     );
     expect(() => getApplicationOverview(" ")).toThrow("applicationId must not be empty");
+    expect(() => getApplicationOverview("app-checkout", undefined, " "))
+      .toThrow("instanceId must not be empty");
   });
 });

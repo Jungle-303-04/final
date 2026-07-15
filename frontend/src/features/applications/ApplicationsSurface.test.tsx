@@ -65,6 +65,51 @@ describe("S10 Applications surface", () => {
     expect(port.getApplication).toHaveBeenCalledWith("app-checkout", expect.any(AbortSignal));
   });
 
+  it("keeps the server-authorized deployment instance in the URL and scopes follow-up reads", async () => {
+    const user = userEvent.setup();
+    const getApplication = vi.fn().mockImplementation((
+      _applicationId: string,
+      _signal: AbortSignal,
+      instanceId?: string | null,
+    ) => Promise.resolve({
+      ...APPLICATION_DETAIL,
+      scope: {
+        ...APPLICATION_DETAIL.scope,
+        selectedInstanceId: instanceId ?? "binding-prod",
+      },
+    }));
+    const port = applicationsPort({ getApplication });
+    renderApplications(
+      port,
+      "/applications?app=app-checkout&tab=overview&instance=binding-stage",
+    );
+
+    expect(await screen.findByText("v2.4.1 deployed")).toBeTruthy();
+    expect(getApplication).toHaveBeenCalledWith(
+      "app-checkout",
+      expect.any(AbortSignal),
+      "binding-stage",
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Deployment instance scope" }));
+    expect(screen.getByRole("option", { name: /stage.*Connection delayed/i })).toBeTruthy();
+    await user.click(screen.getByRole("option", { name: /prod.*Live connection/i }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent)
+      .toContain("instance=binding-prod"));
+    await waitFor(() => expect(getApplication).toHaveBeenCalledWith(
+      "app-checkout",
+      expect.any(AbortSignal),
+      "binding-prod",
+    ));
+
+    await user.click(screen.getByRole("tab", { name: "Deployments" }));
+    await waitFor(() => expect(port.listDeployments).toHaveBeenCalledWith(
+      "app-checkout",
+      expect.any(AbortSignal),
+      "binding-prod",
+    ));
+  });
+
   it("renders topology, history, source evidence, counts-only drilldowns, deployment links, and semantic drift", async () => {
     const user = userEvent.setup();
     const port = applicationsPort();
@@ -100,7 +145,11 @@ describe("S10 Applications surface", () => {
     expect(gitOpsLink.getAttribute("href")).toBe(
       "/gitops?clusters=cluster-1&labels=team%3Dcheckout&detail=change%3Achange-42",
     );
-    expect(port.listDeployments).toHaveBeenCalledWith("app-checkout", expect.any(AbortSignal));
+    expect(port.listDeployments).toHaveBeenCalledWith(
+      "app-checkout",
+      expect.any(AbortSignal),
+      "binding-prod",
+    );
 
     await user.click(within(tabs).getByRole("tab", { name: "Drift" }));
     expect(await screen.findByText("spec.replicas")).toBeTruthy();
