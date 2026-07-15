@@ -15,7 +15,7 @@ export MGMT_CLUSTER
 export TARGET_CLUSTER
 export REFERENCE_REVISION
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-feature-parity-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -77,6 +77,9 @@ reference-feature-ledger: ## 원본 기능·계약 전수 ledger 생성
 
 reference-feature-ledger-check: ## 원본 기능 ledger의 완전성 확인
 	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check
+
+reference-feature-parity-check: ## 출하용: 모든 제품 기능이 실제 구현 상태인지 확인
+	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check --require-complete
 
 gate: reference-ledger-check reference-feature-ledger-check ## CI용 백엔드·manifest·프론트 전체 게이트
 	bash scripts/test.sh
