@@ -1,6 +1,8 @@
 import type { ClusterScope, ResourceRef } from "../../shared/parity/referenceParity";
 import {
   TimelineFailure,
+  type TimelineCapabilityDescriptor,
+  type TimelineCapabilities,
   type TimelineCoverage,
   type TimelineCursor,
   type TimelineEvent,
@@ -14,6 +16,7 @@ import {
   type TimelineWindow,
 } from "./timelineContract";
 import type {
+  TimelineEndpointCapabilityDescriptor,
   TimelineEndpointCoverage,
   TimelineEndpointDependencies,
   TimelineEndpointEvent,
@@ -31,6 +34,8 @@ const ACTIVITY_BY_URL_KEY = {
   warnings: "warning",
 } as const;
 
+const MILLISECONDS_PER_DAY = 86_400_000;
+
 export interface TimelineAdapterDependencies extends TimelineEndpointDependencies {
   now?: () => number;
   random?: () => number;
@@ -39,19 +44,30 @@ export interface TimelineAdapterDependencies extends TimelineEndpointDependencie
 export function createTimelineAdapter(dependencies: TimelineAdapterDependencies): TimelinePort {
   const now = dependencies.now ?? Date.now;
   const random = dependencies.random ?? Math.random;
+  let capabilityDescriptor: TimelineCapabilityDescriptor | null = null;
+  let capabilityRequest: Promise<TimelineCapabilityDescriptor> | null = null;
   return {
-    capabilities: {
-      sourceMode: "retained",
-      maxRangeDays: null,
-      requiresNamespaceFilter: false,
+    get capabilities() {
+      if (capabilityDescriptor === null) {
+        throw new TimelineFailure("invalid-response", "Timeline capabilities have not been bootstrapped.");
+      }
+      return toTimelineCapabilities(capabilityDescriptor);
+    },
+    readCapabilities(signal) {
+      return loadCapabilities(signal);
     },
     async readTimeline(query, signal) {
       try {
+        const preflightCapabilities = await loadCapabilities(signal);
         const request = createTimelineEndpointQuery(query, resolveTimelineWindow(query, now));
         const value = await dependencies.getTimelineSnapshot({ query: request }, signal);
         if (value.snapshot.cursor.token !== value.end.cursor.token) {
           throw new TimelineFailure("invalid-response");
         }
+        assertMatchingCapabilityDescriptors(
+          preflightCapabilities,
+          toTimelineCapabilityDescriptor(value.snapshot.capabilities),
+        );
         return toTimelineSnapshot(query, request.window, value);
       } catch (error) {
         if (isAbortError(error) || error instanceof TimelineFailure) throw error;
@@ -103,6 +119,23 @@ export function createTimelineAdapter(dependencies: TimelineAdapterDependencies)
       }
     },
   };
+
+  async function loadCapabilities(signal?: AbortSignal): Promise<TimelineCapabilityDescriptor> {
+    if (capabilityDescriptor !== null) return capabilityDescriptor;
+    const request = capabilityRequest ?? dependencies.getTimelineCapabilities(signal)
+      .then(toTimelineCapabilityDescriptor);
+    capabilityRequest = request;
+    try {
+      const resolved = await request;
+      capabilityDescriptor = resolved;
+      return resolved;
+    } catch (error) {
+      if (isAbortError(error) || error instanceof TimelineFailure) throw error;
+      throw toTimelineFailure(error);
+    } finally {
+      if (capabilityRequest === request) capabilityRequest = null;
+    }
+  }
 }
 
 /** Maps URL-level activity keys once, then preserves every other filter verbatim. */
@@ -169,6 +202,42 @@ function toTimelineSnapshot(
     events: endpoint.snapshot.events.map(toEvent),
     coverage: endpoint.snapshot.coverage.map(toCoverage),
   };
+}
+
+function toTimelineCapabilityDescriptor(
+  descriptor: TimelineEndpointCapabilityDescriptor,
+): TimelineCapabilityDescriptor {
+  return {
+    selectedSourceMode: descriptor.selected_source_mode,
+    availableSourceModes: [...descriptor.available_source_modes],
+    maxRetainedRangeMs: descriptor.max_retained_range_ms,
+    namespaceFilterPolicy: descriptor.namespace_filter_policy,
+  };
+}
+
+function toTimelineCapabilities(
+  descriptor: TimelineCapabilityDescriptor,
+): TimelineCapabilities {
+  return {
+    sourceMode: descriptor.selectedSourceMode,
+    maxRangeDays: descriptor.maxRetainedRangeMs / MILLISECONDS_PER_DAY,
+    requiresNamespaceFilter: descriptor.namespaceFilterPolicy === "required",
+  };
+}
+
+function assertMatchingCapabilityDescriptors(
+  preflight: TimelineCapabilityDescriptor,
+  snapshot: TimelineCapabilityDescriptor,
+): void {
+  if (
+    preflight.selectedSourceMode !== snapshot.selectedSourceMode
+    || preflight.maxRetainedRangeMs !== snapshot.maxRetainedRangeMs
+    || preflight.namespaceFilterPolicy !== snapshot.namespaceFilterPolicy
+    || preflight.availableSourceModes.length !== snapshot.availableSourceModes.length
+    || preflight.availableSourceModes.some((mode, index) => mode !== snapshot.availableSourceModes[index])
+  ) {
+    throw new TimelineFailure("invalid-response", "Timeline snapshot capabilities disagreed with bootstrap.");
+  }
 }
 
 function toTimelineStreamFrame(frame: TimelineEndpointStreamFrame): TimelineStreamFrame {

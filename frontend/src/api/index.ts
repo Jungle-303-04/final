@@ -17,8 +17,10 @@ export {
   type ApiPath,
 } from "./client";
 export {
+  getTimelineCapabilities,
   getTimelineSnapshot,
   subscribeTimelineEvents,
+  TIMELINE_CAPABILITIES_PATH,
   TIMELINE_SNAPSHOTS_PATH,
   TIMELINE_STREAM_PATH,
   type TimelineSnapshotEndpoint,
@@ -26,6 +28,7 @@ export {
   type TimelineStreamSubscription,
 } from "./timeline";
 export {
+  timelineCapabilityDescriptorSchema,
   timelineCoverageSchema,
   timelineCursorSchema,
   timelineEventSchema,
@@ -39,6 +42,7 @@ export {
   timelineSubjectSchema,
   timelineWindowSchema,
   type TimelineEndpointCoverage,
+  type TimelineEndpointCapabilityDescriptor,
   type TimelineEndpointCursor,
   type TimelineEndpointEvent,
   type TimelineEndpointQuery,

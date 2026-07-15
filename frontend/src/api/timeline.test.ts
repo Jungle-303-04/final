@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getTimelineSnapshot, subscribeTimelineEvents } from "./timeline";
+import {
+  getTimelineCapabilities,
+  getTimelineSnapshot,
+  subscribeTimelineEvents,
+} from "./timeline";
 
 const request = {
   query: {
@@ -26,6 +30,39 @@ const request = {
 
 describe("Timeline API transport", () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  it("gets one strict server-owned capability descriptor before a Timeline query", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
+      JSON.stringify(capabilityDescriptor()),
+      { headers: { "content-type": "application/json" } },
+    ));
+
+    await expect(getTimelineCapabilities()).resolves.toEqual(capabilityDescriptor());
+
+    const [path, init] = fetchMock.mock.calls[0] ?? [];
+    expect(path).toBe("/api/timeline/capabilities");
+    expect(init).toMatchObject({ credentials: "include", method: "GET" });
+    expect(new Headers(init?.headers).get("accept")).toBe("application/json");
+    expect(new Headers(init?.headers).get("x-service-csrf")).toBeNull();
+  });
+
+  it("fails closed when the capability descriptor selects an unavailable source", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...capabilityDescriptor(),
+      selected_source_mode: "local",
+    }), { headers: { "content-type": "application/json" } }));
+
+    await expect(getTimelineCapabilities()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
+  it("fails closed when the capability descriptor repeats a source mode", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...capabilityDescriptor(),
+      available_source_modes: ["retained", "retained"],
+    }), { headers: { "content-type": "application/json" } }));
+
+    await expect(getTimelineCapabilities()).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
 
   it("posts and strictly decodes a retained NDJSON snapshot", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
@@ -58,6 +95,24 @@ describe("Timeline API transport", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
       JSON.stringify(snapshotFrame()),
       JSON.stringify({ kind: "end", cursor: { token: "other-token" } }),
+      "",
+    ].join("\n"), {
+      headers: { "content-type": "application/x-ndjson" },
+    }));
+
+    await expect(getTimelineSnapshot(request)).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
+  it("fails closed when an NDJSON snapshot descriptor violates bootstrap invariants", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response([
+      JSON.stringify({
+        ...snapshotFrame(),
+        capabilities: {
+          ...capabilityDescriptor(),
+          selected_source_mode: "local",
+        },
+      }),
+      JSON.stringify({ kind: "end", cursor: { token: "opaque.snapshot" } }),
       "",
     ].join("\n"), {
       headers: { "content-type": "application/x-ndjson" },
@@ -163,7 +218,17 @@ function snapshotFrame() {
         strategy: "replace_with_snapshot",
       },
     },
+    capabilities: capabilityDescriptor(),
     events: [event()],
+  };
+}
+
+function capabilityDescriptor() {
+  return {
+    selected_source_mode: "retained",
+    available_source_modes: ["retained"],
+    max_retained_range_ms: 7_200_000,
+    namespace_filter_policy: "not_required",
   };
 }
 
