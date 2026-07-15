@@ -39,7 +39,7 @@ export function AlertsPage({ rulesPort = EMPTY_ALERT_RULES_PORT }: { rulesPort?:
     <ProductPageFrame className="gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-2xl font-semibold tracking-tight">{t("alerts.title")}</h2>
+          <h2 className="font-display text-2xl font-normal tracking-wide">{t("alerts.title")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {t("alerts.description")}
           </p>

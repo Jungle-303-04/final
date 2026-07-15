@@ -69,7 +69,7 @@ export function ApplicationDetailWorkspace({
           </Button>
           <div className="grid min-w-0 gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-2xl font-semibold tracking-tight">{application.name}</h2>
+              <h2 className="font-display truncate text-2xl font-normal tracking-wide">{application.name}</h2>
               {application.environments.map((environment) => <Badge key={environment} variant="outline">{environment}</Badge>)}
             </div>
             <p className="min-w-0 text-sm text-muted-foreground">

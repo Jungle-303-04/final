@@ -96,9 +96,8 @@ export function ClusterCard({
   return (
     <Card
       className={cn(
-        "motion-node-land relative min-h-52 overflow-visible transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transition-none",
+        "motion-node-land relative min-h-52 overflow-visible bg-cluster-card-fill text-cluster-card-fill-foreground font-medium transition-[border-color,box-shadow,transform] duration-(--motion-quick) ease-(--ease-out) hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transition-none",
         connectionHoverClasses[cluster.connectionState],
-        disconnected && "bg-muted/30 text-muted-foreground saturate-0",
       )}
       data-cluster-id={cluster.id}
       ref={cardRef}
@@ -116,7 +115,7 @@ export function ClusterCard({
           <ClusterProviderIcon appearance="card" provider={cluster.provider} />
           <div className="min-w-0">
             <CardTitle className="truncate text-lg">{cluster.name}</CardTitle>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{cluster.environment}</p>
+            <p className="mt-1 truncate text-xs text-cluster-card-muted-foreground">{cluster.environment}</p>
           </div>
         </CardHeader>
 
@@ -127,7 +126,7 @@ export function ClusterCard({
               tone={connectionTones[cluster.connectionState]}
             />
             {disconnected && cluster.lastObservedAt ? (
-              <p className="min-w-0 truncate text-xs text-muted-foreground">
+              <p className="min-w-0 truncate text-xs text-cluster-card-muted-foreground">
                 {t("clusters.lastResponse", {
                   time: formatRelativeTime(cluster.lastObservedAt, locale),
                 })}
@@ -136,7 +135,7 @@ export function ClusterCard({
           </div>
 
           <div className="grid gap-3">
-            <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 rounded-lg bg-muted/35 px-3 py-2.5 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 rounded-lg bg-muted/35 px-3 py-2.5 text-xs text-cluster-card-muted-foreground">
               {(cluster.serverCount ?? cluster.nodeCount) == null ? null : (
                 <ClusterMetric icon={<Server />} label={t("clusters.metric.servers", {
                   count: formatNumber(cluster.serverCount ?? cluster.nodeCount ?? 0),

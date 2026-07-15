@@ -70,7 +70,7 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
     <ProductPageFrame className="gap-6">
       <header className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] lg:items-end">
         <div className="min-w-0">
-          <h2 className="text-2xl font-semibold tracking-tight">{t("clusters.title")}</h2>
+          <h2 className="font-display text-2xl font-normal tracking-wide">{t("clusters.title")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("clusters.description")}</p>
         </div>
         <div className="flex min-w-0 items-center gap-2">

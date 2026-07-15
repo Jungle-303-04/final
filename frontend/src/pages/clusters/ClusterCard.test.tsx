@@ -41,6 +41,9 @@ describe("ClusterCard", () => {
     expect((container.querySelector("[data-cluster-id='cluster-1']") as HTMLElement).style.animationDelay)
       .toBe("140ms");
     const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).toContain("bg-cluster-card-fill");
+    expect(card?.className).toContain("text-cluster-card-fill-foreground");
+    expect(card?.className).toContain("font-medium");
     expect(card?.className).toContain("hover:border-status-healthy");
     expect(card?.className).toContain("hover:ring-2");
     expect(card?.className).toContain("hover:ring-status-healthy/30");
@@ -55,6 +58,10 @@ describe("ClusterCard", () => {
     });
 
     const card = container.querySelector("[data-cluster-id='cluster-1']");
+    expect(card?.className).toContain("bg-cluster-card-fill");
+    expect(card?.className).not.toContain("bg-muted/30");
+    expect(card?.className).not.toContain("saturate-0");
+    expect(card?.className).not.toContain("text-cluster-card-muted-foreground");
     expect(card?.className).toContain("hover:border-status-stale");
     expect(card?.className).toContain("hover:ring-status-stale/30");
     expect(card?.className).toContain("hover:shadow-status-stale/30");

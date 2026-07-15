@@ -57,7 +57,7 @@ function ApplicationsCatalog({
     <ProductPageFrame>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <h2 className="text-2xl font-semibold tracking-tight">{copy.title}</h2>
+          <h2 className="font-display text-2xl font-normal tracking-wide">{copy.title}</h2>
           <p className="text-sm text-muted-foreground">{copy.description}</p>
         </div>
         <Button aria-label={copy.refresh} disabled={catalog.refreshing} onClick={refresh} size="icon" type="button" variant="outline">

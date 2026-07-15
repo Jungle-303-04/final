@@ -40,7 +40,7 @@ export function SettingsPage() {
   return (
     <ProductPageFrame className="gap-6">
       <header className="max-w-3xl">
-        <h2 className="text-2xl font-semibold tracking-tight">{t("settings.title")}</h2>
+        <h2 className="font-display text-2xl font-normal tracking-wide">{t("settings.title")}</h2>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
           {t("settings.description")}
         </p>

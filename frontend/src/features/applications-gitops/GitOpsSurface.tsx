@@ -57,7 +57,7 @@ export function GitOpsSurface({ port }: { port: ApplicationsGitOpsPort }) {
     <ProductPageFrame>
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
-          <h2 className="text-2xl font-semibold tracking-tight">{copy.gitops.title}</h2>
+          <h2 className="font-display text-2xl font-normal tracking-wide">{copy.gitops.title}</h2>
           <p className="text-sm text-muted-foreground">{copy.gitops.description}</p>
         </div>
         <Button
