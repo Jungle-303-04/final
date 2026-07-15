@@ -10,6 +10,11 @@ interface StreamEvent {
   value: string;
 }
 
+interface OpaqueTimelineFrame {
+  cursor: { token: string };
+  frame: "event" | "snapshot";
+}
+
 describe("createRafStreamCoalescer", () => {
   it("delivers a replay in cursor order and suppresses already-flushed duplicates", () => {
     const runtime = new FakeRuntime();
@@ -137,6 +142,37 @@ describe("createRafStreamCoalescer", () => {
     expect(received).toEqual([[1, 2]]);
   });
 
+  it("suppresses opaque resume duplicates without sequencing or sorting timeline tokens", () => {
+    const runtime = new FakeRuntime();
+    const received: string[][] = [];
+    const coalescer = createRafStreamCoalescer<OpaqueTimelineFrame>({
+      opaqueCursor: {
+        keyOf: (frame) => frame.cursor.token,
+        equals: (left, right) => left === right,
+      },
+      onFlush: (frames) => received.push(frames.map((frame) => frame.cursor.token)),
+      policy: { hiddenTab: "coalesce", maxFramesPerSecond: 60 },
+      runtime,
+    });
+
+    const laterLexically = opaqueFrame("signed.z-future");
+    const earlierLexically = opaqueFrame("signed.a-past");
+    expect(coalescer.enqueue(laterLexically)).toBe("queued");
+    expect(coalescer.enqueue(earlierLexically)).toBe("queued");
+    expect(coalescer.enqueue(opaqueFrame("signed.z-future"))).toBe("duplicate");
+    runtime.fireFrame();
+
+    expect(received).toEqual([["signed.z-future", "signed.a-past"]]);
+    expect(coalescer.enqueue(opaqueFrame("signed.a-past"))).toBe("duplicate");
+    expect(coalescer.enqueue(opaqueFrame("signed.0-next"))).toBe("queued");
+    runtime.fireFrame();
+
+    expect(received).toEqual([
+      ["signed.z-future", "signed.a-past"],
+      ["signed.0-next"],
+    ]);
+  });
+
   it("keeps semantic event order identical when a consumer requests reduced motion", () => {
     const full = flushWithMotionPreference(false);
     const reduced = flushWithMotionPreference(true);
@@ -165,6 +201,10 @@ function flushWithMotionPreference(reducedMotion: boolean): number[][] {
 
 function event(cursor: number): StreamEvent {
   return { cursor, value: `event-${cursor}` };
+}
+
+function opaqueFrame(token: string): OpaqueTimelineFrame {
+  return { cursor: { token }, frame: "event" };
 }
 
 class FakeRuntime implements RafStreamCoalescerRuntime {
