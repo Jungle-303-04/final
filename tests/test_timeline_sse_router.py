@@ -21,6 +21,7 @@ from domains.timeline.service import TimelineReadResolution
 from packages.contracts.parity import ClusterScope, ResourceRef
 from packages.contracts.timeline import (
     RealtimePolicy,
+    TimelineCoverage,
     TimelineCursor,
     TimelineEvent,
     TimelineQuery,
@@ -38,6 +39,18 @@ class ReplayReader:
     def __call__(self, _scope: object, **kwargs: object) -> TimelineReplayResult:
         self.calls.append(dict(kwargs))
         return self.results.pop(0)
+
+
+class CoverageReader:
+    """Return durable coverage states in server-side replay-poll order."""
+
+    def __init__(self, results: list[tuple[TimelineCoverage, ...]] | None = None) -> None:
+        self.results = results or []
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, _scope: object, **kwargs: object) -> tuple[TimelineCoverage, ...]:
+        self.calls.append(dict(kwargs))
+        return self.results.pop(0) if self.results else ()
 
 
 class ClosedSubscription:
@@ -61,7 +74,18 @@ class OverflowThenClosedSubscription(ClosedSubscription):
         raise TimelineFanoutClosed("closed")
 
 
-def _resolution(*, mode: str = "live") -> TimelineReadResolution:
+class TimeoutThenClosedSubscription(ClosedSubscription):
+    def __init__(self) -> None:
+        self._timed_out = False
+
+    async def next(self) -> None:
+        if not self._timed_out:
+            self._timed_out = True
+            raise TimeoutError
+        raise TimelineFanoutClosed("closed")
+
+
+def _resolution(*, mode: str = "live", event_access: bool = False) -> TimelineReadResolution:
     scope = ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a")
     query = TimelineQuery(
         scopes=(scope,),
@@ -81,6 +105,7 @@ def _resolution(*, mode: str = "live") -> TimelineReadResolution:
         workspace_id="workspace-a",
         scopes=(scope,),
         inventory_cluster_ids=frozenset({"cluster-a"}),
+        kubernetes_event_cluster_ids=(frozenset({"cluster-a"}) if event_access else frozenset()),
     )
     return TimelineReadResolution(
         authorized=authorized,
@@ -170,6 +195,7 @@ def test_sse_replays_durable_records_then_reports_closed_fanout_without_raw_sequ
         _collect(
             _timeline_sse_body(
                 replay_reader=reader,
+                coverage_reader=CoverageReader(),
                 subscription=subscription,
                 resolution=resolution,
                 cursor_codec=cursor_codec,
@@ -204,6 +230,7 @@ def test_sse_overflow_replays_durable_suffix_and_retention_requires_resync() -> 
         _collect(
             _timeline_sse_body(
                 replay_reader=overflow_reader,
+                coverage_reader=CoverageReader(),
                 subscription=OverflowThenClosedSubscription(),
                 resolution=_resolution(),
                 cursor_codec=_cursor_codec(),
@@ -228,6 +255,7 @@ def test_sse_overflow_replays_durable_suffix_and_retention_requires_resync() -> 
         _collect(
             _timeline_sse_body(
                 replay_reader=resync_reader,
+                coverage_reader=CoverageReader(),
                 subscription=ClosedSubscription(),
                 resolution=_resolution(),
                 cursor_codec=_cursor_codec(),
@@ -249,6 +277,7 @@ def test_live_sse_allows_new_events_past_snapshot_upper_bound_but_frozen_does_no
                         _available(),
                     ]
                 ),
+                coverage_reader=CoverageReader(),
                 subscription=ClosedSubscription(),
                 resolution=_resolution(mode="live"),
                 cursor_codec=_cursor_codec(),
@@ -265,6 +294,7 @@ def test_live_sse_allows_new_events_past_snapshot_upper_bound_but_frozen_does_no
                         _available(),
                     ]
                 ),
+                coverage_reader=CoverageReader(),
                 subscription=ClosedSubscription(),
                 resolution=_resolution(mode="frozen"),
                 cursor_codec=_cursor_codec(),
@@ -275,6 +305,76 @@ def test_live_sse_allows_new_events_past_snapshot_upper_bound_but_frozen_does_no
 
     assert [frame.kind for frame in _frames(live_chunks)] == ["event", "error"]
     assert [frame.kind for frame in _frames(frozen_chunks)] == ["error"]
+
+
+def test_sse_coalesces_durable_coverage_additions_without_changing_event_cursor() -> None:
+    coverage = TimelineCoverage(
+        scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
+        source="kubernetes_event",
+        from_ms=1_200,
+        to_ms=1_400,
+        reason="collection_gap",
+    )
+    reader = CoverageReader([(), (coverage,)])
+    resolution = _resolution(event_access=True)
+    codec = _cursor_codec()
+    chunks = asyncio.run(
+        _collect(
+            _timeline_sse_body(
+                replay_reader=ReplayReader([_available(high_water_sequence=4)]),
+                coverage_reader=reader,
+                subscription=ClosedSubscription(),
+                resolution=resolution,
+                cursor_codec=codec,
+                after_sequence=4,
+            )
+        )
+    )
+
+    frames = _frames(chunks)
+    assert [frame.kind for frame in frames] == ["coverage", "error"]
+    assert frames[0].coverage == (coverage,)
+    assert codec.decode(frames[0].cursor, binding=resolution.cursor_binding) == 4
+    assert all("sequence" not in chunk for chunk in chunks)
+    assert reader.calls == [
+        {"window": resolution.query.window},
+        {"window": resolution.query.window},
+    ]
+
+
+def test_sse_repairs_coverage_only_changes_on_the_server_owned_replay_poll(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coverage = TimelineCoverage(
+        scope=ClusterScope(workspace_id="workspace-a", cluster_id="cluster-a"),
+        source="kubernetes_event",
+        from_ms=1_200,
+        to_ms=1_400,
+        reason="collection_gap",
+    )
+    polls: list[float] = []
+    monkeypatch.setattr(
+        "domains.timeline.router.timeline_replay_poll_seconds",
+        lambda: polls.append(0.1) or 0.1,
+    )
+    chunks = asyncio.run(
+        _collect(
+            _timeline_sse_body(
+                replay_reader=ReplayReader(
+                    [_available(high_water_sequence=4), _available(high_water_sequence=4)]
+                ),
+                coverage_reader=CoverageReader([(), (), (coverage,)]),
+                subscription=TimeoutThenClosedSubscription(),
+                resolution=_resolution(event_access=True),
+                cursor_codec=_cursor_codec(),
+                after_sequence=4,
+            )
+        )
+    )
+
+    assert [frame.kind for frame in _frames(chunks)] == ["coverage", "error"]
+    assert polls == [0.1, 0.1]
+    assert ": keep-alive\n\n" in chunks
 
 
 def test_sse_requires_one_consistent_opaque_resume_cursor() -> None:
