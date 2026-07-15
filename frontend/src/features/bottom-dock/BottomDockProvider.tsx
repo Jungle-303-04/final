@@ -13,6 +13,7 @@ import { useAuthSessionGate } from "../auth/AuthSessionGate";
 import {
   EMPTY_LOG_STREAM_PORT,
   logStreamTargetKey,
+  type LogStreamEvent,
   type LogStreamPort,
   type LogStreamTarget,
 } from "../log-stream/logStreamContract";
@@ -22,6 +23,7 @@ import {
   MAX_DOCK_TABS,
   type BottomDockState,
 } from "./bottomDockState";
+import { useOptionalI18n } from "../../shared/i18n";
 
 export interface BottomDockController extends BottomDockState {
   openLogs: (target: LogStreamTarget) => void;
@@ -56,16 +58,43 @@ export function BottomDockProvider({
   const [state, dispatch] = useReducer(bottomDockReducer, INITIAL_BOTTOM_DOCK_STATE);
   const stateRef = useRef(state);
   const subscriptions = useRef(new Map<string, { close: () => void; generation: number }>());
+  const queuedEvents = useRef(new Map<string, LogStreamEvent[]>());
+  const frame = useRef<number | null>(null);
   const generation = useRef(0);
   const { reportUnauthorized } = useAuthSessionGate();
+  const i18n = useOptionalI18n();
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
+  const flushQueuedEvents = useCallback(() => {
+    frame.current = null;
+    const batches = [...queuedEvents.current].map(([id, events]) => ({ id, events }));
+    queuedEvents.current.clear();
+    if (batches.length > 0) dispatch({ type: "events", batches });
+  }, []);
+
+  const queueEvent = useCallback((id: string, event: LogStreamEvent) => {
+    const events = queuedEvents.current.get(id);
+    if (events) events.push(event);
+    else queuedEvents.current.set(id, [event]);
+    if (frame.current !== null) return;
+    if (typeof requestAnimationFrame === "function") {
+      frame.current = requestAnimationFrame(flushQueuedEvents);
+    } else {
+      frame.current = -1;
+      queueMicrotask(flushQueuedEvents);
+    }
+  }, [flushQueuedEvents]);
+
   useEffect(() => () => {
     for (const subscription of subscriptions.current.values()) subscription.close();
     subscriptions.current.clear();
+    queuedEvents.current.clear();
+    if (frame.current !== null && frame.current >= 0 && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(frame.current);
+    }
   }, []);
 
   const start = useCallback((id: string, target: LogStreamTarget) => {
@@ -85,7 +114,7 @@ export function BottomDockProvider({
     const close = port.open(target, {
       onEvent: (event) => {
         if (!isCurrent()) return;
-        dispatch({ type: "event", id, event });
+        queueEvent(id, event);
         if (event.type === "end" || event.type === "error") finish();
       },
       onFailure: (failure) => {
@@ -97,7 +126,7 @@ export function BottomDockProvider({
     });
     transportClose = close;
     if (!isCurrent()) close();
-  }, [port, reportUnauthorized]);
+  }, [port, queueEvent, reportUnauthorized]);
 
   const controller = useMemo<BottomDockController>(() => ({
     ...state,
@@ -110,6 +139,7 @@ export function BottomDockProvider({
         if (evicted) {
           subscriptions.current.get(evicted.id)?.close();
           subscriptions.current.delete(evicted.id);
+          queuedEvents.current.delete(evicted.id);
         }
       }
       dispatch({ type: "open", id, target });
@@ -121,6 +151,7 @@ export function BottomDockProvider({
     closeTab(id) {
       subscriptions.current.get(id)?.close();
       subscriptions.current.delete(id);
+      queuedEvents.current.delete(id);
       dispatch({ type: "close", id });
     },
     selectTab: (id) => dispatch({ type: "select", id }),
@@ -134,9 +165,35 @@ export function BottomDockProvider({
     setHeight: (height) => dispatch({ type: "resize", height }),
   }), [state, start]);
 
-  return <BottomDockContext.Provider value={controller}>{children}</BottomDockContext.Provider>;
+  const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
+  const connectionAnnouncement = activeTab === null
+    ? ""
+    : `${activeTab.target.name}: ${i18n?.t(dockStatusKey(activeTab.status)) ?? activeTab.status}`;
+  return (
+    <BottomDockContext.Provider value={controller}>
+      <output
+        aria-atomic="true"
+        aria-live="polite"
+        className="sr-only"
+        data-testid="dock-connection-announcer"
+      >
+        {connectionAnnouncement}
+      </output>
+      {children}
+    </BottomDockContext.Provider>
+  );
 }
 
 export function useBottomDock(): BottomDockController {
   return useContext(BottomDockContext);
+}
+
+function dockStatusKey(status: BottomDockState["tabs"][number]["status"]) {
+  const keys = {
+    connecting: "shell.dock.connecting",
+    streaming: "shell.dock.streaming",
+    ended: "shell.dock.ended",
+    failed: "shell.dock.failed",
+  } as const;
+  return keys[status];
 }

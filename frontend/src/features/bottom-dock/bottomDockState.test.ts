@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   bottomDockReducer,
@@ -62,6 +62,87 @@ describe("bottom dock reducer", () => {
     expect(state.tabs[0]?.lines[0]?.id).toBe("line-3");
     expect(state.tabs[0]?.dropped).toBe(3);
     expect(state.tabs[0]?.received).toBe(MAX_DOCK_LINES + 3);
+  });
+
+  it("applies a frame of events in one reducer action and deduplicates the retained buffer", () => {
+    let state = bottomDockReducer(INITIAL_BOTTOM_DOCK_STATE, {
+      type: "open",
+      id: "pod:checkout",
+      target: TARGET,
+    });
+    state = bottomDockReducer(state, {
+      type: "events",
+      batches: [{
+        id: "pod:checkout",
+        events: [
+          { type: "connected", streamId: "stream-1" },
+          line("line-1"),
+          line("line-2"),
+          line("line-1"),
+        ],
+      }],
+    });
+
+    expect(state.tabs[0]?.status).toBe("streaming");
+    expect(state.tabs[0]?.lines.map((entry) => entry.id)).toEqual(["line-1", "line-2"]);
+    expect(state.tabs[0]?.received).toBe(2);
+
+    const olderEvents = Array.from({ length: 300 }, (_, index) => line(`older-${index}`));
+    state = bottomDockReducer(state, {
+      type: "events",
+      batches: [{ id: "pod:checkout", events: olderEvents }],
+    });
+    state = bottomDockReducer(state, {
+      type: "event",
+      id: "pod:checkout",
+      event: line("line-1"),
+    });
+    expect(state.tabs[0]?.received).toBe(302);
+  });
+
+  it("deduplicates and trims a burst with one bounded append instead of copying per line", () => {
+    let state = bottomDockReducer(INITIAL_BOTTOM_DOCK_STATE, {
+      type: "open",
+      id: "pod:checkout",
+      target: TARGET,
+    });
+    state = bottomDockReducer(state, {
+      type: "events",
+      batches: [{
+        id: "pod:checkout",
+        events: Array.from({ length: MAX_DOCK_LINES }, (_, index) => line(`line-${index}`)),
+      }],
+    });
+    const retainedIds = state.tabs[0]?.recentLineIds;
+    if (!retainedIds) throw new Error("expected retained line ids");
+    Object.defineProperty(retainedIds, "includes", {
+      configurable: true,
+      value: () => {
+        throw new Error("batch dedupe must use a Set");
+      },
+    });
+    const slice = vi.spyOn(Array.prototype, "slice");
+
+    state = bottomDockReducer(state, {
+      type: "events",
+      batches: [{
+        id: "pod:checkout",
+        events: Array.from(
+          { length: MAX_DOCK_LINES + 1_000 },
+          (_, index) => line(`line-${index + 1_000}`),
+        ),
+      }],
+    });
+    const sliceCalls = slice.mock.calls.length;
+    slice.mockRestore();
+
+    expect(sliceCalls).toBeLessThan(10);
+    expect(state.tabs[0]?.received).toBe(MAX_DOCK_LINES * 2);
+    expect(state.tabs[0]?.dropped).toBe(MAX_DOCK_LINES);
+    expect(state.tabs[0]?.lines).toHaveLength(MAX_DOCK_LINES);
+    expect(state.tabs[0]?.lines[0]?.id).toBe(`line-${MAX_DOCK_LINES}`);
+    expect(state.tabs[0]?.lines[MAX_DOCK_LINES - 1]?.id)
+      .toBe(`line-${MAX_DOCK_LINES * 2 - 1}`);
   });
 
   it("evicts the oldest tab at a fixed memory boundary", () => {
