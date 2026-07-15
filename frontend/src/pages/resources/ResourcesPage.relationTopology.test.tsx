@@ -182,6 +182,48 @@ describe("ResourcesPage S9 relationship topology", () => {
     await waitFor(() => expect(readResourcesQuery().has("clusters")).toBe(false));
     await waitFor(() => expect(readResourcesQuery().has("view")).toBe(false));
   });
+
+  it("labels partial and unavailable relationship evidence without inventing graph records", async () => {
+    const partialPort = resourcesRelationTopologyPort({
+      loadRelationTopology: vi.fn().mockResolvedValue({
+        ...relationSnapshot(),
+        relationCompleteness: "partial",
+        partialReasonCodes: ["source_labels_incomplete"],
+      }),
+    });
+    const partial = renderEnglishResources(
+      "/resources?clusters=cluster-1&applications=checkout",
+      partialPort,
+    );
+
+    expect(await screen.findByText("Partial relationship evidence")).toBeTruthy();
+    expect(screen.getByText("1 evidence limits")).toBeTruthy();
+    partial.unmount();
+
+    const unavailablePort = resourcesRelationTopologyPort({
+      loadRelationTopology: vi.fn().mockResolvedValue({
+        ...relationSnapshot(),
+        availability: "unavailable",
+        relationCompleteness: "unavailable",
+        nodes: [],
+        edges: [],
+        counts: {
+          filteredCount: null,
+          unfilteredCount: null,
+          filteredCountCompleteness: "unavailable",
+          unfilteredCountCompleteness: "unavailable",
+        },
+        partialReasonCodes: ["topology_projection_unavailable"],
+      }),
+    });
+    renderEnglishResources(
+      "/resources?clusters=cluster-1&applications=checkout",
+      unavailablePort,
+    );
+
+    expect(await screen.findByText("Graph data is not available yet")).toBeTruthy();
+    expect(document.querySelector('[data-slot="relation-topology-node"]')).toBeNull();
+  });
 });
 
 function renderEnglishResources(
@@ -209,6 +251,11 @@ function renderEnglishResources(
 
 function relationSnapshot(): RelationTopologySnapshot {
   return {
+    availability: "available",
+    clusterId: "cluster-1",
+    clusterProjectionRevision: 42,
+    graphRevision: "graph-test",
+    refreshAfterSeconds: 60,
     nodes: [
       { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
       { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
@@ -216,6 +263,25 @@ function relationSnapshot(): RelationTopologySnapshot {
     edges: [
       { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },
     ],
+    counts: {
+      filteredCount: 2,
+      unfilteredCount: 2,
+      filteredCountCompleteness: "exact",
+      unfilteredCountCompleteness: "exact",
+    },
+    relationCompleteness: "exact",
+    partialReasonCodes: [],
+    truncated: false,
+    omittedNodeCount: 0,
+    omittedEdgeCount: 0,
+    snapshot: {
+      snapshotRevision: 42,
+      authorizationRevision: "auth-test",
+      filterFingerprint: "filter-test",
+      observedAt: "2026-07-14T05:00:00Z",
+      stale: false,
+      partialReasonCodes: [],
+    },
   };
 }
 

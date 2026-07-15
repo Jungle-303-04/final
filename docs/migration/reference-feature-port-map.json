@@ -153,6 +153,32 @@
           "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
         }
       }
+    },
+    "reference.feature.118": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.inventory_filter.graph",
+      "frontendContract": "frontend/src/features/resources/relationTopologyContract.ts",
+      "verification": [
+        "tests/test_relations_topology_router.py",
+        "tests/test_relations_topology_contract.py",
+        "frontend/src/api/relation-topology.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
+        "frontend/src/pages/resources/useRelationTopologyDataFrame.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_topology",
+          "consumer": "src/domains/inventory_filter/graph.py#build_resource_graph",
+          "test": "tests/test_relations_topology_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/RelationTopologyCanvas.tsx#RelationTopologyCanvas",
+          "consumer": "frontend/src/features/resources/createRelationTopologyAdapter.ts#createRelationTopologyAdapter",
+          "test": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+        }
+      }
     }
   },
   "sections": {

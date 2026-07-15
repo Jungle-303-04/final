@@ -44,7 +44,7 @@ const TONE_PRIORITY: Record<RelationHealthTone, number> = {
 };
 
 export function buildRelationTopologyGraphModel(
-  topology: RelationTopologySnapshot,
+  topology: Pick<RelationTopologySnapshot, "nodes" | "edges">,
   hiddenKinds: ReadonlySet<string>,
 ): RelationTopologyGraphModel {
   const nodesById = new Map(topology.nodes.map((node) => [node.id, node] as const));

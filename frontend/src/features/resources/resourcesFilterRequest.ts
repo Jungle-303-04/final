@@ -21,6 +21,8 @@ import type {
 } from "./resourcesFilterEndpointContract";
 import type { PhysicalTopologyOptions } from "./physicalTopologyContract";
 import type { PhysicalTopologyEndpointQuery } from "./physicalTopologyEndpointContract";
+import type { RelationTopologyOptions } from "./relationTopologyContract";
+import type { RelationTopologyEndpointQuery } from "./relationTopologyEndpointContract";
 import type { ResourceMetricsHistoryOptions } from "./resourceMetricsHistoryContract";
 import type { ResourceMetricsHistoryEndpointQuery } from "./resourceMetricsHistoryEndpointContract";
 import type { ChangeTimelineOptions } from "./changeTimelineContract";
@@ -69,6 +71,21 @@ export function createPhysicalTopologyRequest(
 ): PhysicalTopologyEndpointQuery {
   if (state.common.clusters.length !== 1) {
     throw new TypeError("physical topology requires exactly one cluster");
+  }
+  return {
+    ...baseFilterQuery(state),
+    ...(options.snapshotRevision === undefined
+      ? {}
+      : { snapshotRevision: options.snapshotRevision }),
+  };
+}
+
+export function createRelationTopologyRequest(
+  state: UnifiedFilterState,
+  options: RelationTopologyOptions = {},
+): RelationTopologyEndpointQuery {
+  if (state.common.clusters.length !== 1) {
+    throw new TypeError("relation topology requires exactly one cluster");
   }
   return {
     ...baseFilterQuery(state),

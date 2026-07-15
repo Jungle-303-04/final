@@ -1138,39 +1138,39 @@ class ResourceGraphSnapshotResponse(StrictModel):
 
 
 RelationsTopologyEdgeType = Literal["owns", "runs_on", "selects", "routes_to"]
+TopologyAvailability = Literal["available", "unavailable"]
 
 
-class RelationsTopologyNode(StrictModel):
-    id: str = Field(min_length=1)
-    kind: str = Field(min_length=1)
-    name: str = Field(min_length=1)
-    status: str
+class RelationsTopologyResponse(ResourceGraphSnapshotResponse):
+    """Evidence-backed Resources relationship graph for the /topology surface.
 
+    The projection deliberately inherits the full resource-graph evidence model.
+    It must never turn an unavailable inventory projection into guessed nodes or
+    edges merely to keep the canvas populated.
+    """
 
-class RelationsTopologyEdge(StrictModel):
-    from_node_id: str = Field(alias="from", min_length=1)
-    to_node_id: str = Field(alias="to", min_length=1)
-    type: RelationsTopologyEdgeType
-
-
-class RelationsTopologyResponse(StrictModel):
-    nodes: list[RelationsTopologyNode] = Field(default_factory=list)
-    edges: list[RelationsTopologyEdge] = Field(default_factory=list)
+    view: Literal["relations"] = "relations"
+    availability: TopologyAvailability
+    refresh_after_seconds: int = Field(ge=1, le=60)
 
     @model_validator(mode="after")
-    def validate_graph_integrity(self) -> Self:
-        node_ids = [node.id for node in self.nodes]
-        known_nodes = set(node_ids)
-        if len(known_nodes) != len(node_ids):
-            raise ValueError("relations topology node identities must be unique")
-        edge_keys = [(edge.from_node_id, edge.to_node_id, edge.type) for edge in self.edges]
-        if len(set(edge_keys)) != len(edge_keys):
-            raise ValueError("relations topology edges must be unique")
-        if any(
-            edge.from_node_id not in known_nodes or edge.to_node_id not in known_nodes
-            for edge in self.edges
+    def validate_topology_availability(self) -> Self:
+        unavailable = self.availability == "unavailable"
+        if unavailable and (
+            self.relation_completeness != "unavailable"
+            or self.nodes
+            or self.edges
+            or self.root_node_ids
+            or self.node_count != 0
+            or self.edge_count != 0
+            or self.counts.filtered_count is not None
+            or self.counts.unfiltered_count is not None
+            or self.counts.filtered_count_completeness != "unavailable"
+            or self.counts.unfiltered_count_completeness != "unavailable"
         ):
-            raise ValueError("relations topology edges must reference returned nodes")
+            raise ValueError("unavailable topology must not claim graph evidence")
+        if not unavailable and self.relation_completeness == "unavailable":
+            raise ValueError("available topology requires relationship evidence state")
         return self
 
 
