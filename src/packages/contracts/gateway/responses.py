@@ -1912,7 +1912,7 @@ class AiChatResponse(StrictModel):
 
     @model_validator(mode="after")
     def require_evidence_or_canonical_no_data(self) -> Self:
-        if not self.evidence and self.answer != AI_NO_DATA_ANSWER:
+        if not self.evidence and self.action is None and self.answer != AI_NO_DATA_ANSWER:
             raise ValueError("AI answer without evidence must use the canonical no-data answer")
         identities = [(item.type, item.id) for item in self.evidence]
         if len(set(identities)) != len(identities):
