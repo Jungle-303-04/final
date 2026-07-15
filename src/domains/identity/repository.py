@@ -266,7 +266,7 @@ class IdentityAccessRepository(DatabaseConnection):
             update(table)
             .where(table.c.workspace_id == workspace_id, table.c.cluster_id == cluster_id)
             .values(
-                status=ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+                status=ClusterRegistrationStatus.DISCONNECTED.value,
                 agent_token_hash=None,
                 updated_at=func.now(),
             )
@@ -860,6 +860,7 @@ class IdentityAccessRepository(DatabaseConnection):
                     (
                         ClusterRegistrationStatus.PENDING_INSTALL.value,
                         ClusterRegistrationStatus.REGISTERED.value,
+                        ClusterRegistrationStatus.UNINSTALL_REQUESTED.value,
                     )
                 ),
             )
@@ -890,7 +891,10 @@ class IdentityAccessRepository(DatabaseConnection):
                 table.c.created_at,
                 table.c.updated_at,
             )
-            .where(table.c.workspace_id == workspace_id)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.status != ClusterRegistrationStatus.DISCONNECTED.value,
+            )
             .order_by(table.c.environment, table.c.name, table.c.cluster_id)
             .limit(max(1, min(limit, 500)))
         )

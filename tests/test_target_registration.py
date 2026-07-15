@@ -440,6 +440,21 @@ def target_request() -> TargetRegisterRequest:
     )
 
 
+def assert_guarded_install_command(
+    command: str,
+    *,
+    cluster_id: str,
+    manifest_url_prefix: str,
+) -> None:
+    assert "\n" not in command
+    assert command.startswith('existing="$(kubectl -n target get configmap ')
+    assert "jsonpath='{.data.TARGET_CLUSTER_ID}'" in command
+    assert f'[ "$existing" != {cluster_id} ]' in command
+    assert "Opsia agent is already registered as" in command
+    assert f"curl -fsSL {manifest_url_prefix}" in command
+    assert command.endswith("| kubectl apply -f -")
+
+
 def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     manifest = target_install_manifest(target_request(), "agent-secret")
 
@@ -1158,9 +1173,11 @@ def test_cluster_connect_returns_only_server_generated_one_line_command(monkeypa
     response = asyncio.run(run())
 
     assert response.cluster_id.startswith("new-production-")
-    assert "\n" not in response.install_command
-    assert response.install_command.startswith("curl -fsSL ")
-    assert response.install_command.endswith(" | kubectl apply -f -")
+    assert_guarded_install_command(
+        response.install_command,
+        cluster_id=response.cluster_id,
+        manifest_url_prefix="https://opsia.example.com/api/install/",
+    )
     assert response.expires_at
     assert db.registered[0]["settings"]["provider_config"] == {"provider_hint": "eks"}
 
@@ -1276,8 +1293,11 @@ def test_reissue_cluster_connect_command_rotates_token_for_existing_pending_regi
     )
 
     assert response.cluster_id == "pending-cluster"
-    assert response.install_command.startswith("curl -fsSL ")
-    assert response.install_command.endswith(" | kubectl apply -f -")
+    assert_guarded_install_command(
+        response.install_command,
+        cluster_id="pending-cluster",
+        manifest_url_prefix="https://opsia.example.com/api/install/",
+    )
     assert response.expires_at
     assert len(db.rotated) == 1
     assert db.rotated[0]["agent_token_hash"]
@@ -2265,10 +2285,11 @@ def test_target_registration_returns_one_line_install_command() -> None:
 
     response = asyncio.run(run())
 
-    assert response.install_command.startswith(
-        "curl -fsSL http://management.local:30080/api/install/"
+    assert_guarded_install_command(
+        response.install_command,
+        cluster_id="target-cluster-01",
+        manifest_url_prefix="http://management.local:30080/api/install/",
     )
-    assert response.install_command.endswith("| kubectl apply -f -")
     assert response.agent_token in response.install_command
 
 
@@ -2290,7 +2311,11 @@ def test_target_registration_uses_public_base_url_when_request_omits_management_
 
     response = asyncio.run(run())
 
-    assert response.install_command.startswith("curl -fsSL https://k8s.woonyong.org/api/install/")
+    assert_guarded_install_command(
+        response.install_command,
+        cluster_id="target-cluster-01",
+        manifest_url_prefix="https://k8s.woonyong.org/api/install/",
+    )
     assert db.registered[0]["settings"]["management_base_url"] == "https://k8s.woonyong.org/api"
 
 
@@ -2312,7 +2337,11 @@ def test_deployment_external_url_overrides_untrusted_registration_url(monkeypatc
 
     response = asyncio.run(run())
 
-    assert response.install_command.startswith("curl -fsSL https://opsia.example.com/api/install/")
+    assert_guarded_install_command(
+        response.install_command,
+        cluster_id="target-cluster-01",
+        manifest_url_prefix="https://opsia.example.com/api/install/",
+    )
     assert "localhost" not in response.install_command
     assert db.registered[0]["settings"]["management_base_url"] == "https://opsia.example.com/api"
     assert response.management_access.model_dump() == {

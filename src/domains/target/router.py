@@ -45,7 +45,7 @@ from domains.target.evidence_policy import (
     enabled_provider_keys,
     provider_policy_snapshots,
 )
-from domains.target.install_manifest import target_install_manifest
+from domains.target.install_manifest import agent_namespace, target_install_manifest
 from domains.target.management_guard import (
     MANAGEMENT_CLUSTER_ROLE,
     freeze_management_policy,
@@ -397,7 +397,10 @@ def require_unique_cluster_display_name(db: Any, workspace_id: str, name: str) -
         return
     normalized = normalized_cluster_display_name(name)
     for registration in lister(workspace_id, limit=500):
-        if str(registration.get("status") or "") == ClusterRegistrationStatus.INSTALL_EXPIRED.value:
+        if str(registration.get("status") or "") in {
+            ClusterRegistrationStatus.INSTALL_EXPIRED.value,
+            ClusterRegistrationStatus.DISCONNECTED.value,
+        }:
             continue
         if normalized_cluster_display_name(registration.get("name")) == normalized:
             raise HTTPException(status_code=409, detail=cluster_name_conflict_detail())
@@ -639,7 +642,29 @@ def install_command_for(payload: TargetRegisterRequest, agent_token: str) -> str
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    return f"curl -fsSL {shell_quote(f'{base}{path}')} | kubectl apply -f -"
+    return guarded_kubectl_apply_command(payload, f"{base}{path}")
+
+
+def guarded_kubectl_apply_command(
+    payload: TargetRegisterRequest,
+    manifest_url: str,
+    context: str = "",
+) -> str:
+    """기존 에이전트 소유권을 다른 등록으로 조용히 덮어쓰지 않는 설치 명령."""
+    kubectl = "kubectl"
+    if context:
+        kubectl = f"kubectl --context {shell_quote(context)}"
+    namespace = agent_namespace(payload)
+    expected_cluster_id = payload.cluster_id or ""
+    guard = (
+        f'existing="$({kubectl} -n {shell_quote(namespace)} get configmap '
+        "target-runtime-config -o jsonpath='{.data.TARGET_CLUSTER_ID}' "
+        '2>/dev/null || true)"; '
+        f'if [ -n "$existing" ] && [ "$existing" != {shell_quote(expected_cluster_id)} ]; '
+        "then printf 'Opsia agent is already registered as %s; disconnect it before connecting "
+        f'{expected_cluster_id}.\\n\' "$existing" >&2; exit 1; fi; '
+    )
+    return f"{guard}curl -fsSL {shell_quote(manifest_url)} | {kubectl} apply -f -"
 
 
 def kubectl_apply_command(
@@ -649,10 +674,7 @@ def kubectl_apply_command(
     if not base:
         return ""
     path = gateway_routes.INSTALL_MANIFEST_PATH.format(agent_token=agent_token)
-    kubectl = "kubectl"
-    if context:
-        kubectl = f"kubectl --context {shell_quote(context)}"
-    return f"curl -fsSL {shell_quote(f'{base}{path}')} | {kubectl} apply -f -"
+    return guarded_kubectl_apply_command(payload, f"{base}{path}", context)
 
 
 def bootstrap_command_for(payload: TargetRegisterRequest, agent_token: str) -> str:
@@ -1671,6 +1693,13 @@ async def unregister_cluster(
                 failure_reason = f"agent cleanup queue failed: {type(exc).__name__}"
             else:
                 if queued.inserted:
+                    status_updater = getattr(db, "update_cluster_registration_status", None)
+                    if callable(status_updater):
+                        status_updater(
+                            workspace_id,
+                            cluster_id,
+                            ClusterRegistrationStatus.UNINSTALL_REQUESTED.value,
+                        )
                     return ClusterUnregisterResponse(
                         cluster_id=cluster_id,
                         status="uninstalling",
@@ -1710,7 +1739,7 @@ async def unregister_cluster(
         )
     status_updater = getattr(db, "update_cluster_registration_status", None)
     if callable(status_updater):
-        status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.INSTALL_EXPIRED.value)
+        status_updater(workspace_id, cluster_id, ClusterRegistrationStatus.DISCONNECTED.value)
         return ClusterUnregisterResponse(
             cluster_id=cluster_id,
             status="disconnected",

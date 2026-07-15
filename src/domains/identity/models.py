@@ -152,6 +152,6 @@ class ClusterRegistration(Base):
             workspace_id,
             func.lower(func.btrim(name)),
             unique=True,
-            postgresql_where=text("status <> 'install_expired'"),
+            postgresql_where=text("status not in ('install_expired', 'disconnected')"),
         ),
     )

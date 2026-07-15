@@ -107,6 +107,8 @@ class ClusterRegistrationStatus(StrEnum):
     REGISTERED = "registered"
     PENDING_INSTALL = "pending_install"
     INSTALL_EXPIRED = "install_expired"
+    UNINSTALL_REQUESTED = "uninstall_requested"
+    DISCONNECTED = "disconnected"
 
 
 @dataclass(frozen=True)
