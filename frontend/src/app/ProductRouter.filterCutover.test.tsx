@@ -161,14 +161,14 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("PUSH");
   });
 
-  it("replaces an unknown path with the fallback while preserving filters and dropping detail", async () => {
+  it("replaces an unknown path with the declared Home landing while preserving filters and dropping detail", async () => {
     const { router } = renderProductRouter(
       `/not-released${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
@@ -186,16 +186,28 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
-  it("uses the cluster operating screen as the temporary landing screen", async () => {
+  it("uses the declared Home landing at the bare root even when Clusters is released", async () => {
     const { router } = renderProductRouter(
       `/${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
+  });
+
+  it("keeps the explicit Home route on Home even when Clusters is released", async () => {
+    const { router } = renderProductRouter(
+      `/home${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Home surface")).toBeTruthy();
+    });
+    expect(currentLocation(router)).toBe(`/home${FILTER_SEARCH}#detail`);
   });
 });
 
