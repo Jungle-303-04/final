@@ -5,7 +5,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
-import { ClustersPortFailure, type ClusterDisconnectPort } from "../../features/clusters/clustersContract";
+import {
+  ClustersPortFailure,
+  type ClusterDisconnectPort,
+  type ClusterDisconnectReceipt,
+} from "../../features/clusters/clustersContract";
 import type { HomeClusterChoice } from "../../features/home/homeContract";
 import { I18nProvider } from "../../shared/i18n";
 import { ClusterDisconnectDialog } from "./ClusterDisconnectDialog";
@@ -34,7 +38,9 @@ describe("ClusterDisconnectDialog", () => {
       // Replaced synchronously by the promise executor below.
     };
     const disconnect = vi.fn((_clusterId: string, _signal?: AbortSignal) =>
-      new Promise((resolve) => { resolveDisconnect = () => resolve(uninstallingReceipt()); }));
+      new Promise<ClusterDisconnectReceipt>((resolve) => {
+        resolveDisconnect = () => resolve(uninstallingReceipt());
+      }));
     const loadDisconnect = vi.fn().mockResolvedValue({
       status: "completed",
       cleanupCompleted: true,
