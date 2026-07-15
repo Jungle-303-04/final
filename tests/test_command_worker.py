@@ -271,6 +271,46 @@ def test_human_command_is_queued_when_auto_command_kill_switch_is_off(
     assert len(store.calls) == 1
 
 
+def test_direct_command_is_queued_for_management_cluster_without_recorded_approval() -> None:
+    store = ManagementClusterStore(approval=None)
+    request = CommandRequestedBody(
+        cluster_id="kubernetes-ops",
+        action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        namespace=Sandbox.NAMESPACE,
+        environment="production",
+        reason="direct scale",
+        diff=Diff(
+            resource="deployment/checkout-api",
+            namespace=Sandbox.NAMESPACE,
+            desired_image="checkout:new",
+            actual_image="checkout:old",
+            risk=Sandbox.RISK_TAG,
+            workflow_run_id="workflow-1",
+        ),
+        workspace_id="workspace-1",
+        workflow_run_id="workflow-1",
+        requested_by="user-1",
+        direct_execution=True,
+        payload={"namespace": Sandbox.NAMESPACE, "name": "checkout-api", "replicas": 3},
+    )
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                request,
+                SimpleNamespace(correlation_id="corr-direct-management", db=store),
+            )
+        )
+    )
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert events[0].plan.direct_execution is True
+    assert store.calls[0][1]["direct_execution"] is True
+
+
 def test_non_sandbox_rollout_restart_requires_recorded_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

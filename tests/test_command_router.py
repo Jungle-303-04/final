@@ -586,6 +586,31 @@ def test_scale_deployment_rejects_management_cluster_at_gateway() -> None:
     asyncio.run(run())
 
 
+def test_manual_direct_command_accepts_management_cluster_without_recorded_approval() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await commands(
+            CommandRequest(
+                cluster_id="kubernetes-ops",
+                action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                namespace="sandbox",
+                diff=manual_diff(),
+                direct_execution=True,
+            ),
+            current_session(),
+            SpyAccessDb(allowed=True, cluster_role="management"),
+            events,
+        )
+
+        assert response.accepted is True
+        assert response.command_id is not None
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.direct_execution is True
+        assert events.body.approval_ref is None
+
+    asyncio.run(run())
+
+
 def test_agent_debug_query_denies_without_cluster_read_access() -> None:
     async def run() -> None:
         db = SpyDebugQueryDb(allowed=False)
