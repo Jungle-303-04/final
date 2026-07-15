@@ -378,6 +378,26 @@ def test_dispatcher_routes_resource_request_tuning_to_review_doc() -> None:
     assert "자동 적용값이 아닙니다" in body.patches[0].content
 
 
+@pytest.mark.parametrize("action_type", ["config_fix", "scheduling_constraint_fix"])
+def test_dispatcher_routes_policy_bound_draft_pr_actions_to_review_doc(action_type: str) -> None:
+    event = selected_event(action_type)
+
+    body = asyncio.run(
+        RecoveryDispatcher().dispatch_body(
+            event,
+            authority=None,
+            correlation_id="corr-1",
+        )
+    )
+
+    assert isinstance(body, SafePrRequestedBody)
+    assert body.pr_kind == "safe_pr_review_doc"
+    assert len(body.patches) == 1
+    assert body.patches[0].path.startswith(".gitops/recovery/")
+    assert action_type in body.patches[0].path
+    assert event.selected.title in body.patches[0].content
+
+
 def test_dispatcher_rejects_authority_for_another_cluster() -> None:
     context = replace(authority_context(), cluster_id="cluster-other")
 
