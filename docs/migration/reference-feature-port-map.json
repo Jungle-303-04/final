@@ -179,6 +179,31 @@
           "test": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
         }
       }
+    },
+    "reference.feature.120": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.checks.observations",
+      "frontendContract": "frontend/src/features/checks/checksContract.ts",
+      "verification": [
+        "tests/test_checks_router.py",
+        "tests/test_checks_observation_projection.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/pages/checks/ChecksPage.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/checks/router.py#get_checks_overview",
+          "consumer": "src/domains/checks/observation_projection.py#checks_overview",
+          "test": "tests/test_checks_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
+        }
+      }
     }
   },
   "sections": {
