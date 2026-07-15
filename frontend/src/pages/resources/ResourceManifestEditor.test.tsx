@@ -12,6 +12,29 @@ import { ResourceManifestEditor } from "./ResourceManifestEditor";
 afterEach(cleanup);
 
 describe("ResourceManifestEditor", () => {
+  it("announces loading with the shared reduced-motion-safe spinner", async () => {
+    const user = userEvent.setup();
+    const source = deferred<Awaited<ReturnType<ResourceManifestPort["loadSource"]>>>();
+    const port: ResourceManifestPort = {
+      loadSource: vi.fn().mockReturnValue(source.promise),
+      preview: vi.fn(),
+      approve: vi.fn(),
+    };
+    render(
+      <I18nProvider navigatorLanguage="ko-KR" storage={null}>
+        <ResourceManifestEditor detail={POD_DETAIL} port={port} />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Git으로 YAML 편집" }));
+
+    const status = await screen.findByRole("status");
+    const spinner = status.querySelector<HTMLElement>("[data-slot=spinner]");
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.classList.contains("motion-reduce:animate-none")).toBe(true);
+  });
+
   it("loads Git YAML, validates an exact diff, and requires a human approval reason", async () => {
     const user = userEvent.setup();
     const sourceYaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: checkout-api-0\n  namespace: shop\nspec:\n  restartPolicy: Always\n";
@@ -74,3 +97,11 @@ describe("ResourceManifestEditor", () => {
     expect(screen.getByText(/PR 검토·병합 후에만/u)).toBeTruthy();
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
