@@ -174,6 +174,7 @@ const CAPABILITIES: TimelineCapabilities = {
   selectedSourceMode: "retained",
   availableSourceModes: ["retained"],
   maxRetainedRangeMs: 91_337,
+  queryBounds: { serverNowMs: 2_000, earliestQueryableMs: 1_000, maxWindowMs: 91_337 },
   namespaceFilterPolicy: "not_required",
   controlSurface: timelineControlSurface(),
 };
@@ -283,6 +284,7 @@ function controlOption(id: string, label: string) {
 function timelineOverview() {
   return {
     window: { fromMs: 1_000, toMs: 2_000 },
+    queryBounds: { serverNowMs: 2_000, earliestQueryableMs: 1_000, maxWindowMs: 91_337 },
     bucketWidthMs: 1_000,
     buckets: [{ fromMs: 1_000, toMs: 2_000, eventCount: 0, problemCount: 0 }],
     coverage: [],

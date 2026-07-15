@@ -6,7 +6,7 @@ import {
   type TimelineControlOption,
   type TimelineOverview,
 } from "./timelineContract";
-import type { TimelineUrlState } from "./timelineUrlState";
+import type { TimelineUrlState } from "../filters/timelineUrlState";
 
 export interface TimelineActivitySelection {
   option: TimelineActivityControlOption;
@@ -73,6 +73,7 @@ export function isSameTimelineUrlState(left: TimelineUrlState, right: TimelineUr
     left.selectedEventKey === right.selectedEventKey &&
     left.lensZoomRung === right.lensZoomRung &&
     left.rangeId === right.rangeId &&
+    sameLens(left.lens, right.lens) &&
     sameStrings(left.activityFilter, right.activityFilter) &&
     sameStrings(left.kindFilter, right.kindFilter) &&
     sameMode(left.mode, right.mode)
@@ -124,4 +125,12 @@ function sameMode(left: TimelineUrlState["mode"], right: TimelineUrlState["mode"
     return left.fromMs === right.fromMs && left.toMs === right.toMs;
   }
   return left.kind === "live" && right.kind === "live" && left.widthMs === right.widthMs && left.all === right.all;
+}
+
+function sameLens(left: TimelineUrlState["lens"], right: TimelineUrlState["lens"]): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "window" && right.kind === "window") {
+    return left.fromMs === right.fromMs && left.toMs === right.toMs;
+  }
+  return left.kind !== "trailing" || right.kind !== "trailing" || left.widthMs === right.widthMs;
 }

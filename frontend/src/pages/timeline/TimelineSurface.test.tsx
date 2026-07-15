@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,15 +16,31 @@ import type { ClusterScope } from "../../shared/parity/referenceParity";
 import { I18nProvider } from "../../shared/i18n";
 import { TimelineSurface } from "./TimelineSurface";
 
+let nextAnimationFrame = 0;
+let pendingAnimationFrames = new Map<number, FrameRequestCallback>();
+
 beforeEach(() => {
-  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => (
-    setTimeout(() => callback(Date.now()), 0) as unknown as number
-  ));
-  vi.stubGlobal("cancelAnimationFrame", (frame: number) => clearTimeout(frame));
+  nextAnimationFrame = 0;
+  pendingAnimationFrames = new Map();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    const frame = ++nextAnimationFrame;
+    pendingAnimationFrames.set(frame, callback);
+    queueMicrotask(() => {
+      const pending = pendingAnimationFrames.get(frame);
+      if (pending === undefined) return;
+      pendingAnimationFrames.delete(frame);
+      pending(0);
+    });
+    return frame;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (frame: number) => {
+    pendingAnimationFrames.delete(frame);
+  });
 });
 
 afterEach(() => {
   cleanup();
+  pendingAnimationFrames.clear();
   document.documentElement.classList.remove("dark");
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -196,46 +212,27 @@ describe("TimelineSurface", () => {
   });
 
   it("keeps the retained list mounted while a live session rotates or its replacement fails", async () => {
-    vi.useFakeTimers();
+    const user = userEvent.setup();
     const replacement = deferred<TimelineSnapshot>();
     const readTimeline = vi.fn()
-      .mockResolvedValueOnce(liveSnapshot(1_500))
+      .mockResolvedValueOnce(liveSnapshot(1))
       .mockReturnValueOnce(replacement.promise)
-      .mockResolvedValueOnce(liveSnapshot(1_500));
+      .mockResolvedValueOnce(liveSnapshot(30_000));
     renderTimeline(timelinePort({ readTimeline }), "/timeline", "en-US");
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
+    expect(await screen.findByText("Deployment checkout changed")).toBeTruthy();
     expect(readTimeline).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_499);
-    });
-    expect(readTimeline).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1);
-    });
-    expect(readTimeline).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(readTimeline).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
     expect(screen.queryByText("Loading timeline…")).toBeNull();
     expect(screen.getByText("Resynchronizing retained timeline data…")).toBeTruthy();
 
-    await act(async () => {
-      replacement.reject(new TimelineFailure("offline"));
-      await Promise.resolve();
-    });
+    replacement.reject(new TimelineFailure("offline"));
+    expect((await screen.findByRole("alert")).textContent).toContain("Timeline data is unavailable.");
     expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("Timeline data is unavailable.");
 
-    await act(async () => {
-      screen.getByRole("button", { name: "Retry timeline" }).click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(readTimeline).toHaveBeenCalledTimes(3);
+    await user.click(screen.getByRole("button", { name: "Retry timeline" }));
+    await waitFor(() => expect(readTimeline).toHaveBeenCalledTimes(3));
     expect(screen.getByText("Deployment checkout changed")).toBeTruthy();
   });
 
@@ -458,7 +455,144 @@ describe("TimelineSurface", () => {
     expect(screen.queryByText(/Pinned lanes/i)).toBeNull();
   });
 
-  it("replaces the server snapshot for a range but keeps lens changes local to the rendered view", async () => {
+  it("restores an exact frozen deep-link lens without restarting the snapshot or stream", async () => {
+    const baseSnapshot = lensSnapshot();
+    const readTimeline = vi.fn(async (query) => ({
+      ...baseSnapshot,
+      session: { ...baseSnapshot.session, query },
+    }));
+    const subscribeTimeline = vi.fn(idleStream);
+    const { router } = renderTimeline(
+      timelinePort({ readTimeline, subscribeTimeline }),
+      "/timeline?from=1000&to=2000&lensFrom=1800&lensTo=2000",
+      "en-US",
+    );
+
+    expect(await screen.findByText("Late event")).toBeTruthy();
+    expect(screen.queryByText("Early event")).toBeNull();
+    expect(readTimeline).toHaveBeenCalledTimes(1);
+    expect(subscribeTimeline).toHaveBeenCalledTimes(1);
+    const initial = new URLSearchParams(router.state.location.search);
+    expect(initial.get("from")).toBe("1000");
+    expect(initial.get("to")).toBe("2000");
+    expect(initial.get("lensFrom")).toBe("1800");
+    expect(initial.get("lensTo")).toBe("2000");
+
+    await act(async () => {
+      await router.navigate("/timeline?from=1000&to=2000&lensFrom=1200&lensTo=1300");
+    });
+    expect(await screen.findByText("Early event")).toBeTruthy();
+    expect(screen.queryByText("Late event")).toBeNull();
+    expect(readTimeline).toHaveBeenCalledTimes(1);
+    expect(subscribeTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects future and out-of-retention custom bounds before issuing a snapshot", async () => {
+    const user = userEvent.setup();
+    const fromMs = Date.parse("2026-07-15T11:50");
+    const toMs = Date.parse("2026-07-15T12:00");
+    const boundedOverview = {
+      ...timelineOverview(),
+      window: { fromMs, toMs },
+      queryBounds: { serverNowMs: toMs, earliestQueryableMs: fromMs, maxWindowMs: toMs - fromMs },
+    };
+    const baseSnapshot = lensSnapshot();
+    const boundedSnapshot = {
+      ...baseSnapshot,
+      session: { ...baseSnapshot.session, window: { fromMs, toMs } },
+    };
+    const readTimeline = vi.fn(async (query) => ({
+      ...boundedSnapshot,
+      session: { ...boundedSnapshot.session, query },
+    }));
+    const port = timelinePort({
+      capabilities: { ...timelinePort().capabilities, maxRetainedRangeMs: toMs - fromMs },
+      readTimeline,
+      readTimelineOverview: vi.fn().mockResolvedValue(boundedOverview),
+    });
+    const { router } = renderTimeline(port, "/timeline", "en-US");
+
+    await screen.findByRole("slider", { name: "Retained timeline strip" });
+    await user.click(screen.getByText("Custom range"));
+    const from = screen.getByLabelText("From") as HTMLInputElement;
+    const to = screen.getByLabelText("To") as HTMLInputElement;
+    const snapshotRequests = readTimeline.mock.calls.length;
+    expect(from.min).toBe("2026-07-15T11:50");
+    expect(to.max).toBe("2026-07-15T12:00");
+
+    fireEvent.change(to, { target: { value: "2026-07-16T12:00" } });
+    await user.click(screen.getByRole("button", { name: "Apply range" }));
+    expect(screen.getByRole("alert").textContent).toContain("current timeline boundary");
+    expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests);
+
+    fireEvent.change(from, { target: { value: "2026-07-15T10:00" } });
+    fireEvent.change(to, { target: { value: "2026-07-15T12:00" } });
+    await user.click(screen.getByRole("button", { name: "Apply range" }));
+    expect(screen.getByRole("alert").textContent).toContain("server-retained timeline boundary");
+    expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests);
+
+    fireEvent.change(from, { target: { value: from.min } });
+    fireEvent.change(to, { target: { value: to.max } });
+    await user.click(screen.getByRole("button", { name: "Apply range" }));
+    await waitFor(() => expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests + 1));
+    expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: { kind: "frozen", fromMs, toMs } }),
+      expect.any(AbortSignal),
+    );
+    expect(document.querySelector<HTMLDetailsElement>("[data-slot='timeline-custom-range']")?.open).toBe(false);
+    const params = new URLSearchParams(router.state.location.search);
+    expect(params.get("from")).toBe(String(fromMs));
+    expect(params.get("to")).toBe(String(toMs));
+  });
+
+  it("returns to live with the frozen selection span and local lens width intact", async () => {
+    const user = userEvent.setup();
+    const controls = timelineControlSurface();
+    const controlSurface = {
+      ...controls,
+      timeRanges: [{ ...controlOption("range-default", "Default range"), durationMs: 600 }],
+      defaultTimeRangeId: "range-default",
+    };
+    const baseSnapshot = lensSnapshot();
+    const readTimeline = vi.fn(async (query) => ({
+      ...baseSnapshot,
+      session: { ...baseSnapshot.session, query },
+    }));
+    const { router } = renderTimeline(
+      timelinePort({
+        capabilities: { ...timelinePort().capabilities, controlSurface },
+        readTimeline,
+      }),
+      "/timeline?from=1000&to=2000&lensFrom=1200&lensTo=1400",
+      "en-US",
+    );
+
+    expect(await screen.findByText("Early event")).toBeTruthy();
+    expect(screen.queryByText("Late event")).toBeNull();
+    const initialRequests = readTimeline.mock.calls.length;
+
+    await user.click(screen.getByRole("button", { name: "Go live" }));
+    await waitFor(() => expect(readTimeline).toHaveBeenCalledTimes(initialRequests + 1));
+    expect(readTimeline).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: { kind: "live", widthMs: 1_000 },
+        control: expect.objectContaining({ rangeId: "custom" }),
+      }),
+      expect.any(AbortSignal),
+    );
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("window")).toBe("1000");
+      expect(params.get("range")).toBe("custom");
+      expect(params.get("lensWidth")).toBe("200");
+      expect(params.get("lensFrom")).toBeNull();
+      expect(params.get("lensTo")).toBeNull();
+    });
+    expect(screen.getByText("Late event")).toBeTruthy();
+    expect(screen.queryByText("Early event")).toBeNull();
+  });
+
+  it("keeps pan, keyboard, and zoom inside the visible lens, then resets it when the selected range changes", async () => {
     const user = userEvent.setup();
     const controls = timelineControlSurface();
     const controlSurface = {
@@ -485,19 +619,55 @@ describe("TimelineSurface", () => {
       readTimeline,
       subscribeTimeline,
     });
-    const { router } = renderTimeline(port, "/timeline?zoom=lens-wide", "en-US");
+    const { router } = renderTimeline(
+      port,
+      "/timeline?zoom=lens-wide&lensFrom=1800&lensTo=2000",
+      "en-US",
+    );
 
-    expect(await screen.findByText("Early event")).toBeTruthy();
-    expect(screen.getByText("Late event")).toBeTruthy();
+    expect(await screen.findByText("Late event")).toBeTruthy();
+    expect(screen.queryByText("Early event")).toBeNull();
     const snapshotRequests = readTimeline.mock.calls.length;
     const streamSessions = subscribeTimeline.mock.calls.length;
 
     await user.selectOptions(screen.getByRole("combobox", { name: "Lens zoom" }), "lens-near");
-    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get("zoom")).toBe("lens-near"));
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("zoom")).toBe("lens-near");
+      expect(params.get("lensFrom")).toBe("1850");
+      expect(params.get("lensTo")).toBe("1950");
+    });
     expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests);
     expect(subscribeTimeline).toHaveBeenCalledTimes(streamSessions);
     expect(screen.queryByText("Early event")).toBeNull();
     expect(screen.getByText("Late event")).toBeTruthy();
+
+    const axis = screen.getByRole("slider", { name: "Retained timeline strip" });
+    Object.defineProperty(axis, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ left: 0, width: 100 }),
+    });
+    fireEvent.pointerDown(axis, { clientX: 0, pointerId: 7 });
+    fireEvent.pointerMove(axis, { clientX: 20, pointerId: 7 });
+    fireEvent.pointerUp(axis, { clientX: 20, pointerId: 7 });
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("lensFrom")).toBe("1200");
+      expect(params.get("lensTo")).toBe("1300");
+    });
+    expect(screen.getByText("Early event")).toBeTruthy();
+    expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests);
+    expect(subscribeTimeline).toHaveBeenCalledTimes(streamSessions);
+
+    axis.focus();
+    await user.keyboard("{PageDown}");
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("lensFrom")).toBe("1300");
+      expect(params.get("lensTo")).toBe("1400");
+    });
+    expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests);
+    expect(subscribeTimeline).toHaveBeenCalledTimes(streamSessions);
 
     await user.click(screen.getByRole("button", { name: "Wide range" }));
     await waitFor(() => expect(readTimeline).toHaveBeenCalledTimes(snapshotRequests + 1));
@@ -508,8 +678,15 @@ describe("TimelineSurface", () => {
       }),
       expect.any(AbortSignal),
     );
-    expect(new URLSearchParams(router.state.location.search).get("window")).toBe("1800");
-    expect(new URLSearchParams(router.state.location.search).get("range")).toBe("range-wide");
+    await waitFor(() => {
+      const params = new URLSearchParams(router.state.location.search);
+      expect(params.get("window")).toBe("1800");
+      expect(params.get("range")).toBe("range-wide");
+      expect(params.get("lensFrom")).toBeNull();
+      expect(params.get("lensTo")).toBeNull();
+    });
+    expect(screen.getByText("Early event")).toBeTruthy();
+    expect(screen.getByText("Late event")).toBeTruthy();
 
     await act(async () => { await router.navigate(-1); });
     await waitFor(() => {
@@ -544,6 +721,7 @@ describe("TimelineSurface", () => {
         selectedSourceMode: "retained",
         availableSourceModes: ["retained"],
         maxRetainedRangeMs: 604_800_000,
+        queryBounds: { serverNowMs: 2_000, earliestQueryableMs: 0, maxWindowMs: 604_800_000 },
         namespaceFilterPolicy: "not_required",
         controlSurface: {
           ...controls,
@@ -747,6 +925,7 @@ function timelinePort(overrides: Partial<TimelinePort> = {}): TimelinePort {
       selectedSourceMode: "retained",
       availableSourceModes: ["retained"],
       maxRetainedRangeMs: 604_800_000,
+      queryBounds: { serverNowMs: 2_000, earliestQueryableMs: 0, maxWindowMs: 604_800_000 },
       namespaceFilterPolicy: "not_required",
       controlSurface: timelineControlSurface(),
     },
@@ -868,6 +1047,7 @@ function controlOption(id: string, label: string) {
 function timelineOverview() {
   return {
     window: { fromMs: 1_000, toMs: 2_000 },
+    queryBounds: { serverNowMs: 2_000, earliestQueryableMs: 0, maxWindowMs: 604_800_000 },
     bucketWidthMs: 1_000,
     buckets: [{ fromMs: 1_000, toMs: 2_000, eventCount: 0, problemCount: 0 }],
     coverage: [],

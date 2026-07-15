@@ -5,13 +5,14 @@ import {
   isTimelineHighFrequencyOnlyChange,
   parseTimelineUrlState,
   writeTimelineSearchParams,
-} from "./timelineUrlState";
+} from "../filters/timelineUrlState";
 
 describe("Timeline URL state", () => {
   const retainedOptions = {
     isRetained: true,
     maxRetainedRangeMs: DAY_MILLISECONDS * 7,
     requiresNamespaceFilter: false,
+    customTimeRangeId: "custom",
   } as const;
 
   it("parses supported URL state and removes the unsupported legacy pin selector", () => {
@@ -34,6 +35,7 @@ describe("Timeline URL state", () => {
       selectedEventKey: "inventory:checkout:7",
       lensZoomRung: null,
       rangeId: null,
+      lens: { kind: "selection" },
     });
 
     const written = writeTimelineSearchParams(
@@ -140,6 +142,10 @@ describe("Timeline URL state", () => {
       new URLSearchParams("zoom=wide&view=list"),
       new URLSearchParams("zoom=near&view=list"),
     )).toBe(true);
+    expect(isTimelineHighFrequencyOnlyChange(
+      new URLSearchParams("lensFrom=100&lensTo=200"),
+      new URLSearchParams("lensFrom=120&lensTo=220"),
+    )).toBe(true);
   });
 
   it("round-trips a descriptor-owned lens ID without changing the retained mode", () => {
@@ -159,5 +165,21 @@ describe("Timeline URL state", () => {
 
     expect(state.mode).toEqual({ kind: "live", widthMs: 91_337 });
     expect(writeTimelineSearchParams(new URLSearchParams(), state, options).get("window")).toBeNull();
+  });
+
+  it("round-trips an exact local lens without turning a frozen selection into another query", () => {
+    const state = parseTimelineUrlState(
+      new URLSearchParams("from=1000&to=2000&lensFrom=1200&lensTo=1500"),
+      retainedOptions,
+    );
+
+    expect(state.mode).toEqual({ kind: "frozen", fromMs: 1_000, toMs: 2_000 });
+    expect(state.rangeId).toBe(retainedOptions.customTimeRangeId);
+    expect(state.lens).toEqual({ kind: "window", fromMs: 1_200, toMs: 1_500 });
+    const written = writeTimelineSearchParams(new URLSearchParams(), state, retainedOptions);
+    expect(written.get("from")).toBe("1000");
+    expect(written.get("to")).toBe("2000");
+    expect(written.get("lensFrom")).toBe("1200");
+    expect(written.get("lensTo")).toBe("1500");
   });
 });

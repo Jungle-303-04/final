@@ -29,7 +29,7 @@ import {
   validateTimelineKinds,
 } from "../../features/timeline/timelineControlState";
 import { groupTimelineEvents } from "../../features/timeline/timelinePresentation";
-import { useTimelineUrlState } from "../../features/timeline/useTimelineUrlState";
+import { useTimelineUrlState } from "../../features/filters/useTimelineUrlState";
 import type { ClusterScope } from "../../shared/parity/referenceParity";
 import { useTimelineDataFrame, type TimelineDataFrame } from "./useTimelineDataFrame";
 import { TimelineEventDetailSheet } from "./TimelineEventDetailSheet";
@@ -42,7 +42,8 @@ import { TimelineCoverageNotice } from "./TimelineCoverageNotice";
 import { TimelineToolbar } from "./TimelineToolbar";
 import { TimelineStrip } from "./TimelineStrip";
 import { useTimelineOverviewFrame } from "./useTimelineOverviewFrame";
-import { filterTimelineEventsForLens, timelineLensWindow } from "./timelineStripModel";
+import { filterTimelineEventsForLens, resolveTimelineLens } from "./timelineStripModel";
+import type { TimelineLens } from "../../features/filters/timelineUrlState";
 
 export function TimelineSurface({
   port,
@@ -102,11 +103,6 @@ export function TimelineSurface({
     filters: { ...overviewQuery.filters, kinds: validatedKinds },
   }), [overviewQuery, validatedKinds]);
   const timeline = useTimelineDataFrame(port, query);
-  const lensDurationMs = (
-    capabilities.controlSurface.lensZoomRungs.find(
-      (rung) => rung.id === normalizedState.lensZoomRung,
-    ) ?? requiredControl(capabilities.controlSurface.lensZoomRungs)
-  ).durationMs;
 
   return (
     <ProductPageFrame>
@@ -131,11 +127,16 @@ export function TimelineSurface({
       />
       <TimelineStrip
         capabilities={capabilities}
+        formatDate={formatDate}
         frame={overview.frame}
+        lens={normalizedState.lens}
         lensZoomRung={normalizedState.lensZoomRung ?? capabilities.controlSurface.defaultLensZoomRung}
         mode={normalizedState.mode}
+        rangeId={normalizedState.rangeId ?? capabilities.controlSurface.customTimeRangeId}
+        onCustomRange={url.setCustomRange}
+        onGoLive={url.setGoLive}
+        onLensChange={url.setLens}
         onLensZoomRungChange={url.setLensZoomRung}
-        onModeChange={url.setMode}
         onRangeChange={url.setRange}
         t={t}
       />
@@ -145,7 +146,8 @@ export function TimelineSurface({
           formatNumber={formatNumber}
           frame={timeline.frame}
           grouping={normalizedState.grouping}
-          lensDurationMs={lensDurationMs}
+          lens={normalizedState.lens}
+          coverageSources={overview.frame.phase === "ready" ? overview.frame.overview.coverageSources : []}
           onRetry={timeline.retry}
           onSelectedEventKeyChange={url.setSelectedEventKey}
           selectedEventKey={normalizedState.selectedEventKey}
@@ -164,7 +166,7 @@ function timelineUrlOptions(capabilities: TimelineCapabilities) {
     ?? requiredControl(controls.timeRanges);
   return {
     isRetained: capabilities.selectedSourceMode === "retained",
-    maxRetainedRangeMs: capabilities.maxRetainedRangeMs,
+    maxRetainedRangeMs: capabilities.queryBounds.maxWindowMs,
     requiresNamespaceFilter: capabilities.namespaceFilterPolicy === "required",
     defaultViewMode: requiredControlId<TimelineViewMode>(controls.views),
     defaultShowDeleted: controls.deleted.default,
@@ -174,6 +176,7 @@ function timelineUrlOptions(capabilities: TimelineCapabilities) {
     defaultLensZoomRung: controls.defaultLensZoomRung,
     defaultLiveWindowMs: defaultTimeRange.durationMs,
     defaultTimeRangeId: controls.defaultTimeRangeId,
+    customTimeRangeId: controls.customTimeRangeId,
   };
 }
 
@@ -209,7 +212,8 @@ function TimelineDataBoundary({
   formatNumber,
   frame,
   grouping,
-  lensDurationMs,
+  lens,
+  coverageSources,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -221,7 +225,8 @@ function TimelineDataBoundary({
   formatNumber: I18nController["formatNumber"];
   frame: TimelineDataFrame;
   grouping: TimelineGrouping;
-  lensDurationMs: number;
+  lens: TimelineLens;
+  coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -249,7 +254,8 @@ function TimelineDataBoundary({
       formatNumber={formatNumber}
       frame={frame}
       grouping={grouping}
-      lensDurationMs={lensDurationMs}
+      lens={lens}
+      coverageSources={coverageSources}
       onRetry={onRetry}
       onSelectedEventKeyChange={onSelectedEventKeyChange}
       selectedEventKey={selectedEventKey}
@@ -265,7 +271,8 @@ function TimelineReadyData({
   formatNumber,
   frame,
   grouping,
-  lensDurationMs,
+  lens,
+  coverageSources,
   onRetry,
   onSelectedEventKeyChange,
   selectedEventKey,
@@ -277,7 +284,8 @@ function TimelineReadyData({
   formatNumber: I18nController["formatNumber"];
   frame: Exclude<TimelineDataFrame, { phase: "loading" } | { phase: "failed" }>;
   grouping: TimelineGrouping;
-  lensDurationMs: number;
+  lens: TimelineLens;
+  coverageSources: readonly import("../../features/timeline/timelineContract").TimelineCoverageSourceAvailability[];
   onRetry: () => void;
   onSelectedEventKeyChange: (sourceKey: string | null) => void;
   selectedEventKey: string | null;
@@ -287,8 +295,8 @@ function TimelineReadyData({
 }) {
   const snapshot = frame.snapshot;
   const lensWindow = useMemo(
-    () => timelineLensWindow(snapshot.session.window, lensDurationMs),
-    [lensDurationMs, snapshot.session.window],
+    () => resolveTimelineLens(snapshot.session.window, lens),
+    [lens, snapshot.session.window],
   );
   const lensEvents = useMemo(
     () => lensCoversWindow(lensWindow, snapshot.session.window)
@@ -373,7 +381,12 @@ function TimelineReadyData({
         ) : <TimelineStreamStatus onRetry={onRetry} stream={frame.stream} t={t} />}
         <TimelineCoverageNotice coverage={lensCoverage} formatDate={formatDate} t={t} />
         {lensEvents.length === 0 ? (
-          <TimelineEmptyState coverageCount={lensCoverage.length} filters={snapshot.session.query.filters} t={t} />
+          <TimelineEmptyState
+            coverageCount={lensCoverage.length}
+            coverageUnavailable={coverageSources.some((source) => source.availability === "unavailable")}
+            filters={snapshot.session.query.filters}
+            t={t}
+          />
         ) : viewMode === "list" ? (
           <TimelineEventList
             formatDate={formatDate}
@@ -411,15 +424,19 @@ function lensCoversWindow(lens: TimelineWindow, window: TimelineWindow): boolean
 
 function TimelineEmptyState({
   coverageCount,
+  coverageUnavailable,
   filters,
   t,
 }: {
   coverageCount: number;
+  coverageUnavailable: boolean;
   filters: TimelineQuery["filters"];
   t: I18nController["t"];
 }) {
   const key = coverageCount > 0
     ? "timeline.empty.coverage"
+    : coverageUnavailable
+      ? "timeline.empty.unavailable"
     : hasAppliedFilters(filters)
       ? "timeline.empty.filtered"
       : "timeline.empty.quiet";
