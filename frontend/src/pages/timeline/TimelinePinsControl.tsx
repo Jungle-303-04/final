@@ -1,6 +1,8 @@
+import { type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { timelinePinLabel } from "../../features/timeline/timelinePinTargets";
 import type { I18nController } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
+import { TimelinePinsFeedback } from "./TimelinePinsFeedback";
 import type { TimelinePinsController } from "./useTimelinePins";
 
 export function TimelinePinsControl({
@@ -29,16 +31,23 @@ export function TimelinePinsControl({
           <span className="min-w-0 break-words">{t("timeline.pins.filter")}</span>
         </label>
       ) : null}
-      <details className="relative min-w-0 max-w-full" data-slot="timeline-pins-manager">
+      <details className="relative min-w-0 max-w-full" data-slot="timeline-pins-manager" onKeyDown={closeTimelinePinsOnEscape}>
         <summary className="flex h-9 max-w-full cursor-pointer list-none items-center rounded-md border px-2 text-sm font-medium outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-ring">
           <span className="truncate">{label}</span>
         </summary>
-        <div className="absolute right-0 z-20 mt-1 grid w-[min(24rem,calc(100vw-2rem))] min-w-0 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
+        <div className="absolute left-0 z-20 mt-1 grid w-[min(24rem,calc(100vw-2rem))] min-w-0 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md sm:right-0 sm:left-auto">
           <TimelinePinsManagerContent pins={pins} t={t} />
         </div>
       </details>
     </div>
   );
+}
+
+function closeTimelinePinsOnEscape(event: ReactKeyboardEvent<HTMLDetailsElement>) {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  event.currentTarget.open = false;
+  event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
 }
 
 function TimelinePinsManagerContent({
@@ -64,7 +73,7 @@ function TimelinePinsManagerContent({
 
   return (
     <>
-      <TimelinePinsNotice notice={pins.notice} t={t} />
+      <TimelinePinsFeedback notice={pins.notice} t={t} />
       {pins.pinSet.pins.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("timeline.pins.empty")}</p>
       ) : (
@@ -108,22 +117,4 @@ function TimelinePinsFailure({
       <div><Button onClick={onRetry} size="sm" type="button" variant="outline">{t("timeline.pins.retry")}</Button></div>
     </div>
   );
-}
-
-function TimelinePinsNotice({
-  notice,
-  t,
-}: {
-  notice: TimelinePinsController["notice"];
-  t: I18nController["t"];
-}) {
-  if (notice === null) return null;
-  const key = notice === "added"
-    ? "timeline.pins.added"
-    : notice === "removed"
-      ? "timeline.pins.removed"
-      : notice === "conflict"
-        ? "timeline.pins.conflict"
-        : "timeline.pins.failed";
-  return <p aria-live="polite" className="text-sm text-muted-foreground" role="status">{t(key)}</p>;
 }

@@ -502,7 +502,8 @@ describe("TimelineSurface", () => {
       undefined,
       "workspace-1",
     ));
-    expect(await screen.findByText("The subject is saved to your pins.")).toBeTruthy();
+    const savedNotices = await screen.findAllByText("The subject is saved to your pins.");
+    expect(savedNotices.some((notice) => notice.closest("[data-slot='sheet-content']") !== null)).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "Close" }));
     await user.click(screen.getByText("Pinned lanes"));
@@ -516,6 +517,27 @@ describe("TimelineSurface", () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  it("keeps the pin manager within a narrow viewport and closes it with Escape", async () => {
+    const user = userEvent.setup();
+    renderTimeline(timelinePort(), "/timeline?view=list", "en-US");
+
+    await screen.findByText("Pinned lanes");
+    const manager = document.querySelector<HTMLDetailsElement>("[data-slot='timeline-pins-manager']");
+    const summary = manager?.querySelector<HTMLElement>("summary");
+    expect(manager).not.toBeNull();
+    expect(summary).not.toBeNull();
+    expect(manager?.querySelector("div")?.className).toContain("left-0");
+    expect(manager?.querySelector("div")?.className).toContain("sm:right-0");
+
+    summary?.focus();
+    await user.click(summary!);
+    expect(manager?.open).toBe(true);
+    summary?.focus();
+    fireEvent.keyDown(summary!, { key: "Escape" });
+    expect(manager?.open).toBe(false);
+    expect(document.activeElement).toBe(summary);
   });
 
   it("refreshes the pin set after a revision conflict without restarting the Timeline stream", async () => {
@@ -534,7 +556,8 @@ describe("TimelineSurface", () => {
     const streamSubscriptions = subscribeTimeline.mock.calls.length;
     await user.click(screen.getByRole("button", { name: "Pin subject" }));
 
-    expect(await screen.findByText("Your pins changed in another session. The current set has been refreshed.")).toBeTruthy();
+    const conflictNotices = await screen.findAllByText("Your pins changed in another session. The current set has been refreshed.");
+    expect(conflictNotices.some((notice) => notice.closest("[data-slot='sheet-content']") !== null)).toBe(true);
     expect(upsertTimelinePin).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 3 }), undefined, "workspace-1");
     expect(readTimelinePins).toHaveBeenCalledTimes(2);
     expect(readTimeline).toHaveBeenCalledTimes(snapshotReads);

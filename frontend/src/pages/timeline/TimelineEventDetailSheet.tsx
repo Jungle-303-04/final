@@ -17,6 +17,7 @@ import {
   timelinePinTargetKey,
 } from "../../features/timeline/timelinePinTargets";
 import type { TimelineEvent } from "../../features/timeline/timelineContract";
+import { TimelinePinsFeedback } from "./TimelinePinsFeedback";
 import type { TimelinePinsController } from "./useTimelinePins";
 
 export function TimelineEventDetailSheet({
@@ -78,7 +79,8 @@ export function TimelineEventDetailSheet({
               </DetailSection>
               {pins?.phase === "ready" && pinTarget !== null ? (
                 <DetailSection heading={t("timeline.pins.title")}>
-                  <div>
+                  <div className="grid gap-2">
+                    <TimelinePinsFeedback notice={pins.notice} t={t} />
                     <Button
                       disabled={pins.pendingPinId !== null || pins.pendingTargetKey !== null}
                       onClick={() => {
