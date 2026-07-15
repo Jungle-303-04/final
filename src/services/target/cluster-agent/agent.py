@@ -980,7 +980,8 @@ class TargetClusterAgent:
             Command.CLUSTER_AGENT_UNINSTALL_ACTION,
         }:
             return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
-        if self.management_write_blocked(action):
+        direct_execution = self.direct_execution_requested(command)
+        if self.management_write_blocked(action, direct_execution=direct_execution):
             LOGGER.warning(
                 "management_agent_ignored_write_command",
                 extra={
@@ -997,6 +998,7 @@ class TargetClusterAgent:
             self.write_action_requires_approval(action, command)
             and approval_error
             and not self.approval_exempt_for_environment(action, command)
+            and not direct_execution
         ):
             return self.command_result(False, approval_error)
         try:
@@ -1017,6 +1019,7 @@ class TargetClusterAgent:
                     Gateway.APPROVAL_EXPIRES_AT: self.command_metadata_value(
                         command, Gateway.APPROVAL_EXPIRES_AT
                     ),
+                    Gateway.DIRECT_EXECUTION: direct_execution,
                 },
             )
         except Exception as exc:
@@ -1034,7 +1037,12 @@ class TargetClusterAgent:
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
         }
 
-    def management_write_blocked(self, action: str) -> bool:
+    def direct_execution_requested(self, command: CommandRecord) -> bool:
+        return command.get(Gateway.DIRECT_EXECUTION) is True
+
+    def management_write_blocked(self, action: str, *, direct_execution: bool = False) -> bool:
+        if direct_execution:
+            return False
         if self.cluster_role != MANAGEMENT_CLUSTER_ROLE:
             return False
         return action in {
@@ -1149,7 +1157,9 @@ class TargetClusterAgent:
         self,
         ctx: CommandContext[CatalogHelmInstallPayload],
     ) -> JsonObject:
-        if ctx.cluster_role == MANAGEMENT_CLUSTER_ROLE:
+        if ctx.cluster_role == MANAGEMENT_CLUSTER_ROLE and not bool(
+            ctx.metadata.get(Gateway.DIRECT_EXECUTION)
+        ):
             return ctx.fail(MANAGEMENT_READONLY_CODE)
         result = await asyncio.to_thread(run_catalog_helm_install, ctx.payload)
         fields = {

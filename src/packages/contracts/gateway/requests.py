@@ -304,6 +304,8 @@ class CommandRequest(StrictModel):
     diff: dict[str, Any] | None = None
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 class DeploymentScaleRequest(StrictModel):

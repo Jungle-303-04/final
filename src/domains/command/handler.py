@@ -101,6 +101,7 @@ APPROVAL_DECIDED_BY_MISSING_REASON = "write command approval_decided_by is missi
 APPROVAL_DECIDED_BY_MISMATCH_REASON = "write command approval_decided_by mismatch"
 APPROVAL_EXPIRED_REASON = "write command approval is expired"
 APPROVAL_EXPIRES_AT_INVALID_REASON = "write command approval_expires_at is invalid"
+DIRECT_EXECUTION_CONFIRMATION_REQUIRED_REASON = "direct command requires explicit confirmation"
 MANAGEMENT_READONLY_REASON = management_readonly_detail()["code"]
 COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS_ENV = "COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS"
 DEFAULT_COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS = "3600"
@@ -145,6 +146,7 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     if (
         spec is not None
         and spec.requires_approval_for(command.namespace)
+        and not command.direct_execution
         and not approval_exempt_for_environment(command)
     ):
         if not command.approval_ref:
@@ -184,10 +186,18 @@ def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
 
 
 def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
+    if command.direct_execution:
+        return False
     spec = command_action_spec(command.action)
     if spec is None or not spec.requires_approval_for(command.namespace):
         return False
     return not approval_exempt_for_environment(command)
+
+
+def evaluate_direct_execution_confirmation(command: CommandRequestedBody) -> PolicyResult:
+    if command.direct_execution and not command.direct_execution_confirmed:
+        return PolicyResult.reject(DIRECT_EXECUTION_CONFIRMATION_REQUIRED_REASON)
+    return PolicyResult.allow()
 
 
 def utc_now() -> datetime:
@@ -322,6 +332,8 @@ async def _maybe_await(value: object) -> object:
 async def evaluate_management_guard(
     command: CommandRequestedBody, db: AgentCommandStore
 ) -> PolicyResult:
+    if command.direct_execution:
+        return PolicyResult.allow()
     registration_getter = getattr(db, "get_cluster_registration", None)
     registration = None
     if callable(registration_getter):
@@ -364,6 +376,8 @@ def idempotency_key(
         "cluster_id": command.cluster_id,
         "action": command.action,
         "namespace": command.namespace,
+        "direct_execution": command.direct_execution,
+        "direct_execution_confirmed": command.direct_execution_confirmed,
         "approval_ref": command.approval_ref,
         "policy_decision_ref": command.policy_decision_ref,
         "approval_decided_by": (
@@ -424,6 +438,8 @@ def build_plan(
         approval_expires_at=(
             approval_evidence.expires_at if approval_evidence else command.approval_expires_at
         ),
+        direct_execution=command.direct_execution,
+        direct_execution_confirmed=command.direct_execution_confirmed,
     )
 
 
@@ -466,6 +482,12 @@ async def handle_command_requested(
             reason=management_result.require_reason(), requested=evt.to_body()
         )
         return
+    direct_execution_result = evaluate_direct_execution_confirmation(evt)
+    if not direct_execution_result.allowed:
+        yield CommandRejectedBody(
+            reason=direct_execution_result.require_reason(), requested=evt.to_body()
+        )
+        return
     result = evaluate_command_policy(evt)
     if not result.allowed:
         yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
@@ -491,4 +513,6 @@ async def handle_command_requested(
         policy_decision_ref=plan.policy_decision_ref,
         approval_decided_by=plan.approval_decided_by,
         approval_expires_at=plan.approval_expires_at,
+        direct_execution=plan.direct_execution,
+        direct_execution_confirmed=plan.direct_execution_confirmed,
     )

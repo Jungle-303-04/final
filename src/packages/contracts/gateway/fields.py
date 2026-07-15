@@ -27,6 +27,8 @@ class Gateway(StrEnum):
     CORRELATION_ID = "correlation_id"
     DEAD_LETTER_ID = "dead_letter_id"
     DEAD_LETTERS = "dead_letters"
+    DIRECT_EXECUTION = "direct_execution"
+    DIRECT_EXECUTION_CONFIRMED = "direct_execution_confirmed"
     DUPLICATE = "duplicate"
     EVIDENCE_KEY = "evidence_key"
     ERROR = "error"

@@ -1760,6 +1760,34 @@ def test_management_agent_ignores_write_command_before_kubernetes_call() -> None
     assert agent.kubernetes.patches == []
 
 
+def test_management_agent_executes_explicit_direct_workload_command() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.agent_id = "agent-1"
+    agent.cluster_role = "management"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "namespace": "sandbox",
+                    "name": "checkout-api",
+                    "replicas": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert agent.kubernetes.patches[0]["name"] == "checkout-api"
+
+
 def test_management_agent_policy_rejects_self_patch_if_top_guard_is_bypassed() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
