@@ -1,6 +1,6 @@
 import { Activity, Settings } from "lucide-react";
 import { useCallback, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
 import {
@@ -32,6 +32,7 @@ import {
 } from "../features/global-filter/globalFilterContract";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
+  landingProductRouteForReleasedSurfaces,
   productNavigationForReleasedSurfaces,
   productRouteForPath,
   type ProductSurfaceId,
@@ -144,6 +145,7 @@ function ProductShellFrame({
   if (!currentRoute) {
     throw new Error("ProductShell requires at least one released surface");
   }
+  const landingRoute = landingProductRouteForReleasedSurfaces(releasedSurfaceIds);
   const currentRouteLabel = t(navLabelKeys[currentRoute.id]);
   const changeAiOpen = (next: boolean) => {
     if (next && detailWorkspaceOpen && isNarrowAiViewport()) {
@@ -177,14 +179,18 @@ function ProductShellFrame({
         mobileTitle={t("shell.menu.mobileTitle")}
       >
         <SidebarHeader className="h-14 flex-row items-center gap-2 px-2 py-0">
-          <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[state=collapsed]/sidebar:hidden">
+          <Link
+            aria-label={t("shell.brand.landing", { route: t(navLabelKeys[landingRoute.id]) })}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[state=collapsed]/sidebar:justify-center"
+            to={filter.navigationHref(landingRoute.path)}
+          >
             <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
               <Activity aria-hidden="true" className="size-4" />
             </span>
-            <SidebarText className="text-sm font-semibold tracking-tight">
+            <SidebarText className="text-sm font-semibold tracking-tight group-data-[state=collapsed]/sidebar:sr-only">
               {t("product.name")}
             </SidebarText>
-          </div>
+          </Link>
           {!isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
         </SidebarHeader>
 

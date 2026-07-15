@@ -9,6 +9,7 @@ import { alertsKo } from "./catalogs/ko/alerts";
 
 export const ko = {
   "product.name": "Opsia",
+  "shell.brand.landing": "{route} 화면 열기",
   "common.action.back": "뒤로",
   "common.action.cancel": "취소",
   "common.action.clear": "지우기",
@@ -181,6 +182,9 @@ export const ko = {
   "home.action.reconnect": "다시 연결",
   "home.action.reload": "다시 불러오기",
   "home.cluster.available": "조회 가능한 클러스터",
+  "home.cluster.grid.aria": "클러스터 리소스 탐색",
+  "home.cluster.grid.title": "클러스터별 리소스 탐색",
+  "home.cluster.grid.description": "클러스터를 선택하면 해당 리소스 화면으로 이동합니다.",
   "home.cluster.label": "클러스터",
   "home.cluster.select": "클러스터 선택",
   "home.cluster.unknown.description": "{cluster} 클러스터를 찾을 수 없습니다. 위 선택기에서 다른 클러스터를 골라 주세요.",
