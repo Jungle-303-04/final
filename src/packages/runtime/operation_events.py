@@ -16,14 +16,25 @@ from contextlib import suppress
 from typing import Any, Protocol
 
 from redis.asyncio import Redis as AsyncRedis
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.parity import OperationEvent, OperationEventKind
 
 OPERATION_EVENT_CHANNEL_PREFIX = "opsia:operation-events:"
 OPERATION_EVENT_QUEUE_MAX = 64
+OPERATION_EVENT_RECONNECT_INITIAL_SECONDS = 1.0
+OPERATION_EVENT_RECONNECT_MAX_SECONDS = 30.0
 RedisFactory = Callable[[str], AsyncRedis]
 LOGGER = logging.getLogger(__name__)
+_REDIS_TRANSIENT_ERRORS = (
+    ConnectionError,
+    OSError,
+    TimeoutError,
+    RedisConnectionError,
+    RedisTimeoutError,
+)
 
 
 class OperationEventStore(Protocol):
@@ -255,33 +266,24 @@ class RedisOperationEventBroker(DurableOperationEventBroker):
         self._client: AsyncRedis | None = None
         self._pubsub: Any | None = None
         self._listener: asyncio.Task[None] | None = None
+        self._reconnect_task: asyncio.Task[None] | None = None
+        self._connection_lock = asyncio.Lock()
+        self._closed = True
 
     async def start(self) -> None:
-        if self._client is not None:
-            return
-        client = self._redis_factory(self._redis_url)
-        await client.ping()
-        pubsub = client.pubsub(ignore_subscribe_messages=True)
-        await pubsub.psubscribe(f"{OPERATION_EVENT_CHANNEL_PREFIX}*")
-        self._client = client
-        self._pubsub = pubsub
+        self._closed = False
         await super().start()
-        self._listener = asyncio.create_task(self._listen(), name="operation-event-redis-listener")
+        await self._connect_or_schedule()
 
     async def close(self) -> None:
-        if self._listener is not None:
-            self._listener.cancel()
+        self._closed = True
+        reconnect_task = self._reconnect_task
+        self._reconnect_task = None
+        if reconnect_task is not None:
+            reconnect_task.cancel()
             with suppress(asyncio.CancelledError):
-                await self._listener
-            self._listener = None
-        pubsub = self._pubsub
-        self._pubsub = None
-        if pubsub is not None:
-            await pubsub.aclose()
-        client = self._client
-        self._client = None
-        if client is not None:
-            await client.aclose()
+                await reconnect_task
+        await self._disconnect_client()
         await super().close()
 
     async def publish(
@@ -318,6 +320,7 @@ class RedisOperationEventBroker(DurableOperationEventBroker):
             LOGGER.warning(
                 "operation_event_redis_unavailable", extra={"command_id": event.command_id}
             )
+            self._schedule_reconnect()
             return
         envelope = {
             "workspace_id": workspace_id,
@@ -325,24 +328,122 @@ class RedisOperationEventBroker(DurableOperationEventBroker):
         }
         try:
             await client.publish(_channel(workspace_id, event.command_id), _json(envelope))
-        except (ConnectionError, OSError):
+        except _REDIS_TRANSIENT_ERRORS:
             LOGGER.warning("operation_event_redis_publish_failed", exc_info=True)
+            await self._disconnect_client(client)
+            self._schedule_reconnect()
 
-    async def _listen(self) -> None:
-        assert self._pubsub is not None
-        async for raw in self._pubsub.listen():
-            if not isinstance(raw, dict) or raw.get("type") not in {"message", "pmessage"}:
-                continue
-            parsed = _parse_envelope(raw.get("data"))
-            if parsed is None:
-                continue
-            workspace_id, event = parsed
-            await self.deliver(event, workspace_id=workspace_id)
+    async def _connect_or_schedule(self) -> None:
+        if self._client is not None:
+            return
+        try:
+            await self._connect()
+        except _REDIS_TRANSIENT_ERRORS:
+            # Redis is a cross-replica wake-up optimization.  Keep the durable
+            # PostgreSQL broker live and retry asynchronously instead of failing
+            # the gateway lifespan.
+            LOGGER.warning("operation_event_redis_connect_failed", exc_info=True)
+            self._schedule_reconnect()
 
-    def _require_client(self) -> AsyncRedis:
-        if self._client is None:
-            raise RuntimeError("operation event broker is not connected")
-        return self._client
+    async def _connect(self) -> None:
+        async with self._connection_lock:
+            if self._closed or self._client is not None:
+                return
+            client: AsyncRedis | None = None
+            pubsub: Any | None = None
+            try:
+                client = self._redis_factory(self._redis_url)
+                await client.ping()
+                pubsub = client.pubsub(ignore_subscribe_messages=True)
+                await pubsub.psubscribe(f"{OPERATION_EVENT_CHANNEL_PREFIX}*")
+            except _REDIS_TRANSIENT_ERRORS:
+                await self._close_remote(pubsub, client)
+                raise
+            if self._closed:
+                await self._close_remote(pubsub, client)
+                return
+            self._client = client
+            self._pubsub = pubsub
+            self._listener = asyncio.create_task(
+                self._listen(pubsub, client), name="operation-event-redis-listener"
+            )
+
+    def _schedule_reconnect(self) -> None:
+        task = self._reconnect_task
+        if self._closed or self._client is not None or (task is not None and not task.done()):
+            return
+        self._reconnect_task = asyncio.create_task(
+            self._reconnect(), name="operation-event-redis-reconnect"
+        )
+
+    async def _reconnect(self) -> None:
+        delay = OPERATION_EVENT_RECONNECT_INITIAL_SECONDS
+        try:
+            while not self._closed and self._client is None:
+                await asyncio.sleep(delay)
+                try:
+                    await self._connect()
+                except _REDIS_TRANSIENT_ERRORS:
+                    LOGGER.warning("operation_event_redis_reconnect_failed", exc_info=True)
+                    delay = min(
+                        OPERATION_EVENT_RECONNECT_MAX_SECONDS,
+                        max(OPERATION_EVENT_RECONNECT_INITIAL_SECONDS, delay * 2),
+                    )
+                    continue
+                if self._client is not None:
+                    LOGGER.info("operation_event_redis_reconnected")
+                    return
+        finally:
+            if self._reconnect_task is asyncio.current_task():
+                self._reconnect_task = None
+
+    async def _listen(self, pubsub: Any, client: AsyncRedis) -> None:
+        try:
+            async for raw in pubsub.listen():
+                if not isinstance(raw, dict) or raw.get("type") not in {"message", "pmessage"}:
+                    continue
+                parsed = _parse_envelope(raw.get("data"))
+                if parsed is None:
+                    continue
+                workspace_id, event = parsed
+                await self.deliver(event, workspace_id=workspace_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            LOGGER.warning("operation_event_redis_listener_failed", exc_info=True)
+        else:
+            LOGGER.warning("operation_event_redis_listener_stopped")
+        if not self._closed:
+            await self._disconnect_client(client)
+            self._schedule_reconnect()
+
+    async def _disconnect_client(self, expected_client: AsyncRedis | None = None) -> None:
+        async with self._connection_lock:
+            if expected_client is not None and self._client is not expected_client:
+                return
+            listener = self._listener
+            self._listener = None
+            pubsub = self._pubsub
+            self._pubsub = None
+            client = self._client
+            self._client = None
+        current_task = asyncio.current_task()
+        if listener is not None and listener is not current_task:
+            listener.cancel()
+            with suppress(asyncio.CancelledError):
+                await listener
+        await self._close_remote(pubsub, client)
+
+    @staticmethod
+    async def _close_remote(pubsub: Any | None, client: AsyncRedis | None) -> None:
+        close_pubsub = getattr(pubsub, "aclose", None)
+        if callable(close_pubsub):
+            with suppress(*_REDIS_TRANSIENT_ERRORS):
+                await close_pubsub()
+        close_client = getattr(client, "aclose", None)
+        if callable(close_client):
+            with suppress(*_REDIS_TRANSIENT_ERRORS):
+                await close_client()
 
 
 def _redis_client(url: str) -> AsyncRedis:
