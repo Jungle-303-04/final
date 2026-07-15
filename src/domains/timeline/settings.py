@@ -9,6 +9,7 @@ from __future__ import annotations
 from packages.config.settings import env
 from packages.contracts.timeline import (
     RealtimePolicy,
+    TimelineCapabilityDescriptor,
     TimelineLiveSessionPolicy,
     TimelineReconnectPolicy,
 )
@@ -85,6 +86,21 @@ def timeline_max_window_ms() -> int:
             maximum=31_536_000,
         )
         * 1_000
+    )
+
+
+def timeline_capability_descriptor() -> TimelineCapabilityDescriptor:
+    """Describe only Timeline sources implemented by this server deployment.
+
+    Retained history is the sole implemented source today.  The descriptor is
+    intentionally not derived from a browser preference, and it does not
+    weaken the service's source-specific RBAC predicate.
+    """
+    return TimelineCapabilityDescriptor(
+        selected_source_mode="retained",
+        available_source_modes=("retained",),
+        max_retained_range_ms=timeline_max_window_ms(),
+        namespace_filter_policy="not_required",
     )
 
 
