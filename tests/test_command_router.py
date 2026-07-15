@@ -944,6 +944,67 @@ def test_command_events_keeps_a_durable_receipt_cursor_open_before_projection_ex
     asyncio.run(run())
 
 
+def test_command_events_replays_durable_updates_when_cross_replica_wakeups_are_unavailable(
+    monkeypatch,
+) -> None:
+    """Redis loss may delay wakeups but may never hide a committed terminal event."""
+
+    class ReplayDb(SpyAccessDb):
+        def __init__(self) -> None:
+            super().__init__(allowed=True)
+            self.cursors: list[int] = []
+
+        async def list_command_operation_events(
+            self,
+            workspace_id: str,
+            command_id: str,
+            *,
+            after_sequence: int,
+        ) -> list[object]:
+            self.cursors.append(after_sequence)
+            assert (workspace_id, command_id) == ("workspace-1", "cmd-redis-gap")
+            from packages.contracts.parity import OperationEvent
+
+            if after_sequence == 0:
+                return [
+                    OperationEvent(
+                        command_id="cmd-redis-gap",
+                        sequence=1,
+                        kind="progress",
+                        payload={"cluster_id": "cluster-1", "status": "running"},
+                    )
+                ]
+            if after_sequence == 1:
+                return [
+                    OperationEvent(
+                        command_id="cmd-redis-gap",
+                        sequence=2,
+                        kind="failed",
+                        payload={"cluster_id": "cluster-1", "status": "failed"},
+                    )
+                ]
+            return []
+
+    async def run() -> None:
+        db = ReplayDb()
+        response = await command_events(
+            "cmd-redis-gap",
+            current=current_session(),
+            db=db,
+            operation_events=InMemoryOperationEventBroker(),
+        )
+        stream = response.body_iterator
+        assert '"sequence":1' in await anext(stream)
+        assert '"sequence":2' in await asyncio.wait_for(anext(stream), timeout=0.5)
+        assert db.cursors[:2] == [0, 1]
+        await stream.aclose()
+
+    monkeypatch.setattr(
+        "domains.command.router.OPERATION_EVENT_REPLAY_POLL_SECONDS", 0.01, raising=False
+    )
+    asyncio.run(run())
+
+
 def test_command_status_denies_without_cluster_read_access() -> None:
     async def run() -> None:
         db = SpyCommandStatusDb(allowed=False, row=completed_command_row())
