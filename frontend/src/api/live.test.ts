@@ -49,7 +49,14 @@ describe("realtime.v1 schema", () => {
         key: "cluster-1/sandbox/Pod/storefront-1",
         value: { providerNeutral: { nested: true } },
       },
-      { type: "resource.delta", seq: 3, op: "remove", key: "a/b/c/d", value: null },
+      {
+        type: "resource.delta",
+        seq: 3,
+        op: "remove",
+        key: "a/b/c/d",
+        value: null,
+        observed_at: "2026-07-15T03:00:01Z",
+      },
       { type: "ping", ts: 1_720_000_000.25 },
     ];
 
@@ -64,6 +71,16 @@ describe("realtime.v1 schema", () => {
         type: "hello",
         protocol: "realtime.v1",
         unexpected: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      realtimeMessageSchema.safeParse({
+        type: "resource.delta",
+        seq: 2,
+        op: "remove",
+        key: "cluster-1/sandbox/pod/storefront-1",
+        value: null,
+        observed_at: "not-a-timestamp",
       }).success,
     ).toBe(false);
     expect(

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ChangeTimelineSnapshot } from "../../features/resources/changeTimelineContract";
 import {
+  browserReplayWindow,
   clampTimelineMs,
   isTimelineGap,
   timelinePercent,
+  timelinePlaybackEnd,
   timelinePlaybackStart,
   timelinePlaybackStep,
   timelineWindow,
@@ -45,5 +47,13 @@ describe("timeline scrubber math", () => {
     expect(timelinePlaybackStart(timeline)).toBe(7_000);
     expect(timelinePlaybackStep(timeline)).toBe(1_000);
     expect(timelinePlaybackStart({ ...timeline, events: [] })).toBe(1_000);
+  });
+
+  it("limits replay to the intersection with the actual browser buffer", () => {
+    expect(browserReplayWindow(timeline, { fromMs: 2_000, toMs: 4_000 }))
+      .toEqual({ fromMs: 2_000, toMs: 4_000 });
+    expect(browserReplayWindow(timeline, { fromMs: 20_000, toMs: 30_000 })).toBeNull();
+    expect(browserReplayWindow(timeline, { fromMs: null, toMs: null })).toBeNull();
+    expect(timelinePlaybackEnd(timeline, { fromMs: 2_000, toMs: 4_000 })).toBe(4_000);
   });
 });

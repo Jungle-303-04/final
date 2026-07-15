@@ -15,8 +15,10 @@ import {
 } from "../../shared/ui/primitives/select";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import {
+  browserReplayWindow,
   isTimelineGap,
   timelinePercent,
+  timelinePlaybackEnd,
   timelinePlaybackStart,
   timelinePlaybackStep,
 } from "./scrubberMath";
@@ -82,19 +84,32 @@ export function TimelineStrip({
   atMs,
   frame,
   onAtChange,
+  replayStatus = "live",
+  replayWindow,
 }: {
   atMs: number | undefined;
   frame: ChangeTimelineFrame;
   onAtChange: (atMs: number | undefined) => void;
+  replayStatus?: "live" | "ready" | "gap";
+  replayWindow?: { fromMs: number | null; toMs: number | null };
 }) {
   const { formatDate, t } = useI18n();
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const timeline = frame.phase === "ready" ? frame.data : null;
-  const live = atMs === undefined;
+  const availableWindow = timeline === null
+    ? null
+    : browserReplayWindow(timeline, replayWindow);
+  const replayFromMs = availableWindow?.fromMs ?? 0;
+  const replayToMs = availableWindow?.toMs ?? 0;
+  const replayAvailable = availableWindow !== null;
+  const playbackEnd = timeline === null ? 0 : timelinePlaybackEnd(timeline, replayWindow);
+  const live = atMs === undefined || (replayAvailable && atMs >= replayToMs);
   const selectedMs = timeline
-    ? Math.min(timeline.toMs, Math.max(timeline.fromMs, atMs ?? timeline.toMs))
+    ? replayAvailable
+      ? Math.min(replayToMs, Math.max(replayFromMs, atMs ?? replayToMs))
+      : timeline.toMs
     : 0;
 
   useEffect(() => {
@@ -102,7 +117,7 @@ export function TimelineStrip({
     const interval = window.setInterval(() => {
       const current = atMs ?? timelinePlaybackStart(timeline);
       const next = current + timelinePlaybackStep(timeline);
-      if (next >= timeline.toMs) {
+      if (next >= playbackEnd) {
         setPlaying(false);
         onAtChange(undefined);
       } else {
@@ -110,15 +125,23 @@ export function TimelineStrip({
       }
     }, 250);
     return () => window.clearInterval(interval);
-  }, [atMs, onAtChange, playing, timeline]);
+  }, [atMs, onAtChange, playbackEnd, playing, timeline]);
 
   if (timeline === null) {
     return <UnavailableTimeline loading={frame.phase === "loading"} />;
   }
 
-  const incidentEvents = timeline.events.filter((event) => event.kind === "incident");
-  const maxTotal = Math.max(1, ...timeline.buckets.map((bucket) => bucket.total));
-  const selectedInGap = isTimelineGap(selectedMs, timeline.gaps);
+  const visibleBuckets = replayAvailable
+    ? timeline.buckets.filter((bucket) =>
+        bucket.endMs >= replayFromMs && bucket.startMs <= replayToMs)
+    : [];
+  const incidentEvents = replayAvailable
+    ? timeline.events.filter((event) => event.kind === "incident" &&
+        event.occurredMs >= replayFromMs && event.occurredMs <= replayToMs)
+    : [];
+  const maxTotal = Math.max(1, ...visibleBuckets.map((bucket) => bucket.total));
+  const selectedInGap = isTimelineGap(selectedMs, timeline.gaps) ||
+    (!live && replayStatus === "gap") || !replayAvailable;
   const formatTime = (value: number) => formatDate(value, {
     hour: "2-digit",
     minute: "2-digit",
@@ -128,6 +151,7 @@ export function TimelineStrip({
     <div
       className="shrink-0 border-t bg-background/30"
       data-expanded={expanded ? "true" : "false"}
+      data-replay-status={replayStatus}
       data-slot="resources-time-scrubber"
       data-state={playing ? "playing" : live ? "live" : "past"}
     >
@@ -164,7 +188,7 @@ export function TimelineStrip({
               {t("resources.timeline.noSnapshot")}
             </span>
           ) : null}
-          {!live ? (
+          {!live && !selectedInGap ? (
             <Button
               aria-label={t(playing ? "resources.timeline.pause" : "resources.timeline.play")}
               onClick={() => {
@@ -183,9 +207,17 @@ export function TimelineStrip({
           ) : null}
         <div className="relative h-8 min-w-0 flex-1">
           <svg aria-hidden="true" className="absolute inset-0 size-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 32">
-            {timeline.buckets.map((bucket) => {
-              const x = timelinePercent(bucket.startMs, timeline.fromMs, timeline.toMs);
-              const width = Math.max(0.25, timelinePercent(bucket.endMs, timeline.fromMs, timeline.toMs) - x);
+            {visibleBuckets.map((bucket) => {
+              const x = timelinePercent(
+                Math.max(bucket.startMs, replayFromMs),
+                replayFromMs,
+                replayToMs,
+              );
+              const width = Math.max(0.25, timelinePercent(
+                Math.min(bucket.endMs, replayToMs),
+                replayFromMs,
+                replayToMs,
+              ) - x);
               const height = Math.max(2, (bucket.total / maxTotal) * 20);
               const warningHeight = bucket.total === 0 ? 0 : (bucket.warnings / bucket.total) * height;
               return (
@@ -197,15 +229,20 @@ export function TimelineStrip({
                 </g>
               );
             })}
-            {timeline.gaps.map((gap) => {
-              const x = timelinePercent(gap.from, timeline.fromMs, timeline.toMs);
-              const width = timelinePercent(gap.to, timeline.fromMs, timeline.toMs) - x;
+            {timeline.gaps.filter((gap) => replayAvailable &&
+              gap.to >= replayFromMs && gap.from <= replayToMs).map((gap) => {
+              const x = timelinePercent(Math.max(gap.from, replayFromMs), replayFromMs, replayToMs);
+              const width = timelinePercent(
+                Math.min(gap.to, replayToMs),
+                replayFromMs,
+                replayToMs,
+              ) - x;
               return <rect className="fill-muted" height="28" key={`${gap.from}:${gap.to}`} width={width} x={x} y="0" />;
             })}
           </svg>
           <svg className="pointer-events-none absolute inset-0 z-20 size-full overflow-visible" viewBox="0 0 100 32">
             {incidentEvents.map((event) => {
-              const markerX = timelinePercent(event.occurredMs, timeline.fromMs, timeline.toMs);
+              const markerX = timelinePercent(event.occurredMs, replayFromMs, replayToMs);
               const label = t("resources.timeline.incidentMarker", { time: formatTime(event.occurredMs) });
               return (
                 <foreignObject height="28" key={`${event.id}:${event.occurredMs}`} width="2" x={markerX - 1} y="0">
@@ -214,7 +251,7 @@ export function TimelineStrip({
                     className="pointer-events-auto size-full rounded-sm border-x border-destructive bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => {
                       setPlaying(false);
-                      onAtChange(Math.max(timeline.fromMs, event.occurredMs - timeline.bucketMs));
+                      onAtChange(Math.max(replayFromMs, event.occurredMs - timeline.bucketMs));
                     }}
                     title={label}
                     type="button"
@@ -226,7 +263,7 @@ export function TimelineStrip({
               <foreignObject
                 height="24"
                 width="20"
-                x={Math.min(80, Math.max(0, timelinePercent(selectedMs, timeline.fromMs, timeline.toMs) - 10))}
+                x={Math.min(80, Math.max(0, timelinePercent(selectedMs, replayFromMs, replayToMs) - 10))}
                 y="-26"
               >
                 <output className="block size-full rounded-md border bg-popover px-1 py-1 text-center text-xs shadow-sm">
@@ -235,22 +272,22 @@ export function TimelineStrip({
               </foreignObject>
             ) : null}
           </svg>
-          <input
+          {replayAvailable ? <input
             aria-label={t("resources.timeline.aria")}
             className="absolute inset-x-0 bottom-0 z-10 h-3 w-full cursor-pointer accent-primary"
-            max={timeline.toMs}
-            min={timeline.fromMs}
+            max={replayToMs}
+            min={replayFromMs}
             onChange={(event) => {
               setPlaying(false);
               const next = Number(event.currentTarget.value);
-              onAtChange(next >= timeline.toMs ? undefined : next);
+              onAtChange(next >= replayToMs ? undefined : next);
             }}
             onPointerDown={() => setDragging(true)}
             onPointerUp={() => setDragging(false)}
-            step={timeline.bucketMs}
+            step={Math.min(1_000, timeline.bucketMs)}
             type="range"
             value={selectedMs}
-          />
+          /> : null}
         </div>
         </div>
       ) : null}
