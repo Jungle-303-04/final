@@ -43,8 +43,8 @@ describe("UnifiedFilterBar", () => {
     const status = (await screen.findByText("Loading")).closest<HTMLElement>('[role="status"]');
     expect(status?.textContent).toContain("Loading");
     const spinner = status?.querySelector<HTMLElement>('[data-slot="spinner"]');
-    expect(spinner?.className).toContain("motion-safe:animate-spin");
-    expect(spinner?.className).toContain("motion-reduce:animate-none");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.classList.contains("motion-reduce:animate-none")).toBe(true);
     expect(spinner?.getAttribute("aria-hidden")).toBe("true");
   });
 

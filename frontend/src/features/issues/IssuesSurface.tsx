@@ -359,7 +359,7 @@ export function IssuesSurface({
             type="button"
             variant="ghost"
           >
-            <RefreshCw aria-hidden="true" className={cn(list.loading && "animate-spin")} />
+            <RefreshCw aria-hidden="true" className={cn(list.loading && "motion-safe:animate-spin")} />
           </Button>
         </CardHeader>
         <CardContent className="lg:min-h-96">

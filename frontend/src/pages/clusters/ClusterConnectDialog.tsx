@@ -1,4 +1,4 @@
-import { Check, LoaderCircle } from "lucide-react";
+import { Check } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
 import { clusterResourcesHref } from "./clusterNavigation";
 
@@ -300,10 +301,11 @@ export function ClusterConnectDialog({
             </fieldset>
             <DialogFooter className="mt-1">
               <Button
+                aria-busy={phase === "submitting"}
                 disabled={!name.trim() || nameConflict || phase === "submitting"}
                 onClick={() => void register()}
               >
-                {phase === "submitting" ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : null}
+                {phase === "submitting" ? <Spinner decorative /> : null}
                 {t("clusters.connect.action.register")}
               </Button>
             </DialogFooter>

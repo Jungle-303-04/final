@@ -1,4 +1,4 @@
-import { LoaderCircle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
   ReleaseApplication,
@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 import { FormField, NativeSelect } from "./WorkflowFormControls";
 import { DeploymentTargetPreview } from "./DeploymentTargetPreview";
 
@@ -164,8 +165,8 @@ export function DeploymentTargetDialog({
         </div>
 
         <DialogFooter>
-          <Button disabled={!complete || pending} onClick={() => void submit()}>
-            {pending ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Plus aria-hidden="true" />}
+          <Button aria-busy={pending} disabled={!complete || pending} onClick={() => void submit()}>
+            {pending ? <Spinner decorative /> : <Plus aria-hidden="true" />}
             {pending ? t("workflows.target.creating") : t("workflows.target.create")}
           </Button>
           <Button disabled={pending} onClick={() => changeOpen(false)} variant="outline">

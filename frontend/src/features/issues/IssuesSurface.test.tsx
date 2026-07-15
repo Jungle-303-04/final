@@ -40,7 +40,7 @@ describe("IssuesSurface", () => {
 
     const pendingButton = (await screen.findByText(COPY.selectionPending)).closest("button");
     const spinner = pendingButton?.querySelector<HTMLElement>('[data-slot="spinner"]');
-    expect(spinner?.className).toContain("motion-safe:animate-spin");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
     expect(spinner?.getAttribute("aria-hidden")).toBe("true");
   });
 

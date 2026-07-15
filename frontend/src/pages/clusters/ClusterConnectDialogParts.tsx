@@ -1,8 +1,9 @@
-import { Check, Clipboard, LoaderCircle, TriangleAlert } from "lucide-react";
+import { Check, Clipboard, TriangleAlert } from "lucide-react";
 import type { ClusterConnectStage } from "../../features/clusters/clustersContract";
 import type { I18nController } from "../../shared/i18n";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Button } from "../../shared/ui/primitives/button";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 import type { ConnectPhase } from "./ClusterConnectDialog";
 
 export function ConnectionCommandStep({
@@ -32,7 +33,7 @@ export function ConnectionCommandStep({
     return (
       <div className="flex min-h-36 items-center justify-center rounded-xl border bg-card" role="status">
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
+          <Spinner className="size-4" decorative />
           {t("clusters.connect.reissue.pending")}
         </span>
       </div>
@@ -93,8 +94,8 @@ export function ConnectionCommandStep({
       </div>
       <ConnectionProgress elapsedSeconds={elapsedSeconds} stage={connectionStage} t={t} />
       <div className="flex min-w-0 items-center gap-3">
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <Spinner className="size-4" decorative />
           {t(phase === "finishing" ? "clusters.connect.progress.finalizing" : "clusters.connect.waiting")}
         </span>
       </div>
@@ -157,7 +158,7 @@ function ConnectionProgress({
                   : "grid size-6 place-items-center rounded-full bg-muted text-muted-foreground transition-colors duration-(--motion-quick) ease-(--ease-out) motion-reduce:transition-none"
               }>
                 {complete ? <Check aria-hidden="true" className="size-3.5" /> : active
-                  ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" />
+                  ? <Spinner className="size-3.5" decorative />
                   : <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}
               </span>
               <span className="w-full truncate text-[11px] text-muted-foreground" title={t(labelKey)}>
