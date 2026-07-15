@@ -76,7 +76,11 @@ export function ClustersPage({ port }: { port: ClustersPort & ClusterDisconnectP
         <div className="flex min-w-0 items-center gap-2">
           <div className="min-w-0 flex-1" />
           {canManageClusters ? (
-            <Button onClick={() => setConnectOpen(true)} type="button">
+            <Button
+              aria-label={t("clusters.action.add")}
+              onClick={() => setConnectOpen(true)}
+              type="button"
+            >
               <Plus aria-hidden="true" />
               <span className="hidden sm:inline">{t("clusters.action.add")}</span>
             </Button>

@@ -258,9 +258,6 @@ function ProductShellFrame({
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
-          <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
-          </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
@@ -268,6 +265,9 @@ function ProductShellFrame({
               open={isShortcutHelpOpen}
             />
             <LocaleToggle />
+          </div>
+          <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
+            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
           </div>
         </header>
 
