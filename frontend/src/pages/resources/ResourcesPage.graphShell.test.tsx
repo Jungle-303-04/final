@@ -51,7 +51,8 @@ describe("ResourcesPage S4 physical topology", () => {
     expect(within(crashLoop).getByRole("img", { name: "CrashLoop" })).toBeTruthy();
     expect(highLoadNonMatch.getAttribute("data-usage-tone")).toBe("red");
     expect(highLoadNonMatch.getAttribute("data-matches-filter")).toBe("false");
-    expect(highLoadNonMatch.getAttribute("disabled")).not.toBeNull();
+    expect(highLoadNonMatch.getAttribute("disabled")).toBeNull();
+    expect(highLoadNonMatch.className).toContain("opacity-45");
     expect(document.querySelectorAll('[data-slot="physical-topology-pod"]')).toHaveLength(3);
     expect(document.querySelectorAll('[data-pod-badge="crash-loop"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-pod-badge="pending"]')).toHaveLength(1);
@@ -230,6 +231,38 @@ describe("ResourcesPage S4 physical topology", () => {
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 details" });
     expect(await within(dialog).findByText("Point-in-time evidence")).toBeTruthy();
     expect(within(dialog).getAllByText("Unavailable")).toHaveLength(2);
+  }, 15_000);
+
+  it("opens detail for a visible pod even when it is outside the active filter match", async () => {
+    const user = userEvent.setup();
+    const port = resourcesPort();
+    renderResources(
+      port,
+      "/resources?clusters=cluster-1&resources.types=pod&resources.q=checkout",
+      resourcesClusterPort(),
+      undefined,
+      "en",
+      resourcesFilterPort(),
+      resourcesPhysicalTopologyPort(),
+    );
+
+    const pod = await screen.findByRole("button", {
+      name: "Pod orders-api-0, Running, usage 91%",
+    });
+    expect(pod.getAttribute("data-matches-filter")).toBe("false");
+    await user.click(pod);
+
+    expect(await screen.findByRole("dialog", { name: "orders-api-0 details" })).toBeTruthy();
+    expect(port.loadResourceDetail).toHaveBeenCalledWith(
+      "cluster-1",
+      {
+        resourceType: "pod",
+        kind: "Pod",
+        namespace: "shop",
+        name: "orders-api-0",
+      },
+      expect.any(AbortSignal),
+    );
   }, 15_000);
 });
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { cn } from "@/shared/lib/cn";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type { HomePort } from "../../features/home/homeContract";
@@ -216,8 +217,8 @@ export function ResourcesPage({
       <div
         className={state.detailRequested
           ? state.detailFull
-            ? "hidden"
-            : "hidden min-w-0 flex-1 overflow-y-auto lg:block"
+            ? "hidden min-w-0 overflow-y-auto lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
+            : "hidden min-w-0 flex-1 overflow-y-auto lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
           : "min-w-0 flex-1 overflow-y-auto"}
         data-slot="resources-list-column"
       >
@@ -307,9 +308,11 @@ export function ResourcesPage({
       </div>
       {state.detailRequested ? (
         <div
-          className={state.detailFull
-            ? "min-w-0 flex-1"
-            : "min-w-0 w-full shrink-0 border-l bg-background lg:w-[30rem]"}
+          className={cn(
+            "min-w-0 w-full basis-full shrink-0 bg-background transition-[flex-basis,border-color] duration-300 ease-out motion-reduce:transition-none",
+            state.detailFull ? "border-l-0 lg:basis-full" : "border-l lg:basis-[30rem]",
+          )}
+          data-detail-size={state.detailFull ? "full" : "peek"}
           data-slot="resources-detail-column"
         >
           <ResourceDetailWorkspace

@@ -115,6 +115,7 @@ export function PhysicalTopologyServerCard({
             expectedTotal={placement.totalCount ?? placement.pods.length + placement.omittedCount}
             nodeName={server.name}
             omittedCount={placement.omittedCount}
+            onOpenPod={onOpenPod}
             onUnauthorized={onNodePodsUnauthorized}
             port={nodePodsPort}
           />

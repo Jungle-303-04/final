@@ -2,13 +2,13 @@ import { Waypoints } from "lucide-react";
 import { useMemo } from "react";
 
 import type { HomePort } from "../../features/home/homeContract";
-import type { PhysicalTopologyPod } from "../../features/resources/physicalTopologyContract";
 import { FirstAppearanceMotionBoundary } from "../../motion/useFirstAppearanceMotion";
 import { useI18n } from "../../shared/i18n";
 import { PhysicalTopologyServerCard } from "./PhysicalTopologyServerNode";
 import { physicalServerPlacements } from "./physicalTopologyViewModel";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 import { UsageSmoothingBoundary } from "./useSmoothedUsageColor";
+import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
 
 export function ResourcesPhysicalTopologyScene({
   clusterId,
@@ -22,7 +22,7 @@ export function ResourcesPhysicalTopologyScene({
   clusterId: string;
   frame: PhysicalTopologyFrame;
   nodePodsPort: Pick<HomePort, "loadNodePods">;
-  onOpenPod: (pod: PhysicalTopologyPod) => void;
+  onOpenPod: (pod: PhysicalPodOpenTarget) => void;
   onNodePodsUnauthorized: () => void;
   onRevealServer: (serverId: string) => void;
   skeletonServerCount: number | null;

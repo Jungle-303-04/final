@@ -21,6 +21,9 @@ describe("ResourcesLiveStatus", () => {
 
     expect(screen.getByText("라이브 · 1초")).toBeTruthy();
     expect(screen.getByText("노드 직접 측정을 사용할 수 없어 보조 측정 중")).toBeTruthy();
+    expect(screen.getByText(/업데이트/u)).toBeTruthy();
+    expect(document.querySelector('[data-slot="resources-live-status"]')
+      ?.getAttribute("data-updated-at")).toBeTruthy();
   });
 
   it.each([

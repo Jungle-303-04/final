@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { Maximize2, Minimize2, ScrollText, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
@@ -11,6 +11,7 @@ import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import { StatusMark } from "../../shared/ui/StatusMark";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
@@ -76,7 +77,7 @@ export function ResourceDetailWorkspace({
   return (
     <section
       aria-labelledby="resource-detail-workspace-title"
-      className="motion-detail-workspace grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background"
+      className="motion-detail-workspace grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-background shadow-2xl shadow-black/5"
       data-closing={closing || undefined}
       data-detail-size={full ? "full" : "peek"}
       data-slot="resource-detail-workspace"
@@ -120,9 +121,15 @@ export function ResourceDetailWorkspace({
                 : t("resources.detail.identityDescription")}
             </p>
           </div>
+          {detail.phase === "ready" ? (
+            <StatusMark
+              label={detail.data.resource.healthStatus}
+              tone={detail.data.resource.health}
+            />
+          ) : null}
           <Button
             aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
-            className="ml-auto hidden shrink-0 lg:inline-flex"
+            className="relative ml-auto shrink-0"
             onClick={() => onFullChange(!full)}
             size="icon"
             type="button"
@@ -142,11 +149,24 @@ export function ResourceDetailWorkspace({
             : <span className="text-xs text-muted-foreground">{t("resources.detail.contextAll")}</span>}
         </div>
         {detail.phase === "ready" ? (
-          <ResourceDetailActions
-            actionsPort={actionsPort}
-            capabilities={capabilities}
-            detail={detail.data}
-          />
+          <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="resource-detail-command-bar">
+            {logTarget ? (
+              <Button
+                onClick={() => dock.openLogs(logTarget)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <ScrollText aria-hidden="true" />
+                {t("shell.shortcut.resources.openLogs")}
+              </Button>
+            ) : null}
+            <ResourceDetailActions
+              actionsPort={actionsPort}
+              capabilities={capabilities}
+              detail={detail.data}
+            />
+          </div>
         ) : null}
       </header>
       <div className="min-h-0 min-w-0 overflow-y-auto px-4 pb-6 sm:px-6">

@@ -82,28 +82,75 @@ describe("ResourcesPage URL-backed detail", () => {
     const layout = document.querySelector('[data-detail-layout="peek"]');
     const detailColumn = document.querySelector('[data-slot="resources-detail-column"]');
     expect(layout).toBeTruthy();
-    expect(detailColumn?.className).toContain("lg:w-[30rem]");
+    expect(detailColumn?.className).toContain("lg:basis-[30rem]");
     expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
     expect(within(dialog).getByRole("tab", { name: "개요" })).toBeTruthy();
-    expect(within(dialog).getByRole("tab", { name: "YAML" })).toBeTruthy();
+    expect(within(dialog).queryByRole("tab", { name: "YAML" })).toBeNull();
     expect(within(dialog).getByRole("tab", { name: "메트릭" })).toBeTruthy();
     expect(within(dialog).queryByRole("tab", { name: /로그/u })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "선택 리소스 로그 열기" })).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: /터미널|terminal/iu })).toBeNull();
     const context = within(dialog).getByLabelText("읽기 전용 필터 맥락");
     expect(context.textContent).toContain("team=checkout");
     expect(within(context).queryByRole("button")).toBeNull();
     const close = within(dialog).getByRole("button", { name: "상세 닫기" });
     expect(close.className).toContain("relative");
+    expect(close.className).not.toContain("ml-auto");
     expect(close.className).not.toContain("fixed");
+    const detailHeaderButtons = within(dialog).getAllByRole("button");
+    expect(detailHeaderButtons.indexOf(close)).toBeLessThan(
+      detailHeaderButtons.indexOf(within(dialog).getByRole("button", {
+        name: "상세 전체 화면으로 보기",
+      })),
+    );
 
     await user.click(within(dialog).getByRole("button", { name: "상세 전체 화면으로 보기" }));
     expect(document.querySelector('[data-detail-layout="full"]')).toBeTruthy();
     expect(document.querySelector('[data-slot="resources-list-column"]')?.className)
       .toContain("hidden");
+    expect(screen.getByRole("dialog", { name: "checkout-api-0 상세" })).toBe(dialog);
     expect(within(dialog).getByRole("button", { name: "목록과 상세 함께 보기" })).toBeTruthy();
 
     await user.click(within(dialog).getByRole("button", { name: "목록과 상세 함께 보기" }));
     expect(document.querySelector('[data-detail-layout="peek"]')).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "checkout-api-0 상세" })).toBe(dialog);
     expect(document.querySelector('[data-slot="resources-list-column"]')).toBeTruthy();
+  });
+
+  it("opens the real log stream contract from the detail command bar", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    const logStreamPort = { open: vi.fn(() => close) };
+    renderResources(
+      resourcesPort(),
+      "/resources?clusters=cluster-1&resources.types=pod&detail=Pod%2Fshop%2Fcheckout-api-0",
+      undefined,
+      undefined,
+      "ko",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      logStreamPort,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
+    await user.click(within(dialog).getByRole("button", { name: "선택 리소스 로그 열기" }));
+
+    expect(logStreamPort.open).toHaveBeenCalledWith(
+      {
+        type: "pod",
+        clusterId: "cluster-1",
+        namespace: "shop",
+        name: "checkout-api-0",
+        container: null,
+      },
+      expect.objectContaining({
+        onEvent: expect.any(Function),
+        onFailure: expect.any(Function),
+      }),
+    );
   });
 
   it("keeps initial focus without trapping sibling surfaces and closes with Escape", async () => {
