@@ -4160,16 +4160,28 @@
       "streaming": false,
       "area": "cluster-insights",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.dashboard",
-      "frontendContract": "frontend/src/pages",
+      "backendContract": "packages.contracts.checks.observations",
+      "frontendContract": "frontend/src/features/checks/checksContract.ts",
       "desktopContract": "desktop",
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_checks_router.py",
+        "tests/test_checks_observation_projection.py",
+        "frontend/src/api/checks.test.ts",
+        "frontend/src/pages/checks/ChecksPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/checks/router.py#get_checks_overview",
+          "consumer": "src/domains/checks/observation_projection.py#checks_overview",
+          "test": "tests/test_checks_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
+          "consumer": "frontend/src/features/checks/createChecksAdapter.ts#createChecksAdapter",
+          "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

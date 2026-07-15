@@ -66,6 +66,8 @@ import {
   getHelmRelease,
   listHelmReleases,
   getTrafficOverview,
+  getChecksDetail,
+  getChecksOverview,
 } from "../api";
 import type { PhysicalTopologyRealtimePort } from "../features/resources/physicalTopologyRealtimeContract";
 import { createAiAssistantAdapter } from "../features/ai-assistant/createAiAssistantAdapter";
@@ -106,6 +108,8 @@ import { createHelmAdapter } from "../features/helm/createHelmAdapter";
 import { createHelmSurface } from "../pages/helm/createHelmSurface";
 import { createTrafficAdapter } from "../features/traffic/createTrafficAdapter";
 import { createTrafficSurface } from "../pages/traffic/createTrafficSurface";
+import { createChecksAdapter } from "../features/checks/createChecksAdapter";
+import { createChecksSurface } from "../pages/checks/createChecksSurface";
 
 export function createApiComposition() {
   const homePort = createHomeAdapter({
@@ -201,6 +205,7 @@ export function createApiComposition() {
     listHelmReleases,
   });
   const trafficPort = createTrafficAdapter({ getTrafficOverview });
+  const checksPort = createChecksAdapter({ getChecksDetail, getChecksOverview });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,
@@ -271,6 +276,10 @@ export function createApiComposition() {
     {
       id: "traffic",
       Component: createTrafficSurface(trafficPort),
+    },
+    {
+      id: "checks",
+      Component: createChecksSurface(checksPort),
     },
     {
       id: "settings",

@@ -63,6 +63,24 @@ export {
   type TrafficOverviewEndpoint,
 } from "./traffic-overview-schemas";
 export {
+  CHECKS_OVERVIEW_PATH,
+  checksDetailPath,
+  getChecksDetail,
+  getChecksOverview,
+  type ChecksQuery,
+} from "./checks";
+export {
+  checksCatalogSchema,
+  checksClusterScopeSchema,
+  checksDetailResponseSchema,
+  checksDetailSchema,
+  checksOverviewSchema,
+  checksResultSetSchema,
+  checksScopeCoverageSchema,
+  type ChecksDetailEndpoint,
+  type ChecksOverviewEndpoint,
+} from "./checks-schemas";
+export {
   timelineCapabilityDescriptorSchema,
   timelineCoverageSchema,
   timelineCursorSchema,

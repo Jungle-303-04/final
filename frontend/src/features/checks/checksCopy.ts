@@ -1,0 +1,16 @@
+export const CHECKS_COPY = {
+  title: "Checks",
+  description: "Evidence-backed configuration and workload checks for the selected cluster scope.",
+  refresh: "Refresh",
+  scope: "Scope coverage",
+  scopeUnavailable: "Some selected cluster snapshots are unavailable or incomplete.",
+  noNamespaces: "All namespaces",
+  notObserved: "Not observed",
+  resultStatus: "Check results",
+  resultUnavailable: "Check findings are unavailable until an agent-backed evaluation collector is integrated.",
+  catalogStatus: "Check catalog",
+  catalogUnavailable: "Check definitions and remediation guidance are unavailable until the collector publishes a catalog.",
+  detailStatus: "Requested check",
+  detailUnavailable: "This requested check cannot be resolved until the catalog and result collector are integrated.",
+  refreshFailed: "Could not refresh Checks data.",
+} as const;
