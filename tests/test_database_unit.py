@@ -2564,6 +2564,46 @@ def test_completed_command_stages_terminal_operation_event_in_the_same_transacti
     assert "command_operation_events" in sql
 
 
+def test_command_receipt_operation_event_can_stage_inside_the_event_outbox_transaction() -> None:
+    from domains.command.repository import stage_command_operation_event_in_transaction
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def scalar_one_or_none(self) -> int:
+            return 1
+
+        def mappings(self) -> StubResult:
+            return self
+
+        def one(self) -> dict[str, object]:
+            return {
+                "command_id": "cmd-receipt",
+                "sequence": 1,
+                "kind": "progress",
+                "payload": {"cluster_id": "cluster-1", "status": "queued"},
+                "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+            }
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    event = stage_command_operation_event_in_transaction(
+        StubConnection(),
+        workspace_id="workspace-1",
+        command_id="cmd-receipt",
+        kind="progress",
+        payload={"cluster_id": "cluster-1", "status": "queued"},
+    )
+
+    assert event is not None
+    sql = "\n".join(str(statement.compile(dialect=postgresql.dialect())) for statement in recorded)
+    assert "command_operation_event_cursors" in sql
+    assert "command_operation_events" in sql
+
+
 def test_agent_commands_by_correlation_is_workspace_scoped_newest_and_bounded() -> None:
     from domains.command.repository import AgentCommandRepository
 
