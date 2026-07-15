@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "sourceRepository": "https://github.com/skyhook-io/radar.git",
   "baseRevision": "3ff2b1095151c690bf536e8e6ca685c2703fcd70",
   "targetRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
@@ -29,13 +29,7 @@
         "sha256": "c056f0e91c29ae6e4f386c7c6ff6fb29a47b22f856e934bffb70c4c5668ddad1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -47,13 +41,7 @@
         "sha256": "1fc1ad5fb2d385d5ded352f381ef8dc94ab6bf8b466ad87d4225ecdfce6e0c9c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -65,13 +53,7 @@
         "sha256": "ad60cbcee156a403dcde9ecd2b487f07ef9ca5c9e30724c8d9de5024a723406e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -86,13 +68,7 @@
         "sha256": "95d2168ba469b3a2ebd02fcf1eba8de04c11af7db4ebb18d1da752cef9a51ae4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -104,13 +80,7 @@
         "sha256": "0842e4e498abb29fab0da5e247fd29eae1ba9a9f05bd7b0d09a91338fa86d429"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -125,13 +95,7 @@
         "sha256": "11602ded7f48d054263506058d93aa3e6253d3d5e045992829dc8d94ae34c21b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -146,13 +110,7 @@
         "sha256": "89356f9b5fa563536ba8ad1bf66e47c6ed529c38dbf2c4e4d174672626cc3059"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -167,13 +125,7 @@
         "sha256": "f55a9887a6d0028a13c36144dce0250aca4f497cfb670604321e7b84a09c9604"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -188,13 +140,7 @@
         "sha256": "82a0a521d0a83fb3e55551d11d65e2ba68391f274c3f1556ec2a94a07f528ced"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -209,13 +155,7 @@
         "sha256": "69891daef2b1aa33bd4f153a038e70a95ab9a57251883fa4362f7f0169cfbf0a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -230,13 +170,7 @@
         "sha256": "8ad50261e062ba1224504c6764a950c0b93a2154430a21bfab79f5a735892c35"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -251,13 +185,7 @@
         "sha256": "4d75d1940b9cac67dd005bec77b5cf4b79f7c34122110058944dfba6cf270f41"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -272,13 +200,7 @@
         "sha256": "856822186c0f7cd3185ab507016877d7f3c65e3942230702fe09392c6e78a797"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -293,13 +215,7 @@
         "sha256": "3702af736ab1239e779af734b4d70d9a72684b8857aa8bbed7f59344a3743ada"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -314,13 +230,7 @@
         "sha256": "c12638a733fda7ca4283079cf1a7d93842f3d17c98c10546e31c8ec79e489818"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -335,13 +245,7 @@
         "sha256": "fd1b01c10081885fdf6643afcfc9d787e1fd6d36185895a4a44112c8d73af5c5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -356,13 +260,7 @@
         "sha256": "1466ed0101482e15ab826b74adadd1fbe8433037f3311586b0d1a865fb3aed91"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -374,13 +272,7 @@
         "sha256": "36a0156aa5843b43fb3c58f7450df914de6cd2c1c861543e18385c72c5405357"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -395,13 +287,7 @@
         "sha256": "5ca268078c3900e2dd4cca703f1ea537db5eeeebd7ce57aadfce1d522a3755cb"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -416,13 +302,7 @@
         "sha256": "7b39931f8ce924eb97c4a8722fd2ac7dce5e783eb9405dedfe71483b7caac8e5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -437,13 +317,7 @@
         "sha256": "3024acb8f5d7651140f2e79c922532b7c25c92a6238bfec08c119b9951ce665e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -458,13 +332,7 @@
         "sha256": "8e353c0cd73b3898bcbd8d7ce53e64e5b9bec4590f173decb1be3eb45556d598"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -479,13 +347,7 @@
         "sha256": "b9959f58203375bad3467beb2d120a1d3d82bee2a644c0adcc29c671a56a678e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -500,13 +362,7 @@
         "sha256": "a86d45c58db0152e6ceb8e62533cb565ee3d97365b17756c55cb36cf599e15cc"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -518,13 +374,7 @@
         "sha256": "379b2231c00a70b6f4ccf7ab0df046385ea81a437a46daccb54ebdbdbca2a565"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -539,13 +389,7 @@
         "sha256": "588172f6878b09bc0a0bb5910079cbfbb42ccdf66a6939f937dae69915da3731"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -560,13 +404,7 @@
         "sha256": "8c129429712a6f6d7722a92635846792a14fac8879831c7c880bdf99531945c1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -581,13 +419,7 @@
         "sha256": "9cb832a96ea565639edffc2410714211ed2a34074e1c027eb13070da4d189dcb"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -599,13 +431,7 @@
         "sha256": "b2f2f41a5e5105cc319ae072ce5e0bb6c6747dc0f1f379393a37a2b12d236d91"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -620,13 +446,7 @@
         "sha256": "05c45a4e1ec4eda19f414e2c1d4cf3e65b3585ed49cc3dcbbfa7dffd39e52ffa"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -641,13 +461,7 @@
         "sha256": "c504ee277c7231cd9517003286b3b4f1b14aa5cd351b0f3f8889bf98fb861986"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -662,13 +476,7 @@
         "sha256": "9b9dbae2a3276b9b1f33d78eb8ee4667521d5cc93912d5508893dc1c11f82194"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -683,13 +491,7 @@
         "sha256": "1dc0a1bec5982ebddbc159aec44beea1324a65fbdbae032f0afd09b2c405ae7e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -704,13 +506,7 @@
         "sha256": "c15a93f2cf60fc3b278feb8bb4d0772de9552c6d3bb96d49c177d138ad3bb3a8"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -725,13 +521,7 @@
         "sha256": "bdb383c302406d86a0d0b24fb6d9765bcaa8e7b4e2384d482cb9842b055b2a4a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -746,13 +536,7 @@
         "sha256": "96b2b2909544e36fa730783b471bedfc9dfec10d72fe4d3bb195a5869c97c898"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -767,13 +551,7 @@
         "sha256": "f49b9bc41635f37f614e529acf9f66acdcc89950dd758ac2553db490deeaf008"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -788,13 +566,7 @@
         "sha256": "544e9a4a211ade71137952e6fd38e3962a452522feea0fd9476e8b80fc4add6f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -809,13 +581,7 @@
         "sha256": "35d40455e2ca40c53d296fa921f6b71d0edc30665ec38ce7427f922066a43136"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -830,13 +596,7 @@
         "sha256": "27da719a10771567602fb884d4a569536cbe67bb66e3b2fae94af28cc476b1b9"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -851,13 +611,7 @@
         "sha256": "af8f939971791cc0643bae46b4a0efe736210ab463833c99351b79933a3fc812"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -872,13 +626,7 @@
         "sha256": "44f2a0cc6d10c64c641d6527f881f25d7e818368183618b51e4e6a6344de27b8"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -893,13 +641,7 @@
         "sha256": "dc9b5a9037d18c8228d9b08b0e13cf54e6399ba76f2d387e8ce9293753ed419b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -914,13 +656,7 @@
         "sha256": "7fc6a8c58c3e36035340013ef3bc08197ae2e7d4598794cdb649993ca803bd8e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -935,13 +671,7 @@
         "sha256": "50ecaa6ce5cbce7e9d9d9baba1acd6a55fe5ac03aed9df384ad9fecf24b5ed30"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -956,13 +686,7 @@
         "sha256": "3864a43faae2bbd1ba56a7d60aacd651104727c32b1f22efd4c1399b940d6274"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -977,13 +701,7 @@
         "sha256": "34a2054073e2003fc9cfc55f002b3a4afb4d5e3f16995df4d28e5013a4a41058"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -998,13 +716,7 @@
         "sha256": "aba17e30f1936637cd3c552537e1adaaa71909854d68305b7fd8a4b994ed621a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1019,13 +731,7 @@
         "sha256": "75b47fdf40b2d15214f9f8e1b43086731d8f0e07b61a720665e33bcfa425611a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1040,13 +746,7 @@
         "sha256": "d6c86ef79f5de057c91d3da604dd4a2fab53d87bbfda54f3ff962c04df53dd67"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1061,13 +761,7 @@
         "sha256": "483c740b195347d9580683f39938a0bfdced998f186c68ed6f7bf025bcec3659"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1082,13 +776,7 @@
         "sha256": "baed72efdc86921f6bb2a11812b4aa2e7a1c6122ebaad7061a2d5d4f9e79e05f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1103,13 +791,7 @@
         "sha256": "f91cb4dfecd87d313adc1ecccd2be02a4e6ecdb95dccc790d860409d7e778e9d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1124,13 +806,7 @@
         "sha256": "c6ed2d42a3b559fd11f8d236cd7a6e64dcb330517d47e7b32998a72c8b1112be"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1145,13 +821,7 @@
         "sha256": "98f7de3b64e57523f97878006b39c65bb09ddfcb7f841ca391e2d1f0a4f19edd"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1166,13 +836,7 @@
         "sha256": "85bc726ea86385434c6a9981a6e51dfa16eb54f11946edf9af289d2b25d98a8b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -1184,13 +848,7 @@
         "sha256": "dbcb46c07d1ff06ceb9e668a8d2d01992667b33202d1c983664cee903b7b5276"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1205,13 +863,7 @@
         "sha256": "bb9c03e25c62c6f43307fc8592a09c1d03ad29b498d63297727ef5fe25838304"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1226,13 +878,7 @@
         "sha256": "c8330db428f9af4023aa30d287ca9be690940f43a97527665a2aff13990a97fc"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1247,13 +893,7 @@
         "sha256": "c125057882c22b00b7341d107741e36895e54abdd0935a66d62ca88e540d8d23"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1268,13 +908,7 @@
         "sha256": "f511b746e9cbb34181424bfc555595f87c3ded16800959ce7561ce96a637104c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1289,13 +923,7 @@
         "sha256": "f94d2c70d054f6b28b7a44500ad748ea053d00ca18302d12fb9e079f2c91d8a7"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1310,13 +938,7 @@
         "sha256": "80aff8ba6ce58c0b73825ddd36c467429ebd841f1ea69418204e01e7452e0ca2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1331,13 +953,7 @@
         "sha256": "850089f2e4be8aac04dae9ac3c73f232d406805b3521415a199380f8014370af"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1352,13 +968,7 @@
         "sha256": "769186b28293e60400819016fee6ce35b4cd23ccfa815448752c0a23e17ab138"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1373,13 +983,7 @@
         "sha256": "22ec99b5c41b409521456341bc0d90f6a7c78377f59804c4ce1bbdd1f1519885"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1394,13 +998,7 @@
         "sha256": "79f357a89e18a40bb9a73d11373006e269d65603706281317d2d59a3ef3ef1fa"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1415,13 +1013,7 @@
         "sha256": "57757a027ee620f702bd62f273d6eb46b8809ece5975f2e9d85793084c3824a7"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1436,13 +1028,7 @@
         "sha256": "7dce19566a99fa4f769e3b405be607281c27458b601ffb82008debab680ced87"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1457,13 +1043,7 @@
         "sha256": "02ef0d0fe955564cd67540f9aa32803facd70563c68dd3416b9b840f9d39b2a7"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1478,13 +1058,7 @@
         "sha256": "fe7417af34797105fceb446c7d38f693c8a67ec7178a050e6d2d7b4963871618"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1499,13 +1073,7 @@
         "sha256": "b43095e589db7aefee5b3a1cce791081ceba21d84df271346ed6e9216c7400ea"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1520,13 +1088,7 @@
         "sha256": "95813b3a0353e98c4b1803e00d99f36fc136ff3535da51050c042f5a9b7c78f3"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1541,13 +1103,7 @@
         "sha256": "891c2b1746659ac1e738c10deb8aa655c485336d5f349643e924bad42c73dca2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1562,13 +1118,7 @@
         "sha256": "b755236c91d896ab17fa0c3d5bbf5dc47a50bbd5643513ff3cb6859a6e83adde"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1583,13 +1133,7 @@
         "sha256": "2e0937b1018519693483f3d6bab8bb1b7dcbb36ca153d4c80253ccb5deda559d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1604,13 +1148,7 @@
         "sha256": "6a7878836e8582979d813fe3070723f8e9c82f356e65be2d413f37b73115af0b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1625,13 +1163,7 @@
         "sha256": "73b7e27220cd18ff4161c201c11b255564ecc1abf17a3fb57a7d30c2b25ad304"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1646,13 +1178,7 @@
         "sha256": "dbc2b85f3aa0182cfdd49be8676aa27c3857ea3f6a8170c8d7856e3be2daa22c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1667,13 +1193,7 @@
         "sha256": "e14d6c4579b680022c5ab6e887b44735e2c8f5034debf67be246ac3a812b7e48"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1688,13 +1208,7 @@
         "sha256": "54cde7e1c107a445f916caa8d1becc31c7ec5dac0785527bbe6bfd2e495850a2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -1706,13 +1220,7 @@
         "sha256": "61146659f4b07f4921fb4fc2279ef0521d8ec0c4b87784e9734e443ba1e0a599"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1727,13 +1235,7 @@
         "sha256": "2d3c789fd7b146939b3456a7a6c50b25d906d01bbe4bc8fac2291956eba6b020"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1748,13 +1250,7 @@
         "sha256": "34fcd23815f9f931aa9f2124fd3efb487464813412c3985395b58b8fc227011a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1769,13 +1265,7 @@
         "sha256": "acbbf83e0deda4cacb56f47de4649e43f0adf33c9037d6e61a556245e73d8773"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1790,13 +1280,7 @@
         "sha256": "b9d22cf86d7c69e88da2bfa70f86b54f8210e257cabef67b52f52cd3aa8c1283"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1811,13 +1295,7 @@
         "sha256": "780c22ab1a0156435c59708c78b6488ca2f60e5b1b5ac5220fb66745da6f6d89"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1832,13 +1310,7 @@
         "sha256": "ce9f1336f9d40f42e6a4880ff5d70df5dccc40172fd0998d8244ab3cc67949b4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1853,13 +1325,7 @@
         "sha256": "3b20ab8d45d977730ce8752633c999b8b3ce20e8da5a4dc449864a0cbfb689eb"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -1871,13 +1337,7 @@
         "sha256": "394c05e8fcb050a4ca1b326b2f4d418e64ab9ff92e4ae2b1cc77e30ff8d7bd1f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1892,13 +1352,7 @@
         "sha256": "67728a1e64f2ffb7864e0ed16580ec77513e630c99558fbb5a22fd342655b296"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1913,13 +1367,7 @@
         "sha256": "d4fed53a860359c623c0cd596f8f5c697300fd941e28362935428a2c4c84b253"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1934,13 +1382,7 @@
         "sha256": "3d4bbda92d05e14505df3f4bc047a9e7b68f58fc77a9e75813ae27983e0ad0c1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1955,13 +1397,7 @@
         "sha256": "155b60839d3707b5dbab7502bea86f92b378e2cd46e79eb74dea2fc179264e61"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -1976,13 +1412,7 @@
         "sha256": "6d5440eb921993820337dd7ce37fbf038005a7007f19127b9014e8604b593818"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -1994,13 +1424,7 @@
         "sha256": "0e01d705c14023a5b65b15e2d952a4011e6e7831fdf7b84ab18eda4ccd9139e3"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2015,13 +1439,7 @@
         "sha256": "915c836b9150e2ff3503ec3886da26d9833b4e2f1e315a53a2c96ac120f477f5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2033,13 +1451,7 @@
         "sha256": "e7d233ba27d3b554375e5f1e3bf5b38d5e6643f700e302cb0130658a3ca57522"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2051,13 +1463,7 @@
         "sha256": "38c02e43a5d93c3e17882e9f70d0c76d0579e479a32ca6eb1d925aeebc292937"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2069,13 +1475,7 @@
         "sha256": "e9253e0d078bc8ae5e53443507cddb9c19e2979f5b2af8d5c636e188a98bf136"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2090,13 +1490,7 @@
         "sha256": "af98627043563354f2dbbc0573d6f0b1d3bccb9446479f1eb0869e336d60ff3e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2108,13 +1502,7 @@
         "sha256": "a884a544950b5106128df13f18a060ad6c7abaa783f3f733e1c8ffecf1c78b79"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2126,13 +1514,7 @@
         "sha256": "172d527c3918116395963a41ba9e81c70583c5f1a70df7e37fcd0e5347810be0"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2144,13 +1526,7 @@
         "sha256": "2a25b6c27d8ae69eed595a2c6cc97f55d535003010babb3516ad0807d4229bc6"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2162,13 +1538,7 @@
         "sha256": "304010cafa7ee4d69b3f29321b95a4e2ebc04e28c4f49ca7c29d7bab46d5987d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2180,13 +1550,7 @@
         "sha256": "039017454b3a6476a6367a8c415796accccbf956f0fccd98d9284a4061989b89"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2198,13 +1562,7 @@
         "sha256": "49aaaf71971fe4e798e87b31a8cc2b7f7266b13ce877673979c0615d3016a24a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2219,13 +1577,7 @@
         "sha256": "f682b1a08240087b4244983d2d5a8442cf2a41bc44373c5152d0f755f1e57c60"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2237,13 +1589,7 @@
         "sha256": "f378c8d7bb21e3a02067319eccd15294be67548a16fcde40cc58f88ead54be6d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2255,13 +1601,7 @@
         "sha256": "82452b7223d0d4aac09ec29d670f1b6ee9fe8f9af57fb26a26b97d1b3cc0a53f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2273,13 +1613,7 @@
         "sha256": "d7006158bc9566288ad769cbc21d8712701b8e932aa78431e34b7c4662a35773"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2294,13 +1628,7 @@
         "sha256": "4f7e8213b3c76c4c8a0c13a34c029f8eeded759e6f7be40a35160b48031b072a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2312,13 +1640,7 @@
         "sha256": "48d4d95fba803962e12cacca460c1a5abf87390fc1792289d71087443c4b597d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2330,13 +1652,7 @@
         "sha256": "c8ea59d0f561fa0f2379515c0a2b9bd1c3ecc38a33e049ab53ba3901437d02e8"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2348,13 +1664,7 @@
         "sha256": "1147a5309713f9b4cd272af5b00453dc7a45e10a0dfffd93fb7961d80552cb7f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2369,13 +1679,7 @@
         "sha256": "2e8009180a2d2325951a35108f68055cca2dacb89fb4a310dffec48e21e17a76"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2390,13 +1694,7 @@
         "sha256": "d9ab07960b831238a650e4f24e3980ee3654b3da6ee6a24e0da117e5df0ff8b8"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2408,13 +1706,7 @@
         "sha256": "7bd56e9164a15244dd776a40cd5fe30779966517a4af683fa5a1e53363028a5b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2429,13 +1721,7 @@
         "sha256": "12dd9b8164afef636775427e91140a7e81780148ee4b71f36ca43c9a5c9da8d9"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2450,13 +1736,7 @@
         "sha256": "efaed0382a0607d523403a9be021e74fd049e94f10a6a12d82fcf3faec9ef6a1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2471,13 +1751,7 @@
         "sha256": "482ad4fd8cca50d6ea545812fa38111e3e0195d22e3b74db882e4a016959ab4b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2489,13 +1763,7 @@
         "sha256": "6a38c58a25ca4270a6883775b17b0c01b49ebdae1563183ec514a0324042d1cd"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2510,13 +1778,7 @@
         "sha256": "e180ba22dcd9aaa7e047a39f892b090ac7ba569fe81ff2325340914d9d96e958"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2531,13 +1793,7 @@
         "sha256": "d8a2b17888683f594a7b524a5d0f3fdff019cac80dde150517f36d867c95cc89"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2552,13 +1808,7 @@
         "sha256": "023dcb64a4836e8ca5de7c64e12c9881d8923508cf28c9149c0b8707f7d4966d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2570,13 +1820,7 @@
         "sha256": "21159de76afa092185210145dc7c91e5e6b6105c6e6ad4ec26aaec86a26a04d9"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2591,13 +1835,7 @@
         "sha256": "a743e309fafa9986b404ba2d48dde1cc00b1a23d431a2af75ccccf18c311e95d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2612,13 +1850,7 @@
         "sha256": "28a06851a5097542b7ce4b460d3941a993ca5137cae7a9570e0ae6d071f4135a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2633,13 +1865,7 @@
         "sha256": "934ba9966349431b419d114c06328539f13cf08afbe372aaa0808d99bad2cd71"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2651,13 +1877,7 @@
         "sha256": "8ced4b2c8c861489f8cc16a3d8c6c16d63a8eda038cf44435b3df1a5df97ab7d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2672,13 +1892,7 @@
         "sha256": "27d2f00b141b5d1c89e51d99d428345a31af295235f027db33b70ee5c43e7069"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2693,13 +1907,7 @@
         "sha256": "5940125b08dca6254bda682aa5a7f27462e6d7ea0e171df4280cd8a40a8ee38c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2714,13 +1922,7 @@
         "sha256": "bad19431b6bbe49eda029997915d78219a3ac44f955040b91388a32a50b2e848"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2735,13 +1937,7 @@
         "sha256": "77221bcbe14dc3aefb9620e7c187d591c579ce0ab11bb347c7142a4f3147415c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2753,13 +1949,7 @@
         "sha256": "66a41b084b56e983c75b20805ceb1535aef780f6ae4dcd53ec72039e4a44c3f2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2771,13 +1961,7 @@
         "sha256": "1477455c44d45e36b4d4bbddc509587519ef4bd43b435f6bac939a1c576eeff4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2789,13 +1973,7 @@
         "sha256": "7c89dc76841ae4ab68721350525fa4978476573fccb3034801ca4451a0e9b034"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2810,13 +1988,7 @@
         "sha256": "e15673dd7f878d515d316f62c174dca4cacb6f536ee3c1af6f4ab1c9ea98a16a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2831,13 +2003,7 @@
         "sha256": "c82e7500f2f11d4ac5ad7980ea1d5f27dd7b6b68f51edaff6e9c7bd504902240"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2852,13 +2018,7 @@
         "sha256": "f9ce4a1beb1792b6af99173834c770c32f00029b86643f948b1e013c1ca7f0ad"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2873,13 +2033,7 @@
         "sha256": "d3b59f54735444ad3765d5d8a6db59646aba8a3226c4b7492cfc7e4a08ad145a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -2891,13 +2045,7 @@
         "sha256": "c7530f1c1245dede08b3db60d8f969b3fee07ab54c15bef54ca93cc82ccb7402"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2912,13 +2060,7 @@
         "sha256": "9ccfdf55e04f9b8f6442c9202573f162e70a1d53c2bca21e6c182d901f0743b3"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2933,13 +2075,7 @@
         "sha256": "3c933b5b5fa8d07470167fcf4ec2abf87f8b9be9e401bb336ed080fa4c98adea"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2954,13 +2090,7 @@
         "sha256": "2e8036055a8bd61d9d741be8c28747906e4934c508fca51859ec918cd4d135ee"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2975,13 +2105,7 @@
         "sha256": "a63a210e56b92422ecdc7f40bcb29121b23b274181778fe46634adc3c2db56ff"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -2996,13 +2120,7 @@
         "sha256": "4c878d6e79d39ffa89f67df7f9a037db7c706fe77c7c06b9ac99b1603975e14f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3017,13 +2135,7 @@
         "sha256": "f159b1733fb60b804901fba5e9c0df7e045c86e6c90fbfe838feb2686daf9c65"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3038,13 +2150,7 @@
         "sha256": "b53c9adbfec3c03a8999a2757cc036b76f0932228e1bd33e0fa99a876fe216d1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3059,13 +2165,7 @@
         "sha256": "0767bea94429b632b0c56166b335f58616a33ef75755ffc7e408f495b47b518d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3080,13 +2180,7 @@
         "sha256": "731a41f8b21fba3e9e0f0f3f6013fec48745297708f684d895863624fc31ac06"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3098,13 +2192,7 @@
         "sha256": "f305203f855c974cf387e21e6072e3f1c57c14cd897a2fc43a9a6a14ef8e4174"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3116,13 +2204,7 @@
         "sha256": "8efa4eba9ca4eb6978fd5caea0ab2d20ed6d2801523e6d56868e5c1d4a6ca0db"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3137,13 +2219,7 @@
         "sha256": "1e504f54638d78cb8cffb0b92ab94798bb7ab67a64583bd8bd2b608c0e992890"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3158,13 +2234,7 @@
         "sha256": "d18d55185d8558bf062427ccc742734729d482bf01b68feefa30c45d4034c054"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3179,13 +2249,7 @@
         "sha256": "8fbf15c75f842a2f285d169cd89e6530c1454a4f8d56a2e7d7fc9cf559078500"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3200,13 +2264,7 @@
         "sha256": "43af679c2db69635046e514c3fd253adf4700f21b7c375be9d7d580587fbc78b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3221,13 +2279,7 @@
         "sha256": "5103f1720a55d3e334ad09fe34506512d3b1f01bbd0555727a1da23376751308"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3242,13 +2294,7 @@
         "sha256": "a3c1a9f4c2843aa2c38b012d78567336892df9a4b0bc13358a7fb2904fba16be"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3263,13 +2309,7 @@
         "sha256": "f4aa1f6f73f92a81756434901d8c4fa342e121f5bb5a5f8511391c5878e8d975"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3284,13 +2324,7 @@
         "sha256": "248678abf711a85167c76b7f0d41160a20a47bf415be5252d5cf42c59826de99"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3305,13 +2339,7 @@
         "sha256": "f2615069307e6fa7861decebd349142ff24bb1c8413e06f17fe938b64b2390c6"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3326,13 +2354,7 @@
         "sha256": "19ec041e47569abf25996ff1c8cbd83fe87f14afdd4c2d1a4a78bfaf9a5a176e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3344,13 +2366,7 @@
         "sha256": "44e297da2f3ece1be802b57dea2ec1cdd6758b9371ccbe5a262e571e723df3c1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3362,13 +2378,7 @@
         "sha256": "9948fcc5ee6ec861834b27d056c6c188e28ba7dee6fd84ca83a0ffddde738f5d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3383,13 +2393,7 @@
         "sha256": "d1a8d3b9fe829a832e71d1fefd30ee5c1e7b41a4e3c5b33deedff027eb84b53c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3404,13 +2408,7 @@
         "sha256": "40dac3863581c33a120164852a10804b20eb1f4b7f510e4a0313763491893cd4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3425,13 +2423,7 @@
         "sha256": "cd667350ad242fff93e5e225c40770d7756cc073b0c8cf3731d3378917f4c1f5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3446,13 +2438,7 @@
         "sha256": "1235bcb028dfd481d561f5bb3e9343911842cb120d37a1a07204f027d187649e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3464,13 +2450,7 @@
         "sha256": "9a8d38474c57dcd5c3e0f94c1b258bdb2e8642b5edf208307b83e6017edf3660"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3482,13 +2462,7 @@
         "sha256": "744ea3b9f20731ddb16d8aaf346f62a8ee3162bb5c566dae002268d0ca1218c5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3500,13 +2474,7 @@
         "sha256": "fd719005b1714d4c2956bee92e8e3f141bf9cdf04c386355e02e6e91134673b6"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3518,13 +2486,7 @@
         "sha256": "ec6f0535aa8665c6f15b2905a10fe583f90864a67ac5e12350559919187ea341"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3539,13 +2501,7 @@
         "sha256": "247084c79f8de3229492fc24738371b3ad9b44ee6bb51244c2044f6ca737415f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3557,13 +2513,7 @@
         "sha256": "f55b700169a3fbe264f2fd09db4ec4501004c73fe6ca527659c45cf26d767fee"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3575,13 +2525,7 @@
         "sha256": "9561b8c916ff379c60ddec4b5ce460d4e0bab1e3fac360afc73334f9eb44a624"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3593,13 +2537,7 @@
         "sha256": "35730e7a5000e1c1a569dd127225d07c7974524120f7666411041c0e3b2c33fe"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3614,13 +2552,7 @@
         "sha256": "12aa5fa90416fa418ceb419e0a8e4acade25252375e4940cf84def36c9134bd2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3635,13 +2567,7 @@
         "sha256": "c00085b1e74d13b008c2837524b9a464893ba2a8ee21f31c381ef03cb117603a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3656,13 +2582,7 @@
         "sha256": "c85a697394524e2aa6d2e57de41ea8e536a74f6322b2dc25b6804f314071b968"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3677,13 +2597,7 @@
         "sha256": "b285e10d2c4ba0c6dccd0b308b70800873cf09a99aadc8111c15c68c47b52533"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3698,13 +2612,7 @@
         "sha256": "7d58c0cd21929ff79d56dcc9121d0a2193c860965265382500e5d88d976d9b0d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3716,13 +2624,7 @@
         "sha256": "8a80ecbe0937b51a649107d20a28fc816c11571948604eb8d1966c5131c6e7a5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3734,13 +2636,7 @@
         "sha256": "143cce179ce477bd874ba9eefdf2f0d31004da1282fcc3048cde20dda60ab17e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3752,13 +2648,7 @@
         "sha256": "82543ba6615ec3d0812d2e4b8ed5b633468d2c6fc07cc10252de6b8155ab1762"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3770,13 +2660,7 @@
         "sha256": "7cf3cedde649555eb7b62c0010ecf9d2fc546c72229a0ae8515cc19feaf00db5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3791,13 +2675,7 @@
         "sha256": "6d90071df6f1d00cc695a0c23386d2ea4b17580fc492b6801aad8b8eff4df577"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3809,13 +2687,7 @@
         "sha256": "6464a20eae66e074435b4221d02ee9525b6624c2b0ae1f34b7f410c55a717c85"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -3830,13 +2702,7 @@
         "sha256": "d93dd33d89fe4d849bd126bf29186a6c7d9feeca288a842e351a19ca9044b026"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3848,13 +2714,7 @@
         "sha256": "d36d773f338ddfe7abe965ac0a18ecac6df357807627f4a2f6f6354a75e92fde"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3866,13 +2726,7 @@
         "sha256": "29366e0a7a436cdffec84a35d5433aa7a9523b54c67af7bc854035d7e2b94525"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3884,13 +2738,7 @@
         "sha256": "a8bfb606325ae3206d612f4cb37d9015e7238e43bd0cafa91ccde07cd4d16b50"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3902,13 +2750,7 @@
         "sha256": "065906513eae01f46162aa2fe742d0128681697dffa9217e3bb5887ba5577f15"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3920,13 +2762,7 @@
         "sha256": "1ab8a97f33e7ec7f247c7f41c8531b76a784a5f8d09e9fae33ed6fd8c689e31b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3938,13 +2774,7 @@
         "sha256": "089e34ef5d12e42fc6c1888b80ef55e2c89dc5a3bdc4d7c8b84adfa1185caa64"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3956,13 +2786,7 @@
         "sha256": "805d82193bcb920a63bc7870bcafcac865dff6bd0dc00ce0c0d4445b616a5b9e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3974,13 +2798,7 @@
         "sha256": "1d05795beefe801c6b1aec33fdeb299b8a95a58ccb5b114afb2bbb504dabc287"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -3992,13 +2810,7 @@
         "sha256": "a94e02bb33fed16deabb63169661151acc4f31d0633cf573aea2e33fc1819f23"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4010,13 +2822,7 @@
         "sha256": "8a85acc5b5cc63b977f483ca122b02d1798e69e737519703ce504afa50447dcc"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4031,13 +2837,7 @@
         "sha256": "1e01f8fddb75f9ad448614610e5077f7a538b49f7ebf9f250487e1b5db97f2e5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4049,13 +2849,7 @@
         "sha256": "68abb58b9cbacba0ea7200e9e3b0686ab06d517bc5850a2ff7e33dbe75946c25"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4067,13 +2861,7 @@
         "sha256": "4ce29866936264c5250b0c52a1d53c7e709f40f559ea8ef316ca887e42a097d8"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4085,13 +2873,7 @@
         "sha256": "a45542352b46e4b1fd78b51a82472941b6f8dec2729cfbda6400e77e6bef9d1e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4103,13 +2885,7 @@
         "sha256": "5130e27e528523090b0e65e28bf0186965d789ff09e58befc851a8feff4b6f60"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4121,13 +2897,7 @@
         "sha256": "919418c541ad152cbb1be7af423716bb451acbd729c64b46c1c47c607aab29df"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4139,13 +2909,7 @@
         "sha256": "a554cd6e2998cfdcb764faf847b1256f7ef9d749842c8ec2aa63e02ca10dd7ba"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4157,13 +2921,7 @@
         "sha256": "cf085225ba28b013b399c2b0a419f302065ecb2e52b7a0f4139a4c108b551586"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4175,13 +2933,7 @@
         "sha256": "cce9d437dcfaecc68a739eb59657874d49501949fc84409c0c8a4ab0adf70b89"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4196,13 +2948,7 @@
         "sha256": "8ac4c666f170c13f70a99a63ce26aa26b202a426d2e13737654e951ac95a3b29"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4217,13 +2963,7 @@
         "sha256": "1d245e4c410aff5fb69c43b6b29c79c470f9367ae45096961b603b0781d31c47"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4235,13 +2975,7 @@
         "sha256": "de24b42c4c68027dcde1435491b52e1e7f7b3e888579d7c73c27f1c788d28a90"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4253,13 +2987,7 @@
         "sha256": "68b330ff030433e5912149c268c8cbb584e5d2b172ae2c1773e7c05049f26ba2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4271,13 +2999,7 @@
         "sha256": "15b08736b58baa4337b1b8c2f91d3d17cef800406d9d2aa976a806a99fb3f62a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4289,13 +3011,7 @@
         "sha256": "08a0cac0949c5ce3f62054accf52d6e8d73776a5ac2c4739440b308f8e5b2c09"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4307,13 +3023,7 @@
         "sha256": "1771bef8cf1d30caf7712f386475767989ed15b97fa0dab3fd9f85e34440d097"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4325,13 +3035,7 @@
         "sha256": "69c28367db10d1224da817fd1cd5999c029700297a899bdd0ac1b52abba2df33"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4343,13 +3047,7 @@
         "sha256": "fd2cd485e54c433fe895072bbab8a0a58e86d2acc93ff2363daeacc778ff7891"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4361,13 +3059,7 @@
         "sha256": "a2b6fa8c632409a520b30c4568f72f10fede3507c9e17615aba9b5bffd63e6f4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4379,13 +3071,7 @@
         "sha256": "d30b799992c3b0418fda4101bde3cc351528c69c558a9c15c5610c52392de400"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4400,13 +3086,7 @@
         "sha256": "8d383d52ea2f3a38f557c621a0249d9869c9e9a2127446d50695c08de1d31f3f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4418,13 +3098,7 @@
         "sha256": "0f677ba4902b07308a4fe9637e61dbb87caeae63393d630621af5a90e65ce6fe"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4439,13 +3113,7 @@
         "sha256": "ad7c3154de942d9bc8986a970b2dd204b2d26c7bf8212ca3e43ca9b7c55e08ed"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4460,13 +3128,7 @@
         "sha256": "b062b9b265e4747133286d3a4f40d01ab2589601d7286a976c48bcb2138751b3"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4478,13 +3140,7 @@
         "sha256": "41d82900bcdee20488a0dc9433353f0084935f5dc796b7d7e19a254486aa4235"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4499,13 +3155,7 @@
         "sha256": "17ca93dbb418217bcacf2e6ef00650b8c792cbbe43055cc724b174a946561935"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4520,13 +3170,7 @@
         "sha256": "0776b2fd0cc3e4c315d138fc7b32021153c96927201647cad707eff2df4dbb3f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4541,13 +3185,7 @@
         "sha256": "902a63fed678cfb65f62d2f40b5a9553eeeaac120d51a64afccb1427d2612237"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4562,13 +3200,7 @@
         "sha256": "0d20f7de949752808ccad5a46f1fbeddc995eb7a4534e9f4774b12b0ee227ac3"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4583,13 +3215,7 @@
         "sha256": "99c066561670e46df3f35a796a5cce4ef5be30536a0389972499fb172b61ff03"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4604,13 +3230,7 @@
         "sha256": "b321002ffd78e114d712ab3323f890769c2c361d420199d70f4342dbe6bdaaed"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4625,13 +3245,7 @@
         "sha256": "610f331db7c1b9860ad92fadf8408b40c11e016348ed190e35e89828193bebb1"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4646,13 +3260,7 @@
         "sha256": "0d0af15cf15dea17ca0acadcf01e5a4486e512c1b832e2864b5cf188e2ba065b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4667,13 +3275,7 @@
         "sha256": "963fc30e0ccfbef7cc28103b65c178bd0502169170976caafa463afc14e7eb69"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4688,13 +3290,7 @@
         "sha256": "58a3429b24f81dda481993f65e7ffdfe71d323426a885a439b7b20cd7b96ccf4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4709,13 +3305,7 @@
         "sha256": "0f695a1c3e83c3a9325ef10b78bac0827a39b21148e2050ba2e437c36934a8a6"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4727,13 +3317,7 @@
         "sha256": "ad4b494cd660e35bb09e1e95b476cf23da0841d5b81f33a4bc46c73d278ce28b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4748,13 +3332,7 @@
         "sha256": "d9cad6cac9d141d421e3e17e0b933ddff5d28e46130b119f81ab47280eeea7ab"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4769,13 +3347,7 @@
         "sha256": "07fc0c029c6000b7887b9f77df72a1940584e51328a2f392e906ba0e91c6244f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4790,13 +3362,7 @@
         "sha256": "212ce2ab910ab5db01435a979512ef5c449b112912d2b5ab71a30ea275756962"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4808,13 +3374,7 @@
         "sha256": "dbb6c029c78fb75d8a786f350e729bf6cbf8755cbe0320721266427b49581733"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4829,13 +3389,7 @@
         "sha256": "62bc1da996119a1e2bd8cbb5235f11a404687b632d54418d84add21fde07d0ee"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4850,13 +3404,7 @@
         "sha256": "cee749c3e7ff770411619107abdb93c0b63dec5b1ed34be30c90c19f3dc28ae3"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4871,13 +3419,7 @@
         "sha256": "a6ac118effc8f43163ac53a9e90dd17091283c0683e1fdb4c3838140c16ee4fb"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4889,13 +3431,7 @@
         "sha256": "3333833e2dad29c3041433db64af4d8d764a6e8dfbb5e71a362310e92f12bf27"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4910,13 +3446,7 @@
         "sha256": "dfb5789e6485d0286201bf95b41c3c92e783e0dcfbb5b29811f5c5737d34601f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4931,13 +3461,7 @@
         "sha256": "43ba95b58fa05356f38bc6ffe0de687de83b5692a862202a07fbc22c16bfc6b8"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -4952,13 +3476,7 @@
         "sha256": "204c20bd2bc1674bef9f94c1b76a2e0c055f31be0f7a341c99519a672cffbef9"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4970,13 +3488,7 @@
         "sha256": "586366dd6c3f40175efc100498d9c71c60093af840744be6b1c75d62c902cbef"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -4988,13 +3500,7 @@
         "sha256": "5e7f744f91565b093a8ca089abafa6587225ab8d9e87a4ddabc4efef20872f68"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5006,13 +3512,7 @@
         "sha256": "07162f90d51fc27b0b52b6e1c2c59aee6b5804bcee63871eb135a474b6025083"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5024,13 +3524,7 @@
         "sha256": "8ccc02124934beecb2fb0cd9a0a320d90ad30564c81358e499dcaa154d3080c6"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5042,13 +3536,7 @@
         "sha256": "b46a94bd1fdc0b541c9576eb1243a2e215ac6553b350eb3b0eba5d8f5c419802"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5060,13 +3548,7 @@
         "sha256": "e43d49fda8d2e2f109eb9199294d6a5a20565d1ec163911624b121dee29fd7c6"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5081,13 +3563,7 @@
         "sha256": "0eec73a6f3e1a93557ed7a894f98175bd0c8b1dd5eedd02a6f169a2f9e0b857c"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5102,13 +3578,7 @@
         "sha256": "d217ca3bc775516c65604e9bbd117b7e05f9f907b1a890a3d0a407679d8b2797"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5123,13 +3593,7 @@
         "sha256": "566edca82a6419eeca34b3eaf810a4ab603de03d7f46c92701f15dcb45509357"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5141,13 +3605,7 @@
         "sha256": "2f41e123dd5d5ca521f45c4a991514c78071fd173311d4f116ae6b86b1a86f56"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5159,13 +3617,7 @@
         "sha256": "124f79561d235d1e008f5d508cf450b1f90cbb48178e60134a47abaf9311a36e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5180,13 +3632,7 @@
         "sha256": "cd2aa762622c2b7483c320fa1d2340b63c8e8d22be2ecf2a625f58127f1d6a9f"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5201,13 +3647,7 @@
         "sha256": "ce55f1e0358c551ceeb9c8bfd5cee9a41a9a522f726b00d0e8a5f027a41e8fe2"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5219,13 +3659,7 @@
         "sha256": "a91f08df1d86c1e97650c161628eb56b3f64ef0f183c7d16f4a43e521b30c714"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5240,13 +3674,7 @@
         "sha256": "ece9316dcfaa6f58c1b4d2d59f438af3ce2df2e2f162ee1f9342de2d235ddf97"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5261,13 +3689,7 @@
         "sha256": "e5f05df0ecf3719c724d839a5974cadecad469256c4cd83b94ec15aed9484d24"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5282,13 +3704,7 @@
         "sha256": "b00cf4f9a153e1c46da3658b06fa8c669ca8dafabc17b50720a54758c92e2a93"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5303,13 +3719,7 @@
         "sha256": "f4f446c932feb5813d888349d5ce17c1f3f92eba84330525e898906d0d99300a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5324,13 +3734,7 @@
         "sha256": "2acf12cfedf1d8a2768439e62008615ec40a42caa4fd11ed606dfb175ef4254b"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5342,13 +3746,7 @@
         "sha256": "4c1e6259c6083a3327a0799028f752ad7da5f74efee898980e1b72d5f89a42fc"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5360,13 +3758,7 @@
         "sha256": "7074403527583e013e209d1209a26efd50d53e4e1c4280c26d8bfa319838f36d"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5378,13 +3770,7 @@
         "sha256": "7c4595ca281f42e8387081ba1ccb2470ea57d711716c71077f49da5cf2bbd8d7"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5399,13 +3785,7 @@
         "sha256": "6a6e8e36d16083045264a87f8a75c443181ddbd40f6a118f47e37bf6404b488a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5420,13 +3800,7 @@
         "sha256": "cbfa017c3f1843d3eb4bcc3c4ee113f51e1e8b494358e5630b916eafdab5b6b4"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5441,13 +3815,7 @@
         "sha256": "c0c2293810d334df41717b3dea366f6fc76ddda1b2993f66ae308acf8874842a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5462,13 +3830,7 @@
         "sha256": "55e75972b45a355cf3b32e62ad5caa345e983dd0a2dbf54cbbf9c7e5b03bccdf"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5483,13 +3845,7 @@
         "sha256": "474e0db41fcd05fb1d0139373d5e6a15d212aeed1d255cf7ccc0956556544ab5"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "A",
@@ -5501,13 +3857,7 @@
         "sha256": "a97c27aa3ec267684ce4113f3a272a22b6a463d177dc9d2c9841b43e96c1026a"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     },
     {
       "status": "M",
@@ -5522,13 +3872,7 @@
         "sha256": "41fd181552505c64e356b59867730acdd27d749f3b316a052100c7affc72cd5e"
       },
       "classification": "pending",
-      "sourceKey": null,
-      "legacyContractIds": [],
-      "symbol": null,
-      "interaction": null,
-      "transport": "none",
-      "realtime": null,
-      "motion": null
+      "interactions": []
     }
   ]
 }
