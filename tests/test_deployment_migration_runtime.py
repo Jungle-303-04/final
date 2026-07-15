@@ -26,6 +26,8 @@ def test_service_image_contains_alembic_runtime_and_revision_assets() -> None:
     assert "COPY --chown=appuser:appuser alembic ./alembic" in dockerfile
     assert "COPY --chown=appuser:appuser alembic.ini ./alembic.ini" in dockerfile
     assert "alembic heads" in dockerfile
+    assert "alembic heads | wc -l" in dockerfile
+    assert "grep -Eq '^[0-9_]+ \\(head\\)$'" in dockerfile
     assert "python -m packages.storage.baseline verify" in dockerfile
 
 
