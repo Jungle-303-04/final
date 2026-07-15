@@ -210,6 +210,10 @@ class TimelineEvent(StrictModel):
 
     @model_validator(mode="after")
     def validate_exact_resource_relation(self) -> TimelineEvent:
+        if self.source in {"application_workflow", "gitops"} and not isinstance(
+            self.subject, TimelineApplicationWorkflowSubject
+        ):
+            raise ValueError("application timeline source requires an application workflow subject")
         if isinstance(self.subject, TimelineResourceSubject):
             if self.resource is None:
                 raise ValueError("resource subject requires an exact resource relation")
