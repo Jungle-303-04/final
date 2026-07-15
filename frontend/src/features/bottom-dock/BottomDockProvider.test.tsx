@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthSessionGateProvider } from "../auth/AuthSessionGate";
@@ -84,6 +85,70 @@ describe("BottomDockProvider", () => {
 
     act(() => scheduledFrame?.(16));
     expect(screen.getByTestId("received").textContent).toBe("1");
+  });
+
+  it("keeps the stream coalescer active after StrictMode resets its effects", () => {
+    let handlers: LogStreamHandlers | null = null;
+    const port: LogStreamPort = {
+      open: vi.fn((_target, nextHandlers) => {
+        handlers = nextHandlers;
+        return vi.fn();
+      }),
+    };
+
+    render(
+      <StrictMode>
+        <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+          <BottomDockProvider port={port}>
+            <DockProbe onRender={() => undefined} />
+          </BottomDockProvider>
+        </AuthSessionGateProvider>
+      </StrictMode>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    act(() => {
+      handlers?.onEvent({ type: "connected", streamId: "stream-1" });
+      handlers?.onEvent(line("line-1"));
+    });
+    act(() => scheduledFrame?.(16));
+
+    expect(screen.getByTestId("status").textContent).toBe("streaming");
+    expect(screen.getByTestId("received").textContent).toBe("1");
+  });
+
+  it("cancels pending frames and ignores late transport events after unmount", () => {
+    let handlers: LogStreamHandlers | null = null;
+    const close = vi.fn();
+    const port: LogStreamPort = {
+      open: vi.fn((_target, nextHandlers) => {
+        handlers = nextHandlers;
+        return close;
+      }),
+    };
+    const rendered: number[] = [];
+    const { unmount } = render(
+      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+        <BottomDockProvider port={port}>
+          <DockProbe onRender={(received) => rendered.push(received)} />
+        </BottomDockProvider>
+      </AuthSessionGateProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    act(() => handlers?.onEvent(line("queued-before-unmount")));
+    const pendingFrame = scheduledFrame;
+    const rendersBeforeUnmount = [...rendered];
+
+    unmount();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(17);
+
+    expect(() => act(() => {
+      handlers?.onEvent({ type: "connected", streamId: "late-stream" });
+      pendingFrame?.(16);
+    })).not.toThrow();
+    expect(rendered).toEqual(rendersBeforeUnmount);
   });
 });
 

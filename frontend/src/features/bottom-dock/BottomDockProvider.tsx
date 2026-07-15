@@ -6,7 +6,6 @@ import {
   useMemo,
   useReducer,
   useRef,
-  useState,
   type ReactNode,
 } from "react";
 
@@ -66,13 +65,9 @@ export function BottomDockProvider({
   const stateRef = useRef(state);
   const subscriptions = useRef(new Map<string, { close: () => void; generation: number }>());
   const generation = useRef(0);
-  const [eventCoalescer] = useState(() => createRafStreamCoalescer<QueuedDockEvent>({
-    onFlush(events) {
-      dispatch({ type: "events", batches: dockEventBatches(events) });
-    },
-    policy: { hiddenTab: "coalesce", maxFramesPerSecond: 60 },
-  }),
-  );
+  const eventCoalescerRef = useRef<ReturnType<typeof createRafStreamCoalescer<QueuedDockEvent>> | null>(null);
+  const pendingSetupEvents = useRef<QueuedDockEvent[]>([]);
+  const acceptsEvents = useRef(true);
   const { reportUnauthorized } = useAuthSessionGate();
   const i18n = useOptionalI18n();
 
@@ -81,14 +76,47 @@ export function BottomDockProvider({
   }, [state]);
 
   const queueEvent = useCallback((id: string, event: LogStreamEvent) => {
-    eventCoalescer.enqueue({ id, event });
-  }, [eventCoalescer]);
+    if (!acceptsEvents.current) return;
+    const queued = { id, event };
+    const eventCoalescer = eventCoalescerRef.current;
+    if (eventCoalescer) {
+      eventCoalescer.enqueue(queued);
+      return;
+    }
+    // Child effects can open a stream before this provider's effect owns the scheduler.
+    pendingSetupEvents.current.push(queued);
+  }, []);
 
-  useEffect(() => () => {
-    for (const subscription of subscriptions.current.values()) subscription.close();
-    subscriptions.current.clear();
-    eventCoalescer.dispose();
-  }, [eventCoalescer]);
+  const discardQueuedEvents = useCallback((predicate: (event: QueuedDockEvent) => boolean) => {
+    const buffered = pendingSetupEvents.current;
+    const retained = buffered.filter((event) => !predicate(event));
+    const discardedBuffered = buffered.length - retained.length;
+    pendingSetupEvents.current = retained;
+    return (eventCoalescerRef.current?.discard(predicate) ?? 0) + discardedBuffered;
+  }, []);
+
+  useEffect(() => {
+    const activeSubscriptions = subscriptions.current;
+    const eventCoalescer = createRafStreamCoalescer<QueuedDockEvent>({
+      onFlush(events) {
+        dispatch({ type: "events", batches: dockEventBatches(events) });
+      },
+      policy: { hiddenTab: "coalesce", maxFramesPerSecond: 60 },
+    });
+    eventCoalescerRef.current = eventCoalescer;
+    acceptsEvents.current = true;
+    for (const queued of pendingSetupEvents.current) eventCoalescer.enqueue(queued);
+    pendingSetupEvents.current = [];
+
+    return () => {
+      acceptsEvents.current = false;
+      if (eventCoalescerRef.current === eventCoalescer) eventCoalescerRef.current = null;
+      pendingSetupEvents.current = [];
+      for (const subscription of activeSubscriptions.values()) subscription.close();
+      activeSubscriptions.clear();
+      eventCoalescer.dispose();
+    };
+  }, []);
 
   const start = useCallback((id: string, target: LogStreamTarget) => {
     subscriptions.current.get(id)?.close();
@@ -132,7 +160,7 @@ export function BottomDockProvider({
         if (evicted) {
           subscriptions.current.get(evicted.id)?.close();
           subscriptions.current.delete(evicted.id);
-          eventCoalescer.discard((event) => event.id === evicted.id);
+          discardQueuedEvents((event) => event.id === evicted.id);
         }
       }
       dispatch({ type: "open", id, target });
@@ -144,7 +172,7 @@ export function BottomDockProvider({
     closeTab(id) {
       subscriptions.current.get(id)?.close();
       subscriptions.current.delete(id);
-      eventCoalescer.discard((event) => event.id === id);
+      discardQueuedEvents((event) => event.id === id);
       dispatch({ type: "close", id });
     },
     selectTab: (id) => dispatch({ type: "select", id }),
@@ -156,7 +184,7 @@ export function BottomDockProvider({
     },
     setCollapsed: (collapsed) => dispatch({ type: "collapse", collapsed }),
     setHeight: (height) => dispatch({ type: "resize", height }),
-  }), [eventCoalescer, state, start]);
+  }), [discardQueuedEvents, state, start]);
 
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
   const connectionAnnouncement = activeTab === null
