@@ -7,6 +7,7 @@ import {
   type WorkloadDetailRequest,
   type ScheduledRunCatalog,
 } from "./workloadDetailContract";
+import { toRightsizingEvidence } from "../rightsizing/rightsizingAdapter";
 import type { WorkloadDetailEndpointDependencies } from "./workloadDetailEndpointContract";
 import type { WorkloadDetailEndpoint } from "./workloadDetailWireContract";
 
@@ -102,6 +103,13 @@ function toScheduledRuns(
 function toDetail(request: WorkloadDetailRequest, wire: WorkloadDetailEndpoint): WorkloadDetail {
   const detail = wire.detail;
   assertRequestIdentity(request, detail);
+  const rightsizing = toRightsizingEvidence(detail.rightsizing);
+  if (
+    rightsizing.availability !== "unavailable" &&
+    rightsizing.resource.uid !== detail.observation.resource.uid
+  ) {
+    throw new WorkloadDetailPortFailure("invalid-response");
+  }
   return {
     scope: {
       workspaceId: detail.scope.workspace_id,
@@ -150,6 +158,7 @@ function toDetail(request: WorkloadDetailRequest, wire: WorkloadDetailEndpoint):
       streamKind: detail.log_stream.stream_kind,
       reasonCodes: detail.log_stream.reason_codes,
     },
+    rightsizing,
     capabilities: {
       revision: detail.capabilities.revision,
       actions: detail.capabilities.actions,

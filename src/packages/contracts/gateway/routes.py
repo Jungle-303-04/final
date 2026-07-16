@@ -48,6 +48,7 @@ WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
 # Contextual Workload Detail.  API group/version and exact cluster identity are
 # query-owned because the upstream path is intentionally cluster agnostic.
 WORKLOAD_DETAIL_PATH = "/workloads/{kind}/{namespace}/{name}"
+RIGHTSIZING_SCAN_PATH = "/rightsizing/workloads"
 # Safe contextual Compare.  Source-compatible kind/apiGroup/a/b are query
 # owned; the product adds cluster_id and an exact apiVersion when resolved.
 COMPARE_DESCRIPTORS_PATH = "/compare/descriptors"

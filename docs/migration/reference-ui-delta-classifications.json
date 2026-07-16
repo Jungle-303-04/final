@@ -642,6 +642,34 @@
     "resources.job.runtime-semantics": {
       "destination": "tests/test_inventory_provider_detail.py",
       "rationale": "Job retry defaults and live elapsed duration require an explicit server-owned schema-default and request-clock contract before the UI may present them."
+    },
+    "rightsizing.contract": {
+      "destination": "tests/test_rightsizing.py",
+      "rationale": "Python owns safe integer resource units, recommendation actions, impact, provenance, freshness, partial failures, RBAC, namespace scope, and the 200-workload response bound."
+    },
+    "rightsizing.workload": {
+      "destination": "tests/test_workload_detail.py",
+      "rationale": "Exact workload detail exposes the same observed-or-unavailable rightsizing union and never substitutes an inferred recommendation."
+    },
+    "rightsizing.api": {
+      "destination": "frontend/src/api/rightsizing.test.ts",
+      "rationale": "The explicit scan request canonicalizes namespace scope, validates the workload limit, and consumes only the strict Zod response."
+    },
+    "rightsizing.schema": {
+      "destination": "frontend/src/api/rightsizing-schemas.test.ts",
+      "rationale": "The browser boundary rejects unsafe integers, mismatched resource units, inconsistent replicas, duplicate rows, and malformed partial evidence."
+    },
+    "rightsizing.strip": {
+      "destination": "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
+      "rationale": "The workload surface distinguishes collector absence from observed guidance and presents server actions, signals, quantities, and provenance without recalculation."
+    },
+    "rightsizing.model": {
+      "destination": "frontend/src/features/rightsizing/rightsizingModel.test.ts",
+      "rationale": "The view model only groups server-classified rows by container and does not calculate impact, action, thresholds, or system namespaces."
+    },
+    "rightsizing.presentation": {
+      "destination": "frontend/src/features/rightsizing/rightsizingPresentation.test.ts",
+      "rationale": "Presentation maps server enums to localized semantic labels and formats safe integer units without deriving a recommendation."
     }
   },
   "classifications": {
@@ -1015,9 +1043,23 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The shared bounded projection preserves only allow-listed machine-template and remediation facts and reuses the existing authenticated Resources detail refresh."
@@ -1041,9 +1083,23 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "Integer-or-percentage rollout fields remain server-projected strings, so the browser neither normalizes nor invents strategy values."
@@ -1067,9 +1123,23 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "Selectors and condition collections are capped at the shared 100-row boundary and invalid rows are omitted by the server projector."
@@ -1093,9 +1163,23 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "One reusable replica and reference contract covers this detail without kind-specific browser fetches."
@@ -1119,9 +1203,25 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/features/resources/providerResourceCanonical.test.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/features/resources/providerResourceCanonical.test.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "Provider ID parsing occurs once in Python under a bounded allow-list; the browser consumes explicit provider, region, and instance fields and never parses credentials or raw Kubernetes data."
@@ -1145,9 +1245,23 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The shared bounded replica and exact reference contracts preserve nullable observations without UI defaults."
@@ -1171,9 +1285,24 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The exact infrastructure.cluster.x-k8s.io GCPMachine projector and strict browser contract are implemented for stored observations. Automatic CAPG CRD discovery and read RBAC remain a collection follow-up."
@@ -1197,9 +1326,24 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The official CAPG CRD group is used as the exact projector key; absent Autopilot and network defaults remain unavailable instead of being inferred in the browser. Automatic CAPG collection remains a follow-up."
@@ -1223,9 +1367,24 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product preserves nullable CAPG observations and does not invent e2-medium, pd-standard, 100GB, autoscaling, or zero-replica defaults. Automatic CAPG collection remains a follow-up."
@@ -1249,9 +1408,25 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "HTTP and gRPC routes share one typed rule model and one presentation component. Backend and Gateway clicks remain unavailable until Python resolves each reference to an authorized inventory resource type and exact identity."
@@ -1275,9 +1450,27 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/inventory.test.ts", "frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_domain.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/inventory.test.ts",
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "Sensitive header and query match names are removed, modifier values are never projected, and route integration proves raw values do not cross the RBAC gateway. Cross-resource navigation awaits server-resolved references."
@@ -1290,16 +1483,27 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:renderers:public-contract-boundary:v1",
-          "legacyContractIds": ["reference.feature.126"],
+          "legacyContractIds": [
+            "reference.feature.126"
+          ],
           "symbol": "resource renderer export barrel",
           "interaction": "the product consumes supported resource-detail discriminators through its own typed Python, Zod, canonical adapter, and page modules without importing or recreating the isolated source renderer barrel",
           "transport": "none",
           "realtime": null,
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/features/resources/providerResourceContract.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx"],
-            "requiredBackendContracts": ["packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.public-boundary"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/features/resources/providerResourceContract.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.public-boundary"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "No source-runtime barrel is copied into the product. Direct typed imports keep ownership and tree-shaking boundaries explicit while the source ledger tracks each renderer separately."
@@ -1323,9 +1527,24 @@
           },
           "motion": null,
           "opsiaPort": {
-            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.extension-detail.contract", "resources.extension-detail.transport", "resources.extension-detail.adapter", "resources.extension-detail.presentation"],
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The exact batch/Job projector and localized presentation are implemented. Missing fields remain absent rather than using source defaults for completions, parallelism, or backoff."
@@ -1340,9 +1559,18 @@
           "realtime": null,
           "motion": null,
           "opsiaPort": {
-            "destinations": ["src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
-            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
-            "plannedTestIds": ["resources.job.runtime-semantics"],
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.job.runtime-semantics"
+            ],
             "state": "blocked",
             "blockedReason": "The stored observation does not carry resolved CRD/default values or a request-clock elapsed field; applying source defaults such as backoffLimit=6 or computing a browser-local running duration would fabricate state.",
             "rationale": "Completed and failed terminal timestamps are projected today. Live duration and remaining retries remain explicitly unavailable until the Python contract owns both time and default-resolution evidence."
@@ -6363,7 +6591,7 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-                "frontend/src/desktop/DesktopRuntimeSync.tsx"
+              "frontend/src/desktop/DesktopRuntimeSync.tsx"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.routes",
@@ -7904,6 +8132,282 @@
             "state": "blocked",
             "blockedReason": "External host injection would bypass the product's single authenticated workspace and cluster-scope composition boundary. The supported desktop host is Tauri and shares the same compiled React application instead.",
             "rationale": "The standalone provider composition is retained, while the source-only embeddable browser-library contract remains intentionally outside the product build."
+          }
+        }
+      ]
+    },
+    "web/src/api/client.rightsizing.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:scan:manual-scope-contract:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing scan client tests",
+          "interaction": "an explicit workload scan canonicalizes one authorized cluster and bounded namespace scope without automatically querying on first render",
+          "transport": "poll",
+          "realtime": {
+            "resume": "repeat only after an explicit user scan or refresh using the same normalized cluster and namespace scope",
+            "backpressure": "permit at most one active request per exact scope and cap each response at 200 workloads",
+            "merge": "replace only the scan whose cluster and canonical namespace scope still match the active request"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/rightsizing.test.ts",
+              "frontend/src/api/rightsizing.ts",
+              "frontend/src/api/rightsizing-schemas.ts",
+              "src/domains/workload_detail/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "domains.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.api",
+              "rightsizing.schema"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The manual bounded request and strict response path are implemented; production returns explicit unavailable evidence until a persisted observation repository is connected."
+          }
+        }
+      ]
+    },
+    "web/src/components/resource/RightsizingStrip.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:workload-strip:state-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "RightsizingStrip tests",
+          "interaction": "workload guidance keeps fit, action, confidence, safety signals, collector absence, and partial evidence as separate server-owned states",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh with the exact workload detail observation and its immutable resource identity",
+            "backpressure": "render at most 400 validated container-resource rows for one exact workload",
+            "merge": "replace guidance only when the response ResourceRef still matches the selected workload UID"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "tests/test_workload_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.workload",
+              "rightsizing.strip"
+            ],
+            "state": "blocked",
+            "blockedReason": "The observed and partial branches are contract-tested, but no production metrics repository currently supplies recommendation evidence for an exact workload.",
+            "rationale": "The production strip truthfully renders collector absence and never turns missing metrics into balanced, zero-impact, or no-change guidance."
+          }
+        }
+      ]
+    },
+    "web/src/components/resource/RightsizingStrip.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:workload-guidance:server-evidence:v1",
+          "legacyContractIds": [
+            "reference.feature.154"
+          ],
+          "symbol": "RightsizingStrip",
+          "interaction": "workload detail presents localized current, observed, and suggested request quantities with server action, fit, confidence, safety signals, freshness, and provenance",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reuse the workload detail refresh lifecycle and retain no evidence across immutable resource UID changes",
+            "backpressure": "consume the server-bounded exact-workload union without starting an independent background scan",
+            "merge": "discard guidance whose ResourceRef does not match the selected workload observation"
+          },
+          "motion": {
+            "reducedMotion": "all guidance and safety states remain static semantic content with no motion-dependent disclosure.",
+            "evidence": [
+              "references/upstream/web/src/components/resource/RightsizingStrip.tsx",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
+              "src/domains/workload_detail/rightsizing_projection.py",
+              "src/packages/contracts/rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "packages.contracts.workload_detail",
+              "domains.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.workload",
+              "rightsizing.strip"
+            ],
+            "state": "blocked",
+            "blockedReason": "The strict surface and explicit unavailable branch are mounted, but provider-backed demand samples, autoscaling evidence, OOM history, and throttling observations are not persisted.",
+            "rationale": "No default window, headroom, threshold, savings value, or recommendation is hardcoded in React; all observed guidance must arrive through the Python contract."
+          }
+        }
+      ]
+    },
+    "web/src/components/rightsizing/copy.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:copy:expectation-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing copy tests",
+          "interaction": "localized copy describes request guidance without claiming savings, efficiency, automatic changes, or a browser-owned methodology",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
+              "frontend/src/shared/i18n/catalogs/en/rightsizing.ts",
+              "frontend/src/shared/i18n/catalogs/ko/rightsizing.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.strip",
+              "rightsizing.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product copy sets a conservative expectation while methodology details remain response provenance instead of fixed browser constants."
+          }
+        }
+      ]
+    },
+    "web/src/components/rightsizing/model.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:model:server-classification-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing model tests",
+          "interaction": "the browser preserves server classification, signed impact, replica count, and row order without applying local reduction thresholds or namespace heuristics",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingModel.test.ts",
+              "tests/test_rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.model"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Tests prove grouping only; action, impact, minimum meaningful change, scaled-to-zero review, and safety gating remain Python or repository responsibilities."
+          }
+        }
+      ]
+    },
+    "web/src/components/rightsizing/model.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:model:bounded-view-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing model",
+          "interaction": "validated server rows are grouped by container for presentation while server-provided classification and impact remain unchanged",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingModel.ts",
+              "frontend/src/features/rightsizing/rightsizingAdapter.ts",
+              "src/packages/contracts/rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.model",
+              "rightsizing.schema"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product removes upstream client calculations for thresholds, aggregate impact, system namespaces, and safety review; the browser performs only stable grouping."
+          }
+        }
+      ]
+    },
+    "web/src/components/rightsizing/presentation.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:presentation:enum-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing presentation tests",
+          "interaction": "server action, fit, and signal enums resolve to localized semantic labels while safe integer resource units retain exact transport values",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingPresentation.test.ts",
+              "frontend/src/features/rightsizing/rightsizingPresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.presentation",
+              "rightsizing.schema"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Presentation tests contain no comparison or recommendation arithmetic and preserve missing requests as an explicit localized state."
+          }
+        }
+      ]
+    },
+    "web/src/components/rightsizing/presentation.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:presentation:localized-server-enums:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing presentation",
+          "interaction": "one shared presenter maps Python-owned action, fit, confidence, and safety signals to localized labels and semantic status tones",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingPresentation.ts",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/shared/i18n/keys/rightsizing.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.presentation",
+              "rightsizing.strip"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The presenter formats exact millicore or byte integers but never decides whether to increase, reduce, review, or withhold a recommendation."
           }
         }
       ]

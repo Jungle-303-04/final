@@ -5430,11 +5430,11 @@
     {
       "id": "reference-feature-154",
       "contractId": "reference.feature.154",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:rightsizing:workload-guidance:server-evidence:v1",
       "legacyContractIds": [
         "reference.feature.154"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.5 Metrics·logs·dock",
       "line": 446,
       "cells": [
@@ -5450,16 +5450,31 @@
       "streaming": false,
       "area": "observability-sessions",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.log_stream",
-      "frontendContract": "frontend/src/shared/streaming",
+      "backendContract": "packages.contracts.rightsizing",
+      "frontendContract": "frontend/src/features/rightsizing",
       "desktopContract": "desktop",
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/log-stream.test.ts"
+        "tests/test_rightsizing.py",
+        "tests/test_workload_detail.py",
+        "frontend/src/api/rightsizing.test.ts",
+        "frontend/src/api/rightsizing-schemas.test.ts",
+        "frontend/src/features/rightsizing/RightsizingStrip.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/workload_detail/router.py#get_rightsizing_scan",
+          "consumer": "src/domains/workload_detail/rightsizing_projection.py#rightsizing_scan_result",
+          "reason": "The typed RBAC and bounded scan boundary is implemented, but no persisted provider-backed rightsizing observation repository is connected.",
+          "test": "tests/test_rightsizing.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/features/rightsizing/RightsizingStrip.tsx#RightsizingStrip",
+          "consumer": "frontend/src/features/rightsizing/rightsizingAdapter.ts#toRightsizingEvidence",
+          "reason": "The workload detail renders the strict observed or unavailable union; production remains unavailable until the collector repository supplies evidence.",
+          "test": "frontend/src/features/rightsizing/RightsizingStrip.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

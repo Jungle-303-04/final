@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 98,
+  "pendingCount": 90,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -7303,8 +7303,42 @@
         "blobId": "0dabcab495dff2ad1a370000d85116c2a4fecb96",
         "sha256": "ec6f0535aa8665c6f15b2905a10fe583f90864a67ac5e12350559919187ea341"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:scan:manual-scope-contract:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing scan client tests",
+          "interaction": "an explicit workload scan canonicalizes one authorized cluster and bounded namespace scope without automatically querying on first render",
+          "transport": "poll",
+          "realtime": {
+            "resume": "repeat only after an explicit user scan or refresh using the same normalized cluster and namespace scope",
+            "backpressure": "permit at most one active request per exact scope and cap each response at 200 workloads",
+            "merge": "replace only the scan whose cluster and canonical namespace scope still match the active request"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/rightsizing.test.ts",
+              "frontend/src/api/rightsizing.ts",
+              "frontend/src/api/rightsizing-schemas.ts",
+              "src/domains/workload_detail/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "domains.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.api",
+              "rightsizing.schema"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The manual bounded request and strict response path are implemented; production returns explicit unavailable evidence until a persisted observation repository is connected."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -9521,8 +9555,40 @@
         "blobId": "08515ff577729efd1d065b1acddca9656e68263d",
         "sha256": "dbb6c029c78fb75d8a786f350e729bf6cbf8755cbe0320721266427b49581733"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:workload-strip:state-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "RightsizingStrip tests",
+          "interaction": "workload guidance keeps fit, action, confidence, safety signals, collector absence, and partial evidence as separate server-owned states",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh with the exact workload detail observation and its immutable resource identity",
+            "backpressure": "render at most 400 validated container-resource rows for one exact workload",
+            "merge": "replace guidance only when the response ResourceRef still matches the selected workload UID"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "tests/test_workload_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.workload",
+              "rightsizing.strip"
+            ],
+            "state": "blocked",
+            "blockedReason": "The observed and partial branches are contract-tested, but no production metrics repository currently supplies recommendation evidence for an exact workload.",
+            "rationale": "The production strip truthfully renders collector absence and never turns missing metrics into balanced, zero-impact, or no-change guidance."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -9536,8 +9602,52 @@
         "blobId": "f3c012770510f4e7612435bb8e56592b73126f2d",
         "sha256": "62bc1da996119a1e2bd8cbb5235f11a404687b632d54418d84add21fde07d0ee"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:workload-guidance:server-evidence:v1",
+          "legacyContractIds": [
+            "reference.feature.154"
+          ],
+          "symbol": "RightsizingStrip",
+          "interaction": "workload detail presents localized current, observed, and suggested request quantities with server action, fit, confidence, safety signals, freshness, and provenance",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reuse the workload detail refresh lifecycle and retain no evidence across immutable resource UID changes",
+            "backpressure": "consume the server-bounded exact-workload union without starting an independent background scan",
+            "merge": "discard guidance whose ResourceRef does not match the selected workload observation"
+          },
+          "motion": {
+            "reducedMotion": "all guidance and safety states remain static semantic content with no motion-dependent disclosure.",
+            "evidence": [
+              "references/upstream/web/src/components/resource/RightsizingStrip.tsx",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
+              "src/domains/workload_detail/rightsizing_projection.py",
+              "src/packages/contracts/rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "packages.contracts.workload_detail",
+              "domains.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.workload",
+              "rightsizing.strip"
+            ],
+            "state": "blocked",
+            "blockedReason": "The strict surface and explicit unavailable branch are mounted, but provider-backed demand samples, autoscaling evidence, OOM history, and throttling observations are not persisted.",
+            "rationale": "No default window, headroom, threshold, savings value, or recommendation is hardcoded in React; all observed guidance must arrive through the Python contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -9635,8 +9745,35 @@
         "blobId": "4606470f199bfc3871c8a2d928939fc2bb0856a6",
         "sha256": "586366dd6c3f40175efc100498d9c71c60093af840744be6b1c75d62c902cbef"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:copy:expectation-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing copy tests",
+          "interaction": "localized copy describes request guidance without claiming savings, efficiency, automatic changes, or a browser-owned methodology",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/RightsizingStrip.test.tsx",
+              "frontend/src/shared/i18n/catalogs/en/rightsizing.ts",
+              "frontend/src/shared/i18n/catalogs/ko/rightsizing.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.strip",
+              "rightsizing.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product copy sets a conservative expectation while methodology details remain response provenance instead of fixed browser constants."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -9647,8 +9784,34 @@
         "blobId": "8af3fea63bca9d0859183ab5ccc8b1449ed25557",
         "sha256": "5e7f744f91565b093a8ca089abafa6587225ab8d9e87a4ddabc4efef20872f68"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:model:server-classification-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing model tests",
+          "interaction": "the browser preserves server classification, signed impact, replica count, and row order without applying local reduction thresholds or namespace heuristics",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingModel.test.ts",
+              "tests/test_rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.model"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Tests prove grouping only; action, impact, minimum meaningful change, scaled-to-zero review, and safety gating remain Python or repository responsibilities."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -9659,8 +9822,36 @@
         "blobId": "361840405784cbf51b4e810022c2afe854823a3a",
         "sha256": "07162f90d51fc27b0b52b6e1c2c59aee6b5804bcee63871eb135a474b6025083"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:model:bounded-view-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing model",
+          "interaction": "validated server rows are grouped by container for presentation while server-provided classification and impact remain unchanged",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingModel.ts",
+              "frontend/src/features/rightsizing/rightsizingAdapter.ts",
+              "src/packages/contracts/rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.model",
+              "rightsizing.schema"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product removes upstream client calculations for thresholds, aggregate impact, system namespaces, and safety review; the browser performs only stable grouping."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -9671,8 +9862,34 @@
         "blobId": "c27459d5e3cd8069cdf0c217a4abd49befe51ed6",
         "sha256": "8ccc02124934beecb2fb0cd9a0a320d90ad30564c81358e499dcaa154d3080c6"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:presentation:enum-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing presentation tests",
+          "interaction": "server action, fit, and signal enums resolve to localized semantic labels while safe integer resource units retain exact transport values",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingPresentation.test.ts",
+              "frontend/src/features/rightsizing/rightsizingPresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.presentation",
+              "rightsizing.schema"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Presentation tests contain no comparison or recommendation arithmetic and preserve missing requests as an explicit localized state."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -9683,8 +9900,35 @@
         "blobId": "4996a40167f4508402f237abc4334f5920f60f3d",
         "sha256": "b46a94bd1fdc0b541c9576eb1243a2e215ac6553b350eb3b0eba5d8f5c419802"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:presentation:localized-server-enums:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing presentation",
+          "interaction": "one shared presenter maps Python-owned action, fit, confidence, and safety signals to localized labels and semantic status tones",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/rightsizing/rightsizingPresentation.ts",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/shared/i18n/keys/rightsizing.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing"
+            ],
+            "plannedTestIds": [
+              "rightsizing.presentation",
+              "rightsizing.strip"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The presenter formats exact millicore or byte integers but never decides whether to increase, reduce, review, or withhold a recommendation."
+          }
+        }
+      ]
     },
     {
       "status": "A",

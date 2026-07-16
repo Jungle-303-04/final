@@ -9,6 +9,7 @@ import { alertsEn } from "./catalogs/en/alerts";
 import { timelineEn } from "./catalogs/en/timeline";
 import { desktopEn } from "./catalogs/en/desktop";
 import { costEn } from "./catalogs/en/cost";
+import { rightsizingEn } from "./catalogs/en/rightsizing";
 
 export const en = {
   "product.name": "Opsia",
@@ -284,6 +285,7 @@ export const en = {
   ...timelineEn,
   ...desktopEn,
   ...costEn,
+  ...rightsizingEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

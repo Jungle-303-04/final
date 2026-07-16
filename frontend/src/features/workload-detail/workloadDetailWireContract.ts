@@ -1,3 +1,5 @@
+import type { RightsizingWorkloadEvidenceEndpoint } from "../rightsizing/rightsizingEndpointContract";
+
 /**
  * API-validated transport shape for the Workload Detail feature. The API
  * layer owns Zod validation; the feature owns this narrow mapping contract.
@@ -107,6 +109,7 @@ export interface WorkloadDetailEndpoint {
       stream_kind: "deployments" | "statefulsets" | "daemonsets" | null;
       reason_codes: string[];
     };
+    rightsizing: RightsizingWorkloadEvidenceEndpoint;
     capabilities: {
       scope: WorkloadDetailWireScope;
       resource: WorkloadDetailWireResourceRef;

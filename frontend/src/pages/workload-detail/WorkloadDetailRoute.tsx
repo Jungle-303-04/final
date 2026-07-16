@@ -17,6 +17,7 @@ import { cn } from "../../shared/lib/cn";
 import { parseWorkloadDetailRoute, workloadDetailHref } from "./workloadDetailNavigation";
 import { useWorkloadDetail } from "./useWorkloadDetail";
 import { WorkloadExecution } from "./WorkloadExecution";
+import { RightsizingStrip } from "../../features/rightsizing/RightsizingStrip";
 
 export function WorkloadDetailRoute({ port }: { port: WorkloadDetailPort }) {
   const params = useParams();
@@ -157,6 +158,7 @@ function Overview({ detail }: { detail: WorkloadDetail }) {
       {detail.observation.labels.length > 0 ? (
         <section className="grid gap-2" aria-labelledby="workload-labels-title"><h2 className="text-base font-semibold" id="workload-labels-title">Labels</h2><ul className="flex flex-wrap gap-2">{detail.observation.labels.map((label) => <li className="max-w-full truncate rounded-md border px-2 py-1 font-mono text-xs" key={label.key}>{label.key}={label.value}</li>)}</ul></section>
       ) : null}
+      <RightsizingStrip evidence={detail.rightsizing} />
     </section>
   );
 }

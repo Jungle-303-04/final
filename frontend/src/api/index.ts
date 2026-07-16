@@ -150,6 +150,19 @@ export {
   type WorkloadDetailEndpoint,
 } from "./workload-detail-schemas";
 export {
+  canonicalNamespaces,
+  getRightsizingScan,
+  RIGHTSIZING_SCAN_LIMIT,
+  RIGHTSIZING_SCAN_PATH,
+  type RightsizingScanQuery,
+} from "./rightsizing";
+export {
+  rightsizingObservedWorkloadSchema,
+  rightsizingScanSchema,
+  rightsizingWorkloadEvidenceSchema,
+  type RightsizingScanEndpoint,
+} from "./rightsizing-schemas";
+export {
   COMPARE_CANDIDATES_PATH,
   COMPARE_DESCRIPTORS_PATH,
   COMPARE_RESOURCES_PATH,
