@@ -123,6 +123,7 @@ export const NODE_COLLECTION: HomeEndpointNodeCollection = {
       mem_pct: 54,
       restarts_recent: 0,
       conditions: [],
+      kubernetes_version: "v1.30.7",
     },
     {
       name: "worker-b",
@@ -134,6 +135,7 @@ export const NODE_COLLECTION: HomeEndpointNodeCollection = {
       mem_pct: null,
       restarts_recent: 3,
       conditions: ["MemoryPressure"],
+      kubernetes_version: "v1.30.7",
     },
   ],
 };

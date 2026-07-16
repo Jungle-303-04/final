@@ -69,6 +69,7 @@ export function homeApiResponse(path: string): Response {
           mem_pct: 47,
           restarts_recent: 0,
           conditions: [],
+          kubernetes_version: "v1.30.7",
         },
       ],
     },

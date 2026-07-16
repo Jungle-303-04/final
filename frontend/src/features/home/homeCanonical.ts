@@ -327,6 +327,7 @@ function toNode(clusterId: string, wire: HomeEndpointNode): HomeNodeSummary {
     id: ephemeralId("node", clusterId, name),
     identityStability: "ephemeral",
     name,
+    kubernetesVersion: canonicalOptionalIdentity(wire.kubernetes_version),
     ready: wire.ready,
     health: healthTone(wire.health),
     podsRunning,

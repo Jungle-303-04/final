@@ -268,6 +268,8 @@ type CoreMessageKey =
   | "home.metric.cpuUsage"
   | "home.metric.displayedWarnings"
   | "home.metric.incidents"
+  | "home.metric.kubernetesVersions"
+  | "home.metric.kubernetesVersionsUnavailable"
   | "home.metric.memory"
   | "home.metric.memoryUsage"
   | "home.metric.nodes"

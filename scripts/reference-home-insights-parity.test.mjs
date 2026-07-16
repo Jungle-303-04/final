@@ -25,6 +25,7 @@ const FEATURE_IDS = [
 ];
 
 const IMPLEMENTED = new Set([
+  "reference.feature.038",
   "reference.feature.042",
   "reference.feature.065",
   "reference.feature.114",
@@ -107,6 +108,7 @@ test("server polling, last-success retention, and Timeline SSE stay contractual"
     clusterConnection,
     clusterConnectionSchema,
     home,
+    refreshScheduler,
     timelineApi,
     timelineFrame,
   ] = await Promise.all([
@@ -115,13 +117,16 @@ test("server polling, last-success retention, and Timeline SSE stay contractual"
     readText("frontend/src/pages/clusters/ClusterConnectDialog.tsx"),
     readText("frontend/src/api/cluster-connection-schemas.ts"),
     readText("frontend/src/pages/home/homePageStateModel.ts"),
+    readText("frontend/src/shared/data/serverRefreshScheduler.ts"),
     readText("frontend/src/api/timeline.ts"),
     readText("frontend/src/pages/timeline/useTimelineDataFrame.ts"),
   ]);
 
-  assert.match(applications, /APPLICATIONS_REFRESH_INTERVAL_MS = 60_000/);
-  assert.match(applications, /visibilitychange/);
+  assert.match(applications, /useServerRefreshScheduler/);
+  assert.match(applications, /loadApplicationsRefreshPolicy/);
+  assert.match(applications, /acceptSuccess/);
   assert.match(applications, /refreshFailure/);
+  assert.match(refreshScheduler, /visibilitychange/);
   assert.match(clusterConnectionSchema, /refresh_after_seconds/);
   assert.match(clusterConnection, /refreshAfterSeconds/);
   assert.doesNotMatch(clusterConnection, /POLL_INTERVAL/);

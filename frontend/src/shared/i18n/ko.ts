@@ -286,6 +286,8 @@ export const ko = {
   "home.metric.cpuUsage": "CPU 사용률",
   "home.metric.displayedWarnings": "표시 경고 {warnings} · 전체 수 미확인",
   "home.metric.incidents": "인시던트",
+  "home.metric.kubernetesVersions": "Kubernetes {versions}",
+  "home.metric.kubernetesVersionsUnavailable": "Kubernetes 버전 확인 불가",
   "home.metric.memory": "메모리",
   "home.metric.memoryUsage": "메모리 사용률",
   "home.metric.nodes": "Node",

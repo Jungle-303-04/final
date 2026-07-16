@@ -1238,31 +1238,34 @@
       "streaming": false,
       "area": "dashboard",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.ClusterSummaryDetailResponse",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.NodeSummaryItem",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_fleet_router.py",
+        "frontend/src/api/cluster-summary.test.ts",
         "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/pages/clusters/clusterNavigation.test.ts",
         "frontend/src/pages/home/HomeClusterHealth.test.tsx",
+        "frontend/src/pages/home/HomePage.test.tsx",
         "frontend/src/pages/home/HomePage.semantics.test.tsx",
         "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
-          "consumer": "src/domains/dashboard/fleet_router.py#build_cluster_summary_detail",
-          "reason": "Health, Pod, Node, workload, CPU, memory, restart, warning, incident, and freshness evidence are server-projected, but Kubernetes version is not retained in the summary contract.",
-          "test": "tests/test_fleet_router.py#test_cluster_summary_groups_workloads_and_lists_incidents"
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_nodes_summary",
+          "consumer": "src/domains/dashboard/fleet_router.py#build_nodes_summary",
+          "reason": "The existing authorized Home summary contracts project health, usage, workload, warning, incident, freshness, and exact Node-observed kubelet versions without adding a duplicate dashboard endpoint.",
+          "test": "tests/test_fleet_router.py#test_nodes_summary_aggregates_node_tiles_from_inventory"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/home/HomeClusterHealth.tsx#HomeClusterHealth",
           "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
-          "reason": "The health card and manual refresh are implemented with partial and access states, but version disclosure and all source count drilldowns are not complete.",
-          "test": "frontend/src/pages/home/HomeClusterHealth.test.tsx"
+          "reason": "The health card preserves partial and access states, renders observed Kubernetes versions, and links Pod, Node, restart, incident, workload, and warning evidence to the canonical scoped surfaces.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

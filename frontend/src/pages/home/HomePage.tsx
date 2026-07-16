@@ -1,4 +1,6 @@
 import { CircleAlert } from "lucide-react";
+import { routeDefinitionForSurface } from "../../app/productRoutes";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort, HomePortFailure } from "../../features/home/homeContract";
 import { useI18n } from "../../shared/i18n/I18nProvider";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
@@ -7,6 +9,7 @@ import { Surface } from "../../shared/ui/Surface";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { PollingFreshness } from "../PollingFreshness";
 import { HomeClusterHealth } from "./HomeClusterHealth";
+import { clusterResourcesHref } from "../clusters/clusterNavigation";
 import { HomeClusterGrid } from "./HomeClusterGrid";
 import { HomeIssuesRail } from "./HomeIssuesRail";
 import { HomeInsightsBand } from "./HomeInsightsBand";
@@ -15,6 +18,7 @@ import { useHomePageState } from "./useHomePageState";
 
 export function HomePage({ port }: { port: HomePort }) {
   const state = useHomePageState(port);
+  const filter = useUnifiedFilter();
 
   if (state.choices.phase === "loading" || state.choices.phase === "idle") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -64,6 +68,19 @@ export function HomePage({ port }: { port: HomePort }) {
             <div className="grid min-w-0 content-start gap-4">
               <HomeClusterHealth
                 cluster={selectedCluster ?? null}
+                links={{
+                  incidents: filter.navigationHref(routeDefinitionForSurface("issues").path),
+                  nodes: clusterResourcesHref(filter.state, state.selectedClusterId!, "node"),
+                  pods: clusterResourcesHref(filter.state, state.selectedClusterId!, "pod"),
+                  restarts: clusterResourcesHref(filter.state, state.selectedClusterId!, "pod"),
+                  warnings: filter.navigationHref(routeDefinitionForSurface("timeline").path),
+                  workloads: clusterResourcesHref(
+                    filter.state,
+                    state.selectedClusterId!,
+                    "workload",
+                  ),
+                }}
+                nodes={state.nodes}
                 onRefresh={state.refresh}
                 overview={state.overview}
               />

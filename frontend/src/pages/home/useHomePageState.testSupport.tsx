@@ -169,6 +169,7 @@ export function nodes(clusterId: string, names: string[]): HomeNodeCollection {
       id: `node:${clusterId}/${name}`,
       identityStability: "ephemeral",
       name,
+      kubernetesVersion: "v1.30.7",
       ready: true,
       health: "healthy",
       podsRunning: 1,

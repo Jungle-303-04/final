@@ -84,6 +84,7 @@ export interface HomeEndpointNode {
   name: string;
   ready: boolean;
   health: string;
+  kubernetes_version: string | null;
   pods_running: number;
   pods_capacity: number;
   cpu_pct: number | null;

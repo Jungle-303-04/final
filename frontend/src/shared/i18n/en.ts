@@ -286,6 +286,8 @@ export const en = {
   "home.metric.cpuUsage": "CPU usage",
   "home.metric.displayedWarnings": "Warnings shown {warnings} · total unknown",
   "home.metric.incidents": "Incidents",
+  "home.metric.kubernetesVersions": "Kubernetes {versions}",
+  "home.metric.kubernetesVersionsUnavailable": "Kubernetes version unavailable",
   "home.metric.memory": "Memory",
   "home.metric.memoryUsage": "Memory usage",
   "home.metric.nodes": "Nodes",

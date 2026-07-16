@@ -231,6 +231,7 @@ export const nodeSummaryItemSchema = z.strictObject({
   name: z.string(),
   ready: z.boolean(),
   health: z.string(),
+  kubernetes_version: nullableStringSchema,
   pods_running: z.number().int(),
   pods_capacity: z.number().int(),
   cpu_pct: nullableNumberSchema,

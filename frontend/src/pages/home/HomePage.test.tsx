@@ -49,6 +49,20 @@ describe("HomePage", () => {
     expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
       .toBeTruthy();
     expect(await screen.findByText("42.5%", {}, { timeout: 5_000 })).toBeTruthy();
+    const health = screen.getByRole("region", { name: "클러스터 상태" });
+    expect(within(health).getByText("Kubernetes v1.30.7")).toBeTruthy();
+    expect(within(health).getByRole("link", { name: /Pod/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=pod");
+    expect(within(health).getByRole("link", { name: /Node/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=node");
+    expect(within(health).getByRole("link", { name: /최근 재시작/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=pod");
+    expect(within(health).getByRole("link", { name: /활성 인시던트/u }).getAttribute("href"))
+      .toBe("/issues?clusters=cluster-1");
+    expect(within(health).getByRole("link", { name: /워크로드/u }).getAttribute("href"))
+      .toBe("/resources?clusters=cluster-1&resources.types=workload");
+    expect(within(health).getByRole("link", { name: /^표시 경고/u }).getAttribute("href"))
+      .toBe("/timeline?clusters=cluster-1");
     expect(screen.queryByText("Fleet Home")).toBeNull();
     expect(screen.queryByText("CLUSTER HEALTH")).toBeNull();
     expect(screen.queryByText("ATTENTION")).toBeNull();
@@ -135,6 +149,7 @@ describe("HomePage", () => {
           id: "node:cluster-1/ip-192-168-51-161.ap-northeast-2.compute.internal",
           identityStability: "ephemeral",
           name: "ip-192-168-51-161.ap-northeast-2.compute.internal",
+          kubernetesVersion: "v1.30.7",
           ready: true,
           health: "healthy",
           podsRunning: 18,

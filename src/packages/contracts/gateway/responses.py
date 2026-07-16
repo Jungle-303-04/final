@@ -2014,6 +2014,7 @@ class NodeSummaryItem(StrictModel):
     name: str
     ready: bool
     health: str
+    kubernetes_version: str | None = None
     pods_running: int = 0
     pods_capacity: int = 0
     cpu_pct: float | None = None

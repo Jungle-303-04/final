@@ -1171,12 +1171,16 @@ def node_summary_item(
     latest_usage: JsonObject,
 ) -> NodeSummaryItem:
     summary = _summary(node)
+    node_info = summary.get("node_info")
     name = str(node.get("name") or "")
     running = sum(1 for pod in pods if str(pod.get("status") or "") == "Running")
     return NodeSummaryItem(
         name=name,
         ready=bool(summary.get("ready")) or str(node.get("status") or "") == "Ready",
         health=str(node.get("health") or HEALTH_UNKNOWN),
+        kubernetes_version=_optional_text(
+            node_info.get("kubeletVersion") if isinstance(node_info, dict) else None
+        ),
         pods_running=running,
         pods_capacity=pod_capacity(summary),
         cpu_pct=resource_usage_pct(

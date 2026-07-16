@@ -277,6 +277,7 @@ describe("cluster summary API", () => {
           mem_pct: null,
           restarts_recent: 0,
           conditions: [],
+          kubernetes_version: "v1.30.7",
         },
       ],
     };

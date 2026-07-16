@@ -835,7 +835,8 @@ test("포트 전달 registry와 전역 표시는 단일 native 세션 수명주�
     assert.equal(interaction.opsiaPort.blockedReason, null);
   }
 
-  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "in_progress");
+  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "implemented");
+  assert.equal(portMap.features["reference.feature.162"].coverage.frontend.state, "implemented");
   assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "implemented");
 });
 

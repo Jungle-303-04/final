@@ -118,6 +118,7 @@ export interface HomeNodeSummary {
   id: string;
   identityStability: HomeIdentityStability;
   name: string;
+  kubernetesVersion: string | null;
   ready: boolean;
   health: HomeHealthTone;
   podsRunning: number;

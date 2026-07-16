@@ -934,6 +934,7 @@ def test_nodes_summary_aggregates_node_tiles_from_inventory() -> None:
                 "summary": {
                     "ready": True,
                     "capacity": {"pods": "110"},
+                    "node_info": {"kubeletVersion": "v1.30.7"},
                     "conditions": [
                         {"type": "Ready", "status": "True"},
                         {"type": "MemoryPressure", "status": "True"},
@@ -988,6 +989,7 @@ def test_nodes_summary_aggregates_node_tiles_from_inventory() -> None:
             "mem_pct": 73.4,
             "restarts_recent": 3,
             "conditions": ["MemoryPressure"],
+            "kubernetes_version": "v1.30.7",
         }
     ]
 
