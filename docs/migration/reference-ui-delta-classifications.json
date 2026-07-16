@@ -7111,15 +7111,15 @@
           "sourceKey": "upstream-ui:topology:public:chrome-composition:v1",
           "legacyContractIds": [],
           "symbol": "TopologyOverlayBar and TopologyBreadcrumb public exports",
-          "interaction": "the first-class topology route composes product-owned graph chrome without importing or executing the isolated source package barrel",
+          "interaction": "the Resources physical and relation graph views compose product-owned topology chrome without importing or executing the isolated source package barrel",
           "transport": "none",
           "realtime": null,
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/app/composition/surfaces/topology.ts",
               "frontend/src/shared/ui/TopologyOverlayBar.tsx",
-              "frontend/src/pages/resources/ResourcesGraphChrome.tsx"
+              "frontend/src/pages/resources/ResourcesGraphChrome.tsx",
+              "frontend/src/pages/resources/ResourcesPhysicalTopologyScene.tsx"
             ],
             "requiredBackendContracts": [
               "domains.inventory_filter.graph"
@@ -7129,7 +7129,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product route owns its imports and reuses the verified Resources graph projection; no source-runtime barrel is introduced."
+            "rationale": "The Resources surface owns its graph imports and verified topology projection after the standalone route was removed; no source-runtime barrel is introduced."
           }
         }
       ]
