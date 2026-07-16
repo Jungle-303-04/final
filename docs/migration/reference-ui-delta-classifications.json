@@ -195,6 +195,10 @@
       "destination": "frontend/src/shared/brand/gitOpsProviderAssets.test.ts",
       "rationale": "The product-owned provider asset registry and copied bytes remain pinned to immutable upstream source hashes without importing the isolated source runtime."
     },
+    "build.entrypoint.baseline": {
+      "destination": "frontend/src/app/buildBaseline.test.ts",
+      "rationale": "The standalone product package and document root retain an explicit compatibility baseline without importing or publishing the isolated upstream runtime."
+    },
     "helm.release-list.scope": {
       "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
       "rationale": "The scoped release list must show only inventory-observed Helm storage metadata and must disclose incomplete label coverage."
@@ -249,6 +253,59 @@
     }
   },
   "classifications": {
+    "packages/k8s-ui/package.json": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:toolchain:shared-ui:dependency-baseline:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json dependencies and devDependencies",
+          "interaction": "noninteractive build configuration: shared UI dependency upgrades are represented by the product-owned standalone package baseline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The standalone package already pins the updated UI dependency baseline in one product-owned manifest. This is build compatibility evidence only and does not claim that every dependent source surface is ported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:shared-ui:typescript-transition:v1",
+          "legacyContractIds": [],
+          "symbol": "scripts.tsc and scripts.tsc:ts6",
+          "interaction": "noninteractive build configuration: a transitional external TypeScript compiler launcher is exposed for the reusable source package",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product is one standalone Vite application and pins its supported TypeScript build through `tsc -b`; adding the isolated package's cross-package future-compiler shim would create a second unsupported build authority.",
+            "rationale": "The product test records the one supported compiler entrypoint so this source-only transition cannot be mistaken for a completed runtime port."
+          }
+        }
+      ]
+    },
     "packages/k8s-ui/src/assets/gitops/argocd.png": {
       "classification": "classified",
       "interactions": [
@@ -303,6 +360,112 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
+    },
+    "web/index.html": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:document:standalone:mount-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "index.html mount element",
+          "interaction": "noninteractive document configuration: a reusable host stylesheet isolates its mount selector from the host application root",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/index.html",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product is a standalone web and desktop application, not an embeddable host stylesheet. Its single `#root` mount is intentional and the source mount identifier is a prohibited legacy product term.",
+            "rationale": "The document test proves that the product has exactly one explicit root and local bootstrap script without copying the isolated host-library mount convention."
+          }
+        }
+      ]
+    },
+    "web/package.json": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:dependency-baseline:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json dependency and lint baseline",
+          "interaction": "noninteractive build configuration: web dependency and lint upgrades are represented by the current standalone product manifest",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product manifest already pins the matching browser dependency and lint/test baseline under its own package boundary. This proves only build compatibility, not a claim that source library consumers are supported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:library-publishing:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json main, types, exports, files, and sideEffects",
+          "interaction": "noninteractive build configuration: the source app publishes a reusable browser library with host-facing entrypoints",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product ships one authenticated web application and a Tauri shell, not a reusable browser library; publishing source entrypoints would expose the isolated runtime and violate the product boundary.",
+            "rationale": "The product manifest test proves that no library main or export surface is silently introduced."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:typescript-transition:v1",
+          "legacyContractIds": [],
+          "symbol": "scripts.build, scripts.tsc, scripts.tsc:ts6, and scripts.test",
+          "interaction": "noninteractive build configuration: source library scripts delegate to a transitional compiler launcher and package-local test command",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product owns one TypeScript project-reference build and whole-console test command. The source transitional compiler launcher and source-local test scope cannot be adopted without adding a parallel package build contract.",
+            "rationale": "The product test keeps the supported build and test commands explicit while preserving the source delta as blocked rather than ported."
           }
         }
       ]
