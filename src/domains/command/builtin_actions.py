@@ -56,6 +56,39 @@ class ScaleDeploymentCommand:
 
 
 @command.action(
+    Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+    requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+)
+class ScaleStatefulSetCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+    requires_approval_outside_sandbox=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+)
+class RestartStatefulSetCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+    requires_approval_outside_sandbox=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+)
+class RestartDaemonSetCommand:
+    pass
+
+
+@command.action(
     Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
     requires_approval=False,
     supports_manual_retry=True,

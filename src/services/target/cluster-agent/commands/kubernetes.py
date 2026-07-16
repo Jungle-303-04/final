@@ -170,6 +170,8 @@ class KubernetesCommandPolicy:
             raise PermissionError("user workload control is only enabled on target clusters")
         allowed = {
             ("apps", "v1", "deployments", "patch"),
+            ("apps", "v1", "statefulsets", "patch"),
+            ("apps", "v1", "daemonsets", "patch"),
             ("batch", "v1", "jobs", "create"),
             ("batch", "v1", "cronjobs", "patch"),
         }

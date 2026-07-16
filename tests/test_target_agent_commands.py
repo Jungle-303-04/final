@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from packages.config.constants import Command
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
     SERVICE_REQUEST_MAX_BODY_BYTES,
@@ -1774,6 +1775,50 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
     assert result["replicas"] == 3
     assert agent.kubernetes.patches[0]["subresource"] == "scale"
     assert agent.kubernetes.patches[0]["body"] == {"spec": {"replicas": 3}}
+
+
+@pytest.mark.parametrize(
+    ("action", "resource", "replicas"),
+    [
+        (Command.KUBERNETES_STATEFULSET_SCALE_ACTION, "statefulsets", 3),
+        (Command.KUBERNETES_STATEFULSET_RESTART_ACTION, "statefulsets", None),
+        (Command.KUBERNETES_DAEMONSET_RESTART_ACTION, "daemonsets", None),
+    ],
+)
+def test_workload_commands_use_exact_registered_kubernetes_resource(
+    action: str,
+    resource: str,
+    replicas: int | None,
+) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+    payload: dict[str, object] = {"namespace": "sandbox", "name": "checkout"}
+    if replicas is not None:
+        payload["replicas"] = replicas
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": action,
+                "direct_execution": True,
+                "payload": payload,
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    patch = agent.kubernetes.patches[0]
+    assert patch["resource"] == resource
+    if replicas is None:
+        assert patch["body"] == module.build_rollout_restart_patch()
+        assert patch.get("subresource") is None
+    else:
+        assert patch["body"] == {"spec": {"replicas": replicas}}
+        assert patch["subresource"] == "scale"
 
 
 def test_cronjob_trigger_uses_observed_template_and_advertised_capability(

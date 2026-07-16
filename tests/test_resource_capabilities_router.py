@@ -46,6 +46,15 @@ def cronjob_resource() -> dict[str, object]:
     }
 
 
+def workload_resource(kind: str, name: str) -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": f"resource-{kind.casefold()}-{name}",
+        "kind": kind,
+        "name": name,
+    }
+
+
 class ResourceCapabilitiesDb:
     def __init__(
         self,
@@ -227,6 +236,38 @@ def test_capabilities_are_server_owned_execution_descriptors() -> None:
             "default": 1,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("kind", "name", "capability_ids"),
+    [
+        ("StatefulSet", "checkout-db", ["statefulset.restart", "statefulset.scale"]),
+        ("DaemonSet", "node-agent", ["daemonset.restart"]),
+    ],
+)
+def test_workload_capabilities_reuse_server_owned_command_handoff(
+    kind: str,
+    name: str,
+    capability_ids: list[str],
+) -> None:
+    resource = workload_resource(kind, name)
+    response = client(ResourceCapabilitiesDb(resource=resource)).get(
+        "/capabilities",
+        params={"resource": resource["inventory_key"]},
+    )
+
+    assert response.status_code == 200
+    capabilities = response.json()["capabilities"]
+    assert [item["capability_id"] for item in capabilities] == capability_ids
+    assert all(item["execution"] == "command" for item in capabilities)
+    assert all(item["confirmation_required"] is True for item in capabilities)
+    assert all(item["realtime"] is True for item in capabilities)
+    assert all(
+        item["path"].startswith(
+            f"/clusters/cluster-a/namespaces/sandbox/workloads/{kind.casefold()}/{name}/"
+        )
+        for item in capabilities
+    )
 
 
 def test_capabilities_expose_exact_cronjob_actions_only_with_permission_and_agent_support() -> None:

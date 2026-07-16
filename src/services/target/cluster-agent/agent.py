@@ -14,6 +14,7 @@ from commands import (
     CommandResultOutbox,
     KubernetesApiClient,
     KubernetesCronJobPayload,
+    KubernetesGetPayload,
     KubernetesPatchPayload,
     KubernetesScalePayload,
     command,
@@ -1145,11 +1146,16 @@ class TargetClusterAgent:
         action: str,
         command: CommandRecord,
     ) -> bool:
-        if action == AgentConfig.ROLLOUT_RESTART_ACTION:
+        if action in {
+            AgentConfig.ROLLOUT_RESTART_ACTION,
+            Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+            Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        }:
             return self.command_namespace_value(command).strip().lower() != Sandbox.NAMESPACE
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
         }
 
     def direct_execution_requested(self, command: CommandRecord) -> bool:
@@ -1167,6 +1173,9 @@ class TargetClusterAgent:
             KUBERNETES_CONFIGMAP_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+            Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+            Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
             Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
             Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
             Command.KUBERNETES_CRONJOB_RESUME_ACTION,
@@ -1194,9 +1203,15 @@ class TargetClusterAgent:
         """
         actions = {
             item.strip()
-            for item in env("AGENT_AUTO_APPROVE_ACTIONS", KUBERNETES_DEPLOYMENT_SCALE_ACTION).split(
-                ","
-            )
+            for item in env(
+                "AGENT_AUTO_APPROVE_ACTIONS",
+                ",".join(
+                    (
+                        KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+                    )
+                ),
+            ).split(",")
             if item.strip()
         }
         environments = {
@@ -1370,6 +1385,29 @@ class TargetClusterAgent:
         self,
         ctx: CommandContext[KubernetesScalePayload],
     ) -> JsonObject:
+        return await self.scale_workload_command(ctx, label="deployment")
+
+    @command.k8s(
+        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="statefulsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesScalePayload,
+    )
+    async def scale_statefulset_command(
+        self,
+        ctx: CommandContext[KubernetesScalePayload],
+    ) -> JsonObject:
+        return await self.scale_workload_command(ctx, label="StatefulSet")
+
+    async def scale_workload_command(
+        self,
+        ctx: CommandContext[KubernetesScalePayload],
+        *,
+        label: str,
+    ) -> JsonObject:
         spec = ctx.kubernetes_spec
         result = await ctx.kubernetes.patch_namespaced_resource(
             api_group=spec.api_group,
@@ -1381,9 +1419,60 @@ class TargetClusterAgent:
             subresource="scale",
         )
         return ctx.ok(
-            "kubernetes deployment scaled",
+            f"kubernetes {label} scaled",
             applied=True,
             replicas=ctx.payload.replicas,
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="statefulsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesGetPayload,
+    )
+    async def restart_statefulset_command(
+        self,
+        ctx: CommandContext[KubernetesGetPayload],
+    ) -> JsonObject:
+        return await self.restart_workload_command(ctx, label="StatefulSet")
+
+    @command.k8s(
+        Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="daemonsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesGetPayload,
+    )
+    async def restart_daemonset_command(
+        self,
+        ctx: CommandContext[KubernetesGetPayload],
+    ) -> JsonObject:
+        return await self.restart_workload_command(ctx, label="DaemonSet")
+
+    async def restart_workload_command(
+        self,
+        ctx: CommandContext[KubernetesGetPayload],
+        *,
+        label: str,
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=ctx.payload.namespace,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body=build_rollout_restart_patch(),
+        )
+        return ctx.ok(
+            f"kubernetes {label} restarted",
+            applied=True,
             result=result,
         )
 

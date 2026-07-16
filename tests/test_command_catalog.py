@@ -26,6 +26,9 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.DEFAULT_ACTION,
         Command.APPLY_MANIFEST_ACTION,
         Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+        Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
@@ -35,12 +38,17 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
     }
+    dynamic_workload_actions = {
+        Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+        Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+        Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+    }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
             expected = (TARGET_NAMESPACE,)
         elif spec.action == SERVICE_HTTP_REQUEST_ACTION:
             expected = ()
-        elif spec.action in cronjob_actions:
+        elif spec.action in cronjob_actions | dynamic_workload_actions:
             expected = ()
         elif spec.action == Command.DEFAULT_ACTION:
             expected = (Sandbox.NAMESPACE, "color-turf")

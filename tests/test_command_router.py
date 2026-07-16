@@ -22,9 +22,11 @@ from domains.command.router import (
     commands,
     lease_next_command,
     restart_deployment,
+    restart_workload,
     resume_cronjob,
     retry_command,
     scale_deployment,
+    scale_workload,
     suspend_cronjob,
     trigger_cronjob,
 )
@@ -832,6 +834,89 @@ def test_restart_deployment_receipt_matches_worker_command_id() -> None:
 
         assert isinstance(events.body, CommandRequestedBody)
         assert response.command_id == build_plan(events.body, response.correlation_id).command_id
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("kind", "action"),
+    [
+        ("statefulset", Command.KUBERNETES_STATEFULSET_RESTART_ACTION),
+        ("daemonset", Command.KUBERNETES_DAEMONSET_RESTART_ACTION),
+    ],
+)
+def test_restart_workload_uses_kind_specific_agent_action(kind: str, action: str) -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        operation_events = SpyOperationEvents()
+        response = await restart_workload(
+            "cluster-1",
+            "sandbox",
+            kind,
+            "checkout-api",
+            DeploymentRestartRequest(confirmation=True),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+            operation_events,
+        )
+
+        assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == action
+        assert events.body.diff.resource == f"{kind}/checkout-api"
+        assert events.body.payload == {"namespace": "sandbox", "name": "checkout-api"}
+        assert events.body.direct_execution is True
+        assert operation_events.published[0]["command_id"] == response.command_id
+
+    asyncio.run(run())
+
+
+def test_scale_statefulset_uses_shared_receipt_and_bounded_payload() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await scale_workload(
+            "cluster-1",
+            "sandbox",
+            "statefulset",
+            "checkout-db",
+            DeploymentScaleRequest(replicas=4, confirmation=True),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+            SpyOperationEvents(),
+        )
+
+        assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == Command.KUBERNETES_STATEFULSET_SCALE_ACTION
+        assert events.body.diff.resource == "statefulset/checkout-db"
+        assert events.body.payload == {
+            "namespace": "sandbox",
+            "name": "checkout-db",
+            "replicas": 4,
+        }
+
+    asyncio.run(run())
+
+
+def test_workload_command_rejects_kind_without_registered_executor() -> None:
+    async def run() -> None:
+        with pytest.raises(HTTPException) as raised:
+            await restart_workload(
+                "cluster-1",
+                "sandbox",
+                "job",
+                "one-shot",
+                DeploymentRestartRequest(confirmation=True),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                SpyEvents(),
+                SpyOperationEvents(),
+            )
+
+        assert raised.value.status_code == 422
+        assert raised.value.detail == "unsupported workload kind: job"
 
     asyncio.run(run())
 

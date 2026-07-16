@@ -98,6 +98,7 @@ GITOPS_FILTER_FACETS_PATH = "/gitops/filter-facets"
 GITOPS_APPLICATION_DETAIL_PATH = "/gitops/applications/{application_id}"
 HELM_RELEASES_PATH = "/helm/releases"
 HELM_RELEASE_PATH = "/helm/releases/{namespace}/{release_name}"
+CLUSTER_HOME_INSIGHTS_PATH = "/clusters/{cluster_id}/home/insights"
 TRAFFIC_OVERVIEW_PATH = "/traffic/overview"
 COST_OVERVIEW_PATH = "/cost/overview"
 CHECKS_OVERVIEW_PATH = "/checks/overview"
@@ -223,6 +224,12 @@ CLUSTER_METRIC_WIDGET_PATH = "/clusters/{cluster_id}/metric-widgets/{widget_id}"
 METRICS_VALIDATE_PATH = "/metrics/validate"
 CLUSTER_DEPLOYMENT_SCALE_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale"
+)
+CLUSTER_WORKLOAD_SCALE_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/workloads/{kind}/{workload}/scale"
+)
+CLUSTER_WORKLOAD_RESTART_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/workloads/{kind}/{workload}/restart"
 )
 CLUSTER_CRONJOB_TRIGGER_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/trigger"

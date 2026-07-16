@@ -110,6 +110,15 @@ CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
 OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
+WORKLOAD_RESTART_ACTIONS = {
+    "deployment": Command.DEFAULT_ACTION,
+    "statefulset": Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
+    "daemonset": Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+}
+WORKLOAD_SCALE_ACTIONS = {
+    "deployment": Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+    "statefulset": Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+}
 
 # `/commands` carries only an inspected diff. Actions that need a typed target
 # payload (replicas, Helm values, uninstall contract, and similar) must use their
@@ -533,6 +542,84 @@ async def commands(
     return response
 
 
+def workload_action(actions: dict[str, str], kind: str) -> tuple[str, str]:
+    normalized_kind = kind.strip().casefold()
+    action = actions.get(normalized_kind)
+    if action is None:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=f"unsupported workload kind: {kind}",
+        )
+    return normalized_kind, action
+
+
+async def accept_workload_scale(
+    *,
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentScaleRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    resource_kind, action = workload_action(WORKLOAD_SCALE_ACTIONS, kind)
+    command_payload = {
+        "namespace": namespace,
+        "name": workload,
+        "replicas": payload.replicas,
+    }
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=workload,
+        action=action,
+        reason=payload.reason or f"scale {resource_kind}/{workload}",
+        payload=command_payload,
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
+async def accept_workload_restart(
+    *,
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentRestartRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    resource_kind, action = workload_action(WORKLOAD_RESTART_ACTIONS, kind)
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=resource_kind,
+        resource_name=workload,
+        action=action,
+        reason=payload.reason or f"restart {resource_kind}/{workload}",
+        payload={"namespace": namespace, "name": workload},
+        approval_ref=payload.approval_ref,
+        policy_decision_ref=payload.policy_decision_ref,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
 @router.post(
     gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH,
     response_model=CommandReceipt,
@@ -548,26 +635,45 @@ async def scale_deployment(
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
 ) -> CommandReceipt:
-    command_payload = {
-        "namespace": namespace,
-        "name": deployment,
-        "replicas": payload.replicas,
-    }
-    return await accept_resource_control(
+    return await accept_workload_scale(
         cluster_id=cluster_id,
         namespace=namespace,
-        resource_kind="deployment",
-        resource_name=deployment,
-        action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-        reason=payload.reason or f"scale deployment/{deployment}",
-        payload=command_payload,
-        approval_ref=payload.approval_ref,
-        policy_decision_ref=payload.policy_decision_ref,
-        execution_request=payload,
-        operation_events=operation_events,
+        kind="deployment",
+        workload=deployment,
+        payload=payload,
         current=current,
         db=db,
         events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_WORKLOAD_SCALE_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def scale_workload(
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentScaleRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_workload_scale(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        kind=kind,
+        workload=workload,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
     )
 
 
@@ -586,25 +692,45 @@ async def restart_deployment(
     events: Any = Depends(get_events),
     operation_events: Any = Depends(get_operation_events),
 ) -> CommandReceipt:
-    command_payload = {
-        "namespace": namespace,
-        "name": deployment,
-    }
-    return await accept_resource_control(
+    return await accept_workload_restart(
         cluster_id=cluster_id,
         namespace=namespace,
-        resource_kind="deployment",
-        resource_name=deployment,
-        action=Command.DEFAULT_ACTION,
-        reason=payload.reason or f"restart deployment/{deployment}",
-        payload=command_payload,
-        approval_ref=payload.approval_ref,
-        policy_decision_ref=payload.policy_decision_ref,
-        execution_request=payload,
-        operation_events=operation_events,
+        kind="deployment",
+        workload=deployment,
+        payload=payload,
         current=current,
         db=db,
         events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_WORKLOAD_RESTART_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def restart_workload(
+    cluster_id: str,
+    namespace: str,
+    kind: str,
+    workload: str,
+    payload: DeploymentRestartRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_workload_restart(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        kind=kind,
+        workload=workload,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
     )
 
 
