@@ -447,6 +447,76 @@ def test_helm_artifact_command_returns_only_the_typed_sanitized_projection(monke
     assert HELM_RELEASE_ARTIFACT_READ_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
 
 
+def test_helm_structured_diff_command_never_emits_raw_hook_manifests(monkeypatch) -> None:
+    module = load_agent_module()
+    artifact = HelmArtifactResult(
+        artifact="hooks_diff",
+        format="structured",
+        namespace="storefront",
+        release_name="storefront",
+        revision=2,
+        comparison_revision=3,
+        source_bytes=200,
+        redaction_applied=True,
+        projection_sha256="0" * 64,
+        projection_bytes=128,
+        hooks_diff={
+            "revision1": 2,
+            "revision2": 3,
+            "added": [],
+            "removed": [],
+            "modified": [
+                {
+                    "api_version": "batch/v1",
+                    "kind": "Job",
+                    "name": "migrate",
+                    "namespace": "storefront",
+                    "events": ["pre-upgrade"],
+                    "weight": 1,
+                    "delete_policies": [],
+                    "output_log_policies": [],
+                    "manifest_changed": True,
+                }
+            ],
+            "unchanged": [],
+            "parse_error_count": 0,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "run_helm_artifact_query",
+        lambda _payload: SimpleNamespace(succeeded=True, artifact=artifact, error_code=""),
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = False
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "command_id": "cmd-helm-hooks-1",
+                "action": HELM_RELEASE_ARTIFACT_READ_ACTION,
+                "payload": {
+                    "cluster_id": "cluster-1",
+                    "namespace": "storefront",
+                    "release_name": "storefront",
+                    "artifact": "hooks_diff",
+                    "revision": 2,
+                    "comparison_revision": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["artifact"]["hooks_diff"]["modified"][0]["name"] == "migrate"
+    assert "manifest" not in result["artifact"]["hooks_diff"]["modified"][0]
+    assert "must-not-leak" not in str(result)
+
+
 def test_apply_manifest_keeps_plan_diff_payload() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

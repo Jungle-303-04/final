@@ -101,6 +101,28 @@ describe("Helm release API", () => {
       all_values: false,
     });
   });
+
+  it("queues a typed resource comparison through the same audited artifact route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(receipt()));
+
+    await expect(startHelmArtifactRead({
+      clusterId: "cluster-a",
+      namespace: "storefront",
+      releaseName: "storefront",
+      artifact: "resources_diff",
+      revision: 2,
+      comparisonRevision: 3,
+    })).resolves.toMatchObject({ audit_event_id: "evt-helm-1" });
+
+    const request = fetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toEqual({
+      cluster_id: "cluster-a",
+      artifact: "resources_diff",
+      revision: 2,
+      comparison_revision: 3,
+      all_values: false,
+    });
+  });
 });
 
 function list() {

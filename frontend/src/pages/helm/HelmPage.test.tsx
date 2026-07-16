@@ -251,6 +251,113 @@ describe("HelmPage", () => {
     expect(screen.getByText(/kind: Deployment/u)).toBeTruthy();
     expect(screen.queryByText("password=must-not-leak")).toBeNull();
   });
+
+  it("streams a typed hook comparison without rendering raw hook manifests", async () => {
+    const port = helmPort();
+    operationState.value = completedOperationStore({
+      artifact: "hooks_diff",
+      format: "structured",
+      namespace: "storefront",
+      release_name: "storefront",
+      revision: 3,
+      comparison_revision: 2,
+      all_values: false,
+      source_bytes: 300,
+      redaction_applied: true,
+      truncated: false,
+      projection_sha256: "0".repeat(64),
+      projection_bytes: 260,
+      hooks_diff: {
+        revision1: 3,
+        revision2: 2,
+        added: [],
+        removed: [],
+        modified: [{
+          api_version: "batch/v1",
+          kind: "Job",
+          name: "migrate",
+          namespace: "storefront",
+          events: ["pre-upgrade"],
+          weight: 2,
+          delete_policies: ["hook-succeeded"],
+          output_log_policies: ["hook-failed"],
+          manifest_changed: true,
+        }],
+        unchanged: [],
+        parse_error_count: 1,
+      },
+    });
+    renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Compare hooks" }));
+
+    await waitFor(() => expect(port.readArtifact).toHaveBeenCalledWith({
+      clusterId: "cluster-a",
+      namespace: "storefront",
+      releaseName: "storefront",
+      artifact: "hooks_diff",
+      revision: 3,
+      comparisonRevision: 2,
+      allValues: false,
+    }));
+    expect(await screen.findByRole("heading", { name: "Modified hooks" })).toBeTruthy();
+    expect(screen.getByText("Job/migrate")).toBeTruthy();
+    expect(screen.getByText("Manifest changed")).toBeTruthy();
+    expect(screen.getByText("1 hook document could not be parsed.")).toBeTruthy();
+    expect(screen.queryByText("token=must-not-leak")).toBeNull();
+  });
+
+  it("renders typed resource changes and partial parse evidence", async () => {
+    const port = helmPort();
+    operationState.value = completedOperationStore({
+      artifact: "resources_diff",
+      format: "structured",
+      namespace: "storefront",
+      release_name: "storefront",
+      revision: 3,
+      comparison_revision: 2,
+      all_values: false,
+      source_bytes: 400,
+      redaction_applied: true,
+      truncated: false,
+      projection_sha256: "0".repeat(64),
+      projection_bytes: 360,
+      resources_diff: {
+        revision1: 3,
+        revision2: 2,
+        added: [{
+          api_version: "v1",
+          kind: "Service",
+          name: "storefront",
+          namespace: "storefront",
+        }],
+        removed: [],
+        modified: [{
+          api_version: "apps/v1",
+          kind: "Deployment",
+          name: "storefront",
+          namespace: "storefront",
+          summary: "2 fields changed",
+          field_count: 2,
+          fields: [{
+            path: "spec.replicas",
+            old_value: 1,
+            new_value: 3,
+          }],
+        }],
+        unchanged: [],
+        parse_error_count: 1,
+      },
+    });
+    renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Compare resources" }));
+
+    expect(await screen.findByRole("heading", { name: "Modified resources" })).toBeTruthy();
+    expect(screen.getByText("Deployment/storefront")).toBeTruthy();
+    expect(screen.getByText("spec.replicas")).toBeTruthy();
+    expect(screen.getByText("1 resource document could not be parsed.")).toBeTruthy();
+  });
 });
 
 function renderRoute(path: string, port: HelmPort) {
@@ -294,12 +401,24 @@ function helmPort(): HelmPort & {
 function detail() {
   return {
     release: release(),
-    history: [{
-      storage: release().storage,
-      revision: 3,
-      status: "deployed",
-      observedAt: "2026-07-16T09:00:00Z",
-    }],
+    history: [
+      {
+        storage: release().storage,
+        revision: 3,
+        status: "deployed",
+        observedAt: "2026-07-16T09:00:00Z",
+      },
+      {
+        storage: {
+          ...release().storage,
+          name: "sh.helm.release.v1.storefront.v2",
+          uid: "storage-2",
+        },
+        revision: 2,
+        status: "superseded",
+        observedAt: "2026-07-15T09:00:00Z",
+      },
+    ],
     manifest: unavailable("helm_manifest_provider_not_integrated"),
     values: unavailable("helm_values_provider_not_integrated"),
     ownedResources: {
@@ -362,4 +481,27 @@ function release(): HelmRelease {
 
 function unavailable(reasonCode: string) {
   return { availability: "unavailable" as const, reasonCode };
+}
+
+function completedOperationStore(artifact: Record<string, unknown>) {
+  const snapshot = {
+    commandId: "cmd-helm-1",
+    event: {
+      commandId: "cmd-helm-1",
+      sequence: 2,
+      kind: "completed" as const,
+      occurredAt: "2026-07-16T09:02:00Z",
+      payload: { result: { artifact } },
+    },
+    failure: null,
+    retry: null,
+    sequence: 2,
+    status: "completed" as const,
+    updatedAt: 1,
+  };
+  return {
+    start: vi.fn(),
+    subscribe: vi.fn(() => () => undefined),
+    getSnapshot: vi.fn(() => snapshot),
+  };
 }

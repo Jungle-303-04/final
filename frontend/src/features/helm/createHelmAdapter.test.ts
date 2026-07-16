@@ -91,6 +91,110 @@ describe("createHelmAdapter", () => {
     });
     expect(unsafe).toBeNull();
   });
+
+  it("accepts typed hook metadata while rejecting any raw hook manifest field", () => {
+    const hooksDiff = {
+      revision1: 2,
+      revision2: 3,
+      added: [],
+      removed: [],
+      modified: [{
+        api_version: "batch/v1",
+        kind: "Job",
+        name: "migrate",
+        namespace: "storefront",
+        events: ["pre-upgrade"],
+        weight: 2,
+        delete_policies: ["hook-succeeded"],
+        output_log_policies: ["hook-failed"],
+        manifest_changed: true,
+      }],
+      unchanged: [],
+      parse_error_count: 0,
+    };
+    const hookResult = structuredArtifactResult({
+      artifact: "hooks_diff",
+      hooks_diff: hooksDiff,
+    });
+    const parsed = toHelmArtifactOperationResult({
+      result: { artifact: hookResult },
+    });
+    const unsafe = toHelmArtifactOperationResult({
+      result: {
+        artifact: {
+          ...hookResult,
+          hooks_diff: {
+            ...hooksDiff,
+            modified: [{
+              ...hooksDiff.modified[0],
+              manifest: "token=must-not-leak",
+            }],
+          },
+        },
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      artifact: "hooks_diff",
+      format: "structured",
+      hooksDiff: {
+        modified: [{
+          name: "migrate",
+          events: ["pre-upgrade"],
+          manifestChanged: true,
+        }],
+      },
+    });
+    expect(unsafe).toBeNull();
+  });
+
+  it("accepts a bounded typed resource diff with parse evidence", () => {
+    const parsed = toHelmArtifactOperationResult({
+      result: {
+        artifact: structuredArtifactResult({
+          artifact: "resources_diff",
+          resources_diff: {
+            revision1: 2,
+            revision2: 3,
+            added: [{
+              api_version: "v1",
+              kind: "Service",
+              name: "storefront",
+              namespace: "storefront",
+            }],
+            removed: [],
+            modified: [{
+              api_version: "apps/v1",
+              kind: "Deployment",
+              name: "storefront",
+              namespace: "storefront",
+              summary: "2 fields changed",
+              field_count: 2,
+              fields: [{
+                path: "spec.replicas",
+                old_value: 1,
+                new_value: 3,
+              }],
+            }],
+            unchanged: [],
+            parse_error_count: 1,
+          },
+        }),
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      artifact: "resources_diff",
+      resourcesDiff: {
+        added: [{ kind: "Service", name: "storefront" }],
+        modified: [{
+          fieldCount: 2,
+          fields: [{ path: "spec.replicas", oldValue: 1, newValue: 3 }],
+        }],
+        parseErrorCount: 1,
+      },
+    });
+  });
 });
 
 function listEndpoint(freshness: "live" | "stale" | "partial" | "disconnected" = "live") {
@@ -199,5 +303,27 @@ function artifactResult() {
     source_bytes: 120,
     redaction_applied: true as const,
     truncated: false,
+  };
+}
+
+function structuredArtifactResult(diff:
+  | { artifact: "hooks_diff"; hooks_diff: Record<string, unknown> }
+  | { artifact: "resources_diff"; resources_diff: Record<string, unknown> }) {
+  return {
+    artifact: diff.artifact,
+    format: "structured",
+    namespace: "storefront",
+    release_name: "storefront",
+    revision: 2,
+    comparison_revision: 3,
+    all_values: false,
+    source_bytes: 240,
+    redaction_applied: true,
+    truncated: false,
+    projection_sha256: "0".repeat(64),
+    projection_bytes: 240,
+    ...(diff.artifact === "hooks_diff"
+      ? { hooks_diff: diff.hooks_diff }
+      : { resources_diff: diff.resources_diff }),
   };
 }
