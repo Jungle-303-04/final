@@ -31,6 +31,12 @@ def test_cluster_curl_normalizes_attach_fallback_duplicate_response() -> None:
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == '{"status":"ok"}\n200\n'
+    script = source.read_text(encoding="utf-8")
+    assert "--rm -i --restart=Never" not in script
+    assert "--pod-running-timeout=30s" in script
+    assert "--follow" in script
+    assert "_wait_for_cluster_curl_container" in script
+    assert "_delete_cluster_curl_pod" in script
 
 
 def test_pre_deploy_smoke_uses_only_legacy_safe_health_frontend_and_database_checks() -> None:
@@ -64,7 +70,20 @@ def _write_fake_pre_deploy_commands(tmp_path: Path) -> Path:
     fake_kubectl.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-url="${!#}"
+command="${1:-}"
+if [ "${command}" = "--context" ]; then command="${5:-}"; fi
+if [ "${command}" = "run" ]; then
+  printf '%s' "${!#}" >"${FAKE_CLUSTER_CURL_URL}"
+  exit 0
+fi
+if [ "${command}" = "delete" ]; then
+  exit 0
+fi
+if [ "${command}" != "logs" ]; then
+  printf '1\\n'
+  exit 0
+fi
+url="$(cat "${FAKE_CLUSTER_CURL_URL}")"
 if [[ "${url}" == */api/healthz ]]; then
   count=0
   if [ -f "${FAKE_CURL_COUNT}" ]; then count="$(cat "${FAKE_CURL_COUNT}")"; fi
@@ -78,7 +97,7 @@ if [[ "${url}" == */api/healthz ]]; then
 elif [[ "${url}" == http://console-dev.* ]]; then
   printf '%s\n%s\n' '<script src="/assets/index-newBundle.js"></script>' '200'
 else
-  printf '1\n'
+  exit 1
 fi
 """,
         encoding="utf-8",
@@ -98,6 +117,7 @@ def _run_fake_pre_deploy(
         "MGMT_CONTEXT": "opsia-dev",
         "MGMT_NS": "management",
         "FAKE_CURL_COUNT": str(count_file),
+        "FAKE_CLUSTER_CURL_URL": str(tmp_path / "cluster-curl-url"),
         "FAKE_HEALTH_ALWAYS_FAIL": "1" if always_fail else "0",
         "PRE_DEPLOY_HEALTH_MAX_ATTEMPTS": "3",
         "PRE_DEPLOY_HEALTH_BACKOFF_MAX_SECONDS": "0",
