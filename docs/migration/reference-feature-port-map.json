@@ -1,6 +1,63 @@
 {
   "schemaVersion": 1,
   "features": {
+    "reference.feature.026": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ApplicationProductDetailResponse",
+      "frontendContract": "frontend/src/features/applications/ApplicationsSurface.tsx",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_application_product_router.py",
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/features/filters/filterUrl.test.ts",
+        "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+        "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/applications/router.py#get_application",
+          "consumer": "src/domains/applications/product_projection.py#application_detail",
+          "test": "tests/test_application_product_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/applications/ApplicationsSurface.tsx#ApplicationsSurface",
+          "consumer": "frontend/src/features/filters/detailUrlCodec.ts#parseProductDetailQuery",
+          "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+        }
+      }
+    },
+    "reference.feature.117": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ApplicationProductListResponse",
+      "frontendContract": "frontend/src/features/applications/applicationsContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_application_product_contract.py",
+        "tests/test_application_product_projection.py",
+        "tests/test_application_product_router.py",
+        "frontend/src/api/application-catalog.test.ts",
+        "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+        "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+        "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/applications/router.py#list_applications",
+          "consumer": "src/domains/applications/product_projection.py#application_card",
+          "test": "tests/test_application_product_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/applications/ApplicationsSurface.tsx#ApplicationsSurface",
+          "consumer": "frontend/src/features/applications/createApplicationsAdapter.ts#createApplicationsAdapter",
+          "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+        }
+      }
+    },
     "reference.feature.099": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ClusterListResponse",

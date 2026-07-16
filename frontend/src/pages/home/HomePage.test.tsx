@@ -67,6 +67,17 @@ describe("HomePage", () => {
     expect(port.loadNodes).toHaveBeenCalledWith("cluster-1", expect.any(AbortSignal));
   }, 15_000);
 
+  it("does not advertise source-only cost or MCP capabilities without a product contract", async () => {
+    renderHome(homePort());
+
+    expect(await screen.findByRole("heading", { name: "클러스터 상태" }, { timeout: 5_000 }))
+      .toBeTruthy();
+    expect(screen.queryByText("Cost Insights")).toBeNull();
+    expect(screen.queryByText("OpenCost")).toBeNull();
+    expect(screen.queryByText("MCP Server")).toBeNull();
+    expect(screen.queryByText("Connect your AI tool")).toBeNull();
+  }, 15_000);
+
   it("keeps an internal Node hostname on one identifiable label while preserving its full identity", async () => {
     const port = homePort({
       loadNodes: vi.fn().mockResolvedValue({

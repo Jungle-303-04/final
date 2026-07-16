@@ -854,11 +854,11 @@
     {
       "id": "reference-feature-026",
       "contractId": "reference.feature.026",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:applications:route:url-scope-and-history:v1",
       "legacyContractIds": [
         "reference.feature.026"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 110,
       "cells": [
@@ -871,17 +871,31 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ApplicationProductDetailResponse",
+      "frontendContract": "frontend/src/features/applications/ApplicationsSurface.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_application_product_router.py",
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/features/filters/filterUrl.test.ts",
+        "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+        "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/applications/router.py#get_application",
+          "consumer": "src/domains/applications/product_projection.py#application_detail",
+          "test": "tests/test_application_product_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/applications/ApplicationsSurface.tsx#ApplicationsSurface",
+          "consumer": "frontend/src/features/filters/detailUrlCodec.ts#parseProductDetailQuery",
+          "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4131,11 +4145,11 @@
     {
       "id": "reference-feature-117",
       "contractId": "reference.feature.117",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:applications:projection:catalog-detail-refresh:v1",
       "legacyContractIds": [
         "reference.feature.117"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "line": 393,
       "cells": [
@@ -4150,17 +4164,32 @@
       ],
       "streaming": false,
       "area": "cluster-insights",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.dashboard",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ApplicationProductListResponse",
+      "frontendContract": "frontend/src/features/applications/applicationsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_application_product_contract.py",
+        "tests/test_application_product_projection.py",
+        "tests/test_application_product_router.py",
+        "frontend/src/api/application-catalog.test.ts",
+        "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+        "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+        "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/applications/router.py#list_applications",
+          "consumer": "src/domains/applications/product_projection.py#application_card",
+          "test": "tests/test_application_product_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/applications/ApplicationsSurface.tsx#ApplicationsSurface",
+          "consumer": "frontend/src/features/applications/createApplicationsAdapter.ts#createApplicationsAdapter",
+          "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

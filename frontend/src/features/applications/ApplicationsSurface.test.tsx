@@ -5,6 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationsFailure } from "./applicationsContract";
 import {
+  APPLICATIONS_REFRESH_INTERVAL_MS,
+} from "./useApplicationsData";
+import {
   APPLICATION_CARD,
   APPLICATION_DETAIL,
   applicationsPort,
@@ -12,7 +15,14 @@ import {
 } from "./ApplicationsSurface.testSupport";
 import type { ApplicationCardModel, ApplicationsPort } from "./applicationsContract";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "visible",
+  });
+});
 
 describe("S10 Applications surface", () => {
   it("forwards the canonical unified filter state and switches the same result set to table view", async () => {
@@ -141,6 +151,43 @@ describe("S10 Applications surface", () => {
     view.unmount();
     await Promise.resolve();
     expect(refreshSignal?.aborted).toBe(true);
+  });
+
+  it("refreshes the visible catalog on the shared application cadence and resumes after visibility", async () => {
+    vi.useFakeTimers();
+    const listApplications = vi.fn<ApplicationsPort["listApplications"]>()
+      .mockResolvedValue([APPLICATION_CARD]);
+    renderApplications(applicationsPort({ listApplications }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText("checkout-api")).toBeTruthy();
+    expect(listApplications).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(APPLICATIONS_REFRESH_INTERVAL_MS);
+    });
+    expect(listApplications).toHaveBeenCalledTimes(2);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "hidden",
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(APPLICATIONS_REFRESH_INTERVAL_MS);
+    });
+    expect(listApplications).toHaveBeenCalledTimes(2);
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    expect(listApplications).toHaveBeenCalledTimes(3);
   });
 
   it("opens URL-backed detail and keeps overview evidence honest", async () => {

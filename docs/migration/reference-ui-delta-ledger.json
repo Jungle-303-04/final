@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 46,
+  "pendingCount": 40,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -8577,8 +8577,91 @@
         "blobId": "a0e283b2d3654feb9ed9371e9439728cf32d1d7d",
         "sha256": "c00085b1e74d13b008c2837524b9a464893ba2a8ee21f31c381ef03cb117603a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:route:url-scope-and-history:v1",
+          "legacyContractIds": [
+            "reference.feature.026"
+          ],
+          "symbol": "ApplicationsView and AppDetailRoute URL state",
+          "interaction": "the Applications route keeps catalog versus detail, deployment instance, application versus workload scope, and selected detail tab in canonical URL state so deep links, keyboard navigation, close, and browser history resolve one authorized workspace",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "scope and tab selection use semantic controlled state and remain fully operable without transition animation",
+            "evidence": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/productRoutes.ts",
+              "frontend/src/app/shortcutRegistry.ts",
+              "frontend/src/features/applications/ApplicationsSurface.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationFilters.ts",
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.scope-tabs",
+              "applications.detail.parity"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing route controller already owns app, instance, workload, and tab state, the global shortcut registry owns g a, and server-selected single-workload or unavailable-workload recovery prevents browser identity inference."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:projection:catalog-detail-refresh:v1",
+          "legacyContractIds": [
+            "reference.feature.117"
+          ],
+          "symbol": "useApplications, application detail evidence, history, topology and issues composition",
+          "interaction": "an authorized application collection and detail expose runtime, delivery, batch, source, topology, history, incidents, workload scope, and explicit cost availability while the visible route refreshes every sixty seconds and retains the last successful result",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh immediately after the document becomes visible and restart the same authorized application scope after a manual reconnect",
+            "backpressure": "share one request per exact catalog or detail key and suppress another refresh while that key already has an active request",
+            "merge": "commit a result only to its exact filter, application, deployment instance, and workload key while retaining the previous successful data after a refresh failure"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/application-catalog.ts",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "frontend/src/features/applications/createApplicationsAdapter.ts",
+              "frontend/src/features/applications/useApplicationsData.ts",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+              "src/domains/applications/router.py",
+              "src/domains/applications/product_projection.py",
+              "tests/test_application_product_router.py",
+              "tests/test_application_product_contract.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.detail.overview-projection",
+              "applications.detail.topology",
+              "applications.detail.history",
+              "applications.refresh.cadence"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python projection and strict TypeScript adapter already replace the source runtime, and this slice adds the missing visibility-aware sixty-second refresh cadence. Application-level observed cost and source-specific graph drilldowns remain tracked by their existing blocked or in-progress interactions."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11198,8 +11281,51 @@
         "blobId": "c1e05a273c6bb51cb1e2ffd6dc319d929d507478",
         "sha256": "610f331db7c1b9860ad92fadf8408b40c11e016348ed190e35e89828193bebb1"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:home:cost:server-projected-summary:v1",
+          "legacyContractIds": [],
+          "symbol": "CostCard projected monthly, daily and hourly summary",
+          "interaction": "Home may present hourly, daily, and monthly cost only when an authorized provider observation supplies currency, data window, and server-projected period totals; an absent collector removes the optional card instead of rendering zero",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reacquire the current authorized cost scope after the server refresh policy or an explicit page refresh",
+            "backpressure": "share one bounded overview read for the normalized cluster scope and retain no monetary state across a scope change",
+            "merge": "replace cost evidence only when the cluster scope, observation identity, currency, and data window still match"
+          },
+          "motion": {
+            "reducedMotion": "availability, currency, and projected values remain readable without lift or entrance animation",
+            "evidence": [
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/pages/home/HomePage.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/features/cost/createCostAdapter.ts",
+              "frontend/src/features/cost/costFormat.ts",
+              "frontend/src/pages/home/HomePage.test.tsx",
+              "src/domains/cost/router.py",
+              "src/domains/cost/observation_projection.py",
+              "tests/test_cost_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.overview.contract",
+              "cost.overview.unavailable",
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Python Cost response intentionally exposes collector absence and null monetary fields because no provider-backed observation repository is connected; Home cannot truthfully render a cost card yet.",
+            "rationale": "The existing Cost page already consumes server-projected monthly values and never multiplies hourly cost in the browser. Home remains capability-gated and a regression test prevents a fake OpenCost or currency summary from being advertised."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11213,8 +11339,84 @@
         "blobId": "ab6a42b807b991e33bbe0cdbefc6ec5a5e12821a",
         "sha256": "0d0af15cf15dea17ca0acadcf01e5a4486e512c1b832e2864b5cf188e2ba065b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:home:load-state:section-authority:v1",
+          "legacyContractIds": [],
+          "symbol": "HomeView fallbackClusterLoadState and PaneLoader",
+          "interaction": "Home renders cluster catalog, overview, node, pod, and refresh progress from independent authorized section states so slow or partial evidence does not blank successful sections or claim completion",
+          "transport": "poll",
+          "realtime": {
+            "resume": "visibility resume advances the shared Home refresh clock and reacquires only the currently selected cluster and node scope",
+            "backpressure": "each section owns one abortable request generation and retains the last successful section during a same-scope refresh",
+            "merge": "apply a response only when its cluster, selected node, scope key, and refresh generation still match the active Home frame"
+          },
+          "motion": {
+            "reducedMotion": "loading skeletons and status marks preserve stable geometry and semantic progress without motion-dependent feedback",
+            "evidence": [
+              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomeClusterHealth.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/home/homeContract.ts",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/pages/home/useHomePageState.ts",
+              "frontend/src/pages/home/useHomeClusterFrame.ts",
+              "frontend/src/pages/home/HomeClusterHealth.tsx",
+              "frontend/src/pages/home/HomePage.semantics.test.tsx",
+              "src/domains/dashboard/fleet_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.fleet_router"
+            ],
+            "plannedTestIds": [
+              "home.load-state.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product has a stronger section-owned state model than the source fallback banner: loading, partial refresh failure, forbidden access, and disconnected data are isolated without a shared runtime import."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:issues:onset-timing-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "ProblemsPanel issueTiming chip",
+          "interaction": "a Home issue row may label creation-time failure or post-healthy regression only when the server supplies the verified onset basis and explanatory evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh onset evidence with the same authorized issue snapshot after the Home or Issues refresh policy fires",
+            "backpressure": "retain only the bounded current issue projection for the selected cluster scope",
+            "merge": "replace timing only when the issue correlation, resource identity, and evidence revision still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomeIssuesRail.tsx",
+              "frontend/src/features/issues/resourceIssuesContract.ts",
+              "frontend/src/features/issues/ResourceIssuesSection.tsx",
+              "frontend/src/features/issues/issuePresentation.test.ts",
+              "src/domains/dashboard/repository.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.repository"
+            ],
+            "plannedTestIds": [
+              "home.issue-timing.disclosure",
+              "issues.timing.evidence"
+            ],
+            "state": "blocked",
+            "blockedReason": "The durable incident and inventory projections do not yet retain a verified resource-creation timestamp plus a healthy-to-failing transition boundary, so a Home timing chip would be a browser heuristic.",
+            "rationale": "The Python resource-issue contract explicitly reports timing unavailable and the product omits the chip rather than deriving it from updated_at, current inventory, or presentation age."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11228,8 +11430,43 @@
         "blobId": "ebe145f8fcc63e707560e4a1e257a35720304f7b",
         "sha256": "963fc30e0ccfbef7cc28103b65c178bd0502169170976caafa463afc14e7eb69"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:mcp:setup:capability-gated-client-config:v1",
+          "legacyContractIds": [],
+          "symbol": "MCPSetupDialog endpoint, client configuration and pinned port",
+          "interaction": "an MCP setup dialog may expose an endpoint, client-specific configuration, destructive-tool disclosure, and stable local port only when the product owns an authenticated MCP capability and typed configuration persistence contract",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the authenticated capability and current saved endpoint before reopening setup",
+            "backpressure": "keep one bounded capability/configuration request and serialize any endpoint persistence mutation",
+            "merge": "apply configuration only to the current user, workspace, deployment endpoint, and configuration revision"
+          },
+          "motion": {
+            "reducedMotion": "dialog focus, Escape, copy feedback, and capability disclosure must remain semantic without transition effects",
+            "evidence": [
+              "frontend/src/pages/home/HomePage.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomePage.test.tsx",
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "src/packages/contracts/reference_feature_catalog.json"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.mcp"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia has no authenticated Python MCP endpoint, per-user MCP configuration revision, client setup contract, or safe tool capability response; copying the source dialog would advertise a nonexistent runtime.",
+            "rationale": "No dialog or source client configuration is mounted. The Home regression test proves the unavailable capability stays hidden until a real contract is designed."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11243,8 +11480,37 @@
         "blobId": "d5e10629080333f527f72f6664d056685412a7f8",
         "sha256": "58a3429b24f81dda481993f65e7ffdfe71d323426a885a439b7b20cd7b96ccf4"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:mcp:catalog:backend-owned-tool-authority:v1",
+          "legacyContractIds": [],
+          "symbol": "MCP_TOOL_CATALOG backend-registration parity",
+          "interaction": "a human-facing MCP tool catalog must be generated from the same authenticated backend capability registry that executes the tools, including read versus destructive metadata and bounded parameters",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the tool capability catalog after deployment or permission revision changes",
+            "backpressure": "return one bounded catalog page or versioned snapshot rather than embedding a duplicate browser list",
+            "merge": "replace the catalog only when its server capability revision and authenticated workspace still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomePage.test.tsx",
+              "src/packages/contracts/reference_feature_catalog.json"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.mcp"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "No Python MCP registration registry or permission-filtered tool catalog exists, so a copied TypeScript array would be hardcoded, drift-prone, and disconnected from execution authority.",
+            "rationale": "The source tool names and descriptions are not copied. Product UI remains silent until a backend-owned catalog can drive both execution and presentation."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11258,8 +11524,50 @@
         "blobId": "b55af0a4e8fa546aea04b1975b1e0f1ba73a181c",
         "sha256": "0f695a1c3e83c3a9325ef10b78bac0827a39b21148e2050ba2e437c36934a8a6"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:investigation:authorized-rca-workflow:v1",
+          "legacyContractIds": [],
+          "symbol": "IssuesPane IssueDiagnoseButton action",
+          "interaction": "an issue investigation opens the selected authorized incident, loads independent detail, recent-change, evidence, report, audit, and recovery sections, and submits an allowed recovery only through a typed receipt and observed progress",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the visible issue queue every ten seconds and the accepted recovery progress every two seconds while retaining successful sections",
+            "backpressure": "abort superseded issue selections and serialize one recovery selection mutation for the active correlation",
+            "merge": "apply detail and operation progress only to the exact cluster, incident, correlation, plan, action, and command identities"
+          },
+          "motion": {
+            "reducedMotion": "detail expansion, progress, pending action, completion, and failure remain visible through text and status marks with transitions disabled",
+            "evidence": [
+              "frontend/src/features/issues/IssuesSurface.tsx",
+              "frontend/src/features/issues/IssuesSurface.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/IssuesSurface.tsx",
+              "frontend/src/features/issues/IssuesPanels.tsx",
+              "frontend/src/features/issues/createIssuesAdapter.ts",
+              "frontend/src/features/issues/IssuesSurface.test.tsx",
+              "src/domains/dashboard/router.py",
+              "src/domains/rca/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.rca.router",
+              "domains.recovery.router"
+            ],
+            "plannedTestIds": [
+              "issues.diagnose.workflow",
+              "issues.severity.queue-presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing Issues surface is the reusable product equivalent of a direct diagnose button and is safer: it shows server evidence before mutation, capability-gates recovery, returns a receipt, and observes progress without importing the source local-diagnose runtime."
+          }
+        }
+      ]
     },
     {
       "status": "A",

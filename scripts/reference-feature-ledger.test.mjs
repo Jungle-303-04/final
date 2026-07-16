@@ -634,6 +634,36 @@ test("웹 클러스터 범위는 권한 계약과 원본 identity를 연결하�
   }
 });
 
+test("Applications 경로와 투영은 URL·Python 계약·갱신 증거를 연결한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const expected = new Map([
+    ["reference.feature.026", "upstream-ui:applications:route:url-scope-and-history:v1"],
+    ["reference.feature.117", "upstream-ui:applications:projection:catalog-detail-refresh:v1"],
+  ]);
+  const interactions = classifications
+    .classifications["web/src/components/applications/ApplicationsView.tsx"]
+    .interactions;
+
+  for (const [contractId, sourceKey] of expected) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
+    assert.equal(port.deliveryStatus, "implemented");
+    assert.equal(port.desktopContract, null);
+    assert.equal(port.coverage.backend.state, "implemented");
+    assert.equal(port.coverage.frontend.state, "implemented");
+    assert.equal(aliases.aliases[contractId], sourceKey);
+    assert.equal(feature.deliveryStatus, "implemented");
+    assert.equal(feature.sourceKey, sourceKey);
+    assert.deepEqual(interaction.legacyContractIds, [contractId]);
+  }
+});
+
 async function readRepositoryJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, import.meta.url), "utf8"));
 }

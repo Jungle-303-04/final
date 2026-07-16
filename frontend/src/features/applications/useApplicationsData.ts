@@ -10,6 +10,8 @@ import {
   type ApplicationsPort,
 } from "./applicationsContract";
 
+export const APPLICATIONS_REFRESH_INTERVAL_MS = 60_000;
+
 export type ApplicationsResource<T> =
   | { phase: "loading" }
   | {
@@ -34,6 +36,7 @@ export function useApplicationCatalog(
     port,
     `applications:catalog:${filterKey}`,
     load,
+    { refreshIntervalMs: APPLICATIONS_REFRESH_INTERVAL_MS },
   );
 }
 
@@ -60,6 +63,7 @@ export function useApplicationDetail(
     applicationId === null ? null : `applications:detail:${applicationId}:${instanceId ?? "default"}:${workloadKey ?? "application"}`,
     load,
     {
+      refreshIntervalMs: APPLICATIONS_REFRESH_INTERVAL_MS,
       reuseReady: (data) => data !== null &&
         instanceId !== null &&
         data.scope.selectedInstanceId === instanceId &&
@@ -118,7 +122,10 @@ function useApplicationsResource<T>(
   owner: ApplicationsPort,
   key: string | null,
   load: (signal: AbortSignal) => Promise<T>,
-  options: { reuseReady?: (data: T) => boolean } = {},
+  options: {
+    refreshIntervalMs?: number;
+    reuseReady?: (data: T) => boolean;
+  } = {},
 ): readonly [ApplicationsResource<T>, () => void] {
   const [revision, refresh] = useReducer((value: number) => value + 1, 0);
   const [manualRefresh, setManualRefresh] = useState<{ key: string; token: number } | null>(null);
@@ -217,6 +224,26 @@ function useApplicationsResource<T>(
     });
     refresh();
   }, [key, refresh]);
+
+  useEffect(() => {
+    if (key === null || options.refreshIntervalMs === undefined) return;
+    const refreshVisibleResource = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      requestRefresh();
+    };
+    const interval = window.setInterval(
+      refreshVisibleResource,
+      options.refreshIntervalMs,
+    );
+    const refreshAfterVisibility = () => {
+      if (document.visibilityState === "visible") refreshVisibleResource();
+    };
+    document.addEventListener("visibilitychange", refreshAfterVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshAfterVisibility);
+    };
+  }, [key, options.refreshIntervalMs, requestRefresh]);
 
   return [state, requestRefresh] as const;
 }

@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "sourceRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
   "aliases": {
+    "reference.feature.026": "upstream-ui:applications:route:url-scope-and-history:v1",
     "reference.feature.099": "upstream-ui:shell:context-switcher:server-scope:v1",
     "reference.feature.101": "upstream-ui:shell:context-switcher:server-scope:v1",
     "reference.feature.102": "upstream-ui:namespace:scope:authorized-rescope:v1",
@@ -10,6 +11,7 @@
     "reference.feature.105": "upstream-ui:shell:preferences:user-persistence:v1",
     "reference.feature.106": "upstream-ui:shell:preferences:user-persistence:v1",
     "reference.feature.109": "upstream-ui:desktop:external-link:native-bridge:v1",
+    "reference.feature.117": "upstream-ui:applications:projection:catalog-detail-refresh:v1",
     "reference.feature.126": "upstream-ui:resources:renderers:public-contract-boundary:v1",
     "reference.feature.159": "upstream-ui:observability:local-terminal:native-pty:v1",
     "reference.feature.160": "upstream-ui:service-access:port-session:list-and-layout:v1",
