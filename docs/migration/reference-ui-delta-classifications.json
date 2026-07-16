@@ -75,6 +75,18 @@
       "destination": "frontend/src/api/timeline.test.ts",
       "rationale": "HTTP capability, snapshot, overview, and stream request shapes are validated at the product boundary."
     },
+    "api.client.transport": {
+      "destination": "frontend/src/api/client.test.ts",
+      "rationale": "The shared browser transport enforces credentials, CSRF, typed errors, strict response validation, abort propagation, and streaming media types without domain-specific fetch wrappers."
+    },
+    "commands.cronjob.provider-gate": {
+      "destination": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+      "rationale": "CronJob trigger, suspend, and resume remain absent until an exact server capability can hand off an audited CommandReceipt and durable OperationEvent stream."
+    },
+    "helm.upgrade.provider-gate": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "Helm upgrade controls remain hidden while the Python provider has no validated values payload, write capability, command receipt, or resumable progress stream."
+    },
     "applications.catalog.batch-runtime": {
       "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
       "rationale": "Catalog cards and table rows must render batch runtime, retained run outcome, and deterministic attention ordering from a typed product projection."
@@ -11131,6 +11143,477 @@
             "state": "blocked",
             "blockedReason": "The product has no provider-neutral selective resource sync CommandRequest, resource eligibility projection, provider executor, CommandReceipt, or operation event stream.",
             "rationale": "The existing release workflow cannot be reused because selective controller sync has different safety fields and requires exact managed-resource ownership evidence."
+          }
+        }
+      ]
+    },
+    "web/src/api/client.delta.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:delta-merge:cursor-invariants-test:v1",
+          "legacyContractIds": [],
+          "symbol": "maxEventSeq, mergeDeltaEvents, and deltaFetchCursor tests",
+          "interaction": "a cached timeline retains its reference for an empty suffix, suppresses a replayed event observation, appends an advanced Kubernetes Event count observation once, preserves event-time order, and remains bounded by the server event limit",
+          "transport": "poll",
+          "realtime": {
+            "resume": "resume from the authorization-bound opaque cursor returned with the retained snapshot rather than exposing the source store sequence",
+            "backpressure": "apply only the server-advertised batch and frame limits and coalesce browser delivery at the shared animation-frame boundary",
+            "merge": "deduplicate immutable source keys, append an advanced Kubernetes Event observation under its count-and-time source identity, and retain the existing snapshot reference when no evidence changes"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+              "frontend/src/pages/timeline/timelineFrameReducer.ts",
+              "src/domains/inventory/kubernetes_events.py",
+              "tests/test_kubernetes_event_timeline.py",
+              "src/domains/timeline/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.inventory.kubernetes_events",
+              "domains.timeline.repository"
+            ],
+            "plannedTestIds": [
+              "timeline.live.stream"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia preserves the source behavior without a public numeric cursor: PostgreSQL stores immutable evidence, Kubernetes Event count advances receive distinct idempotency keys, and the reducer returns the original snapshot for empty or replay-only suffixes."
+          }
+        }
+      ]
+    },
+    "web/src/api/client.deltaSync.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
+          "legacyContractIds": [
+            "reference.feature.119"
+          ],
+          "symbol": "runDeltaSyncFetch orchestration tests",
+          "interaction": "an initial bounded snapshot establishes a high-water cursor, later evidence resumes without reloading the full history, a replay gap or retention change forces an explicit snapshot replacement, and the final evidence set remains equivalent to a fresh authorized read",
+          "transport": "poll",
+          "realtime": {
+            "resume": "POST Fetch-SSE sends the exact opaque snapshot cursor in both the request contract and Last-Event-ID and resumes only the bound workspace, scope, query, and retention identity",
+            "backpressure": "the server replays bounded durable batches while the browser applies negotiated frame limits, hidden-tab coalescing, and jittered reconnect delays",
+            "merge": "accept only strictly validated frames for the active read session, deduplicate by immutable source identity, and replace the snapshot after an explicit resync_required terminal frame"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.test.ts",
+              "frontend/src/api/timeline.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.test.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.ts",
+              "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+              "src/domains/timeline/router.py",
+              "tests/test_timeline_sse_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.cursor",
+              "domains.timeline.repository",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.source-contract",
+              "timeline.adapter.source",
+              "timeline.live.stream"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product replaces source polling epochs and public sequence headers with a stronger durable replay contract: PostgreSQL is authoritative, cursors are signed and authorization-bound, retention expiry is explicit, and the browser never polls the full timeline as an anti-entropy fallback."
+          }
+        }
+      ]
+    },
+    "web/src/api/client.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
+          "legacyContractIds": [],
+          "symbol": "apiFetch, fetchJSON, query enablement, refresh intervals, and mutation invalidation",
+          "interaction": "browser requests share one authenticated cancellation-aware transport, domain hooks can be disabled or refreshed without spawning duplicate clients, and mutations invalidate only their owned projections",
+          "transport": "poll",
+          "realtime": {
+            "resume": "each domain port restarts from its current scope, revision, or durable cursor after authentication and visibility recovery",
+            "backpressure": "AbortSignal cancellation, bounded schemas, domain refresh policies, and shared streaming readers prevent unbounded parallel reads",
+            "merge": "only the active request generation or matching domain identity may replace cached state while typed adapters own wire-to-product conversion"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/client.ts",
+              "frontend/src/api/client.test.ts",
+              "frontend/src/api/timeline.ts",
+              "frontend/src/api/operation-events.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "api.client.transport"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product has one strict fetch and stream boundary with credentials, CSRF, structured errors, Zod validation, abort propagation, and media-type validation; domain adapters reuse it instead of recreating the upstream monolithic client."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:timeline:client-query:bounded-live-resume:v1",
+          "legacyContractIds": [],
+          "symbol": "UseChangesOptions, useChanges, ChangesDeltaMeta, and delta helpers",
+          "interaction": "timeline queries preserve multi-kind filters, bounded history, no-op suffix identity, high-water progress, reconnect recovery, and exact event evidence while avoiding repeated full-ring transfers",
+          "transport": "fetch_sse",
+          "realtime": {
+            "resume": "resume the retained query with its opaque authorization-bound cursor and rotate a live session only under the server policy",
+            "backpressure": "durable replay batches, negotiated frames per second, hidden-tab coalescing, and RAF flushing replace the source 60-second poll",
+            "merge": "append immutable source evidence for the active query, suppress replayed source keys, retain a no-op snapshot reference, and request a fresh snapshot after retention expiry"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.ts",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts",
+              "frontend/src/pages/timeline/timelineFrameReducer.ts",
+              "src/domains/timeline/router.py",
+              "src/domains/timeline/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.cursor",
+              "domains.timeline.repository",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.source-contract",
+              "timeline.adapter.source",
+              "timeline.live.stream"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source delta is fully represented by the product's stronger snapshot-plus-SSE design, including exact scope binding, durable replay, explicit resync, bounded merge, and render-coalescing guarantees."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:history-client:bounded-query:v1",
+          "legacyContractIds": [],
+          "symbol": "useApplications and useApplicationHistory",
+          "interaction": "the signed-in user loads only authorized Applications and bounded deployment or workflow history, preserves application identity across detail tabs, and distinguishes incomplete history from an empty history",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact application and selected instance after route identity, explicit refresh, or visibility recovery",
+            "backpressure": "abort superseded reads and enforce server list and history limits before projection",
+            "merge": "replace catalog rows by stable application identity and accept detail history only for the active application and instance"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/applications.ts",
+              "frontend/src/features/applications/createApplicationsAdapter.ts",
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+              "src/domains/applications/router.py",
+              "tests/test_application_product_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.history",
+              "applications.detail.scope-tabs"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python projection already supplies authorized catalog and bounded history evidence with explicit completeness, while the React adapter preserves application, instance, and workload identity without browser inference."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:cost:workload-client:allocation-use:v1",
+          "legacyContractIds": [
+            "reference.feature.218"
+          ],
+          "symbol": "OpenCost workload detail, application allocation, and allocation-use fields",
+          "interaction": "workload and Application cost views distinguish observed allocation use from unavailable usage, preserve server currency and integer micro-unit projections, and never turn collector absence into zero cost",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the exact authorized workload allocation observation and its bounded trend window",
+            "backpressure": "one strict workload allocation response caps trend series and points before browser delivery",
+            "merge": "replace allocation only when workload identity, currency, observation timestamp, and requested range still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/costWorkloadAdapter.ts",
+              "frontend/src/features/cost/WorkloadCostPanel.tsx",
+              "frontend/src/features/cost/costWorkloadAdapter.test.ts",
+              "src/packages/contracts/cost/observations.py",
+              "tests/test_cost_observation_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "cost.workload.contract",
+              "cost.workload.adapter",
+              "cost.workload.collector-gate"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The typed observed-or-unavailable contract and UI are implemented, but production remains explicitly unavailable until an authorized provider-backed workload allocation repository is connected."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:cost:trend-client:bounded-range:v1",
+          "legacyContractIds": [
+            "reference.feature.219"
+          ],
+          "symbol": "OpenCost trend and application workload trend queries",
+          "interaction": "the Cost surface requests a bounded 6-hour, 24-hour, or 7-day allocation window and renders only ordered server series with explicit partial or unavailable evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "repeat the authorized Cost overview for the current cluster scope and URL-owned trend range after the server refresh interval",
+            "backpressure": "the Python contract caps series and points and the browser keeps one request for the active scope and range",
+            "merge": "replace trend data only for the current canonical cluster set and time range while preserving explicit gaps and reason codes"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/cost-overview.ts",
+              "frontend/src/features/cost/createCostAdapter.ts",
+              "frontend/src/features/cost/CostTrendChart.tsx",
+              "src/domains/cost/router.py",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.trend.contract",
+              "cost.trend.surface",
+              "cost.trend.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Range validation, integer micro-units, ordering, bounds, URL state, and unavailable rendering are implemented; observed series stay unavailable until the provider repository supplies them."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:cost:nodes-client:provider-identity:v1",
+          "legacyContractIds": [
+            "reference.feature.220"
+          ],
+          "symbol": "OpenCostNodeCost provider identity and node query refresh",
+          "interaction": "node cost rows require an exact provider node identity, observed allocation pricing, efficiency evidence, and authorized cluster scope before rendering",
+          "transport": "poll",
+          "realtime": {
+            "resume": "repeat only for the same authorized cluster set after a server-owned observation refresh interval",
+            "backpressure": "bound node rows and retain at most one active provider observation read per scope",
+            "merge": "replace a node row only by its immutable provider and cluster identity and never merge an inferred price"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/pages/cost/CostPage.test.tsx",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.overview.contract",
+              "cost.overview.unavailable"
+            ],
+            "state": "blocked",
+            "blockedReason": "No provider-neutral node allocation identity, pricing observation repository, authorization projection, or node-cost response contract exists.",
+            "rationale": "The product intentionally omits node prices and efficiency instead of deriving them from inventory or provider identifiers."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:client-contract:provider-detail-actions:v1",
+          "legacyContractIds": [],
+          "symbol": "Argo resource diff, revision metadata, status, selective validation, refresh, and terminate clients",
+          "interaction": "GitOps detail requires revision-bound desired/live artifacts, commit provenance, controller connection evidence, selective-resource eligibility, validation, and command outcomes tied to the exact application and managed resource",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume a submitted provider command only from its durable CommandReceipt cursor for the same application, resource, and attempt",
+            "backpressure": "coalesce progress while preserving validation, cancellation, denial, failure, and terminal events",
+            "merge": "accept detail evidence only for the active application and revision and reject operation events whose receipt or immutable ResourceRef differs"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/gitops-application-detail.ts",
+              "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "src/domains/gitops/detail_router.py",
+              "src/packages/contracts/gitops/detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail",
+              "packages.contracts.parity",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.availability",
+              "gitops.detail.revision-meta",
+              "gitops.detail.operation-gate",
+              "gitops.sync-options.payload"
+            ],
+            "state": "blocked",
+            "blockedReason": "Provider-backed desired/live artifacts, revision metadata, controller status, selective validation, executor capability, CommandReceipt, and application-resource operation stream are not integrated.",
+            "rationale": "The current strict detail projection exposes source revision, operation gating, and explicit unavailable reasons, but it does not manufacture provider observations or reuse an unrelated release command."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:rightsizing:client-contract:observed-scan-fields:v1",
+          "legacyContractIds": [],
+          "symbol": "rightsizing row, scan coverage, provenance, confidence, fit, and cache policy",
+          "interaction": "request guidance consumes only server-classified workload observations with exact resource units, safety signals, confidence, coverage, provenance, partial failures, and bounded scan scope",
+          "transport": "poll",
+          "realtime": {
+            "resume": "repeat only after explicit user intent for the same normalized cluster and namespace scope",
+            "backpressure": "limit each server response to 200 workloads and cap concurrent multi-cluster reads",
+            "merge": "retain verified same-scope results through partial refresh failure and discard obsolete request generations"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/rightsizing.ts",
+              "frontend/src/api/rightsizing-schemas.ts",
+              "frontend/src/features/rightsizing/createRightsizingAdapter.ts",
+              "frontend/src/features/rightsizing/useRightsizingScans.ts",
+              "src/domains/workload_detail/router.py",
+              "src/packages/contracts/rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "domains.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.contract",
+              "rightsizing.api",
+              "rightsizing.schema",
+              "rightsizing.scan.lifecycle"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The complete typed and bounded request path exists and renders observed-or-unavailable evidence; production remains unavailable until a persisted provider-backed observation repository is connected."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workload:scheduled-runs:catalog-and-logs:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadRun, useWorkloadRuns, workload empty diagnostics, and log stream",
+          "interaction": "CronJob and other scheduled workload details list exact owned runs, lifecycle, pod outcomes, next-step evidence, and a selected run log stream without guessing ownership or command text",
+          "transport": "sse",
+          "realtime": {
+            "resume": "restart only the selected authorized run stream and require a new user retry after a typed terminal end or error",
+            "backpressure": "the Python catalog bounds runs and lifecycle events while the log stream enforces byte, line, and duration limits",
+            "merge": "accept catalog and log events only when owner identity, run key, ResourceRef UID, cluster, namespace, and current stream generation match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "src/domains/log_stream/router.py",
+              "src/domains/log_stream/service.py",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router",
+              "domains.log_stream.service"
+            ],
+            "plannedTestIds": [
+              "workload.public-api.surface",
+              "logs.workload.empty-diagnostic"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product already owns a strict scheduled-run catalog and authenticated fetch-SSE log stream with exact owner and run identity; arbitrary source command strings remain excluded."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
+          "legacyContractIds": [
+            "reference.feature.171",
+            "reference.feature.172"
+          ],
+          "symbol": "CronJob trigger, suspend, and resume mutation invalidation",
+          "interaction": "a successful CronJob command refreshes the exact owner resource, derived Jobs, scheduled-run catalog, topology, and operation state without invalidating unrelated clusters",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the exact CronJob command from its durable CommandReceipt cursor",
+            "backpressure": "coalesce progress while preserving acceptance, denial, cancellation, failure, and terminal events",
+            "merge": "apply command status and targeted refresh only when cluster, namespace, CronJob ResourceRef, receipt, and attempt match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "src/domains/command/builtin_actions.py",
+              "src/domains/command/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "commands.cronjob.provider-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "No CronJob trigger, suspend, or resume action is registered with an agent capability, exact diff, executor, audited receipt, or product capability projection.",
+            "rationale": "The generic command and operation stream cannot be exposed as a CronJob action until Python and the target agent own the complete action-specific contract."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:helm:upgrade-client:values-payload:v1",
+          "legacyContractIds": [
+            "reference.feature.201"
+          ],
+          "symbol": "upgradeWithProgress values payload and Helm mutation refresh",
+          "interaction": "a Helm upgrade validates an optional values document, targets one authorized release revision and repository, streams progress, and refreshes release detail only after a terminal result",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume only from the durable CommandReceipt cursor for the exact release, chart revision, values digest, and attempt",
+            "backpressure": "coalesce progress while preserving validation, cancellation, failure, and terminal frames",
+            "merge": "refresh release state only when namespace, release identity, submitted revision, receipt, and operation attempt match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "src/domains/helm/release_router.py",
+              "src/packages/contracts/helm/releases.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm",
+              "packages.contracts.parity",
+              "domains.helm.release_router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "helm.upgrade.provider-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python Helm provider is read-only and has no values validation, upgrade executor, CommandReceipt, or resumable progress stream.",
+            "rationale": "The product keeps upgrade controls unavailable rather than forwarding a source-shaped values object to an unowned runtime."
           }
         }
       ]

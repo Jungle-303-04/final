@@ -4248,11 +4248,11 @@
     {
       "id": "reference-feature-119",
       "contractId": "reference.feature.119",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
       "legacyContractIds": [
         "reference.feature.119"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.3 Home·Issues·Applications·Topology·Timeline",
       "line": 395,
       "cells": [
@@ -4267,17 +4267,31 @@
       ],
       "streaming": false,
       "area": "cluster-insights",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.dashboard",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.timeline",
+      "frontendContract": "frontend/src/features/timeline/timelineContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_timeline_ledger_foundation.py",
+        "tests/test_timeline_snapshot_router.py",
+        "tests/test_timeline_sse_router.py",
+        "frontend/src/api/timeline.test.ts",
+        "frontend/src/features/timeline/createTimelineAdapter.test.ts",
+        "frontend/src/pages/timeline/timelineFrameReducer.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/timeline/router.py#stream_timeline_events",
+          "consumer": "src/domains/timeline/repository.py#replay_timeline_events",
+          "test": "tests/test_timeline_sse_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/timeline/createTimelineAdapter.ts#createTimelineAdapter",
+          "consumer": "frontend/src/api/timeline.ts#subscribeTimelineEvents",
+          "test": "frontend/src/features/timeline/createTimelineAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -6320,11 +6334,11 @@
     {
       "id": "reference-feature-171",
       "contractId": "reference.feature.171",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
       "legacyContractIds": [
         "reference.feature.171"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.6 Resource·workload mutation",
       "line": 476,
       "cells": [
@@ -6339,17 +6353,27 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
         "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No CronJob trigger action, agent capability, exact Job receipt payload, or audited command executor is registered.",
+          "test": "tests/test_command_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "The generic resource action handoff has no server-projected CronJob trigger capability and must not manufacture one in the browser.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -6357,11 +6381,11 @@
     {
       "id": "reference-feature-172",
       "contractId": "reference.feature.172",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
       "legacyContractIds": [
         "reference.feature.172"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.6 Resource·workload mutation",
       "line": 477,
       "cells": [
@@ -6377,17 +6401,27 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
         "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No CronJob suspend or resume action, agent capability, diff contract, or audited command executor is registered.",
+          "test": "tests/test_command_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "The browser has no server-projected CronJob suspend or resume capability and cannot infer it from resource kind alone.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -7497,11 +7531,11 @@
     {
       "id": "reference-feature-201",
       "contractId": "reference.feature.201",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:upgrade-client:values-payload:v1",
       "legacyContractIds": [
         "reference.feature.201"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.8 Helm",
       "line": 524,
       "cells": [
@@ -7517,16 +7551,26 @@
       "streaming": true,
       "area": "helm-release-management",
       "deliveryStatus": "planned",
-      "backendContract": "domains.helm",
+      "backendContract": "packages.contracts.helm",
       "frontendContract": "frontend/src/pages/helm",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_helm_release_router.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py",
+          "reason": "The Python Helm boundary is read-only and has no provider-backed values validation, upgrade executor, CommandReceipt, or durable progress stream.",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx",
+          "reason": "Upgrade controls remain hidden until the Python contract exposes an authorized values payload and resumable operation stream.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": null
       }
@@ -8141,11 +8185,11 @@
     {
       "id": "reference-feature-218",
       "contractId": "reference.feature.218",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cost:workload-client:allocation-use:v1",
       "legacyContractIds": [
         "reference.feature.218"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.10 Cost·Settings·기타 overlay",
       "line": 561,
       "cells": [
@@ -8160,17 +8204,30 @@
       ],
       "streaming": false,
       "area": "cost-settings",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.cost.observations",
+      "frontendContract": "frontend/src/features/cost/costContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_cost_observation_projection.py",
+        "tests/test_application_product_contract.py",
+        "frontend/src/features/cost/costWorkloadAdapter.test.ts",
+        "frontend/src/features/cost/WorkloadCostPanel.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/packages/contracts/cost/observations.py#CostWorkloadAllocation",
+          "consumer": "src/domains/applications/product_projection.py#application_detail",
+          "reason": "The strict allocation contract exists, but no authorized provider-backed workload cost observation repository supplies production values.",
+          "test": "tests/test_cost_observation_projection.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cost/WorkloadCostPanel.tsx#WorkloadCostPanel",
+          "consumer": "frontend/src/features/cost/costWorkloadAdapter.ts#toCostWorkloadAllocation",
+          "test": "frontend/src/features/cost/WorkloadCostPanel.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8178,11 +8235,11 @@
     {
       "id": "reference-feature-219",
       "contractId": "reference.feature.219",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cost:trend-client:bounded-range:v1",
       "legacyContractIds": [
         "reference.feature.219"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.10 Cost·Settings·기타 overlay",
       "line": 562,
       "cells": [
@@ -8199,17 +8256,30 @@
       ],
       "streaming": false,
       "area": "cost-settings",
-      "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.cost.observations",
+      "frontendContract": "frontend/src/features/cost/costContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_cost_router.py",
+        "tests/test_cost_observation_projection.py",
+        "frontend/src/api/cost-overview.test.ts",
+        "frontend/src/features/cost/CostTrendChart.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/cost/router.py#get_cost_overview",
+          "consumer": "src/packages/contracts/cost/observations.py#CostObservedTrend",
+          "reason": "Bounded trend ranges and transport limits are implemented, but the provider observation repository is not connected.",
+          "test": "tests/test_cost_router.py#test_cost_overview_validates_and_forwards_the_trend_range"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cost/CostTrendChart.tsx#CostTrendChart",
+          "consumer": "frontend/src/features/cost/createCostAdapter.ts#createCostAdapter",
+          "test": "frontend/src/features/cost/CostTrendChart.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -8217,11 +8287,11 @@
     {
       "id": "reference-feature-220",
       "contractId": "reference.feature.220",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cost:nodes-client:provider-identity:v1",
       "legacyContractIds": [
         "reference.feature.220"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.10 Cost·Settings·기타 overlay",
       "line": 563,
       "cells": [
@@ -8237,16 +8307,26 @@
       "streaming": false,
       "area": "cost-settings",
       "deliveryStatus": "planned",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/pages",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.cost.observations",
+      "frontendContract": "frontend/src/pages/cost",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_cost_observation_projection.py",
+        "frontend/src/pages/cost/CostPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/packages/contracts/cost/observations.py",
+          "reason": "No provider-neutral node allocation identity, pricing observation, or authorized node-cost repository exists.",
+          "test": "tests/test_cost_observation_projection.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/cost/CostPage.tsx",
+          "reason": "The Cost surface cannot render node prices or efficiency until the server supplies a typed observed-or-unavailable node allocation contract.",
+          "test": "frontend/src/pages/cost/CostPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
