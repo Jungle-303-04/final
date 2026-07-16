@@ -180,7 +180,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "gitops",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(),
+        default: (await import("./composition/surfaces/gitops")).loadGitOpsSurface(refreshPolicies),
       })),
     },
     {

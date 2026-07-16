@@ -102,6 +102,52 @@ describe("server refresh scheduler", () => {
     expect(harness.timerCount()).toBe(1);
   });
 
+  it("bounds server-declared cold-empty retries before returning to the normal cadence", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+    const policy = {
+      refreshAfterSeconds: 120,
+      retryAfterSeconds: 2,
+      retryLimit: 4,
+    };
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      scheduler.complete(policy, { coldEmpty: true });
+      expect(harness.delays()).toEqual([2_000]);
+      harness.fireNextTimer();
+    }
+
+    scheduler.complete(policy, { coldEmpty: true });
+    expect(harness.delays()).toEqual([120_000]);
+    expect(harness.refreshCount).toBe(4);
+  });
+
+  it("never treats a later empty projection as a cold-start retry", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+    const policy = {
+      refreshAfterSeconds: 120,
+      retryAfterSeconds: 2,
+      retryLimit: 4,
+    };
+
+    scheduler.complete(policy, { coldEmpty: false });
+    scheduler.complete(policy, { coldEmpty: true });
+
+    expect(harness.delays()).toEqual([120_000]);
+  });
+
+  it("rejects incomplete bounded retry policy instead of inventing its missing half", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+
+    expect(() => scheduler.complete({
+      refreshAfterSeconds: 120,
+      retryAfterSeconds: 2,
+    }, { coldEmpty: true })).toThrow(RangeError);
+    expect(harness.timerCount()).toBe(0);
+  });
+
   it("rejects invalid server policy instead of substituting a client default", () => {
     const harness = schedulerHarness();
     const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });

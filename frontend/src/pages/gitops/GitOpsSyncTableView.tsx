@@ -19,6 +19,11 @@ import { Surface } from "../../shared/ui/Surface";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Button } from "../../shared/ui/primitives/button";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
+import type {
+  BrowserRefreshPolicy,
+  BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import { DeploymentTargetDialog } from "./DeploymentTargetDialog";
 import { GitOpsSyncSearch } from "./GitOpsSyncSearch";
 import { GitOpsSyncTargetDetails } from "./GitOpsSyncTargetDetails";
@@ -31,7 +36,15 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 
-export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
+type GitOpsRefreshPolicyKey = "gitops_rows" | "gitops_counts";
+
+export function GitOpsSyncTableView({
+  port,
+  refreshPolicies,
+}: {
+  port: GitOpsPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<GitOpsRefreshPolicyKey>;
+}) {
   const { formatDate, t } = useI18n();
   const [request, setRequest] = useState(0);
   const [rows, setRows] = useState<GitOpsSyncTarget[]>([]);
@@ -41,25 +54,64 @@ export function GitOpsSyncTableView({ port }: { port: GitOpsPort }) {
   const [targetPending, setTargetPending] = useState(false);
   const [error, setError] = useState(false);
   const [query, setQuery] = useState("");
+  const [policies, setPolicies] = useState<{
+    rows: BrowserRefreshPolicy;
+    counts: BrowserRefreshPolicy;
+  } | null>(null);
+  const [successfulRead, setSuccessfulRead] = useState<{ sequence: number; empty: boolean } | null>(null);
   const visibleRows = useMemo(() => filterGitOpsSyncTargets(rows, query), [query, rows]);
+  const requestSharedRefresh = useCallback(() => setRequest((value) => value + 1), []);
+  const rowsRefresh = useServerRefreshScheduler(requestSharedRefresh);
+  const countsRefresh = useServerRefreshScheduler(requestSharedRefresh);
   const refresh = useCallback(() => {
     setLoading(true);
     setError(false);
-    setRequest((value) => value + 1);
-  }, []);
+    rowsRefresh.backgroundFailure();
+    countsRefresh.requestRefresh();
+  }, [countsRefresh, rowsRefresh]);
 
   useEffect(() => {
     const controller = new AbortController();
+    void Promise.all([
+      refreshPolicies.getPolicy("gitops_rows", controller.signal),
+      refreshPolicies.getPolicy("gitops_counts", controller.signal),
+    ]).then(([rowsPolicy, countsPolicy]) => {
+      if (!controller.signal.aborted) setPolicies({ rows: rowsPolicy, counts: countsPolicy });
+    }).catch((reason: unknown) => {
+      if (!isAbortError(reason)) {
+        rowsRefresh.backgroundFailure();
+        countsRefresh.backgroundFailure();
+      }
+    });
+    return () => controller.abort();
+  }, [countsRefresh, refreshPolicies, rowsRefresh]);
+
+  useEffect(() => {
+    if (policies === null || successfulRead === null) return;
+    rowsRefresh.acceptSuccess(policies.rows, { coldEmpty: successfulRead.empty });
+    countsRefresh.acceptSuccess(policies.counts);
+  }, [countsRefresh, policies, rowsRefresh, successfulRead]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    rowsRefresh.backgroundFailure();
+    countsRefresh.backgroundFailure();
     void port.listSyncTargets(controller.signal).then((nextRows) => {
       setRows(nextRows);
+      setSuccessfulRead((current) => ({
+        sequence: (current?.sequence ?? 0) + 1,
+        empty: nextRows.length === 0,
+      }));
       setLoading(false);
     }).catch((reason: unknown) => {
       if (isAbortError(reason)) return;
+      rowsRefresh.backgroundFailure();
+      countsRefresh.backgroundFailure();
       setError(true);
       setLoading(false);
     });
     return () => controller.abort();
-  }, [port, request]);
+  }, [countsRefresh, port, request, rowsRefresh]);
 
   useEffect(() => {
     const controller = new AbortController();

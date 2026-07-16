@@ -9,6 +9,13 @@
 
 export interface ServerDeclaredRefreshPolicy {
   refreshAfterSeconds: number;
+  retryAfterSeconds?: number | null;
+  retryLimit?: number | null;
+}
+
+export interface ServerRefreshCompletion {
+  /** True only when an initial collection response is valid but contains no rows. */
+  coldEmpty?: boolean;
 }
 
 export interface ServerRefreshSchedulerRuntime {
@@ -30,7 +37,7 @@ export interface ServerRefreshScheduler {
    * Arms the next automatic refresh after the caller has accepted a server
    * response. Replacing a policy always replaces the pending timer.
    */
-  complete(policy: ServerDeclaredRefreshPolicy): boolean;
+  complete(policy: ServerDeclaredRefreshPolicy, completion?: ServerRefreshCompletion): boolean;
   /**
    * Stops automatic refresh after a background failure. The caller keeps its
    * last successful resource state and may later restart this scheduler only
@@ -78,6 +85,8 @@ export function createServerRefreshScheduler(
   let disposed = false;
   let refreshInFlight = false;
   let hasSuccessfulResponse = false;
+  let hasObservedNonEmpty = false;
+  let coldEmptyRetryCount = 0;
   let policy: ServerDeclaredRefreshPolicy | null = null;
   let timer: number | null = null;
 
@@ -104,11 +113,20 @@ export function createServerRefreshScheduler(
     isRefreshInFlight: () => refreshInFlight,
   };
 
-  function complete(nextPolicy: ServerDeclaredRefreshPolicy): boolean {
+  function complete(
+    nextPolicy: ServerDeclaredRefreshPolicy,
+    completion: ServerRefreshCompletion = {},
+  ): boolean {
     if (disposed) return false;
     validatePolicy(nextPolicy);
     clearTimer();
-    policy = { refreshAfterSeconds: nextPolicy.refreshAfterSeconds };
+    const coldEmpty = completion.coldEmpty === true && !hasObservedNonEmpty;
+    if (completion.coldEmpty !== true) hasObservedNonEmpty = true;
+    const retryAfterSeconds = coldEmptyRetryInterval(nextPolicy, coldEmptyRetryCount, coldEmpty);
+    if (retryAfterSeconds !== null) coldEmptyRetryCount += 1;
+    policy = {
+      refreshAfterSeconds: retryAfterSeconds ?? nextPolicy.refreshAfterSeconds,
+    };
     hasSuccessfulResponse = true;
     refreshInFlight = false;
     schedule();
@@ -162,6 +180,35 @@ function validatePolicy(policy: ServerDeclaredRefreshPolicy): void {
   if (!Number.isFinite(policy.refreshAfterSeconds) || policy.refreshAfterSeconds <= 0) {
     throw new RangeError("server refresh interval must be a positive finite number");
   }
+  const hasRetryAfter = policy.retryAfterSeconds !== undefined && policy.retryAfterSeconds !== null;
+  const hasRetryLimit = policy.retryLimit !== undefined && policy.retryLimit !== null;
+  if (hasRetryAfter !== hasRetryLimit) {
+    throw new RangeError("server retry interval and limit must be declared together");
+  }
+  if (hasRetryAfter && (
+    !Number.isFinite(policy.retryAfterSeconds)
+    || policy.retryAfterSeconds! <= 0
+    || !Number.isInteger(policy.retryLimit)
+    || policy.retryLimit! <= 0
+  )) {
+    throw new RangeError("server retry policy must use a positive interval and limit");
+  }
+}
+
+function coldEmptyRetryInterval(
+  policy: ServerDeclaredRefreshPolicy,
+  retryCount: number,
+  coldEmpty: boolean,
+): number | null {
+  if (
+    !coldEmpty
+    || policy.retryAfterSeconds === undefined
+    || policy.retryAfterSeconds === null
+    || policy.retryLimit === undefined
+    || policy.retryLimit === null
+    || retryCount >= policy.retryLimit
+  ) return null;
+  return policy.retryAfterSeconds;
 }
 
 function milliseconds(policy: ServerDeclaredRefreshPolicy): number {

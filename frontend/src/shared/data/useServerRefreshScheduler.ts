@@ -3,11 +3,12 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   createServerRefreshScheduler,
   type ServerDeclaredRefreshPolicy,
+  type ServerRefreshCompletion,
   type ServerRefreshScheduler,
 } from "./serverRefreshScheduler";
 
 export interface ServerRefreshController {
-  acceptSuccess(policy: ServerDeclaredRefreshPolicy): void;
+  acceptSuccess(policy: ServerDeclaredRefreshPolicy, completion?: ServerRefreshCompletion): void;
   backgroundFailure(): void;
   requestEventInvalidation(): void;
   requestRefresh(): void;
@@ -43,13 +44,17 @@ export function useServerRefreshScheduler(
     };
   }, []);
 
-  const acceptSuccess = useCallback((policy: ServerDeclaredRefreshPolicy) => {
+  const acceptSuccess = useCallback((
+    policy: ServerDeclaredRefreshPolicy,
+    completion?: ServerRefreshCompletion,
+  ) => {
     const followUpAfterSeconds = mutationFollowUpRef.current;
     mutationFollowUpRef.current = null;
     schedulerRef.current?.complete(
       followUpAfterSeconds === null
         ? policy
         : { refreshAfterSeconds: followUpAfterSeconds },
+      completion,
     );
   }, []);
   const backgroundFailure = useCallback(() => {

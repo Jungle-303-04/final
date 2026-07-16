@@ -11,6 +11,7 @@ import type {
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { GitOpsPage } from "./GitOpsPage";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function installWorkflowGraphDomStubs() {
   vi.stubGlobal(
@@ -35,13 +36,28 @@ export function renderGitOps(initialEntry: string, port: GitOpsPort = gitOpsPort
     element: (
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <UnifiedFilterProvider>
-          <GitOpsPage port={port} />
+          <GitOpsPage port={port} refreshPolicies={gitOpsRefreshPolicies()} />
           <LocationProbe />
         </UnifiedFilterProvider>
       </I18nProvider>
     ),
   }], { initialEntries: [initialEntry] });
   return { ...render(<RouterProvider router={router} />), port, router };
+}
+
+export function gitOpsRefreshPolicies(): BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts"> {
+  return {
+    getPolicy: vi.fn(async (key) => ({
+      staleAfterSeconds: key === "gitops_counts" ? 10 : 30,
+      refreshAfterSeconds: key === "gitops_counts" ? 60 : 120,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: false,
+      retryAfterSeconds: key === "gitops_rows" ? 2 : null,
+      retryLimit: key === "gitops_rows" ? 4 : null,
+      postMutationRefreshAfterSeconds: null,
+    })),
+  };
 }
 
 function LocationProbe() {

@@ -20,10 +20,17 @@ import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowPlanPicker } from "./WorkflowPlanPicker";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
 import { GitOpsApplicationDetailPage } from "./GitOpsApplicationDetailPage";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 type GitOpsSection = "changes" | "sync";
 
-export function GitOpsPage({ port }: { port: GitOpsPort }) {
+export function GitOpsPage({
+  port,
+  refreshPolicies,
+}: {
+  port: GitOpsPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<"gitops_rows" | "gitops_counts">;
+}) {
   const { t } = useI18n();
   const detailMatch = useMatch("/gitops/detail/*");
   const [section, setSection] = useState<GitOpsSection>("changes");
@@ -62,7 +69,7 @@ export function GitOpsPage({ port }: { port: GitOpsPort }) {
           {section === "changes" ? <GitOpsChangesWorkspace port={port} /> : null}
         </TabsContent>
         <TabsContent className="min-w-0" value="sync">
-          {section === "sync" ? <GitOpsSyncTableView port={port} /> : null}
+          {section === "sync" ? <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} /> : null}
         </TabsContent>
       </Tabs>
     </ProductPageFrame>

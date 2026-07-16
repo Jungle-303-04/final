@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
-import { gitOpsPort } from "./GitOpsPage.testSupport";
+import { gitOpsPort, gitOpsRefreshPolicies } from "./GitOpsPage.testSupport";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("GitOpsSyncTableView", () => {
   it("shows compact observed data and expands one row without fetching invented details", async () => {
@@ -94,12 +97,52 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.getByText("Inventory API")).toBeTruthy();
     expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
   });
+
+  it("shares server-owned row retries and count cadence without a browser fallback", async () => {
+    vi.useFakeTimers();
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([]);
+    const refreshPolicies = gitOpsRefreshPolicies();
+    renderView(port, refreshPolicies);
+
+    await act(async () => undefined);
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+    expect(refreshPolicies.getPolicy).toHaveBeenCalledWith("gitops_rows", expect.any(AbortSignal));
+    expect(refreshPolicies.getPolicy).toHaveBeenCalledWith("gitops_counts", expect.any(AbortSignal));
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await act(async () => vi.advanceTimersByTimeAsync(2_000));
+      expect(port.listSyncTargets).toHaveBeenCalledTimes(attempt + 2);
+    }
+
+    await act(async () => vi.advanceTimersByTimeAsync(59_999));
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(5);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(6);
+  });
+
+  it("stays manual when the server policy inventory is unavailable", async () => {
+    vi.useFakeTimers();
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([]);
+    const refreshPolicies = gitOpsRefreshPolicies();
+    vi.mocked(refreshPolicies.getPolicy).mockRejectedValue(new Error("policy unavailable"));
+
+    renderView(port, refreshPolicies);
+    await act(async () => undefined);
+    await act(async () => vi.advanceTimersByTimeAsync(3_600_000));
+
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+  });
 });
 
-function renderView(port: ReturnType<typeof gitOpsPort>) {
+function renderView(
+  port: ReturnType<typeof gitOpsPort>,
+  refreshPolicies = gitOpsRefreshPolicies(),
+) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
-      <GitOpsSyncTableView port={port} />
+      <GitOpsSyncTableView port={port} refreshPolicies={refreshPolicies} />
     </I18nProvider>,
   );
 }
