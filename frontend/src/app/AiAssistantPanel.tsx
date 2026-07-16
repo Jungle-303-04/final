@@ -33,6 +33,7 @@ import {
   clampAiAssistantPanelWidth,
 } from "./AiAssistantResizeHandle";
 import { AiAlertRuleActionCard } from "./AiAlertRuleActionCard";
+import { useOptionalActivityNotifications } from "../features/notifications/ActivityNotificationsProvider";
 
 const AI_ASSISTANT_PANEL_WIDTH_STORAGE_KEY = "opsia.ai-assistant.panel-width";
 
@@ -62,9 +63,13 @@ export function AiAssistantPanel({
   const { locale, t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
+  const activityNotifications = useOptionalActivityNotifications();
+  const registerAiOpener = activityNotifications?.registerAiOpener;
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingController = useRef<AbortController | null>(null);
+  const pendingActivityId = useRef<string | null>(null);
+  const activityNotificationsRef = useRef(activityNotifications);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
   const [width, setWidth] = useState(readAiAssistantPanelWidth);
@@ -86,6 +91,14 @@ export function AiAssistantPanel({
   const chips = aiAssistantContextChips(context);
   const stopLabel = locale === "ko" ? "중단" : "Stop";
   const canCreateAlertRule = session?.roles.includes("service_admin") ?? false;
+
+  useEffect(() => {
+    activityNotificationsRef.current = activityNotifications;
+  }, [activityNotifications]);
+
+  useEffect(() => registerAiOpener?.(
+    () => onOpenChange(true),
+  ), [onOpenChange, registerAiOpener]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -112,13 +125,26 @@ export function AiAssistantPanel({
     threadEndRef.current?.scrollIntoView?.({ block: "end" });
   }, [contextKey, open, pending, visibleEntries.length]);
 
-  useEffect(() => () => pendingController.current?.abort(), [contextKey, open]);
+  useEffect(() => () => {
+    pendingController.current?.abort();
+    if (pendingActivityId.current) {
+      activityNotificationsRef.current?.dismissActivity(pendingActivityId.current);
+      pendingActivityId.current = null;
+    }
+  }, [contextKey]);
+
+  useEffect(() => {
+    if (!pending || !pendingActivityId.current) return;
+    activityNotifications?.setActivityMuted(pendingActivityId.current, open);
+  }, [activityNotifications, open, pending]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const question = message.trim();
     if (!question || pending) return;
     const controller = new AbortController();
+    const activityId = activityNotifications?.beginAi(question) ?? null;
+    pendingActivityId.current = activityId;
     pendingController.current = controller;
     setPending(true);
     setPendingQuestion({ contextKey, question });
@@ -133,12 +159,14 @@ export function AiAssistantPanel({
         question,
         response,
       }]);
+      if (activityId) activityNotifications?.completeAi(activityId);
     } catch (error) {
       if (isAbortError(error) || controller.signal.aborted) return;
       if (error instanceof AiAssistantPortFailure && error.code === "unauthorized") {
         reportUnauthorized();
       }
       setFailureContextKey(contextKey);
+      if (activityId) activityNotifications?.failActivity(activityId);
     } finally {
       if (pendingController.current === controller) {
         pendingController.current = null;
@@ -146,6 +174,7 @@ export function AiAssistantPanel({
         setPendingQuestion(null);
         inputRef.current?.focus();
       }
+      if (pendingActivityId.current === activityId) pendingActivityId.current = null;
     }
   };
 
@@ -344,6 +373,10 @@ export function AiAssistantPanel({
   function stopPendingRequest() {
     pendingController.current?.abort();
     pendingController.current = null;
+    if (pendingActivityId.current) {
+      activityNotifications?.dismissActivity(pendingActivityId.current);
+      pendingActivityId.current = null;
+    }
     setPending(false);
     setPendingQuestion(null);
     inputRef.current?.focus();

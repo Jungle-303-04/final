@@ -25,6 +25,7 @@ import type {
 } from "./issuesSurfaceContract";
 import { useIssueAuditPagination } from "./useIssueAuditPagination";
 import { useIssueDetailFocus } from "./useIssueDetailFocus";
+import { useOptionalActivityNotifications } from "../notifications/ActivityNotificationsProvider";
 
 const ISSUE_REFRESH_INTERVAL_MS = 10_000;
 const RECOVERY_PROGRESS_REFRESH_INTERVAL_MS = 2_000;
@@ -52,6 +53,7 @@ export function IssuesSurface({
   const [detailFull, setDetailFull] = useState(false);
   const [revision, setRevision] = useState(0);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  const activityNotifications = useOptionalActivityNotifications();
   const mutationRef = useRef<AbortController | null>(null);
   const list = listRecord.scope === clusterId ? listRecord.state : emptyState<IssueList>();
   const selected = selectedRecord?.scope === clusterId ? selectedRecord.issue : null;
@@ -250,6 +252,11 @@ export function IssuesSurface({
         selectionFailure: null,
         selectionPendingId: null,
       }));
+      activityNotifications?.beginIncidentRecovery({
+        correlationId: result.receipt.correlationId,
+        target: selected.resourceName || selected.symptom || selected.id,
+        href: issueActivityHref(selected.clusterId),
+      });
       try {
         const refreshed = await port.loadRecoveryPlan(selected.correlationId, controller.signal);
         setPanels((current) => ({
@@ -282,7 +289,7 @@ export function IssuesSurface({
     }).finally(() => {
       if (mutationRef.current === controller) mutationRef.current = null;
     });
-  }, [panels.recovery.data, port, recoverySelection.state, selected]);
+  }, [activityNotifications, panels.recovery.data, port, recoverySelection.state, selected]);
 
   const selectIssue = useCallback((issue: IssueSummary) => {
     abortAuditPage();
@@ -419,6 +426,11 @@ function recoveryProgressIsTerminalStatus(status: string): boolean {
   return ["command_rejected", "incident_resolved", "pr_failed", "resolved"].includes(
     status.trim().toLowerCase(),
   );
+}
+
+function issueActivityHref(clusterId: string | null): string {
+  if (!clusterId) return "/issues";
+  return `/issues?${new URLSearchParams({ clusters: clusterId }).toString()}`;
 }
 
 function loadingPanels(loadIncidentSections: boolean): IssuePanelsState {

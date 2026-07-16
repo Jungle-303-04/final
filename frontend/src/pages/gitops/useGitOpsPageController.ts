@@ -20,12 +20,14 @@ import {
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { useI18n } from "../../shared/i18n";
 import { useWorkflowData } from "./useWorkflowData";
+import { useOptionalActivityNotifications } from "../../features/notifications/ActivityNotificationsProvider";
 
 type Operation = "idle" | "save" | "create" | "target" | "readiness" | "start" | "run" | "generate" | "safe-pr";
 export type WorkflowFeedback = { tone: "success" | "danger"; message: string };
 
 export function useGitOpsPageController(port: GitOpsPort) {
   const { t } = useI18n();
+  const activityNotifications = useOptionalActivityNotifications();
   const { detail, updateDetail } = useUnifiedFilter();
   const requestedPlanId = detail.workflowPlan || "";
   const requestedView = detail.workflowView ?? null;
@@ -215,12 +217,28 @@ export function useGitOpsPageController(port: GitOpsPort) {
 
   const submitSafePr = async (stepIndex: number) => {
     if (!selectedPlan) return;
+    const step = selectedPlan.steps[stepIndex];
+    const activityId = activityNotifications?.beginSafePr({
+      target: step?.name || step?.application_id || selectedPlan.name,
+      href: gitOpsActivityHref(selectedPlan.plan_id),
+    });
     setOperation("safe-pr");
     try {
-      setSafePr(await port.submitSafePr(selectedPlan, stepIndex));
+      const result = await port.submitSafePr(selectedPlan, stepIndex);
+      setSafePr(result);
       setSafePrStepIndex(stepIndex);
+      if (activityId) {
+        activityNotifications?.observeSafePr(
+          activityId,
+          result.correlation_id,
+          result.workflow_run_id,
+        );
+      }
     }
-    catch { handleError(); } finally { setOperation("idle"); }
+    catch {
+      if (activityId) activityNotifications?.failActivity(activityId);
+      handleError();
+    } finally { setOperation("idle"); }
   };
 
   return {
@@ -231,4 +249,9 @@ export function useGitOpsPageController(port: GitOpsPort) {
     openEditor, saveDraft, createPlan, createTarget, checkReadiness, startPlan, runAction,
     generateManifest, submitSafePr,
   };
+}
+
+function gitOpsActivityHref(planId: string | undefined): string {
+  if (!planId) return "/gitops";
+  return `/gitops?${new URLSearchParams({ plan: planId, view: "yaml" }).toString()}`;
 }
