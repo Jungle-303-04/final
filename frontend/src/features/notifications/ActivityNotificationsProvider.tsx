@@ -17,10 +17,12 @@ import type {
   ActivityNotificationsPort,
   IncidentActivityEvent,
   SafePrActivityEvent,
+  WorkflowActivityEvent,
 } from "./activityNotificationsContract";
 import type { HeaderNotificationAttentionHandler } from "./headerNotificationAttention";
 
 const OBSERVATION_INTERVAL_MS = 2_000;
+const WORKFLOW_POLL_INTERVAL_MS = 5_000;
 const TERMINAL_TOAST_DURATION_MS = 5_000;
 const MAX_STORED_ACTIVITIES = 24;
 const STORAGE_PREFIX = "opsia.activity-notifications";
@@ -78,6 +80,7 @@ export function ActivityNotificationsProvider({
   const activitiesRef = useRef(activities);
   const sequence = useRef(0);
   const aiOpener = useRef<(() => void) | null>(null);
+  const workflowSeen = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (!suppressFloatingNotifications) return;
@@ -148,7 +151,7 @@ export function ActivityNotificationsProvider({
     } else if (activity.status === "succeeded") {
       toast.success(activity.title, { ...options, duration: TERMINAL_TOAST_DURATION_MS });
     } else {
-      toast.error(activity.title, { ...options, duration: Infinity });
+      toast.error(activity.title, { ...options, duration: TERMINAL_TOAST_DURATION_MS });
     }
   }, [onSuppressedNotification, openActivity, suppressFloatingNotifications, t]);
 
@@ -320,6 +323,51 @@ export function ActivityNotificationsProvider({
   ) => {
     update(id, { correlationId, workflowRunId }, false);
   }, [update]);
+
+  useEffect(() => {
+    if (!port.loadWorkflowEvents) return;
+    let active = true;
+    let inFlight = false;
+    let controller: AbortController | null = null;
+    const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      controller?.abort();
+      controller = new AbortController();
+      try {
+        const events = await port.loadWorkflowEvents?.(controller.signal) ?? [];
+        if (!active) return;
+        const currentIds = new Set(events.map((event) => event.eventId));
+        if (workflowSeen.current !== null) {
+          const fresh = events
+            .filter((event) => !workflowSeen.current?.has(event.eventId))
+            .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt));
+          for (const event of fresh) {
+            const notification = workflowNotification(event, t);
+            replace(notification);
+            if (event.eventType === "workflow.run.failed") present(notification);
+          }
+        }
+        workflowSeen.current = currentIds;
+      } catch (error) {
+        if (!isAbortError(error)) {
+          // Keep existing notifications and retry when the audit projection is temporarily unavailable.
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    void load();
+    const interval = window.setInterval(() => void load(), WORKFLOW_POLL_INTERVAL_MS);
+    const handleVisibility = () => document.visibilityState === "visible" && void load();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      active = false;
+      controller?.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [port, present, replace, t]);
 
   const markAllActivitiesRead = useCallback(() => {
     commit(activitiesRef.current.map((activity) => (
@@ -497,7 +545,7 @@ function incidentObservation(
     }
     return { ...base, status: "running", currentStep: 1, description: t("alerts.activity.analysis.start") };
   }
-  if (["command.rejected", "safe_pr.failed", "workflow.failed"].includes(latest.subject)) {
+  if (["command.rejected", "safe_pr.failed", "workflow.run.failed"].includes(latest.subject)) {
     return {
       ...base,
       status: "failed",
@@ -629,9 +677,44 @@ const recoverySubjects = new Set([
   "safe_pr.ready_for_creation",
   "safe_pr.created",
   "safe_pr.failed",
-  "workflow.failed",
+  "workflow.run.failed",
   "incident.resolved",
 ]);
+
+function workflowNotification(
+  event: WorkflowActivityEvent,
+  t: ReturnType<typeof useI18n>["t"],
+): ActivityNotification {
+  const failed = event.eventType === "workflow.run.failed";
+  const target = event.planName || event.applicationIds[0] || event.runId;
+  const genericMessage = failed ? "Workflow run failed." : "Workflow run completed.";
+  const description = event.message.trim() && event.message !== genericMessage
+    ? event.message
+    : t(failed ? "alerts.activity.workflow.failed" : "alerts.activity.workflow.completed");
+  return {
+    id: `workflow:${event.eventId}`,
+    kind: "workflow",
+    status: failed ? "failed" : "succeeded",
+    title: t(
+      failed ? "alerts.activity.workflow.failedTitle" : "alerts.activity.workflow.completedTitle",
+      { target },
+    ),
+    description,
+    target,
+    href: event.planId
+      ? `/gitops?plan=${encodeURIComponent(event.planId)}&view=runs`
+      : "/gitops?view=runs",
+    createdAt: event.createdAt,
+    updatedAt: event.createdAt,
+    currentStep: 1,
+    totalSteps: 1,
+    correlationId: null,
+    workflowRunId: event.runId,
+    lastEventId: event.eventId,
+    muted: false,
+    read: false,
+  };
+}
 
 function activityDescription(
   activity: ActivityNotification,

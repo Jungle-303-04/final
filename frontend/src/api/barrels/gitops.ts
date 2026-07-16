@@ -87,6 +87,16 @@ export {
   type ReleaseRunAction,
 } from "../release-flow";
 export {
+  listReleaseAuditEvents,
+  RELEASE_AUDIT_PATH,
+} from "../release-audit";
+export {
+  releaseAuditEventSchema,
+  releaseAuditListSchema,
+  type ReleaseAuditEventEndpoint,
+  type ReleaseAuditListEndpoint,
+} from "../release-audit-schemas";
+export {
   releaseGeneratedManifestSchema,
   releasePlanListSchema,
   releasePlanResponseSchema,

@@ -16,6 +16,7 @@ import {
   listAlertRules,
   listClusters,
   listGlobalFilterFacets,
+  listReleaseAuditEvents,
   openPodLogStream,
   openScheduledWorkloadRunLogStream,
   openWorkloadLogStream,
@@ -74,6 +75,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
   });
   const activityNotificationsPort = createActivityNotificationsAdapter({
     getAuditTimeline,
+    listReleaseAuditEvents,
   });
   const alertRulesPort = createAlertRulesAdapter({
     createAlertRule,

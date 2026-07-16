@@ -7,14 +7,14 @@ function Toaster() {
       expand={false}
       gap={8}
       mobileOffset={{
-        bottom: "calc(var(--product-floating-action-clearance) + 0.75rem)",
+        top: "calc(3.5rem + 0.75rem + env(safe-area-inset-top, 0px))",
         right: "1rem",
       }}
       offset={{
-        bottom: "calc(var(--product-floating-action-clearance) + 0.75rem)",
+        top: "calc(3.5rem + 0.75rem + env(safe-area-inset-top, 0px))",
         right: "var(--product-floating-action-inline-inset)",
       }}
-      position="bottom-right"
+      position="top-right"
       visibleToasts={3}
       toastOptions={{
         classNames: {

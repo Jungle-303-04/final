@@ -35,6 +35,7 @@ const EXECUTING_STATUSES = new Set([
 const FAILED_SUBJECTS = new Set([
   "command.rejected",
   "safe_pr.failed",
+  "workflow.run.failed",
   "workflow.failed",
 ]);
 const COMPLETED_SUBJECTS = new Set(["incident.resolved"]);
@@ -127,10 +128,12 @@ function failureStep(
   events: IssueAuditTimelinePage["items"],
 ): number {
   if (
-    status === "pr_failed" || subject === "safe_pr.failed" || subject === "workflow.failed" ||
+    status === "pr_failed" || subject === "safe_pr.failed" ||
+    subject === "workflow.run.failed" || subject === "workflow.failed" ||
     events.some((event) => {
       const eventSubject = normalize(event.subject);
-      return eventSubject === "safe_pr.failed" || eventSubject === "workflow.failed";
+      return eventSubject === "safe_pr.failed" || eventSubject === "workflow.run.failed" ||
+        eventSubject === "workflow.failed";
     })
   ) return 3;
   if (

@@ -2,6 +2,7 @@ export type ActivityNotificationKind =
   | "incident-analysis"
   | "incident-recovery"
   | "safe-pr"
+  | "workflow"
   | "ai";
 
 export type ActivityNotificationStatus =
@@ -44,7 +45,20 @@ export interface SafePrActivityEvent {
   details: Readonly<Record<string, unknown>>;
 }
 
+export interface WorkflowActivityEvent {
+  eventId: string;
+  eventType: "workflow.run.completed" | "workflow.run.failed";
+  message: string;
+  createdAt: string;
+  runId: string;
+  planId: string;
+  planName: string;
+  applicationIds: readonly string[];
+  details: Readonly<Record<string, unknown>>;
+}
+
 export interface ActivityNotificationsPort {
+  loadWorkflowEvents?(signal?: AbortSignal): Promise<readonly WorkflowActivityEvent[]>;
   loadIncidentEvents(
     correlationId: string,
     signal?: AbortSignal,
@@ -65,6 +79,19 @@ export const EMPTY_ACTIVITY_NOTIFICATIONS_PORT: ActivityNotificationsPort = {
 };
 
 export interface ActivityNotificationsEndpointDependencies {
+  listReleaseAuditEvents(options?: { signal?: AbortSignal; limit?: number }): Promise<{
+    events: Array<{
+      audit_id: string;
+      run_id: string;
+      event_type: string;
+      message: string;
+      created_at: string;
+      plan_id: string;
+      plan_name: string;
+      application_ids: string[];
+      details: Record<string, unknown>;
+    }>;
+  }>;
   getAuditTimeline(
     correlationId: string,
     options?: { signal?: AbortSignal; limit?: number },

@@ -23,6 +23,7 @@ const EVENT_KEYS: Readonly<Record<string, IssuesMessageKey>> = {
   "safe_pr.ready_for_creation": "issues.audit.event.safePrReady",
   "safe_pr.created": "issues.audit.event.safePrCreated",
   "safe_pr.failed": "issues.audit.event.safePrFailed",
+  "workflow.run.failed": "issues.audit.event.workflowFailed",
   "workflow.failed": "issues.audit.event.workflowFailed",
   "workflow.step": "issues.audit.event.workflowStep",
   "alert.requested": "issues.audit.event.alertRequested",

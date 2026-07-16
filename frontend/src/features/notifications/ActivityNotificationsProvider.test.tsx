@@ -32,6 +32,50 @@ afterEach(() => {
 });
 
 describe("ActivityNotificationsProvider", () => {
+  it("stores completed workflow runs in the header and floats failed runs", async () => {
+    const loadWorkflowEvents = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{
+        eventId: "audit-failed",
+        eventType: "workflow.run.failed" as const,
+        message: "Readiness verification timed out.",
+        createdAt: "2026-07-17T05:00:00Z",
+        runId: "run-1",
+        planId: "plan-1",
+        planName: "payment-api",
+        applicationIds: ["payment-api"],
+        details: {},
+      }, {
+        eventId: "audit-completed",
+        eventType: "workflow.run.completed" as const,
+        message: "Workflow run completed.",
+        createdAt: "2026-07-17T05:01:00Z",
+        runId: "run-2",
+        planId: "plan-2",
+        planName: "catalog-api",
+        applicationIds: ["catalog-api"],
+        details: {},
+      }]);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    renderProvider({
+      loadIncidentEvents: async () => [],
+      loadSafePrEvents: async () => [],
+      loadWorkflowEvents,
+    });
+
+    await waitFor(() => expect(loadWorkflowEvents).toHaveBeenCalledTimes(1));
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => expect(screen.getByTestId("activity-state").textContent)
+      .toContain("workflow:failed:1"));
+    expect(screen.getByTestId("activity-state").textContent).toContain("workflow:succeeded:1");
+    expect(toastSpies.error).toHaveBeenCalledWith(
+      expect.stringContaining("payment-api"),
+      expect.objectContaining({ duration: 5_000, id: "workflow:audit-failed" }),
+    );
+    expect(toastSpies.success).not.toHaveBeenCalled();
+  });
+
   it("updates one incident analysis notification through the audit timeline", async () => {
     const loadIncidentEvents = vi.fn().mockResolvedValue([{
       eventId: "evt-ready",

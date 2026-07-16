@@ -33,6 +33,7 @@ describe("issueRecoveryProgress", () => {
     ["incident_resolved", "incident.resolved", "completed", 100],
     ["command_rejected", "command.rejected", "failed", 60],
     ["pr_failed", "safe_pr.failed", "failed", 80],
+    ["pr_failed", "workflow.run.failed", "failed", 80],
   ] as const)("maps %s to a server-backed %s phase", (status, subject, expected, progress) => {
     expect(issueRecoveryProgress({
       audit: audit(subject),

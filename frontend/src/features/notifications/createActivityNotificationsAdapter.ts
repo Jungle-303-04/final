@@ -7,6 +7,24 @@ export function createActivityNotificationsAdapter(
   endpoints: ActivityNotificationsEndpointDependencies,
 ): ActivityNotificationsPort {
   return {
+    async loadWorkflowEvents(signal) {
+      const response = await endpoints.listReleaseAuditEvents({ limit: 200, signal });
+      return response.events.flatMap((event) => (
+        event.event_type === "workflow.run.completed" || event.event_type === "workflow.run.failed"
+          ? [{
+              eventId: event.audit_id,
+              eventType: event.event_type,
+              message: event.message,
+              createdAt: event.created_at,
+              runId: event.run_id,
+              planId: event.plan_id,
+              planName: event.plan_name,
+              applicationIds: event.application_ids,
+              details: event.details,
+            }]
+          : []
+      ));
+    },
     async loadIncidentEvents(correlationId, signal) {
       const response = await endpoints.getAuditTimeline(correlationId, { limit: 200, signal });
       return response.items.map((event) => ({
