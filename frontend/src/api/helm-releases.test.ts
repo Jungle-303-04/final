@@ -1,14 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  checkHelmReleaseUpgrades,
   getHelmRelease,
+  getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_UPGRADE_PATH,
+  HELM_RELEASE_UPGRADE_INFO_PATH,
+  HELM_RELEASE_VERSIONS_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
   listHelmReleases,
+  listHelmReleaseVersions,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
+  HELM_UPGRADE_CHECK_PATH,
 } from "./helm-releases";
 
 describe("Helm release API", () => {
@@ -157,6 +163,41 @@ describe("Helm release API", () => {
       reason: "upgrade to selected chart",
     });
   });
+
+  it("reads server-resolved upgrade info, versions, and bounded batch decoration", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(upgradeInfo()))
+      .mockResolvedValueOnce(jsonResponse(releaseVersions()))
+      .mockResolvedValueOnce(jsonResponse(upgradeBatch()));
+
+    await expect(getHelmReleaseUpgradeInfo({
+      clusterId: "cluster-a",
+      namespace: "team/a",
+      releaseName: "shop/front",
+    })).resolves.toMatchObject({ latest_version: "2.0.0", update_available: true });
+    await expect(listHelmReleaseVersions({
+      clusterId: "cluster-a",
+      namespace: "team/a",
+      releaseName: "shop/front",
+    })).resolves.toMatchObject({ versions: [{ version: "2.0.0" }] });
+    await expect(checkHelmReleaseUpgrades({
+      clusterIds: ["cluster-b", "cluster-a"],
+      namespaces: ["team/a"],
+    })).resolves.toMatchObject({ truncated: false });
+
+    expect(HELM_RELEASE_UPGRADE_INFO_PATH).toBe(
+      "/api/helm/releases/{namespace}/{release_name}/upgrade-info",
+    );
+    expect(HELM_RELEASE_VERSIONS_PATH).toBe(
+      "/api/helm/releases/{namespace}/{release_name}/versions",
+    );
+    expect(HELM_UPGRADE_CHECK_PATH).toBe("/api/helm/upgrade-check");
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/helm/releases/team%2Fa/shop%2Ffront/upgrade-info?cluster_id=cluster-a",
+      "/api/helm/releases/team%2Fa/shop%2Ffront/versions?cluster_id=cluster-a",
+      "/api/helm/upgrade-check?clusters=cluster-a%2Ccluster-b&namespaces=team%2Fa",
+    ]);
+  });
 });
 
 function list() {
@@ -206,6 +247,8 @@ function release() {
       uid: "storage-3",
     },
     chart: null,
+    chart_version: null,
+    chart_reason_codes: ["helm_chart_identity_unavailable"],
     app_version: null,
     status: "deployed",
     revision: 3,
@@ -217,6 +260,64 @@ function release() {
       observed_at: "2026-07-16T09:01:00Z",
       reason_codes: [],
     },
+  };
+}
+
+function upgradeInfo() {
+  return {
+    availability: "available",
+    chart_name: "storefront",
+    current_version: "1.2.3",
+    latest_version: "2.0.0",
+    update_available: true,
+    source: chartSource(),
+    observed_at: "2026-07-17T00:01:00Z",
+    reason_codes: [],
+    refresh_after_seconds: 10,
+  };
+}
+
+function releaseVersions() {
+  return {
+    availability: "available",
+    chart_name: "storefront",
+    current_version: "1.2.3",
+    source: chartSource(),
+    versions: [
+      { version: "2.0.0", app_version: "4.0.0", deprecated: false },
+      { version: "1.2.3", app_version: "3.0.0", deprecated: false },
+    ],
+    observed_at: "2026-07-17T00:01:00Z",
+    truncated: false,
+    reason_codes: [],
+    refresh_after_seconds: 10,
+  };
+}
+
+function upgradeBatch() {
+  return {
+    releases: { "cluster-a/team/a/shop/front": upgradeInfo() },
+    coverage: {
+      availability: "available",
+      observed_at: "2026-07-17T00:00:00Z",
+      reason_codes: [],
+    },
+    truncated: false,
+    reason_codes: [],
+    refresh_after_seconds: 30,
+  };
+}
+
+function chartSource() {
+  return {
+    source_id: "source-a",
+    provider: "repository",
+    name: "Stable",
+    reference: "https://charts.example.test/stable",
+    status: "active",
+    actions: [],
+    credentials_configured: false,
+    observed_at: "2026-07-17T00:00:00Z",
   };
 }
 
