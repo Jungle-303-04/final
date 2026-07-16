@@ -250,6 +250,8 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
 
   const wrapRef = useRef<HTMLDivElement>(null);
+  const fullRef = useRef<HTMLDivElement>(null);
+  const capRef = useRef<HTMLDivElement>(null);
   const fromRef = useRef<number | null>(null);
 
   const instant = phase === "review";
@@ -275,21 +277,35 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     return () => window.clearTimeout(id);
   }, [phase, actionIdle, hasRunning, collapsed]);
 
-  // 폭 100% 고정, 높이만 단일 물리 스프링으로 (캡처한 from → wrap 자연높이 to)
+  // 초기 투명도(마운트 시)
+  useLayoutEffect(() => {
+    if (fullRef.current) fullRef.current.style.opacity = collapsed ? "0" : "1";
+    if (capRef.current) capRef.current.style.opacity = collapsed ? "1" : "0";
+  }, []);
+
+  // 높이 스프링 + 내용 투명도를 같은 진행도(p)로 동기 구동 → 갑작스런 사라짐 없음
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap || fromRef.current == null) return;
     const from = fromRef.current; fromRef.current = null;
-    // 목표를 wrap 자연높이로 측정 → 끝에서 auto 전환 시 테두리 오차(2px 틱) 없음
     wrap.style.height = "auto";
-    const to = wrap.getBoundingClientRect().height;
-    if (Math.abs(from - to) < 0.5) return; // 이미 auto = 자연높이, 매끄럽게 끝
+    const to = wrap.getBoundingClientRect().height; // wrap 자연높이 → 끝 2px 틱 없음
+    const setOp = (p: number) => {
+      const fullOp = collapsed ? 1 - p : p;
+      if (fullRef.current) fullRef.current.style.opacity = String(fullOp);
+      if (capRef.current) capRef.current.style.opacity = String(1 - fullOp);
+    };
+    if (Math.abs(from - to) < 0.5) { wrap.style.height = "auto"; setOp(1); return; }
     wrap.style.height = `${from}px`;
     void wrap.offsetHeight;
+    setOp(0);
     const controls = animate(from, to, {
-      duration: 0.24, ease: [0.32, 0.72, 0, 1],
-      onUpdate: (v) => { const el = wrapRef.current; if (el) el.style.height = `${v}px`; },
-      onComplete: () => { const el = wrapRef.current; if (el) el.style.height = "auto"; },
+      type: "spring", visualDuration: 0.23, bounce: 0.12,
+      onUpdate: (v) => {
+        const el = wrapRef.current; if (el) el.style.height = `${v}px`;
+        setOp(Math.min(1, Math.max(0, (v - from) / (to - from))));
+      },
+      onComplete: () => { const el = wrapRef.current; if (el) el.style.height = "auto"; setOp(1); },
     });
     return () => controls.stop();
   }, [collapsed]);
@@ -300,11 +316,11 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     : { position: "absolute", top: 0, left: 0, right: 0, pointerEvents: "none" };
   return (
     <div ref={wrapRef} onClick={onSurfaceClick}
-      className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.035] bg-card/75 px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] backdrop-blur-2xl animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
+      className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
       style={{ height: "auto", borderRadius: 20 }}>
       <div className="relative">
-        {/* 펼친 내용 */}
-        <div style={{ ...overlay(!collapsed), opacity: collapsed ? 0 : 1, transition: "opacity 0.2s cubic-bezier(0.32,0.72,0,1)", paddingTop: 14, paddingBottom: 14 }}>
+        {/* 펼친 내용 (투명도는 높이와 동기 구동) */}
+        <div ref={fullRef} style={{ ...overlay(!collapsed), paddingTop: 14, paddingBottom: 14 }}>
           <div className="grid gap-3.5">
             {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
               <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
@@ -312,8 +328,8 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
             ))}
           </div>
         </div>
-        {/* 접힌 캡슐 */}
-        <div style={{ ...overlay(collapsed), opacity: collapsed ? 1 : 0, transition: "opacity 0.2s cubic-bezier(0.32,0.72,0,1)", paddingTop: 14, paddingBottom: 14 }}>
+        {/* 접힌 캡슐 (투명도는 높이와 동기 구동) */}
+        <div ref={capRef} style={{ ...overlay(collapsed), paddingTop: 14, paddingBottom: 14 }}>
           <div className="flex items-center gap-2.5">
             <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
             <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
