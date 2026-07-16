@@ -65,7 +65,9 @@ async def list_compare_candidates(
     except (ValueError, CompareUnsupported) as exc:
         raise HTTPException(status_code=422, detail="safe comparison is unavailable") from exc
     except CompareUnavailable as exc:
-        raise HTTPException(status_code=503, detail="comparison observation is unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="comparison observation is unavailable"
+        ) from exc
     return CompareCandidateListResponse(result=result)
 
 
@@ -102,7 +104,9 @@ async def get_compare_resource_pair(
     except CompareIdentityUnavailable as exc:
         raise HTTPException(status_code=409, detail="comparison identity is incomplete") from exc
     except CompareUnavailable as exc:
-        raise HTTPException(status_code=503, detail="comparison observation is unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="comparison observation is unavailable"
+        ) from exc
     return CompareResourcePairResponse(comparison=comparison)
 
 

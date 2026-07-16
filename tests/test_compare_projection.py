@@ -18,7 +18,9 @@ WORKSPACE_ID = "workspace-a"
 CLUSTER_ID = "cluster-a"
 
 
-def deployment(name: str, *, snapshot_id: str = "snapshot-current", replicas: int | None = 3) -> dict[str, Any]:
+def deployment(
+    name: str, *, snapshot_id: str = "snapshot-current", replicas: int | None = 3
+) -> dict[str, Any]:
     return {
         "workspace_id": WORKSPACE_ID,
         "cluster_id": CLUSTER_ID,
@@ -55,7 +57,14 @@ def service(name: str) -> dict[str, Any]:
             "type": "LoadBalancer",
             "selector": {"secret-token": "must-not-leak"},
             "ports": [
-                {"name": "https", "port": 443, "protocol": "TCP", "targetPort": "https", "nodePort": 30443, "appProtocol": "must-not-leak"},
+                {
+                    "name": "https",
+                    "port": 443,
+                    "protocol": "TCP",
+                    "targetPort": "https",
+                    "nodePort": 30443,
+                    "appProtocol": "must-not-leak",
+                },
                 {"name": "bad", "port": 70000, "protocol": "TCP"},
             ],
         },
@@ -106,7 +115,9 @@ class CompareDb:
             and row["kind"].casefold() == identity["kind"].casefold()
         ]
 
-    def latest_inventory_snapshot(self, workspace_id: str, cluster_id: str) -> dict[str, Any] | None:
+    def latest_inventory_snapshot(
+        self, workspace_id: str, cluster_id: str
+    ) -> dict[str, Any] | None:
         if workspace_id != WORKSPACE_ID or cluster_id != CLUSTER_ID:
             return None
         return {
@@ -148,7 +159,13 @@ def test_pair_allowlists_only_safe_typed_fields_and_exact_identity() -> None:
     db = CompareDb()
     response = _client(db).get(
         "/compare/resources",
-        params={"cluster_id": CLUSTER_ID, "kind": "deployments", "apiGroup": "apps", "a": "shop/api-a", "b": "shop/api-b"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "deployments",
+            "apiGroup": "apps",
+            "a": "shop/api-a",
+            "b": "shop/api-b",
+        },
     )
 
     assert response.status_code == 200
@@ -164,9 +181,20 @@ def test_pair_allowlists_only_safe_typed_fields_and_exact_identity() -> None:
     assert body["a"]["projection"] == {"projection_kind": "workload_replicas", "replicas": 3}
     assert body["a"]["resource"]["uid"] == "uid-api-a"
     assert body["coverage"]["availability"] == "available"
-    assert body["presentation"] == {"modes": ["side-by-side", "unified"], "swap": True, "diff_only": True}
+    assert body["presentation"] == {
+        "modes": ["side-by-side", "unified"],
+        "swap": True,
+        "diff_only": True,
+    }
     assert "must-not-leak" not in response.text
-    for forbidden in ('"raw"', '"summary"', '"annotations"', '"status"', '"labels"', '"secret-token"'):
+    for forbidden in (
+        '"raw"',
+        '"summary"',
+        '"annotations"',
+        '"status"',
+        '"labels"',
+        '"secret-token"',
+    ):
         assert forbidden not in response.text
     assert {call["api_version"] for call in db.identity_calls} == {"apps/v1"}
 
@@ -182,7 +210,16 @@ def test_service_projection_bounds_ports_without_forwarding_selector_or_unknown_
     assert projection == {
         "projection_kind": "service_ports",
         "service_type": "LoadBalancer",
-        "ports": [{"name": "https", "port": 443, "protocol": "TCP", "target_port_name": "https", "target_port_number": None, "node_port": 30443}],
+        "ports": [
+            {
+                "name": "https",
+                "port": 443,
+                "protocol": "TCP",
+                "target_port_name": "https",
+                "target_port_number": None,
+                "node_port": 30443,
+            }
+        ],
         "excluded_port_count": 1,
     }
     assert "must-not-leak" not in response.text
@@ -195,11 +232,23 @@ def test_candidates_and_pair_keep_snapshot_partial_and_different_side_provenance
 
     pair = client.get(
         "/compare/resources",
-        params={"cluster_id": CLUSTER_ID, "kind": "deployments", "apiGroup": "apps", "apiVersion": "v1", "a": "shop/api-a", "b": "shop/api-b"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "deployments",
+            "apiGroup": "apps",
+            "apiVersion": "v1",
+            "a": "shop/api-a",
+            "b": "shop/api-b",
+        },
     )
     candidates = client.get(
         "/compare/candidates",
-        params={"cluster_id": CLUSTER_ID, "kind": "deployments", "apiGroup": "apps", "apiVersion": "v1"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "deployments",
+            "apiGroup": "apps",
+            "apiVersion": "v1",
+        },
     )
 
     assert pair.status_code == 200
@@ -216,17 +265,36 @@ def test_candidates_and_pair_keep_snapshot_partial_and_different_side_provenance
 def test_rbac_uid_and_unsupported_crd_close_without_a_raw_fallback() -> None:
     denied = _client(CompareDb(allowed=False)).get(
         "/compare/resources",
-        params={"cluster_id": CLUSTER_ID, "kind": "deployments", "apiGroup": "apps", "a": "shop/api-a", "b": "shop/api-b"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "deployments",
+            "apiGroup": "apps",
+            "a": "shop/api-a",
+            "b": "shop/api-b",
+        },
     )
     incomplete_db = CompareDb()
     incomplete_db.rows[0]["uid"] = None
     incomplete = _client(incomplete_db).get(
         "/compare/resources",
-        params={"cluster_id": CLUSTER_ID, "kind": "deployments", "apiGroup": "apps", "a": "shop/api-a", "b": "shop/api-b"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "deployments",
+            "apiGroup": "apps",
+            "a": "shop/api-a",
+            "b": "shop/api-b",
+        },
     )
     crd = _client(CompareDb()).get(
         "/compare/resources",
-        params={"cluster_id": CLUSTER_ID, "kind": "widgets", "apiGroup": "example.io", "apiVersion": "v1", "a": "shop/a", "b": "shop/b"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "widgets",
+            "apiGroup": "example.io",
+            "apiVersion": "v1",
+            "a": "shop/a",
+            "b": "shop/b",
+        },
     )
 
     assert denied.status_code == 403
@@ -240,12 +308,21 @@ def test_descriptor_catalog_is_server_owned_and_pair_rejects_invalid_target_shap
     descriptors = client.get("/compare/descriptors")
     invalid = client.get(
         "/compare/resources",
-        params={"cluster_id": CLUSTER_ID, "kind": "deployments", "apiGroup": "apps", "a": "shop/a/b", "b": "shop/api-b"},
+        params={
+            "cluster_id": CLUSTER_ID,
+            "kind": "deployments",
+            "apiGroup": "apps",
+            "a": "shop/a/b",
+            "b": "shop/api-b",
+        },
     )
 
     assert descriptors.status_code == 200
     assert {item["route_kind"] for item in descriptors.json()["descriptors"]} == {
-        "deployments", "statefulsets", "replicasets", "services"
+        "deployments",
+        "statefulsets",
+        "replicasets",
+        "services",
     }
     assert invalid.status_code == 422
 
