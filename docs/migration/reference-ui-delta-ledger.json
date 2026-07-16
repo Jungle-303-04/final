@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 113,
+  "pendingCount": 109,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3891,8 +3891,33 @@
         "blobId": "91277030b2d004b974d745e8f8f8063e373f064a",
         "sha256": "3d4bbda92d05e14505df3f4bc047a9e7b68f58fc77a9e75813ae27983e0ad0c1"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "components/shared/index.ts",
+          "interaction": "noninteractive module boundary: resource detail, actions, confirmation, and diff primitives are composed from product-owned feature modules",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The resource workspace owns the shared interaction boundary and imports concrete product modules directly, preventing a second compatibility package from becoming runtime authority."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5490,8 +5515,33 @@
         "blobId": "df35439d8b755b6eccb6dbd7a154195454b5a260",
         "sha256": "77221bcbe14dc3aefb9620e7c187d591c579ce0ab11bb347c7142a4f3147415c"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:ui:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "components/ui/index.ts",
+          "interaction": "noninteractive module boundary: tested product UI primitives remain reusable without publishing the frozen shared-package entrypoint",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/app/ProductShell.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "ui.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product retains reusable primitives under its shared layer and validates them through focused interaction tests; the frozen package barrel is not imported or executed."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -5896,8 +5946,33 @@
         "blobId": "b0691a7a147ff0f0e7ed63216dcc4742affa6796",
         "sha256": "3c933b5b5fa8d07470167fcf4ec2abf87f8b9be9e401bb336ed080fa4c98adea"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workload:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "components/workload/index.ts",
+          "interaction": "noninteractive module boundary: workload detail and drawer exports compose through one product-owned typed route surface",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/features/workload-detail/workloadDetailContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "workload.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route owns workload composition and consumes the Python projection through an explicit domain contract; the frozen barrel remains reference-only."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -6360,8 +6435,33 @@
         "blobId": "7c320b10aa47eae665b818cbff581689e42243ff",
         "sha256": "8fbf15c75f842a2f285d169cd89e6530c1454a4f8d56a2e7d7fc9cf559078500"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:utils:public-api:catch-all-exports:v1",
+          "legacyContractIds": [],
+          "symbol": "utils/index.ts",
+          "interaction": "noninteractive module boundary: formatting, navigation, hierarchy, animation, GitOps, and application utilities are re-exported through one catch-all package entrypoint",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/createResourcesAdapter.ts",
+              "frontend/src/shared/ui/charts/index.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "utils.public-api.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product enforces explicit app, feature, and shared import boundaries; adding a catch-all utility barrel would reintroduce cross-domain coupling and a second compatibility API.",
+            "rationale": "Each interactive utility remains mapped and tested at its owning domain. Only the broad source-package re-export is intentionally unavailable in the product runtime."
+          }
+        }
+      ]
     },
     {
       "status": "M",

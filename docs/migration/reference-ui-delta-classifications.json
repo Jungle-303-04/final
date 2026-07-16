@@ -618,6 +618,22 @@
     "resources.compliance-controls.interaction": {
       "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
       "rationale": "Compliance controls preserve server ordering and support accessible search, failed-only filtering, clear, and per-control disclosure without mutating source evidence."
+    },
+    "workload.public-api.surface": {
+      "destination": "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx",
+      "rationale": "The product workload route must compose one typed detail surface without importing or executing the frozen source package."
+    },
+    "shared.public-api.surface": {
+      "destination": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+      "rationale": "Shared detail primitives must remain product-owned and preserve the authenticated resource-detail interaction boundary."
+    },
+    "utils.public-api.boundary": {
+      "destination": "frontend/src/features/resources/createResourcesAdapter.detailMapping.test.ts",
+      "rationale": "Canonical resource utilities must be consumed through explicit domain modules rather than a catch-all compatibility export."
+    },
+    "ui.public-api.surface": {
+      "destination": "frontend/src/shared/ui/SearchPillInput.test.tsx",
+      "rationale": "Reusable UI primitives must retain their tested product-owned contracts without publishing the frozen package surface."
     }
   },
   "classifications": {
@@ -7375,6 +7391,122 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The exact gateway.networking.k8s.io group/kind projection and strict UI contract are implemented for stored observations. Automatic Gateway API CRD collection remains a follow-up."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/workload/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workload:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "components/workload/index.ts",
+          "interaction": "noninteractive module boundary: workload detail and drawer exports compose through one product-owned typed route surface",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/features/workload-detail/workloadDetailContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "workload.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route owns workload composition and consumes the Python projection through an explicit domain contract; the frozen barrel remains reference-only."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/shared/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "components/shared/index.ts",
+          "interaction": "noninteractive module boundary: resource detail, actions, confirmation, and diff primitives are composed from product-owned feature modules",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The resource workspace owns the shared interaction boundary and imports concrete product modules directly, preventing a second compatibility package from becoming runtime authority."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:utils:public-api:catch-all-exports:v1",
+          "legacyContractIds": [],
+          "symbol": "utils/index.ts",
+          "interaction": "noninteractive module boundary: formatting, navigation, hierarchy, animation, GitOps, and application utilities are re-exported through one catch-all package entrypoint",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/createResourcesAdapter.ts",
+              "frontend/src/shared/ui/charts/index.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "utils.public-api.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product enforces explicit app, feature, and shared import boundaries; adding a catch-all utility barrel would reintroduce cross-domain coupling and a second compatibility API.",
+            "rationale": "Each interactive utility remains mapped and tested at its owning domain. Only the broad source-package re-export is intentionally unavailable in the product runtime."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:ui:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "components/ui/index.ts",
+          "interaction": "noninteractive module boundary: tested product UI primitives remain reusable without publishing the frozen shared-package entrypoint",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/app/ProductShell.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "ui.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product retains reusable primitives under its shared layer and validates them through focused interaction tests; the frozen package barrel is not imported or executed."
           }
         }
       ]
