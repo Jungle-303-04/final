@@ -5,7 +5,7 @@ import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
   FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { animate } from "motion/react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
@@ -249,19 +249,18 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   });
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
 
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const fullRef = useRef<HTMLDivElement>(null);
-  const capRef = useRef<HTMLDivElement>(null);
-  const fromRef = useRef<number | null>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const fromRef = useRef<{ h: number; b: number } | null>(null);
+  const didAuto = useRef(false);
 
   const instant = phase === "review";
   const canCollapse = instant && !hasRunning && !actionIdle;
   const clickable = collapsed || canCollapse;
 
-  // 기준: 상태 변경 "직전"의 현재 높이를 캡처(FLIP) → from이 항상 정확 → 튐/단계 버그 없음
   const setCollapse = (val: boolean) => {
-    const wrap = wrapRef.current;
-    if (wrap) fromRef.current = wrap.getBoundingClientRect().height;
+    const h = headerRef.current, b = bodyRef.current;
+    if (h && b) fromRef.current = { h: h.getBoundingClientRect().height, b: b.getBoundingClientRect().height };
     setCollapsed(val);
   };
   const onSurfaceClick = (e: ReactMouseEvent) => {
@@ -270,70 +269,63 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     else if (canCollapse) setCollapse(true);
   };
 
-  const didAuto = useRef(false);
+  // 자동 접힘: 완료 후 1회
   useEffect(() => {
-    if (didAuto.current || phase !== "review" || hasRunning || actionIdle || collapsed) return;
+    if (didAuto.current || !canCollapse || collapsed) return;
     const id = window.setTimeout(() => { didAuto.current = true; setCollapse(true); }, AUTO_COLLAPSE_MS);
     return () => window.clearTimeout(id);
-  }, [phase, actionIdle, hasRunning, collapsed]);
+  }, [canCollapse, collapsed]);
 
-  // 초기 투명도(마운트 시)
+  // 초기 높이: 헤더는 접혔을 때만, 본문은 펼쳤을 때만 (펼치면 헤더 높이 0 → 띠 없음)
   useLayoutEffect(() => {
-    if (fullRef.current) fullRef.current.style.opacity = collapsed ? "0" : "1";
-    if (capRef.current) capRef.current.style.opacity = collapsed ? "1" : "0";
+    if (headerRef.current) headerRef.current.style.height = collapsed ? "auto" : "0px";
+    if (bodyRef.current) bodyRef.current.style.height = collapsed ? "0px" : "auto";
   }, []);
 
-  // 높이 스프링 + 내용 투명도를 같은 진행도(p)로 동기 구동 → 갑작스런 사라짐 없음
+  // 헤더/본문 높이를 하나의 스프링으로 반대로 슬라이드 (크로스페이드 없음)
   useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap || fromRef.current == null) return;
-    const from = fromRef.current; fromRef.current = null;
-    wrap.style.height = "auto";
-    const to = wrap.getBoundingClientRect().height; // wrap 자연높이 → 끝 2px 틱 없음
-    const setOp = (p: number) => {
-      const fullOp = collapsed ? 1 - p : p;
-      if (fullRef.current) fullRef.current.style.opacity = String(fullOp);
-      if (capRef.current) capRef.current.style.opacity = String(1 - fullOp);
-    };
-    if (Math.abs(from - to) < 0.5) { wrap.style.height = "auto"; setOp(1); return; }
-    wrap.style.height = `${from}px`;
-    void wrap.offsetHeight;
-    setOp(0);
-    const controls = animate(from, to, {
-      type: "spring", visualDuration: 0.23, bounce: 0.12,
-      onUpdate: (v) => {
-        const el = wrapRef.current; if (el) el.style.height = `${v}px`;
-        setOp(Math.min(1, Math.max(0, (v - from) / (to - from))));
+    const h = headerRef.current, b = bodyRef.current;
+    if (!h || !b || fromRef.current == null) return;
+    const { h: fromH, b: fromB } = fromRef.current; fromRef.current = null;
+    h.style.height = "auto"; const natH = h.getBoundingClientRect().height;
+    b.style.height = "auto"; const natB = b.getBoundingClientRect().height;
+    const toH = collapsed ? natH : 0;
+    const toB = collapsed ? 0 : natB;
+    h.style.height = `${fromH}px`; b.style.height = `${fromB}px`;
+    void h.offsetHeight;
+    const controls = animate(0, 1, {
+      type: "spring", visualDuration: 0.28, bounce: 0.1,
+      onUpdate: (p) => {
+        if (headerRef.current) headerRef.current.style.height = `${fromH + (toH - fromH) * p}px`;
+        if (bodyRef.current) bodyRef.current.style.height = `${fromB + (toB - fromB) * p}px`;
       },
-      onComplete: () => { const el = wrapRef.current; if (el) el.style.height = "auto"; setOp(1); },
+      onComplete: () => {
+        if (headerRef.current) headerRef.current.style.height = collapsed ? "auto" : "0px";
+        if (bodyRef.current) bodyRef.current.style.height = collapsed ? "0px" : "auto";
+      },
     });
     return () => controls.stop();
   }, [collapsed]);
 
-  // 유일한 기준: collapsed 상태. 내용은 CSS opacity로만 교체(DOM 위치 조작 없음) → 높이 측정과 경쟁 없음
-  const overlay = (on: boolean): CSSProperties => on
-    ? { position: "relative" }
-    : { position: "absolute", top: 0, left: 0, right: 0, pointerEvents: "none" };
   return (
-    <div ref={wrapRef} onClick={onSurfaceClick}
-      className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
-      style={{ height: "auto", borderRadius: 20 }}>
-      <div className="relative">
-        {/* 펼친 내용 (투명도는 높이와 동기 구동) */}
-        <div ref={fullRef} style={{ ...overlay(!collapsed), paddingTop: 14, paddingBottom: 14 }}>
-          <div className="grid gap-3.5">
-            {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
-              <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
-                onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
-            ))}
-          </div>
+    <div onClick={onSurfaceClick}
+      className={`group/msg mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
+      style={{ borderRadius: 20 }}>
+      {/* 요약 헤더 — 펼치면 높이 0으로 사라짐 */}
+      <div ref={headerRef} style={{ overflow: "hidden" }}>
+        <div className="flex items-center gap-2.5 px-4 py-3">
+          <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+          <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/40" />
         </div>
-        {/* 접힌 캡슐 (투명도는 높이와 동기 구동) */}
-        <div ref={capRef} style={{ ...overlay(collapsed), paddingTop: 14, paddingBottom: 14 }}>
-          <div className="flex items-center gap-2.5">
-            <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
-            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
-          </div>
+      </div>
+      {/* 본문 — 접으면 높이 0 */}
+      <div ref={bodyRef} style={{ overflow: "hidden" }}>
+        <div className="grid gap-3.5 px-4 py-4">
+          {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
+            <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
+              onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
+          ))}
         </div>
       </div>
     </div>
