@@ -234,6 +234,23 @@ impl LocalTerminalSession {
         }
     }
 
+    /// Exit is not emitted until every renderer-admitted output byte has been
+    /// acknowledged. This keeps the native output window and the webview's
+    /// terminal paint order aligned at the final process boundary.
+    fn wait_for_output_drain(&self) {
+        let Ok(mut credit) = self.output_credit.lock() else {
+            return;
+        };
+        while !self.closed.load(Ordering::Acquire)
+            && credit.available_bytes < LOCAL_TERMINAL_OUTPUT_WINDOW_BYTES
+        {
+            let Ok(next) = self.output_credit_available.wait(credit) else {
+                return;
+            };
+            credit = next;
+        }
+    }
+
     fn acknowledge_output(&self, bytes: usize) -> Result<(), String> {
         if !(1..=LOCAL_TERMINAL_OUTPUT_WINDOW_BYTES).contains(&bytes) {
             return Err("local terminal output acknowledgement is outside the configured window".to_owned());
@@ -327,8 +344,8 @@ pub fn desktop_local_terminal_start(
     let session_id = Uuid::new_v4().to_string();
     registry.insert(session_id.clone(), Arc::clone(&session))?;
 
-    spawn_terminal_reader(app.clone(), session_id.clone(), Arc::clone(&session), reader);
-    spawn_terminal_waiter(app, session_id.clone(), session, child, registry.inner().clone());
+    let reader = spawn_terminal_reader(app.clone(), session_id.clone(), Arc::clone(&session), reader);
+    spawn_terminal_waiter(app, session_id.clone(), session, child, registry.inner().clone(), reader);
 
     Ok(LocalTerminalStarted {
         session_id,
@@ -399,7 +416,7 @@ fn spawn_terminal_reader(
     session_id: String,
     session: Arc<LocalTerminalSession>,
     mut reader: Box<dyn Read + Send>,
-) {
+) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let mut buffer = [0_u8; LOCAL_TERMINAL_READ_BUFFER_BYTES];
         loop {
@@ -409,6 +426,7 @@ fn spawn_terminal_reader(
             match reader.read(&mut buffer[..read_limit]) {
                 Ok(0) => {
                     session.restore_output_bytes(read_limit);
+                    session.wait_for_output_drain();
                     return;
                 }
                 Ok(length) => {
@@ -448,7 +466,7 @@ fn spawn_terminal_reader(
                 }
             }
         }
-    });
+    })
 }
 
 fn spawn_terminal_waiter(
@@ -457,9 +475,11 @@ fn spawn_terminal_waiter(
     session: Arc<LocalTerminalSession>,
     mut child: Box<dyn Child + Send + Sync>,
     registry: LocalTerminalRegistry,
+    reader: thread::JoinHandle<()>,
 ) {
     thread::spawn(move || {
         let result = child.wait();
+        let _ = reader.join();
         session.mark_finished();
         registry.remove_finished(&session_id);
         match result {

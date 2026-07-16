@@ -36,10 +36,21 @@ const summaryMessage = {
   },
 };
 
+const helloMessage = {
+  type: "hello" as const,
+  protocol: "realtime.v1" as const,
+  stream_policy: {
+    revision: 1,
+    max_frames_per_second: 60,
+    hidden_tab: "coalesce" as const,
+    max_pending_messages: 32,
+  },
+};
+
 describe("realtime.v1 schema", () => {
   it("validates every canonical message variant", () => {
     const messages = [
-      { type: "hello", protocol: "realtime.v1" },
+      helloMessage,
       { type: "snapshot", seq: 0, state: { clusters: {}, arbitrary: [1, 2] } },
       summaryMessage,
       {
@@ -68,8 +79,7 @@ describe("realtime.v1 schema", () => {
   it("rejects unknown fields outside the two open payload maps", () => {
     expect(
       realtimeMessageSchema.safeParse({
-        type: "hello",
-        protocol: "realtime.v1",
+        ...helloMessage,
         unexpected: true,
       }).success,
     ).toBe(false);
@@ -141,8 +151,7 @@ describe("realtime sequence reducer", () => {
   it("becomes connected only after a valid hello and snapshot", () => {
     const initial = createRealtimeSequenceState();
     const hello = reduceRealtimeSequence(initial, {
-      type: "hello",
-      protocol: "realtime.v1",
+      ...helloMessage,
     });
 
     expect(hello.accepted).toBe(true);

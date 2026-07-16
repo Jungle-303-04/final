@@ -221,6 +221,35 @@ describe("DesktopLocalTerminalSheet", () => {
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
+  it("drains and acknowledges output queued in the same frame before showing terminal exit", async () => {
+    let queuedFrame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      queuedFrame = callback;
+      return 17;
+    }));
+    renderTerminal();
+    await openTerminal();
+    xterm.write.mockClear();
+
+    bridge.terminalListener?.({ sessionId: "session-1", kind: "output", data: "final output", byteLength: 12 });
+    bridge.terminalListener?.({ sessionId: "session-1", kind: "exit", exitCode: 0 });
+
+    expect(screen.getByRole("status").textContent).toContain("Connected");
+    expect(xterm.write).not.toHaveBeenCalled();
+
+    queuedFrame?.(0);
+
+    await waitFor(() => expect(bridge.acknowledgeLocalTerminalOutput).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      byteLength: 12,
+    }));
+    expect(await screen.findByText("Shell exited")).toBeTruthy();
+    expect(xterm.write.mock.calls.map(([data]) => data)).toEqual([
+      "final output",
+      "\r\n[Shell exited]\r\n",
+    ]);
+  });
+
   it("keeps a bridge start error out of the rendered UI", async () => {
     bridge.startLocalTerminal.mockRejectedValue(new Error("native local path /private/diagnostic"));
     renderTerminal();
