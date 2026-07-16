@@ -1,7 +1,7 @@
 import { ArrowLeft, PackageSearch } from "lucide-react";
 import {
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -196,7 +196,7 @@ function HelmReleaseTable({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const activeIndex = Math.min(highlightedIndex, Math.max(filtered.length - 1, 0));
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (isSearchShortcutExcluded(event)) return;
       if (event.key === "/") {
