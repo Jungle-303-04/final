@@ -5521,6 +5521,7 @@
         "frontend/src/api/resource-filters.test.ts",
         "frontend/src/features/resources/resourcesFilterCanonical.test.ts",
         "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
@@ -5535,8 +5536,8 @@
           "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceTableSmartCell.tsx#ResourceTableSmartCell",
           "consumer": "frontend/src/features/resources/resourcesFilterCanonical.ts#toResourcesResourcePage",
-          "reason": "The shared Resources table consumes only server-owned Pod measurements, sorts by measured CPU and memory, displays request and limit evidence, and keeps partial or unavailable values distinct from zero.",
-          "test": "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx"
+          "reason": "The shared Resources table consumes only server-owned Pod measurements, sorts by measured CPU and memory, displays request and limit evidence, keeps partial or unavailable values distinct from zero, and refreshes the complete pinned list cut through the server-owned Kubernetes metrics policy.",
+          "test": "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5568,6 +5569,7 @@
         "frontend/src/api/resource-filters.test.ts",
         "frontend/src/features/resources/resourcesFilterCanonical.test.ts",
         "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
@@ -5582,8 +5584,8 @@
           "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceTableSmartCell.tsx#ResourceTableSmartCell",
           "consumer": "frontend/src/features/resources/resourcesFilterCanonical.ts#toResourcesResourcePage",
-          "reason": "The existing Node table renders and sorts the server-owned observation, showing actual versus allocatable CPU and memory plus scheduled versus allocatable Pods with explicit completeness.",
-          "test": "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx"
+          "reason": "The existing Node table renders and sorts the server-owned observation, shows actual versus allocatable CPU and memory plus scheduled versus allocatable Pods with explicit completeness, and refreshes the complete pinned list cut through the server-owned Kubernetes metrics policy.",
+          "test": "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
