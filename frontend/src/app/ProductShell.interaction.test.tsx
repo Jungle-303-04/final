@@ -46,7 +46,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(dialog.textContent).toContain("홈 화면 열기");
     expect(dialog.textContent).toContain("인시던트 화면 열기");
-    expect(dialog.textContent).toContain("토폴로지 화면 열기");
+    expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
     expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await user.keyboard("{Escape}");
@@ -117,7 +117,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect((input as HTMLInputElement).value).toBe("gi?");
   });
 
-  it("opens the descriptor-backed command palette from Cmd/Ctrl+K and gives honest feedback for an unavailable route", async () => {
+  it("opens the descriptor-backed command palette and excludes the removed Topology route", async () => {
     vi.stubGlobal("ResizeObserver", class {
       disconnect() {}
       observe() {}
@@ -130,7 +130,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
       await user.keyboard("{Meta>}k{/Meta}");
       const dialog = await screen.findByRole("dialog", { name: "명령 팔레트" });
-      expect(dialog.textContent).toContain("토폴로지");
+      expect(dialog.textContent).not.toContain("토폴로지");
       expect(dialog.textContent).toContain("준비되지 않음");
       await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
       await user.keyboard("{Escape}");
@@ -142,7 +142,8 @@ describe("ProductShell keyboard and help interaction", () => {
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
 
       await user.keyboard("gt");
-      expect(await screen.findByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeTruthy();
+      expect(screen.getByText("Home content")).toBeTruthy();
+      expect(screen.queryByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeNull();
     } finally {
       restoreScrollIntoView();
       vi.unstubAllGlobals();
@@ -271,6 +272,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
     expect(tabOrder).toEqual([
       "모바일 사이드바 열기",
+      "런타임 진단 열기",
       "키보드 단축키",
       "현재 언어: 한국어",
       "클러스터, 앱, 라벨, 리소스 필터",
