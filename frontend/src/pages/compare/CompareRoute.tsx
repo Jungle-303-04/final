@@ -1,5 +1,5 @@
 import { ArrowLeftRight, Check, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type {
@@ -14,6 +14,7 @@ import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
+import { Input } from "../../shared/ui/primitives/input";
 import { cn } from "../../shared/lib/cn";
 import { compareHref, parseCompareRoute, replaceCompareSide } from "./compareNavigation";
 import { useCompare } from "./useCompare";
@@ -177,6 +178,7 @@ function ComparePage({
           onPick={(target) => onPickCandidate(pickerSide, target)}
           onRetry={onRetryCandidates}
           side={pickerSide}
+          source={pickerSide === "a" ? data.a.resource : data.b.resource}
         />
       ) : null}
     </ProductPageFrame>
@@ -297,33 +299,164 @@ function CandidatePicker({
   onClose,
   onPick,
   onRetry,
+  source,
 }: {
   side: CompareSide;
   frame: ReturnType<typeof useCompareCandidates>["frame"];
   onClose: () => void;
   onPick: (target: CompareTarget) => void;
   onRetry: () => void;
+  source: CompareResult["a"]["resource"];
 }) {
+  const listboxId = useId();
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [query, setQuery] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const candidates = frame.phase === "ready"
+    ? frame.data.candidates.filter((candidate) => !sameResource(candidate.resource, source))
+    : [];
+  const filteredCandidates = candidates.filter((candidate) => candidateLabel(candidate.resource)
+    .toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const activeIndex = clampCandidateIndex(highlightedIndex, filteredCandidates.length);
+  const highlightedCandidate = filteredCandidates[activeIndex] ?? null;
+  const activeDescendant = highlightedCandidate
+    ? candidateOptionId(listboxId, highlightedCandidate.resource)
+    : undefined;
+
+  useEffect(() => {
+    if (!highlightedCandidate) return;
+    optionRefs.current.get(resourceKey(highlightedCandidate.resource))?.scrollIntoView?.({ block: "nearest" });
+  }, [highlightedCandidate]);
+
+  const selectHighlighted = () => {
+    if (!highlightedCandidate) return;
+    onPick(toCompareTarget(highlightedCandidate.resource));
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (shouldIgnorePickerShortcut(event)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (filteredCandidates.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedIndex((current) => Math.min(
+        clampCandidateIndex(current, filteredCandidates.length) + 1,
+        filteredCandidates.length - 1,
+      ));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedIndex((current) => Math.max(clampCandidateIndex(current, filteredCandidates.length) - 1, 0));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setHighlightedIndex(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setHighlightedIndex(filteredCandidates.length - 1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      selectHighlighted();
+    }
+  };
+
   return (
     <section aria-label={`Choose side ${side.toUpperCase()} resource`} className="grid gap-3 rounded-xl border bg-card p-4 shadow-sm" role="dialog">
       <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Choose side {side.toUpperCase()} resource</h2><p className="text-sm text-muted-foreground">Only resources accepted by this safe descriptor are listed.</p></div><Button aria-label="Close resource picker" onClick={onClose} size="icon" type="button" variant="ghost"><X aria-hidden="true" /></Button></div>
       {frame.phase === "loading" || frame.phase === "idle" ? <p className="text-sm text-muted-foreground">Loading resources…</p> : null}
       {frame.phase === "failed" ? <div className="flex flex-wrap items-center gap-2"><p className="text-sm text-muted-foreground">Resources are unavailable.</p><Button onClick={onRetry} size="sm" type="button" variant="outline">Retry</Button></div> : null}
       {frame.phase === "ready" ? (
-        frame.data.candidates.length === 0 ? <p className="text-sm text-muted-foreground">No compatible resources are currently observed.</p> : (
-          <ul className="grid max-h-72 gap-2 overflow-y-auto pr-1">
-            {frame.data.candidates.map((candidate) => (
-              <li key={candidate.resource.uid}>
-                <Button className="w-full justify-between" onClick={() => onPick({ namespace: candidate.resource.namespace, name: candidate.resource.name })} type="button" variant="outline">
-                  <span className="min-w-0 truncate text-left">{candidate.resource.namespace === null ? "cluster scope" : candidate.resource.namespace}/{candidate.resource.name}</span><Check aria-hidden="true" className="shrink-0" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )
+        <>
+          {frame.data.coverage.availability === "available" ? null : <p className="text-sm text-muted-foreground" role="status">Candidate inventory is partial.</p>}
+          {candidates.length === 0 ? <p className="text-sm text-muted-foreground">No compatible resources are currently observed.</p> : <>
+            <Input
+              aria-activedescendant={activeDescendant}
+              aria-controls={listboxId}
+              aria-expanded="true"
+              aria-label="Filter comparison candidates"
+              autoFocus
+              className="font-mono"
+              onChange={(event) => {
+                setQuery(event.currentTarget.value);
+                setHighlightedIndex(0);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Filter by namespace or name"
+              role="combobox"
+              value={query}
+            />
+            {filteredCandidates.length === 0 ? <p className="text-sm text-muted-foreground">No compatible resources match this filter.</p> : (
+              <ul aria-label="Compatible comparison candidates" className="grid max-h-72 gap-2 overflow-y-auto pr-1" id={listboxId} role="listbox">
+                {filteredCandidates.map((candidate, index) => {
+                  const key = resourceKey(candidate.resource);
+                  const optionId = candidateOptionId(listboxId, candidate.resource);
+                  return (
+                    <li key={key}>
+                      <Button
+                        aria-selected={index === activeIndex}
+                        className={cn("w-full justify-between", index === activeIndex && "border-primary bg-primary/10")}
+                        id={optionId}
+                        onClick={() => onPick(toCompareTarget(candidate.resource))}
+                        onMouseEnter={() => setHighlightedIndex(index)}
+                        ref={(node) => {
+                          if (node) optionRefs.current.set(key, node);
+                          else optionRefs.current.delete(key);
+                        }}
+                        role="option"
+                        type="button"
+                        variant="outline"
+                      >
+                        <span className="min-w-0 truncate text-left">{candidateLabel(candidate.resource)}</span><Check aria-hidden="true" className="shrink-0" />
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>}
+        </>
       ) : null}
     </section>
   );
+}
+
+function candidateLabel(resource: CompareResult["a"]["resource"]): string {
+  return resource.namespace === null ? resource.name : `${resource.namespace}/${resource.name}`;
+}
+
+function candidateOptionId(listboxId: string, resource: CompareResult["a"]["resource"]): string {
+  return `${listboxId}-${resourceKey(resource)}`;
+}
+
+function resourceKey(resource: CompareResult["a"]["resource"]): string {
+  return resource.uid;
+}
+
+function clampCandidateIndex(index: number, candidateCount: number): number {
+  return Math.min(index, Math.max(0, candidateCount - 1));
+}
+
+function sameResource(
+  left: CompareResult["a"]["resource"],
+  right: CompareResult["a"]["resource"],
+): boolean {
+  return left.uid === right.uid;
+}
+
+function toCompareTarget(resource: CompareResult["a"]["resource"]): CompareTarget {
+  return { namespace: resource.namespace, name: resource.name };
+}
+
+function shouldIgnorePickerShortcut(event: React.KeyboardEvent<HTMLInputElement>): boolean {
+  return event.defaultPrevented
+    || event.nativeEvent.isComposing
+    || event.nativeEvent.keyCode === 229
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+    || event.getModifierState("AltGraph");
 }
 
 function FailureScreen({ failure, onRefresh }: { failure: string; onRefresh: () => void }) {

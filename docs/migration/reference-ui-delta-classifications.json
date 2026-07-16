@@ -334,9 +334,209 @@
     "logs.workload.empty-diagnostic": {
       "destination": "frontend/src/features/bottom-dock/BottomDockProvider.test.tsx",
       "rationale": "A future workload-empty diagnostic must retain stream identity and be rendered only from an authenticated typed endpoint event."
+    },
+    "compare.picker.keyboard": {
+      "destination": "frontend/src/pages/compare/CompareRoute.test.tsx",
+      "rationale": "The compare candidate picker must retain canonical URL replacement, server-authorized candidates, partial inventory evidence, and IME-safe keyboard selection."
+    },
+    "resources.physical-topology.stream-lifecycle": {
+      "destination": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
+      "rationale": "The typed physical-topology stream must expose connecting before its authenticated browser transport is connected and must keep its bounded delivery policy authoritative."
+    },
+    "logs.scheduled-run.target": {
+      "destination": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+      "rationale": "A future scheduled-workload log target must prove its server-authorized run identity before it opens the existing bounded log stream."
+    },
+    "namespace.scope.rescope": {
+      "destination": "frontend/src/features/filters/UnifiedFilterProvider.test.tsx",
+      "rationale": "A future namespace-rescope controller must prove authorized catalog replacement, URL state, and active-session invalidation without browser-derived scope."
     }
   },
   "classifications": {
+    "packages/k8s-ui/src/components/compare/CompareResourcePicker.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:compare:picker:keyboard-selection:v1",
+          "legacyContractIds": [],
+          "symbol": "CompareResourcePicker",
+          "interaction": "a side-specific compare picker filters only server-authorized compatible candidates, excludes its source resource, preserves partial-inventory evidence, and maps IME-safe roving keyboard selection to canonical comparison URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/compare/compareContract.ts",
+              "frontend/src/pages/compare/CompareRoute.tsx",
+              "frontend/src/pages/compare/CompareRoute.test.tsx",
+              "src/packages/contracts/comparable_manifest.py",
+              "src/domains/compare/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.comparable_manifest",
+              "domains.compare.router"
+            ],
+            "plannedTestIds": [
+              "compare.picker.keyboard"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product candidate endpoint already applies workspace, cluster, and inventory authorization before returning a compatible descriptor set. The route owns canonical URL replacement while the picker reuses the shared identifier-safe input instead of source runtime code."
+          }
+        }
+      ]
+    },
+    "web/src/hooks/useEventSource.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:stream:connecting-lifecycle:v1",
+          "legacyContractIds": [],
+          "symbol": "useEventSource connecting lifecycle",
+          "interaction": "the topology consumer exposes a distinct connecting state until its authenticated realtime browser transport reports connected, and returns to connecting before each new connection attempt",
+          "transport": "ws",
+          "realtime": {
+            "resume": "visibility or sequence-integrity reconnects discard the previous client state and require a fresh server snapshot",
+            "backpressure": "the gateway hello policy bounds pending messages and the browser coalesces accepted records at the negotiated maximum frame rate",
+            "merge": "only ordered server snapshot and delta records for the active workspace and cluster mutate the overlay; invalid sequence requests a resync"
+          },
+          "motion": {
+            "reducedMotion": "connecting and connection-state feedback remain semantic while realtime paint coalescing avoids decorative animation dependence.",
+            "evidence": [
+              "references/upstream/web/src/hooks/useEventSource.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/composition/surfaces/resources.ts",
+              "frontend/src/features/resources/physicalTopologyRealtimeContract.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
+              "src/packages/contracts/realtime.py",
+              "src/services/realtime/realtime-gateway/app.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.realtime",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "resources.physical-topology.stream-lifecycle"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source delta is limited to connecting lifecycle semantics. Opsia deliberately uses its authenticated typed WebSocket gateway rather than the source EventSource runtime, preserving a stricter negotiated policy, resync, and scope model."
+          }
+        }
+      ]
+    },
+    "web/src/components/dock/WorkloadLogsTab.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:scheduled:run-routing:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadLogsTab scheduled-kind routing",
+          "interaction": "scheduled workload kinds route to a retained-run selector before opening the selected run's bounded workload log stream",
+          "transport": "sse",
+          "realtime": {
+            "resume": "a selected immutable run target opens a new authorized stream; a terminal run does not infer a replacement target",
+            "backpressure": "the selected stream retains its bounded ordered log buffer and animation-frame batching",
+            "merge": "events apply only to the selected immutable run target and its current stream generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.scheduled-run.target"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python log-stream target permits only deployments, statefulsets, and daemonsets; it has no authorized scheduled-owner-to-run catalog or immutable run-target projection.",
+            "rationale": "Routing by a browser-maintained scheduled-kind allowlist would be hardcoded and could open logs for the wrong execution, so the source behavior remains blocked until a typed Python run catalog exists."
+          }
+        }
+      ]
+    },
+    "web/src/components/logs/ScheduledWorkloadLogsViewer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:scheduled:run-picker:v1",
+          "legacyContractIds": [],
+          "symbol": "ScheduledWorkloadLogsViewer",
+          "interaction": "a scheduled workload exposes its retained executions, chooses a valid default run, makes the selected run visible, and forwards only that run to the shared workload log viewer",
+          "transport": "sse",
+          "realtime": {
+            "resume": "a run catalog refresh may replace a missing selection only with a server-authorized default run before the stream opens",
+            "backpressure": "run catalog refresh and the selected log stream require independent bounded update policies",
+            "merge": "a selected run identity must match the catalog generation and log stream target before its status or lines render"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.scheduled-run.target"
+            ],
+            "state": "blocked",
+            "blockedReason": "No Python contract describes retained scheduled executions, their lifecycle, a default-run rule, or a scoped projection from a scheduler owner to the concrete workload target.",
+            "rationale": "The product must not infer a Job, Workflow, or pod name from a CronJob-like owner in the browser; the picker waits for the server-owned execution projection."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/namespace-switcher/NamespacePicker.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
+          "legacyContractIds": [],
+          "symbol": "NamespacePicker cache-scoped rescope",
+          "interaction": "a cache-scoped namespace selector exposes only authorized namespaces, applies one replacement scope, communicates the rescope lifecycle, and invalidates incompatible active sessions",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/filters/filterContract.ts",
+              "frontend/src/features/filters/UnifiedFilterProvider.tsx",
+              "frontend/src/features/filters/UnifiedFilterProvider.test.tsx",
+              "src/packages/contracts/parity.py",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "domains.inventory_filter.router"
+            ],
+            "plannedTestIds": [
+              "namespace.scope.rescope"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Python APIs accept namespace filters but do not project an authorized namespace catalog, cache-scope ownership, rescope lifecycle, or the required invalidation of terminal and port-forward sessions.",
+            "rationale": "URL namespace values alone cannot establish whether a namespace is listable, cache-scoped, or safe to switch, so the product retains only its existing normalized filter state until the server contract exists."
+          }
+        }
+      ]
+    },
     "packages/k8s-ui/package.json": {
       "classification": "classified",
       "interactions": [

@@ -28,6 +28,23 @@ const STREAM_POLICY = {
 };
 
 describe("physical topology realtime overlay", () => {
+  it("reports connecting before the authenticated typed stream becomes connected", async () => {
+    const harness = realtimeHarness();
+    const rendered = renderHook(() => usePhysicalTopologyRealtime({
+      active: true,
+      clusterId: "cluster-1",
+      frame: readyFrame(),
+      port: harness.port,
+      workspaceId: "default",
+    }));
+
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
+    await waitFor(() => expect(rendered.result.current.live.status).toBe("connecting"));
+
+    act(() => harness.latestHandlers().onStatusChange("connected"));
+    expect(rendered.result.current.live.status).toBe("connected");
+  });
+
   it("fails closed and reconnects when a record arrives before the server delivery policy", async () => {
     const harness = realtimeHarness({ announcePolicy: false });
     const rendered = renderHook(() => usePhysicalTopologyRealtime({
