@@ -22,10 +22,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # pull_request의 기본 checkout은 GitHub가 만든 synthetic merge SHA다.
+          # 제목 게이트는 실제 PR 커밋만 검사하고, push는 그대로 gated SHA를 검사한다.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Prepare bounded commit message range
         env:
           BASE_SHA: ${{ github.event.before || github.event.pull_request.base.sha || '' }}
+          AUDIT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           COMMIT_COUNT: ${{ github.event.pull_request.commits || 0 }}
           PUSH_COMMITS: ${{ toJSON(github.event.commits) }}
         run: |
@@ -34,11 +39,11 @@ jobs:
             COMMIT_COUNT="$(jq 'length' <<<"${PUSH_COMMITS}")"
           fi
           if [[ -z "${BASE_SHA}" || "${BASE_SHA}" =~ ^0+$ ]]; then
-            git fetch --no-tags --depth=2 origin "${GITHUB_SHA}"
+            git fetch --no-tags --depth=2 origin "${AUDIT_HEAD_SHA}"
             BASE_SHA="$(git rev-parse HEAD^)"
             COMMIT_COUNT=1
           else
-            git fetch --no-tags --depth="$((COMMIT_COUNT + 1))" origin "${GITHUB_SHA}"
+            git fetch --no-tags --depth="$((COMMIT_COUNT + 1))" origin "${AUDIT_HEAD_SHA}"
           fi
           git fetch --no-tags --depth=1 origin "${BASE_SHA}"
           git update-ref refs/remotes/origin/dev "${BASE_SHA}"

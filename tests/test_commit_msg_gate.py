@@ -94,8 +94,25 @@ def test_dev_gate_checks_only_the_bounded_new_commit_range() -> None:
         if "scripts/commit-msg-gate.sh --range origin/dev..HEAD" in step.get("run", "")
     )
 
-    assert "fetch-depth" not in checkout.get("with", {})
+    assert checkout["with"] == {
+        "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
+    }
     assert command["name"] == "Enforce commit message convention"
+
+
+def test_pull_request_gate_audits_head_commits_not_the_synthetic_merge_subject() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/dev-gate.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["gate"]["steps"]
+    prepare = next(
+        step for step in steps if step.get("name") == "Prepare bounded commit message range"
+    )
+
+    assert (
+        prepare["env"]["AUDIT_HEAD_SHA"]
+        == "${{ github.event.pull_request.head.sha || github.sha }}"
+    )
+    assert 'origin "${AUDIT_HEAD_SHA}"' in prepare["run"]
+    assert "GITHUB_SHA" not in prepare["run"]
 
 
 def test_dev_gate_runs_commit_message_unit_tests_before_the_full_gate() -> None:
