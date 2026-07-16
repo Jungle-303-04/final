@@ -11551,7 +11551,8 @@
             "reference.feature.127",
             "reference.feature.129",
             "reference.feature.147",
-            "reference.feature.148"
+            "reference.feature.148",
+            "reference.feature.166"
           ],
           "symbol": "apiFetch, fetchJSON, query enablement, refresh intervals, and mutation invalidation",
           "interaction": "browser requests share one authenticated cancellation-aware transport, domain hooks can be disabled or refreshed without spawning duplicate clients, and mutations invalidate only their owned projections",

@@ -6349,11 +6349,11 @@
     },
     {
       "contractId": "reference.feature.166",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
       "legacyContractIds": [
         "reference.feature.166"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-166",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [

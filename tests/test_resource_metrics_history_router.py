@@ -193,6 +193,7 @@ def test_metric_history_returns_measured_node_series() -> None:
                     "mem_mib": 4096.0,
                 }
             ],
+            "current_observation": None,
             "has_sparkline_points": True,
             "completeness": "exact",
             "partial_reason_codes": [],

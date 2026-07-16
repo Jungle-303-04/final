@@ -7545,11 +7545,11 @@
     {
       "id": "reference-feature-166",
       "contractId": "reference.feature.166",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:api:client-boundary:request-orchestration:v1",
       "legacyContractIds": [
         "reference.feature.166"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.6 Resource·workload mutation",
       "line": 471,
       "cells": [
