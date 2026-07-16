@@ -566,6 +566,287 @@ class JobProviderDetail(StrictModel):
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
+class ProviderRequirementDetail(StrictModel):
+    key: str
+    operator: str | None = None
+    values: list[str] = Field(default_factory=list)
+    min_values: int | None = None
+
+
+class KarpenterSelectorTermDetail(StrictModel):
+    id: str | None = None
+    name: str | None = None
+    alias: str | None = None
+    owner: str | None = None
+    tags: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class KarpenterBlockDeviceDetail(StrictModel):
+    device_name: str | None = None
+    volume_type: str | None = None
+    volume_size: str | None = None
+    iops: int | None = None
+    throughput: int | None = None
+    encrypted: bool | None = None
+    delete_on_termination: bool | None = None
+
+
+class KarpenterResolvedAmiDetail(StrictModel):
+    id: str
+    name: str | None = None
+    requirements: list[ProviderRequirementDetail] = Field(default_factory=list)
+
+
+class KarpenterResolvedNetworkDetail(StrictModel):
+    id: str
+    name: str | None = None
+    zone: str | None = None
+
+
+class KarpenterMetadataOptionsDetail(StrictModel):
+    http_tokens: str | None = None
+    http_put_response_hop_limit: int | None = None
+    http_endpoint: str | None = None
+
+
+class KarpenterEc2NodeClassProviderDetail(StrictModel):
+    type: Literal["karpenter-ec2-node-class"] = "karpenter-ec2-node-class"
+    ready: bool | None = None
+    role: str | None = None
+    instance_profile: str | None = None
+    ami_family: str | None = None
+    ami_selector_terms: list[KarpenterSelectorTermDetail] = Field(default_factory=list)
+    block_devices: list[KarpenterBlockDeviceDetail] = Field(default_factory=list)
+    subnet_selector_terms: list[KarpenterSelectorTermDetail] = Field(default_factory=list)
+    security_group_selector_terms: list[KarpenterSelectorTermDetail] = Field(default_factory=list)
+    metadata_options: KarpenterMetadataOptionsDetail | None = None
+    resolved_amis: list[KarpenterResolvedAmiDetail] = Field(default_factory=list)
+    resolved_subnets: list[KarpenterResolvedNetworkDetail] = Field(default_factory=list)
+    resolved_security_groups: list[KarpenterResolvedNetworkDetail] = Field(default_factory=list)
+    tags: list[ProviderKeyValue] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class KarpenterCapacityDetail(StrictModel):
+    cpu: str | None = None
+    memory: str | None = None
+    pods: str | None = None
+    ephemeral_storage: str | None = None
+
+
+class KarpenterNodeClaimProviderDetail(StrictModel):
+    type: Literal["karpenter-node-claim"] = "karpenter-node-claim"
+    state: Literal[
+        "ready",
+        "registered",
+        "launched",
+        "initialized",
+        "not-ready",
+        "pending",
+        "unknown",
+    ]
+    instance_type: str | None = None
+    capacity_type: str | None = None
+    node_name: str | None = None
+    zone: str | None = None
+    architecture: str | None = None
+    node_pool: str | None = None
+    node_class_ref: ProviderNamedReference | None = None
+    image_id: str | None = None
+    expire_after: str | None = None
+    capacity: KarpenterCapacityDetail
+    requirements: list[ProviderRequirementDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class KarpenterDisruptionBudgetDetail(StrictModel):
+    nodes: str | None = None
+    schedule: str | None = None
+    duration: str | None = None
+
+
+class KarpenterNodePoolProviderDetail(StrictModel):
+    type: Literal["karpenter-node-pool"] = "karpenter-node-pool"
+    ready: bool | None = None
+    node_class_ref: ProviderNamedReference | None = None
+    limit_cpu: str | None = None
+    limit_memory: str | None = None
+    weight: int | None = None
+    current_cpu: str | None = None
+    current_memory: str | None = None
+    consolidation_policy: str | None = None
+    consolidate_after: str | None = None
+    expire_after: str | None = None
+    disruption_budgets: list[KarpenterDisruptionBudgetDetail] = Field(default_factory=list)
+    template_labels: list[ProviderKeyValue] = Field(default_factory=list)
+    template_taints: list[ProviderTaint] = Field(default_factory=list)
+    startup_taints: list[ProviderTaint] = Field(default_factory=list)
+    requirements: list[ProviderRequirementDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class KedaTriggerDetail(StrictModel):
+    type: str
+    name: str | None = None
+    authentication_ref: ProviderNamedReference | None = None
+    metadata_keys: list[str] = Field(default_factory=list)
+    redacted_metadata_count: int = 0
+
+
+class KedaScalingPolicyDetail(StrictModel):
+    direction: Literal["up", "down"]
+    type: str | None = None
+    value: int | None = None
+    period_seconds: int | None = None
+
+
+class KedaScaledObjectProviderDetail(StrictModel):
+    type: Literal["keda-scaled-object"] = "keda-scaled-object"
+    state: Literal["paused", "fallback", "not-ready", "active", "idle", "ready", "unknown"]
+    target_ref: ProviderNamedReference | None = None
+    scaling: ProviderScaling
+    idle_replicas: int | None = None
+    polling_interval_seconds: int | None = None
+    cooldown_period_seconds: int | None = None
+    hpa_name: str | None = None
+    last_active_time: str | None = None
+    fallback_failure_threshold: int | None = None
+    fallback_replicas: int | None = None
+    restore_original_replicas: bool | None = None
+    scale_up_stabilization_seconds: int | None = None
+    scale_down_stabilization_seconds: int | None = None
+    scaling_policies: list[KedaScalingPolicyDetail] = Field(default_factory=list)
+    triggers: list[KedaTriggerDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class KedaScaledJobProviderDetail(StrictModel):
+    type: Literal["keda-scaled-job"] = "keda-scaled-job"
+    state: Literal["not-ready", "active", "idle", "ready", "unknown"]
+    job_target_name: str | None = None
+    strategy: str | None = None
+    polling_interval_seconds: int | None = None
+    successful_history_limit: int | None = None
+    failed_history_limit: int | None = None
+    minimum_replicas: int | None = None
+    maximum_replicas: int | None = None
+    triggers: list[KedaTriggerDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class SecuritySeveritySummaryDetail(StrictModel):
+    critical: int = Field(ge=0)
+    high: int = Field(ge=0)
+    medium: int = Field(ge=0)
+    low: int = Field(ge=0)
+    unknown: int = Field(ge=0)
+
+
+class SbomComponentDetail(StrictModel):
+    name: str
+    version: str | None = None
+    type: str | None = None
+    package_url: str | None = None
+    package_url_qualifiers_redacted: bool = False
+    license: str | None = None
+
+
+class SbomReportProviderDetail(StrictModel):
+    type: Literal["sbom-report"] = "sbom-report"
+    container_name: str | None = None
+    image: str | None = None
+    bom_format: str | None = None
+    spec_version: str | None = None
+    component_count: int = Field(ge=0)
+    dependency_count: int = Field(ge=0)
+    observed_component_count: int = Field(ge=0)
+    projected_component_count: int = Field(ge=0)
+    truncated: bool
+    scanner_name: str | None = None
+    scanner_version: str | None = None
+    scanned_at: str | None = None
+    components: list[SbomComponentDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class VulnerabilityFindingDetail(StrictModel):
+    vulnerability_id: str
+    severity: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+    score: float | None = Field(default=None, ge=0, le=10)
+    package: str | None = None
+    installed_version: str | None = None
+    fixed_version: str | None = None
+    primary_link: str | None = None
+
+
+class VulnerabilityReportProviderDetail(StrictModel):
+    type: Literal["vulnerability-report"] = "vulnerability-report"
+    container_name: str | None = None
+    image: str | None = None
+    os_family: str | None = None
+    os_name: str | None = None
+    os_end_of_service_life: bool | None = None
+    scanner_name: str | None = None
+    scanner_version: str | None = None
+    scanned_at: str | None = None
+    severity: SecuritySeveritySummaryDetail
+    observed_vulnerability_count: int = Field(ge=0)
+    projected_vulnerability_count: int = Field(ge=0)
+    truncated: bool
+    vulnerabilities: list[VulnerabilityFindingDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class PrometheusRuleEntryDetail(StrictModel):
+    type: Literal["alert", "recording"]
+    name: str
+    expression: str
+    duration: str | None = None
+    severity: str | None = None
+    summary: str | None = None
+    description: str | None = None
+    labels: list[ProviderKeyValue] = Field(default_factory=list)
+
+
+class PrometheusRuleGroupDetail(StrictModel):
+    name: str
+    interval: str | None = None
+    rule_count: int
+    alert_count: int
+    recording_count: int
+    rules: list[PrometheusRuleEntryDetail] = Field(default_factory=list)
+
+
+class PrometheusRuleProviderDetail(StrictModel):
+    type: Literal["prometheus-rule"] = "prometheus-rule"
+    group_count: int
+    total_rules: int
+    total_alerts: int
+    total_recordings: int
+    projected_rules: int
+    truncated: bool
+    groups: list[PrometheusRuleGroupDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class TcpRouteProviderDetail(StrictModel):
+    type: Literal["tcp-route"] = "tcp-route"
+    hostnames: list[str] = Field(default_factory=list)
+    parent_refs: list[ProviderNamedReference] = Field(default_factory=list)
+    rules: list[GatewayRouteRuleDetail] = Field(default_factory=list)
+    parent_statuses: list[GatewayRouteParentStatusDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class TlsRouteProviderDetail(StrictModel):
+    type: Literal["tls-route"] = "tls-route"
+    hostnames: list[str] = Field(default_factory=list)
+    parent_refs: list[ProviderNamedReference] = Field(default_factory=list)
+    rules: list[GatewayRouteRuleDetail] = Field(default_factory=list)
+    parent_statuses: list[GatewayRouteParentStatusDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 ResourceProviderDetail = Annotated[
     AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
@@ -593,6 +874,16 @@ ResourceProviderDetail = Annotated[
     | GcpManagedMachinePoolProviderDetail
     | GrpcRouteProviderDetail
     | HttpRouteProviderDetail
-    | JobProviderDetail,
+    | JobProviderDetail
+    | KarpenterEc2NodeClassProviderDetail
+    | KarpenterNodeClaimProviderDetail
+    | KarpenterNodePoolProviderDetail
+    | KedaScaledObjectProviderDetail
+    | KedaScaledJobProviderDetail
+    | SbomReportProviderDetail
+    | VulnerabilityReportProviderDetail
+    | PrometheusRuleProviderDetail
+    | TcpRouteProviderDetail
+    | TlsRouteProviderDetail,
     Field(discriminator="type"),
 ]

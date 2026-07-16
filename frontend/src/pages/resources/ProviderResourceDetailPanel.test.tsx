@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
 import type { ProviderResourceDetail } from "../../features/resources/providerResourceContract";
@@ -389,16 +389,348 @@ describe("ProviderResourceDetailPanel", () => {
     expect(screen.getByText("600s")).toBeTruthy();
     expect(screen.getByText("3600s")).toBeTruthy();
   });
+
+  it("renders shared Karpenter and KEDA details without exposing trigger values", () => {
+    const { rerender } = renderPanel({
+      type: "karpenter-ec2-node-class",
+      ready: true,
+      role: "KarpenterNodeRole",
+      instanceProfile: "nodes",
+      amiFamily: "AL2023",
+      amiSelectorTerms: [{
+        id: null,
+        name: null,
+        alias: "al2023@latest",
+        owner: null,
+        tags: [],
+      }],
+      blockDevices: [{
+        deviceName: "/dev/xvda",
+        volumeType: "gp3",
+        volumeSize: "100Gi",
+        iops: 3000,
+        throughput: 125,
+        encrypted: true,
+        deleteOnTermination: true,
+      }],
+      subnetSelectorTerms: [],
+      securityGroupSelectorTerms: [],
+      metadataOptions: {
+        httpTokens: "required",
+        httpPutResponseHopLimit: 2,
+        httpEndpoint: "enabled",
+      },
+      resolvedAmis: [{
+        id: "ami-123",
+        name: "al2023",
+        requirements: [],
+      }],
+      resolvedSubnets: [{ id: "subnet-a", name: null, zone: "ap-northeast-2a" }],
+      resolvedSecurityGroups: [{ id: "sg-a", name: "nodes", zone: null }],
+      tags: [{ key: "team", value: "platform" }],
+      conditions: [],
+    });
+    expect(screen.getByText("KarpenterNodeRole")).toBeTruthy();
+    expect(screen.getByText(/\/dev\/xvda/)).toBeTruthy();
+    expect(screen.getByText("ami-123 · al2023")).toBeTruthy();
+
+    rerender(panel({
+      type: "karpenter-node-claim",
+      state: "registered",
+      instanceType: "m7g.large",
+      capacityType: "spot",
+      nodeName: "ip-10-0-0-1",
+      zone: "ap-northeast-2a",
+      architecture: "arm64",
+      nodePool: "general",
+      nodeClassRef: {
+        apiVersion: "karpenter.k8s.aws",
+        kind: "EC2NodeClass",
+        namespace: null,
+        name: "default",
+      },
+      imageId: "ami-123",
+      expireAfter: "720h",
+      capacity: { cpu: "2", memory: "8Gi", pods: "29", ephemeralStorage: null },
+      requirements: [{
+        key: "kubernetes.io/arch",
+        operator: "In",
+        values: ["arm64"],
+        minValues: null,
+      }],
+      conditions: [],
+    }));
+    expect(screen.getByText("Registered")).toBeTruthy();
+    expect(screen.getByText("EC2NodeClass · default")).toBeTruthy();
+
+    rerender(panel({
+      type: "karpenter-node-pool",
+      ready: true,
+      nodeClassRef: {
+        apiVersion: "karpenter.k8s.aws",
+        kind: "EC2NodeClass",
+        namespace: null,
+        name: "default",
+      },
+      limitCpu: "100",
+      limitMemory: "400Gi",
+      weight: 50,
+      currentCpu: "24",
+      currentMemory: "96Gi",
+      consolidationPolicy: "WhenEmptyOrUnderutilized",
+      consolidateAfter: "5m",
+      expireAfter: "720h",
+      disruptionBudgets: [{ nodes: "10%", schedule: null, duration: "2h" }],
+      templateLabels: [{ key: "team", value: "platform" }],
+      templateTaints: [{ key: "dedicated", value: "batch", effect: "NoSchedule" }],
+      startupTaints: [],
+      requirements: [],
+      conditions: [],
+    }));
+    expect(screen.getByText("WhenEmptyOrUnderutilized")).toBeTruthy();
+    expect(screen.getByText("team=platform")).toBeTruthy();
+
+    rerender(panel({
+      type: "keda-scaled-object",
+      state: "active",
+      targetRef: { apiVersion: null, kind: "Deployment", namespace: "shop", name: "api" },
+      scaling: { minimum: 1, maximum: 20, current: null },
+      idleReplicas: null,
+      pollingIntervalSeconds: 15,
+      cooldownPeriodSeconds: 60,
+      hpaName: "keda-hpa-api",
+      lastActiveTime: "2026-07-16T00:00:00Z",
+      fallbackFailureThreshold: null,
+      fallbackReplicas: null,
+      restoreOriginalReplicas: false,
+      scaleUpStabilizationSeconds: null,
+      scaleDownStabilizationSeconds: null,
+      scalingPolicies: [],
+      triggers: [{
+        type: "rabbitmq",
+        name: "orders",
+        authenticationRef: {
+          apiVersion: null,
+          kind: "TriggerAuthentication",
+          namespace: "shop",
+          name: "rabbitmq",
+        },
+        metadataKeys: ["queueName"],
+        redactedMetadataCount: 2,
+      }],
+      conditions: [],
+    }));
+    expect(screen.getByText("Deployment · shop · api")).toBeTruthy();
+    expect(screen.getByText("queueName")).toBeTruthy();
+    expect(screen.getByText("2 values withheld")).toBeTruthy();
+    expect(screen.queryByText("connectionString")).toBeNull();
+
+    rerender(panel({
+      type: "keda-scaled-job",
+      state: "idle",
+      jobTargetName: "worker",
+      strategy: "accurate",
+      pollingIntervalSeconds: 30,
+      successfulHistoryLimit: 3,
+      failedHistoryLimit: 2,
+      minimumReplicas: 0,
+      maximumReplicas: 10,
+      triggers: [],
+      conditions: [],
+    }));
+    expect(screen.getByText("Idle")).toBeTruthy();
+    expect(screen.getByText("accurate")).toBeTruthy();
+  });
+
+  it("searches and expands Prometheus rules and reuses the route presentation for TLS", () => {
+    const longExpression = `sum(rate(http_requests_total[5m])) ${"+ vector(0) ".repeat(30)}`;
+    const { rerender } = renderPanel({
+      type: "prometheus-rule",
+      groupCount: 1,
+      totalRules: 6,
+      totalAlerts: 1,
+      totalRecordings: 5,
+      projectedRules: 6,
+      truncated: false,
+      groups: [{
+        name: "api",
+        interval: "30s",
+        ruleCount: 6,
+        alertCount: 1,
+        recordingCount: 5,
+        rules: [
+          {
+            type: "alert",
+            name: "HighErrorRate",
+            expression: longExpression,
+            duration: "10m",
+            severity: "critical",
+            summary: "API error rate is high",
+            description: null,
+            labels: [{ key: "severity", value: "critical" }],
+          },
+          ...Array.from({ length: 5 }, (_, index) => ({
+            type: "recording" as const,
+            name: `api:requests:rate${index}`,
+            expression: "vector(1)",
+            duration: null,
+            severity: null,
+            summary: null,
+            description: null,
+            labels: [],
+          })),
+        ],
+      }],
+      conditions: [],
+    });
+
+    expect(screen.getByText("HighErrorRate")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    expect(screen.getByText((_, element) => (
+      element?.tagName === "PRE" && element.textContent === longExpression
+    ))).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search Prometheus rules" }), {
+      target: { value: "HighErrorRate" },
+    });
+    expect(screen.getByText("1 of 6")).toBeTruthy();
+    expect(screen.queryByText("api:requests:rate0")).toBeNull();
+
+    rerender(panel({
+      type: "tls-route",
+      hostnames: ["tls.example.test"],
+      parentRefs: [],
+      rules: [{
+        matches: [],
+        backends: [{
+          reference: {
+            apiVersion: null,
+            kind: null,
+            namespace: "network",
+            name: "tls-api",
+          },
+          port: 9443,
+          weight: 100,
+        }],
+        filters: [],
+      }],
+      parentStatuses: [],
+      conditions: [],
+    }));
+    expect(screen.getByText("tls.example.test")).toBeTruthy();
+    expect(screen.getByLabelText("network · tls-api · Port 9443 · Weight 100")).toBeTruthy();
+  });
+
+  it("filters bounded SBOM and vulnerability evidence and opens only the typed link", () => {
+    const openExternalUrl = vi.fn(async () => undefined);
+    const components = Array.from({ length: 102 }, (_, index) => ({
+      name: `component-${index}`,
+      version: `1.${index}`,
+      type: "library",
+      packageUrl: `pkg:npm/component-${index}@1.${index}`,
+      packageUrlQualifiersRedacted: index === 0,
+      license: "MIT",
+    }));
+    const { rerender } = render(panel({
+      type: "sbom-report",
+      containerName: "api",
+      image: "registry.example.test/platform/api:1.2.3",
+      bomFormat: "CycloneDX",
+      specVersion: "1.6",
+      componentCount: 120,
+      dependencyCount: 42,
+      observedComponentCount: 120,
+      projectedComponentCount: 102,
+      truncated: true,
+      scannerName: "Trivy",
+      scannerVersion: "0.64.1",
+      scannedAt: "2026-07-16T00:00:00Z",
+      components,
+      conditions: [],
+    }, openExternalUrl));
+
+    expect(screen.getByText("CycloneDX · 1.6")).toBeTruthy();
+    expect(screen.queryByText("component-101")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show all 102 components" }));
+    expect(screen.getByText("component-101")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search software components" }), {
+      target: { value: "component-101" },
+    });
+    expect(screen.getByText("1 of 102 components")).toBeTruthy();
+    expect(screen.queryByText("component-0")).toBeNull();
+
+    rerender(panel({
+      type: "vulnerability-report",
+      containerName: "api",
+      image: "registry.example.test/platform/api:1.2.3",
+      osFamily: "debian",
+      osName: "12",
+      osEndOfServiceLife: false,
+      scannerName: "Trivy",
+      scannerVersion: "0.64.1",
+      scannedAt: "2026-07-16T00:00:00Z",
+      severity: { critical: 1, high: 1, medium: 0, low: 0, unknown: 0 },
+      observedVulnerabilityCount: 2,
+      projectedVulnerabilityCount: 2,
+      truncated: false,
+      vulnerabilities: [
+        {
+          vulnerabilityId: "CVE-2026-0001",
+          severity: "CRITICAL",
+          score: 9.8,
+          package: "openssl",
+          installedVersion: "3.0.1",
+          fixedVersion: "3.0.2",
+          primaryLink: "https://security.example.test/CVE-2026-0001",
+        },
+        {
+          vulnerabilityId: "CVE-2026-0002",
+          severity: "HIGH",
+          score: 7.5,
+          package: "curl",
+          installedVersion: "8.0.0",
+          fixedVersion: null,
+          primaryLink: null,
+        },
+      ],
+      conditions: [],
+    }, openExternalUrl));
+
+    expect(screen.getByText("1 critical vulnerabilities require attention")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search vulnerabilities" }), {
+      target: { value: "openssl" },
+    });
+    expect(screen.getByText("1 of 2 vulnerabilities")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fix available" }));
+    expect(screen.queryByText("CVE-2026-0002")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "High 1" }));
+    expect(screen.getByText("CVE-2026-0002")).toBeTruthy();
+    expect(screen.queryByText("CVE-2026-0001")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("button", {
+      name: "Open verified reference for CVE-2026-0001",
+    }));
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://security.example.test/CVE-2026-0001",
+    );
+  });
 });
 
 function renderPanel(detail: ProviderResourceDetail) {
   return render(panel(detail));
 }
 
-function panel(detail: ProviderResourceDetail) {
+function panel(
+  detail: ProviderResourceDetail,
+  onOpenExternalUrl?: (url: string) => Promise<void>,
+) {
   return (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
-      <ProviderResourceDetailPanel detail={detail} />
+      <ProviderResourceDetailPanel
+        detail={detail}
+        onOpenExternalUrl={onOpenExternalUrl}
+      />
     </I18nProvider>
   );
 }

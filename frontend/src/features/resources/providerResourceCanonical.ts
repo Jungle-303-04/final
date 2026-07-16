@@ -2,10 +2,13 @@ import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointC
 import type {
   GatewayRouteParentStatus,
   GatewayRouteRule,
+  KedaTrigger,
+  PrometheusRuleGroup,
   ProviderCondition,
   ProviderKeyValue,
   ProviderNamedReference,
   ProviderReference,
+  ProviderRequirement,
   ProviderReplicas,
   ProviderResourceDetail,
   ProviderScaling,
@@ -423,7 +426,12 @@ export function toProviderResourceDetail(
       effect: optionalString(item.effect),
     })),
   };
-  if (type === "grpc-route" || type === "http-route") return {
+  if (
+    type === "grpc-route" ||
+    type === "http-route" ||
+    type === "tcp-route" ||
+    type === "tls-route"
+  ) return {
     type,
     conditions,
     hostnames: stringList(raw.hostnames),
@@ -448,6 +456,195 @@ export function toProviderResourceDetail(
     completionTime: optionalString(raw.completion_time),
     terminalReason: optionalString(raw.terminal_reason),
     terminalMessage: optionalString(raw.terminal_message),
+  };
+  if (type === "karpenter-ec2-node-class") {
+    const metadataOptions = raw.metadata_options === null ? null : record(raw.metadata_options);
+    return {
+      type,
+      conditions,
+      ready: optionalBoolean(raw.ready),
+      role: optionalString(raw.role),
+      instanceProfile: optionalString(raw.instance_profile),
+      amiFamily: optionalString(raw.ami_family),
+      amiSelectorTerms: karpenterSelectorTerms(raw.ami_selector_terms),
+      blockDevices: records(raw.block_devices).map((item) => ({
+        deviceName: optionalString(item.device_name),
+        volumeType: optionalString(item.volume_type),
+        volumeSize: optionalString(item.volume_size),
+        iops: optionalInteger(item.iops),
+        throughput: optionalInteger(item.throughput),
+        encrypted: optionalBoolean(item.encrypted),
+        deleteOnTermination: optionalBoolean(item.delete_on_termination),
+      })),
+      subnetSelectorTerms: karpenterSelectorTerms(raw.subnet_selector_terms),
+      securityGroupSelectorTerms: karpenterSelectorTerms(raw.security_group_selector_terms),
+      metadataOptions: metadataOptions === null ? null : {
+        httpTokens: optionalString(metadataOptions.http_tokens),
+        httpPutResponseHopLimit: optionalInteger(metadataOptions.http_put_response_hop_limit),
+        httpEndpoint: optionalString(metadataOptions.http_endpoint),
+      },
+      resolvedAmis: records(raw.resolved_amis).map((item) => ({
+        id: requiredString(item.id),
+        name: optionalString(item.name),
+        requirements: providerRequirements(item.requirements),
+      })),
+      resolvedSubnets: karpenterResolvedNetworks(raw.resolved_subnets),
+      resolvedSecurityGroups: karpenterResolvedNetworks(raw.resolved_security_groups),
+      tags: keyValues(raw.tags),
+    };
+  }
+  if (type === "karpenter-node-claim") {
+    const capacity = record(raw.capacity);
+    return {
+      type,
+      conditions,
+      state: karpenterNodeClaimState(raw.state),
+      instanceType: optionalString(raw.instance_type),
+      capacityType: optionalString(raw.capacity_type),
+      nodeName: optionalString(raw.node_name),
+      zone: optionalString(raw.zone),
+      architecture: optionalString(raw.architecture),
+      nodePool: optionalString(raw.node_pool),
+      nodeClassRef: namedReference(raw.node_class_ref),
+      imageId: optionalString(raw.image_id),
+      expireAfter: optionalString(raw.expire_after),
+      capacity: {
+        cpu: optionalString(capacity.cpu),
+        memory: optionalString(capacity.memory),
+        pods: optionalString(capacity.pods),
+        ephemeralStorage: optionalString(capacity.ephemeral_storage),
+      },
+      requirements: providerRequirements(raw.requirements),
+    };
+  }
+  if (type === "karpenter-node-pool") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    nodeClassRef: namedReference(raw.node_class_ref),
+    limitCpu: optionalString(raw.limit_cpu),
+    limitMemory: optionalString(raw.limit_memory),
+    weight: optionalInteger(raw.weight),
+    currentCpu: optionalString(raw.current_cpu),
+    currentMemory: optionalString(raw.current_memory),
+    consolidationPolicy: optionalString(raw.consolidation_policy),
+    consolidateAfter: optionalString(raw.consolidate_after),
+    expireAfter: optionalString(raw.expire_after),
+    disruptionBudgets: records(raw.disruption_budgets).map((item) => ({
+      nodes: optionalString(item.nodes),
+      schedule: optionalString(item.schedule),
+      duration: optionalString(item.duration),
+    })),
+    templateLabels: keyValues(raw.template_labels),
+    templateTaints: providerTaints(raw.template_taints),
+    startupTaints: providerTaints(raw.startup_taints),
+    requirements: providerRequirements(raw.requirements),
+  };
+  if (type === "keda-scaled-object") return {
+    type,
+    conditions,
+    state: kedaScaledObjectState(raw.state),
+    targetRef: namedReference(raw.target_ref),
+    scaling: scaling(raw.scaling),
+    idleReplicas: optionalInteger(raw.idle_replicas),
+    pollingIntervalSeconds: optionalInteger(raw.polling_interval_seconds),
+    cooldownPeriodSeconds: optionalInteger(raw.cooldown_period_seconds),
+    hpaName: optionalString(raw.hpa_name),
+    lastActiveTime: optionalString(raw.last_active_time),
+    fallbackFailureThreshold: optionalInteger(raw.fallback_failure_threshold),
+    fallbackReplicas: optionalInteger(raw.fallback_replicas),
+    restoreOriginalReplicas: optionalBoolean(raw.restore_original_replicas),
+    scaleUpStabilizationSeconds: optionalInteger(raw.scale_up_stabilization_seconds),
+    scaleDownStabilizationSeconds: optionalInteger(raw.scale_down_stabilization_seconds),
+    scalingPolicies: records(raw.scaling_policies).map((item) => ({
+      direction: kedaScalingDirection(item.direction),
+      type: optionalString(item.type),
+      value: optionalInteger(item.value),
+      periodSeconds: optionalInteger(item.period_seconds),
+    })),
+    triggers: kedaTriggers(raw.triggers),
+  };
+  if (type === "keda-scaled-job") return {
+    type,
+    conditions,
+    state: kedaScaledJobState(raw.state),
+    jobTargetName: optionalString(raw.job_target_name),
+    strategy: optionalString(raw.strategy),
+    pollingIntervalSeconds: optionalInteger(raw.polling_interval_seconds),
+    successfulHistoryLimit: optionalInteger(raw.successful_history_limit),
+    failedHistoryLimit: optionalInteger(raw.failed_history_limit),
+    minimumReplicas: optionalInteger(raw.minimum_replicas),
+    maximumReplicas: optionalInteger(raw.maximum_replicas),
+    triggers: kedaTriggers(raw.triggers),
+  };
+  if (type === "sbom-report") return {
+    type,
+    conditions,
+    containerName: optionalString(raw.container_name),
+    image: optionalString(raw.image),
+    bomFormat: optionalString(raw.bom_format),
+    specVersion: optionalString(raw.spec_version),
+    componentCount: requiredInteger(raw.component_count),
+    dependencyCount: requiredInteger(raw.dependency_count),
+    observedComponentCount: requiredInteger(raw.observed_component_count),
+    projectedComponentCount: requiredInteger(raw.projected_component_count),
+    truncated: requiredBoolean(raw.truncated),
+    scannerName: optionalString(raw.scanner_name),
+    scannerVersion: optionalString(raw.scanner_version),
+    scannedAt: optionalString(raw.scanned_at),
+    components: records(raw.components).map((item) => ({
+      name: requiredString(item.name),
+      version: optionalString(item.version),
+      type: optionalString(item.type),
+      packageUrl: optionalString(item.package_url),
+      packageUrlQualifiersRedacted: requiredBoolean(item.package_url_qualifiers_redacted),
+      license: optionalString(item.license),
+    })),
+  };
+  if (type === "vulnerability-report") {
+    const severity = record(raw.severity);
+    return {
+      type,
+      conditions,
+      containerName: optionalString(raw.container_name),
+      image: optionalString(raw.image),
+      osFamily: optionalString(raw.os_family),
+      osName: optionalString(raw.os_name),
+      osEndOfServiceLife: optionalBoolean(raw.os_end_of_service_life),
+      scannerName: optionalString(raw.scanner_name),
+      scannerVersion: optionalString(raw.scanner_version),
+      scannedAt: optionalString(raw.scanned_at),
+      severity: {
+        critical: requiredInteger(severity.critical),
+        high: requiredInteger(severity.high),
+        medium: requiredInteger(severity.medium),
+        low: requiredInteger(severity.low),
+        unknown: requiredInteger(severity.unknown),
+      },
+      observedVulnerabilityCount: requiredInteger(raw.observed_vulnerability_count),
+      projectedVulnerabilityCount: requiredInteger(raw.projected_vulnerability_count),
+      truncated: requiredBoolean(raw.truncated),
+      vulnerabilities: records(raw.vulnerabilities).map((item) => ({
+        vulnerabilityId: requiredString(item.vulnerability_id),
+        severity: vulnerabilitySeverity(item.severity),
+        score: optionalFiniteNumber(item.score),
+        package: optionalString(item.package),
+        installedVersion: optionalString(item.installed_version),
+        fixedVersion: optionalString(item.fixed_version),
+        primaryLink: optionalString(item.primary_link),
+      })),
+    };
+  }
+  if (type === "prometheus-rule") return {
+    type,
+    conditions,
+    groupCount: requiredInteger(raw.group_count),
+    totalRules: requiredInteger(raw.total_rules),
+    totalAlerts: requiredInteger(raw.total_alerts),
+    totalRecordings: requiredInteger(raw.total_recordings),
+    projectedRules: requiredInteger(raw.projected_rules),
+    truncated: requiredBoolean(raw.truncated),
+    groups: prometheusRuleGroups(raw.groups),
   };
   return invalidResponse();
 }
@@ -565,6 +762,143 @@ function gatewayRouteParentStatuses(value: unknown): GatewayRouteParentStatus[] 
   }));
 }
 
+function providerRequirements(value: unknown): ProviderRequirement[] {
+  return records(value).map((item) => ({
+    key: requiredString(item.key),
+    operator: optionalString(item.operator),
+    values: stringList(item.values),
+    minValues: optionalInteger(item.min_values),
+  }));
+}
+
+function karpenterSelectorTerms(value: unknown) {
+  return records(value).map((item) => ({
+    id: optionalString(item.id),
+    name: optionalString(item.name),
+    alias: optionalString(item.alias),
+    owner: optionalString(item.owner),
+    tags: keyValues(item.tags),
+  }));
+}
+
+function karpenterResolvedNetworks(value: unknown) {
+  return records(value).map((item) => ({
+    id: requiredString(item.id),
+    name: optionalString(item.name),
+    zone: optionalString(item.zone),
+  }));
+}
+
+function providerTaints(value: unknown) {
+  return records(value).map((item) => ({
+    key: requiredString(item.key),
+    value: optionalString(item.value),
+    effect: optionalString(item.effect),
+  }));
+}
+
+function kedaTriggers(value: unknown): KedaTrigger[] {
+  return records(value).map((item) => ({
+    type: requiredString(item.type),
+    name: optionalString(item.name),
+    authenticationRef: namedReference(item.authentication_ref),
+    metadataKeys: stringList(item.metadata_keys),
+    redactedMetadataCount: requiredInteger(item.redacted_metadata_count),
+  }));
+}
+
+function prometheusRuleGroups(value: unknown): PrometheusRuleGroup[] {
+  return records(value).map((group) => ({
+    name: requiredString(group.name),
+    interval: optionalString(group.interval),
+    ruleCount: requiredInteger(group.rule_count),
+    alertCount: requiredInteger(group.alert_count),
+    recordingCount: requiredInteger(group.recording_count),
+    rules: records(group.rules).map((rule) => ({
+      type: prometheusRuleType(rule.type),
+      name: requiredString(rule.name),
+      expression: requiredString(rule.expression),
+      duration: optionalString(rule.duration),
+      severity: optionalString(rule.severity),
+      summary: optionalString(rule.summary),
+      description: optionalString(rule.description),
+      labels: keyValues(rule.labels),
+    })),
+  }));
+}
+
+function karpenterNodeClaimState(
+  value: unknown,
+): "ready" | "registered" | "launched" | "initialized" | "not-ready" | "pending" | "unknown" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "ready" &&
+    normalized !== "registered" &&
+    normalized !== "launched" &&
+    normalized !== "initialized" &&
+    normalized !== "not-ready" &&
+    normalized !== "pending" &&
+    normalized !== "unknown"
+  ) return invalidResponse();
+  return normalized;
+}
+
+function kedaScaledObjectState(
+  value: unknown,
+): "paused" | "fallback" | "not-ready" | "active" | "idle" | "ready" | "unknown" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "paused" &&
+    normalized !== "fallback" &&
+    normalized !== "not-ready" &&
+    normalized !== "active" &&
+    normalized !== "idle" &&
+    normalized !== "ready" &&
+    normalized !== "unknown"
+  ) return invalidResponse();
+  return normalized;
+}
+
+function kedaScaledJobState(
+  value: unknown,
+): "not-ready" | "active" | "idle" | "ready" | "unknown" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "not-ready" &&
+    normalized !== "active" &&
+    normalized !== "idle" &&
+    normalized !== "ready" &&
+    normalized !== "unknown"
+  ) return invalidResponse();
+  return normalized;
+}
+
+function kedaScalingDirection(value: unknown): "up" | "down" {
+  const normalized = requiredString(value);
+  if (normalized !== "up" && normalized !== "down") return invalidResponse();
+  return normalized;
+}
+
+function prometheusRuleType(value: unknown): "alert" | "recording" {
+  const normalized = requiredString(value);
+  if (normalized !== "alert" && normalized !== "recording") return invalidResponse();
+  return normalized;
+}
+
+function vulnerabilitySeverity(
+  value: unknown,
+): "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "CRITICAL" &&
+    normalized !== "HIGH" &&
+    normalized !== "MEDIUM" &&
+    normalized !== "LOW" &&
+    normalized !== "UNKNOWN"
+  ) return invalidResponse();
+  return normalized;
+}
+
 function jobState(
   value: unknown,
 ): "completed" | "failed" | "suspended" | "running" | "pending" {
@@ -649,4 +983,15 @@ function optionalInteger(value: unknown): number | null {
   if (value === null) return null;
   if (!Number.isSafeInteger(value)) return invalidResponse();
   return value as number;
+}
+
+function requiredInteger(value: unknown): number {
+  const parsed = optionalInteger(value);
+  return parsed ?? invalidResponse();
+}
+
+function optionalFiniteNumber(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return invalidResponse();
+  return value;
 }

@@ -609,7 +609,7 @@
     },
     "resources.extension-detail.transport": {
       "destination": "frontend/src/api/inventory.test.ts",
-      "rationale": "The browser boundary must accept all seven strict resource-detail discriminators and reject unknown, malformed, or raw payload additions."
+      "rationale": "The browser boundary must accept every declared strict resource-detail discriminator and reject unknown, malformed, secret-bearing, or raw payload additions."
     },
     "resources.extension-detail.adapter": {
       "destination": "frontend/src/features/resources/providerResourceCanonical.test.ts",
@@ -617,7 +617,7 @@
     },
     "resources.extension-detail.presentation": {
       "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
-      "rationale": "One reusable localized detail surface renders certificate, compliance, Crossplane, workflow, secret-sync, and Gateway API observations while omitting absent evidence."
+      "rationale": "One reusable localized detail surface renders typed infrastructure, autoscaling, monitoring, workflow, secret-sync, compliance, and Gateway API observations while omitting absent or protected evidence."
     },
     "resources.compliance-controls.interaction": {
       "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
@@ -722,6 +722,30 @@
     "resources.kind-icons.registry": {
       "destination": "frontend/src/pages/resources/resourcePresentation.test.tsx",
       "rationale": "Every known Kubernetes and provider kind must resolve through one reusable icon registry while unknown CRDs retain a neutral fallback."
+    },
+    "resources.extension-detail.redaction": {
+      "destination": "tests/test_inventory_provider_detail.py",
+      "rationale": "Dynamic selector, tag, trigger, and rule metadata must cross the inventory boundary only through bounded allow-listed fields while secret-bearing values and unknown raw objects remain server-side."
+    },
+    "resources.extension-detail.reference-navigation": {
+      "destination": "tests/test_inventory_domain.py",
+      "rationale": "Cross-resource links require the Python inventory boundary to resolve an observed reference into an authorized exact resource type and identity before the browser may navigate."
+    },
+    "resources.extension-detail.runtime-clock": {
+      "destination": "tests/test_inventory_provider_detail.py",
+      "rationale": "Relative lifecycle time requires a server-owned request clock or explicit age field so the browser does not create inconsistent timestamps."
+    },
+    "resources.prometheus-rule.search-disclosure": {
+      "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+      "rationale": "Prometheus rule groups preserve server order while accessible search, disclosure, and long-expression expansion operate only over the bounded typed projection."
+    },
+    "resources.security-report.contract": {
+      "destination": "tests/test_inventory_provider_detail.py",
+      "rationale": "SBOM and vulnerability reports must cross the Python boundary through exact API-group projectors, global collection budgets, safe integer and score bounds, normalized severities, credential-free HTTP(S) links, and allow-listed fields only."
+    },
+    "resources.security-report.interaction": {
+      "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+      "rationale": "The shared security-report surface must preserve server order while providing accessible disclosure, search, severity and fixability filters, tri-state sorting, bounded expansion, and the typed desktop-aware external URL bridge."
     }
   },
   "classifications": {
@@ -8936,6 +8960,630 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product extends its existing shared registry instead of introducing renderer-local maps; resource catalogs and application topology consume the same normalized kind lookup and unknown CRDs remain safe."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/KarpenterEC2NodeClassRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:karpenter-ec2-node-class:v1",
+          "legacyContractIds": [],
+          "symbol": "KarpenterEC2NodeClassRenderer",
+          "interaction": "an authorized EC2NodeClass detail presents readiness, IAM identity names, AMI selection, bounded block devices, network selection, metadata options, resolved infrastructure, tags, and conditions through the exact karpenter.k8s.aws group",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the exact EC2NodeClass identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity and cap every selector, block-device, resolved-resource, requirement, tag, and condition collection",
+            "merge": "replace the complete typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact karpenter.k8s.aws/EC2NodeClass projector, strict browser contract, bounded presentation, and secret non-exposure tests are implemented for stored observations. Automatic Karpenter CRD discovery and read RBAC remain an agent collection follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:karpenter-selector-fallback:v1",
+          "legacyContractIds": [],
+          "symbol": "AMI selector JSON.stringify fallback",
+          "interaction": "unknown AMI, subnet, security-group, block-device, and tag fields remain unavailable instead of being stringified from an untyped infrastructure payload",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.redaction"
+            ],
+            "state": "blocked",
+            "blockedReason": "The source fallback serializes arbitrary selector objects, but the product has no safe schema for unknown provider fields. Copying it would expose user data, key identifiers, credentials, or future secret-bearing fields.",
+            "rationale": "Known selector identity, tag, EBS, and resolved-resource fields are available today. Unknown fields require an explicit versioned allow-list before they can cross the Python boundary."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/KarpenterNodeClaimRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:karpenter-node-claim:v1",
+          "legacyContractIds": [],
+          "symbol": "KarpenterNodeClaimRenderer",
+          "interaction": "an authorized NodeClaim detail presents the server-owned provisioning state, instance and node identity, known capacity labels, NodePool and NodeClass references, image, expiry, capacity, requirements, and bounded conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the detail read when the exact NodeClaim identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity and cap requirements and conditions before browser delivery",
+            "merge": "replace the complete NodeClaim projection only while the active identity is unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Only known Karpenter labels and exact observed fields are projected, and the provisioning state is derived once in Python from bounded conditions. Automatic Karpenter CRD collection remains a follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:karpenter-node-claim-reference-time:v1",
+          "legacyContractIds": [],
+          "symbol": "Node and NodeClass links / relative provisioning time",
+          "interaction": "Node and NodeClass references become navigable only after server resolution, and relative transition time appears only from a server-owned request clock or explicit age field",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.reference-navigation",
+              "resources.extension-detail.runtime-clock"
+            ],
+            "state": "blocked",
+            "blockedReason": "The stored reference lacks an authorized exact inventory resource type, and the detail response has no request-clock age. Browser kind pluralization or Date.now() would fabricate routing and time state.",
+            "rationale": "Reference names and absolute condition timestamps remain visible as evidence; click navigation and relative age remain unavailable until Python owns both contracts."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/KarpenterNodePoolRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:karpenter-node-pool:v1",
+          "legacyContractIds": [],
+          "symbol": "KarpenterNodePoolRenderer",
+          "interaction": "an authorized NodePool detail presents readiness, NodeClass reference, observed limits and usage, weight, disruption settings and budgets, template labels and taints, requirements, and conditions without applying source defaults",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the detail read when the exact NodePool identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity and cap budgets, labels, taints, requirements, and conditions",
+            "merge": "replace the complete NodePool projection only while the active identity is unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact karpenter.sh/NodePool projection preserves nullable values and does not invent the source consolidation default. Dynamic discovery and read RBAC remain a collection follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:karpenter-node-pool-reference-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "NodeClass ResourceLink",
+          "interaction": "the NodeClass reference becomes a cross-resource link only after Python resolves its group, kind, name, cluster scope, and authorized inventory resource type",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "tests/test_inventory_domain.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.reference-navigation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current reference projection has group, kind, and name but not the exact authorized resource_type required by the inventory detail route.",
+            "rationale": "The reference remains visible as typed evidence; browser-owned pluralization and optimistic navigation are intentionally absent."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/KedaScaledJobRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:keda-scaled-job:v1",
+          "legacyContractIds": [],
+          "symbol": "KedaScaledJobRenderer",
+          "interaction": "an authorized ScaledJob detail presents its server-owned state, observed Job target name, strategy, polling and history limits, replica bounds, trigger identity, protected metadata field names, authentication reference, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the detail read when the exact ScaledJob identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity and cap triggers, metadata field names, and conditions",
+            "merge": "replace the complete ScaledJob projection only while the active identity is unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/inventory.test.ts",
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact keda.sh/ScaledJob projector exposes no trigger metadata values and does not invent the source strategy default. Automatic KEDA CRD collection remains a follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:keda-scaled-job-trigger-values:v1",
+          "legacyContractIds": [],
+          "symbol": "trigger metadata values",
+          "interaction": "trigger metadata values remain protected because scaler metadata can contain connection strings, credentials, tokens, endpoints, or provider-specific secret material",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.redaction"
+            ],
+            "state": "blocked",
+            "blockedReason": "KEDA trigger metadata is an open map with scaler-specific secret semantics, so no generic value allow-list can prove that arbitrary values are safe for browser delivery.",
+            "rationale": "Safe metadata field names, trigger type, name, and authentication reference remain available while every metadata value stays server-side."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/KedaScaledObjectRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:keda-scaled-object:v1",
+          "legacyContractIds": [],
+          "symbol": "KedaScaledObjectRenderer",
+          "interaction": "an authorized ScaledObject detail presents paused, fallback, ready and active state, target reference, observed scaling values, generated HPA name, last-active timestamp, fallback settings, advanced policies, protected trigger metadata field names, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the detail read when the exact ScaledObject identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity and cap policies, triggers, metadata field names, and conditions",
+            "merge": "replace the complete ScaledObject projection only while the active identity is unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/inventory.test.ts",
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact keda.sh/ScaledObject projector owns status precedence in Python and preserves absent min, max, polling, cooldown, and target kind values instead of applying source defaults. Automatic KEDA collection remains a follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:keda-scaled-object-trigger-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "trigger metadata values / target and HPA ResourceLink",
+          "interaction": "trigger metadata values remain protected and target or generated-HPA navigation remains unavailable until Python resolves an authorized exact resource identity",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.redaction",
+              "resources.extension-detail.reference-navigation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The open trigger map has no generic safe value schema, and the target and HPA names do not carry the authorized inventory resource_type required for exact navigation.",
+            "rationale": "Typed references and safe metadata field names remain visible, but values and clicks stay unavailable rather than relying on browser defaults or kind pluralization."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/PrometheusRuleRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:prometheus-rule:v1",
+          "legacyContractIds": [],
+          "symbol": "PrometheusRuleRenderer search, group disclosure, and expression disclosure",
+          "interaction": "an authorized PrometheusRule detail presents bounded group and rule counts, alert and recording rule identity, expressions, duration, severity, summary, description, safe labels, conditions, accessible search, group disclosure, and long-expression expansion",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the detail read when the exact PrometheusRule identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity, cap groups and rules with one global rule budget, and cap every expression, annotation, label, and condition",
+            "merge": "replace the complete rule projection only while the active identity is unchanged and apply search to that immutable bounded cut"
+          },
+          "motion": {
+            "reducedMotion": "group and expression disclosure preserve their semantic expanded state while the shared Collapse primitive suppresses transitions for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/resources/renderers/PrometheusRuleRenderer.tsx",
+              "frontend/src/shared/ui/primitives/collapse.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction",
+              "resources.prometheus-rule.search-disclosure"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact monitoring.coreos.com/PrometheusRule projection uses one server-side global rule budget, strict schemas, safe label redaction, and tested accessible interactions. Automatic Prometheus Operator CRD collection remains a follow-up."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/SimpleRouteRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:simple-route:v1",
+          "legacyContractIds": [],
+          "symbol": "SimpleRouteRenderer TCPRoute and TLSRoute presentation",
+          "interaction": "authorized TCPRoute and TLSRoute details reuse the shared Gateway route contract for bounded SNI hostnames, parents, backend ports and weights, parent acceptance, resolved-reference state, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the detail read when the exact TCPRoute or TLSRoute identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity and cap rules, backends, parent references, parent status, and conditions",
+            "merge": "replace the complete route projection only while the active identity and discriminator are unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact gateway.networking.k8s.io TCPRoute and TLSRoute projectors reuse the existing bounded route models and presentation rather than duplicating renderers. Automatic Gateway API collection remains a follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:simple-route-reference-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "parent Gateway and backend Service ResourceRefBadge",
+          "interaction": "parent and backend references become clickable only after Python resolves their group, kind, namespace, name, cluster scope, and authorized inventory resource type",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "tests/test_inventory_domain.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.reference-navigation"
+            ],
+            "state": "blocked",
+            "blockedReason": "Gateway API references do not carry the exact authorized inventory resource_type required by the product detail route, so browser-owned kind assumptions would be unsafe.",
+            "rationale": "Typed reference labels and parent status remain visible while cross-resource navigation stays unavailable until the server resolves capability and identity."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/SbomReportRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:security-report:sbom-components:v1",
+          "legacyContractIds": [],
+          "symbol": "SbomReportRenderer overview, disclosure, search, clear, and show-all",
+          "interaction": "an authorized namespaced or cluster SBOM report presents only server-normalized container, image, format, component and dependency counts, scanner evidence, absolute scan time, and a globally bounded component list with accessible disclosure, search, clear, and show-all events",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the exact SBOM report identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity, project at most one global component budget, and cap every component field before browser delivery",
+            "merge": "replace the complete SBOM projection only while the active identity is unchanged and apply local search to that immutable bounded cut"
+          },
+          "motion": {
+            "reducedMotion": "component disclosure preserves its semantic expanded state while the shared Collapse primitive suppresses transitions for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/resources/renderers/SbomReportRenderer.tsx",
+              "frontend/src/shared/ui/primitives/collapse.tsx",
+              "frontend/src/pages/resources/ProviderSecurityReportPanels.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/features/resources/providerResourceContract.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderSecurityReportPanels.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction",
+              "resources.security-report.contract",
+              "resources.security-report.interaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact aquasecurity.github.io SBOM projectors, strict Zod union, canonical adapter, global 1000-component budget, package-URL qualifier removal, and tested interaction surface are implemented for stored observations. Automatic Trivy Operator CRD discovery remains a collection follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:security-report:sbom-relative-scan-time:v1",
+          "legacyContractIds": [],
+          "symbol": "formatAge(report.updateTimestamp)",
+          "interaction": "relative scan age remains unavailable until the Python response carries a server-owned request clock or explicit age, while the observed absolute scan timestamp remains visible",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.runtime-clock"
+            ],
+            "state": "blocked",
+            "blockedReason": "Computing relative age from Date.now() would make the same server observation render differently across clients and reconnects.",
+            "rationale": "The absolute report updateTimestamp is retained as typed evidence without a browser-owned clock."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/VulnerabilityReportRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:security-report:vulnerability-workbench:v1",
+          "legacyContractIds": [],
+          "symbol": "VulnerabilityReportRenderer alert, severity filters, fixable filter, search, tri-state sort, disclosure, show-all, and primary-link event",
+          "interaction": "an authorized vulnerability report presents normalized severity evidence, OS and scanner facts, a globally bounded finding list, semantic status tokens, accessible severity and fixability filters, CVE or package search, clear, tri-state column sorting, disclosure, show-all, and credential-free HTTP(S) references through the shared desktop-aware external URL bridge",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the exact VulnerabilityReport identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per cluster and exact identity, project at most one global vulnerability budget, and cap every finding field before browser delivery",
+            "merge": "replace the complete vulnerability projection only while the active identity is unchanged and derive filters and stable ordering from that immutable bounded cut"
+          },
+          "motion": {
+            "reducedMotion": "disclosure and filter-state transitions preserve their semantic result while shared primitives suppress decorative transitions for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/resources/renderers/VulnerabilityReportRenderer.tsx",
+              "frontend/src/shared/ui/primitives/collapse.tsx",
+              "frontend/src/pages/resources/ProviderSecurityReportPanels.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/inventory.test.ts",
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/features/resources/providerResourceContract.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderSecurityReportPanels.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.extension-detail.redaction",
+              "resources.security-report.contract",
+              "resources.security-report.interaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact aquasecurity.github.io VulnerabilityReport projector, strict schemas, normalized score and severity contract, global 500-row budget, primary-link credential rejection, RBAC integration, shared semantic severity tokens, and complete tested UI event model are implemented for stored observations. Automatic Trivy Operator CRD discovery remains a collection follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:security-report:vulnerability-open-fields:v1",
+          "legacyContractIds": [],
+          "symbol": "untyped vulnerability title, description, and arbitrary primaryLink",
+          "interaction": "untyped title and description fields and unsafe primary links remain unavailable because security scanner extensions may include unbounded or sensitive provider content",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.redaction",
+              "resources.security-report.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "No versioned safe schema exists for arbitrary scanner prose, and non-HTTP(S) or credential-bearing links cannot cross the product or native desktop boundary.",
+            "rationale": "CVE identity, normalized severity and score, package versions, fixed version, and validated credential-free HTTP(S) references remain available."
           }
         }
       ]

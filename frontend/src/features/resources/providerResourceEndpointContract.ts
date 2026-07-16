@@ -79,6 +79,82 @@ export interface GatewayRouteParentStatusEndpoint {
   conditions: ProviderConditionEndpoint[];
 }
 
+export interface ProviderRequirementEndpoint {
+  key: string;
+  operator: string | null;
+  values: string[];
+  min_values: number | null;
+}
+
+export interface KarpenterSelectorTermEndpoint {
+  id: string | null;
+  name: string | null;
+  alias: string | null;
+  owner: string | null;
+  tags: ProviderKeyValueEndpoint[];
+}
+
+export interface KarpenterResolvedNetworkEndpoint {
+  id: string;
+  name: string | null;
+  zone: string | null;
+}
+
+export interface KedaTriggerEndpoint {
+  type: string;
+  name: string | null;
+  authentication_ref: ProviderNamedReferenceEndpoint | null;
+  metadata_keys: string[];
+  redacted_metadata_count: number;
+}
+
+export interface PrometheusRuleEntryEndpoint {
+  type: "alert" | "recording";
+  name: string;
+  expression: string;
+  duration: string | null;
+  severity: string | null;
+  summary: string | null;
+  description: string | null;
+  labels: ProviderKeyValueEndpoint[];
+}
+
+export interface PrometheusRuleGroupEndpoint {
+  name: string;
+  interval: string | null;
+  rule_count: number;
+  alert_count: number;
+  recording_count: number;
+  rules: PrometheusRuleEntryEndpoint[];
+}
+
+export interface SecuritySeveritySummaryEndpoint {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+}
+
+export interface SbomComponentEndpoint {
+  name: string;
+  version: string | null;
+  type: string | null;
+  package_url: string | null;
+  package_url_qualifiers_redacted: boolean;
+  license: string | null;
+}
+
+export interface VulnerabilityFindingEndpoint {
+  vulnerability_id: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+  score: number | null;
+  package: string | null;
+  installed_version: string | null;
+  fixed_version: string | null;
+  primary_link: string | null;
+}
+
 interface ProviderDetailBaseEndpoint {
   conditions: ProviderConditionEndpoint[];
 }
@@ -511,6 +587,181 @@ export interface JobProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
   terminal_message: string | null;
 }
 
+export interface KarpenterEc2NodeClassProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "karpenter-ec2-node-class";
+  ready: boolean | null;
+  role: string | null;
+  instance_profile: string | null;
+  ami_family: string | null;
+  ami_selector_terms: KarpenterSelectorTermEndpoint[];
+  block_devices: Array<{
+    device_name: string | null;
+    volume_type: string | null;
+    volume_size: string | null;
+    iops: number | null;
+    throughput: number | null;
+    encrypted: boolean | null;
+    delete_on_termination: boolean | null;
+  }>;
+  subnet_selector_terms: KarpenterSelectorTermEndpoint[];
+  security_group_selector_terms: KarpenterSelectorTermEndpoint[];
+  metadata_options: {
+    http_tokens: string | null;
+    http_put_response_hop_limit: number | null;
+    http_endpoint: string | null;
+  } | null;
+  resolved_amis: Array<{
+    id: string;
+    name: string | null;
+    requirements: ProviderRequirementEndpoint[];
+  }>;
+  resolved_subnets: KarpenterResolvedNetworkEndpoint[];
+  resolved_security_groups: KarpenterResolvedNetworkEndpoint[];
+  tags: ProviderKeyValueEndpoint[];
+}
+
+export interface KarpenterNodeClaimProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "karpenter-node-claim";
+  state: "ready" | "registered" | "launched" | "initialized" | "not-ready" | "pending" | "unknown";
+  instance_type: string | null;
+  capacity_type: string | null;
+  node_name: string | null;
+  zone: string | null;
+  architecture: string | null;
+  node_pool: string | null;
+  node_class_ref: ProviderNamedReferenceEndpoint | null;
+  image_id: string | null;
+  expire_after: string | null;
+  capacity: {
+    cpu: string | null;
+    memory: string | null;
+    pods: string | null;
+    ephemeral_storage: string | null;
+  };
+  requirements: ProviderRequirementEndpoint[];
+}
+
+export interface KarpenterNodePoolProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "karpenter-node-pool";
+  ready: boolean | null;
+  node_class_ref: ProviderNamedReferenceEndpoint | null;
+  limit_cpu: string | null;
+  limit_memory: string | null;
+  weight: number | null;
+  current_cpu: string | null;
+  current_memory: string | null;
+  consolidation_policy: string | null;
+  consolidate_after: string | null;
+  expire_after: string | null;
+  disruption_budgets: Array<{
+    nodes: string | null;
+    schedule: string | null;
+    duration: string | null;
+  }>;
+  template_labels: ProviderKeyValueEndpoint[];
+  template_taints: ProviderTaintEndpoint[];
+  startup_taints: ProviderTaintEndpoint[];
+  requirements: ProviderRequirementEndpoint[];
+}
+
+export interface KedaScaledObjectProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "keda-scaled-object";
+  state: "paused" | "fallback" | "not-ready" | "active" | "idle" | "ready" | "unknown";
+  target_ref: ProviderNamedReferenceEndpoint | null;
+  scaling: ProviderScalingEndpoint;
+  idle_replicas: number | null;
+  polling_interval_seconds: number | null;
+  cooldown_period_seconds: number | null;
+  hpa_name: string | null;
+  last_active_time: string | null;
+  fallback_failure_threshold: number | null;
+  fallback_replicas: number | null;
+  restore_original_replicas: boolean | null;
+  scale_up_stabilization_seconds: number | null;
+  scale_down_stabilization_seconds: number | null;
+  scaling_policies: Array<{
+    direction: "up" | "down";
+    type: string | null;
+    value: number | null;
+    period_seconds: number | null;
+  }>;
+  triggers: KedaTriggerEndpoint[];
+}
+
+export interface KedaScaledJobProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "keda-scaled-job";
+  state: "not-ready" | "active" | "idle" | "ready" | "unknown";
+  job_target_name: string | null;
+  strategy: string | null;
+  polling_interval_seconds: number | null;
+  successful_history_limit: number | null;
+  failed_history_limit: number | null;
+  minimum_replicas: number | null;
+  maximum_replicas: number | null;
+  triggers: KedaTriggerEndpoint[];
+}
+
+export interface SbomReportProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "sbom-report";
+  container_name: string | null;
+  image: string | null;
+  bom_format: string | null;
+  spec_version: string | null;
+  component_count: number;
+  dependency_count: number;
+  observed_component_count: number;
+  projected_component_count: number;
+  truncated: boolean;
+  scanner_name: string | null;
+  scanner_version: string | null;
+  scanned_at: string | null;
+  components: SbomComponentEndpoint[];
+}
+
+export interface VulnerabilityReportProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "vulnerability-report";
+  container_name: string | null;
+  image: string | null;
+  os_family: string | null;
+  os_name: string | null;
+  os_end_of_service_life: boolean | null;
+  scanner_name: string | null;
+  scanner_version: string | null;
+  scanned_at: string | null;
+  severity: SecuritySeveritySummaryEndpoint;
+  observed_vulnerability_count: number;
+  projected_vulnerability_count: number;
+  truncated: boolean;
+  vulnerabilities: VulnerabilityFindingEndpoint[];
+}
+
+export interface PrometheusRuleProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "prometheus-rule";
+  group_count: number;
+  total_rules: number;
+  total_alerts: number;
+  total_recordings: number;
+  projected_rules: number;
+  truncated: boolean;
+  groups: PrometheusRuleGroupEndpoint[];
+}
+
+export interface TcpRouteProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "tcp-route";
+  hostnames: string[];
+  parent_refs: ProviderNamedReferenceEndpoint[];
+  rules: GatewayRouteRuleEndpoint[];
+  parent_statuses: GatewayRouteParentStatusEndpoint[];
+}
+
+export interface TlsRouteProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "tls-route";
+  hostnames: string[];
+  parent_refs: ProviderNamedReferenceEndpoint[];
+  rules: GatewayRouteRuleEndpoint[];
+  parent_statuses: GatewayRouteParentStatusEndpoint[];
+}
+
 export type ProviderResourceDetailEndpoint =
   | AwsMachineProviderDetailEndpoint
   | AwsManagedClusterProviderDetailEndpoint
@@ -538,4 +789,14 @@ export type ProviderResourceDetailEndpoint =
   | GcpManagedMachinePoolProviderDetailEndpoint
   | GrpcRouteProviderDetailEndpoint
   | HttpRouteProviderDetailEndpoint
-  | JobProviderDetailEndpoint;
+  | JobProviderDetailEndpoint
+  | KarpenterEc2NodeClassProviderDetailEndpoint
+  | KarpenterNodeClaimProviderDetailEndpoint
+  | KarpenterNodePoolProviderDetailEndpoint
+  | KedaScaledObjectProviderDetailEndpoint
+  | KedaScaledJobProviderDetailEndpoint
+  | SbomReportProviderDetailEndpoint
+  | VulnerabilityReportProviderDetailEndpoint
+  | PrometheusRuleProviderDetailEndpoint
+  | TcpRouteProviderDetailEndpoint
+  | TlsRouteProviderDetailEndpoint;

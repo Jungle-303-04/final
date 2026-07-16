@@ -1,5 +1,6 @@
 import type { MessageKey, TranslationFunction } from "../../shared/i18n";
 import { useI18n } from "../../shared/i18n";
+import { desktopBridge } from "../../desktop/desktopBridge";
 import { StatusMark } from "../../shared/ui/StatusMark";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -11,6 +12,10 @@ import type {
   ProviderResourceDetail,
 } from "../../features/resources/providerResourceContract";
 import { DefinitionGrid } from "./ResourceFactsPanel";
+import {
+  SbomComponentsPanel,
+  VulnerabilityReportPanel,
+} from "./ProviderSecurityReportPanels";
 import { useMemo, useState } from "react";
 
 interface ProviderSection {
@@ -19,7 +24,13 @@ interface ProviderSection {
   rows: Array<[MessageKey, string | null]>;
 }
 
-export function ProviderResourceDetailPanel({ detail }: { detail: ProviderResourceDetail }) {
+export function ProviderResourceDetailPanel({
+  detail,
+  onOpenExternalUrl = desktopBridge.openExternalUrl,
+}: {
+  detail: ProviderResourceDetail;
+  onOpenExternalUrl?: (url: string) => Promise<void>;
+}) {
   const { t } = useI18n();
   const sections = providerSections(detail, t)
     .map((section) => ({
@@ -47,8 +58,26 @@ export function ProviderResourceDetailPanel({ detail }: { detail: ProviderResour
       {detail.type === "cluster-compliance-report" ? (
         <ComplianceControlsPanel detail={detail} />
       ) : null}
-      {detail.type === "grpc-route" || detail.type === "http-route" ? (
+      {
+        detail.type === "grpc-route" ||
+        detail.type === "http-route" ||
+        detail.type === "tcp-route" ||
+        detail.type === "tls-route"
+      ? (
         <GatewayRouteRulesPanel detail={detail} />
+      ) : null}
+      {detail.type === "keda-scaled-object" || detail.type === "keda-scaled-job" ? (
+        <KedaTriggersPanel detail={detail} />
+      ) : null}
+      {detail.type === "prometheus-rule" ? (
+        <PrometheusRuleGroupsPanel detail={detail} />
+      ) : null}
+      {detail.type === "sbom-report" ? <SbomComponentsPanel detail={detail} /> : null}
+      {detail.type === "vulnerability-report" ? (
+        <VulnerabilityReportPanel
+          detail={detail}
+          onOpenExternalUrl={onOpenExternalUrl}
+        />
       ) : null}
       {detail.conditions.length > 0 ? <ProviderConditions conditions={detail.conditions} /> : null}
     </section>
@@ -58,8 +87,13 @@ export function ProviderResourceDetailPanel({ detail }: { detail: ProviderResour
 type ComplianceDetail = Extract<ProviderResourceDetail, { type: "cluster-compliance-report" }>;
 type GatewayRouteDetail = Extract<
   ProviderResourceDetail,
-  { type: "grpc-route" | "http-route" }
+  { type: "grpc-route" | "http-route" | "tcp-route" | "tls-route" }
 >;
+type KedaDetail = Extract<
+  ProviderResourceDetail,
+  { type: "keda-scaled-object" | "keda-scaled-job" }
+>;
+type PrometheusRuleDetail = Extract<ProviderResourceDetail, { type: "prometheus-rule" }>;
 
 function ComplianceControlsPanel({ detail }: { detail: ComplianceDetail }) {
   const { t } = useI18n();
@@ -225,6 +259,185 @@ function GatewayRouteRulesPanel({ detail }: { detail: GatewayRouteDetail }) {
         ))}
       </ol>
     </section>
+  );
+}
+
+function KedaTriggersPanel({ detail }: { detail: KedaDetail }) {
+  const { t } = useI18n();
+  if (detail.triggers.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-keda-triggers" className="grid gap-3">
+      <h4 className="text-sm font-medium" id="provider-keda-triggers">
+        {t("resources.detail.provider.triggers")}
+      </h4>
+      <ul className="grid gap-2">
+        {detail.triggers.map((trigger, index) => (
+          <li className="grid gap-2 rounded-lg border bg-background/65 p-3" key={`${trigger.type}-${index}`}>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="font-medium">{trigger.type}</span>
+              {trigger.name ? <Badge variant="outline">{trigger.name}</Badge> : null}
+            </div>
+            <DefinitionGrid entries={[
+              ...(trigger.authenticationRef
+                ? [[
+                    t("resources.detail.provider.authenticationReference"),
+                    namedReferenceLabel(trigger.authenticationRef) ?? trigger.authenticationRef.name,
+                  ] as [string, string]]
+                : []),
+              ...(trigger.metadataKeys.length > 0
+                ? [[
+                    t("resources.detail.provider.metadataFields"),
+                    trigger.metadataKeys.join(" · "),
+                  ] as [string, string]]
+                : []),
+              ...(trigger.redactedMetadataCount > 0
+                ? [[
+                    t("resources.detail.provider.redactedValues"),
+                    t("resources.detail.provider.redactedValueCount", {
+                      count: trigger.redactedMetadataCount,
+                    }),
+                  ] as [string, string]]
+                : []),
+            ]} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function PrometheusRuleGroupsPanel({ detail }: { detail: PrometheusRuleDetail }) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(
+    detail.groups
+      .map((group, index) => ({ group, key: `${index}:${group.name}` }))
+      .filter(({ group }) => group.rules.length <= 10)
+      .map(({ key }) => key),
+  ));
+  const normalized = query.trim().toLocaleLowerCase();
+  const groups = useMemo(() => detail.groups.map((group, index) => ({
+    ...group,
+    key: `${index}:${group.name}`,
+    rules: normalized
+      ? group.rules.filter((rule) => [
+          rule.name,
+          rule.expression,
+          rule.severity,
+          rule.summary,
+          rule.description,
+        ].filter((value): value is string => value !== null)
+          .some((value) => value.toLocaleLowerCase().includes(normalized)))
+      : group.rules,
+  })).filter((group) => group.rules.length > 0), [detail.groups, normalized]);
+  if (detail.groups.length === 0) return null;
+  return (
+    <section aria-labelledby="provider-prometheus-rule-groups" className="grid gap-3">
+      <h4 className="text-sm font-medium" id="provider-prometheus-rule-groups">
+        {t("resources.detail.provider.ruleGroups")}
+      </h4>
+      {detail.totalRules > 5 ? (
+        <Input
+          aria-label={t("resources.detail.provider.ruleSearch")}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("resources.detail.provider.ruleSearchPlaceholder")}
+          type="search"
+          value={query}
+        />
+      ) : null}
+      {groups.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+          {t("resources.detail.provider.noRuleResults")}
+        </p>
+      ) : (
+        <ul className="grid gap-2">
+          {groups.map((group) => {
+            const open = normalized.length > 0 || expanded.has(group.key);
+            const contentId = `provider-rule-group-${safeId(group.key)}`;
+            return (
+              <li className="rounded-lg border bg-background/65" key={group.key}>
+                <button
+                  aria-controls={contentId}
+                  aria-expanded={open}
+                  className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 text-left"
+                  onClick={() => setExpanded((current) => toggleSet(current, group.key))}
+                  type="button"
+                >
+                  <CollapseChevron className="size-4" open={open} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {group.name}
+                  </span>
+                  {group.interval ? <Badge variant="outline">{group.interval}</Badge> : null}
+                  <span className="text-xs text-muted-foreground">
+                    {t("resources.detail.provider.ruleResultCount", {
+                      count: group.rules.length,
+                      total: group.ruleCount,
+                    })}
+                  </span>
+                </button>
+                <Collapse mountLazily open={open}>
+                  <ol className="grid gap-2 border-t p-3" id={contentId}>
+                    {group.rules.map((rule, index) => (
+                      <li className="grid gap-2 rounded-lg border bg-card p-3" key={`${rule.type}-${rule.name}-${index}`}>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="min-w-0 font-medium [overflow-wrap:anywhere]">
+                            {rule.name}
+                          </span>
+                          <Badge variant="outline">
+                            {t(rule.type === "alert"
+                              ? "resources.detail.provider.alertRule"
+                              : "resources.detail.provider.recordingRule")}
+                          </Badge>
+                          {rule.severity ? <Badge variant="outline">{rule.severity}</Badge> : null}
+                          {rule.duration ? <span className="text-xs text-muted-foreground">{rule.duration}</span> : null}
+                        </div>
+                        {rule.summary || rule.description ? (
+                          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                            {rule.summary ?? rule.description}
+                          </p>
+                        ) : null}
+                        <PrometheusExpression expression={rule.expression} />
+                        {rule.labels.length > 0 ? (
+                          <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                            {formatKeyValues(rule.labels)}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </Collapse>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function PrometheusExpression({ expression }: { expression: string }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const truncated = expression.length > 200;
+  return (
+    <div className="grid gap-1">
+      <pre className="whitespace-pre-wrap rounded-md bg-muted px-2 py-1.5 font-mono text-xs [overflow-wrap:anywhere]">
+        {expanded || !truncated ? expression : `${expression.slice(0, 200)}…`}
+      </pre>
+      {truncated ? (
+        <Button
+          className="w-fit"
+          onClick={() => setExpanded((value) => !value)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          {t(expanded
+            ? "resources.detail.provider.showLess"
+            : "resources.detail.provider.showMore")}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -659,7 +872,201 @@ function providerSections(
       ],
     ]),
   ];
-  if (detail.type === "grpc-route" || detail.type === "http-route") return [
+  if (detail.type === "karpenter-ec2-node-class") return [
+    section("karpenter-instance", "resources.detail.provider.instanceConfiguration", [
+      ["resources.detail.provider.statusReady", yesNo(detail.ready, t)],
+      ["resources.detail.provider.role", detail.role],
+      ["resources.detail.provider.instanceProfile", detail.instanceProfile],
+      ["resources.detail.provider.amiFamily", detail.amiFamily],
+      [
+        "resources.detail.provider.amiSelector",
+        join(detail.amiSelectorTerms.map(formatKarpenterSelectorTerm)),
+      ],
+    ]),
+    section("karpenter-block-devices", "resources.detail.provider.blockDevices", [
+      [
+        "resources.detail.provider.blockDevices",
+        join(detail.blockDevices.map((device) => formatKarpenterBlockDevice(device, t))),
+      ],
+    ]),
+    section("karpenter-network", "resources.detail.provider.network", [
+      [
+        "resources.detail.provider.subnetSelector",
+        join(detail.subnetSelectorTerms.map(formatKarpenterSelectorTerm)),
+      ],
+      [
+        "resources.detail.provider.securityGroupSelector",
+        join(detail.securityGroupSelectorTerms.map(formatKarpenterSelectorTerm)),
+      ],
+      [
+        "resources.detail.provider.resolvedSubnets",
+        join(detail.resolvedSubnets.map((item) => join([item.id, item.name, item.zone]))),
+      ],
+      [
+        "resources.detail.provider.resolvedSecurityGroups",
+        join(detail.resolvedSecurityGroups.map((item) => join([item.id, item.name]))),
+      ],
+    ]),
+    section("karpenter-metadata", "resources.detail.provider.metadataOptions", [
+      ["resources.detail.provider.httpTokens", detail.metadataOptions?.httpTokens ?? null],
+      [
+        "resources.detail.provider.hopLimit",
+        number(detail.metadataOptions?.httpPutResponseHopLimit ?? null),
+      ],
+      ["resources.detail.provider.httpEndpoint", detail.metadataOptions?.httpEndpoint ?? null],
+    ]),
+    section("karpenter-amis", "resources.detail.provider.resolvedAmis", [
+      [
+        "resources.detail.provider.resolvedAmis",
+        join(detail.resolvedAmis.map((ami) => join([
+          ami.id,
+          ami.name,
+          formatRequirements(ami.requirements),
+        ]))),
+      ],
+      ["resources.detail.provider.tags", formatKeyValues(detail.tags)],
+    ]),
+  ];
+  if (detail.type === "karpenter-node-claim") return [
+    section("karpenter-claim", "resources.detail.provider.instance", [
+      ["resources.detail.provider.lifecycleState", t(karpenterNodeClaimStateKey(detail.state))],
+      ["resources.detail.provider.instanceType", detail.instanceType],
+      ["resources.detail.provider.capacityType", detail.capacityType],
+      ["resources.detail.provider.nodeName", detail.nodeName],
+      ["resources.detail.provider.zone", detail.zone],
+      ["resources.detail.provider.architecture", detail.architecture],
+      ["resources.detail.provider.nodePool", detail.nodePool],
+      ["resources.detail.provider.nodeClass", namedReferenceLabel(detail.nodeClassRef)],
+      ["resources.detail.provider.image", detail.imageId],
+      ["resources.detail.provider.expireAfter", detail.expireAfter],
+    ]),
+    section("karpenter-capacity", "resources.detail.provider.capacity", [
+      ["resources.detail.provider.cpu", detail.capacity.cpu],
+      ["resources.detail.provider.memory", detail.capacity.memory],
+      ["resources.detail.provider.pods", detail.capacity.pods],
+      ["resources.detail.provider.ephemeralStorage", detail.capacity.ephemeralStorage],
+    ]),
+    section("karpenter-requirements", "resources.detail.provider.requirements", [
+      ["resources.detail.provider.requirements", formatRequirements(detail.requirements)],
+    ]),
+  ];
+  if (detail.type === "karpenter-node-pool") return [
+    section("karpenter-pool", "resources.detail.provider.nodeClass", [
+      ["resources.detail.provider.statusReady", yesNo(detail.ready, t)],
+      ["resources.detail.provider.nodeClass", namedReferenceLabel(detail.nodeClassRef)],
+      ["resources.detail.provider.weight", number(detail.weight)],
+    ]),
+    section("karpenter-limits", "resources.detail.provider.limits", [
+      ["resources.detail.provider.cpu", join([detail.currentCpu, detail.limitCpu])],
+      ["resources.detail.provider.memory", join([detail.currentMemory, detail.limitMemory])],
+    ]),
+    section("karpenter-disruption", "resources.detail.provider.disruption", [
+      ["resources.detail.provider.consolidationPolicy", detail.consolidationPolicy],
+      ["resources.detail.provider.consolidateAfter", detail.consolidateAfter],
+      ["resources.detail.provider.expireAfter", detail.expireAfter],
+      [
+        "resources.detail.provider.disruptionBudgets",
+        join(detail.disruptionBudgets.map((budget) => join([
+          budget.nodes,
+          budget.schedule,
+          budget.duration,
+        ]))),
+      ],
+    ]),
+    section("karpenter-template", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.templateLabels", formatKeyValues(detail.templateLabels)],
+      ["resources.detail.provider.taints", formatTaints(detail.templateTaints)],
+      ["resources.detail.provider.startupTaints", formatTaints(detail.startupTaints)],
+      ["resources.detail.provider.requirements", formatRequirements(detail.requirements)],
+    ]),
+  ];
+  if (detail.type === "keda-scaled-object") return [
+    section("keda-scaling", "resources.detail.provider.scaling", [
+      ["resources.detail.provider.scalerState", t(kedaScaledObjectStateKey(detail.state))],
+      ["resources.detail.provider.target", namedReferenceLabel(detail.targetRef)],
+      ["resources.detail.provider.minimum", number(detail.scaling.minimum)],
+      ["resources.detail.provider.maximum", number(detail.scaling.maximum)],
+      ["resources.detail.provider.idleReplicas", number(detail.idleReplicas)],
+      ["resources.detail.provider.pollingInterval", seconds(detail.pollingIntervalSeconds)],
+      ["resources.detail.provider.cooldownPeriod", seconds(detail.cooldownPeriodSeconds)],
+      ["resources.detail.provider.generatedHpa", detail.hpaName],
+      ["resources.detail.provider.lastActive", detail.lastActiveTime],
+    ]),
+    section("keda-fallback", "resources.detail.provider.fallback", [
+      ["resources.detail.provider.failureThreshold", number(detail.fallbackFailureThreshold)],
+      ["resources.detail.provider.fallbackReplicas", number(detail.fallbackReplicas)],
+    ]),
+    section("keda-advanced", "resources.detail.provider.advanced", [
+      [
+        "resources.detail.provider.restoreOriginalReplicas",
+        yesNo(detail.restoreOriginalReplicas, t),
+      ],
+      [
+        "resources.detail.provider.scaleUpStabilization",
+        seconds(detail.scaleUpStabilizationSeconds),
+      ],
+      [
+        "resources.detail.provider.scaleDownStabilization",
+        seconds(detail.scaleDownStabilizationSeconds),
+      ],
+      [
+        "resources.detail.provider.scalingPolicies",
+        join(detail.scalingPolicies.map(formatKedaScalingPolicy)),
+      ],
+    ]),
+  ];
+  if (detail.type === "keda-scaled-job") return [
+    section("keda-job", "resources.detail.provider.scaling", [
+      ["resources.detail.provider.scalerState", t(kedaScaledJobStateKey(detail.state))],
+      ["resources.detail.provider.jobTarget", detail.jobTargetName],
+      ["resources.detail.provider.strategy", detail.strategy],
+      ["resources.detail.provider.pollingInterval", seconds(detail.pollingIntervalSeconds)],
+      ["resources.detail.provider.successHistory", number(detail.successfulHistoryLimit)],
+      ["resources.detail.provider.failedHistory", number(detail.failedHistoryLimit)],
+      ["resources.detail.provider.minimum", number(detail.minimumReplicas)],
+      ["resources.detail.provider.maximum", number(detail.maximumReplicas)],
+    ]),
+  ];
+  if (detail.type === "sbom-report") return [
+    section("sbom-overview", "resources.detail.provider.reportOverview", [
+      ["resources.detail.provider.container", detail.containerName],
+      ["resources.detail.provider.image", detail.image],
+      ["resources.detail.provider.format", join([detail.bomFormat, detail.specVersion])],
+      ["resources.detail.provider.components", number(detail.componentCount)],
+      ["resources.detail.provider.dependencies", number(detail.dependencyCount)],
+      ["resources.detail.provider.scanner", join([detail.scannerName, detail.scannerVersion])],
+      ["resources.detail.provider.scannedAt", detail.scannedAt],
+    ]),
+  ];
+  if (detail.type === "vulnerability-report") return [
+    section("vulnerability-overview", "resources.detail.provider.reportOverview", [
+      ["resources.detail.provider.container", detail.containerName],
+      ["resources.detail.provider.image", detail.image],
+      ["resources.detail.provider.os", join([detail.osFamily, detail.osName])],
+      [
+        "resources.detail.provider.endOfServiceLife",
+        yesNo(detail.osEndOfServiceLife, t),
+      ],
+      ["resources.detail.provider.scanner", join([detail.scannerName, detail.scannerVersion])],
+      ["resources.detail.provider.scannedAt", detail.scannedAt],
+    ]),
+  ];
+  if (detail.type === "prometheus-rule") return [
+    section("prometheus-summary", "resources.detail.provider.summary", [
+      ["resources.detail.provider.ruleGroups", number(detail.groupCount)],
+      ["resources.detail.provider.totalRules", number(detail.totalRules)],
+      ["resources.detail.provider.displayedRules", number(detail.projectedRules)],
+      ["resources.detail.provider.alertRules", number(detail.totalAlerts)],
+      ["resources.detail.provider.recordingRules", number(detail.totalRecordings)],
+      ["resources.detail.provider.truncated", yesNo(detail.truncated, t)],
+    ]),
+  ];
+  if (
+    detail.type === "grpc-route" ||
+    detail.type === "http-route" ||
+    detail.type === "tcp-route" ||
+    detail.type === "tls-route"
+  ) return [
     section("route-status", "resources.detail.provider.status", [
       ["resources.detail.provider.hostnames", join(detail.hostnames)],
       [
@@ -829,6 +1236,76 @@ function diskLabel(type: string | null, size: number | null): string | null {
   return join([type, numberWithUnit(size, "GB")]);
 }
 
+function formatKarpenterSelectorTerm(value: {
+  id: string | null;
+  name: string | null;
+  alias: string | null;
+  owner: string | null;
+  tags: Array<{ key: string; value: string }>;
+}): string | null {
+  return join([
+    value.alias,
+    value.id,
+    value.name,
+    value.owner,
+    formatKeyValues(value.tags),
+  ]);
+}
+
+function formatKarpenterBlockDevice(
+  value: Extract<
+    ProviderResourceDetail,
+    { type: "karpenter-ec2-node-class" }
+  >["blockDevices"][number],
+  t: TranslationFunction,
+): string | null {
+  return join([
+    value.deviceName,
+    value.volumeType,
+    value.volumeSize,
+    number(value.iops),
+    number(value.throughput),
+    yesNo(value.encrypted, t),
+    yesNo(value.deleteOnTermination, t),
+  ]);
+}
+
+function formatRequirements(
+  values: Array<{
+    key: string;
+    operator: string | null;
+    values: string[];
+    minValues: number | null;
+  }>,
+): string | null {
+  return join(values.map((value) => join([
+    value.key,
+    value.operator,
+    join(value.values),
+    number(value.minValues),
+  ])));
+}
+
+function formatTaints(
+  values: Array<{ key: string; value: string | null; effect: string | null }>,
+): string | null {
+  return join(values.map((value) => join([value.key, value.value, value.effect])));
+}
+
+function formatKedaScalingPolicy(
+  value: Extract<
+    ProviderResourceDetail,
+    { type: "keda-scaled-object" }
+  >["scalingPolicies"][number],
+): string | null {
+  return join([
+    value.direction,
+    value.type,
+    number(value.value),
+    seconds(value.periodSeconds),
+  ]);
+}
+
 function formatGatewayRouteMatch(
   match: GatewayRouteDetail["rules"][number]["matches"][number],
   t: TranslationFunction,
@@ -899,6 +1376,65 @@ function jobStateKey(
       return "resources.detail.provider.jobRunning";
     case "pending":
       return "resources.detail.provider.jobPending";
+  }
+}
+
+function karpenterNodeClaimStateKey(
+  state: Extract<ProviderResourceDetail, { type: "karpenter-node-claim" }>["state"],
+): MessageKey {
+  switch (state) {
+    case "ready":
+      return "resources.detail.provider.stateReady";
+    case "registered":
+      return "resources.detail.provider.stateRegistered";
+    case "launched":
+      return "resources.detail.provider.stateLaunched";
+    case "initialized":
+      return "resources.detail.provider.stateInitialized";
+    case "not-ready":
+      return "resources.detail.provider.stateNotReady";
+    case "pending":
+      return "resources.detail.provider.jobPending";
+    case "unknown":
+      return "resources.detail.provider.stateUnknown";
+  }
+}
+
+function kedaScaledObjectStateKey(
+  state: Extract<ProviderResourceDetail, { type: "keda-scaled-object" }>["state"],
+): MessageKey {
+  switch (state) {
+    case "paused":
+      return "resources.detail.provider.statePaused";
+    case "fallback":
+      return "resources.detail.provider.stateFallback";
+    case "not-ready":
+      return "resources.detail.provider.stateNotReady";
+    case "active":
+      return "resources.detail.provider.stateActive";
+    case "idle":
+      return "resources.detail.provider.stateIdle";
+    case "ready":
+      return "resources.detail.provider.stateReady";
+    case "unknown":
+      return "resources.detail.provider.stateUnknown";
+  }
+}
+
+function kedaScaledJobStateKey(
+  state: Extract<ProviderResourceDetail, { type: "keda-scaled-job" }>["state"],
+): MessageKey {
+  switch (state) {
+    case "not-ready":
+      return "resources.detail.provider.stateNotReady";
+    case "active":
+      return "resources.detail.provider.stateActive";
+    case "idle":
+      return "resources.detail.provider.stateIdle";
+    case "ready":
+      return "resources.detail.provider.stateReady";
+    case "unknown":
+      return "resources.detail.provider.stateUnknown";
   }
 }
 

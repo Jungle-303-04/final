@@ -589,6 +589,114 @@ def test_inventory_resource_detail_returns_gateway_route_projection_after_rbac()
     assert "raw" not in response.resource.model_dump()
 
 
+def test_inventory_resource_detail_redacts_keda_trigger_metadata_after_rbac() -> None:
+    scaled_object = inventory_resource("scaledobject", "ScaledObject", "api")
+    scaled_object["api_version"] = "keda.sh/v1alpha1"
+    scaled_object["raw"] = {
+        "metadata": {"namespace": "default"},
+        "spec": {
+            "scaleTargetRef": {"kind": "Deployment", "name": "api"},
+            "triggers": [
+                {
+                    "type": "rabbitmq",
+                    "metadata": {
+                        "queueName": "orders",
+                        "authToken": "must-not-leak-trigger-token",
+                    },
+                    "authenticationRef": {
+                        "kind": "TriggerAuthentication",
+                        "name": "rabbitmq",
+                    },
+                }
+            ],
+        },
+        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="scaledobject",
+            kind="ScaledObject",
+            namespace="default",
+            name="api",
+            related_limit=10,
+            event_limit=10,
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=StubInventoryDb([scaled_object]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "keda-scaled-object"
+    serialized = response.provider_detail.model_dump_json()
+    assert "queueName" in serialized
+    assert "authToken" not in serialized
+    assert "must-not-leak" not in serialized
+    assert "raw" not in response.resource.model_dump()
+
+
+def test_inventory_resource_detail_redacts_vulnerability_payload_after_rbac() -> None:
+    report = inventory_resource(
+        "vulnerabilityreport",
+        "VulnerabilityReport",
+        "api-container",
+    )
+    report["api_version"] = "aquasecurity.github.io/v1alpha1"
+    report["raw"] = {
+        "metadata": {
+            "namespace": "default",
+            "labels": {"trivy-operator.container.name": "api"},
+        },
+        "report": {
+            "artifact": {"repository": "platform/api", "tag": "1.2.3"},
+            "registry": {"server": "registry.example.test"},
+            "summary": {"criticalCount": 1},
+            "vulnerabilities": [
+                {
+                    "vulnerabilityID": "CVE-2026-0001",
+                    "severity": "CRITICAL",
+                    "resource": "openssl",
+                    "primaryLink": "https://user:must-not-leak@example.test/CVE-2026-0001",
+                    "description": "must-not-leak-description",
+                }
+            ],
+        },
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="vulnerabilityreport",
+            kind="VulnerabilityReport",
+            namespace="default",
+            name="api-container",
+            related_limit=10,
+            event_limit=10,
+            current=type(
+                "Current",
+                (),
+                {"user_id": "user-1", "workspace_id": "ws-1"},
+            )(),
+            db=StubInventoryDb([report]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "vulnerability-report"
+    serialized = response.provider_detail.model_dump_json()
+    assert "CVE-2026-0001" in serialized
+    assert "must-not-leak" not in serialized
+    assert "primary_link" in serialized
+    assert "raw" not in response.resource.model_dump()
+
+
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     async def run():
         return await get_inventory_summary(
