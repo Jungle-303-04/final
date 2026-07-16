@@ -2357,7 +2357,11 @@ def test_cronjob_schedule_control_is_typed_and_namespace_scoped(
         "KUBERNETES_CRONJOB_RESUME_ACTION",
     ],
 )
-def test_cronjob_control_rejects_a_recreated_uid_before_any_write(action: str) -> None:
+def test_cronjob_control_rejects_a_recreated_uid_before_any_write(
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
     agent.cluster_id = "cluster-1"

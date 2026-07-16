@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import inspect
+import json
 import time
+from collections.abc import Mapping
 from typing import Annotated, Any, cast
 from uuid import uuid4
 
@@ -48,6 +52,8 @@ from domains.identity.dependencies import (
     require_cluster_agent,
     require_session,
 )
+from domains.inventory.action_catalog import resource_action_capability_id
+from domains.inventory.capabilities import resource_capabilities_response
 from domains.target.management_guard import (
     cluster_role_from_policy,
     is_management_registration,
@@ -71,6 +77,7 @@ from packages.contracts.gateway.requests import (
     CommandResultRequest,
     CommandStartRequest,
     ConfirmedResourceActionRequest,
+    CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
 )
@@ -83,7 +90,12 @@ from packages.contracts.gateway.responses import (
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
-from packages.contracts.parity import CommandControlReceipt, CommandReceipt, OperationEvent
+from packages.contracts.parity import (
+    CommandControlReceipt,
+    CommandReceipt,
+    OperationEvent,
+    ResourceRef,
+)
 from packages.contracts.scoped_metrics import (
     ScopedMetricCoverage,
     ScopedMetricQueryReceipt,
@@ -120,6 +132,8 @@ CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
 OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
+CRONJOB_RESOURCE_STALE = "selected CronJob capability is stale"
+CRONJOB_IDEMPOTENCY_REUSED = "cronjob_idempotency_key_reused"
 WORKLOAD_RESTART_ACTIONS = {
     "deployment": Command.DEFAULT_ACTION,
     "statefulset": Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
@@ -412,6 +426,8 @@ async def accept_resource_control(
     current: Any,
     db: Any,
     events: Any,
+    command_id: str | None = None,
+    diff_basis: JsonObject | None = None,
 ) -> CommandReceipt:
     if namespace is not None:
         validate_control_namespace(namespace)
@@ -427,7 +443,7 @@ async def accept_resource_control(
         resource_kind=resource_kind,
         resource_name=resource_name,
         action=action,
-        basis=payload,
+        basis=diff_basis if diff_basis is not None else payload,
     )
     command = CommandRequestedBody(
         cluster_id=cluster_id,
@@ -435,7 +451,7 @@ async def accept_resource_control(
         namespace=namespace or "",
         reason=reason,
         diff=diff,
-        command_id=new_command_id(),
+        command_id=command_id or new_command_id(),
         payload=payload,
         workspace_id=workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
@@ -844,7 +860,8 @@ async def accept_cronjob_control(
     cronjob: str,
     action: str,
     reason: str,
-    payload: ConfirmedResourceActionRequest,
+    payload: CronJobControlRequest,
+    idempotency_key: str,
     current: Any,
     db: Any,
     events: Any,
@@ -855,6 +872,49 @@ async def accept_cronjob_control(
             status_code=UNPROCESSABLE_CODE,
             detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
         )
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    capability_id = resource_action_capability_id(action)
+    if capability_id is None:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    inventory_resource, current_resource = exact_cronjob_capability_resource(
+        db,
+        current=current,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        capability_id=capability_id,
+        payload=payload,
+    )
+    request_fingerprint = cronjob_request_fingerprint(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        action=action,
+        reason=payload.reason or reason,
+        payload=payload,
+    )
+    command_id = resource_action_command_id(
+        workspace_id,
+        str(current.user_id),
+        idempotency_key,
+    )
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=request_fingerprint,
+    )
+    if replay is not None:
+        return replay
+    diff_basis = {
+        "resource_id": payload.resource_id,
+        "capability_snapshot_id": payload.snapshot_id,
+        "capability_revision": payload.capability_revision,
+        "capability_id": capability_id,
+        "resource_ref": current_resource.model_dump(),
+        "inventory_resource_version": str(inventory_resource.get("resource_version") or ""),
+        "request_fingerprint": request_fingerprint,
+    }
     return await accept_resource_control(
         cluster_id=cluster_id,
         namespace=namespace,
@@ -862,7 +922,11 @@ async def accept_cronjob_control(
         resource_name=cronjob,
         action=action,
         reason=payload.reason or reason,
-        payload={"namespace": namespace, "name": cronjob},
+        payload={
+            "namespace": namespace,
+            "name": cronjob,
+            "resource_ref": current_resource.model_dump(),
+        },
         approval_ref=None,
         policy_decision_ref=None,
         execution_request=payload,
@@ -870,6 +934,143 @@ async def accept_cronjob_control(
         current=current,
         db=db,
         events=events,
+        command_id=command_id,
+        diff_basis=diff_basis,
+    )
+
+
+def exact_cronjob_capability_resource(
+    db: Any,
+    *,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    capability_id: str,
+    payload: CronJobControlRequest,
+) -> tuple[dict[str, Any], ResourceRef]:
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    if not callable(reader):
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    resource = reader(workspace_id=workspace_id, inventory_key=payload.resource_id)
+    if not isinstance(resource, dict):
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    current_resource = inventory_resource_ref(resource)
+    if (
+        str(resource.get("snapshot_id") or "") != payload.snapshot_id
+        or current_resource != payload.resource
+        or current_resource.api_group != "batch"
+        or current_resource.version != "v1"
+        or current_resource.kind.casefold() != "cronjob"
+        or current_resource.namespace != namespace
+        or current_resource.name != cronjob
+        or str(resource.get("cluster_id") or "") != cluster_id
+    ):
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    decision = resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=resource,
+    )
+    enabled = {item.capability_id for item in decision.capabilities}
+    if decision.revision != payload.capability_revision or capability_id not in enabled:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    return resource, current_resource
+
+
+def inventory_resource_ref(resource: Mapping[str, object]) -> ResourceRef:
+    api_version = str(resource.get("api_version") or "").strip().strip("/")
+    segments = api_version.split("/") if api_version else []
+    if len(segments) == 1:
+        api_group, version = "", segments[0]
+    elif len(segments) == 2:
+        api_group, version = segments
+    else:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE)
+    uid = str(resource.get("uid") or "")
+    namespace = resource.get("namespace")
+    try:
+        return ResourceRef(
+            api_group=api_group,
+            version=version,
+            kind=str(resource.get("kind") or ""),
+            namespace=str(namespace) if namespace is not None else None,
+            name=str(resource.get("name") or ""),
+            uid=uid,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=CRONJOB_RESOURCE_STALE) from exc
+
+
+def cronjob_request_fingerprint(
+    *,
+    workspace_id: str,
+    user_id: str,
+    action: str,
+    reason: str,
+    payload: CronJobControlRequest,
+) -> str:
+    encoded = json.dumps(
+        {
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            "action": action,
+            "reason": reason,
+            "resource_id": payload.resource_id,
+            "snapshot_id": payload.snapshot_id,
+            "capability_revision": payload.capability_revision,
+            "resource": payload.resource.model_dump(),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def resource_action_command_id(workspace_id: str, user_id: str, idempotency_key: str) -> str:
+    authority = "\0".join((workspace_id, user_id, idempotency_key))
+    return f"cmd-resource-{hashlib.sha256(authority.encode()).hexdigest()[:24]}"
+
+
+async def replay_resource_action_receipt(
+    db: Any,
+    *,
+    workspace_id: str,
+    command_id: str,
+    request_fingerprint: str,
+) -> CommandReceipt | None:
+    reader = getattr(db, "get_agent_command", None)
+    if not callable(reader):
+        return None
+    existing = reader(command_id, workspace_id)
+    if inspect.isawaitable(existing):
+        existing = await existing
+    if not isinstance(existing, Mapping):
+        return None
+    plan = existing.get("payload")
+    diff = plan.get("diff") if isinstance(plan, Mapping) else None
+    basis = diff.get("basis") if isinstance(diff, Mapping) else None
+    if not isinstance(basis, Mapping) or basis.get("request_fingerprint") != request_fingerprint:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": CRONJOB_IDEMPOTENCY_REUSED,
+                "detail": "Idempotency-Key was already used for another resource action.",
+            },
+        )
+    event_id = str(existing.get("confirmation_event_id") or "")
+    correlation_id = str(existing.get("correlation_id") or "")
+    if not event_id or not correlation_id:
+        raise HTTPException(status_code=409, detail="resource action receipt is incomplete")
+    return CommandReceipt(
+        command_id=command_id,
+        event_id=event_id,
+        audit_event_id=event_id,
+        correlation_id=correlation_id,
+        status=str(existing.get("status") or CommandStatus.QUEUED),
     )
 
 
@@ -882,7 +1083,11 @@ async def trigger_cronjob(
     cluster_id: str,
     namespace: str,
     cronjob: str,
-    payload: ConfirmedResourceActionRequest,
+    payload: CronJobControlRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
@@ -895,6 +1100,7 @@ async def trigger_cronjob(
         action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         reason=f"trigger cronjob/{cronjob}",
         payload=payload,
+        idempotency_key=idempotency_key,
         current=current,
         db=db,
         events=events,
@@ -911,7 +1117,11 @@ async def suspend_cronjob(
     cluster_id: str,
     namespace: str,
     cronjob: str,
-    payload: ConfirmedResourceActionRequest,
+    payload: CronJobControlRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
@@ -924,6 +1134,7 @@ async def suspend_cronjob(
         action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         reason=f"suspend cronjob/{cronjob}",
         payload=payload,
+        idempotency_key=idempotency_key,
         current=current,
         db=db,
         events=events,
@@ -940,7 +1151,11 @@ async def resume_cronjob(
     cluster_id: str,
     namespace: str,
     cronjob: str,
-    payload: ConfirmedResourceActionRequest,
+    payload: CronJobControlRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
@@ -953,6 +1168,7 @@ async def resume_cronjob(
         action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
         reason=f"resume cronjob/{cronjob}",
         payload=payload,
+        idempotency_key=idempotency_key,
         current=current,
         db=db,
         events=events,

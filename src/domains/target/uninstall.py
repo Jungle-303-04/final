@@ -98,6 +98,20 @@ PRE_ACK_NAMESPACED_CLEANUP = (
         "rbac.authorization.k8s.io",
         "v1",
         SANDBOX_NAMESPACE,
+        "rolebindings",
+        "cluster-agent-cronjob-control",
+    ),
+    NamespacedCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        SANDBOX_NAMESPACE,
+        "roles",
+        "cluster-agent-cronjob-control",
+    ),
+    NamespacedCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        SANDBOX_NAMESPACE,
         "roles",
         "cluster-agent-catalog-install",
     ),
@@ -143,6 +157,8 @@ SANDBOX_RBAC_RESOURCES = (
     "role/cluster-agent-catalog-install",
     "rolebinding/cluster-agent-sandbox-write",
     "rolebinding/cluster-agent-catalog-install",
+    "role/cluster-agent-cronjob-control",
+    "rolebinding/cluster-agent-cronjob-control",
 )
 CLUSTER_SCOPED_RESOURCES = (
     "clusterrolebinding/cluster-agent-node-control",

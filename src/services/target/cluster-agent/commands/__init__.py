@@ -10,6 +10,7 @@ from commands.kubernetes import (
     KubernetesScalePayload,
     cronjob_job_body,
     kubernetes_generate_name,
+    validate_cronjob_resource_ref,
 )
 from commands.outbox import CommandResultOutbox, CommandResultRecord
 from commands.registry import (
@@ -33,6 +34,7 @@ __all__ = [
     "KubernetesScalePayload",
     "cronjob_job_body",
     "kubernetes_generate_name",
+    "validate_cronjob_resource_ref",
     "command",
     "command_handler",
     "kubernetes_command",

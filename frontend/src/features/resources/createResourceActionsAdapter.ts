@@ -11,12 +11,12 @@ export function createResourceActionsAdapter(
   endpoints: ResourceActionsEndpointDependencies,
 ): ResourceActionsPort {
   return {
-    async execute(capability, values, signal) {
+    async execute(capability, values, context, signal) {
       if (capability.execution !== "command" || capability.method !== "POST") {
         throw new ResourcesPortFailure("invalid-request");
       }
       return withActionFailure(async () => toResourceActionReceipt(
-        await endpoints.executeResourceCapability(capability, values, signal),
+        await endpoints.executeResourceCapability(capability, values, context, signal),
       ));
     },
   };

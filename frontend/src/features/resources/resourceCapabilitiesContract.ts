@@ -38,6 +38,22 @@ export interface ResourceCapabilities {
   capabilities: ResourceActionCapability[];
 }
 
+export interface ResourceActionExecutionContext {
+  capabilityId: ResourceActionCapabilityId;
+  idempotencyKey: string;
+  resourceId: string;
+  snapshotId: string;
+  revision: string;
+  resource: {
+    apiGroup: string;
+    version: string;
+    kind: string;
+    namespace: string | null;
+    name: string;
+    uid: string;
+  };
+}
+
 /**
  * Lifecycle states shared by resource-action receipts and the operation stream.
  * Keep the in-progress cancellation states explicit so consumers never coerce a
@@ -73,6 +89,7 @@ export interface ResourceActionsPort {
   execute(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,
+    context?: ResourceActionExecutionContext,
     signal?: AbortSignal,
   ): Promise<ResourceActionReceipt>;
 }

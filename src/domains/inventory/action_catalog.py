@@ -300,6 +300,19 @@ def applicable_resource_actions(
     )
 
 
+def resource_action_capability_id(command_action: str) -> str | None:
+    """Resolve a command action through the canonical resource-action catalog."""
+
+    return next(
+        (
+            definition.capability_id
+            for definition in RESOURCE_ACTIONS
+            if definition.command_action == command_action
+        ),
+        None,
+    )
+
+
 def _resource_state_matches(state: ResourceState, resource: Mapping[str, Any]) -> bool:
     if state == "always":
         return True

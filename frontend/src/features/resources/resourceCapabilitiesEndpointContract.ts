@@ -1,5 +1,6 @@
 import type {
   ResourceActionCapability,
+  ResourceActionExecutionContext,
   ResourceActionStatus,
 } from "./resourceCapabilitiesContract";
 
@@ -46,6 +47,7 @@ export interface ResourceActionsEndpointDependencies {
   executeResourceCapability(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,
+    context?: ResourceActionExecutionContext,
     signal?: AbortSignal,
   ): Promise<{
     accepted: true;

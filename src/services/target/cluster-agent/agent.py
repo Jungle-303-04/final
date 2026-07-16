@@ -20,6 +20,7 @@ from commands import (
     KubernetesScalePayload,
     command,
     cronjob_job_body,
+    validate_cronjob_resource_ref,
 )
 from commands.helm import run_catalog_helm_install, run_helm_artifact_query
 from commands.service_access import (
@@ -1598,6 +1599,7 @@ class TargetClusterAgent:
             resource="cronjobs",
             name=ctx.payload.name,
         )
+        validate_cronjob_resource_ref(cronjob, ctx.payload.resource_ref)
         result = await ctx.kubernetes.create_namespaced_resource(
             api_group="batch",
             version="v1",
@@ -1647,6 +1649,14 @@ class TargetClusterAgent:
         *,
         suspended: bool,
     ) -> JsonObject:
+        cronjob = await ctx.kubernetes.get_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="cronjobs",
+            name=ctx.payload.name,
+        )
+        validate_cronjob_resource_ref(cronjob, ctx.payload.resource_ref)
         result = await ctx.kubernetes.patch_namespaced_resource(
             api_group="batch",
             version="v1",

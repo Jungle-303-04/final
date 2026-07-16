@@ -409,6 +409,7 @@ export function ResourcesPage({
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
             onNavigateResource={state.navigateDetail}
+            onResourceActionInvalidation={state.requestResourceEventInvalidation}
             onTabChange={state.setDetailTab}
             tab={state.detailTab}
             terminalPort={podTerminalPort}

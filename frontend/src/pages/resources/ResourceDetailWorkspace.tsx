@@ -49,6 +49,7 @@ export function ResourceDetailWorkspace({
   manifestPort,
   onUnauthorized,
   onNavigateResource,
+  onResourceActionInvalidation,
   tab,
   terminalPort = EMPTY_POD_TERMINAL_PORT,
   serviceAccessPort,
@@ -67,6 +68,7 @@ export function ResourceDetailWorkspace({
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
   onNavigateResource: (identity: ResourceIdentity) => void;
+  onResourceActionInvalidation?: () => void;
   tab: string;
   terminalPort?: PodTerminalPort;
   serviceAccessPort?: ServiceAccessPort;
@@ -223,6 +225,7 @@ export function ResourceDetailWorkspace({
               actionsPort={actionsPort}
               capabilities={capabilities}
               detail={detail.data}
+              onInvalidate={onResourceActionInvalidation}
             />
             {manifestPort ? (
               <ResourceManifestEditor

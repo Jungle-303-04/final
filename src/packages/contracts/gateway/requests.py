@@ -19,6 +19,7 @@ from packages.contracts.gitops import (
     DEFAULT_WORKFLOW_RUN_ID,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
+from packages.contracts.parity import ResourceRef
 from packages.contracts.target import FAST_LANE_PRIORITY_CLASS_NAME, TARGET_NAMESPACE
 
 DEFAULT_WEBHOOK_REPLICAS = 2
@@ -367,6 +368,26 @@ class ConfirmedResourceActionRequest(StrictModel):
     confirmation: Literal[True] | None = None
     direct_execution: bool = False
     direct_execution_confirmed: bool = False
+
+
+class CronJobControlRequest(ConfirmedResourceActionRequest):
+    """One capability-bound CronJob mutation against an exact observed UID."""
+
+    resource_id: str = Field(min_length=1, max_length=255)
+    snapshot_id: str = Field(min_length=1, max_length=255)
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resource: ResourceRef
+
+    @model_validator(mode="after")
+    def validate_cronjob_resource(self) -> CronJobControlRequest:
+        if (
+            self.resource.api_group != "batch"
+            or self.resource.version != "v1"
+            or self.resource.kind.casefold() != "cronjob"
+            or self.resource.namespace is None
+        ):
+            raise ValueError("CronJob control requires an exact batch/v1 ResourceRef")
+        return self
 
 
 class AgentDebugQueryRequest(StrictModel):

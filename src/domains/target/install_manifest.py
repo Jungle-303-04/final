@@ -41,6 +41,9 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
             node_control_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
+            cronjob_control_rbac_manifest(payload, namespace)
+            if role != MANAGEMENT_CLUSTER_ROLE
+            else "",
             cluster_uninstall_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -185,12 +188,12 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles"]
     resourceNames:
-      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install"]
+      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install", "cluster-agent-cronjob-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["rolebindings"]
     resourceNames:
-      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install"]
+      ["cluster-agent-self-manage", "cluster-agent-target-manage", "cluster-agent-sandbox-write", "cluster-agent-catalog-install", "cluster-agent-cronjob-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
@@ -246,6 +249,49 @@ subjects:
     name: cluster-agent
     namespace: {namespace}
 """
+
+
+def cronjob_control_rbac_manifest(payload: TargetRegisterRequest, agent_namespace: str) -> str:
+    """Project CronJob writes only into the configured control namespaces."""
+
+    control_namespaces = tuple(
+        dict.fromkeys(
+            item.strip()
+            for item in (payload.control_namespaces.strip() or SANDBOX_NAMESPACE).split(",")
+            if item.strip()
+        )
+    )
+    return "\n---\n".join(
+        f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-agent-cronjob-control
+  namespace: {control_namespace}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-agent-cronjob-control
+  namespace: {control_namespace}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-agent-cronjob-control
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {agent_namespace}
+""".strip()
+        for control_namespace in control_namespaces
+    )
 
 
 def target_write_rbac_manifest(namespace: str) -> str:

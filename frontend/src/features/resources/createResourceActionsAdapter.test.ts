@@ -59,7 +59,12 @@ describe("resource action adapter", () => {
       commandId: "command-1",
       status: "queued",
     });
-    expect(executeResourceCapability).toHaveBeenCalledWith(CAPABILITY, { replicas: 4 }, undefined);
+    expect(executeResourceCapability).toHaveBeenCalledWith(
+      CAPABILITY,
+      { replicas: 4 },
+      undefined,
+      undefined,
+    );
   });
 
   it("rejects a non-command capability before an HTTP request is attempted", async () => {

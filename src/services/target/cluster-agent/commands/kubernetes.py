@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from commands.context import KubernetesCommandSpec
 from config import (
@@ -24,6 +24,7 @@ from packages.config.control import (
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.requests import StrictModel
+from packages.contracts.parity import ResourceRef
 
 CORE_API_GROUP = "core"
 KUBERNETES_DNS_LABEL_MAX_LENGTH = 63
@@ -76,6 +77,20 @@ class KubernetesCronJobPayload(KubernetesGetPayload):
         max_length=52,
         pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
     )
+    resource_ref: ResourceRef
+
+    @model_validator(mode="after")
+    def validate_resource_ref(self) -> KubernetesCronJobPayload:
+        resource = self.resource_ref
+        if (
+            resource.api_group != "batch"
+            or resource.version != "v1"
+            or resource.kind.casefold() != "cronjob"
+            or resource.namespace != self.namespace
+            or resource.name != self.name
+        ):
+            raise ValueError("CronJob payload ResourceRef does not match the command target")
+        return self
 
 
 def kubernetes_generate_name(
@@ -95,6 +110,21 @@ def kubernetes_generate_name(
     if not bounded_name:
         raise ValueError("Kubernetes generated name requires a resource name")
     return f"{bounded_name}{infix}"
+
+
+def validate_cronjob_resource_ref(cronjob: JsonObject, expected: ResourceRef) -> None:
+    metadata = cronjob.get("metadata")
+    metadata_object = metadata if isinstance(metadata, dict) else {}
+    api_version = str(cronjob.get("apiVersion") or "")
+    expected_api_version = f"{expected.api_group}/{expected.version}"
+    if (
+        api_version != expected_api_version
+        or str(cronjob.get("kind") or "").casefold() != expected.kind.casefold()
+        or str(metadata_object.get("namespace") or "") != expected.namespace
+        or str(metadata_object.get("name") or "") != expected.name
+        or str(metadata_object.get("uid") or "") != expected.uid
+    ):
+        raise ValueError("selected CronJob identity is stale")
 
 
 def cronjob_job_body(cronjob: JsonObject, *, namespace: str, name: str) -> JsonObject:

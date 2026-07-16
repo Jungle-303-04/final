@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import type {
   ResourceActionCapability,
+  ResourceActionExecutionContext,
   ResourceActionReceipt,
   ResourceActionsPort,
 } from "../../features/resources/resourceCapabilitiesContract";
@@ -36,10 +37,12 @@ export function ResourceDetailActions({
   actionsPort,
   capabilities,
   detail,
+  onInvalidate,
 }: {
   actionsPort: ResourceActionsPort;
   capabilities: ResourceCapabilitiesFrame;
   detail: ResourceDetail;
+  onInvalidate?: (context: ResourceActionExecutionContext) => void;
 }) {
   const { t } = useI18n();
   const session = useOptionalProductSession();
@@ -50,6 +53,7 @@ export function ResourceDetailActions({
   const [receipt, setReceipt] = useState<ResourceActionReceipt | null>(null);
   const [failed, setFailed] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [executionKey, setExecutionKey] = useState<string | null>(null);
   const [diagnoseConsent, setDiagnoseConsent] = useState<{
     capabilities: DiagnoseCapabilities;
     target: DiagnoseResourceTarget;
@@ -65,10 +69,23 @@ export function ResourceDetailActions({
     setPending(true);
     setFailed(false);
     try {
-      const result = await actionsPort.execute(dialog, actionValues(dialog, values));
+      const context = cronjobExecutionContext(
+        capabilities,
+        detail,
+        dialog,
+        executionKey,
+      );
+      if (dialog.capabilityId.startsWith("cronjob.") && context === null) {
+        throw new Error("CronJob action identity is incomplete");
+      }
+      const result = context
+        ? await actionsPort.execute(dialog, actionValues(dialog, values), context)
+        : await actionsPort.execute(dialog, actionValues(dialog, values));
       setReceipt(result);
       if (result.commandId) operationStatusStore?.start(result.commandId);
+      if (context) onInvalidate?.(context);
       setDialog(null);
+      setExecutionKey(null);
     } catch {
       setFailed(true);
     } finally {
@@ -211,6 +228,9 @@ export function ResourceDetailActions({
   function open(capability: ResourceActionCapability) {
     setFailed(false);
     setValues(defaultInputValues(capability));
+    setExecutionKey(capability.capabilityId.startsWith("cronjob.")
+      ? resourceActionIdempotencyKey()
+      : null);
     setDialog(capability);
   }
 
@@ -263,6 +283,45 @@ export function ResourceDetailActions({
     const result = await diagnose.port.startResourceRun(target, agentCapabilities);
     diagnose.openRun(result.run.runId);
   }
+}
+
+function cronjobExecutionContext(
+  frame: ResourceCapabilitiesFrame,
+  detail: ResourceDetail,
+  capability: ResourceActionCapability,
+  idempotencyKey: string | null,
+): ResourceActionExecutionContext | null {
+  if (!capability.capabilityId.startsWith("cronjob.")) return null;
+  if (frame.phase !== "ready" || idempotencyKey === null) return null;
+  const uid = detail.resource.uid;
+  const apiIdentity = splitApiVersion(detail.resource.apiVersion);
+  if (!uid || apiIdentity === null) return null;
+  return {
+    capabilityId: capability.capabilityId,
+    idempotencyKey,
+    resourceId: frame.data.subject.resourceId,
+    snapshotId: frame.data.subject.snapshotId,
+    revision: frame.data.revision,
+    resource: {
+      apiGroup: apiIdentity.apiGroup,
+      version: apiIdentity.apiVersion,
+      kind: detail.identity.kind,
+      namespace: detail.identity.namespace,
+      name: detail.identity.name,
+      uid,
+    },
+  };
+}
+
+function resourceActionIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `resource-action-${crypto.randomUUID()}`;
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = crypto.getRandomValues(new Uint32Array(4));
+    return `resource-action-${Array.from(bytes, (value) => value.toString(16).padStart(8, "0")).join("")}`;
+  }
+  throw new Error("Secure resource action identity is unavailable");
 }
 
 function diagnoseTargetFrom(detail: ResourceDetail): DiagnoseResourceTarget | null {

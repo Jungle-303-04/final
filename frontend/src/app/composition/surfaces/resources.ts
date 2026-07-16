@@ -75,8 +75,8 @@ export function loadResourcesSurface(
     refreshPolicies,
     createResourceCapabilitiesAdapter({ getResourceCapabilities }),
     createResourceActionsAdapter({
-      executeResourceCapability(capability, values, signal) {
-        return executeResourceCapability(capability.path, values, signal);
+      executeResourceCapability(capability, values, context, signal) {
+        return executeResourceCapability(capability.path, values, context, signal);
       },
     }),
     createPodTerminalAdapter({ openPodTerminal }),

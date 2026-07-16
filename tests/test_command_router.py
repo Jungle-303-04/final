@@ -1075,7 +1075,11 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
             "cluster-1",
             "team-jobs",
             "nightly",
-            cronjob_control_request(db, namespace="team-jobs"),
+            cronjob_control_request(
+                db,
+                namespace="team-jobs",
+                suspended=action == Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+            ),
             "cronjob-action-key-1",
             current_session(),
             db,

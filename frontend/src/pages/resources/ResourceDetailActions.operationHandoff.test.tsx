@@ -100,6 +100,7 @@ describe("ResourceDetailActions operation handoff", () => {
         eventId: "event-cronjob-1",
         status: "queued",
       });
+    const onInvalidate = vi.fn();
     const cronjobDetail: ResourceDetail = {
       ...detail,
       identity: {
@@ -148,6 +149,7 @@ describe("ResourceDetailActions operation handoff", () => {
           actionsPort={{ execute }}
           capabilities={cronjobCapabilities}
           detail={cronjobDetail}
+          onInvalidate={onInvalidate}
         />
       </I18nProvider>,
     );
@@ -177,6 +179,8 @@ describe("ResourceDetailActions operation handoff", () => {
       },
     });
     expect(secondContext.idempotencyKey).toBe(firstContext.idempotencyKey);
+    expect(onInvalidate).toHaveBeenCalledOnce();
+    expect(onInvalidate).toHaveBeenCalledWith(firstContext);
   });
 });
 
