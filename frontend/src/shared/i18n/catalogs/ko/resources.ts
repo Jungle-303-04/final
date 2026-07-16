@@ -913,6 +913,7 @@ export const resourcesKo = {
   "resources.detail.metricsRestarts": "재시작 횟수",
   "resources.detail.metricsHpaCurrent": "현재 레플리카",
   "resources.detail.metricsHpaDesired": "목표 레플리카",
+  "resources.detail.metricsSaturation": "{boundary}의 {percent}",
   "resources.detail.provider.metricSourceKubernetes": "Kubernetes",
   "resources.detail.provider.metricFreshness": "최신성",
   "resources.detail.provider.metricObservedAt": "관측 시각",

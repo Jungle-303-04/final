@@ -12,7 +12,7 @@ import type {
 } from "./resourceMetricsHistoryContract";
 import { toResourceMetricsHistory } from "./resourceMetricsHistoryCanonical";
 import { createResourceMetricsHistoryRequest } from "./resourcesFilterRequest";
-import { ResourcesPortFailure } from "./resourcesContract";
+import { ResourcesPortFailure, type ResourceSummary } from "./resourcesContract";
 import { ResourcesCanonicalError } from "./resourcesValidation";
 
 export function createResourceMetricsHistoryAdapter(
@@ -52,7 +52,7 @@ export function createResourceMetricsHistoryAdapter(
           range,
         }, { signal });
         return {
-          series: toScopedSeries(resource.inventoryKey, run),
+          series: toScopedSeries(resource, run),
           completeness: run.completeness,
           partialReasonCodes: run.reasonCodes,
           refreshPolicyKey: run.endpoint.refresh_policy_key,
@@ -65,9 +65,10 @@ export function createResourceMetricsHistoryAdapter(
 }
 
 function toScopedSeries(
-  resourceId: string,
+  observedResource: ResourceSummary,
   run: ScopedMetricEndpointRun,
 ) {
+  const resourceId = observedResource.inventoryKey;
   const resource = run.endpoint.resource;
   if (resource === null || run.observations.length === 0) return null;
   const points = new Map<number, ResourceMetricHistoryPoint>();
@@ -129,11 +130,27 @@ function toScopedSeries(
     namespace: resource.namespace,
     name: resource.name,
     points: ordered,
+    references: metricReferences(observedResource),
     hasSparklinePoints: ordered.length > 1,
     completeness: run.completeness,
     partialReasonCodes: run.reasonCodes,
     source: "prometheus" as const,
     freshness: run.endpoint.scope.freshness,
+  };
+}
+
+function metricReferences(resource: ResourceSummary) {
+  const evidence = resource.tableMetrics;
+  if (
+    evidence?.kind !== "pod" ||
+    resource.uid === null ||
+    evidence.resourceUid !== resource.uid
+  ) return undefined;
+  return {
+    cpuRequestMillicores: evidence.cpuRequestMillicores,
+    cpuLimitMillicores: evidence.cpuLimitMillicores,
+    memoryRequestMebibytes: evidence.memoryRequestMebibytes,
+    memoryLimitMebibytes: evidence.memoryLimitMebibytes,
   };
 }
 

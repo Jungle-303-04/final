@@ -911,6 +911,7 @@ export type ResourcesMessageKey =
   | "resources.detail.metricsRestarts"
   | "resources.detail.metricsHpaCurrent"
   | "resources.detail.metricsHpaDesired"
+  | "resources.detail.metricsSaturation"
   | "resources.detail.provider.metricSourceKubernetes"
   | "resources.detail.provider.metricFreshness"
   | "resources.detail.provider.metricObservedAt"

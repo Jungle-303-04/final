@@ -61,6 +61,12 @@ export interface ResourceMetricHistorySeries {
   namespace: string | null;
   name: string;
   points: ResourceMetricHistoryPoint[];
+  references?: {
+    cpuRequestMillicores: number | null;
+    cpuLimitMillicores: number | null;
+    memoryRequestMebibytes: number | null;
+    memoryLimitMebibytes: number | null;
+  };
   currentObservation?: ResourceMetricCurrentObservation | null;
   containerSeries?: ResourceMetricContainerHistorySeries[];
   containerHistoryCompleteness?: ResourcesFilterCompleteness;

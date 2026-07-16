@@ -12,6 +12,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -169,6 +170,10 @@ export function ResourceMetricsCharts({
             icon={Activity}
             title={t("resources.detail.metricsCpu")}
             unit="m"
+            references={{
+              request: series.references?.cpuRequestMillicores ?? null,
+              limit: series.references?.cpuLimitMillicores ?? null,
+            }}
           />
         ) : null}
         {hasMemory ? (
@@ -180,6 +185,10 @@ export function ResourceMetricsCharts({
             icon={MemoryStick}
             title={t("resources.detail.metricsMemory")}
             unit="MiB"
+            references={{
+              request: series.references?.memoryRequestMebibytes ?? null,
+              limit: series.references?.memoryLimitMebibytes ?? null,
+            }}
           />
         ) : null}
         {hasVolume ? (
@@ -468,6 +477,7 @@ function ResourceMetricChart({
   icon: Icon,
   title,
   unit,
+  references,
 }: {
   config: ChartConfig;
   currentValue?: number | null;
@@ -476,6 +486,7 @@ function ResourceMetricChart({
   icon: LucideIcon;
   title: string;
   unit: string;
+  references?: { request: number | null; limit: number | null };
 }) {
   const { t } = useI18n();
   const gradientId = useId().replace(/:/g, "");
@@ -484,6 +495,7 @@ function ResourceMetricChart({
     [currentValue, data, dataKey],
   );
   const formatValue = (value: number) => `${formatNumber(value)}${unit}`;
+  const saturation = metricSaturation(stats.current, references);
 
   return (
     <section className="min-w-0 rounded-xl border bg-card p-4 shadow-xs" data-slot="resource-metric-card">
@@ -496,6 +508,24 @@ function ResourceMetricChart({
           <p className="text-xs text-muted-foreground">
             {formatTimeRange(data)}
           </p>
+          {saturation === null ? null : (
+            <Badge variant={saturation.ratio >= 0.9 ? "destructive" : "outline"}>
+              {t("resources.detail.metricsSaturation", {
+                percent: formatPercent(saturation.ratio),
+                boundary: saturation.boundary,
+              })}
+            </Badge>
+          )}
+          {references === undefined ? null : (
+            <div className="flex flex-wrap gap-2 text-[0.6875rem] text-muted-foreground">
+              {references.request === null ? null : (
+                <span>{`request ${formatValue(references.request)}`}</span>
+              )}
+              {references.limit === null ? null : (
+                <span>{`limit ${formatValue(references.limit)}`}</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-baseline gap-3 text-right">
           <MetricStat
@@ -532,6 +562,20 @@ function ResourceMetricChart({
             tickLine={false}
             width={58}
           />
+          {references?.request === null || references?.request === undefined ? null : (
+            <ReferenceLine
+              stroke="var(--muted-foreground)"
+              strokeDasharray="3 3"
+              y={references.request}
+            />
+          )}
+          {references?.limit === null || references?.limit === undefined ? null : (
+            <ReferenceLine
+              stroke="var(--destructive)"
+              strokeDasharray="3 3"
+              y={references.limit}
+            />
+          )}
           <Tooltip
             content={({ active, label, payload }) => {
               const value = payload?.[0]?.value;
@@ -620,6 +664,25 @@ function metricStats(
 }
 
 type MetricDataKey = Exclude<keyof MetricPoint, "time">;
+
+function metricSaturation(
+  current: number | null,
+  references: { request: number | null; limit: number | null } | undefined,
+): { ratio: number; boundary: "limit" | "request" } | null {
+  if (current === null || references === undefined) return null;
+  if (references.limit !== null && references.limit > 0) {
+    return { ratio: current / references.limit, boundary: "limit" };
+  }
+  if (references.request !== null && references.request > 0) {
+    return { ratio: current / references.request, boundary: "request" };
+  }
+  return null;
+}
+
+function formatPercent(ratio: number): string {
+  const percent = ratio * 100;
+  return `${percent < 10 ? percent.toFixed(1) : percent.toFixed(0)}%`;
+}
 
 function formatNumber(value: number): string {
   if (value >= 100) return value.toFixed(0);

@@ -913,6 +913,7 @@ export const resourcesEn = {
   "resources.detail.metricsRestarts": "Restarts",
   "resources.detail.metricsHpaCurrent": "Current replicas",
   "resources.detail.metricsHpaDesired": "Desired replicas",
+  "resources.detail.metricsSaturation": "{percent} of {boundary}",
   "resources.detail.provider.metricSourceKubernetes": "Kubernetes",
   "resources.detail.provider.metricFreshness": "Freshness",
   "resources.detail.provider.metricObservedAt": "Observed at",
