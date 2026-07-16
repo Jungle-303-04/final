@@ -5388,15 +5388,15 @@
       "frontendContract": "frontend/src/pages/resources/PodTerminalDialog.tsx",
       "desktopContract": null,
       "verification": [
-        "tests/test_terminal_gateway.py",
+        "tests/test_pod_terminal.py",
         "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
       ],
       "coverage": {
         "backend": {
           "state": "blocked",
-          "destination": "src/domains/terminal/router.py",
+          "destination": "src/services/target/cluster-agent/terminal_exec.py#PodExecController",
           "reason": "The current terminal opens an existing container; no ephemeral-container debug mutation or resulting debug session receipt exists.",
-          "test": "tests/test_terminal_gateway.py"
+          "test": "tests/test_pod_terminal.py"
         },
         "frontend": {
           "state": "blocked",
