@@ -39,6 +39,9 @@ describe("DiagnoseSurface", () => {
     );
 
     expect(await screen.findByText("Evidence-backed result")).not.toBeNull();
+    expect(
+      screen.getByText("Evidence-backed result").closest('[data-kind="verdict"]')?.className,
+    ).toContain("motion-diagnose-verdict");
     expect(screen.getByRole("link", { name: "Deployment checkout" }).getAttribute("href"))
       .toBe("/resources/workload?resource=checkout");
     expect(

@@ -303,23 +303,35 @@ function DiagnoseEventRow({
   const reason = text(event.payload.reason);
   if (event.kind === "turn" && question) {
     return (
-      <p className="ml-auto w-fit max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
+      <p
+        className="motion-diagnose-entry ml-auto w-fit max-w-[88%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground"
+        data-kind={event.kind}
+      >
         {question}
       </p>
     );
   }
   if (event.kind === "verdict" && answer) {
     return (
-      <article className="mr-auto grid w-fit max-w-[95%] gap-2 rounded-2xl rounded-bl-sm border bg-card px-3 py-3">
+      <article
+        className="motion-diagnose-verdict mr-auto grid w-fit max-w-[95%] gap-2 rounded-2xl rounded-bl-sm border bg-card px-3 py-3"
+        data-kind={event.kind}
+      >
         <p className="whitespace-pre-wrap text-sm leading-relaxed">{answer}</p>
         <EvidenceList evidence={event.payload.evidence} locale={locale} />
       </article>
     );
   }
   return (
-    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+    <div
+      className="motion-diagnose-entry flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+      data-kind={event.kind}
+    >
       <span className="size-1.5 shrink-0 rounded-full bg-current" />
-      <span className="break-words">
+      <span className={event.kind === "thinking"
+        ? "motion-diagnose-thinking break-words"
+        : "break-words"}
+      >
         {status || reason || eventLabel(event.kind, locale)}
       </span>
     </div>

@@ -775,6 +775,10 @@
       "destination": "frontend/src/features/diagnose/DiagnoseSurface.test.tsx",
       "rationale": "Recent history, investigation selection, evidence rendering, and follow-up availability must be driven by the durable Diagnose port."
     },
+    "diagnose.frontend.motion": {
+      "destination": "frontend/src/motion/__tests__/motion-contract.test.ts",
+      "rationale": "Streaming investigation entries, active reasoning, and verdict reveal must use transform-only shared tokens and become static, legible states under reduced motion."
+    },
     "design.severity-token.contract": {
       "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
       "rationale": "Severity presentation must use shared semantic product tokens with light, dark, reduced-motion, and forced-color coverage instead of copying literal provider palette classes."
@@ -11302,6 +11306,74 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product already replaces source DOM-event handoff with a typed capability-gated Tauri bridge and keeps workstation shell authority out of Python. Cross-OS packaging remains deferred to the final OS stage, not this runtime contract."
+          }
+        }
+      ]
+    },
+    "web/src/index.css": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:diagnose:motion:stream-and-verdict-feedback:v1",
+          "legacyContractIds": [],
+          "symbol": "transcript enter, thinking shimmer, synthesis pulse, verdict reveal, and code colorize styles",
+          "interaction": "new investigation turns and lifecycle events enter without changing layout geometry, active reasoning receives a semantic live-work cue, and the final verdict receives one bounded reveal while all meaning remains readable when motion is reduced",
+          "transport": "sse",
+          "realtime": {
+            "resume": "replayed transcript rows render in durable sequence and use the same bounded entry treatment as live rows without restarting server work",
+            "backpressure": "animation is applied only to mounted validated rows and never schedules a timer per stream token",
+            "merge": "motion attaches to the immutable event kind and sequence already accepted by the Diagnose adapter"
+          },
+          "motion": {
+            "reducedMotion": "entry transforms and verdict glow are removed, shimmer becomes ordinary muted text, and no animation is required to distinguish active work from a terminal result.",
+            "evidence": [
+              "frontend/src/motion/tokens.css",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/motion/tokens.css",
+              "frontend/src/motion/__tests__/motion-contract.test.ts",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.stream"
+            ],
+            "plannedTestIds": [
+              "diagnose.frontend.motion",
+              "diagnose.frontend.surface",
+              "diagnose.frontend.transport"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source styles are consolidated into the product motion token boundary and applied only to strict durable Diagnose events. The implementation avoids height animation, token-level shimmer churn, and literal source product colors."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:runtime:stylesheet:host-root-isolation:v1",
+          "legacyContractIds": [],
+          "symbol": "published-library source root isolation",
+          "interaction": "an external browser host imports the complete product stylesheet without allowing app-shell height rules to reshape the host document root",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/ProductApp.tsx",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia does not publish an embeddable browser-library stylesheet or accept an arbitrary host root; the supported web and Tauri runtimes own the full document and authenticated composition.",
+            "rationale": "Product root isolation remains explicit in the standalone build baseline. A source-specific legacy selector would preserve an unsupported host-injection architecture and removed product naming."
           }
         }
       ]
