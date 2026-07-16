@@ -61,12 +61,12 @@
       }
     },
     "reference.feature.025": {
-      "deliveryStatus": "implemented",
+      "deliveryStatus": "not_applicable",
       "desktopContract": null,
-      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"],
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/app/ProductRouter.filterCutover.test.tsx"],
       "coverage": {
-        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Topology route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
-        "frontend": {"state": "implemented", "destination": "frontend/src/app/composition/surfaces/topology.ts#loadTopologySurface", "consumer": "frontend/src/pages/resources/PhysicalTopologyView.tsx#PhysicalTopologyView", "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"}
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The standalone Topology route was deliberately removed from the product and therefore must not create a Python route contract.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The standalone Topology surface is intentionally excluded; Resources retains the shared physical and relation graph contracts under their own feature rows.", "test": "frontend/src/app/ProductRouter.filterCutover.test.tsx"}
       }
     },
     "reference.feature.026": {
@@ -230,6 +230,15 @@
       "coverage": {
         "backend": {"state": "not_required", "destination": "frontend/src/app/ProductCommandPalette.tsx", "reason": "Command-palette opening is browser keyboard state.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
         "frontend": {"state": "implemented", "destination": "frontend/src/app/ProductCommandPalette.tsx#ProductCommandPalette", "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
+      }
+    },
+    "reference.feature.052": {
+      "deliveryStatus": "not_applicable",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "Topology viewport keyboard state has no backend contract and its standalone surface is intentionally excluded.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "not_required", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "reason": "The topology-only fit and zoom shortcuts are deliberately absent with the removed standalone surface; Resources graph interaction remains independently scoped.", "test": "frontend/src/app/shortcutRegistry.test.ts"}
       }
     },
     "reference.feature.053": {

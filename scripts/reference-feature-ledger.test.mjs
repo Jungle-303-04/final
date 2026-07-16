@@ -789,7 +789,7 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
   const expected = new Map([
     ["reference.feature.014", "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1"],
     ...[
-      "021", "022", "023", "024", "025", "027", "028", "029",
+      "021", "022", "023", "024", "027", "028", "029",
       "030", "031", "032", "033", "034", "035", "036",
     ].map((id) => [
       `reference.feature.${id}`,
@@ -824,6 +824,16 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
     assert.equal(feature.deliveryStatus, "implemented", contractId);
     assert.equal(feature.sourceKey, sourceKey, contractId);
     assert.equal(interactionOwners.get(contractId)?.sourceKey, sourceKey, contractId);
+  }
+
+  for (const contractId of ["reference.feature.025", "reference.feature.052"]) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(port.deliveryStatus, "not_applicable", contractId);
+    assert.equal(port.desktopContract, null, contractId);
+    assert.equal(port.coverage.backend.state, "not_required", contractId);
+    assert.equal(port.coverage.frontend.state, "not_required", contractId);
+    assert.equal(feature.deliveryStatus, "not_applicable", contractId);
   }
 });
 
