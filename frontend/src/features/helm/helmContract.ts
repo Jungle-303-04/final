@@ -1,5 +1,7 @@
 import type {
   HelmChartSource,
+  HelmChartSourceDeleteReceipt,
+  HelmChartSourceDeleteRequest,
   HelmChartSourceListRequest,
   HelmChartSourcePage,
   HelmChartSourceRegisterRequest,
@@ -7,7 +9,10 @@ import type {
 
 export type {
   HelmChartSource,
+  HelmChartSourceAction,
   HelmChartSourceCredential,
+  HelmChartSourceDeleteReceipt,
+  HelmChartSourceDeleteRequest,
   HelmChartSourceListRequest,
   HelmChartSourcePage,
   HelmChartSourceProvider,
@@ -281,4 +286,8 @@ export interface HelmPort {
     request: HelmChartSourceRegisterRequest,
     signal?: AbortSignal,
   ): Promise<HelmChartSource>;
+  deleteChartSource(
+    request: HelmChartSourceDeleteRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmChartSourceDeleteReceipt>;
 }

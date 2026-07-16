@@ -14,13 +14,14 @@ from domains.helm.source_router import (
     router as helm_source_router,
 )
 from domains.identity.dependencies import require_admin_session, require_session
+from packages.contracts.event_bus.interfaces import EventEnvelope
 from packages.contracts.helm.sources import (
     HelmChartSource,
     HelmChartSourcePage,
     HelmChartVersion,
     HelmChartVersionObservation,
 )
-from packages.runtime.dependencies import get_db
+from packages.runtime.dependencies import get_db, get_events
 
 
 def _current(*, admin: bool = False) -> SimpleNamespace:
@@ -48,20 +49,54 @@ def _client(
     *,
     provider: object | None = None,
     admin: bool = False,
+    events: object | None = None,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(helm_source_router)
     app.dependency_overrides[require_session] = lambda: _current(admin=admin)
     app.dependency_overrides[require_admin_session] = lambda: _current(admin=True)
     app.dependency_overrides[get_db] = lambda: db
+    if events is not None:
+        app.dependency_overrides[get_events] = lambda: events
     if provider is not None:
         app.dependency_overrides[get_helm_chart_version_provider] = lambda: provider
     return TestClient(app)
 
 
+class _AcceptedEvents:
+    def __init__(self) -> None:
+        self.body: object | None = None
+        self.actor: object | None = None
+        self.stage_calls = 0
+
+    async def accept_body(
+        self,
+        body: object,
+        *,
+        actor: object,
+        transactional_stage: object,
+    ) -> object:
+        self.body = body
+        self.actor = actor
+        event = EventEnvelope(
+            event_id="event-delete-source-a",
+            subject="helm.chart_source.deleted",
+            source="api-gateway",
+            correlation_id="correlation-delete-source-a",
+            causation_id=None,
+            created_at="2026-07-17T09:00:00+00:00",
+            workspace_id="workspace-a",
+            payload=body.to_body(),  # type: ignore[attr-defined]
+        )
+        self.stage_calls += 1
+        transactional_stage(object(), event)
+        return SimpleNamespace(event=event)
+
+
 def test_source_list_materializes_per_source_workspace_rbac_before_pagination() -> None:
     class Db:
         source_ids: set[str] | None = None
+        permissions: list[str] = []
 
         def accessible_resource_ids(
             self,
@@ -72,7 +107,8 @@ def test_source_list_materializes_per_source_workspace_rbac_before_pagination() 
         ) -> set[str]:
             assert (user_id, workspace_id) == ("user-a", "workspace-a")
             assert resource_type == "helm_chart_source"
-            assert permission == "catalog.read"
+            self.permissions.append(permission)
+            assert permission in {"catalog.read", "config.update"}
             return {"source-a"}
 
         def list_helm_chart_sources(
@@ -95,12 +131,39 @@ def test_source_list_materializes_per_source_workspace_rbac_before_pagination() 
             )
 
     db = Db()
-    response = _client(db).get("/helm/chart-sources?limit=25")
+    response = _client(db, admin=True).get("/helm/chart-sources?limit=25")
 
     assert response.status_code == 200
     assert db.source_ids == {"source-a"}
+    assert db.permissions == ["catalog.read", "config.update"]
     assert response.json()["items"][0]["reference"] == "https://charts.example.com/stable"
+    assert response.json()["items"][0]["actions"] == ["delete"]
     assert "credential_ref" not in response.text
+
+
+def test_source_list_omits_delete_capability_for_non_admin_or_denied_source() -> None:
+    class Db:
+        def accessible_resource_ids(
+            self,
+            _user_id: str,
+            _workspace_id: str,
+            _resource_type: str,
+            permission: str,
+        ) -> set[str]:
+            return {"source-a"} if permission == "catalog.read" else set()
+
+        def list_helm_chart_sources(self, **_payload: object) -> HelmChartSourcePage:
+            return HelmChartSourcePage(
+                items=(_source(),),
+                limit=50,
+                has_more=False,
+                next_cursor=None,
+            )
+
+    response = _client(Db(), admin=False).get("/helm/chart-sources")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["actions"] == []
 
 
 def test_admin_source_registration_reuses_encrypted_workspace_credential(
@@ -155,6 +218,238 @@ def test_admin_source_registration_reuses_encrypted_workspace_credential(
     assert str(source["credential_ref"]).startswith(
         "db:helm_repository:helm-chart-source/helm-source-"
     )
+
+
+def test_admin_deletes_exact_workspace_source_and_credential_with_durable_audit_receipt() -> None:
+    deleted: dict[str, object] = {}
+
+    class Db:
+        def can_access(
+            self,
+            user_id: str,
+            workspace_id: str,
+            resource_type: str,
+            resource_id: str,
+            permission: str,
+        ) -> bool:
+            deleted["access"] = (
+                user_id,
+                workspace_id,
+                resource_type,
+                resource_id,
+                permission,
+            )
+            return True
+
+        def delete_helm_chart_source(self, **payload: object) -> dict[str, object]:
+            deleted["source"] = payload
+            return {
+                "source_id": "source-a",
+                "workspace_id": "workspace-a",
+                "provider": "repository",
+                "name": "stable",
+                "canonical_ref": "https://charts.example.com/stable",
+                "credential_ref": "db:helm_repository:helm-chart-source/source-a",
+            }
+
+        def delete_workspace_credential(
+            self,
+            workspace_id: str,
+            provider: str,
+            scope: str,
+        ) -> bool:
+            deleted["credential"] = (workspace_id, provider, scope)
+            return True
+
+    events = _AcceptedEvents()
+    response = _client(Db(), admin=True, events=events).request(
+        "DELETE",
+        "/helm/chart-sources/source-a",
+        json={
+            "provider": "repository",
+            "name": "stable",
+            "reference": "https://charts.example.com/stable",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "accepted": True,
+        "event_id": "event-delete-source-a",
+        "correlation_id": "correlation-delete-source-a",
+        "command_id": None,
+    }
+    assert deleted["access"] == (
+        "user-a",
+        "workspace-a",
+        "helm_chart_source",
+        "source-a",
+        "config.update",
+    )
+    assert deleted["source"] == {
+        "workspace_id": "workspace-a",
+        "source_id": "source-a",
+        "expected_provider": "repository",
+        "expected_name": "stable",
+        "expected_reference": "https://charts.example.com/stable",
+    }
+    assert deleted["credential"] == (
+        "workspace-a",
+        "helm_repository",
+        "helm-chart-source/source-a",
+    )
+    assert events.stage_calls == 1
+    assert events.body is not None
+    assert events.body.to_body() == {  # type: ignore[attr-defined]
+        "workspace_id": "workspace-a",
+        "source_id": "source-a",
+        "provider": "repository",
+        "name": "stable",
+        "reference": "https://charts.example.com/stable",
+    }
+    assert "credential" not in response.text
+
+
+def test_source_delete_requires_resource_config_update_even_for_admin() -> None:
+    class Db:
+        def can_access(self, *_args: object) -> bool:
+            return False
+
+        def delete_helm_chart_source(self, **_payload: object) -> object:
+            raise AssertionError("forbidden source must not be deleted")
+
+    events = _AcceptedEvents()
+    response = _client(Db(), admin=True, events=events).request(
+        "DELETE",
+        "/helm/chart-sources/source-a",
+        json={
+            "provider": "repository",
+            "name": "stable",
+            "reference": "https://charts.example.com/stable",
+        },
+    )
+
+    assert response.status_code == 403
+    assert events.stage_calls == 0
+
+
+def test_source_delete_identity_conflict_is_atomic_and_does_not_emit_receipt() -> None:
+    from domains.helm.repository import HelmChartSourceIdentityConflict
+
+    class Db:
+        def can_access(self, *_args: object) -> bool:
+            return True
+
+        def delete_helm_chart_source(self, **_payload: object) -> object:
+            raise HelmChartSourceIdentityConflict
+
+    events = _AcceptedEvents()
+    response = _client(Db(), admin=True, events=events).request(
+        "DELETE",
+        "/helm/chart-sources/source-a",
+        json={
+            "provider": "repository",
+            "name": "stale-name",
+            "reference": "https://charts.example.com/stable",
+        },
+    )
+
+    assert response.status_code == 409
+    assert events.stage_calls == 1
+    assert response.json()["detail"] == "Helm chart source identity changed"
+
+
+def test_source_delete_absence_is_idempotent_and_does_not_revoke_unrelated_credentials() -> None:
+    from domains.helm.repository import HelmChartSourceNotFound
+
+    class Db:
+        def can_access(self, *_args: object) -> bool:
+            return True
+
+        def delete_helm_chart_source(self, **_payload: object) -> object:
+            raise HelmChartSourceNotFound
+
+        def delete_workspace_credential(self, *_args: object) -> object:
+            raise AssertionError("an absent source has no credential to revoke")
+
+    response = _client(Db(), admin=True, events=_AcceptedEvents()).request(
+        "DELETE",
+        "/helm/chart-sources/source-a",
+        json={
+            "provider": "repository",
+            "name": "stable",
+            "reference": "https://charts.example.com/stable",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Helm chart source not found"
+
+
+def test_source_delete_stages_workspace_audit_event_in_the_mutation_unit_of_work() -> None:
+    from packages.runtime.gateway import ApiEventGateway
+
+    class Publisher:
+        async def emit(self, *_args: object, **_kwargs: object) -> object:
+            raise AssertionError("durable mutation must use the transactional outbox")
+
+    class Db:
+        def __init__(self) -> None:
+            self.recorded: list[EventEnvelope] = []
+            self.staged: list[EventEnvelope] = []
+            self.mutated = False
+            self.active = False
+
+        @contextmanager
+        def unit_of_work(self):
+            assert not self.active
+            self.active = True
+            try:
+                yield self
+            finally:
+                self.active = False
+
+        def record_event(self, event: EventEnvelope) -> None:
+            assert self.active
+            self.recorded.append(event)
+
+        def stage_events(self, conn: object, events: list[EventEnvelope]) -> None:
+            assert self.active and conn is self
+            self.staged.extend(events)
+
+        def can_access(self, *_args: object) -> bool:
+            return True
+
+        def delete_helm_chart_source(self, **_payload: object) -> dict[str, object]:
+            assert self.active
+            self.mutated = True
+            return {"credential_ref": None}
+
+    db = Db()
+    events = ApiEventGateway(Publisher(), db, "api-gateway")
+    response = _client(db, admin=True, events=events).request(
+        "DELETE",
+        "/helm/chart-sources/source-a",
+        json={
+            "provider": "repository",
+            "name": "stable",
+            "reference": "https://charts.example.com/stable",
+        },
+    )
+
+    assert response.status_code == 200
+    assert db.mutated is True
+    assert db.recorded == db.staged
+    assert len(db.recorded) == 1
+    assert db.recorded[0].workspace_id == "workspace-a"
+    assert str(db.recorded[0].subject) == "helm.chart_source.deleted"
+    assert db.recorded[0].event_id == response.json()["event_id"]
+    assert db.recorded[0].payload["requested_by"] == "user-a"
+    assert db.recorded[0].payload["actor"] == {
+        "user_id": "user-a",
+        "roles": ["service_admin"],
+    }
+    assert "credential" not in db.recorded[0].payload
 
 
 def test_malformed_credential_validation_never_echoes_token_or_password() -> None:

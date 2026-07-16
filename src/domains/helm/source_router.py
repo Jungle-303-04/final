@@ -12,7 +12,12 @@ from fastapi.routing import APIRoute
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from domains.helm.repository import HelmChartSourceConflict
+from domains.helm.events import HelmChartSourceDeletedBody
+from domains.helm.repository import (
+    HelmChartSourceConflict,
+    HelmChartSourceIdentityConflict,
+    HelmChartSourceNotFound,
+)
 from domains.helm.source_provider import (
     HelmChartVersionProvider,
     HelmProviderCredential,
@@ -27,17 +32,26 @@ from domains.identity.dependencies import (
     require_resource_access,
     require_session,
 )
+from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
+from packages.contracts.gateway.responses import AcceptedResponse
 from packages.contracts.helm.sources import (
     HELM_CHART_SOURCE_PAGE_MAX,
     HelmChartSource,
     HelmChartSourceCredentialInput,
+    HelmChartSourceDeleteRequest,
     HelmChartSourcePage,
     HelmChartSourceRegisterRequest,
     HelmChartVersionObservation,
 )
-from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
-from packages.runtime.dependencies import get_db
+from packages.contracts.identity import (
+    DEFAULT_WORKSPACE_ID,
+    AccessResourceType,
+    Permission,
+    ServiceRole,
+)
+from packages.events.context import event_workspace
+from packages.runtime.dependencies import get_db, get_events
 from packages.security.credentials import (
     CredentialEncryptionError,
     credential_ref,
@@ -90,25 +104,40 @@ async def list_helm_chart_sources(
     db: Any = Depends(get_db),
 ) -> HelmChartSourcePage:
     workspace_id = _workspace_id(current)
-    accessible = getattr(db, "accessible_resource_ids", None)
-    source_ids: set[str] | None
-    if not callable(accessible):
-        source_ids = set()
-    else:
-        result = await asyncio.to_thread(
-            accessible,
-            str(getattr(current, "user_id", "")),
+    source_ids = await _accessible_source_ids(
+        db,
+        current,
+        workspace_id,
+        Permission.CATALOG_READ.value,
+    )
+    delete_ids: set[str] | None = set()
+    if ServiceRole.SERVICE_ADMIN.value in tuple(getattr(current, "roles", ()) or ()):
+        delete_ids = await _accessible_source_ids(
+            db,
+            current,
             workspace_id,
-            HELM_CHART_SOURCE_RESOURCE_TYPE,
-            Permission.CATALOG_READ.value,
+            Permission.CONFIG_UPDATE.value,
         )
-        source_ids = None if result is None else {str(value) for value in result}
-    return await asyncio.to_thread(
+    page = await asyncio.to_thread(
         db.list_helm_chart_sources,
         workspace_id=workspace_id,
         limit=limit,
         cursor=cursor,
         source_ids=source_ids,
+    )
+    return page.model_copy(
+        update={
+            "items": tuple(
+                source.model_copy(
+                    update={
+                        "actions": ("delete",)
+                        if delete_ids is None or source.source_id in delete_ids
+                        else ()
+                    }
+                )
+                for source in page.items
+            )
+        }
     )
 
 
@@ -136,6 +165,72 @@ async def register_helm_chart_source(
         raise HTTPException(status_code=503, detail=HELM_CHART_CREDENTIAL_UNAVAILABLE) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete(
+    gateway_routes.HELM_CHART_SOURCE_PATH,
+    response_model=AcceptedResponse,
+)
+async def delete_helm_chart_source(
+    payload: HelmChartSourceDeleteRequest,
+    source_id: str = Path(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$"),
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+) -> AcceptedResponse:
+    """Atomically delete one exact source, its credential, and durable audit event."""
+
+    workspace_id = _workspace_id(current)
+    await asyncio.to_thread(
+        require_resource_access,
+        db,
+        current,
+        workspace_id,
+        HELM_CHART_SOURCE_RESOURCE_TYPE,
+        source_id,
+        Permission.CONFIG_UPDATE.value,
+    )
+    try:
+        canonical_reference = normalize_helm_chart_source_reference(
+            payload.provider,
+            payload.reference,
+        )
+
+        def stage(_conn: Any, _event: Any) -> None:
+            _delete_chart_source(
+                db,
+                workspace_id=workspace_id,
+                source_id=source_id,
+                expected_provider=payload.provider,
+                expected_name=payload.name,
+                expected_reference=canonical_reference,
+            )
+
+        with event_workspace(workspace_id):
+            accepted = await events.accept_body(
+                HelmChartSourceDeletedBody(
+                    workspace_id=workspace_id,
+                    source_id=source_id,
+                    provider=payload.provider,
+                    name=payload.name,
+                    reference=canonical_reference,
+                ),
+                actor=Actor(str(current.user_id), tuple(current.roles)),
+                transactional_stage=stage,
+            )
+    except HelmChartSourceNotFound as exc:
+        raise HTTPException(status_code=404, detail=HELM_CHART_SOURCE_NOT_FOUND) from exc
+    except HelmChartSourceIdentityConflict as exc:
+        raise HTTPException(status_code=409, detail="Helm chart source identity changed") from exc
+    except CredentialEncryptionError as exc:
+        raise HTTPException(status_code=503, detail=HELM_CHART_CREDENTIAL_UNAVAILABLE) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return AcceptedResponse(
+        accepted=True,
+        event_id=str(accepted.event.event_id),
+        correlation_id=str(accepted.event.correlation_id),
+    )
 
 
 @router.get(
@@ -195,6 +290,54 @@ async def get_helm_chart_source_versions(
 
 def _workspace_id(current: Any) -> str:
     return str(getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID) or DEFAULT_WORKSPACE_ID)
+
+
+async def _accessible_source_ids(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    permission: str,
+) -> set[str] | None:
+    accessible = getattr(db, "accessible_resource_ids", None)
+    if not callable(accessible):
+        return set()
+    result = await asyncio.to_thread(
+        accessible,
+        str(getattr(current, "user_id", "")),
+        workspace_id,
+        HELM_CHART_SOURCE_RESOURCE_TYPE,
+        permission,
+    )
+    return None if result is None else {str(value) for value in result}
+
+
+def _delete_chart_source(
+    db: Any,
+    *,
+    workspace_id: str,
+    source_id: str,
+    expected_provider: str,
+    expected_name: str,
+    expected_reference: str,
+) -> None:
+    deleted = db.delete_helm_chart_source(
+        workspace_id=workspace_id,
+        source_id=source_id,
+        expected_provider=expected_provider,
+        expected_name=expected_name,
+        expected_reference=expected_reference,
+    )
+    ref = str(deleted.get("credential_ref") or "")
+    if not ref:
+        return
+    provider, scope = parse_credential_ref(ref)
+    expected_credential_provider = helm_chart_credential_provider(expected_provider)
+    expected_scope = helm_chart_credential_scope(source_id)
+    if provider != expected_credential_provider or scope != expected_scope:
+        raise CredentialEncryptionError(HELM_CHART_CREDENTIAL_UNAVAILABLE)
+    delete_credential = getattr(db, "delete_workspace_credential", None)
+    if not callable(delete_credential) or not delete_credential(workspace_id, provider, scope):
+        raise CredentialEncryptionError(HELM_CHART_CREDENTIAL_UNAVAILABLE)
 
 
 def _credential_payload(

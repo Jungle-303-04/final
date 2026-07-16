@@ -8,7 +8,12 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
-from domains.helm.repository import HelmChartSourceConflict, HelmReleaseRepository
+from domains.helm.repository import (
+    HelmChartSourceConflict,
+    HelmChartSourceIdentityConflict,
+    HelmChartSourceNotFound,
+    HelmReleaseRepository,
+)
 from domains.helm.source_provider import (
     helm_chart_credential_scope,
     helm_chart_source_from_row,
@@ -83,6 +88,7 @@ def test_chart_source_projection_never_exposes_credential_storage_fields() -> No
         "name": "stable",
         "reference": "https://charts.example.com/stable",
         "status": "active",
+        "actions": [],
         "credentials_configured": True,
         "observed_at": "2026-07-16T09:00:00+00:00",
     }
@@ -477,3 +483,110 @@ def test_internal_source_lookup_never_selects_workspace_credential_secret() -> N
     assert "credential_ref" in selected
     assert "encrypted_value" not in selected
     assert "metadata" not in selected
+
+
+def test_source_delete_locks_workspace_row_and_removes_only_exact_optimistic_identity() -> None:
+    statements: list[object] = []
+
+    class Result:
+        def __init__(self, row: dict[str, object] | None = None) -> None:
+            self.row = row
+
+        def mappings(self) -> Result:
+            return self
+
+        def first(self) -> dict[str, object] | None:
+            return self.row
+
+    class Connection:
+        def execute(self, statement: object) -> Result:
+            statements.append(statement)
+            if len(statements) == 1:
+                return Result(
+                    {
+                        "source_id": "source-a",
+                        "workspace_id": "workspace-a",
+                        "provider": "repository",
+                        "name": "stable",
+                        "canonical_ref": "https://charts.example.com/stable",
+                        "credential_ref": None,
+                    }
+                )
+            return Result()
+
+    @contextmanager
+    def connect() -> Iterator[Connection]:
+        yield Connection()
+
+    repository = object.__new__(HelmReleaseRepository)
+    repository.connection = connect
+    deleted = repository.delete_helm_chart_source(
+        workspace_id="workspace-a",
+        source_id="source-a",
+        expected_provider="repository",
+        expected_name="stable",
+        expected_reference="https://charts.example.com/stable/",
+    )
+
+    assert deleted["source_id"] == "source-a"
+    assert len(statements) == 2
+    locked_sql = str(statements[0].compile(dialect=postgresql.dialect()))
+    deleted_sql = str(statements[1].compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in locked_sql
+    assert "helm_chart_sources.workspace_id" in locked_sql
+    assert "helm_chart_sources.source_id" in locked_sql
+    assert deleted_sql.startswith("DELETE FROM helm_chart_sources")
+
+
+def test_source_delete_distinguishes_absent_from_changed_identity_without_deleting() -> None:
+    def repository_for(row: dict[str, object] | None) -> HelmReleaseRepository:
+        class Result:
+            def mappings(self) -> Result:
+                return self
+
+            def first(self) -> dict[str, object] | None:
+                return row
+
+        class Connection:
+            calls = 0
+
+            def execute(self, _statement: object) -> Result:
+                self.calls += 1
+                if self.calls > 1:
+                    raise AssertionError("non-matching source must not be deleted")
+                return Result()
+
+        @contextmanager
+        def connect() -> Iterator[Connection]:
+            yield Connection()
+
+        repository = object.__new__(HelmReleaseRepository)
+        repository.connection = connect
+        return repository
+
+    with pytest.raises(HelmChartSourceNotFound):
+        repository_for(None).delete_helm_chart_source(
+            workspace_id="workspace-a",
+            source_id="source-a",
+            expected_provider="repository",
+            expected_name="stable",
+            expected_reference="https://charts.example.com/stable",
+        )
+
+    with pytest.raises(HelmChartSourceIdentityConflict):
+        repository_for(
+            {
+                "source_id": "source-a",
+                "workspace_id": "workspace-a",
+                "provider": "repository",
+                "name": "renamed",
+                "canonical_ref": "https://charts.example.com/stable",
+                "credential_ref": None,
+            }
+        ).delete_helm_chart_source(
+            workspace_id="workspace-a",
+            source_id="source-a",
+            expected_provider="repository",
+            expected_name="stable",
+            expected_reference="https://charts.example.com/stable",
+        )

@@ -177,6 +177,7 @@ _AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSub
                 EventSubject.PIPELINE_CONTRACT_FAILED,
                 EventSubject.NAMESPACE_SCOPE_UPDATED,
                 EventSubject.UI_PREFERENCES_UPDATED,
+                EventSubject.HELM_CHART_SOURCE_DELETED,
             }
         ),
     ),

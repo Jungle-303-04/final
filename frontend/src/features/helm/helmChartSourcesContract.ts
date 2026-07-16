@@ -1,5 +1,8 @@
+import type { ConfigMutationReceipt } from "../../shared/parity/referenceParity";
+
 export type HelmChartSourceProvider = "repository" | "oci";
 export type HelmChartSourceStatus = "active" | "disabled";
+export type HelmChartSourceAction = "delete";
 
 export interface HelmChartSource {
   id: string;
@@ -7,6 +10,7 @@ export interface HelmChartSource {
   name: string;
   reference: string;
   status: HelmChartSourceStatus;
+  actions: readonly HelmChartSourceAction[];
   credentialsConfigured: boolean;
   observedAt: string | null;
 }
@@ -33,3 +37,12 @@ export interface HelmChartSourceRegisterRequest {
   reference: string;
   credential?: HelmChartSourceCredential;
 }
+
+export interface HelmChartSourceDeleteRequest {
+  id: string;
+  provider: HelmChartSourceProvider;
+  name: string;
+  reference: string;
+}
+
+export type HelmChartSourceDeleteReceipt = ConfigMutationReceipt;

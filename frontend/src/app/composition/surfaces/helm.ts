@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import {
+  deleteHelmChartSource,
   getHelmRelease,
   listHelmChartSources,
   listHelmReleases,
@@ -11,6 +12,7 @@ import { createHelmSurface } from "../../../pages/helm/createHelmSurface";
 
 export function loadHelmSurface(): ComponentType {
   return createHelmSurface(createHelmAdapter({
+    deleteHelmChartSource,
     getHelmRelease,
     listHelmChartSources,
     listHelmReleases,

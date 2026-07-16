@@ -380,6 +380,7 @@ function helmPort(): HelmPort & {
   readArtifact: ReturnType<typeof vi.fn>;
   listChartSources: ReturnType<typeof vi.fn>;
   registerChartSource: ReturnType<typeof vi.fn>;
+  deleteChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
     listReleases: vi.fn().mockResolvedValue({
@@ -397,6 +398,11 @@ function helmPort(): HelmPort & {
       commandId: "cmd-helm-1",
       status: "queued",
     }),
+    deleteChartSource: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "event-delete-source",
+      correlationId: "correlation-delete-source",
+    }),
     listChartSources: vi.fn().mockResolvedValue({
       items: [],
       limit: 50,
@@ -409,6 +415,7 @@ function helmPort(): HelmPort & {
       name: "Stable",
       reference: "https://charts.example.test/index.yaml",
       status: "active",
+      actions: ["delete"],
       credentialsConfigured: false,
       observedAt: null,
     }),

@@ -1,5 +1,9 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
+  acceptedConfigMutationSchema,
+  type AcceptedConfigMutationEndpoint,
+} from "./accepted-event-schemas";
+import {
   helmChartSourcePageSchema,
   helmChartSourceSchema,
   type HelmChartSourceEndpoint,
@@ -34,6 +38,12 @@ export interface HelmChartSourceListQuery {
   cursor?: string;
 }
 
+export interface HelmChartSourceDeleteRequest {
+  provider: HelmChartSourceProviderEndpoint;
+  name: string;
+  reference: string;
+}
+
 export function listHelmChartSources(
   query: HelmChartSourceListQuery = {},
   signal?: AbortSignal,
@@ -64,6 +74,25 @@ export function registerHelmChartSource(
   });
 }
 
+export function deleteHelmChartSource(
+  sourceId: string,
+  input: HelmChartSourceDeleteRequest,
+  signal?: AbortSignal,
+): Promise<AcceptedConfigMutationEndpoint> {
+  const id = requiredSourceId(sourceId);
+  const path = `${HELM_CHART_SOURCES_PATH}/${id}` as ApiPath;
+  return apiRequest(path, acceptedConfigMutationSchema, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      provider: input.provider,
+      name: requiredText(input.name, "name", NAME_MAX),
+      reference: requiredText(input.reference, "reference", REFERENCE_MAX),
+    }),
+    signal,
+  });
+}
+
 function optionalLimit(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isInteger(value) || value < 1 || value > SOURCE_PAGE_MAX) {
@@ -84,6 +113,14 @@ function requiredText(value: string, name: string, max: number): string {
   const normalized = value.trim();
   if (normalized === "" || normalized.length > max) {
     throw new TypeError(`${name} must contain between 1 and ${max} characters`);
+  }
+  return normalized;
+}
+
+function requiredSourceId(value: string): string {
+  const normalized = value.trim();
+  if (!/^[a-z0-9-]{1,80}$/.test(normalized)) {
+    throw new TypeError("sourceId must be a canonical Helm chart source ID");
   }
   return normalized;
 }

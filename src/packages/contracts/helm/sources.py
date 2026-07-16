@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -13,6 +13,7 @@ HELM_CHART_VERSION_PAGE_MAX = 200
 
 HelmChartSourceProvider = Literal["repository", "oci"]
 HelmChartSourceStatus = Literal["active", "disabled"]
+HelmChartSourceAction = Literal["delete"]
 HelmChartVersionAvailability = Literal["available", "partial", "unavailable"]
 
 
@@ -41,6 +42,22 @@ class HelmChartSourceRegisterRequest(StrictModel):
     credential: HelmChartSourceCredentialInput | None = None
 
 
+class HelmChartSourceDeleteRequest(StrictModel):
+    """Optimistic identity copied from an authorized source projection."""
+
+    provider: HelmChartSourceProvider
+    name: str = Field(min_length=1, max_length=120)
+    reference: str = Field(min_length=1, max_length=2048)
+
+    @field_validator("name", "reference")
+    @classmethod
+    def strip_identity_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Helm chart source identity must not be blank")
+        return normalized
+
+
 class HelmChartSource(StrictModel):
     """Public source projection; persisted credential references are intentionally absent."""
 
@@ -49,6 +66,7 @@ class HelmChartSource(StrictModel):
     name: str = Field(min_length=1)
     reference: str = Field(min_length=1)
     status: HelmChartSourceStatus
+    actions: tuple[HelmChartSourceAction, ...] = ()
     credentials_configured: bool
     observed_at: str | None = None
 

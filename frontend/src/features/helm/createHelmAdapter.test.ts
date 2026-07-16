@@ -7,6 +7,7 @@ describe("createHelmAdapter", () => {
     const port = createHelmAdapter({
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint()),
       getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
+      deleteHelmChartSource: vi.fn(),
       listHelmChartSources: vi.fn(),
       registerHelmChartSource: vi.fn(),
       startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
@@ -60,6 +61,7 @@ describe("createHelmAdapter", () => {
     const port = createHelmAdapter({
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint("stale")),
       getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
+      deleteHelmChartSource: vi.fn(),
       listHelmChartSources: vi.fn(),
       registerHelmChartSource: vi.fn(),
       startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),

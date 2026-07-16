@@ -29,10 +29,13 @@ function toPortFailure(error: unknown): HelmPortFailure {
     "rate-limited": "rate-limited",
   };
   const kind = stringField(error, "kind");
+  const status = numberField(error, "status");
   const retryAfter = numberField(error, "retryAfter");
-  const code = Object.prototype.hasOwnProperty.call(kinds, kind)
-    ? kinds[kind as keyof typeof kinds]
-    : "error";
+  const code = status === 409
+    ? "invalid-request"
+    : Object.prototype.hasOwnProperty.call(kinds, kind)
+      ? kinds[kind as keyof typeof kinds]
+      : "error";
   return new HelmPortFailure(code, retryAfter);
 }
 

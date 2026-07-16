@@ -121,9 +121,11 @@ export {
 } from "./helm-releases-schemas";
 export {
   HELM_CHART_SOURCES_PATH,
+  deleteHelmChartSource,
   listHelmChartSources,
   registerHelmChartSource,
   type HelmChartSourceCredentialRequest,
+  type HelmChartSourceDeleteRequest,
   type HelmChartSourceListQuery,
   type HelmChartSourceProviderEndpoint,
   type HelmChartSourceRegisterRequest,

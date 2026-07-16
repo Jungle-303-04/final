@@ -1,4 +1,5 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import {
   type HelmChartSource,
@@ -27,6 +28,7 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 import { HelmChartSourceRegistrationDialog } from "./HelmChartSourceRegistrationDialog";
+import { HelmChartSourceDeleteDialog } from "./HelmChartSourceDeleteDialog";
 import { useHelmChartSources } from "./useHelmChartSources";
 
 export function HelmChartSourcesPanel({ port }: { port: HelmPort }) {
@@ -41,13 +43,19 @@ export function HelmChartSourcesPanel({ port }: { port: HelmPort }) {
         </CardAction>
       </CardHeader>
       <CardContent className="grid min-w-0 gap-3">
-        <ChartSourceListBoundary data={data} />
+        <ChartSourceListBoundary data={data} port={port} />
       </CardContent>
     </Card>
   );
 }
 
-function ChartSourceListBoundary({ data }: { data: ReturnType<typeof useHelmChartSources> }) {
+function ChartSourceListBoundary({
+  data,
+  port,
+}: {
+  data: ReturnType<typeof useHelmChartSources>;
+  port: HelmPort;
+}) {
   if (data.state.phase === "loading") {
     return (
       <div aria-label={HELM_COPY.chartSourcesLoading} className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground" role="status">
@@ -74,7 +82,7 @@ function ChartSourceListBoundary({ data }: { data: ReturnType<typeof useHelmChar
   }
   return (
     <>
-      <ChartSourceTable items={data.state.items} />
+      <ChartSourceTable items={data.state.items} onDeleted={data.refresh} port={port} />
       {data.state.loadMoreFailure ? (
         <Alert variant="destructive"><AlertDescription>{HELM_COPY.chartSourcesLoadMoreFailed}</AlertDescription></Alert>
       ) : null}
@@ -91,32 +99,71 @@ function ChartSourceListBoundary({ data }: { data: ReturnType<typeof useHelmChar
   );
 }
 
-function ChartSourceTable({ items }: { items: readonly HelmChartSource[] }) {
+function ChartSourceTable({
+  items,
+  onDeleted,
+  port,
+}: {
+  items: readonly HelmChartSource[];
+  onDeleted: () => void;
+  port: HelmPort;
+}) {
+  const [selected, setSelected] = useState<HelmChartSource | null>(null);
+  const hasActions = items.some((source) => source.actions.includes("delete"));
   return (
-    <Table scrollAreaLabel={HELM_COPY.chartSources}>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{HELM_COPY.chartSourceName}</TableHead>
-          <TableHead>{HELM_COPY.chartSourceType}</TableHead>
-          <TableHead>{HELM_COPY.chartSourceReference}</TableHead>
-          <TableHead>{HELM_COPY.chartSourceCredentials}</TableHead>
-          <TableHead>{HELM_COPY.chartSourceStatus}</TableHead>
-          <TableHead>{HELM_COPY.chartSourceObserved}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((source) => (
-          <TableRow key={source.id}>
-            <TableCell className="max-w-48 truncate font-medium" title={source.name}>{source.name}</TableCell>
-            <TableCell>{source.provider === "oci" ? HELM_COPY.chartSourceOci : HELM_COPY.chartSourceRepository}</TableCell>
-            <TableCell className="max-w-96 break-all text-muted-foreground">{source.reference}</TableCell>
-            <TableCell>{source.credentialsConfigured ? HELM_COPY.chartSourceCredentialsConfigured : HELM_COPY.chartSourceCredentialsNone}</TableCell>
-            <TableCell><Badge variant="outline">{source.status}</Badge></TableCell>
-            <TableCell className="text-muted-foreground">{formatObservedAt(source.observedAt)}</TableCell>
+    <>
+      <Table scrollAreaLabel={HELM_COPY.chartSources}>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{HELM_COPY.chartSourceName}</TableHead>
+            <TableHead>{HELM_COPY.chartSourceType}</TableHead>
+            <TableHead>{HELM_COPY.chartSourceReference}</TableHead>
+            <TableHead>{HELM_COPY.chartSourceCredentials}</TableHead>
+            <TableHead>{HELM_COPY.chartSourceStatus}</TableHead>
+            <TableHead>{HELM_COPY.chartSourceObserved}</TableHead>
+            {hasActions ? <TableHead>{HELM_COPY.chartSourceActions}</TableHead> : null}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {items.map((source) => (
+            <TableRow key={source.id}>
+              <TableCell className="max-w-48 truncate font-medium" title={source.name}>{source.name}</TableCell>
+              <TableCell>{source.provider === "oci" ? HELM_COPY.chartSourceOci : HELM_COPY.chartSourceRepository}</TableCell>
+              <TableCell className="max-w-96 break-all text-muted-foreground">{source.reference}</TableCell>
+              <TableCell>{source.credentialsConfigured ? HELM_COPY.chartSourceCredentialsConfigured : HELM_COPY.chartSourceCredentialsNone}</TableCell>
+              <TableCell><Badge variant="outline">{source.status}</Badge></TableCell>
+              <TableCell className="text-muted-foreground">{formatObservedAt(source.observedAt)}</TableCell>
+              {hasActions ? (
+                <TableCell>
+                  {source.actions.includes("delete") ? (
+                    <Button
+                      aria-label={HELM_COPY.chartSourceDeleteButton(source.name)}
+                      onClick={() => setSelected(source)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </TableCell>
+              ) : null}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {selected ? (
+        <HelmChartSourceDeleteDialog
+          onDeleted={onDeleted}
+          onOpenChange={(open) => {
+            if (!open) setSelected(null);
+          }}
+          open
+          port={port}
+          source={selected}
+        />
+      ) : null}
+    </>
   );
 }
 

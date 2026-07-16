@@ -55,6 +55,9 @@ TERMINAL_SUBJECTS = {
     # committed state directly; workers must not replay them as another write.
     EventSubject.NAMESPACE_SCOPE_UPDATED,
     EventSubject.UI_PREFERENCES_UPDATED,
+    # Source deletion is committed configuration/audit evidence. Replaying it
+    # through a worker would attempt the same mutation a second time.
+    EventSubject.HELM_CHART_SOURCE_DELETED,
 }
 
 

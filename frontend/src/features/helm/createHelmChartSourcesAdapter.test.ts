@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createHelmAdapter } from "./createHelmAdapter";
+import { HelmPortFailure } from "./helmContract";
 
 describe("createHelmAdapter chart sources", () => {
   it("maps repository and OCI sources without exposing workspace or credential identities", async () => {
@@ -21,6 +22,7 @@ describe("createHelmAdapter chart sources", () => {
           name: "Stable",
           reference: "https://charts.example.test/index.yaml",
           status: "active",
+          actions: ["delete"],
           credentialsConfigured: false,
           observedAt: "2026-07-17T08:00:00Z",
         },
@@ -30,6 +32,7 @@ describe("createHelmAdapter chart sources", () => {
           name: "Private OCI",
           reference: "registry.example.test/team/charts",
           status: "active",
+          actions: [],
           credentialsConfigured: true,
           observedAt: null,
         },
@@ -62,6 +65,45 @@ describe("createHelmAdapter chart sources", () => {
     expect(result).toMatchObject({ id: "source-oci", credentialsConfigured: true });
     expect(JSON.stringify(result)).not.toContain("private-token");
   });
+
+  it("forwards the listed optimistic identity and maps the shared mutation receipt", async () => {
+    const endpoints = endpointDependencies();
+    const port = createHelmAdapter(endpoints);
+
+    await expect(port.deleteChartSource({
+      id: "source-repository",
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    })).resolves.toEqual({
+      accepted: true,
+      eventId: "event-delete-source",
+      correlationId: "correlation-delete-source",
+    });
+
+    expect(endpoints.deleteHelmChartSource).toHaveBeenCalledWith(
+      "source-repository",
+      {
+        provider: "repository",
+        name: "Stable",
+        reference: "https://charts.example.test/index.yaml",
+      },
+      undefined,
+    );
+  });
+
+  it("maps an optimistic identity conflict to a safe refreshable port failure", async () => {
+    const endpoints = endpointDependencies();
+    endpoints.deleteHelmChartSource.mockRejectedValue({ kind: "http", status: 409 });
+    const port = createHelmAdapter(endpoints);
+
+    await expect(port.deleteChartSource({
+      id: "source-repository",
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    })).rejects.toEqual(new HelmPortFailure("invalid-request"));
+  });
 });
 
 function endpointDependencies() {
@@ -69,6 +111,12 @@ function endpointDependencies() {
     listHelmReleases: vi.fn(),
     getHelmRelease: vi.fn(),
     startHelmArtifactRead: vi.fn(),
+    deleteHelmChartSource: vi.fn().mockResolvedValue({
+      accepted: true as const,
+      event_id: "event-delete-source",
+      correlation_id: "correlation-delete-source",
+      command_id: null,
+    }),
     listHelmChartSources: vi.fn().mockResolvedValue({
       items: [
         sourceEndpoint(),
@@ -78,6 +126,7 @@ function endpointDependencies() {
           name: "Private OCI",
           reference: "registry.example.test/team/charts",
           credentials_configured: true,
+          actions: [],
           observed_at: null,
         }),
       ],
@@ -104,6 +153,7 @@ function sourceEndpoint(overrides: Record<string, unknown> = {}) {
     reference: "https://charts.example.test/index.yaml",
     status: "active" as const,
     credentials_configured: false,
+    actions: ["delete"],
     observed_at: "2026-07-17T08:00:00Z",
     ...overrides,
   };

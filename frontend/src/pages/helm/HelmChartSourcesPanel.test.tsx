@@ -124,16 +124,66 @@ describe("HelmChartSourcesPanel", () => {
       expect.any(AbortSignal),
     );
   });
+
+  it("confirms an authorized delete with the listed identity and refetches after receipt", async () => {
+    const user = userEvent.setup();
+    const port = helmPort();
+    render(<HelmChartSourcesPanel port={port} />);
+
+    await user.click(await screen.findByRole("button", { name: "Delete Stable chart source" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete chart source" });
+    expect(dialog.textContent).toContain("Stable");
+    expect(dialog.textContent).toContain("https://charts.example.test/index.yaml");
+
+    await user.click(screen.getByRole("button", { name: "Delete chart source permanently" }));
+
+    await waitFor(() => expect(port.deleteChartSource).toHaveBeenCalledWith({
+      id: "source-repository",
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    }, expect.any(AbortSignal)));
+    await waitFor(() => expect(port.listChartSources).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("dialog", { name: "Delete chart source" })).toBeNull();
+  });
+
+  it("omits unauthorized delete actions and keeps a safe forbidden error in confirmation", async () => {
+    const user = userEvent.setup();
+    const port = helmPort();
+    port.listChartSources.mockResolvedValue(sourcePage([
+      source({ actions: [] }),
+      source({ id: "source-oci", provider: "oci", name: "Private OCI", actions: ["delete"] }),
+    ]));
+    port.deleteChartSource.mockRejectedValue(new HelmPortFailure("forbidden"));
+    render(<HelmChartSourcesPanel port={port} />);
+
+    await screen.findByText("Stable");
+    expect(screen.queryByRole("button", { name: "Delete Stable chart source" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Delete Private OCI chart source" }));
+    await user.click(screen.getByRole("button", { name: "Delete chart source permanently" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "You are not authorized to delete this chart source.",
+    );
+    expect(screen.getByRole("dialog", { name: "Delete chart source" })).toBeTruthy();
+    expect(port.listChartSources).toHaveBeenCalledTimes(1);
+  });
 });
 
 function helmPort(): HelmPort & {
   listChartSources: ReturnType<typeof vi.fn>;
   registerChartSource: ReturnType<typeof vi.fn>;
+  deleteChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
     listReleases: vi.fn(),
     getRelease: vi.fn(),
     readArtifact: vi.fn(),
+    deleteChartSource: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "event-delete-source",
+      correlationId: "correlation-delete-source",
+    }),
     listChartSources: vi.fn().mockResolvedValue(sourcePage([
       source(),
       source({
@@ -167,6 +217,7 @@ function source(overrides: Partial<HelmChartSource> = {}): HelmChartSource {
     name: "Stable",
     reference: "https://charts.example.test/index.yaml",
     status: "active",
+    actions: ["delete"],
     credentialsConfigured: false,
     observedAt: "2026-07-17T08:00:00Z",
     ...overrides,

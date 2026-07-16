@@ -94,6 +94,9 @@ class EventSubject(StrEnum):
     NAMESPACE_SCOPE_UPDATED = "namespace.scope.updated"
     UI_PREFERENCES_UPDATED = "ui.preferences.updated"
 
+    # --- Helm workspace configuration ---
+    HELM_CHART_SOURCE_DELETED = "helm.chart_source.deleted"
+
     # --- GitOps 제품 상태(workflow-controller): 이벤트 흐름을 사용자 실행 객체로 투영 ---
     WORKFLOW_CREATED = "workflow.created"  # 앱/바인딩/커밋 기준 실행 객체 생성 요청
     WORKFLOW_RUN_STARTED = "workflow.run.started"  # 실행 객체 시작/재개

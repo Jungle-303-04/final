@@ -8,6 +8,7 @@ export const helmChartSourceSchema = z.strictObject({
   name: z.string().min(1),
   reference: z.string().min(1),
   status: z.enum(["active", "disabled"]),
+  actions: z.array(z.literal("delete")).max(1),
   credentials_configured: z.boolean(),
   observed_at: nullableObservedAtSchema,
 });

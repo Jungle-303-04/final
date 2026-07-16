@@ -92,6 +92,7 @@ export interface HelmChartSourceEndpoint {
   name: string;
   reference: string;
   status: "active" | "disabled";
+  actions: Array<"delete">;
   credentials_configured: boolean;
   observed_at: string | null;
 }
@@ -112,6 +113,19 @@ export interface HelmChartSourceRegisterEndpointInput {
   name: string;
   reference: string;
   credential?: HelmChartSourceCredentialEndpointInput;
+}
+
+export interface HelmChartSourceDeleteEndpointInput {
+  provider: "repository" | "oci";
+  name: string;
+  reference: string;
+}
+
+export interface HelmConfigMutationEndpointReceipt {
+  accepted: true;
+  event_id: string;
+  correlation_id: string;
+  command_id: null;
 }
 
 export interface HelmEndpointDependencies {
@@ -157,4 +171,9 @@ export interface HelmEndpointDependencies {
     input: HelmChartSourceRegisterEndpointInput,
     signal?: AbortSignal,
   ): Promise<HelmChartSourceEndpoint>;
+  deleteHelmChartSource(
+    sourceId: string,
+    input: HelmChartSourceDeleteEndpointInput,
+    signal?: AbortSignal,
+  ): Promise<HelmConfigMutationEndpointReceipt>;
 }

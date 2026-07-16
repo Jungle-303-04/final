@@ -41,6 +41,14 @@ class HelmChartSourceConflict(RuntimeError):
     """A workspace already has the same source identity or display name."""
 
 
+class HelmChartSourceNotFound(RuntimeError):
+    """No source exists for the exact workspace and source ID."""
+
+
+class HelmChartSourceIdentityConflict(RuntimeError):
+    """The listed optimistic source identity no longer matches storage."""
+
+
 @dataclass(frozen=True)
 class HelmOwnedResourceObservationBatch:
     """Bounded safe metadata rows used for release ownership correlation."""
@@ -210,6 +218,61 @@ class HelmReleaseRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
+
+    def delete_helm_chart_source(
+        self,
+        *,
+        workspace_id: str,
+        source_id: str,
+        expected_provider: str,
+        expected_name: str,
+        expected_reference: str,
+    ) -> dict[str, Any]:
+        """Lock and delete one source only when its listed identity still matches."""
+
+        normalized_workspace = workspace_id.strip()
+        normalized_source_id = source_id.strip()
+        normalized_name = expected_name.strip()
+        if not normalized_workspace or not normalized_source_id or not normalized_name:
+            raise ValueError("workspace and Helm chart source identity are required")
+        canonical_ref = normalize_helm_chart_source_reference(
+            expected_provider,
+            expected_reference,
+        )
+        table = HelmChartSourceRecord.__table__
+        locked = (
+            select(
+                table.c.source_id,
+                table.c.workspace_id,
+                table.c.provider,
+                table.c.name,
+                table.c.canonical_ref,
+                table.c.credential_ref,
+            )
+            .where(
+                table.c.workspace_id == normalized_workspace,
+                table.c.source_id == normalized_source_id,
+            )
+            .with_for_update()
+        )
+        with self.connection() as conn:
+            row = conn.execute(locked).mappings().first()
+            if row is None:
+                raise HelmChartSourceNotFound
+            current = dict(row)
+            if (
+                str(current.get("provider") or "") != expected_provider
+                or str(current.get("name") or "") != normalized_name
+                or str(current.get("canonical_ref") or "") != canonical_ref
+            ):
+                raise HelmChartSourceIdentityConflict
+            conn.execute(
+                table.delete().where(
+                    table.c.workspace_id == normalized_workspace,
+                    table.c.source_id == normalized_source_id,
+                )
+            )
+        return current
 
     def list_helm_storage_observations(
         self,

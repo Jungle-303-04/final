@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  deleteHelmChartSource,
   HELM_CHART_SOURCES_PATH,
   listHelmChartSources,
   registerHelmChartSource,
@@ -63,6 +64,57 @@ describe("Helm chart source API", () => {
     });
   });
 
+  it("deletes one exact source identity and validates the durable mutation receipt", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      accepted: true,
+      event_id: "event-delete-source",
+      correlation_id: "correlation-delete-source",
+      command_id: null,
+    }));
+
+    await expect(deleteHelmChartSource("source-repository", {
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    })).resolves.toEqual({
+      accepted: true,
+      event_id: "event-delete-source",
+      correlation_id: "correlation-delete-source",
+      command_id: null,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/helm/chart-sources/source-repository");
+    const request = fetchMock.mock.calls[0]?.[1];
+    expect(request?.method).toBe("DELETE");
+    expect(new Headers(request?.headers).get("x-service-csrf")).toBe("same-origin");
+    expect(JSON.parse(String(request?.body))).toEqual({
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    });
+  });
+
+  it("rejects unsafe delete identities and invalid mutation receipts before projection", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      accepted: true,
+      event_id: "event-delete-source",
+      correlation_id: "",
+      command_id: null,
+    }));
+
+    expect(() => deleteHelmChartSource("../other-source", {
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    })).toThrow(TypeError);
+    await expect(deleteHelmChartSource("source-repository", {
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+    })).rejects.toMatchObject({ kind: "invalid-payload" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed when pagination is inconsistent or a response leaks credential identity", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(jsonResponse({ ...page(), has_more: true, next_cursor: null }))
@@ -101,6 +153,7 @@ function source(overrides: Record<string, unknown> = {}) {
     name: "Stable",
     reference: "https://charts.example.test/index.yaml",
     status: "active",
+    actions: ["delete"],
     credentials_configured: false,
     observed_at: "2026-07-17T08:00:00Z",
     ...overrides,
