@@ -28,8 +28,12 @@ const PROVIDER_BLOCKED = new Set([
   "reference.feature.140",
   "reference.feature.141",
   "reference.feature.142",
+]);
+
+const PROMETHEUS_RESOURCE_IMPLEMENTED = new Set([
   "reference.feature.149",
   "reference.feature.150",
+  "reference.feature.151",
   "reference.feature.152",
 ]);
 
@@ -102,6 +106,17 @@ test("unavailable providers and native port authority remain explicit", async ()
     "reference.feature.163",
   ]) {
     assert.equal(ports.features[contractId].coverage.desktop.state, "implemented", contractId);
+  }
+});
+
+test("Prometheus status, connection, resource categories, and HPA ranges reuse typed runtime ports", async () => {
+  const ports = await readJson("docs/migration/reference-feature-port-map.json");
+  for (const contractId of PROMETHEUS_RESOURCE_IMPLEMENTED) {
+    const port = ports.features[contractId];
+    assert.equal(port.deliveryStatus, "implemented", contractId);
+    assert.equal(port.coverage.backend.state, "implemented", contractId);
+    assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    assert.match(port.backendContract, /scoped_metrics/, contractId);
   }
 });
 

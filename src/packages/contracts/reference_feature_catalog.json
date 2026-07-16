@@ -5622,27 +5622,29 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.telemetry",
-      "frontendContract": "frontend/src/api/metrics.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.scoped_metrics.ScopedMetricQueryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_target_registration.py",
-        "frontend/src/api/metrics.test.ts",
+        "tests/test_scoped_resource_metrics.py",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/target/router.py",
-          "reason": "Prometheus configuration can be installed, but no live provider status repository reports address, service, context, freshness, and connection error.",
-          "test": "tests/test_target_registration.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#scoped_resource_metrics_query",
+          "consumer": "src/domains/command/scoped_metrics.py#build_scoped_metric_plans",
+          "reason": "The normalized multi-cluster status is returned by the real scoped query boundary as source, availability, scope freshness, queued coverage, and explicit reason codes; no process-local connection flag or browser inference is used.",
+          "test": "tests/test_scoped_resource_metrics.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/api/metrics.ts",
-          "reason": "Metric panels receive typed query outcomes and cannot infer provider connection state from an empty or failed query.",
-          "test": "frontend/src/api/metrics.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/api/metrics.ts#runScopedMetricQuery",
+          "consumer": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.ts#createResourceMetricsHistoryAdapter",
+          "reason": "The resource frame consumes server-reported source, freshness, availability, coverage, and per-command failure reasons and schedules the next observation from the response-selected refresh policy.",
+          "test": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5663,27 +5665,29 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity.CommandReceipt",
-      "frontendContract": "frontend/src/api/metrics.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.scoped_metrics.ScopedMetricQueryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_target_registration.py",
-        "frontend/src/api/metrics.test.ts",
+        "tests/test_scoped_resource_metrics.py",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/target/router.py",
-          "reason": "No provider discovery and connection command validates a target, persists status, returns an audited receipt, and invalidates metric availability.",
-          "test": "tests/test_target_registration.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#scoped_resource_metrics_query",
+          "consumer": "src/domains/command/debug_queries.py#queue_debug_query",
+          "reason": "Opening an authorized metric surface queues bounded server-owned Prometheus probes through the existing audited target-agent command path and returns immutable command and correlation receipts for actual provider outcomes.",
+          "test": "tests/test_scoped_resource_metrics.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/api/metrics.ts",
-          "reason": "The existing query command cannot be reused as a Prometheus connection mutation.",
-          "test": "frontend/src/api/metrics.test.ts"
+          "state": "implemented",
+          "destination": "frontend/src/api/metrics.ts#runScopedMetricQuery",
+          "consumer": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
+          "reason": "The visible resource identity automatically starts one real provider observation, follows its receipts without re-enqueueing, isolates partial failures, and invalidates on the server-selected Prometheus cadence.",
+          "test": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5705,29 +5709,29 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.scoped_metrics.ScopedMetricQueryResponse",
       "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_inventory_filter_router.py",
-        "frontend/src/api/resource-metrics-history.test.ts",
+        "tests/test_scoped_resource_metrics.py",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
         "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
-          "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
-          "reason": "CPU and memory history with exact scope and range is implemented; network, filesystem, restart, request, limit, category, and unit series are not persisted.",
-          "test": "tests/test_inventory_filter_router.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#scoped_resource_metrics_query",
+          "consumer": "src/domains/command/scoped_metrics.py#build_scoped_metric_plans",
+          "reason": "One typed resource batch resolves the exact inventory UID and queues server-owned CPU, memory, network receive/transmit, filesystem, and restart ranges with explicit units, coverage, freshness, and bounded cardinality; request and limit evidence reuses the same UID-bound inventory summary.",
+          "test": "tests/test_scoped_resource_metrics.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
           "consumer": "frontend/src/features/resources/resourceMetricsHistoryContract.ts#ResourceMetricsHistoryPort",
-          "reason": "The grid renders only server-observed CPU and memory panels and does not synthesize missing categories.",
+          "reason": "The shared grid renders every returned category, preserves unavailable categories as absent, overlays exact-UID request and limit evidence, and derives saturation only from the current observation and observed reference values.",
           "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
         },
         "desktop": null,
@@ -5749,29 +5753,30 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.requests.AgentDebugQueryRequest",
-      "frontendContract": "frontend/src/api/metrics.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.scoped_metrics.ScopedMetricQueryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "tests/test_target_agent_commands.py",
-        "frontend/src/api/metrics-command.test.ts",
+        "tests/test_scoped_resource_metrics.py",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
           "state": "implemented",
-          "destination": "src/domains/command/debug_queries.py#queue_debug_query",
-          "consumer": "src/services/target/cluster-agent/providers/prometheus_providers.py",
-          "test": "tests/test_command_router.py"
+          "destination": "src/domains/command/scoped_metrics.py#build_scoped_metric_plans",
+          "consumer": "src/domains/command/debug_queries.py#queue_debug_query",
+          "reason": "The exact autoscaling/v2 HPA identity selects server-owned current and desired replica range definitions; the browser cannot submit PromQL and every query keeps the existing audited command boundary.",
+          "test": "tests/test_scoped_resource_metrics.py#test_hpa_replica_history_uses_exact_inventory_identity_and_server_owned_queries"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/api/metrics.ts#runPrometheusQuery",
+          "state": "implemented",
+          "destination": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.ts#createResourceMetricsHistoryAdapter",
           "consumer": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
-          "reason": "The generic bounded Prometheus command is implemented, but no server-owned HPA query definition and range chart consumer is attached to an exact HPA resource.",
-          "test": "frontend/src/api/metrics-command.test.ts"
+          "reason": "The HPA detail requests only the two typed replica presets and renders current and desired series with the canonical server-controlled range and refresh policy.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

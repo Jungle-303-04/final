@@ -14418,7 +14418,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product now drives metrics range from the shared URL detail contract instead of a hardcoded hook value. CPU and memory history remain strict server evidence, while rightsizing stays in its own observed-or-unavailable contract."
+            "rationale": "The product drives metrics range from the shared URL detail contract, renders strict CPU and memory evidence, and attaches exact HPA current/desired replica presets without browser PromQL. Rightsizing stays in its own observed-or-unavailable contract."
           }
         },
         {
@@ -14457,7 +14457,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The shared scoped metric path now supplies exact-unit PVC volume usage with source, freshness, coverage, and inventory identity to provider detail. Network, filesystem, restart, request, limit, and saturation panels remain tracked by reference.feature.151 and are not synthesized."
+            "rationale": "The shared scoped metric path supplies exact-unit CPU, memory, network receive/transmit, filesystem, restart, and PVC volume series with source, freshness, coverage, and inventory identity. UID-bound request/limit evidence and saturation reuse the canonical resource summary and are never synthesized from missing values."
           }
         }
       ]
@@ -15371,8 +15371,8 @@
               "settings.integrations.gate"
             ],
             "state": "blocked",
-            "blockedReason": "No Python integration repository owns Prometheus endpoint secrets, write-only header preservation, owner authorization, live client replacement, bounded probe, or audit evidence.",
-            "rationale": "The product keeps this control unavailable instead of storing credentials in browser state or claiming that the workload metrics reader can mutate its provider."
+            "blockedReason": "The provider status and automatic audited connection probe are implemented through the scoped metrics runtime; only reference.feature.223 credential URL/header mutation remains blocked because no Python secret integration repository owns write-only preservation or live client replacement.",
+            "rationale": "Resource surfaces reuse real agent query receipts, source freshness, coverage, and failure reasons for connection feedback. Settings still exposes no fake credential editor and does not store provider secrets in browser state."
           }
         },
         {
