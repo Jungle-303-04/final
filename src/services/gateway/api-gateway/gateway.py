@@ -38,6 +38,7 @@ from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.gitops_filter.router import router as gitops_filter_router
 from domains.helm.release_router import router as helm_release_router
+from domains.helm.source_router import router as helm_source_router
 from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -349,6 +350,9 @@ class ApiGateway:
         app.include_router(
             helm_release_router
         )  # browser Helm storage metadata (session + inventory RBAC)
+        app.include_router(
+            helm_source_router
+        )  # workspace Helm chart sources (session/admin + per-source RBAC)
         app.include_router(
             traffic_router
         )  # browser Traffic availability (session + inventory RBAC)

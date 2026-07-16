@@ -92,6 +92,7 @@ class AccessResourceType(StrEnum):
     DEPLOYMENT_BINDING = "deployment_binding"
     MANIFEST_PATH = "manifest_path"
     CATALOG_ITEM = "catalog_item"
+    HELM_CHART_SOURCE = "helm_chart_source"
     STACK = "stack"
     RUNNER_JOB = "runner_job"
     INCIDENT = "incident"
@@ -234,6 +235,7 @@ PLATFORM_RESOURCE_TYPES: tuple[str, ...] = (
     AccessResourceType.DEPLOYMENT_BINDING.value,
     AccessResourceType.MANIFEST_PATH.value,
     AccessResourceType.CATALOG_ITEM.value,
+    AccessResourceType.HELM_CHART_SOURCE.value,
     AccessResourceType.STACK.value,
     AccessResourceType.RUNNER_JOB.value,
     AccessResourceType.INCIDENT.value,

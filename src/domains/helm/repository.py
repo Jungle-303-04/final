@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
@@ -12,7 +11,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.helm.models import HelmChartSourceRecord
 from domains.helm.source_provider import (
+    helm_chart_credential_provider,
+    helm_chart_credential_scope,
     helm_chart_source_from_row,
+    helm_chart_source_id,
     normalize_helm_chart_source_reference,
 )
 from domains.inventory.models import ClusterInventoryResourceRecord
@@ -33,10 +35,6 @@ HELM_MANAGED_BY_LABEL = "app.kubernetes.io/managed-by"
 HELM_MANAGED_BY_VALUE = "Helm"
 HELM_RELEASE_NAME_ANNOTATION = "meta.helm.sh/release-name"
 HELM_RELEASE_NAMESPACE_ANNOTATION = "meta.helm.sh/release-namespace"
-HELM_CHART_CREDENTIAL_PROVIDERS = {
-    "repository": "helm_repository",
-    "oci": "helm_oci",
-}
 
 
 class HelmChartSourceConflict(RuntimeError):
@@ -71,18 +69,20 @@ class HelmReleaseRepository(DatabaseConnection):
         if not normalized_workspace or not normalized_name:
             raise ValueError("workspace_id and source name are required")
         canonical_ref = normalize_helm_chart_source_reference(provider, reference)
-        if credential_ref is not None:
-            try:
-                credential_provider, _scope = parse_credential_ref(credential_ref)
-            except CredentialEncryptionError as exc:
-                raise ValueError("invalid Helm chart source credential reference") from exc
-            if credential_provider != HELM_CHART_CREDENTIAL_PROVIDERS[provider]:
-                raise ValueError("invalid Helm chart source credential reference")
-        source_id = _helm_chart_source_id(
+        source_id = helm_chart_source_id(
             normalized_workspace,
             provider,
             canonical_ref,
         )
+        if credential_ref is not None:
+            try:
+                credential_provider, credential_scope = parse_credential_ref(credential_ref)
+            except CredentialEncryptionError as exc:
+                raise ValueError("invalid Helm chart source credential reference") from exc
+            if credential_provider != helm_chart_credential_provider(
+                provider
+            ) or credential_scope != helm_chart_credential_scope(source_id):
+                raise ValueError("invalid Helm chart source credential reference")
         table = HelmChartSourceRecord.__table__
         statement = (
             pg_insert(table)
@@ -112,6 +112,7 @@ class HelmReleaseRepository(DatabaseConnection):
         workspace_id: str,
         limit: int,
         cursor: str | None = None,
+        source_ids: Collection[str] | None = None,
     ) -> HelmChartSourcePage:
         """List one workspace's safe source projections with bounded keyset pagination."""
 
@@ -135,6 +136,16 @@ class HelmReleaseRepository(DatabaseConnection):
             table.c.status,
             table.c.updated_at,
         ).where(table.c.workspace_id == workspace_id)
+        if source_ids is not None:
+            allowed_source_ids = _ids(source_ids)
+            if not allowed_source_ids:
+                return HelmChartSourcePage(
+                    items=(),
+                    limit=effective_limit,
+                    has_more=False,
+                    next_cursor=None,
+                )
+            statement = statement.where(table.c.source_id.in_(allowed_source_ids))
         if cursor is not None:
             position = decode_keyset_cursor(cursor, expected_scope=scope)
             statement = statement.where(
@@ -166,6 +177,39 @@ class HelmReleaseRepository(DatabaseConnection):
             has_more=has_more,
             next_cursor=next_cursor,
         )
+
+    def get_helm_chart_source_record(
+        self,
+        *,
+        workspace_id: str,
+        source_id: str,
+    ) -> dict[str, Any] | None:
+        """Return one internal provider record, scoped before credential access."""
+
+        if not workspace_id or not source_id:
+            return None
+        table = HelmChartSourceRecord.__table__
+        statement = (
+            select(
+                table.c.source_id,
+                table.c.workspace_id,
+                table.c.provider,
+                table.c.name,
+                table.c.canonical_ref,
+                table.c.credential_ref,
+                table.c.status,
+                table.c.access_policy,
+                table.c.updated_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.source_id == source_id,
+            )
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return dict(row) if row is not None else None
 
     def list_helm_storage_observations(
         self,
@@ -313,11 +357,6 @@ class HelmReleaseRepository(DatabaseConnection):
 
 def _ids(values: Collection[str]) -> tuple[str, ...]:
     return tuple(sorted({str(value).strip() for value in values if str(value).strip()}))
-
-
-def _helm_chart_source_id(workspace_id: str, provider: str, canonical_ref: str) -> str:
-    digest = hashlib.sha256(f"{workspace_id}|{provider}|{canonical_ref}".encode()).hexdigest()
-    return f"helm-source-{digest[:32]}"
 
 
 def _release_scopes(

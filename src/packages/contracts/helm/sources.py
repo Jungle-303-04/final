@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 
 from packages.contracts.gateway.base import StrictModel
 
@@ -14,6 +14,31 @@ HELM_CHART_VERSION_PAGE_MAX = 200
 HelmChartSourceProvider = Literal["repository", "oci"]
 HelmChartSourceStatus = Literal["active", "disabled"]
 HelmChartVersionAvailability = Literal["available", "partial", "unavailable"]
+
+
+class HelmChartSourceCredentialInput(StrictModel):
+    """Write-only credential input; response models never contain this type."""
+
+    kind: Literal["bearer", "basic"]
+    token: SecretStr | None = Field(default=None, min_length=1, max_length=16_384)
+    username: str | None = Field(default=None, min_length=1, max_length=512)
+    password: SecretStr | None = Field(default=None, min_length=1, max_length=16_384)
+
+    @model_validator(mode="after")
+    def credential_shape_matches_kind(self) -> HelmChartSourceCredentialInput:
+        if self.kind == "bearer":
+            if self.token is None or self.username is not None or self.password is not None:
+                raise ValueError("bearer credentials require only a token")
+        elif self.username is None or self.password is None or self.token is not None:
+            raise ValueError("basic credentials require username and password")
+        return self
+
+
+class HelmChartSourceRegisterRequest(StrictModel):
+    provider: HelmChartSourceProvider
+    name: str = Field(min_length=1, max_length=120)
+    reference: str = Field(min_length=1, max_length=2048)
+    credential: HelmChartSourceCredentialInput | None = None
 
 
 class HelmChartSource(StrictModel):

@@ -10,7 +10,9 @@ from sqlalchemy.dialects import postgresql
 
 from domains.helm.repository import HelmChartSourceConflict, HelmReleaseRepository
 from domains.helm.source_provider import (
+    helm_chart_credential_scope,
     helm_chart_source_from_row,
+    helm_chart_source_id,
     normalize_helm_chart_source_reference,
     resolve_helm_chart_versions,
 )
@@ -351,6 +353,36 @@ def test_source_registration_is_atomic_and_duplicate_provider_identity_fails_clo
         )
 
 
+def test_repository_registration_rejects_cross_source_credential_scope_before_write() -> None:
+    calls = 0
+
+    @contextmanager
+    def connect() -> Iterator[object]:
+        nonlocal calls
+        calls += 1
+        yield object()
+
+    repository = object.__new__(HelmReleaseRepository)
+    repository.connection = connect
+    source_id = helm_chart_source_id(
+        "workspace-a",
+        "repository",
+        "https://charts.example.com/stable",
+    )
+    other_scope = helm_chart_credential_scope(f"{source_id}-other")
+
+    with pytest.raises(ValueError, match="invalid Helm chart source credential reference"):
+        repository.register_helm_chart_source(
+            workspace_id="workspace-a",
+            provider="repository",
+            name="stable",
+            reference="https://charts.example.com/stable",
+            credential_ref=f"db:helm_repository:{other_scope}",
+        )
+
+    assert calls == 0
+
+
 def test_single_permission_denied_provider_is_explicitly_unavailable() -> None:
     denied = resolve_helm_chart_versions(
         (
@@ -366,3 +398,82 @@ def test_single_permission_denied_provider_is_explicitly_unavailable() -> None:
     assert denied.source is not None
     assert denied.versions == ()
     assert denied.reason_codes == ("helm_chart_source_permission_denied",)
+
+
+def test_source_repository_applies_authorized_ids_before_page_limit() -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return []
+
+    class Connection:
+        statement: object | None = None
+
+        def execute(self, statement: object) -> Result:
+            self.statement = statement
+            return Result()
+
+    connection = Connection()
+
+    @contextmanager
+    def connect() -> Iterator[Connection]:
+        yield connection
+
+    repository = object.__new__(HelmReleaseRepository)
+    repository.connection = connect
+    page = repository.list_helm_chart_sources(
+        workspace_id="workspace-a",
+        limit=10,
+        source_ids={"source-a", "source-b"},
+    )
+
+    assert page.items == ()
+    assert connection.statement is not None
+    sql = str(
+        connection.statement.compile(  # type: ignore[union-attr]
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "helm_chart_sources.source_id IN ('source-a', 'source-b')" in sql
+    assert "LIMIT 11" in sql
+
+
+def test_internal_source_lookup_never_selects_workspace_credential_secret() -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def first(self) -> None:
+            return None
+
+    class Connection:
+        statement: object | None = None
+
+        def execute(self, statement: object) -> Result:
+            self.statement = statement
+            return Result()
+
+    connection = Connection()
+
+    @contextmanager
+    def connect() -> Iterator[Connection]:
+        yield connection
+
+    repository = object.__new__(HelmReleaseRepository)
+    repository.connection = connect
+    assert (
+        repository.get_helm_chart_source_record(
+            workspace_id="workspace-a",
+            source_id="source-a",
+        )
+        is None
+    )
+
+    assert connection.statement is not None
+    selected = set(connection.statement.selected_columns.keys())  # type: ignore[union-attr]
+    assert "credential_ref" in selected
+    assert "encrypted_value" not in selected
+    assert "metadata" not in selected
