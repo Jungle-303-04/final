@@ -298,7 +298,7 @@ test("출하 게이트는 구현 상태여도 행별 backend/frontend 증거 없
   });
   assert.throws(
     () => assertFeatureDeliveryComplete(ledger),
-    /reference.feature.001: missing backend coverage/,
+    /reference.feature.001: incomplete backend coverage/,
   );
 });
 
@@ -318,15 +318,18 @@ test("행별 증거 override가 있는 구현 기능만 출하 게이트를 통�
           deliveryStatus: "implemented",
           coverage: {
             backend: {
+              state: "implemented",
               route: "/api/feature-contracts",
               handler: "domains.parity.router.list_feature_contracts",
               test: "tests/test_feature_contract_router.py",
             },
             frontend: {
+              state: "implemented",
               consumer: "frontend/src/shared/parity/referenceParity.ts",
               test: "frontend/src/shared/parity/referenceParity.test.ts",
             },
             desktop: {
+              state: "implemented",
               bridge: "desktop",
               test: "desktop/tests/catalog.rs",
             },
@@ -347,6 +350,53 @@ test("행별 증거 override가 있는 구현 기능만 출하 게이트를 통�
   );
 
   assert.doesNotThrow(() => assertFeatureDeliveryComplete(ledger));
+});
+
+test("웹 출하 게이트는 desktop-only 행과 desktop coverage를 최종 OS 단계로 분리한다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## API",
+      "| Method·path | 동작 |",
+      "|---|---|",
+      "| `GET /settings` | 웹 설정 |",
+      "| `POST /desktop/save-file` | 네이티브 저장 |",
+    ].join("\n"),
+    REVISION,
+    {
+      ...PORT_MAP,
+      features: {
+        "reference.feature.001": {
+          coverage: {
+            backend: {
+              state: "implemented",
+              destination: "src/domains/settings/router.py",
+              test: "tests/test_settings.py",
+            },
+            frontend: {
+              state: "implemented",
+              destination: "frontend/src/pages/settings/SettingsPage.tsx",
+              test: "frontend/src/pages/settings/SettingsPage.test.tsx",
+            },
+            desktop: {
+              state: "blocked",
+              destination: "desktop/src-tauri/src/lib.rs",
+              reason: "OS packaging is deferred to the final desktop release.",
+            },
+          },
+        },
+      },
+    },
+    {
+      "reference.feature.001": "upstream-ui:settings:user-preferences:read:v1",
+    },
+  );
+
+  assert.throws(() => assertFeatureDeliveryComplete(ledger), /reference.feature.001: in_progress/);
+  assert.doesNotThrow(() => assertFeatureDeliveryComplete(ledger, { surface: "web" }));
+  assert.throws(
+    () => assertFeatureDeliveryComplete(ledger, { surface: "mobile" }),
+    /지원하지 않는 release surface/,
+  );
 });
 
 test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
