@@ -12,6 +12,9 @@ import "./styles/foundation.css";
 const AuthenticatedProductRuntime = lazy(async () => ({
   default: (await import("./app/AuthenticatedProductRuntime")).AuthenticatedProductRuntime,
 }));
+const AlertNotificationPreview = lazy(async () => ({
+  default: (await import("./app/AlertNotificationPreview")).AlertNotificationPreview,
+}));
 
 export default function ProductApp() {
   return (
@@ -34,20 +37,26 @@ export default function ProductApp() {
 
 function ProductRuntime() {
   const [authPort] = useState(createAuthBootstrap);
+  const alertPreview = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).has("alert-preview");
 
   return (
     <BrowserRouter>
-      <AuthBarrier port={authPort}>
-        {(auth) => (
-          <Suspense fallback={<ProductStateScreen kind="loading" />}>
+      <Suspense fallback={<ProductStateScreen kind="loading" />}>
+        {alertPreview ? (
+          <AlertNotificationPreview />
+        ) : (
+          <AuthBarrier port={authPort}>
+            {(auth) => (
             <AuthenticatedProductRuntime
               auth={auth}
               authPort={authPort}
               key={`${auth.session.workspaceId}:${auth.session.userId}`}
             />
-          </Suspense>
+            )}
+          </AuthBarrier>
         )}
-      </AuthBarrier>
+      </Suspense>
     </BrowserRouter>
   );
 }
