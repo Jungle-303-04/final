@@ -24,6 +24,13 @@ export interface ProviderReference {
   name: string;
 }
 
+export interface ProviderNamedReference {
+  apiVersion: string | null;
+  kind: string | null;
+  namespace: string | null;
+  name: string;
+}
+
 export interface ProviderReplicas {
   desired: number | null;
   ready: number | null;
@@ -226,4 +233,119 @@ export type ProviderResourceDetail =
       replicas: ProviderReplicas;
       infrastructureRef: ProviderReference | null;
       bootstrapRef: ProviderReference | null;
+    })
+  | (ProviderDetailBase & {
+      type: "certificate";
+      ready: boolean | null;
+      secretName: string | null;
+      revision: number | null;
+      isCa: boolean | null;
+      duration: string | null;
+      renewBefore: string | null;
+      notBefore: string | null;
+      notAfter: string | null;
+      renewalTime: string | null;
+      failedIssuanceAttempts: number | null;
+      lastFailureTime: string | null;
+      privateKey: {
+        algorithm: string | null;
+        size: number | null;
+        encoding: string | null;
+        rotationPolicy: string | null;
+      } | null;
+      dnsNames: string[];
+      issuerRef: ProviderNamedReference | null;
+      usages: string[];
+    })
+  | (ProviderDetailBase & {
+      type: "certificate-request";
+      ready: boolean | null;
+      approved: boolean | null;
+      denied: boolean | null;
+      issuerRef: ProviderNamedReference | null;
+      ownerCertificate: ProviderNamedReference | null;
+      duration: string | null;
+      usages: string[];
+      certificateIssued: boolean | null;
+    })
+  | (ProviderDetailBase & {
+      type: "cluster-compliance-report";
+      frameworkId: string | null;
+      frameworkTitle: string | null;
+      frameworkDescription: string | null;
+      frameworkVersion: string | null;
+      platform: string | null;
+      updatedAt: string | null;
+      passCount: number | null;
+      failCount: number | null;
+      controls: Array<{
+        id: string;
+        name: string | null;
+        description: string | null;
+        severity: string | null;
+        totalPass: number | null;
+        totalFail: number | null;
+        checkIds: string[];
+      }>;
+    })
+  | (ProviderDetailBase & {
+      type: "crossplane-composite";
+      claim: boolean;
+      paused: boolean;
+      compositionRef: ProviderNamedReference | null;
+      compositionRevisionRef: ProviderNamedReference | null;
+      compositionUpdatePolicy: string | null;
+      boundResourceRef: ProviderNamedReference | null;
+      composedResourceRefs: ProviderNamedReference[];
+    })
+  | (ProviderDetailBase & {
+      type: "cron-workflow";
+      schedules: string[];
+      timezone: string | null;
+      suspended: boolean | null;
+      concurrencyPolicy: string | null;
+      lastScheduledTime: string | null;
+      activeWorkflows: ProviderNamedReference[];
+      workflowTemplateRef: ProviderNamedReference | null;
+      workflowTemplateClusterScope: boolean | null;
+      entrypoint: string | null;
+      argumentCount: number | null;
+      templateCount: number | null;
+      successfulHistoryLimit: number | null;
+      failedHistoryLimit: number | null;
+      startingDeadlineSeconds: number | null;
+    })
+  | (ProviderDetailBase & {
+      type: "external-secret";
+      ready: boolean | null;
+      lastSyncTime: string | null;
+      refreshInterval: string | null;
+      targetName: string | null;
+      syncedResourceVersion: string | null;
+      bindingName: string | null;
+      storeName: string | null;
+      storeKind: string | null;
+      mappings: Array<{
+        secretKey: string | null;
+        remoteKey: string | null;
+        remoteProperty: string | null;
+        remoteVersion: string | null;
+      }>;
+      dataSources: Array<{
+        type: "extract" | "find" | "source-ref" | "unknown";
+        detail: string | null;
+      }>;
+      targetCreationPolicy: string | null;
+      targetDeletionPolicy: string | null;
+      templateType: string | null;
+      templateEngineVersion: string | null;
+      templateLabels: ProviderKeyValue[];
+      templateAnnotations: ProviderKeyValue[];
+    })
+  | (ProviderDetailBase & {
+      type: "gateway-class";
+      controllerName: string | null;
+      description: string | null;
+      accepted: boolean | null;
+      parametersRef: ProviderNamedReference | null;
     });

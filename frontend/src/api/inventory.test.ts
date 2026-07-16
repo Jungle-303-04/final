@@ -152,6 +152,78 @@ describe("inventory resource API", () => {
     expect(JSON.stringify(response.provider_detail)).not.toContain("raw");
   });
 
+  it("validates the bounded external-secret transport contract", async () => {
+    const providerDetail = {
+      type: "external-secret" as const,
+      ready: true,
+      last_sync_time: "2026-07-16T00:00:00Z",
+      refresh_interval: "1h",
+      target_name: "api",
+      synced_resource_version: "42",
+      binding_name: null,
+      store_name: "vault",
+      store_kind: "ClusterSecretStore",
+      mappings: [{
+        secret_key: "TOKEN",
+        remote_key: "prod/api",
+        remote_property: "token",
+        remote_version: null,
+      }],
+      data_sources: [{ type: "extract" as const, detail: "prod/common" }],
+      target_creation_policy: "Owner",
+      target_deletion_policy: "Retain",
+      template_type: null,
+      template_engine_version: null,
+      template_labels: [],
+      template_annotations: [],
+      conditions: [],
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "cluster-1",
+      identity: { resource_type: "externalsecret", kind: "ExternalSecret", name: "api", namespace: "default" },
+      resource: { ...RESOURCE, resource_type: "externalsecret", kind: "ExternalSecret", name: "api" },
+      provider_detail: providerDetail,
+      related: {},
+      events: [],
+    }));
+
+    const response = await getInventoryResourceDetail("cluster-1", {
+      resourceType: "externalsecret",
+      kind: "ExternalSecret",
+      name: "api",
+      namespace: "default",
+    });
+
+    expect(response.provider_detail).toEqual(providerDetail);
+    expect(JSON.stringify(response.provider_detail)).not.toContain("secretValue");
+  });
+
+  it("rejects raw fields appended to an extension detail", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "cluster-1",
+      identity: { resource_type: "gatewayclass", kind: "GatewayClass", name: "prod", namespace: null },
+      resource: { ...RESOURCE, resource_type: "gatewayclass", kind: "GatewayClass", name: "prod", namespace: null },
+      provider_detail: {
+        type: "gateway-class",
+        controller_name: "example.test/controller",
+        description: null,
+        accepted: true,
+        parameters_ref: null,
+        conditions: [],
+        raw: { credential: "must-not-enter" },
+      },
+      related: {},
+      events: [],
+    }));
+
+    await expect(getInventoryResourceDetail("cluster-1", {
+      resourceType: "gatewayclass",
+      kind: "GatewayClass",
+      name: "prod",
+      namespace: null,
+    })).rejects.toMatchObject({ kind: "invalid-payload", status: 200 });
+  });
+
   it("rejects an unknown provider detail discriminator", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
       cluster_id: "cluster-1",

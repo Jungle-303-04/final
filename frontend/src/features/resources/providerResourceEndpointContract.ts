@@ -29,6 +29,13 @@ export interface ProviderReferenceEndpoint {
   name: string;
 }
 
+export interface ProviderNamedReferenceEndpoint {
+  api_version: string | null;
+  kind: string | null;
+  namespace: string | null;
+  name: string;
+}
+
 export interface ProviderReplicasEndpoint {
   desired: number | null;
   ready: number | null;
@@ -261,6 +268,130 @@ export interface CapiMachineSetProviderDetailEndpoint extends ProviderDetailBase
   bootstrap_ref: ProviderReferenceEndpoint | null;
 }
 
+export interface CertificateProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "certificate";
+  ready: boolean | null;
+  secret_name: string | null;
+  revision: number | null;
+  is_ca: boolean | null;
+  duration: string | null;
+  renew_before: string | null;
+  not_before: string | null;
+  not_after: string | null;
+  renewal_time: string | null;
+  failed_issuance_attempts: number | null;
+  last_failure_time: string | null;
+  private_key: {
+    algorithm: string | null;
+    size: number | null;
+    encoding: string | null;
+    rotation_policy: string | null;
+  } | null;
+  dns_names: string[];
+  issuer_ref: ProviderNamedReferenceEndpoint | null;
+  usages: string[];
+}
+
+export interface CertificateRequestProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "certificate-request";
+  ready: boolean | null;
+  approved: boolean | null;
+  denied: boolean | null;
+  issuer_ref: ProviderNamedReferenceEndpoint | null;
+  owner_certificate: ProviderNamedReferenceEndpoint | null;
+  duration: string | null;
+  usages: string[];
+  certificate_issued: boolean | null;
+}
+
+export interface ComplianceControlDetailEndpoint {
+  id: string;
+  name: string | null;
+  description: string | null;
+  severity: string | null;
+  total_pass: number | null;
+  total_fail: number | null;
+  check_ids: string[];
+}
+
+export interface ClusterComplianceReportProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "cluster-compliance-report";
+  framework_id: string | null;
+  framework_title: string | null;
+  framework_description: string | null;
+  framework_version: string | null;
+  platform: string | null;
+  updated_at: string | null;
+  pass_count: number | null;
+  fail_count: number | null;
+  controls: ComplianceControlDetailEndpoint[];
+}
+
+export interface CrossplaneCompositeProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "crossplane-composite";
+  claim: boolean;
+  paused: boolean;
+  composition_ref: ProviderNamedReferenceEndpoint | null;
+  composition_revision_ref: ProviderNamedReferenceEndpoint | null;
+  composition_update_policy: string | null;
+  bound_resource_ref: ProviderNamedReferenceEndpoint | null;
+  composed_resource_refs: ProviderNamedReferenceEndpoint[];
+}
+
+export interface CronWorkflowProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "cron-workflow";
+  schedules: string[];
+  timezone: string | null;
+  suspended: boolean | null;
+  concurrency_policy: string | null;
+  last_scheduled_time: string | null;
+  active_workflows: ProviderNamedReferenceEndpoint[];
+  workflow_template_ref: ProviderNamedReferenceEndpoint | null;
+  workflow_template_cluster_scope: boolean | null;
+  entrypoint: string | null;
+  argument_count: number | null;
+  template_count: number | null;
+  successful_history_limit: number | null;
+  failed_history_limit: number | null;
+  starting_deadline_seconds: number | null;
+}
+
+export interface ExternalSecretProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "external-secret";
+  ready: boolean | null;
+  last_sync_time: string | null;
+  refresh_interval: string | null;
+  target_name: string | null;
+  synced_resource_version: string | null;
+  binding_name: string | null;
+  store_name: string | null;
+  store_kind: string | null;
+  mappings: Array<{
+    secret_key: string | null;
+    remote_key: string | null;
+    remote_property: string | null;
+    remote_version: string | null;
+  }>;
+  data_sources: Array<{
+    type: "extract" | "find" | "source-ref" | "unknown";
+    detail: string | null;
+  }>;
+  target_creation_policy: string | null;
+  target_deletion_policy: string | null;
+  template_type: string | null;
+  template_engine_version: string | null;
+  template_labels: ProviderKeyValueEndpoint[];
+  template_annotations: ProviderKeyValueEndpoint[];
+}
+
+export interface GatewayClassProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "gateway-class";
+  controller_name: string | null;
+  description: string | null;
+  accepted: boolean | null;
+  parameters_ref: ProviderNamedReferenceEndpoint | null;
+}
+
 export type ProviderResourceDetailEndpoint =
   | AwsMachineProviderDetailEndpoint
   | AwsManagedClusterProviderDetailEndpoint
@@ -275,4 +406,11 @@ export type ProviderResourceDetailEndpoint =
   | CapiMachineHealthCheckProviderDetailEndpoint
   | CapiMachinePoolProviderDetailEndpoint
   | CapiMachineProviderDetailEndpoint
-  | CapiMachineSetProviderDetailEndpoint;
+  | CapiMachineSetProviderDetailEndpoint
+  | CertificateProviderDetailEndpoint
+  | CertificateRequestProviderDetailEndpoint
+  | ClusterComplianceReportProviderDetailEndpoint
+  | CrossplaneCompositeProviderDetailEndpoint
+  | CronWorkflowProviderDetailEndpoint
+  | ExternalSecretProviderDetailEndpoint
+  | GatewayClassProviderDetailEndpoint;

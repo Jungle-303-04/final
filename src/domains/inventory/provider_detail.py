@@ -24,9 +24,21 @@ from packages.contracts.inventory_provider import (
     CapiMachineProviderDetail,
     CapiMachineSetProviderDetail,
     CapiUnhealthyCondition,
+    CertificatePrivateKeyDetail,
+    CertificateProviderDetail,
+    CertificateRequestProviderDetail,
+    ClusterComplianceReportProviderDetail,
+    ComplianceControlDetail,
+    CronWorkflowProviderDetail,
+    CrossplaneCompositeProviderDetail,
+    ExternalSecretMappingDetail,
+    ExternalSecretProviderDetail,
+    ExternalSecretSourceDetail,
+    GatewayClassProviderDetail,
     ProviderAddress,
     ProviderCondition,
     ProviderKeyValue,
+    ProviderNamedReference,
     ProviderReference,
     ProviderReplicas,
     ProviderScaling,
@@ -37,12 +49,30 @@ from packages.contracts.inventory_provider import (
 INFRASTRUCTURE_GROUP = "infrastructure.cluster.x-k8s.io"
 CONTROL_PLANE_GROUP = "controlplane.cluster.x-k8s.io"
 CAPI_GROUP = "cluster.x-k8s.io"
+CERT_MANAGER_GROUP = "cert-manager.io"
+COMPLIANCE_GROUP = "aquasecurity.github.io"
+ARGO_GROUP = "argoproj.io"
+EXTERNAL_SECRETS_GROUP = "external-secrets.io"
+GATEWAY_GROUP = "gateway.networking.k8s.io"
 MAX_COLLECTION_ITEMS = 100
 MAX_TEXT_LENGTH = 2_000
+COMPLIANCE_SEVERITY_ORDER = {
+    "CRITICAL": 0,
+    "HIGH": 1,
+    "MEDIUM": 2,
+    "LOW": 3,
+    "UNKNOWN": 4,
+}
 
 
 class ProviderDetailProjector(Protocol):
     def __call__(self, raw: Mapping[str, Any]) -> ResourceProviderDetail: ...
+
+
+class ProviderDetailMatcher(Protocol):
+    def __call__(
+        self, resource: Mapping[str, Any], raw: Mapping[str, Any]
+    ) -> ResourceProviderDetail | None: ...
 
 
 def provider_detail_projection(resource: Mapping[str, Any]) -> ResourceProviderDetail | None:
@@ -52,7 +82,12 @@ def provider_detail_projection(resource: Mapping[str, Any]) -> ResourceProviderD
         return None
     kind = _text(resource.get("kind")) or ""
     projector = PROVIDER_DETAIL_PROJECTORS.get((_api_group(resource.get("api_version")), kind))
-    return projector(raw) if projector is not None else None
+    if projector is not None:
+        return projector(raw)
+    for matcher in PROVIDER_DETAIL_MATCHERS:
+        if detail := matcher(resource, raw):
+            return detail
+    return None
 
 
 def _aws_machine(raw: Mapping[str, Any]) -> AwsMachineProviderDetail:
@@ -422,6 +457,243 @@ def _capi_machine_set(raw: Mapping[str, Any]) -> CapiMachineSetProviderDetail:
     )
 
 
+def _certificate(raw: Mapping[str, Any]) -> CertificateProviderDetail:
+    private_key = _mapping_at(raw, "spec", "privateKey")
+    return CertificateProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        secret_name=_text_at(raw, "spec", "secretName"),
+        revision=_int_at(raw, "status", "revision"),
+        is_ca=_bool_at(raw, "spec", "isCA"),
+        duration=_text_at(raw, "spec", "duration"),
+        renew_before=_text_at(raw, "spec", "renewBefore"),
+        not_before=_text_at(raw, "status", "notBefore"),
+        not_after=_text_at(raw, "status", "notAfter"),
+        renewal_time=_text_at(raw, "status", "renewalTime"),
+        failed_issuance_attempts=_int_at(raw, "status", "failedIssuanceAttempts"),
+        last_failure_time=_text_at(raw, "status", "lastFailureTime"),
+        private_key=(
+            CertificatePrivateKeyDetail(
+                algorithm=_text(private_key.get("algorithm")),
+                size=_int(private_key.get("size")),
+                encoding=_text(private_key.get("encoding")),
+                rotation_policy=_text(private_key.get("rotationPolicy")),
+            )
+            if private_key
+            else None
+        ),
+        dns_names=_text_items_at(raw, "spec", "dnsNames"),
+        issuer_ref=_named_reference_at(raw, "spec", "issuerRef"),
+        usages=_text_items_at(raw, "spec", "usages"),
+        conditions=_conditions(raw),
+    )
+
+
+def _certificate_request(raw: Mapping[str, Any]) -> CertificateRequestProviderDetail:
+    owner_certificate: ProviderNamedReference | None = None
+    for item in _mapping_items_at(raw, "metadata", "ownerReferences"):
+        if _text(item.get("kind")) == "Certificate":
+            owner_certificate = _named_reference(item)
+            if owner_certificate is not None:
+                break
+    return CertificateRequestProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        approved=_condition_truth(raw, "Approved"),
+        denied=_condition_truth(raw, "Denied"),
+        issuer_ref=_named_reference_at(raw, "spec", "issuerRef"),
+        owner_certificate=owner_certificate,
+        duration=_text_at(raw, "spec", "duration"),
+        usages=_text_items_at(raw, "spec", "usages"),
+        certificate_issued=_present_at(raw, "status", "certificate"),
+        conditions=_conditions(raw),
+    )
+
+
+def _cluster_compliance_report(
+    raw: Mapping[str, Any],
+) -> ClusterComplianceReportProviderDetail:
+    definitions = {
+        control_id: item
+        for item in _mapping_items_at(raw, "spec", "compliance", "controls")
+        if (control_id := _text(item.get("id"))) is not None
+    }
+    controls: list[ComplianceControlDetail] = []
+    seen_control_ids: set[str] = set()
+    for item in _mapping_items_at(raw, "status", "summaryReport", "controlCheck"):
+        control_id = _text(item.get("id"))
+        if control_id is None or control_id in seen_control_ids:
+            continue
+        seen_control_ids.add(control_id)
+        definition = definitions.get(control_id, {})
+        controls.append(
+            ComplianceControlDetail(
+                id=control_id,
+                name=_text(item.get("name")),
+                description=_text(definition.get("description")),
+                severity=_text(item.get("severity")),
+                total_pass=_int(item.get("totalPass")),
+                total_fail=_int(item.get("totalFail")),
+                check_ids=[
+                    check_id
+                    for check in _mapping_items(definition.get("checks"))
+                    if (check_id := _text(check.get("id"))) is not None
+                ],
+            )
+        )
+    controls.sort(
+        key=lambda control: (
+            (control.total_fail or 0) == 0,
+            COMPLIANCE_SEVERITY_ORDER.get((control.severity or "").upper(), 99),
+            control.id,
+        )
+    )
+    return ClusterComplianceReportProviderDetail(
+        framework_id=_text_at(raw, "spec", "compliance", "id"),
+        framework_title=_text_at(raw, "spec", "compliance", "title"),
+        framework_description=_text_at(raw, "spec", "compliance", "description"),
+        framework_version=_text_at(raw, "spec", "compliance", "version"),
+        platform=_text_at(raw, "spec", "compliance", "platform"),
+        updated_at=_text_at(raw, "status", "updateTimestamp"),
+        pass_count=_int_at(raw, "status", "summary", "passCount"),
+        fail_count=_int_at(raw, "status", "summary", "failCount"),
+        controls=controls,
+        conditions=_conditions(raw),
+    )
+
+
+def _crossplane_composite(
+    resource: Mapping[str, Any], raw: Mapping[str, Any]
+) -> CrossplaneCompositeProviderDetail | None:
+    del resource
+    spec = _mapping_at(raw, "spec")
+    crossplane = _mapping(spec.get("crossplane"))
+    if _mapping(spec.get("providerConfigRef")) or _mapping(crossplane.get("providerConfigRef")):
+        return None
+    resource_refs = crossplane.get("resourceRefs")
+    if not isinstance(resource_refs, list):
+        resource_refs = spec.get("resourceRefs")
+    claim = bool(_mapping(spec.get("resourceRef")) and _mapping(spec.get("compositionRef")))
+    if not isinstance(resource_refs, list) and not claim:
+        return None
+    composition = _mapping(crossplane.get("compositionRef")) or _mapping(spec.get("compositionRef"))
+    composition_revision = _mapping(crossplane.get("compositionRevisionRef")) or _mapping(
+        spec.get("compositionRevisionRef")
+    )
+    return CrossplaneCompositeProviderDetail(
+        claim=claim,
+        paused=_text_at(raw, "metadata", "annotations", "crossplane.io/paused") == "true",
+        composition_ref=_named_reference(composition),
+        composition_revision_ref=_named_reference(composition_revision),
+        composition_update_policy=_text(crossplane.get("compositionUpdatePolicy"))
+        or _text(spec.get("compositionUpdatePolicy")),
+        bound_resource_ref=_named_reference(_mapping(spec.get("resourceRef"))) if claim else None,
+        composed_resource_refs=[
+            reference
+            for item in _mapping_items(resource_refs)
+            if (reference := _named_reference(item)) is not None
+        ],
+        conditions=_conditions(raw),
+    )
+
+
+def _cron_workflow(raw: Mapping[str, Any]) -> CronWorkflowProviderDetail:
+    schedules = _text_items_at(raw, "spec", "schedules")
+    if not schedules and (schedule := _text_at(raw, "spec", "schedule")) is not None:
+        schedules = [schedule]
+    workflow_spec = _mapping_at(raw, "spec", "workflowSpec")
+    template_ref = _mapping(workflow_spec.get("workflowTemplateRef"))
+    template_name = _text(template_ref.get("name")) or _text(template_ref.get("template"))
+    template_reference = (
+        ProviderNamedReference(name=template_name) if template_name is not None else None
+    )
+    return CronWorkflowProviderDetail(
+        schedules=schedules,
+        timezone=_text_at(raw, "spec", "timezone"),
+        suspended=_bool_at(raw, "spec", "suspend"),
+        concurrency_policy=_text_at(raw, "spec", "concurrencyPolicy"),
+        last_scheduled_time=_text_at(raw, "status", "lastScheduledTime"),
+        active_workflows=[
+            reference
+            for item in _mapping_items_at(raw, "status", "active")
+            if (reference := _named_reference(item)) is not None
+        ],
+        workflow_template_ref=template_reference,
+        workflow_template_cluster_scope=_bool(template_ref.get("clusterScope")),
+        entrypoint=_text(workflow_spec.get("entrypoint")),
+        argument_count=_collection_length_at(workflow_spec, "arguments", "parameters"),
+        template_count=_collection_length_at(workflow_spec, "templates"),
+        successful_history_limit=_int_at(raw, "spec", "successfulJobsHistoryLimit"),
+        failed_history_limit=_int_at(raw, "spec", "failedJobsHistoryLimit"),
+        starting_deadline_seconds=_int_at(raw, "spec", "startingDeadlineSeconds"),
+        conditions=_conditions(raw),
+    )
+
+
+def _external_secret(raw: Mapping[str, Any]) -> ExternalSecretProviderDetail:
+    target = _mapping_at(raw, "spec", "target")
+    template = _mapping(target.get("template"))
+    store = _mapping_at(raw, "spec", "secretStoreRef")
+    target_name = _text(target.get("name")) or _text_at(raw, "metadata", "name")
+    return ExternalSecretProviderDetail(
+        ready=_condition_truth(raw, "Ready"),
+        last_sync_time=_text_at(raw, "status", "refreshTime"),
+        refresh_interval=_text_at(raw, "spec", "refreshInterval"),
+        target_name=target_name,
+        synced_resource_version=_text_at(raw, "status", "syncedResourceVersion"),
+        binding_name=_text_at(raw, "status", "binding", "name"),
+        store_name=_text(store.get("name")),
+        store_kind=_text(store.get("kind")),
+        mappings=[
+            ExternalSecretMappingDetail(
+                secret_key=_text(item.get("secretKey")),
+                remote_key=_text_at(item, "remoteRef", "key"),
+                remote_property=_text_at(item, "remoteRef", "property"),
+                remote_version=_text_at(item, "remoteRef", "version"),
+            )
+            for item in _mapping_items_at(raw, "spec", "data")
+        ],
+        data_sources=[
+            _external_secret_source(item) for item in _mapping_items_at(raw, "spec", "dataFrom")
+        ],
+        target_creation_policy=_text(target.get("creationPolicy")),
+        target_deletion_policy=_text(target.get("deletionPolicy")),
+        template_type=_text(template.get("type")),
+        template_engine_version=_text(template.get("engineVersion")),
+        template_labels=_key_values_at(template, "metadata", "labels"),
+        template_annotations=_key_values_at(template, "metadata", "annotations"),
+        conditions=_conditions(raw),
+    )
+
+
+def _external_secret_source(item: Mapping[str, Any]) -> ExternalSecretSourceDetail:
+    extract = _mapping(item.get("extract"))
+    if extract:
+        return ExternalSecretSourceDetail(type="extract", detail=_text(extract.get("key")))
+    find = _mapping(item.get("find"))
+    if find:
+        return ExternalSecretSourceDetail(
+            type="find",
+            detail=_text_at(find, "name", "regexp")
+            or ("tags" if _mapping(find.get("tags")) else "name"),
+        )
+    source_ref = _mapping(item.get("sourceRef"))
+    if source_ref:
+        return ExternalSecretSourceDetail(
+            type="source-ref",
+            detail=_joined_text(source_ref.get("kind"), source_ref.get("name")),
+        )
+    return ExternalSecretSourceDetail(type="unknown")
+
+
+def _gateway_class(raw: Mapping[str, Any]) -> GatewayClassProviderDetail:
+    return GatewayClassProviderDetail(
+        controller_name=_text_at(raw, "spec", "controllerName"),
+        description=_text_at(raw, "spec", "description"),
+        accepted=_condition_truth(raw, "Accepted"),
+        parameters_ref=_named_reference_at(raw, "spec", "parametersRef"),
+        conditions=_conditions(raw),
+    )
+
+
 PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (INFRASTRUCTURE_GROUP, "AWSMachine"): _aws_machine,
     (INFRASTRUCTURE_GROUP, "AWSManagedCluster"): _aws_managed_cluster,
@@ -437,7 +709,15 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (CAPI_GROUP, "MachinePool"): _capi_machine_pool,
     (CAPI_GROUP, "Machine"): _capi_machine,
     (CAPI_GROUP, "MachineSet"): _capi_machine_set,
+    (CERT_MANAGER_GROUP, "Certificate"): _certificate,
+    (CERT_MANAGER_GROUP, "CertificateRequest"): _certificate_request,
+    (COMPLIANCE_GROUP, "ClusterComplianceReport"): _cluster_compliance_report,
+    (ARGO_GROUP, "CronWorkflow"): _cron_workflow,
+    (EXTERNAL_SECRETS_GROUP, "ExternalSecret"): _external_secret,
+    (GATEWAY_GROUP, "GatewayClass"): _gateway_class,
 }
+
+PROVIDER_DETAIL_MATCHERS: tuple[ProviderDetailMatcher, ...] = (_crossplane_composite,)
 
 
 def _conditions(raw: Mapping[str, Any]) -> list[ProviderCondition]:
@@ -565,6 +845,22 @@ def _reference_at(value: Mapping[str, Any], *path: str) -> ProviderReference | N
     )
 
 
+def _named_reference_at(value: Mapping[str, Any], *path: str) -> ProviderNamedReference | None:
+    return _named_reference(_mapping_at(value, *path))
+
+
+def _named_reference(value: Mapping[str, Any]) -> ProviderNamedReference | None:
+    name = _text(value.get("name"))
+    if name is None:
+        return None
+    return ProviderNamedReference(
+        api_version=_text(value.get("apiVersion")) or _text(value.get("group")),
+        kind=_text(value.get("kind")),
+        namespace=_text(value.get("namespace")),
+        name=name,
+    )
+
+
 def _cluster_name(raw: Mapping[str, Any]) -> str | None:
     return _text_at(raw, "spec", "clusterName") or _text_at(
         raw, "metadata", "labels", "cluster.x-k8s.io/cluster-name"
@@ -626,7 +922,10 @@ def _path_value(parts: list[str], marker: str) -> str | None:
 
 
 def _mapping_items_at(value: Mapping[str, Any], *path: str) -> list[dict[str, Any]]:
-    raw = _value_at(value, *path)
+    return _mapping_items(_value_at(value, *path))
+
+
+def _mapping_items(raw: object) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         return []
     return [_mapping(item) for item in raw[:MAX_COLLECTION_ITEMS] if isinstance(item, Mapping)]
@@ -645,8 +944,24 @@ def _mapping_keys_at(value: Mapping[str, Any], *path: str) -> list[str]:
 
 def _key_values_at(value: Mapping[str, Any], *path: str) -> list[ProviderKeyValue]:
     result: list[ProviderKeyValue] = []
-    for key, raw in sorted(_mapping_at(value, *path).items())[:MAX_COLLECTION_ITEMS]:
+    for raw_key, raw in sorted(_mapping_at(value, *path).items())[:MAX_COLLECTION_ITEMS]:
+        key = _text(raw_key)
         normalized = _text(str(raw)) if isinstance(raw, (str, int, float, bool)) else None
-        if normalized is not None:
+        if key is not None and normalized is not None:
             result.append(ProviderKeyValue(key=key, value=normalized))
     return result
+
+
+def _present_at(value: Mapping[str, Any], *path: str) -> bool | None:
+    raw = _value_at(value, *path)
+    return None if raw is None else bool(raw)
+
+
+def _collection_length_at(value: Mapping[str, Any], *path: str) -> int | None:
+    raw = _value_at(value, *path)
+    return len(raw) if isinstance(raw, list) else None
+
+
+def _joined_text(*values: object) -> str | None:
+    parts = [part for value in values if (part := _text(value)) is not None]
+    return "/".join(parts) if parts else None

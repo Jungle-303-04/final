@@ -22,6 +22,12 @@ const reference = z.strictObject({
   namespace: nullableString,
   name: z.string().min(1),
 });
+const namedReference = z.strictObject({
+  api_version: nullableString,
+  kind: nullableString,
+  namespace: nullableString,
+  name: z.string().min(1),
+});
 const replicas = z.strictObject({
   desired: nullableInteger,
   ready: nullableInteger,
@@ -260,6 +266,137 @@ const capiMachineSet = z.strictObject({
   conditions,
 });
 
+const certificate = z.strictObject({
+  type: z.literal("certificate"),
+  ready: z.boolean().nullable(),
+  secret_name: nullableString,
+  revision: nullableInteger,
+  is_ca: z.boolean().nullable(),
+  duration: nullableString,
+  renew_before: nullableString,
+  not_before: nullableString,
+  not_after: nullableString,
+  renewal_time: nullableString,
+  failed_issuance_attempts: nullableInteger,
+  last_failure_time: nullableString,
+  private_key: z.strictObject({
+    algorithm: nullableString,
+    size: nullableInteger,
+    encoding: nullableString,
+    rotation_policy: nullableString,
+  }).nullable(),
+  dns_names: z.array(z.string()).max(100),
+  issuer_ref: namedReference.nullable(),
+  usages: z.array(z.string()).max(100),
+  conditions,
+});
+
+const certificateRequest = z.strictObject({
+  type: z.literal("certificate-request"),
+  ready: z.boolean().nullable(),
+  approved: z.boolean().nullable(),
+  denied: z.boolean().nullable(),
+  issuer_ref: namedReference.nullable(),
+  owner_certificate: namedReference.nullable(),
+  duration: nullableString,
+  usages: z.array(z.string()).max(100),
+  certificate_issued: z.boolean().nullable(),
+  conditions,
+});
+
+const complianceControl = z.strictObject({
+  id: z.string().min(1),
+  name: nullableString,
+  description: nullableString,
+  severity: nullableString,
+  total_pass: nullableInteger,
+  total_fail: nullableInteger,
+  check_ids: z.array(z.string()).max(100),
+});
+
+const clusterComplianceReport = z.strictObject({
+  type: z.literal("cluster-compliance-report"),
+  framework_id: nullableString,
+  framework_title: nullableString,
+  framework_description: nullableString,
+  framework_version: nullableString,
+  platform: nullableString,
+  updated_at: nullableString,
+  pass_count: nullableInteger,
+  fail_count: nullableInteger,
+  controls: z.array(complianceControl).max(100),
+  conditions,
+});
+
+const crossplaneComposite = z.strictObject({
+  type: z.literal("crossplane-composite"),
+  claim: z.boolean(),
+  paused: z.boolean(),
+  composition_ref: namedReference.nullable(),
+  composition_revision_ref: namedReference.nullable(),
+  composition_update_policy: nullableString,
+  bound_resource_ref: namedReference.nullable(),
+  composed_resource_refs: z.array(namedReference).max(100),
+  conditions,
+});
+
+const cronWorkflow = z.strictObject({
+  type: z.literal("cron-workflow"),
+  schedules: z.array(z.string()).max(100),
+  timezone: nullableString,
+  suspended: z.boolean().nullable(),
+  concurrency_policy: nullableString,
+  last_scheduled_time: nullableString,
+  active_workflows: z.array(namedReference).max(100),
+  workflow_template_ref: namedReference.nullable(),
+  workflow_template_cluster_scope: z.boolean().nullable(),
+  entrypoint: nullableString,
+  argument_count: nullableInteger,
+  template_count: nullableInteger,
+  successful_history_limit: nullableInteger,
+  failed_history_limit: nullableInteger,
+  starting_deadline_seconds: nullableInteger,
+  conditions,
+});
+
+const externalSecret = z.strictObject({
+  type: z.literal("external-secret"),
+  ready: z.boolean().nullable(),
+  last_sync_time: nullableString,
+  refresh_interval: nullableString,
+  target_name: nullableString,
+  synced_resource_version: nullableString,
+  binding_name: nullableString,
+  store_name: nullableString,
+  store_kind: nullableString,
+  mappings: z.array(z.strictObject({
+    secret_key: nullableString,
+    remote_key: nullableString,
+    remote_property: nullableString,
+    remote_version: nullableString,
+  })).max(100),
+  data_sources: z.array(z.strictObject({
+    type: z.enum(["extract", "find", "source-ref", "unknown"]),
+    detail: nullableString,
+  })).max(100),
+  target_creation_policy: nullableString,
+  target_deletion_policy: nullableString,
+  template_type: nullableString,
+  template_engine_version: nullableString,
+  template_labels: z.array(keyValue).max(100),
+  template_annotations: z.array(keyValue).max(100),
+  conditions,
+});
+
+const gatewayClass = z.strictObject({
+  type: z.literal("gateway-class"),
+  controller_name: nullableString,
+  description: nullableString,
+  accepted: z.boolean().nullable(),
+  parameters_ref: namedReference.nullable(),
+  conditions,
+});
+
 export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   awsMachine,
   awsManagedCluster,
@@ -275,4 +412,11 @@ export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   capiMachinePool,
   capiMachine,
   capiMachineSet,
+  certificate,
+  certificateRequest,
+  clusterComplianceReport,
+  crossplaneComposite,
+  cronWorkflow,
+  externalSecret,
+  gatewayClass,
 ]);

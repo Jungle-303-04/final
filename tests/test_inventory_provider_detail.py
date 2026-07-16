@@ -284,6 +284,250 @@ def test_provider_detail_projects_capi_resources(
     assert "raw" not in payload
 
 
+@pytest.mark.parametrize(
+    ("kind", "api_version", "raw", "detail_type", "expected"),
+    [
+        (
+            "Certificate",
+            "cert-manager.io/v1",
+            {
+                "spec": {
+                    "secretName": "api-tls",
+                    "dnsNames": ["api.example.test"],
+                    "issuerRef": {
+                        "group": "cert-manager.io",
+                        "kind": "ClusterIssuer",
+                        "name": "prod",
+                    },
+                    "privateKey": {"algorithm": "ECDSA", "size": 256},
+                },
+                "status": {
+                    "revision": 3,
+                    "notAfter": "2026-08-15T00:00:00Z",
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "certificate",
+            {"secret_name": "api-tls", "ready": True, "revision": 3},
+        ),
+        (
+            "CertificateRequest",
+            "cert-manager.io/v1",
+            {
+                "metadata": {
+                    "ownerReferences": [
+                        {"apiVersion": "cert-manager.io/v1", "kind": "Certificate", "name": "api"}
+                    ]
+                },
+                "spec": {
+                    "issuerRef": {"group": "cert-manager.io", "kind": "Issuer", "name": "prod"},
+                    "duration": "2160h",
+                    "usages": ["server auth"],
+                },
+                "status": {
+                    "certificate": "redacted-pem",
+                    "conditions": [
+                        {"type": "Approved", "status": "True"},
+                        {"type": "Ready", "status": "False", "reason": "Pending"},
+                    ],
+                },
+            },
+            "certificate-request",
+            {"approved": True, "ready": False, "certificate_issued": True},
+        ),
+        (
+            "ClusterComplianceReport",
+            "aquasecurity.github.io/v1alpha1",
+            {
+                "spec": {
+                    "compliance": {
+                        "id": "cis",
+                        "title": "CIS Kubernetes",
+                        "controls": [
+                            {
+                                "id": "1.1",
+                                "description": "Protect API server",
+                                "checks": [{"id": "AVD-KCV-0001"}],
+                            }
+                        ],
+                    }
+                },
+                "status": {
+                    "summary": {"passCount": 4, "failCount": 1},
+                    "summaryReport": {
+                        "controlCheck": [
+                            {
+                                "id": "1.1",
+                                "name": "API server",
+                                "severity": "HIGH",
+                                "totalPass": 4,
+                                "totalFail": 1,
+                            }
+                        ]
+                    },
+                },
+            },
+            "cluster-compliance-report",
+            {"framework_id": "cis", "pass_count": 4, "fail_count": 1},
+        ),
+        (
+            "CronWorkflow",
+            "argoproj.io/v1alpha1",
+            {
+                "spec": {
+                    "schedules": ["0 2 * * *"],
+                    "timezone": "Asia/Seoul",
+                    "suspend": False,
+                    "workflowSpec": {
+                        "entrypoint": "backup",
+                        "templates": [{"name": "backup"}],
+                        "workflowTemplateRef": {"name": "backup-template", "clusterScope": True},
+                    },
+                },
+                "status": {"active": [{"name": "backup-123", "namespace": "ops"}]},
+            },
+            "cron-workflow",
+            {"schedules": ["0 2 * * *"], "entrypoint": "backup", "template_count": 1},
+        ),
+        (
+            "ExternalSecret",
+            "external-secrets.io/v1beta1",
+            {
+                "metadata": {"name": "api-secret"},
+                "spec": {
+                    "secretStoreRef": {"name": "vault", "kind": "ClusterSecretStore"},
+                    "refreshInterval": "1h",
+                    "target": {"name": "api", "creationPolicy": "Owner"},
+                    "data": [
+                        {
+                            "secretKey": "TOKEN",
+                            "remoteRef": {"key": "prod/api", "property": "token"},
+                        }
+                    ],
+                },
+                "status": {
+                    "refreshTime": "2026-07-16T00:00:00Z",
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "external-secret",
+            {"ready": True, "target_name": "api", "store_name": "vault"},
+        ),
+        (
+            "GatewayClass",
+            "gateway.networking.k8s.io/v1",
+            {
+                "spec": {
+                    "controllerName": "example.test/gateway-controller",
+                    "parametersRef": {
+                        "group": "example.test",
+                        "kind": "GatewayConfig",
+                        "name": "prod",
+                    },
+                },
+                "status": {"conditions": [{"type": "Accepted", "status": "True"}]},
+            },
+            "gateway-class",
+            {"controller_name": "example.test/gateway-controller", "accepted": True},
+        ),
+    ],
+)
+def test_provider_detail_projects_operational_extension_resources(
+    kind: str,
+    api_version: str,
+    raw: dict[str, Any],
+    detail_type: str,
+    expected: dict[str, Any],
+) -> None:
+    detail = provider_detail_projection(resource(kind, raw, api_version=api_version))
+
+    assert detail is not None
+    payload = detail.model_dump()
+    assert payload["type"] == detail_type
+    for key, value in expected.items():
+        assert payload[key] == value
+    assert "raw" not in payload
+    assert "redacted-pem" not in str(payload)
+
+
+def test_provider_detail_projects_crossplane_composite_by_bounded_shape() -> None:
+    detail = provider_detail_projection(
+        resource(
+            "Database",
+            {
+                "metadata": {"annotations": {"crossplane.io/paused": "true"}},
+                "spec": {
+                    "crossplane": {
+                        "compositionRef": {"name": "postgres"},
+                        "resourceRefs": [
+                            {
+                                "apiVersion": "sql.example.test/v1",
+                                "kind": "Instance",
+                                "namespace": "data",
+                                "name": f"db-{index}",
+                            }
+                            for index in range(MAX_COLLECTION_ITEMS + 5)
+                        ],
+                    }
+                },
+                "status": {"conditions": [{"type": "Ready", "status": "False"}]},
+            },
+            api_version="platform.example.test/v1alpha1",
+        )
+    )
+
+    assert detail is not None
+    assert detail.type == "crossplane-composite"
+    assert detail.paused is True
+    assert len(detail.composed_resource_refs) == MAX_COLLECTION_ITEMS
+    assert detail.composition_ref is not None
+    assert detail.composition_ref.name == "postgres"
+
+
+def test_provider_detail_does_not_misclassify_crossplane_managed_resource() -> None:
+    assert (
+        provider_detail_projection(
+            resource(
+                "Bucket",
+                {
+                    "spec": {
+                        "providerConfigRef": {"name": "prod"},
+                        "resourceRefs": [],
+                    }
+                },
+                api_version="s3.aws.upbound.io/v1beta1",
+            )
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "api_version"),
+    [
+        ("Certificate", "networking.internal.knative.dev/v1alpha1"),
+        ("CertificateRequest", "attacker.test/v1"),
+        ("ClusterComplianceReport", "attacker.test/v1"),
+        ("CronWorkflow", "attacker.test/v1"),
+        ("ExternalSecret", "attacker.test/v1"),
+        ("GatewayClass", "attacker.test/v1"),
+    ],
+)
+def test_operational_extension_projectors_reject_kind_collisions(
+    kind: str, api_version: str
+) -> None:
+    assert (
+        provider_detail_projection(
+            resource(
+                kind,
+                {"spec": {"controllerName": "must-not-project"}},
+                api_version=api_version,
+            )
+        )
+        is None
+    )
+
+
 def test_provider_detail_rejects_kind_collision_outside_exact_api_group() -> None:
     assert (
         provider_detail_projection(

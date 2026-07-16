@@ -40,6 +40,15 @@ class ProviderReference(StrictModel):
     name: str
 
 
+class ProviderNamedReference(StrictModel):
+    """A redacted object reference whose source may omit Kubernetes type metadata."""
+
+    api_version: str | None = None
+    kind: str | None = None
+    namespace: str | None = None
+    name: str
+
+
 class ProviderReplicas(StrictModel):
     desired: int | None = None
     ready: int | None = None
@@ -288,6 +297,143 @@ class CapiMachineSetProviderDetail(StrictModel):
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
+class CertificatePrivateKeyDetail(StrictModel):
+    algorithm: str | None = None
+    size: int | None = None
+    encoding: str | None = None
+    rotation_policy: str | None = None
+
+
+class CertificateProviderDetail(StrictModel):
+    type: Literal["certificate"] = "certificate"
+    ready: bool | None = None
+    secret_name: str | None = None
+    revision: int | None = None
+    is_ca: bool | None = None
+    duration: str | None = None
+    renew_before: str | None = None
+    not_before: str | None = None
+    not_after: str | None = None
+    renewal_time: str | None = None
+    failed_issuance_attempts: int | None = None
+    last_failure_time: str | None = None
+    private_key: CertificatePrivateKeyDetail | None = None
+    dns_names: list[str] = Field(default_factory=list)
+    issuer_ref: ProviderNamedReference | None = None
+    usages: list[str] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CertificateRequestProviderDetail(StrictModel):
+    type: Literal["certificate-request"] = "certificate-request"
+    ready: bool | None = None
+    approved: bool | None = None
+    denied: bool | None = None
+    issuer_ref: ProviderNamedReference | None = None
+    owner_certificate: ProviderNamedReference | None = None
+    duration: str | None = None
+    usages: list[str] = Field(default_factory=list)
+    certificate_issued: bool | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class ComplianceControlDetail(StrictModel):
+    id: str
+    name: str | None = None
+    description: str | None = None
+    severity: str | None = None
+    total_pass: int | None = None
+    total_fail: int | None = None
+    check_ids: list[str] = Field(default_factory=list)
+
+
+class ClusterComplianceReportProviderDetail(StrictModel):
+    type: Literal["cluster-compliance-report"] = "cluster-compliance-report"
+    framework_id: str | None = None
+    framework_title: str | None = None
+    framework_description: str | None = None
+    framework_version: str | None = None
+    platform: str | None = None
+    updated_at: str | None = None
+    pass_count: int | None = None
+    fail_count: int | None = None
+    controls: list[ComplianceControlDetail] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CrossplaneCompositeProviderDetail(StrictModel):
+    type: Literal["crossplane-composite"] = "crossplane-composite"
+    claim: bool
+    paused: bool
+    composition_ref: ProviderNamedReference | None = None
+    composition_revision_ref: ProviderNamedReference | None = None
+    composition_update_policy: str | None = None
+    bound_resource_ref: ProviderNamedReference | None = None
+    composed_resource_refs: list[ProviderNamedReference] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CronWorkflowProviderDetail(StrictModel):
+    type: Literal["cron-workflow"] = "cron-workflow"
+    schedules: list[str] = Field(default_factory=list)
+    timezone: str | None = None
+    suspended: bool | None = None
+    concurrency_policy: str | None = None
+    last_scheduled_time: str | None = None
+    active_workflows: list[ProviderNamedReference] = Field(default_factory=list)
+    workflow_template_ref: ProviderNamedReference | None = None
+    workflow_template_cluster_scope: bool | None = None
+    entrypoint: str | None = None
+    argument_count: int | None = None
+    template_count: int | None = None
+    successful_history_limit: int | None = None
+    failed_history_limit: int | None = None
+    starting_deadline_seconds: int | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class ExternalSecretMappingDetail(StrictModel):
+    secret_key: str | None = None
+    remote_key: str | None = None
+    remote_property: str | None = None
+    remote_version: str | None = None
+
+
+class ExternalSecretSourceDetail(StrictModel):
+    type: Literal["extract", "find", "source-ref", "unknown"]
+    detail: str | None = None
+
+
+class ExternalSecretProviderDetail(StrictModel):
+    type: Literal["external-secret"] = "external-secret"
+    ready: bool | None = None
+    last_sync_time: str | None = None
+    refresh_interval: str | None = None
+    target_name: str | None = None
+    synced_resource_version: str | None = None
+    binding_name: str | None = None
+    store_name: str | None = None
+    store_kind: str | None = None
+    mappings: list[ExternalSecretMappingDetail] = Field(default_factory=list)
+    data_sources: list[ExternalSecretSourceDetail] = Field(default_factory=list)
+    target_creation_policy: str | None = None
+    target_deletion_policy: str | None = None
+    template_type: str | None = None
+    template_engine_version: str | None = None
+    template_labels: list[ProviderKeyValue] = Field(default_factory=list)
+    template_annotations: list[ProviderKeyValue] = Field(default_factory=list)
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class GatewayClassProviderDetail(StrictModel):
+    type: Literal["gateway-class"] = "gateway-class"
+    controller_name: str | None = None
+    description: str | None = None
+    accepted: bool | None = None
+    parameters_ref: ProviderNamedReference | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 ResourceProviderDetail = Annotated[
     AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
@@ -302,6 +448,13 @@ ResourceProviderDetail = Annotated[
     | CapiMachineHealthCheckProviderDetail
     | CapiMachinePoolProviderDetail
     | CapiMachineProviderDetail
-    | CapiMachineSetProviderDetail,
+    | CapiMachineSetProviderDetail
+    | CertificateProviderDetail
+    | CertificateRequestProviderDetail
+    | ClusterComplianceReportProviderDetail
+    | CrossplaneCompositeProviderDetail
+    | CronWorkflowProviderDetail
+    | ExternalSecretProviderDetail
+    | GatewayClassProviderDetail,
     Field(discriminator="type"),
 ]

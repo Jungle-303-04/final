@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 128,
+  "pendingCount": 121,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3031,8 +3031,45 @@
         "blobId": "0e8791360e4072635f0ff6f82342f51f80ef37ce",
         "sha256": "f91cb4dfecd87d313adc1ecccd2be02a4e6ecdb95dccc790d860409d7e778e9d"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:certificate:v1",
+          "legacyContractIds": [],
+          "symbol": "CertificateRenderer",
+          "interaction": "an authorized cert-manager Certificate detail presents readiness, validity, renewal, private-key metadata, DNS identities, issuer, usages, failures, and conditions without returning certificate or key material",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact cert-manager group/kind projector, strict browser discriminator, localized detail sections, and redaction tests are implemented for stored observations. Automatic agent discovery and read RBAC for this CRD remains a collection follow-up."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3046,8 +3083,45 @@
         "blobId": "aa14a3cfee7f6d11f4f00257e178f5093d8a2e28",
         "sha256": "c6ed2d42a3b559fd11f8d236cd7a6e64dcb330517d47e7b32998a72c8b1112be"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:certificate-request:v1",
+          "legacyContractIds": [],
+          "symbol": "CertificateRequestRenderer",
+          "interaction": "an authorized CertificateRequest detail presents ready, approved, and denied state, issuer and owner references, duration, usages, issuance presence, and conditions while redacting PEM bytes",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Only issuance presence is projected; certificate contents and unrelated status payloads never cross the gateway. Cross-resource reference navigation awaits an inventory-resolved ResourceRef contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3061,8 +3135,53 @@
         "blobId": "d389f233bd1e281de856ddc824e1c45efaf60ddd",
         "sha256": "98f7de3b64e57523f97878006b39c65bb09ddfcb7f841ca391e2d1f0a4f19edd"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:cluster-compliance-report:v1",
+          "legacyContractIds": [],
+          "symbol": "ClusterComplianceReportRenderer",
+          "interaction": "an authorized compliance report presents framework and bounded summary evidence, then supports localized search, failed-only filtering, filter clearing, and accessible per-control disclosure",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap projected controls and check identifiers",
+            "merge": "replace the report atomically for the active identity while keeping filter state local to that mounted detail"
+          },
+          "motion": {
+            "reducedMotion": "control disclosures use the shared Collapse primitive, whose grid transition is disabled for reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/resources/renderers/ClusterComplianceReportRenderer.tsx",
+              "frontend/src/shared/ui/primitives/collapse.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation",
+              "resources.compliance-controls.interaction"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Failure-first severity ordering is centralized in Python and the browser filters only the bounded typed projection. Automatic compliance-operator CRD collection remains a follow-up."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3076,8 +3195,45 @@
         "blobId": "07ab3e0d784fd0f3860b4b16a0eb2adfb8998c39",
         "sha256": "85bc726ea86385434c6a9981a6e51dfa16eb54f11946edf9af289d2b25d98a8b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:crossplane-composite:v1",
+          "legacyContractIds": [],
+          "symbol": "CompositeRenderer",
+          "interaction": "an authorized Crossplane XR or claim detail presents pause state, composition references, update policy, bound XR, bounded composed-resource references, and conditions across v1 and v2 field layouts",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded parent detail read after identity or explicit Resources refresh changes",
+            "backpressure": "project at most the shared collection limit and never fan out browser reads from untrusted raw references",
+            "merge": "replace composition references only for the active exact parent identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The reusable shape matcher rejects managed resources and returns only typed references. Per-reference live status and cross-resource navigation remain unavailable until Python resolves each reference under the current workspace, cluster, and RBAC scope."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -3088,8 +3244,45 @@
         "blobId": "9379bf8e6f33d319856acd7a4f957f5b88e30621",
         "sha256": "dbcb46c07d1ff06ceb9e668a8d2d01992667b33202d1c983664cee903b7b5276"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:cron-workflow:v1",
+          "legacyContractIds": [],
+          "symbol": "CronWorkflowRenderer",
+          "interaction": "an authorized CronWorkflow detail presents observed schedules, timezone, suspension, concurrency, retained active runs, workflow-template metadata, counts, history limits, deadline, and conditions without browser defaults",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap active workflow references",
+            "merge": "replace the typed schedule projection only while the active identity matches"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The projection preserves absent CRD defaults as unavailable rather than inventing Allow or history-limit values in the browser. Template and active-run navigation awaits a server-resolved reference identity."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3103,8 +3296,47 @@
         "blobId": "dcabccceafde08b6f4af9ad86049b3dff326c959",
         "sha256": "bb9c03e25c62c6f43307fc8592a09c1d03ad29b498d63297727ef5fe25838304"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:external-secret:v1",
+          "legacyContractIds": [],
+          "symbol": "ExternalSecretRenderer",
+          "interaction": "an authorized ExternalSecret detail presents sync state, target and store metadata, bounded remote-key mappings and data-source identities, target policy, template metadata, and conditions without secret values",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap every mapping, source, label, and annotation collection",
+            "merge": "replace only the typed redacted projection for the active identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/inventory.test.ts",
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_domain.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Route integration proves provider payload and secret values are excluded after RBAC. Store and target navigation awaits a server-resolved reference identity; automatic External Secrets CRD collection remains a follow-up."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3118,8 +3350,45 @@
         "blobId": "f67477a8d8c97e42b09849cd2091d0cd6ad2a739",
         "sha256": "c8330db428f9af4023aa30d287ca9be690940f43a97527665a2aff13990a97fc"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:gateway-class:v1",
+          "legacyContractIds": [],
+          "symbol": "GatewayClassRenderer",
+          "interaction": "an authorized GatewayClass detail presents controller identity, description, accepted state, optional parameter reference, and conditions from an exact Gateway API projection",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.transport",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The exact gateway.networking.k8s.io group/kind projection and strict UI contract are implemented for stored observations. Automatic Gateway API CRD collection remains a follow-up."
+          }
+        }
+      ]
     },
     {
       "status": "M",

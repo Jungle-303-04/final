@@ -2,6 +2,7 @@ import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointC
 import type {
   ProviderCondition,
   ProviderKeyValue,
+  ProviderNamedReference,
   ProviderReference,
   ProviderReplicas,
   ProviderResourceDetail,
@@ -239,6 +240,131 @@ export function toProviderResourceDetail(
     infrastructureRef: reference(raw.infrastructure_ref),
     bootstrapRef: reference(raw.bootstrap_ref),
   };
+  if (type === "certificate") {
+    const privateKey = raw.private_key === null ? null : record(raw.private_key);
+    return {
+      type,
+      conditions,
+      ready: optionalBoolean(raw.ready),
+      secretName: optionalString(raw.secret_name),
+      revision: optionalInteger(raw.revision),
+      isCa: optionalBoolean(raw.is_ca),
+      duration: optionalString(raw.duration),
+      renewBefore: optionalString(raw.renew_before),
+      notBefore: optionalString(raw.not_before),
+      notAfter: optionalString(raw.not_after),
+      renewalTime: optionalString(raw.renewal_time),
+      failedIssuanceAttempts: optionalInteger(raw.failed_issuance_attempts),
+      lastFailureTime: optionalString(raw.last_failure_time),
+      privateKey: privateKey === null ? null : {
+        algorithm: optionalString(privateKey.algorithm),
+        size: optionalInteger(privateKey.size),
+        encoding: optionalString(privateKey.encoding),
+        rotationPolicy: optionalString(privateKey.rotation_policy),
+      },
+      dnsNames: stringList(raw.dns_names),
+      issuerRef: namedReference(raw.issuer_ref),
+      usages: stringList(raw.usages),
+    };
+  }
+  if (type === "certificate-request") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    approved: optionalBoolean(raw.approved),
+    denied: optionalBoolean(raw.denied),
+    issuerRef: namedReference(raw.issuer_ref),
+    ownerCertificate: namedReference(raw.owner_certificate),
+    duration: optionalString(raw.duration),
+    usages: stringList(raw.usages),
+    certificateIssued: optionalBoolean(raw.certificate_issued),
+  };
+  if (type === "cluster-compliance-report") return {
+    type,
+    conditions,
+    frameworkId: optionalString(raw.framework_id),
+    frameworkTitle: optionalString(raw.framework_title),
+    frameworkDescription: optionalString(raw.framework_description),
+    frameworkVersion: optionalString(raw.framework_version),
+    platform: optionalString(raw.platform),
+    updatedAt: optionalString(raw.updated_at),
+    passCount: optionalInteger(raw.pass_count),
+    failCount: optionalInteger(raw.fail_count),
+    controls: records(raw.controls).map((item) => ({
+      id: requiredString(item.id),
+      name: optionalString(item.name),
+      description: optionalString(item.description),
+      severity: optionalString(item.severity),
+      totalPass: optionalInteger(item.total_pass),
+      totalFail: optionalInteger(item.total_fail),
+      checkIds: stringList(item.check_ids),
+    })),
+  };
+  if (type === "crossplane-composite") return {
+    type,
+    conditions,
+    claim: requiredBoolean(raw.claim),
+    paused: requiredBoolean(raw.paused),
+    compositionRef: namedReference(raw.composition_ref),
+    compositionRevisionRef: namedReference(raw.composition_revision_ref),
+    compositionUpdatePolicy: optionalString(raw.composition_update_policy),
+    boundResourceRef: namedReference(raw.bound_resource_ref),
+    composedResourceRefs: namedReferences(raw.composed_resource_refs),
+  };
+  if (type === "cron-workflow") return {
+    type,
+    conditions,
+    schedules: stringList(raw.schedules),
+    timezone: optionalString(raw.timezone),
+    suspended: optionalBoolean(raw.suspended),
+    concurrencyPolicy: optionalString(raw.concurrency_policy),
+    lastScheduledTime: optionalString(raw.last_scheduled_time),
+    activeWorkflows: namedReferences(raw.active_workflows),
+    workflowTemplateRef: namedReference(raw.workflow_template_ref),
+    workflowTemplateClusterScope: optionalBoolean(raw.workflow_template_cluster_scope),
+    entrypoint: optionalString(raw.entrypoint),
+    argumentCount: optionalInteger(raw.argument_count),
+    templateCount: optionalInteger(raw.template_count),
+    successfulHistoryLimit: optionalInteger(raw.successful_history_limit),
+    failedHistoryLimit: optionalInteger(raw.failed_history_limit),
+    startingDeadlineSeconds: optionalInteger(raw.starting_deadline_seconds),
+  };
+  if (type === "external-secret") return {
+    type,
+    conditions,
+    ready: optionalBoolean(raw.ready),
+    lastSyncTime: optionalString(raw.last_sync_time),
+    refreshInterval: optionalString(raw.refresh_interval),
+    targetName: optionalString(raw.target_name),
+    syncedResourceVersion: optionalString(raw.synced_resource_version),
+    bindingName: optionalString(raw.binding_name),
+    storeName: optionalString(raw.store_name),
+    storeKind: optionalString(raw.store_kind),
+    mappings: records(raw.mappings).map((item) => ({
+      secretKey: optionalString(item.secret_key),
+      remoteKey: optionalString(item.remote_key),
+      remoteProperty: optionalString(item.remote_property),
+      remoteVersion: optionalString(item.remote_version),
+    })),
+    dataSources: records(raw.data_sources).map((item) => ({
+      type: externalSecretSourceType(item.type),
+      detail: optionalString(item.detail),
+    })),
+    targetCreationPolicy: optionalString(raw.target_creation_policy),
+    targetDeletionPolicy: optionalString(raw.target_deletion_policy),
+    templateType: optionalString(raw.template_type),
+    templateEngineVersion: optionalString(raw.template_engine_version),
+    templateLabels: keyValues(raw.template_labels),
+    templateAnnotations: keyValues(raw.template_annotations),
+  };
+  if (type === "gateway-class") return {
+    type,
+    conditions,
+    controllerName: optionalString(raw.controller_name),
+    description: optionalString(raw.description),
+    accepted: optionalBoolean(raw.accepted),
+    parametersRef: namedReference(raw.parameters_ref),
+  };
   return invalidResponse();
 }
 
@@ -284,6 +410,37 @@ function reference(value: unknown): ProviderReference | null {
     namespace: optionalString(item.namespace),
     name: requiredString(item.name),
   };
+}
+
+function namedReference(value: unknown): ProviderNamedReference | null {
+  if (value === null) return null;
+  const item = record(value);
+  return {
+    apiVersion: optionalString(item.api_version),
+    kind: optionalString(item.kind),
+    namespace: optionalString(item.namespace),
+    name: requiredString(item.name),
+  };
+}
+
+function namedReferences(value: unknown): ProviderNamedReference[] {
+  return records(value).map((item) => {
+    const reference = namedReference(item);
+    return reference ?? invalidResponse();
+  });
+}
+
+function externalSecretSourceType(
+  value: unknown,
+): "extract" | "find" | "source-ref" | "unknown" {
+  const normalized = requiredString(value);
+  if (
+    normalized !== "extract" &&
+    normalized !== "find" &&
+    normalized !== "source-ref" &&
+    normalized !== "unknown"
+  ) return invalidResponse();
+  return normalized;
 }
 
 function machineRole(value: unknown): "control-plane" | "worker" {

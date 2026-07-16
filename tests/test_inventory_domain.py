@@ -493,6 +493,50 @@ def test_inventory_resource_detail_returns_typed_provider_projection_after_rbac(
     assert "raw" not in response.resource.model_dump()
 
 
+def test_inventory_resource_detail_redacts_external_secret_payload_after_rbac() -> None:
+    external_secret = inventory_resource("externalsecret", "ExternalSecret", "api-secret")
+    external_secret["api_version"] = "external-secrets.io/v1beta1"
+    external_secret["raw"] = {
+        "metadata": {"name": "api-secret"},
+        "spec": {
+            "secretStoreRef": {"name": "vault", "kind": "ClusterSecretStore"},
+            "target": {"name": "api"},
+            "data": [
+                {
+                    "secretKey": "TOKEN",
+                    "remoteRef": {"key": "prod/api", "property": "token"},
+                }
+            ],
+        },
+        "status": {
+            "conditions": [{"type": "Ready", "status": "True"}],
+            "providerPayload": {"secretValue": "must-not-leak"},
+        },
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="externalsecret",
+            kind="ExternalSecret",
+            namespace="default",
+            name="api-secret",
+            related_limit=10,
+            event_limit=10,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=StubInventoryDb([external_secret]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "external-secret"
+    serialized = response.provider_detail.model_dump_json()
+    assert "must-not-leak" not in serialized
+    assert "providerPayload" not in serialized
+    assert "raw" not in response.resource.model_dump()
+
+
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     async def run():
         return await get_inventory_summary(
