@@ -3460,11 +3460,11 @@
     {
       "id": "reference-feature-102",
       "contractId": "reference.feature.102",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
       "legacyContractIds": [
         "reference.feature.102"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 373,
       "cells": [
@@ -3479,17 +3479,28 @@
       ],
       "streaming": false,
       "area": "bootstrap-shell-desktop",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.shell_state.NamespaceScopeResponse",
+      "frontendContract": "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/shell-state.test.ts",
+        "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_namespace_scope",
+          "consumer": "src/domains/inventory_filter/repository.py#list_authorized_namespace_catalog",
+          "test": "tests/test_shell_state_router.py#test_namespace_scope_is_authoritative_and_mutation_is_audited"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx#NamespaceScopeSync",
+          "consumer": "frontend/src/api/shell-state.ts#getNamespaceScope",
+          "test": "tests/test_shell_state_router.py#test_namespace_scope_is_authoritative_and_mutation_is_audited"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3497,11 +3508,11 @@
     {
       "id": "reference-feature-103",
       "contractId": "reference.feature.103",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
       "legacyContractIds": [
         "reference.feature.103"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 374,
       "cells": [
@@ -3516,17 +3527,28 @@
       ],
       "streaming": false,
       "area": "bootstrap-shell-desktop",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.shell_state.NamespaceScopeUpdateResponse",
+      "frontendContract": "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/features/bottom-dock/BottomDockProvider.test.tsx",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#update_namespace_scope",
+          "consumer": "src/domains/shell_state/repository.py#put_namespace_scope",
+          "test": "tests/test_shell_state_router.py#test_namespace_scope_rejects_inaccessible_and_stale_mutations"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/bottom-dock/BottomDockProvider.tsx#invalidateNamespaceScope",
+          "consumer": "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx#NamespaceScopeSync",
+          "test": "frontend/src/features/bottom-dock/BottomDockProvider.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3534,11 +3556,11 @@
     {
       "id": "reference-feature-104",
       "contractId": "reference.feature.104",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:search:resource-identity:v1",
       "legacyContractIds": [
         "reference.feature.104"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 375,
       "cells": [
@@ -3553,17 +3575,28 @@
       ],
       "streaming": false,
       "area": "bootstrap-shell-desktop",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceIdentitySearchResponse",
+      "frontendContract": "frontend/src/features/global-filter/globalFilterContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#search_resource_identities",
+          "consumer": "src/domains/inventory_filter/repository.py#search_resource_identities",
+          "test": "tests/test_inventory_filter_router.py#test_resource_search_returns_exact_identity_and_authorized_scopes"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "consumer": "frontend/src/features/global-filter/createGlobalFilterAdapter.ts#createGlobalFilterAdapter",
+          "test": "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3571,11 +3604,11 @@
     {
       "id": "reference-feature-105",
       "contractId": "reference.feature.105",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:preferences:user-persistence:v1",
       "legacyContractIds": [
         "reference.feature.105"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 376,
       "cells": [
@@ -3590,17 +3623,27 @@
       ],
       "streaming": false,
       "area": "bootstrap-shell-desktop",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.shell_state.UiPreferencesResponse",
+      "frontendContract": "frontend/src/features/preferences/UiPreferencesSync.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/shell-state.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_settings",
+          "consumer": "src/domains/shell_state/repository.py#get_ui_preferences",
+          "test": "tests/test_shell_state_router.py#test_ui_preferences_round_trip_with_revision_and_audit_event"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/preferences/UiPreferencesSync.tsx#UiPreferencesSync",
+          "consumer": "frontend/src/api/shell-state.ts#getUiPreferences",
+          "test": "tests/test_shell_state_router.py#test_ui_preferences_round_trip_with_revision_and_audit_event"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -3608,11 +3651,11 @@
     {
       "id": "reference-feature-106",
       "contractId": "reference.feature.106",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:preferences:user-persistence:v1",
       "legacyContractIds": [
         "reference.feature.106"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "7.2 Bootstrap·전역 셸·desktop",
       "line": 377,
       "cells": [
@@ -3627,17 +3670,27 @@
       ],
       "streaming": false,
       "area": "bootstrap-shell-desktop",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.catalog",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.shell_state.UiPreferencesUpdateResponse",
+      "frontendContract": "frontend/src/features/preferences/UiPreferencesSync.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/shell-state.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#update_settings",
+          "consumer": "src/domains/shell_state/repository.py#put_ui_preferences",
+          "test": "tests/test_shell_state_router.py#test_ui_preferences_round_trip_with_revision_and_audit_event"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/preferences/UiPreferencesSync.tsx#UiPreferencesSync",
+          "consumer": "frontend/src/api/shell-state.ts#updateUiPreferences",
+          "test": "tests/test_shell_state_router.py#test_ui_preferences_round_trip_with_revision_and_audit_event"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

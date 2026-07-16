@@ -424,8 +424,16 @@
       "rationale": "A future scheduled-workload log target must prove its server-authorized run identity before it opens the existing bounded log stream."
     },
     "namespace.scope.rescope": {
-      "destination": "frontend/src/features/filters/UnifiedFilterProvider.test.tsx",
-      "rationale": "A future namespace-rescope controller must prove authorized catalog replacement, URL state, and active-session invalidation without browser-derived scope."
+      "destination": "tests/test_shell_state_router.py",
+      "rationale": "The namespace-rescope controller proves authorized catalog replacement, optimistic persistence, URL state, audit identity, and incompatible stream invalidation without browser-derived scope."
+    },
+    "shell.resource-search.identity": {
+      "destination": "tests/test_inventory_filter_router.py",
+      "rationale": "Global search returns one authorized, snapshot-backed ResourceRef and the browser opens that exact inventory identity."
+    },
+    "shell.preferences.persistence": {
+      "destination": "tests/test_shell_state_router.py",
+      "rationale": "Theme and locale preferences round-trip through user-scoped PostgreSQL state with optimistic revision and immutable audit event identity."
     },
     "issues.severity.server-projection": {
       "destination": "tests/test_dashboard_projection.py",
@@ -974,7 +982,10 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:resources:provider-detail:aws-machine:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.102",
+            "reference.feature.103"
+          ],
           "symbol": "AWSMachineRenderer",
           "interaction": "an authorized AWSMachine detail presents observed instance identity, lifecycle state, configuration, addresses, and Cluster API conditions without exposing the raw object",
           "transport": "poll",
@@ -2192,22 +2203,26 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/features/filters/filterContract.ts",
-              "frontend/src/features/filters/UnifiedFilterProvider.tsx",
-              "frontend/src/features/filters/UnifiedFilterProvider.test.tsx",
-              "src/packages/contracts/parity.py",
-              "src/domains/inventory_filter/router.py"
+              "frontend/src/features/namespace-scope/NamespaceScopeSync.tsx",
+              "frontend/src/features/namespace-scope/namespaceScopeInvalidation.ts",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/pages/resources/PodTerminalDialog.tsx",
+              "frontend/src/api/shell-state.ts",
+              "src/packages/contracts/shell_state.py",
+              "src/domains/shell_state/router.py",
+              "src/domains/shell_state/repository.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.parity",
-              "domains.inventory_filter.router"
+              "packages.contracts.shell_state",
+              "domains.shell_state.router",
+              "domains.inventory_filter.repository"
             ],
             "plannedTestIds": [
               "namespace.scope.rescope"
             ],
-            "state": "blocked",
-            "blockedReason": "The current Python APIs accept namespace filters but do not project an authorized namespace catalog, cache-scope ownership, rescope lifecycle, or the required invalidation of terminal and port-forward sessions.",
-            "rationale": "URL namespace values alone cannot establish whether a namespace is listable, cache-scoped, or safe to switch, so the product retains only its existing normalized filter state until the server contract exists."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python gateway now owns the RBAC-filtered catalog and durable replacement scope; the browser applies canonical URL state and closes incompatible live log subscriptions after the audited transaction commits."
           }
         }
       ]
@@ -8478,6 +8493,77 @@
             "state": "blocked",
             "blockedReason": "External host injection would bypass the product's single authenticated workspace and cluster-scope composition boundary. The supported desktop host is Tauri and shares the same compiled React application instead.",
             "rationale": "The standalone provider composition is retained, while the source-only embeddable browser-library contract remains intentionally outside the product build."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:shell:search:resource-identity:v1",
+          "legacyContractIds": [
+            "reference.feature.104"
+          ],
+          "symbol": "authenticated query provider and global resource lookup",
+          "interaction": "the global omnibar debounces an authorized resource lookup, cancels superseded scans, preserves bounded snapshot metadata, and opens the exact Kubernetes ResourceRef selected by keyboard or pointer",
+          "transport": "poll",
+          "realtime": {
+            "resume": "each stable query resumes from the current workspace, cluster, namespace, application, resource-type, and label scope",
+            "backpressure": "one AbortController cancels the previous request and the Python contract caps a response at 50 exact identities",
+            "merge": "only the latest query frame replaces resource suggestions while structural filter facets and committed URL chips remain independently owned"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/shell-state.ts",
+              "frontend/src/features/global-filter/createGlobalFilterAdapter.ts",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "src/domains/inventory_filter/router.py",
+              "src/domains/inventory_filter/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "packages.contracts.parity",
+              "domains.inventory_filter.router"
+            ],
+            "plannedTestIds": [
+              "shell.resource-search.identity"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product search uses the temporal PostgreSQL inventory projection and returns UID-bearing identities instead of label-only browser guesses."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:shell:preferences:user-persistence:v1",
+          "legacyContractIds": [
+            "reference.feature.105",
+            "reference.feature.106"
+          ],
+          "symbol": "theme provider preference hydration and persistence",
+          "interaction": "the authenticated provider tree hydrates user-owned UI preferences, applies theme and locale without startup overwrite, and persists later changes with optimistic conflict recovery",
+          "transport": "poll",
+          "realtime": {
+            "resume": "authentication bootstrap reads the latest user revision and a conflict reloads the server authority before another write",
+            "backpressure": "preference writes are debounced and each update requires the exact previously observed revision",
+            "merge": "the server replaces the complete validated UI preference object while unrelated workspace and cluster state remains unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/preferences/UiPreferencesSync.tsx",
+              "frontend/src/api/shell-state.ts",
+              "src/packages/contracts/shell_state.py",
+              "src/domains/shell_state/router.py",
+              "src/domains/shell_state/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "domains.shell_state.router",
+              "domains.shell_state.repository"
+            ],
+            "plannedTestIds": [
+              "shell.preferences.persistence"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Preferences are scoped by workspace and user in PostgreSQL, validated at both Python and Zod boundaries, and coupled to an immutable audit event in one transaction."
           }
         }
       ]

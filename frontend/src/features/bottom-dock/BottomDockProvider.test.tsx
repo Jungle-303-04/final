@@ -87,6 +87,26 @@ describe("BottomDockProvider", () => {
     expect(screen.getByTestId("received").textContent).toBe("1");
   });
 
+  it("closes an incompatible stream after an authoritative namespace rescope", () => {
+    const close = vi.fn();
+    const port: LogStreamPort = {
+      open: vi.fn(() => close),
+    };
+    render(
+      <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+        <BottomDockProvider port={port}>
+          <DockProbe onRender={() => undefined} />
+        </BottomDockProvider>
+      </AuthSessionGateProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    fireEvent.click(screen.getByRole("button", { name: "rescope" }));
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("status").textContent).toBe("closed");
+  });
+
   it("keeps the stream coalescer active after StrictMode resets its effects", () => {
     let handlers: LogStreamHandlers | null = null;
     const port: LogStreamPort = {
@@ -176,6 +196,12 @@ function DockProbe({ onRender }: { onRender: (received: number) => void }) {
         type="button"
       >
         close
+      </button>
+      <button
+        onClick={() => dock.invalidateNamespaceScope("cluster-1", ["other"])}
+        type="button"
+      >
+        rescope
       </button>
       <span data-testid="received">{tab?.received ?? 0}</span>
       <span data-testid="status">{tab?.status ?? "closed"}</span>

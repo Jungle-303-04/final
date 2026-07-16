@@ -175,6 +175,8 @@ _AUDIT_JOURNEY_SUBJECT_GROUPS: tuple[tuple[AuditJourneyStage, frozenset[EventSub
             {
                 EventSubject.DEAD_LETTER_CREATED,
                 EventSubject.PIPELINE_CONTRACT_FAILED,
+                EventSubject.NAMESPACE_SCOPE_UPDATED,
+                EventSubject.UI_PREFERENCES_UPDATED,
             }
         ),
     ),

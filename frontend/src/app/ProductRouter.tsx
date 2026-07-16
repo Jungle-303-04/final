@@ -21,6 +21,7 @@ import {
   type ProductRouteDefinition,
 } from "./productRoutes";
 import { navLabelKeys } from "./ProductShellNavigation";
+import { UiPreferencesSync } from "../features/preferences/UiPreferencesSync";
 
 export function ProductRouter({
   auth,
@@ -50,6 +51,7 @@ export function ProductRouter({
             authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
             port={composition.clusterScope}
           >
+            <UiPreferencesSync />
             <DesktopRuntimeSync />
             <Routes>
           <Route element={(

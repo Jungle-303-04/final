@@ -63,6 +63,7 @@ import {
 import type { ProductRouteDefinition } from "./productRoutes";
 import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
 import { useOptionalDiagnoseSession } from "../features/diagnose/DiagnoseSessionContext";
+import { NamespaceScopeSync } from "../features/namespace-scope/NamespaceScopeSync";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -199,6 +200,7 @@ function ProductShellFrame({
 
   return (
     <>
+      <NamespaceScopeSync />
       <a
         className="fixed left-3 top-3 z-50 -translate-y-20 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-transform focus:translate-y-0 motion-reduce:transition-none"
         href="#product-main"

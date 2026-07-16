@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useUnifiedFilter } from "../filters/UnifiedFilterProvider";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import {
@@ -66,6 +67,7 @@ const groupIcons = {
 
 export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   const filter = useUnifiedFilter();
+  const navigate = useNavigate();
   const { formatNumber, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -121,6 +123,40 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   }));
 
   const selectSuggestion = (suggestion: GlobalFilterSuggestion) => {
+    if (suggestion.type === "resource") {
+      const detail = {
+        ...filter.detail,
+        detail: [
+          suggestion.resource.kind,
+          suggestion.resource.namespace ?? "~",
+          suggestion.resource.name,
+        ].join("/"),
+        resource: null,
+        resourceKind: null,
+        tab: null,
+      };
+      filter.updateFilters((current) => ({
+        ...current,
+        common: {
+          ...current.common,
+          clusters: [suggestion.clusterId],
+          namespaces: suggestion.resource.namespace === null
+            ? []
+            : [{
+                clusterId: suggestion.clusterId,
+                namespace: suggestion.resource.namespace,
+              }],
+        },
+        resources: {
+          ...current.resources,
+          types: [suggestion.resourceType],
+        },
+      }), "legacy-migration");
+      navigate(filter.navigationHref("/resources", detail));
+      setOpen(false);
+      setQuery("");
+      return;
+    }
     filter.updateFilters((current) => addSuggestion(current, suggestion), "chip-add");
     setQuery("");
   };
@@ -230,7 +266,9 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
                         <Icon aria-hidden="true" />
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.type === "resource" ? (
-                          <span className="text-xs text-muted-foreground">{item.kind}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {item.resource.kind}
+                          </span>
                         ) : null}
                         <span className="text-xs tabular-nums text-muted-foreground">
                           {formatCount(item, formatNumber, t)}

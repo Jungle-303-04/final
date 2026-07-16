@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProductSessionProvider } from "../../features/auth/ProductSessionContext";
+import { publishNamespaceScopeInvalidation } from "../../features/namespace-scope/namespaceScopeInvalidation";
 import type { PodTerminalPort } from "../../features/pod-terminal/podTerminalContract";
 import type { ResourceDetail } from "../../features/resources/resourcesContract";
 import { I18nProvider } from "../../shared/i18n";
@@ -134,6 +135,26 @@ describe("PodTerminalDialog", () => {
     renderTerminal(mismatched, { open: vi.fn() });
 
     expect(screen.queryByRole("button", { name: "Pod 터미널" })).toBeNull();
+  });
+
+  it("closes an active terminal when namespace authority is replaced", async () => {
+    const user = userEvent.setup();
+    const close = vi.fn();
+    const port: PodTerminalPort = {
+      open: vi.fn(() => ({ sendInput: vi.fn(), close })),
+    };
+    renderTerminal(CAPABILITIES, port);
+
+    await user.click(screen.getByRole("button", { name: "Pod 터미널" }));
+    await user.type(screen.getByLabelText("명령"), "sh");
+    await user.click(screen.getByRole("button", { name: "명령 실행" }));
+    act(() => publishNamespaceScopeInvalidation({
+      clusterId: "cluster-1",
+      allowedNamespaces: ["other"],
+    }));
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "터미널 · checkout-api-0" })).toBeNull();
   });
 });
 

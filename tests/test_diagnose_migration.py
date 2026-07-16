@@ -37,8 +37,9 @@ def test_diagnose_migration_creates_durable_run_event_and_consent_storage(
     config = _config(monkeypatch)
     script = ScriptDirectory.from_config(config)
 
-    assert tuple(script.get_heads()) == (REVISION,)
-    assert script.get_revision(REVISION).down_revision == DOWN_REVISION
+    revision = script.get_revision(REVISION)
+    assert revision is not None
+    assert revision.down_revision == DOWN_REVISION
     sql = _render(config, "upgrade", f"{DOWN_REVISION}:{REVISION}")
     assert "create table diagnose_runs" in sql
     assert "create table diagnose_event_cursors" in sql

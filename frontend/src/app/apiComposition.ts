@@ -19,6 +19,7 @@ import {
   listAlertRules,
   listClusters,
   listGlobalFilterFacets,
+  searchResourceIdentities,
   listDiagnoseRuns,
   openPodLogStream,
   openScheduledWorkloadRunLogStream,
@@ -61,7 +62,10 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     createOperationEventsAdapter({ subscribeCommandOperationEvents }),
   );
   const registry = createPortRegistry({ homePort, operationStatusStore });
-  const globalFilterPort = createGlobalFilterAdapter({ listGlobalFilterFacets });
+  const globalFilterPort = createGlobalFilterAdapter({
+    listGlobalFilterFacets,
+    searchResourceIdentities,
+  });
   const aiAssistantPort = createAiAssistantAdapter({
     createAlertRule,
     getAiSuggestions,

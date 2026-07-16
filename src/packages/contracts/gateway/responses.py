@@ -994,6 +994,25 @@ class GlobalFilterFacetsResponse(StrictModel):
     resources: list[GlobalResourceFacetItem] = Field(default_factory=list)
 
 
+class ResourceIdentitySearchHit(StrictModel):
+    id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    resource: ResourceRef
+    matched_fields: list[
+        Literal["name", "kind", "namespace", "api_version", "resource_type", "uid"]
+    ] = Field(default_factory=list)
+    observed_at: str | None = None
+
+
+class ResourceIdentitySearchResponse(StrictModel):
+    scopes: list[ClusterScope] = Field(default_factory=list)
+    hits: list[ResourceIdentitySearchHit] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    total_completeness: FilterCountCompleteness
+    snapshot: FilterSnapshotMeta
+
+
 class InventoryResourceClusterIdentity(StrictModel):
     cluster_id: str = Field(min_length=1)
     name: str | None = None

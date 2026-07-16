@@ -59,6 +59,7 @@ from domains.rca_bundle.router import router as rca_bundle_router
 from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
 from domains.service_access.router import router as service_access_router
+from domains.shell_state.router import router as shell_state_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
@@ -361,6 +362,7 @@ class ApiGateway:
             inventory_router
         )  # agent inventory snapshot -> multi-cluster read model 투영
         app.include_router(inventory_filter_router)  # workspace Resources 필터·facet 서버 집계
+        app.include_router(shell_state_router)  # user namespace scope + durable UI preferences
         app.include_router(
             manifest_editor_router
         )  # exact resource -> Git source -> approved Safe PR

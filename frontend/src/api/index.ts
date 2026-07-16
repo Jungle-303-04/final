@@ -36,6 +36,13 @@ export {
   type ApiPath,
 } from "./client";
 export {
+  getNamespaceScope,
+  getUiPreferences,
+  searchResourceIdentities,
+  updateNamespaceScope,
+  updateUiPreferences,
+} from "./shell-state";
+export {
   getTimelineCapabilities,
   getTimelineOverview,
   getTimelinePins,

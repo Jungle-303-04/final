@@ -182,6 +182,27 @@ class InventoryFilterApiDb:
             ),
         }
 
+    def search_resource_identities(self, **kwargs: Any) -> dict[str, Any]:
+        self.data_calls.append(("resource-search", dict(kwargs)))
+        resource = _resource()
+        return {
+            "items": [
+                {
+                    "id": resource["inventory_key"],
+                    "cluster_id": resource["cluster_id"],
+                    "api_version": resource["api_version"],
+                    "kind": resource["kind"],
+                    "namespace": resource["namespace"],
+                    "name": resource["name"],
+                    "uid": resource["uid"],
+                    "resource_type": resource["resource_type"],
+                    "observed_at": resource["observed_at"],
+                    "matched_fields": ["name"],
+                }
+            ],
+            "total": 1,
+        }
+
     def list_label_facets(self, **kwargs: Any) -> dict[str, Any]:
         self.data_calls.append(("labels", dict(kwargs)))
         return {
@@ -422,6 +443,51 @@ def test_global_filter_facets_do_not_turn_missing_projection_into_exact_zero() -
     assert body.clusters[0].count_completeness == "unavailable"
     assert body.applications[0].count is None
     assert body.applications[0].count_completeness == "unavailable"
+
+
+def test_resource_search_returns_exact_identity_and_authorized_scopes() -> None:
+    db = InventoryFilterApiDb(
+        allowed_clusters={CLUSTER_ID},
+        allowed_applications={APPLICATION_ID},
+    )
+    client, _auth = _make_client(db)
+
+    response = client.get(
+        "/search",
+        params={
+            "q": "checkout",
+            "clusters": CLUSTER_ID,
+            "namespaces": f"{CLUSTER_ID}/shop",
+            "include": "resources",
+            "globalNs": "true",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scopes"] == [
+        {
+            "workspace_id": WORKSPACE_ID,
+            "cluster_id": CLUSTER_ID,
+            "namespaces": [],
+            "freshness": "live",
+        }
+    ]
+    assert body["hits"][0]["resource"] == {
+        "api_group": "apps",
+        "version": "v1",
+        "kind": "Deployment",
+        "namespace": "shop",
+        "name": "checkout",
+        "uid": "uid-checkout",
+    }
+    assert body["hits"][0]["resource_type"] == "workload"
+    assert body["hits"][0]["matched_fields"] == ["name"]
+    assert body["total"] == 1
+    assert body["total_completeness"] == "exact"
+    call = [item for item in db.data_calls if item[0] == "resource-search"][-1][1]
+    assert call["filters"].clusters == (CLUSTER_ID,)
+    assert call["filters"].namespaces == ()
 
 
 @pytest.mark.parametrize(

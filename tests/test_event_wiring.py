@@ -51,6 +51,10 @@ TERMINAL_SUBJECTS = {
     EventSubject.WORKFLOW_RUN_COMPLETED,
     EventSubject.WORKFLOW_RUN_FAILED,
     EventSubject.APPROVAL_REQUESTED,
+    # User shell changes are durable audit facts. The browser applies their
+    # committed state directly; workers must not replay them as another write.
+    EventSubject.NAMESPACE_SCOPE_UPDATED,
+    EventSubject.UI_PREFERENCES_UPDATED,
 }
 
 
