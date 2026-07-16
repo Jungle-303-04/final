@@ -85,6 +85,19 @@ class StubAlertEventDb:
         self.ack_calls: list[tuple[str, str, str]] = []
         self.promote_calls: list[tuple[str, str, str, str]] = []
 
+    def create_alert_event(self, payload: dict[str, Any]) -> dict[str, Any]:
+        row = {
+            **payload,
+            "acknowledged_at": None,
+            "acknowledged_by": None,
+            "promoted_at": None,
+            "promoted_by": None,
+            "created_at": payload["fired_at"],
+            "updated_at": payload["fired_at"],
+        }
+        self.rows[str(row["event_id"])] = row
+        return dict(row)
+
     def list_alert_events(self, workspace_id: str, **filters: Any) -> list[dict[str, Any]]:
         self.list_calls.append({"workspace_id": workspace_id, **filters})
         rows = [row for row in self.rows.values() if row["workspace_id"] == workspace_id]
@@ -220,6 +233,25 @@ def test_list_alert_events_rejects_reversed_time_window() -> None:
     assert db.list_calls == []
 
 
+def test_create_test_alert_event_is_hidden_unless_capability_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = StubAlertEventDb()
+    client = TestClient(alert_app(db))
+    monkeypatch.setenv("ALERT_TEST_EVENTS_ENABLED", "0")
+
+    assert client.post("/alert-events/test").status_code == 404
+
+    monkeypatch.setenv("ALERT_TEST_EVENTS_ENABLED", "1")
+    response = client.post("/alert-events/test")
+
+    assert response.status_code == 201
+    assert response.json()["event_id"].startswith("ale-test-")
+    assert response.json()["rule_name"] == "실시간 알림 테스트"
+    assert response.json()["status"] == "firing"
+    assert response.json()["subject"]["cluster"] == "cluster-1"
+
+
 def test_ack_alert_event_records_actor_and_hides_other_workspace() -> None:
     db = StubAlertEventDb()
     client = TestClient(alert_app(db))
@@ -269,6 +301,7 @@ def test_alert_event_routes_publish_openapi() -> None:
 
     assert {
         "/alert-events",
+        "/alert-events/test",
         "/alert-events/{event_id}/ack",
         "/alert-events/{event_id}/promote-incident",
     } <= set(schema["paths"])

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   acknowledgeAlertEvent,
+  createTestAlertEvent,
   listAlertEvents,
   promoteAlertEvent,
 } from "./alert-events";
@@ -60,6 +61,16 @@ describe("alert event API", () => {
     ]);
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("x-service-csrf"))
       .toBe("same-origin");
+  });
+
+  it("creates a development test occurrence through a bodyless mutation", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(json(EVENT));
+
+    await expect(createTestAlertEvent()).resolves.toEqual(EVENT);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/alert-events/test",
+      expect.objectContaining({ credentials: "include", method: "POST" }),
+    );
   });
 
   it("rejects Opsia occurrences without observed threshold evidence", async () => {

@@ -62,6 +62,13 @@ def serialize_alert_event(row: JsonObject) -> JsonObject:
 
 
 class AlertChannelRepository(DatabaseConnection):
+    def create_alert_event(self, payload: JsonObject) -> JsonObject:
+        table = AlertEvent.__table__
+        statement = pg_insert(table).values(**payload).returning(table)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return serialize_alert_event(dict(row))
+
     def list_alert_channels(
         self, workspace_id: str, *, only_enabled: bool = False
     ) -> list[JsonObject]:

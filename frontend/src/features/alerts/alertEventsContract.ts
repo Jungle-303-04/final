@@ -62,12 +62,14 @@ export interface AlertEventListOptions {
 
 export interface AlertEventsPort {
   list(signal?: AbortSignal): Promise<readonly AlertEvent[]>;
+  createTest?(signal?: AbortSignal): Promise<AlertEvent>;
   acknowledge(eventId: string, signal?: AbortSignal): Promise<AlertEvent>;
   promote(eventId: string, signal?: AbortSignal): Promise<AlertIncidentPromotion>;
 }
 
 export interface AlertEventEndpoints {
   listAlertEvents(options?: AlertEventListOptions): Promise<AlertEvent[]>;
+  createTestAlertEvent(signal?: AbortSignal): Promise<AlertEvent>;
   acknowledgeAlertEvent(eventId: string, signal?: AbortSignal): Promise<AlertEvent>;
   promoteAlertEvent(eventId: string, signal?: AbortSignal): Promise<AlertIncidentPromotion>;
 }

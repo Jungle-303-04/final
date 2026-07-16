@@ -16,7 +16,9 @@ export {
 } from "../alert-channels-schemas";
 export {
   ALERT_EVENTS_PATH,
+  ALERT_EVENT_TEST_PATH,
   acknowledgeAlertEvent,
+  createTestAlertEvent,
   listAlertEvents,
   promoteAlertEvent,
   type AlertEventListOptions,

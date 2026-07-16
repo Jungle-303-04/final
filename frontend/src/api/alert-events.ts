@@ -11,6 +11,7 @@ import {
 import { encodePathSegment } from "./url";
 
 export const ALERT_EVENTS_PATH: ApiPath = "/api/alert-events";
+export const ALERT_EVENT_TEST_PATH: ApiPath = "/api/alert-events/test";
 
 export interface AlertEventListOptions {
   from?: string;
@@ -35,6 +36,10 @@ export function listAlertEvents(options: AlertEventListOptions = {}): Promise<Al
     alertEventListSchema,
     { signal: options.signal },
   );
+}
+
+export function createTestAlertEvent(signal?: AbortSignal): Promise<AlertEvent> {
+  return apiRequest(ALERT_EVENT_TEST_PATH, alertEventSchema, { method: "POST", signal });
 }
 
 export function acknowledgeAlertEvent(

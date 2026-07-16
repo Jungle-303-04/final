@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from domains.alert.schemas import (
@@ -80,6 +81,54 @@ def alert_rule_response(row: dict[str, Any]) -> AlertRuleResponse:
 def alert_event_response(row: dict[str, Any]) -> AlertEventResponse:
     fields = AlertEventResponse.model_fields
     return AlertEventResponse.model_validate({key: row.get(key) for key in fields})
+
+
+def create_test_alert_event_occurrence(
+    db: Any,
+    *,
+    workspace_id: str,
+    actor_id: str,
+    id_factory: Callable[[], str] | None = None,
+    now: datetime | None = None,
+) -> AlertEventResponse:
+    """개발 capability가 허용된 환경에서만 호출되는 실제 알림 원장 fixture."""
+    event_id = (id_factory or _new_alert_event_id)()
+    fired_at = now or datetime.now(UTC)
+    subject = {
+        "cluster": "cluster-1",
+        "namespace": "default",
+        "kind": "Pod",
+        "name": "notification-preview",
+    }
+    saved = db.create_alert_event(
+        {
+            "event_id": event_id,
+            "workspace_id": workspace_id,
+            "rule_id": "development-notification-preview",
+            "rule_name": "실시간 알림 테스트",
+            "source": "opsia",
+            "severity": "high",
+            "subject_key": f"development:{event_id}",
+            "subject": subject,
+            "fired_at": fired_at,
+            "resolved_at": None,
+            "status": "firing",
+            "observed_value": 92.0,
+            "threshold": 80.0,
+            "evidence": [
+                {
+                    "type": "development_test",
+                    "metric": "cpu_pct",
+                    "observed_at": fired_at.isoformat(),
+                    "subject": subject,
+                    "value": 92.0,
+                    "summary": f"{actor_id} 사용자가 생성한 개발용 실시간 알림입니다.",
+                }
+            ],
+            "incident_id": None,
+        }
+    )
+    return alert_event_response(saved)
 
 
 def acknowledge_alert_event_occurrence(
@@ -200,6 +249,10 @@ def _require_workspace_channels(db: Any, workspace_id: str, channel_ids: list[st
 
 def _new_rule_id() -> str:
     return f"alr-{uuid.uuid4()}"
+
+
+def _new_alert_event_id() -> str:
+    return f"ale-test-{uuid.uuid4()}"
 
 
 def _new_incident_id() -> str:

@@ -29,10 +29,12 @@ from domains.alert.service import (
     alert_event_response,
     alert_rule_response,
     create_alert_rule_setting,
+    create_test_alert_event_occurrence,
     promote_alert_event_occurrence,
     update_alert_rule_setting,
 )
 from domains.identity.dependencies import require_admin_session
+from packages.config.security import alert_test_events_enabled
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import AlertChannelTestRequest, AlertChannelUpsertRequest
@@ -55,6 +57,7 @@ ALERT_CHANNEL_NOT_FOUND_CODE = "alert_channel_not_found"
 ALERT_CHANNEL_NOT_FOUND_DETAIL = "선택한 알림 채널을 찾을 수 없습니다."
 ALERT_RULE_NOT_FOUND = "alert rule not found"
 ALERT_EVENT_NOT_FOUND = "alert event not found"
+ALERT_TEST_EVENT_NOT_FOUND = "not found"
 
 
 @router.post(
@@ -161,6 +164,25 @@ async def list_alert_events(
         limit=limit,
     )
     return [alert_event_response(row) for row in rows]
+
+
+@router.post(
+    gateway_routes.ALERT_EVENT_TEST_PATH,
+    response_model=AlertEventResponse,
+    status_code=201,
+)
+async def create_test_alert_event(
+    current: Any = Depends(require_admin_session),
+    db: Any = Depends(get_db),
+) -> AlertEventResponse:
+    if not alert_test_events_enabled():
+        raise HTTPException(status_code=404, detail=ALERT_TEST_EVENT_NOT_FOUND)
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    return create_test_alert_event_occurrence(
+        db,
+        workspace_id=workspace_id,
+        actor_id=str(current.user_id),
+    )
 
 
 @router.post(gateway_routes.ALERT_EVENT_ACK_PATH, response_model=AlertEventResponse)
