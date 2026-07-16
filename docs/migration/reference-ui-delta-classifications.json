@@ -191,6 +191,10 @@
       "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
       "rationale": "Topology node icons must use the shared resource registry and never make the root resource a recursive detail portal."
     },
+    "gitops.provider-assets.provenance": {
+      "destination": "frontend/src/shared/brand/gitOpsProviderAssets.test.ts",
+      "rationale": "The product-owned provider asset registry and copied bytes remain pinned to immutable upstream source hashes without importing the isolated source runtime."
+    },
     "helm.release-list.scope": {
       "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
       "rationale": "The scoped release list must show only inventory-observed Helm storage metadata and must disclose incomplete label coverage."
@@ -245,6 +249,64 @@
     }
   },
   "classifications": {
+    "packages/k8s-ui/src/assets/gitops/argocd.png": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:argocd:provider-asset:v1",
+          "legacyContractIds": [],
+          "symbol": "assets/gitops/argocd.png",
+          "interaction": "noninteractive asset: Argo CD provider mark is preserved byte-for-byte behind the shared GitOps provider identity registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
+              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.provider-assets.provenance"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/assets/gitops/flux.svg": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:flux:provider-asset:v1",
+          "legacyContractIds": [],
+          "symbol": "assets/gitops/flux.svg",
+          "interaction": "noninteractive asset: Flux provider mark is preserved byte-for-byte behind the shared GitOps provider identity registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
+              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.provider-assets.provenance"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
+    },
     "packages/k8s-ui/src/components/timeline/index.ts": {
       "classification": "classified",
       "interactions": [

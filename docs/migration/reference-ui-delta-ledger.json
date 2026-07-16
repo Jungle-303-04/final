@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 219,
+  "pendingCount": 217,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -40,8 +40,33 @@
         "blobId": "b9cb18e63431b2559105a29b3140d6fc22882b5b",
         "sha256": "1fc1ad5fb2d385d5ded352f381ef8dc94ab6bf8b466ad87d4225ecdfce6e0c9c"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:argocd:provider-asset:v1",
+          "legacyContractIds": [],
+          "symbol": "assets/gitops/argocd.png",
+          "interaction": "noninteractive asset: Argo CD provider mark is preserved byte-for-byte behind the shared GitOps provider identity registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
+              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.provider-assets.provenance"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -52,8 +77,33 @@
         "blobId": "4893bf117717435d06608496982e689a7fb46958",
         "sha256": "ad60cbcee156a403dcde9ecd2b487f07ef9ca5c9e30724c8d9de5024a723406e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:flux:provider-asset:v1",
+          "legacyContractIds": [],
+          "symbol": "assets/gitops/flux.svg",
+          "interaction": "noninteractive asset: Flux provider mark is preserved byte-for-byte behind the shared GitOps provider identity registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
+              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.provider-assets.provenance"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
     },
     {
       "status": "M",
