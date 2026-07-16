@@ -209,6 +209,90 @@ def test_application_detail_requires_honest_completeness_and_bounded_activity() 
         )
 
 
+def test_workload_cost_requires_a_supported_server_identity() -> None:
+    evidence = _detail_evidence()
+    workload_scope = evidence["scope"]["workload_scope"]  # type: ignore[index]
+    workload = {
+        "key": "workload-job",
+        "resource": {
+            "api_group": "batch",
+            "version": "v1",
+            "kind": "Job",
+            "namespace": "shop",
+            "name": "checkout-job",
+            "uid": "job-uid",
+        },
+        "scope": {
+            "workspace_id": "workspace-a",
+            "cluster_id": "cluster-a",
+            "namespaces": ["shop"],
+            "freshness": "live",
+        },
+        "observed_at": "2026-07-16T09:00:00Z",
+    }
+    workload_scope.update(
+        {  # type: ignore[union-attr]
+            "selected_workload_key": "workload-job",
+            "workloads": [workload],
+        }
+    )
+    evidence["scope"]["selected_scope"] = "workload"  # type: ignore[index]
+    evidence["workload"] = {
+        "workload": workload,
+        "runtime_readiness": {
+            "completeness": "exact",
+            "status": "healthy",
+            "ready_pods": 1,
+            "total_pods": 1,
+            "restarts": 0,
+        },
+        "resource_counts": [],
+        "resource_counts_completeness": "exact",
+        "topology": evidence["topology"],
+        "history": {"availability": "unavailable", "reason_codes": ["not_connected"]},
+        "cost": {
+            "availability": "available",
+            "observed_at": "2026-07-16T09:00:00Z",
+            "currency": "USD",
+            "current": {
+                "replicas": 1,
+                "hourly_rate_micros": 2,
+                "projected_daily_micros": 48,
+                "projected_monthly_micros": 1_460,
+                "cpu_rate_micros": 1,
+                "memory_rate_micros": 1,
+                "cpu_allocation_use_basis_points": None,
+                "memory_allocation_use_basis_points": None,
+                "cpu_usage_window_seconds": None,
+                "memory_usage_window_seconds": None,
+            },
+            "trend": {
+                "availability": "unavailable",
+                "range": "24h",
+                "currency": None,
+                "series": [],
+                "reason_codes": ["not_connected"],
+            },
+            "reason_codes": [],
+        },
+        "actions": {"availability": "unavailable", "reason_codes": ["not_connected"]},
+    }
+
+    with pytest.raises(ValidationError, match="supported workload kind"):
+        ApplicationProductDetailResponse.model_validate(
+            {
+                "application": _card()
+                | {
+                    "endpoints": [],
+                    "endpoints_completeness": "exact",
+                    "recent_incidents": [],
+                    "recent_activity": [],
+                    **evidence,
+                }
+            }
+        )
+
+
 def test_application_runtime_delivery_and_batch_contracts_require_honest_availability() -> None:
     invalid_cards = [
         _card()

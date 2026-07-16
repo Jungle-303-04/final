@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from packages.contracts.cost.observations import (
+    CostObservedWorkloadAllocation,
+    CostWorkloadAllocation,
+    CostWorkloadKind,
+)
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
 from packages.contracts.parity import ClusterScope, ResourceRef
@@ -2567,7 +2572,7 @@ class ApplicationWorkloadDetail(StrictModel):
     resource_counts_completeness: ApplicationProjectionCompleteness
     topology: ApplicationTopology
     history: ApplicationUnavailableEvidence
-    cost: ApplicationUnavailableEvidence
+    cost: CostWorkloadAllocation
     actions: ApplicationUnavailableEvidence
 
     @model_validator(mode="after")
@@ -2576,6 +2581,10 @@ class ApplicationWorkloadDetail(StrictModel):
             raise ValueError("unavailable workload resource counts must be null")
         if self.resource_counts_completeness != "unavailable" and self.resource_counts is None:
             raise ValueError("available workload resource counts must be an array")
+        if isinstance(self.cost, CostObservedWorkloadAllocation) and (
+            self.workload.resource.kind not in get_args(CostWorkloadKind)
+        ):
+            raise ValueError("observed cost requires a supported workload kind")
         return self
 
 

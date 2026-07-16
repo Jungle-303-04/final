@@ -64,6 +64,37 @@ export interface CostUnavailableTrend {
 
 export type CostTrend = CostObservedTrend | CostUnavailableTrend;
 
+export interface CostCurrentAllocation {
+  replicas: number;
+  hourlyRateMicros: number;
+  projectedDailyMicros: number;
+  projectedMonthlyMicros: number;
+  cpuRateMicros: number;
+  memoryRateMicros: number;
+  cpuAllocationUseBasisPoints: number | null;
+  memoryAllocationUseBasisPoints: number | null;
+  cpuUsageWindowSeconds: number | null;
+  memoryUsageWindowSeconds: number | null;
+}
+
+export interface CostObservedWorkloadAllocation {
+  availability: "available" | "partial";
+  observedAt: string;
+  currency: string;
+  current: CostCurrentAllocation;
+  trend: CostTrend;
+  reasonCodes: readonly string[];
+}
+
+export interface CostUnavailableWorkloadAllocation {
+  availability: "unavailable";
+  reasonCodes: readonly string[];
+}
+
+export type CostWorkloadAllocation =
+  | CostObservedWorkloadAllocation
+  | CostUnavailableWorkloadAllocation;
+
 export interface CostOverview {
   scopeCoverage: CostScopeCoverage;
   observation: CostUnavailableObservation;

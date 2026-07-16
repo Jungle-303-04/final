@@ -1,3 +1,6 @@
+import type { CostWorkloadAllocation } from "../cost/costContract";
+import type { CostWorkloadAllocationEndpoint } from "../cost/costEndpointContract";
+
 export type ApplicationsFailureCode =
   | "forbidden"
   | "invalid-response"
@@ -222,7 +225,7 @@ export interface ApplicationWorkloadDetail {
   resourceCountsCompleteness: ApplicationProjectionCompleteness;
   topology: ApplicationTopology;
   history: ApplicationUnavailableEvidence;
-  cost: ApplicationUnavailableEvidence;
+  cost: CostWorkloadAllocation;
   actions: ApplicationUnavailableEvidence;
 }
 
@@ -521,7 +524,7 @@ export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpoin
     resource_counts_completeness: ApplicationProjectionCompleteness;
     topology: ApplicationDetailEndpointItem["topology"];
     history: { availability: "unavailable"; reason_codes: string[] };
-    cost: { availability: "unavailable"; reason_codes: string[] };
+    cost: CostWorkloadAllocationEndpoint;
     actions: { availability: "unavailable"; reason_codes: string[] };
   } | null;
 }

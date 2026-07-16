@@ -321,7 +321,7 @@ describe("S10 Applications surface", () => {
       "workload-a",
     );
     const tabs = screen.getByRole("tablist", { name: "View details" });
-    expect(within(tabs).getAllByRole("tab")).toHaveLength(3);
+    expect(within(tabs).getAllByRole("tab")).toHaveLength(4);
     expect(within(tabs).queryByRole("tab", { name: "Deployments" })).toBeNull();
     expect(screen.queryByText("v2.4.1 deployed")).toBeNull();
 

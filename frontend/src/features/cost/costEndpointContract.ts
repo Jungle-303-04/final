@@ -25,6 +25,29 @@ export type CostEndpointTrend = {
   reason_codes: string[];
 };
 
+export type CostWorkloadAllocationEndpoint = {
+  availability: "unavailable";
+  reason_codes: string[];
+} | {
+  availability: "available" | "partial";
+  observed_at: string;
+  currency: string;
+  current: {
+    replicas: number;
+    hourly_rate_micros: number;
+    projected_daily_micros: number;
+    projected_monthly_micros: number;
+    cpu_rate_micros: number;
+    memory_rate_micros: number;
+    cpu_allocation_use_basis_points: number | null;
+    memory_allocation_use_basis_points: number | null;
+    cpu_usage_window_seconds: number | null;
+    memory_usage_window_seconds: number | null;
+  };
+  trend: CostEndpointTrend;
+  reason_codes: string[];
+};
+
 export interface CostOverviewEndpoint {
   scope_coverage: {
     availability: "available" | "partial" | "unavailable";

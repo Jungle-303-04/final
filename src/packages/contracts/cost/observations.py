@@ -11,11 +11,12 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from packages.contracts.gateway.base import StrictModel
+from packages.contracts.modeling import StrictModel
 from packages.contracts.parity import ClusterScope
 
 CostAvailability = Literal["available", "partial", "unavailable"]
 CostTimeRange = Literal["6h", "24h", "7d"]
+CostWorkloadKind = Literal["Deployment", "StatefulSet", "DaemonSet"]
 
 MAX_COST_TREND_SERIES = 8
 MAX_COST_TREND_POINTS = 480
@@ -101,6 +102,68 @@ class CostUnavailableTrend(StrictModel):
     currency: None = None
     series: tuple[()] = ()
     reason_codes: tuple[str, ...] = Field(min_length=1)
+
+
+class CostCurrentAllocation(StrictModel):
+    """One server-computed workload allocation snapshot in integer micro-units."""
+
+    replicas: int = Field(ge=0, le=100_000)
+    hourly_rate_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    projected_daily_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    projected_monthly_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    cpu_rate_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    memory_rate_micros: int = Field(ge=0, le=MAX_SAFE_JSON_INTEGER)
+    cpu_allocation_use_basis_points: int | None = Field(default=None, ge=0, le=10_000)
+    memory_allocation_use_basis_points: int | None = Field(default=None, ge=0, le=10_000)
+    cpu_usage_window_seconds: int | None = Field(default=None, ge=1, le=86_400)
+    memory_usage_window_seconds: int | None = Field(default=None, ge=1, le=86_400)
+
+    @model_validator(mode="after")
+    def component_rates_do_not_exceed_total(self) -> CostCurrentAllocation:
+        if self.cpu_rate_micros + self.memory_rate_micros > self.hourly_rate_micros:
+            raise ValueError("workload component rates cannot exceed the hourly total")
+        if (self.cpu_allocation_use_basis_points is None) != (
+            self.cpu_usage_window_seconds is None
+        ):
+            raise ValueError("CPU allocation use and its window must be available together")
+        if (self.memory_allocation_use_basis_points is None) != (
+            self.memory_usage_window_seconds is None
+        ):
+            raise ValueError("memory allocation use and its window must be available together")
+        return self
+
+
+class CostObservedWorkloadAllocation(StrictModel):
+    availability: Literal["available", "partial"]
+    observed_at: str = Field(min_length=1)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    current: CostCurrentAllocation
+    trend: CostObservedTrend | CostUnavailableTrend
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def observed_workload_is_consistent(self) -> CostObservedWorkloadAllocation:
+        if self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial workload cost requires a reason")
+        if isinstance(self.trend, CostObservedTrend) and self.trend.currency != self.currency:
+            raise ValueError("workload current and trend currencies must match")
+        if len(self.reason_codes) != len(set(self.reason_codes)):
+            raise ValueError("workload cost reasons must be unique")
+        return self
+
+
+class CostUnavailableWorkloadAllocation(StrictModel):
+    availability: Literal["unavailable"] = "unavailable"
+    reason_codes: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reasons_are_unique(self) -> CostUnavailableWorkloadAllocation:
+        if len(self.reason_codes) != len(set(self.reason_codes)):
+            raise ValueError("workload cost reasons must be unique")
+        return self
+
+
+CostWorkloadAllocation = CostObservedWorkloadAllocation | CostUnavailableWorkloadAllocation
 
 
 class CostOverviewResponse(StrictModel):

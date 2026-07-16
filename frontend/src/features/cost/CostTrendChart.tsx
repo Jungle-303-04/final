@@ -39,7 +39,7 @@ export function CostTrendChart({
   timeRange,
   trend,
 }: {
-  onTimeRangeChange(value: CostTimeRange): void;
+  onTimeRangeChange?(value: CostTimeRange): void;
   timeRange: CostTimeRange;
   trend: CostTrend;
 }) {
@@ -54,7 +54,9 @@ export function CostTrendChart({
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">{t("cost.trend.description")}</p>
         </div>
-        <CostTimeRangeSelector onChange={onTimeRangeChange} value={timeRange} />
+        {onTimeRangeChange === undefined ? null : (
+          <CostTimeRangeSelector onChange={onTimeRangeChange} value={timeRange} />
+        )}
       </CardHeader>
       <CardContent className="min-w-0">
         {trend.availability === "unavailable" || trend.series.length === 0 ? (

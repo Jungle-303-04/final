@@ -8,6 +8,7 @@ import {
   type ApplicationsFailureCode,
   type ApplicationsPort,
 } from "./applicationsContract";
+import { toCostWorkloadAllocation } from "../cost/costWorkloadAdapter";
 
 export function createApplicationsAdapter(
   api: ApplicationsApiDependencies,
@@ -264,10 +265,7 @@ function toDetail(item: ApplicationDetailEndpointItem): ApplicationDetailModel {
         availability: item.workload.history.availability,
         reasonCodes: [...item.workload.history.reason_codes],
       },
-      cost: {
-        availability: item.workload.cost.availability,
-        reasonCodes: [...item.workload.cost.reason_codes],
-      },
+      cost: toCostWorkloadAllocation(item.workload.cost),
       actions: {
         availability: item.workload.actions.availability,
         reasonCodes: [...item.workload.actions.reason_codes],

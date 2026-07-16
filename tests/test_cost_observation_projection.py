@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 
 from domains.cost.observation_projection import cost_overview
-from packages.contracts.cost.observations import CostObservedTrend, CostTrendPoint, CostTrendSeries
+from packages.contracts.cost.observations import (
+    CostCurrentAllocation,
+    CostObservedTrend,
+    CostObservedWorkloadAllocation,
+    CostTrendPoint,
+    CostTrendSeries,
+)
 
 
 def test_cost_projection_exposes_scope_but_never_invents_currency_or_amounts() -> None:
@@ -141,3 +147,55 @@ def test_observed_cost_trend_enforces_order_and_transport_bounds() -> None:
     )
 
     assert observed.currency == "KRW"
+
+
+def test_workload_allocation_requires_server_projections_and_consistent_units() -> None:
+    current = CostCurrentAllocation(
+        replicas=2,
+        hourly_rate_micros=300_000,
+        projected_daily_micros=7_200_000,
+        projected_monthly_micros=219_000_000,
+        cpu_rate_micros=180_000,
+        memory_rate_micros=120_000,
+        cpu_allocation_use_basis_points=2_500,
+        memory_allocation_use_basis_points=4_000,
+        cpu_usage_window_seconds=3_600,
+        memory_usage_window_seconds=60,
+    )
+    workload = CostObservedWorkloadAllocation(
+        availability="partial",
+        observed_at="2026-07-16T09:00:00Z",
+        currency="KRW",
+        current=current,
+        trend={
+            "availability": "unavailable",
+            "range": "24h",
+            "currency": None,
+            "series": (),
+            "reason_codes": ("workload_history_not_observed",),
+        },
+        reason_codes=("workload_history_not_observed",),
+    )
+
+    assert workload.current.projected_monthly_micros == 219_000_000
+
+    with pytest.raises(ValueError, match="component rates"):
+        CostCurrentAllocation(
+            replicas=1,
+            hourly_rate_micros=1,
+            projected_daily_micros=24,
+            projected_monthly_micros=730,
+            cpu_rate_micros=1,
+            memory_rate_micros=1,
+        )
+
+    with pytest.raises(ValueError, match="available together"):
+        CostCurrentAllocation(
+            replicas=1,
+            hourly_rate_micros=2,
+            projected_daily_micros=48,
+            projected_monthly_micros=1_460,
+            cpu_rate_micros=1,
+            memory_rate_micros=1,
+            cpu_allocation_use_basis_points=5_000,
+        )

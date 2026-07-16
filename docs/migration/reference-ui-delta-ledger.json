@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 121,
+  "pendingCount": 113,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -7578,8 +7578,35 @@
         "blobId": "727e6f522b00ac43df4b7fbaa0d0c9df38983143",
         "sha256": "a8bfb606325ae3206d612f4cb37d9015e7238e43bd0cafa91ccde07cd4d16b50"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:current-allocation-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "CurrentAllocationUse tests",
+          "interaction": "current workload allocation presentation keeps unobserved use, observed zero, and zero allocation distinct and never presents allocation use as a savings grade",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/CurrentAllocationUse.test.tsx",
+              "frontend/src/features/cost/costFormat.test.ts",
+              "tests/test_cost_observation_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.workload.contract",
+              "cost.workload.allocation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Tests prove server-owned projections, integer micro-units, separate missing-use semantics, and bounded progress values without browser extrapolation."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7590,8 +7617,48 @@
         "blobId": "749e06fad1fdd1eecd2b9a0dacaec8d1070eb1a8",
         "sha256": "065906513eae01f46162aa2fe742d0128681697dffa9217e3bb5887ba5577f15"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:current-allocation-surface:v1",
+          "legacyContractIds": [],
+          "symbol": "CurrentAllocationUse",
+          "interaction": "the workload Cost tab presents current CPU and memory allocation rates, usage ratios, replicas, and period projections only when the server supplies an observed allocation",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh with the selected application workload projection and discard superseded application reads",
+            "backpressure": "render one bounded current allocation and at most the bounded trend carried by the selected workload response",
+            "merge": "replace allocation only when the opaque workload key and immutable resource identity still match the selected scope"
+          },
+          "motion": {
+            "reducedMotion": "allocation progress remains readable without transitions and does not use motion as the only status signal.",
+            "evidence": [
+              "references/upstream/web/src/components/cost/CurrentAllocationUse.tsx",
+              "frontend/src/features/cost/CurrentAllocationUse.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/CurrentAllocationUse.tsx",
+              "frontend/src/features/cost/WorkloadCostPanel.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "cost.workload.contract",
+              "cost.workload.allocation",
+              "cost.workload.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The localized product component consumes only the strict workload allocation union; the current projection truthfully selects its unavailable branch until a collector persists evidence."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7602,8 +7669,35 @@
         "blobId": "c720bdc1cff4fab0b6ae3ecb4cf47cb2e838a5b3",
         "sha256": "1ab8a97f33e7ec7f247c7f41c8531b76a784a5f8d09e9fae33ed6fd8c689e31b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:nested-error-state:v1",
+          "legacyContractIds": [],
+          "symbol": "costUnavailableReasonFromError",
+          "interaction": "workload cost access and missing-resource failures are represented without parsing arbitrary error messages",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationsState.tsx",
+              "frontend/src/features/cost/WorkloadCostPanel.tsx",
+              "frontend/src/features/cost/costContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "cost.workload.collector-gate",
+              "cost.workload.surface"
+            ],
+            "state": "blocked",
+            "blockedReason": "Workload cost is carried inside the authorized application-detail response, so it has no independent request whose 403 or 404 can be safely reclassified below the application failure boundary.",
+            "rationale": "The product keeps one typed application failure authority and one cost availability union instead of parsing nested exception messages or creating a duplicate error hierarchy."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7614,8 +7708,34 @@
         "blobId": "8a09f0312309fdc6f4603a22fcea5987c4594cd5",
         "sha256": "089e34ef5d12e42fc6c1888b80ef55e2c89dc5a3bdc4d7c8b84adfa1185caa64"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:format-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "cost formatter tests",
+          "interaction": "cost labels preserve currency and integer micro-unit precision without turning missing history into zero or projecting another period in the browser",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/costFormat.test.ts",
+              "tests/test_cost_observation_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.workload.contract",
+              "cost.workload.format"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Tests reject invalid transport units and lowercase currency while proving that unavailable allocation use is distinct from observed zero."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7626,8 +7746,34 @@
         "blobId": "3dceaf69e4e5fa406b351e4c9a17c4e2d8192bd8",
         "sha256": "805d82193bcb920a63bc7870bcafcac865dff6bd0dc00ce0c0d4445b616a5b9e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:currency-format:v1",
+          "legacyContractIds": [],
+          "symbol": "cost formatters",
+          "interaction": "integer micro-unit workload rates and server-projected period totals are localized using the response ISO currency",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/costFormat.ts",
+              "frontend/src/features/cost/CurrentAllocationUse.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.workload.format",
+              "cost.workload.allocation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The formatter contains no fixed dollar symbol or 730-hour multiplication; daily and monthly values remain server-owned evidence."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7638,8 +7784,35 @@
         "blobId": "2f7ef87793f1d99373e4e2fdc641c44a1b5053b1",
         "sha256": "1d05795beefe801c6b1aec33fdeb299b8a95a58ccb5b114afb2bbb504dabc287"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:supported-kind-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "isOpenCostWorkloadKind",
+          "interaction": "observed workload cost is accepted only for a server-supported workload kind bound to the selected immutable resource identity",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/cost/observations.py",
+              "src/packages/contracts/gateway/responses.py",
+              "tests/test_application_product_contract.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "cost.workload.kind"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The gate lives at the Python response boundary; the browser receives a validated observed union and does not duplicate Kubernetes kind taxonomy in a client-side set."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7650,8 +7823,42 @@
         "blobId": "111fef879cdcfb35995be9e1e031dcb8d90fca27",
         "sha256": "a94e02bb33fed16deabb63169661151acc4f31d0633cf573aea2e33fc1819f23"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:tab-state-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadCostTab state tests",
+          "interaction": "the workload Cost tab distinguishes observed allocation, partial trend, observed zero, collector absence, and application-level load failure without placeholder money",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the exact selected application and workload response under the existing application refresh lifecycle",
+            "backpressure": "abort a superseded application read and retain no cost state across different opaque workload keys",
+            "merge": "replace only the allocation whose selected workload identity still matches the route"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx",
+              "frontend/src/features/cost/WorkloadCostPanel.test.tsx",
+              "tests/test_cost_observation_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "cost.workload.contract",
+              "cost.workload.adapter",
+              "cost.workload.surface",
+              "cost.workload.collector-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "No provider-backed workload allocation repository currently produces observed or historical cost, so live zero, partial-history, and retry transitions cannot be exercised against production data.",
+            "rationale": "Contract and presentation branches are tested with strict fixtures, while production remains on the explicit unavailable branch rather than manufacturing collector states."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7662,8 +7869,53 @@
         "blobId": "9f6575280381ef23a3a2b7ab012504fa43b1882c",
         "sha256": "8a85acc5b5cc63b977f483ca122b02d1798e69e737519703ce504afa50447dcc"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:detail-tab:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadCostTab",
+          "interaction": "a workload-scoped application detail exposes a localized Cost tab backed by the selected immutable workload allocation union and bounded trend",
+          "transport": "poll",
+          "realtime": {
+            "resume": "use application refresh to reacquire the exact workload projection and its server-selected trend window",
+            "backpressure": "carry one current allocation and the existing bounded trend limits of eight series and 480 points",
+            "merge": "never merge allocation evidence across application, instance, workload, cluster, or currency identity"
+          },
+          "motion": {
+            "reducedMotion": "cost disclosure, partial state, and progress values remain semantic; historical chart animation is disabled.",
+            "evidence": [
+              "references/upstream/web/src/components/cost/WorkloadCostTab.tsx",
+              "frontend/src/features/cost/WorkloadCostPanel.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/WorkloadCostPanel.tsx",
+              "frontend/src/features/cost/costWorkloadAdapter.ts",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/api/cost-workload-schemas.ts",
+              "src/packages/contracts/cost/observations.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "cost.workload.contract",
+              "cost.workload.kind",
+              "cost.workload.adapter",
+              "cost.workload.surface"
+            ],
+            "state": "blocked",
+            "blockedReason": "The typed tab and unavailable production path are mounted, but an authorized provider-backed allocation repository and selectable workload trend-window query are not yet connected.",
+            "rationale": "The surface is structurally ready and renders no fake currency, projection, or history while the real collector path remains absent."
+          }
+        }
+      ]
     },
     {
       "status": "M",

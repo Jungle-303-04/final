@@ -22,7 +22,7 @@ const costTrendSeriesSchema = z.strictObject({
   }
 });
 
-const costObservedTrendSchema = z.strictObject({
+export const costObservedTrendSchema = z.strictObject({
   availability: z.enum(["available", "partial"]),
   range: costTimeRangeSchema,
   currency: z.string().regex(/^[A-Z]{3}$/),
@@ -37,13 +37,15 @@ const costObservedTrendSchema = z.strictObject({
   }
 });
 
-const costUnavailableTrendSchema = z.strictObject({
+export const costUnavailableTrendSchema = z.strictObject({
   availability: z.literal("unavailable"),
   range: costTimeRangeSchema,
   currency: z.null(),
   series: z.tuple([]),
   reason_codes: reasonCodesSchema,
 });
+
+export const costTrendSchema = z.union([costObservedTrendSchema, costUnavailableTrendSchema]);
 
 export const costClusterScopeSchema = z.strictObject({
   workspace_id: z.string().min(1),
@@ -86,7 +88,7 @@ export const costOverviewSchema = z.strictObject({
   scope_coverage: costScopeCoverageSchema,
   observation: costObservationStatusSchema,
   summary: costObservationSummarySchema,
-  trend: z.union([costObservedTrendSchema, costUnavailableTrendSchema]),
+  trend: costTrendSchema,
   refresh_after_seconds: z.number().int().min(1).max(3600),
 });
 

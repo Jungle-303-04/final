@@ -35,4 +35,17 @@ export type CostMessageKey =
   | "cost.trend.range.label"
   | "cost.trend.range.6h"
   | "cost.trend.range.24h"
-  | "cost.trend.range.7d";
+  | "cost.trend.range.7d"
+  | "cost.workload.title"
+  | "cost.workload.current.title"
+  | "cost.workload.current.description"
+  | "cost.workload.hourly"
+  | "cost.workload.daily"
+  | "cost.workload.monthly"
+  | "cost.workload.replicas"
+  | "cost.workload.cpu"
+  | "cost.workload.memory"
+  | "cost.workload.noAllocation"
+  | "cost.workload.usageUnavailable"
+  | "cost.workload.usageMeasured"
+  | "cost.workload.usageLabel";
