@@ -9,6 +9,7 @@ import type {
   ResourceDetail,
   ResourceIdentity,
 } from "../../features/resources/resourcesContract";
+import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
 import {
   useI18n,
   type I18nController,
@@ -39,6 +40,8 @@ export function ResourceDetailBody({
   full,
   identity,
   metricHistory,
+  metricRange,
+  onMetricRangeChange,
   resourceIssues,
   onTabChange,
   tab,
@@ -47,6 +50,8 @@ export function ResourceDetailBody({
   full: boolean;
   identity: ResourceIdentity | null;
   metricHistory: ResourceMetricsHistoryFrame;
+  metricRange: ResourceMetricTimeRange;
+  onMetricRangeChange: (range: ResourceMetricTimeRange) => void;
   resourceIssues: ResourceIssuesFrame;
   onTabChange: (tab: string) => void;
   tab: string;
@@ -151,6 +156,8 @@ export function ResourceDetailBody({
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
           <ResourceMetricsCharts
             frame={metricHistory}
+            onRangeChange={onMetricRangeChange}
+            range={metricRange}
             resourceId={resource.inventoryKey}
             wide={full}
           />
@@ -184,6 +191,8 @@ export function ResourceDetailBody({
       <TabsContent className="grid gap-3 py-4" value="metrics">
         <ResourceMetricsCharts
           frame={metricHistory}
+          onRangeChange={onMetricRangeChange}
+          range={metricRange}
           resourceId={resource.inventoryKey}
           wide={full}
         />

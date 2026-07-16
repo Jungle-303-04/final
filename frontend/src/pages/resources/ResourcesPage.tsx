@@ -177,6 +177,7 @@ export function ResourcesPage({
     authorityKey,
     filterState: filter.state,
     port: resourceMetricsHistoryPort,
+    range: filter.detail.timeRange ?? "1h",
     reportUnauthorized,
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,

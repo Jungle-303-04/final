@@ -18,6 +18,8 @@ import {
 } from "../../shared/ui/primitives/chart";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
+import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
+import { TimelineRangeSelect } from "./ResourcesGraphChrome";
 
 interface MetricPoint {
   cpu: number | null;
@@ -35,10 +37,14 @@ const MEMORY_CONFIG = {
 
 export function ResourceMetricsCharts({
   frame,
+  onRangeChange,
+  range,
   resourceId,
   wide,
 }: {
   frame: ResourceMetricsHistoryFrame;
+  onRangeChange: (range: ResourceMetricTimeRange) => void;
+  range: ResourceMetricTimeRange;
   resourceId: string;
   wide: boolean;
 }) {
@@ -61,6 +67,9 @@ export function ResourceMetricsCharts({
   const partial = frame.data.completeness !== "exact" || series.completeness !== "exact";
   return (
     <div className="grid gap-4" data-slot="resource-metrics-charts">
+      <header className="flex justify-end">
+        <TimelineRangeSelect onChange={onRangeChange} value={range} />
+      </header>
       {partial ? (
         <Badge className="w-fit" variant="outline">
           {t("resources.detail.metricsPartial")}

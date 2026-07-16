@@ -212,6 +212,14 @@ export function ResourceDetailWorkspace({
           full={full}
           identity={identity}
           metricHistory={metricHistory}
+          metricRange={filter.detail.timeRange ?? "1h"}
+          onMetricRangeChange={(range) => filter.updateDetail(
+            (current) => ({
+              ...current,
+              timeRange: range === "1h" ? undefined : range,
+            }),
+            "time-range",
+          )}
           resourceIssues={resourceIssues}
           onTabChange={onTabChange}
           tab={tab}

@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 39,
+  "pendingCount": 34,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -11803,8 +11803,80 @@
         "blobId": "0cd9059b77427cbf9698c025b398ac43a1cb239e",
         "sha256": "212ce2ab910ab5db01435a979512ef5c449b112912d2b5ab71a30ea275756962"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
+          "legacyContractIds": [],
+          "symbol": "PrometheusChartsGrid time range, CPU and memory panels, and rightsizing separation",
+          "interaction": "an authorized resource metrics surface selects a canonical 15-minute to 24-hour range, requests one bounded server history frame, preserves partial coverage, renders accessible CPU and memory measurements, and keeps recommendation health in the separate rightsizing contract",
+          "transport": "poll",
+          "realtime": {
+            "resume": "range, resource, scope, or snapshot changes abort the previous reader and start one request for the new canonical identity",
+            "backpressure": "the Python endpoint caps resource identities and points while the browser retains one frame plus bounded live-series updates",
+            "merge": "history and live points merge only for the exact resource inventory key, cluster, scope, and current range"
+          },
+          "motion": {
+            "reducedMotion": "charts disable internal point interpolation and the range selector remains fully keyboard operable without transition dependence.",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceMetricsCharts.tsx",
+              "frontend/src/shared/ui/primitives/chart.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+              "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts",
+              "frontend/src/pages/resources/ResourceMetricsCharts.tsx",
+              "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+              "src/domains/inventory_filter/router.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.inventory_filter.router"
+            ],
+            "plannedTestIds": [
+              "resources.metrics.range"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product now drives metrics range from the shared URL detail contract instead of a hardcoded hook value. CPU and memory history remain strict server evidence, while rightsizing stays in its own observed-or-unavailable contract."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:metrics-grid:network-filesystem-and-saturation:v1",
+          "legacyContractIds": [],
+          "symbol": "network, filesystem, request, limit, saturation, and restart panels",
+          "interaction": "resource history may show network receive and transmit, filesystem usage, request and limit reference lines, saturation, and restart markers only when the server supplies typed series with exact unit, source, coverage, and resource identity",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload additive metric series with the same exact resource and canonical range",
+            "backpressure": "reuse one bounded history response rather than issuing one query per visible chart",
+            "merge": "associate every series and reference line with the exact resource UID or inventory key and reject unknown units or categories"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+              "frontend/src/pages/resources/ResourceMetricsCharts.tsx",
+              "frontend/src/shared/ui/charts/saturation.ts",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.inventory_filter.router",
+              "domains.inventory.repository"
+            ],
+            "plannedTestIds": [
+              "resources.metrics.range"
+            ],
+            "state": "blocked",
+            "blockedReason": "The resource metric history response currently provides only CPU millicores and memory MiB; it does not carry network, filesystem, restart, request, limit, unit, or series-category evidence.",
+            "rationale": "The UI does not synthesize zero-valued panels or derive operational limits from untyped resource facts. These charts require an additive Python projection and persisted observation sources."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -11921,8 +11993,33 @@
         "blobId": "62d7933780573295dd7e1b850a8e38ca4a7aba04",
         "sha256": "cee749c3e7ff770411619107abdb93c0b63dec5b1ed34be30c90c19f3dc28ae3"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:image-filesystem:search-input:shared-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "ImageFilesystemModal search Input",
+          "interaction": "the latest image-filesystem search field reuses the product-owned identifier-safe Input boundary instead of copying raw browser text mutation behavior into the modal",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.input.identifier-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source delta is limited to replacing the raw search field. The common product Input already owns the same policy without introducing an uncontracted image inspection endpoint."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11936,8 +12033,33 @@
         "blobId": "3632c5d975770943583fab64d85917e45b439c99",
         "sha256": "a6ac118effc8f43163ac53a9e90dd17091283c0683e1fdb4c3838140c16ee4fb"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:pod-filesystem:search-input:shared-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "PodFilesystemModal search Input",
+          "interaction": "the latest pod-filesystem filter field reuses the product-owned identifier-safe Input boundary while directory identity, authorization, and file data remain server responsibilities",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.input.identifier-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source delta is limited to replacing the raw filter field. Opsia keeps the shared input policy centralized and does not create a browser-only filesystem model."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -11948,8 +12070,43 @@
         "blobId": "d18e7ec91a7550b4f36a19e2bb9aba15104e181e",
         "sha256": "3333833e2dad29c3041433db64af4d8d764a6e8dfbb5e71a362310e92f12bf27"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:cron-workflow-web-export:v1",
+          "legacyContractIds": [],
+          "symbol": "CronWorkflowRenderer web export",
+          "interaction": "the web resource dispatcher consumes the same typed CronWorkflow detail projection as every other resource surface rather than maintaining a second renderer or parsing raw CRD objects",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the exact CronWorkflow identity or explicit Resources refresh changes",
+            "backpressure": "share one request per exact cluster and resource identity and cap active workflow references",
+            "merge": "replace the projection only while the active identity and provider-detail discriminator remain unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.adapter",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product already exposes the CronWorkflow projection through one shared detail panel, so the source web re-export is represented by composition evidence rather than copied wrapper code."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -11963,8 +12120,38 @@
         "blobId": "d9620dd5c7655a47ed7621cf1095093df6ce0f27",
         "sha256": "dfb5789e6485d0286201bf95b41c3c92e783e0dcfbb5b29811f5c5737d34601f"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:extension-detail:cron-workflow-registry:v1",
+          "legacyContractIds": [],
+          "symbol": "CronWorkflowRenderer registry export",
+          "interaction": "CronWorkflow is registered once in the product provider-detail discriminator and rendered through the common resource detail surface without a duplicate web renderer registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "A single strict discriminator and shared panel replace the source barrel export while preserving exact CRD identity and bounded fields."
+          }
+        }
+      ]
     },
     {
       "status": "M",

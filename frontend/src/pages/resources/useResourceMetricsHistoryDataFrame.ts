@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { UnifiedFilterState } from "../../features/filters/filterContract";
 import type {
+  ResourceMetricTimeRange,
   ResourceMetricsHistoryBatch,
   ResourceMetricsHistoryPort,
 } from "../../features/resources/resourceMetricsHistoryContract";
@@ -29,6 +30,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
   authorityKey: string;
   filterState: UnifiedFilterState;
   port: ResourceMetricsHistoryPort;
+  range: ResourceMetricTimeRange;
   reportUnauthorized: () => void;
   resourceIds: string[];
   snapshotRevision: number | null;
@@ -39,6 +41,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
     authorityKey,
     filterState,
     port,
+    range,
     reportUnauthorized,
     resourceIds: requestedResourceIds,
     snapshotRevision,
@@ -59,7 +62,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
     [idsKey],
   );
   const scope = active && resourceIds.length > 0 && snapshotRevision !== null
-    ? `${authorityKey}:${filterKey}:${snapshotRevision}:${idsKey}`
+    ? `${authorityKey}:${filterKey}:${snapshotRevision}:${range}:${idsKey}`
     : null;
   const [record, setRecord] = useState<{
     scope: string | null;
@@ -77,7 +80,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
     void port.loadResourceMetricsHistory(
       requestState,
       resourceIds,
-      { snapshotRevision, range: "1h", limit: 60 },
+      { snapshotRevision, range, limit: 60 },
       controller.signal,
     ).then((data) => {
       if (controller.signal.aborted || requestSequence.current !== requestId) return;
@@ -94,6 +97,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
   }, [
     port,
     reportUnauthorized,
+    range,
     requestState,
     resourceIds,
     scope,

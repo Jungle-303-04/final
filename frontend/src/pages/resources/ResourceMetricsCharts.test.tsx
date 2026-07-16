@@ -64,7 +64,22 @@ describe("resource detail metrics", () => {
     expect(within(dialog).getAllByText("160MiB").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("192MiB").length).toBeGreaterThan(0);
     expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(2);
-    await waitFor(() => expect(loadResourceMetricsHistory).toHaveBeenCalled());
+    await waitFor(() => expect(loadResourceMetricsHistory).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ range: "1h" }),
+      expect.any(AbortSignal),
+    ));
+    await user.click(within(dialog).getByRole("combobox", { name: "시간 범위" }));
+    await user.click(await screen.findByRole("option", { name: "6시간" }));
+    await waitFor(() => expect(screen.getByTestId("resources-location").textContent)
+      .toContain("t.range=6h"));
+    await waitFor(() => expect(loadResourceMetricsHistory).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ range: "6h" }),
+      expect.any(AbortSignal),
+    ));
     await user.click(within(dialog).getByRole("tab", { name: "개요" }));
     expect(dialog.querySelector('[data-slot="resource-history-unavailable"]')).toBeNull();
     expect(within(dialog).getByText("CPU 사용량")).toBeTruthy();
