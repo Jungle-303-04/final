@@ -58,8 +58,9 @@ class SpyAgentCommandStore:
             return self.approval
         return None
 
-    async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> None:
+    async def queue_agent_command(self, correlation_id: str, plan: JsonObject, status: str) -> bool:
         self.calls.append((correlation_id, plan, status))
+        return True
 
 
 class ManagementClusterStore(SpyAgentCommandStore):
@@ -98,6 +99,7 @@ def approval_record(
 def command_request(
     action: str = Command.DEFAULT_ACTION,
     *,
+    command_id: str | None = None,
     approval_ref: str | None = "approval-1",
     policy_decision_ref: str | None = "policy-decision-1",
     approval_decided_by: str | None = "approver-1",
@@ -122,6 +124,7 @@ def command_request(
             workflow_run_id="workflow-1",
         ),
         workspace_id="workspace-1",
+        command_id=command_id,
         workflow_run_id="workflow-1",
         requested_by="user-1",
         actor=actor,
@@ -271,6 +274,47 @@ def test_human_command_is_queued_when_auto_command_kill_switch_is_off(
     assert len(store.calls) == 1
 
 
+def test_direct_command_is_queued_for_management_cluster_without_recorded_approval() -> None:
+    store = ManagementClusterStore(approval=None)
+    request = CommandRequestedBody(
+        cluster_id="kubernetes-ops",
+        action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        namespace=Sandbox.NAMESPACE,
+        environment="production",
+        reason="direct scale",
+        diff=Diff(
+            resource="deployment/checkout-api",
+            namespace=Sandbox.NAMESPACE,
+            desired_image="checkout:new",
+            actual_image="checkout:old",
+            risk=Sandbox.RISK_TAG,
+            workflow_run_id="workflow-1",
+        ),
+        workspace_id="workspace-1",
+        workflow_run_id="workflow-1",
+        requested_by="user-1",
+        direct_execution=True,
+        direct_execution_confirmed=True,
+        payload={"namespace": Sandbox.NAMESPACE, "name": "checkout-api", "replicas": 3},
+    )
+
+    events = asyncio.run(
+        collect_events(
+            handle_command_requested(
+                request,
+                SimpleNamespace(correlation_id="corr-direct-management", db=store),
+            )
+        )
+    )
+
+    assert [type(event) for event in events] == [
+        CommandDispatchedBody,
+        CommandQueuedForAgentBody,
+    ]
+    assert events[0].plan.direct_execution is True
+    assert store.calls[0][1]["direct_execution"] is True
+
+
 def test_non_sandbox_rollout_restart_requires_recorded_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -413,6 +457,32 @@ def test_command_handler_fills_approval_evidence_from_record() -> None:
     assert events[-1].approval_decided_by == "release-operator-1"
 
 
+def test_command_handler_preserves_server_receipt_id_after_approval_evidence() -> None:
+    async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
+        store = SpyAgentCommandStore(
+            approval=approval_record(
+                decided_by="release-operator-1",
+                expires_at="2099-02-01T00:00:00Z",
+            )
+        )
+        request = command_request(
+            Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            command_id="cmd-accepted-before-approval",
+            approval_decided_by=None,
+            approval_expires_at=None,
+        )
+        events = await collect_events(
+            handle_command_requested(request, SimpleNamespace(correlation_id="corr-1", db=store))
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert events[0].plan.command_id == "cmd-accepted-before-approval"
+    assert events[-1].command_id == "cmd-accepted-before-approval"
+    assert store.calls[0][1]["command_id"] == "cmd-accepted-before-approval"
+
+
 def test_command_handler_rejects_not_required_approval_for_production_write() -> None:
     async def run() -> tuple[list[EventBody], SpyAgentCommandStore]:
         store = SpyAgentCommandStore(
@@ -524,6 +594,98 @@ def test_command_handler_queues_manifest_diff_even_when_image_matches() -> None:
         CommandQueuedForAgentBody,
     ]
     assert store.calls[0][1]["diff"]["desired_manifest"]["spec"]["replicas"] == 3
+
+
+def test_command_handler_closes_the_operation_when_queue_persistence_fails() -> None:
+    class QueueFailureStore(SpyAgentCommandStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed: list[tuple[str, str, str, dict[str, object]]] = []
+
+        async def queue_agent_command(
+            self, correlation_id: str, plan: JsonObject, status: str
+        ) -> bool:
+            self.calls.append((correlation_id, plan, status))
+            return False
+
+        async def append_command_operation_event(
+            self,
+            workspace_id: str,
+            command_id: str,
+            kind: str,
+            payload: dict[str, object],
+        ) -> object:
+            self.closed.append((workspace_id, command_id, kind, payload))
+            return object()
+
+    async def run() -> tuple[list[EventBody], QueueFailureStore]:
+        store = QueueFailureStore()
+        events = await collect_events(
+            handle_command_requested(
+                command_request(), SimpleNamespace(correlation_id="corr-1", db=store)
+            )
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [CommandDispatchedBody, CommandRejectedBody]
+    assert store.closed == [
+        (
+            "workspace-1",
+            build_plan(command_request(), "corr-1").command_id,
+            "failed",
+            {
+                "cluster_id": Target.DEFAULT_CLUSTER_ID,
+                "status": "failed",
+                "reason": "agent command could not be queued",
+            },
+        )
+    ]
+
+
+def test_command_handler_closes_the_operation_when_policy_rejects_a_receipt() -> None:
+    class RejectedStore(SpyAgentCommandStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed: list[tuple[str, str, str, dict[str, object]]] = []
+
+        async def append_command_operation_event(
+            self,
+            workspace_id: str,
+            command_id: str,
+            kind: str,
+            payload: dict[str, object],
+        ) -> object:
+            self.closed.append((workspace_id, command_id, kind, payload))
+            return object()
+
+    request = command_request("unsupported-command")
+
+    async def run() -> tuple[list[EventBody], RejectedStore]:
+        store = RejectedStore()
+        events = await collect_events(
+            handle_command_requested(
+                request, SimpleNamespace(correlation_id="corr-rejected", db=store)
+            )
+        )
+        return events, store
+
+    events, store = asyncio.run(run())
+
+    assert [type(event) for event in events] == [CommandRejectedBody]
+    assert store.closed == [
+        (
+            "workspace-1",
+            build_plan(request, "corr-rejected").command_id,
+            "failed",
+            {
+                "cluster_id": Target.DEFAULT_CLUSTER_ID,
+                "status": "failed",
+                "reason": "unsupported command action",
+            },
+        )
+    ]
 
 
 def test_sweep_expired_commands_emits_failed_completion_per_row() -> None:

@@ -1,6 +1,7 @@
 import type {
   ResourceCapabilities,
   ResourceActionReceipt,
+  ResourceActionStatus,
 } from "./resourceCapabilitiesContract";
 import type { ResourceCapabilitiesEndpointResponse } from "./resourceCapabilitiesEndpointContract";
 import { ResourcesCanonicalError } from "./resourcesValidation";
@@ -25,6 +26,20 @@ export function toResourceCapabilities(
     revision: value.revision,
     capabilities: value.capabilities.map((item) => ({
       capabilityId: item.capability_id,
+      label: item.label,
+      description: item.description,
+      execution: item.execution,
+      confirmationRequired: item.confirmation_required,
+      realtime: item.realtime,
+      inputSchema: item.input_schema.map((input) => ({
+        key: input.key,
+        label: input.label,
+        type: input.type,
+        required: input.required,
+        minimum: input.minimum,
+        maximum: input.maximum,
+        default: input.default,
+      })),
       method: item.method,
       path: item.path,
     })),
@@ -32,13 +47,19 @@ export function toResourceCapabilities(
 }
 
 export function toResourceActionReceipt(value: {
-  accepted: boolean;
+  accepted: true;
   event_id: string;
+  audit_event_id: string;
   correlation_id: string;
+  command_id: string;
+  status: ResourceActionStatus;
 }): ResourceActionReceipt {
   return {
     accepted: value.accepted,
     eventId: value.event_id,
+    auditEventId: value.audit_event_id,
     correlationId: value.correlation_id,
+    commandId: value.command_id,
+    status: value.status,
   };
 }

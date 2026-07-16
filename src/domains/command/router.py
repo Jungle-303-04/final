@@ -2,20 +2,39 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
-from typing import Any, cast
+from typing import Annotated, Any, cast
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
+from domains.command.actions import command_action_spec
 from domains.command.debug_queries import (
     debug_query_plan,
     is_reserved_log_stream_query,
     queue_debug_query,
 )
-from domains.command.events import CommandRequestedBody
-from domains.command.handler import build_plan, command_requires_recorded_approval
+from domains.command.events import (
+    CommandCancelRequestedBody,
+    CommandRequestedBody,
+    CommandRetryRequestedBody,
+)
+from domains.command.handler import build_plan
+from domains.command.lifecycle import command_impact_identity
 from domains.command.policy import (
     DEFAULT_COMMAND_LEASE_SECONDS,
+)
+from domains.command.repository import (
+    CommandControlError,
+    CommandControlNotFound,
+    DuplicateCommandControl,
+    LeasedAgentCommand,
+    StartedAgentCommand,
+    stage_command_control_in_transaction,
+    stage_command_operation_event_in_transaction,
+    stage_logical_command_acceptance_in_transaction,
 )
 from domains.gitops.events import Diff
 from domains.identity.dependencies import (
@@ -42,6 +61,7 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
+    CommandControlRequest,
     CommandHeartbeatRequest,
     CommandRequest,
     CommandResultRequest,
@@ -50,7 +70,6 @@ from packages.contracts.gateway.requests import (
     DeploymentScaleRequest,
 )
 from packages.contracts.gateway.responses import (
-    AcceptedResponse,
     AgentCommandPollResponse,
     AgentDebugQueryResponse,
     CommandHeartbeatResponse,
@@ -59,8 +78,9 @@ from packages.contracts.gateway.responses import (
     EventIdAcceptedResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
+from packages.contracts.parity import CommandControlReceipt, CommandReceipt, OperationEvent
 from packages.runtime.command_wakeup import WAKEUP
-from packages.runtime.dependencies import get_db, get_events
+from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.retry import async_retry_db_conflict
 
 # 롱폴 튜닝값 — env 미설정 시 기존 기본값과 동일한 기본값이 적용됨(배포 호환)
@@ -77,6 +97,10 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 # 수동 명령도 대상(diff)은 클라이언트가 명시해야 함 — 서버가 임의 리소스를 합성하지 않음.
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
+DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE = "direct command requires explicit confirmation"
+DEDICATED_COMMAND_ACTION_REQUIRED_MESSAGE = (
+    "this action requires its typed dedicated command endpoint"
+)
 RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
     "RCA test actions are reserved; use the dedicated /rca/test-runs API"
 )
@@ -84,23 +108,182 @@ RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
 CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
+OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
+
+# `/commands` carries only an inspected diff. Actions that need a typed target
+# payload (replicas, Helm values, uninstall contract, and similar) must use their
+# dedicated endpoint so a queued receipt is always executable by the agent.
+MANUAL_DIFF_ACTIONS = frozenset({Command.DEFAULT_ACTION, Command.APPLY_MANIFEST_ACTION})
 
 router = APIRouter()
 __all__ = ["debug_query_plan", "router"]
 
 
-def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> AcceptedResponse:
-    command_id = (
-        None
-        if command_requires_recorded_approval(command)
-        else build_plan(command, accepted.event.correlation_id).command_id
-    )
-    return AcceptedResponse(
+def new_command_id() -> str:
+    """Create a server-owned command trace before the acceptance UoW starts."""
+    return f"cmd-{uuid4()}"
+
+
+def command_accepted_response(command: CommandRequestedBody, accepted: Any) -> CommandReceipt:
+    command_id = command.command_id or build_plan(command, accepted.event.correlation_id).command_id
+    event_id = str(accepted.event.event_id)
+    return CommandReceipt(
         accepted=True,
-        event_id=accepted.event.event_id,
-        correlation_id=accepted.event.correlation_id,
         command_id=command_id,
+        event_id=event_id,
+        # audit worker가 비동기로 audit_log.event_id에 투영하는 immutable source ID.
+        # audit_log.id는 이 시점에 존재하지 않을 수 있어 의도적으로 노출하지 않는다.
+        audit_event_id=event_id,
+        correlation_id=accepted.event.correlation_id,
+        status=CommandStatus.QUEUED,
     )
+
+
+async def accept_command_with_receipt_stage(
+    events: Any,
+    command: CommandRequestedBody,
+    *,
+    actor: Actor,
+) -> tuple[Any, OperationEvent | None]:
+    """Accept a command and stage its browser receipt in the same event outbox UoW."""
+    staged: list[OperationEvent | None] = []
+
+    def stage(conn: Any, accepted_event: Any) -> None:
+        plan = build_plan(command, accepted_event.correlation_id)
+        stage_logical_command_acceptance_in_transaction(
+            conn,
+            correlation_id=accepted_event.correlation_id,
+            plan=plan.to_body(),
+            confirmation_event_id=str(accepted_event.event_id),
+        )
+        staged.append(
+            stage_command_operation_event_in_transaction(
+                conn,
+                workspace_id=command.workspace_id,
+                command_id=plan.command_id,
+                kind="progress",
+                payload={
+                    "cluster_id": command.cluster_id,
+                    "status": CommandStatus.QUEUED,
+                    "action": command.action,
+                    "correlation_id": accepted_event.correlation_id,
+                },
+            )
+        )
+
+    accepted = await events.accept_body(command, actor=actor, transactional_stage=stage)
+    return accepted, staged[0] if staged else None
+
+
+async def publish_operation_event(
+    operation_events: Any,
+    *,
+    command_id: str | None,
+    workspace_id: str = DEFAULT_WORKSPACE_ID,
+    status: str,
+    payload: dict[str, object],
+) -> None:
+    """Publish through the injected cross-replica broker when an HTTP route provides it."""
+    if not command_id:
+        return
+    publish = getattr(operation_events, "publish", None)
+    if not callable(publish):
+        return
+    kind = (
+        "completed"
+        if status == CommandStatus.COMPLETED
+        else "failed"
+        if status == CommandStatus.FAILED
+        else "cancelled"
+        if status == CommandStatus.CANCELLED
+        else "progress"
+    )
+    await publish(
+        command_id=command_id,
+        kind=kind,
+        payload={"status": status, **payload},
+        workspace_id=workspace_id,
+    )
+
+
+async def announce_staged_operation_event(
+    operation_events: Any,
+    event: OperationEvent | None,
+    *,
+    workspace_id: str,
+) -> bool:
+    """Fan out an event already committed by a lifecycle transaction exactly once."""
+    if event is None:
+        return False
+    announce = getattr(operation_events, "announce", None)
+    if not callable(announce):
+        return False
+    await announce(event, workspace_id=workspace_id)
+    return True
+
+
+async def publish_accepted_operation(
+    operation_events: Any,
+    command: CommandRequestedBody,
+    response: CommandReceipt,
+) -> None:
+    await publish_operation_event(
+        operation_events,
+        command_id=response.command_id,
+        workspace_id=command.workspace_id,
+        status=CommandStatus.QUEUED,
+        payload={
+            "cluster_id": command.cluster_id,
+            "action": command.action,
+            "correlation_id": response.correlation_id,
+        },
+    )
+
+
+def command_snapshot_event(row: dict[str, object]) -> OperationEvent:
+    status = str(row["status"])
+    kind = (
+        "completed"
+        if status == CommandStatus.COMPLETED
+        else "failed"
+        if status == CommandStatus.FAILED
+        else "cancelled"
+        if status == CommandStatus.CANCELLED
+        else "progress"
+    )
+    return OperationEvent(
+        command_id=str(row["command_id"]),
+        sequence=1,
+        kind=kind,
+        payload={
+            "status": status,
+            "cluster_id": str(row["cluster_id"]),
+            "action": str(row["action"]),
+            "correlation_id": str(row["correlation_id"]),
+            "result": dict(row.get("result") or {}),
+        },
+    )
+
+
+def sse_operation_event(event: OperationEvent) -> str:
+    return f"id: {event.sequence}\nevent: operation\ndata: {event.model_dump_json()}\n\n"
+
+
+def operation_event_cursor(after: int | None, last_event_id: str | None) -> int:
+    """Resolve the equivalent query/header SSE cursors without ambiguity."""
+    if last_event_id is None or not last_event_id.strip():
+        return after or 0
+    try:
+        cursor = int(last_event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=UNPROCESSABLE_CODE, detail="invalid Last-Event-ID") from exc
+    if cursor < 0:
+        raise HTTPException(status_code=UNPROCESSABLE_CODE, detail="invalid Last-Event-ID")
+    if after is not None and after != cursor:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE, detail="conflicting operation event cursor"
+        )
+    return cursor
 
 
 def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
@@ -108,6 +291,29 @@ def command_diff(payload: CommandRequest, workspace_id: str) -> Diff:
         raise HTTPException(status_code=UNPROCESSABLE_CODE, detail=MANUAL_DIFF_REQUIRED_MESSAGE)
     raw = {**payload.diff, "workspace_id": workspace_id, "cluster_id": payload.cluster_id}
     return cast(Diff, Diff.from_body(raw))
+
+
+def require_direct_execution_confirmation(payload: Any) -> None:
+    """Reject legacy mode flags unless a real one-time confirmation is present.
+
+    ``direct_execution`` is no longer a client-controlled execution grant.  The
+    server derives that mode solely from the common ``confirmation: true`` field
+    after RBAC, target, and diff validation finish in the route.
+    """
+    legacy_requested = bool(
+        getattr(payload, "direct_execution", False)
+        or getattr(payload, "direct_execution_confirmed", False)
+    )
+    if legacy_requested and getattr(payload, "confirmation", None) is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+
+
+def direct_execution_from_confirmation(payload: Any) -> bool:
+    """The only server-side rule that enables immediate agent dispatch."""
+    return getattr(payload, "confirmation", None) is True
 
 
 def validate_control_namespace(namespace: str) -> None:
@@ -128,7 +334,11 @@ def require_cluster_deploy_access(
     )
 
 
-def require_not_management_cluster(db: Any, workspace_id: str, cluster_id: str) -> None:
+def require_not_management_cluster(
+    db: Any, workspace_id: str, cluster_id: str, *, direct_execution: bool = False
+) -> None:
+    if direct_execution:
+        return
     registration_getter = getattr(db, "get_cluster_registration", None)
     registration = (
         registration_getter(workspace_id, cluster_id) if callable(registration_getter) else None
@@ -173,14 +383,18 @@ async def accept_deployment_control(
     payload: JsonObject,
     approval_ref: str | None,
     policy_decision_ref: str | None,
+    execution_request: Any,
+    operation_events: Any,
     current: Any,
     db: Any,
     events: Any,
-) -> AcceptedResponse:
+) -> CommandReceipt:
     validate_control_namespace(namespace)
+    require_direct_execution_confirmation(execution_request)
+    direct_execution = direct_execution_from_confirmation(execution_request)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, cluster_id)
-    require_not_management_cluster(db, workspace_id, cluster_id)
+    require_not_management_cluster(db, workspace_id, cluster_id, direct_execution=direct_execution)
     diff = deployment_control_diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
@@ -195,18 +409,27 @@ async def accept_deployment_control(
         namespace=namespace,
         reason=reason,
         diff=diff,
+        command_id=new_command_id(),
         payload=payload,
         workspace_id=workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
         requested_by=current.user_id,
         approval_ref=approval_ref,
         policy_decision_ref=policy_decision_ref,
+        direct_execution=direct_execution,
+        direct_execution_confirmed=direct_execution,
     )
-    accepted = await events.accept_body(
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
         command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return command_accepted_response(command, accepted)
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events, receipt_event, workspace_id=command.workspace_id
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
@@ -222,7 +445,7 @@ def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluste
 
 async def lease_next_command(
     db: Any, cluster_id: str, workspace_id: str, agent_id: str, timeout: int
-) -> JsonObject | None:
+) -> Any | None:
     """롱폴 — 이 클러스터의 다음 명령을 timeout 까지 대기하며 리스(아웃바운드 단일 채널).
 
     대기는 LISTEN/NOTIFY 웨이크업(WAKEUP)을 우선 사용 — 명령 큐잉 순간 즉시
@@ -247,41 +470,68 @@ async def lease_next_command(
     return None
 
 
-@router.post(gateway_routes.COMMANDS_PATH, response_model=AcceptedResponse)
+@router.post(
+    gateway_routes.COMMANDS_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
 async def commands(
     payload: CommandRequest,
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
-) -> AcceptedResponse:
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
     if payload.action in RCA_TEST_COMMAND_ACTIONS:
         raise HTTPException(
             status_code=UNPROCESSABLE_CODE,
             detail=RCA_TEST_ACTION_DEDICATED_API_REQUIRED,
         )
+    if payload.action not in MANUAL_DIFF_ACTIONS:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DEDICATED_COMMAND_ACTION_REQUIRED_MESSAGE,
+        )
+    require_direct_execution_confirmation(payload)
+    direct_execution = direct_execution_from_confirmation(payload)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, payload.cluster_id)
-    require_not_management_cluster(db, workspace_id, payload.cluster_id)
+    require_not_management_cluster(
+        db, workspace_id, payload.cluster_id, direct_execution=direct_execution
+    )
     command = CommandRequestedBody(
         cluster_id=payload.cluster_id,
         action=payload.action,
         namespace=payload.namespace,
         reason=payload.reason or "manual command request",
         diff=command_diff(payload, workspace_id),
+        command_id=new_command_id(),
         workspace_id=workspace_id,
         priority=COMMAND_PRIORITY_HIGH,
         requested_by=current.user_id,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
+        direct_execution=direct_execution,
+        direct_execution_confirmed=direct_execution,
     )
-    accepted = await events.accept_body(
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
         command,
         actor=Actor(current.user_id, tuple(current.roles)),
     )
-    return command_accepted_response(command, accepted)
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events, receipt_event, workspace_id=command.workspace_id
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
 
 
-@router.post(gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH, response_model=AcceptedResponse)
+@router.post(
+    gateway_routes.CLUSTER_DEPLOYMENT_SCALE_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
 async def scale_deployment(
     cluster_id: str,
     namespace: str,
@@ -290,7 +540,8 @@ async def scale_deployment(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
-) -> AcceptedResponse:
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
     command_payload = {
         "namespace": namespace,
         "name": deployment,
@@ -305,13 +556,19 @@ async def scale_deployment(
         payload=command_payload,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
+        execution_request=payload,
+        operation_events=operation_events,
         current=current,
         db=db,
         events=events,
     )
 
 
-@router.post(gateway_routes.CLUSTER_DEPLOYMENT_RESTART_PATH, response_model=AcceptedResponse)
+@router.post(
+    gateway_routes.CLUSTER_DEPLOYMENT_RESTART_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
 async def restart_deployment(
     cluster_id: str,
     namespace: str,
@@ -320,7 +577,8 @@ async def restart_deployment(
     current: Any = Depends(require_session),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
-) -> AcceptedResponse:
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
     command_payload = {
         "namespace": namespace,
         "name": deployment,
@@ -334,6 +592,8 @@ async def restart_deployment(
         payload=command_payload,
         approval_ref=payload.approval_ref,
         policy_decision_ref=payload.policy_decision_ref,
+        execution_request=payload,
+        operation_events=operation_events,
         current=current,
         db=db,
         events=events,
@@ -392,6 +652,349 @@ async def command_status(
     )
 
 
+def command_control_http_error(error: CommandControlError) -> HTTPException:
+    if isinstance(error, CommandControlNotFound):
+        return HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    return HTTPException(status_code=409, detail=str(error))
+
+
+def control_receipt_from_existing(control: dict[str, object]) -> CommandControlReceipt:
+    details = control.get("details")
+    outcome = details if isinstance(details, dict) else {}
+    return CommandControlReceipt(
+        command_id=str(control["command_id"]),
+        action=str(control["action"]),
+        event_id=str(control["event_id"]),
+        audit_event_id=str(control["audit_event_id"]),
+        correlation_id=str(outcome.get("correlation_id") or "control-replayed"),
+        status=str(outcome.get("status_after") or CommandStatus.CANCEL_REQUESTED),
+        idempotent=True,
+        attempt_id=(str(control["attempt_id"]) if control.get("attempt_id") else None),
+    )
+
+
+def command_plan_impact_matches(row: dict[str, object]) -> bool:
+    """Direct retry may reuse confirmation only for the identical stored impact."""
+
+    payload = row.get("payload")
+    if not isinstance(payload, dict):
+        return False
+    try:
+        expected = command_impact_identity(
+            cluster_id=str(row["cluster_id"]),
+            action=str(row["action"]),
+            namespace=str(payload["namespace"]),
+            diff=dict(payload.get("diff") or {}),
+            payload=dict(payload.get("payload") or {}),
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+    return expected == str(row.get("impact_identity") or "")
+
+
+def require_retry_agent_capability(db: Any, *, workspace_id: str, cluster_id: str) -> None:
+    """Retry rechecks live agent support; a stale browser capability is never enough."""
+
+    lister = getattr(db, "list_cluster_agent_statuses", None)
+    if not callable(lister):
+        raise HTTPException(status_code=409, detail="command agent capability cannot be verified")
+    statuses = lister(workspace_id, cluster_id)
+    if not any(
+        isinstance(item, dict)
+        and str(item.get("status") or "").lower() == "connected"
+        and "command_receiver" in set(item.get("capabilities") or ())
+        for item in statuses
+    ):
+        raise HTTPException(status_code=409, detail="command agent is not currently capable")
+
+
+async def accept_command_control(
+    *,
+    command_id: str,
+    action: str,
+    payload: CommandControlRequest,
+    idempotency_key: str,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandControlReceipt:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    row = await db.get_agent_command(command_id, workspace_id)
+    if row is None:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    cluster_id = str(row["cluster_id"])
+    require_cluster_deploy_access(db, current, workspace_id, cluster_id)
+    require_not_management_cluster(
+        db,
+        workspace_id,
+        cluster_id,
+        direct_execution=bool(row.get("direct_execution")),
+    )
+
+    if action == "retry":
+        spec = command_action_spec(str(row["action"]))
+        if spec is None or not spec.supports_manual_retry:
+            raise HTTPException(
+                status_code=409, detail="command action retry policy does not allow manual retry"
+            )
+        require_retry_agent_capability(db, workspace_id=workspace_id, cluster_id=cluster_id)
+        if bool(row.get("direct_execution")):
+            if not row.get("confirmation_event_id") or not command_plan_impact_matches(dict(row)):
+                raise HTTPException(
+                    status_code=409,
+                    detail="direct command retry requires a fresh confirmed request",
+                )
+
+    body = (
+        CommandCancelRequestedBody(
+            command_id=command_id,
+            workspace_id=workspace_id,
+            reason=payload.reason,
+            requested_by=current.user_id,
+        )
+        if action == "cancel"
+        else CommandRetryRequestedBody(
+            command_id=command_id,
+            workspace_id=workspace_id,
+            reason=payload.reason,
+            requested_by=current.user_id,
+        )
+    )
+    staged: list[Any] = []
+
+    def stage(conn: Any, accepted_event: Any) -> None:
+        staged.append(
+            stage_command_control_in_transaction(
+                conn,
+                workspace_id=workspace_id,
+                command_id=command_id,
+                action=action,
+                idempotency_key=idempotency_key,
+                requested_by=current.user_id,
+                reason=payload.reason,
+                event_id=str(accepted_event.event_id),
+                audit_event_id=str(accepted_event.event_id),
+            )
+        )
+
+    try:
+        accepted = await events.accept_body(
+            body,
+            correlation_id=str(row["correlation_id"]),
+            actor=Actor(current.user_id, tuple(current.roles)),
+            transactional_stage=stage,
+        )
+    except DuplicateCommandControl as duplicate:
+        return control_receipt_from_existing(duplicate.control)
+    except CommandControlError as error:
+        raise command_control_http_error(error) from error
+    if not staged:
+        raise HTTPException(status_code=503, detail="command control durable outbox is unavailable")
+    control = staged[0]
+    await announce_staged_operation_event(
+        operation_events,
+        control.operation_event,
+        workspace_id=workspace_id,
+    )
+    return CommandControlReceipt(
+        command_id=command_id,
+        action=action,
+        event_id=str(accepted.event.event_id),
+        audit_event_id=str(accepted.event.event_id),
+        correlation_id=control.correlation_id,
+        status=control.status,
+        idempotent=False,
+        attempt_id=control.attempt_id,
+    )
+
+
+@router.post(
+    gateway_routes.COMMAND_CANCEL_PATH,
+    response_model=CommandControlReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def cancel_command(
+    command_id: str,
+    payload: CommandControlRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandControlReceipt:
+    return await accept_command_control(
+        command_id=command_id,
+        action="cancel",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.COMMAND_RETRY_PATH,
+    response_model=CommandControlReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def retry_command(
+    command_id: str,
+    payload: CommandControlRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=8)],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandControlReceipt:
+    return await accept_command_control(
+        command_id=command_id,
+        action="retry",
+        payload=payload,
+        idempotency_key=idempotency_key,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.get(gateway_routes.COMMAND_EVENTS_PATH)
+async def command_events(
+    command_id: str,
+    after: Annotated[int | None, Query(ge=0)] = None,
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
+) -> StreamingResponse:
+    """Replay durable events then follow live broker notifications in exact order."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    cursor = operation_event_cursor(after, last_event_id)
+    subscribe = getattr(operation_events, "subscribe", None)
+    if not callable(subscribe):
+        raise HTTPException(status_code=503, detail="operation event stream unavailable")
+    # Subscribe before reading replay so a commit between the two is either in
+    # the query result or this live queue; no status polling recovery exists.
+    subscription = await subscribe(command_id, workspace_id=workspace_id)
+    list_events = getattr(db, "list_command_operation_events", None)
+    event_context = getattr(db, "get_command_operation_event_context", None)
+
+    async def replay(starting_after: int) -> list[OperationEvent]:
+        if callable(list_events):
+            return await list_events(
+                workspace_id,
+                command_id,
+                after_sequence=starting_after,
+            )
+        return []
+
+    try:
+        initial = await replay(cursor)
+        if initial:
+            cluster_id = str(initial[0].payload.get("cluster_id") or "")
+            if not cluster_id:
+                raise HTTPException(
+                    status_code=500, detail="operation event missing cluster identity"
+                )
+            require_cluster_read_access(db, current, workspace_id, cluster_id)
+        else:
+            # A receipt is written ahead of the asynchronous agent_commands
+            # projection.  Reconnecting from that receipt is valid: authorize
+            # from the immutable operation ledger and keep the SSE subscription
+            # open until a later lifecycle event is committed.
+            context = (
+                await event_context(workspace_id, command_id) if callable(event_context) else None
+            )
+            if context is not None:
+                last_sequence = int(context.get("last_sequence") or 0)
+                cluster_id = str(context.get("cluster_id") or "")
+                if not cluster_id:
+                    raise HTTPException(
+                        status_code=500, detail="operation event missing cluster identity"
+                    )
+                if cursor > last_sequence:
+                    raise HTTPException(
+                        status_code=UNPROCESSABLE_CODE,
+                        detail="operation event cursor is ahead of durable history",
+                    )
+                require_cluster_read_access(db, current, workspace_id, cluster_id)
+            else:
+                # Existing commands predating the append-only ledger are materialized
+                # as one compatibility snapshot only. New receipts always have an
+                # accepted event and therefore never take this delayed-row path.
+                row = await db.get_agent_command(command_id, workspace_id)
+                if row is None:
+                    raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+                require_cluster_read_access(db, current, workspace_id, str(row["cluster_id"]))
+                initial = [command_snapshot_event(dict(row))]
+    except BaseException:
+        await subscription.close()
+        raise
+
+    async def stream():
+        delivered = cursor
+
+        async def emit(events: list[OperationEvent]):
+            nonlocal delivered
+            for event in events:
+                if event.sequence <= delivered:
+                    continue
+                if delivered and event.sequence != delivered + 1:
+                    raise RuntimeError("durable operation events are not contiguous")
+                yield sse_operation_event(event)
+                delivered = event.sequence
+                if event.kind in {"completed", "failed", "cancelled"}:
+                    return
+
+        try:
+            async for item in emit(initial):
+                yield item
+            if initial and initial[-1].kind in {"completed", "failed", "cancelled"}:
+                return
+            while True:
+                try:
+                    live = await asyncio.wait_for(
+                        subscription.next(), timeout=OPERATION_EVENT_REPLAY_POLL_SECONDS
+                    )
+                except TimeoutError:
+                    # Redis is only a low-latency wake-up. A failed listener or
+                    # cross-replica publish is repaired from PostgreSQL without
+                    # asking the browser to poll command status.
+                    replayed = await replay(delivered)
+                    async for item in emit(replayed):
+                        yield item
+                    if replayed and replayed[-1].kind in {"completed", "failed", "cancelled"}:
+                        return
+                    yield ": keep-alive\n\n"
+                    continue
+                if live.sequence <= delivered:
+                    continue
+                if live.sequence != delivered + 1:
+                    async for item in emit(await replay(delivered)):
+                        yield item
+                    if live.sequence <= delivered:
+                        continue
+                if live.sequence != delivered + 1:
+                    raise RuntimeError("durable operation event replay did not close sequence gap")
+                yield sse_operation_event(live)
+                delivered = live.sequence
+                if live.kind in {"completed", "failed", "cancelled"}:
+                    return
+        finally:
+            await subscription.close()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # agent 라우트 — 각 핸들러의 identity dependency 로 per-cluster 토큰 인증.
 # workspace_id/cluster_id 는 토큰으로 인증된 identity 에서만 취하고 body/query 는 신뢰 안 함.
 agent_router = APIRouter()
@@ -403,12 +1006,32 @@ async def poll_command(
     timeout: int = DEFAULT_POLL_SECONDS,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> AgentCommandPollResponse:
     # 멀티클러스터: 각 클러스터 agent 가 자기 cluster_id 로 아웃바운드 롱폴(인바운드 0).
     # cluster_id/workspace_id 는 토큰 identity 에서 — 임의 클러스터/워크스페이스 폴링 차단.
-    row = await lease_next_command(
+    leased = await lease_next_command(
         db, identity.cluster_id, identity.workspace_id, agent_id, timeout
     )
+    row = leased.command if isinstance(leased, LeasedAgentCommand) else leased
+    if row is not None:
+        if not await announce_staged_operation_event(
+            operation_events,
+            leased.operation_event if isinstance(leased, LeasedAgentCommand) else None,
+            workspace_id=identity.workspace_id,
+        ):
+            await publish_operation_event(
+                operation_events,
+                command_id=str(row["command_id"]),
+                workspace_id=identity.workspace_id,
+                status=CommandStatus.LEASED,
+                payload={
+                    "cluster_id": identity.cluster_id,
+                    "action": str(row["action"]),
+                    "correlation_id": str(row["correlation_id"]),
+                    "attempt_id": row.get("attempt_id"),
+                },
+            )
     return AgentCommandPollResponse(command=row)
 
 
@@ -418,21 +1041,54 @@ async def command_start(
     payload: CommandStartRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> CommandStartedResponse:
-    correlation_id = await async_retry_db_conflict(
-        lambda: db.start_agent_command(
-            command_id,
-            identity.workspace_id,  # body 가 아닌 토큰 identity 의 workspace
-            identity.cluster_id,  # body 가 아닌 토큰 identity 의 cluster
-            payload.lease_id,
-            payload.agent_id,
-            CommandStatus.RUNNING,
-            LEASE_SECONDS,
+    start = db.start_agent_command
+    if payload.attempt_id is None:
+        correlation_id = await async_retry_db_conflict(
+            lambda: start(
+                command_id,
+                identity.workspace_id,  # body 가 아닌 토큰 identity 의 workspace
+                identity.cluster_id,  # body 가 아닌 토큰 identity 의 cluster
+                payload.lease_id,
+                payload.agent_id,
+                CommandStatus.RUNNING,
+                LEASE_SECONDS,
+            )
         )
-    )
+    else:
+        correlation_id = await async_retry_db_conflict(
+            lambda: start(
+                command_id,
+                identity.workspace_id,
+                identity.cluster_id,
+                payload.lease_id,
+                payload.agent_id,
+                CommandStatus.RUNNING,
+                LEASE_SECONDS,
+                payload.attempt_id,
+            )
+        )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-    return CommandStartedResponse(accepted=True, correlation_id=correlation_id)
+    correlation = (
+        correlation_id if isinstance(correlation_id, str) else str(correlation_id.correlation_id)
+    )
+    if not correlation:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    if not await announce_staged_operation_event(
+        operation_events,
+        correlation_id.operation_event if isinstance(correlation_id, StartedAgentCommand) else None,
+        workspace_id=identity.workspace_id,
+    ):
+        await publish_operation_event(
+            operation_events,
+            command_id=command_id,
+            workspace_id=identity.workspace_id,
+            status=CommandStatus.RUNNING,
+            payload={"cluster_id": identity.cluster_id, "correlation_id": correlation},
+        )
+    return CommandStartedResponse(accepted=True, correlation_id=correlation)
 
 
 @agent_router.post(
@@ -443,20 +1099,55 @@ async def command_heartbeat(
     payload: CommandHeartbeatRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> CommandHeartbeatResponse:
-    correlation_id = await async_retry_db_conflict(
-        lambda: db.heartbeat_agent_command(
-            command_id,
-            identity.workspace_id,
-            identity.cluster_id,
-            payload.lease_id,
-            payload.agent_id,
-            LEASE_SECONDS,
+    heartbeat = db.heartbeat_agent_command
+    if payload.attempt_id is None and payload.observed_cancel_generation is None:
+        correlation_id = await async_retry_db_conflict(
+            lambda: heartbeat(
+                command_id,
+                identity.workspace_id,
+                identity.cluster_id,
+                payload.lease_id,
+                payload.agent_id,
+                LEASE_SECONDS,
+            )
         )
-    )
+    else:
+        correlation_id = await async_retry_db_conflict(
+            lambda: heartbeat(
+                command_id,
+                identity.workspace_id,
+                identity.cluster_id,
+                payload.lease_id,
+                payload.agent_id,
+                LEASE_SECONDS,
+                payload.attempt_id,
+                payload.observed_cancel_generation,
+            )
+        )
     if not correlation_id:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
-    return CommandHeartbeatResponse(accepted=True, correlation_id=correlation_id)
+    # Compatibility stores used by old deployments return only the correlation
+    # string.  Production repository returns the full reverse-control reply.
+    correlation = (
+        correlation_id
+        if isinstance(correlation_id, str)
+        else str(getattr(correlation_id, "correlation_id", ""))
+    )
+    if not correlation:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    await announce_staged_operation_event(
+        operation_events,
+        getattr(correlation_id, "operation_event", None),
+        workspace_id=identity.workspace_id,
+    )
+    return CommandHeartbeatResponse(
+        accepted=True,
+        correlation_id=correlation,
+        cancel_requested=bool(getattr(correlation_id, "cancel_requested", False)),
+        cancel_generation=getattr(correlation_id, "cancel_generation", None),
+    )
 
 
 @agent_router.post(gateway_routes.AGENT_COMMAND_RESULT_PATH, response_model=EventIdAcceptedResponse)
@@ -465,6 +1156,7 @@ async def command_result(
     payload: CommandResultRequest,
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
+    operation_events: Any = Depends(get_operation_events),
 ) -> EventIdAcceptedResponse:
     command_row = await db.get_agent_command(command_id, identity.workspace_id)
     if command_row is None or str(command_row.get("cluster_id")) != identity.cluster_id:
@@ -482,19 +1174,50 @@ async def command_result(
     result = payload.model_dump()
     result["workspace_id"] = identity.workspace_id
     result["cluster_id"] = identity.cluster_id
-    completed = await async_retry_db_conflict(
-        lambda: db.complete_agent_command_and_stage_event(
-            command_id,
-            identity.workspace_id,
-            identity.cluster_id,
-            result,
-            payload.lease_id,
-            payload.agent_id,
-            "api-gateway",
+    complete = db.complete_agent_command_and_stage_event
+    if payload.attempt_id is None:
+        completed = await async_retry_db_conflict(
+            lambda: complete(
+                command_id,
+                identity.workspace_id,
+                identity.cluster_id,
+                result,
+                payload.lease_id,
+                payload.agent_id,
+                "api-gateway",
+            )
         )
-    )
+    else:
+        completed = await async_retry_db_conflict(
+            lambda: complete(
+                command_id,
+                identity.workspace_id,
+                identity.cluster_id,
+                result,
+                payload.lease_id,
+                payload.agent_id,
+                "api-gateway",
+                payload.attempt_id,
+            )
+        )
     if completed is None:
         raise HTTPException(status_code=NOT_FOUND_CODE, detail=NOT_FOUND_MESSAGE)
+    if not await announce_staged_operation_event(
+        operation_events,
+        getattr(completed, "operation_event", None),
+        workspace_id=identity.workspace_id,
+    ):
+        await publish_operation_event(
+            operation_events,
+            command_id=command_id,
+            workspace_id=identity.workspace_id,
+            status=payload.status,
+            payload={
+                "cluster_id": identity.cluster_id,
+                "correlation_id": str(command_row.get("correlation_id") or ""),
+                "result": result,
+            },
+        )
     if (
         uninstall_result
         and payload.status == CommandStatus.COMPLETED

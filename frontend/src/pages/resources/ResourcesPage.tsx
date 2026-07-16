@@ -301,9 +301,7 @@ export function ResourcesPage({
                 onLoadMore={filtered.loadMoreList}
                 onTopologyViewChange={topology.pin}
                 physicalTopology={physicalTopology}
-                port={port}
                 relationTopology={relationTopology}
-                reportUnauthorized={reportUnauthorized}
                 replay={physicalRealtime.replay}
                 selectTableRows={physicalRealtime.selectTableRows}
                 state={state}

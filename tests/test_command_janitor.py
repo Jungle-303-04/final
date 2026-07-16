@@ -22,6 +22,7 @@ class StubDb:
             {
                 "command_id": "cmd-1",
                 "workspace_id": "workspace-1",
+                "cluster_id": "cluster-1",
                 "correlation_id": "corr-original",
                 "result": {
                     "status": "failed",

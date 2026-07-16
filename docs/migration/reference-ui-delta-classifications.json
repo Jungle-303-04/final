@@ -1,0 +1,3844 @@
+{
+  "schemaVersion": 1,
+  "sourceProvenance": "references/provenance/source.json",
+  "targetRevision": "cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc",
+  "testPlans": {
+    "timeline.public-api.surface": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Timeline public exports remain consumable by the route surface."
+    },
+    "timeline.strip.math": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Range URL transitions preserve server-owned millisecond bounds."
+    },
+    "timeline.shared.presentation": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Shared event markers retain their semantic presentation."
+    },
+    "timeline.filters.url": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Toolbar filters serialize canonically and restore with browser history."
+    },
+    "timeline.lanes.presentation": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Lane grouping and order are rendered from the authorized projection."
+    },
+    "timeline.live.stream": {
+      "destination": "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+      "rationale": "Live frame merging preserves bounded snapshot identity and ordering."
+    },
+    "timeline.list.detail": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "List events open the detail sheet without losing selected-event URL state."
+    },
+    "timeline.strip.controls": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Range picker, lens controls, keyboard navigation, and reduced motion are exercised at the route surface."
+    },
+    "timeline.swimlanes.grouping": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Swimlane grouping, sorting, and pin affordances remain capability-gated."
+    },
+    "timeline.toolbar.controls": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Toolbar controls expose only server-described choices and preserve focus behavior."
+    },
+    "timeline.toolbar.state": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Activity and problem projections map to stable URL filter state."
+    },
+    "timeline.adapter.source": {
+      "destination": "frontend/src/features/timeline/createTimelineAdapter.test.ts",
+      "rationale": "The adapter maps authenticated snapshot, overview, and stream contracts without source-runtime imports."
+    },
+    "timeline.local-scrubber": {
+      "destination": "frontend/src/pages/timeline/createTimelineSurface.test.tsx",
+      "rationale": "Local source selection remains route-capability gated."
+    },
+    "timeline.retained-overview": {
+      "destination": "tests/test_timeline_coverage_projection.py",
+      "rationale": "Retained overview buckets and coverage are created from an authorized server aggregation."
+    },
+    "timeline.view.integration": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Timeline view controls compose through the product surface rather than the upstream runtime."
+    },
+    "timeline.url.history": {
+      "destination": "frontend/src/features/timeline/timelineUrlState.test.ts",
+      "rationale": "Back, forward, replace-history, and deep-link state use one URL state model."
+    },
+    "timeline.source-context": {
+      "destination": "frontend/src/features/timeline/createTimelineAdapter.test.ts",
+      "rationale": "Source selection and transport composition remain isolated in the product adapter."
+    },
+    "timeline.source-contract": {
+      "destination": "frontend/src/api/timeline.test.ts",
+      "rationale": "HTTP capability, snapshot, overview, and stream request shapes are validated at the product boundary."
+    },
+    "applications.catalog.batch-runtime": {
+      "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+      "rationale": "Catalog cards and table rows must render batch runtime, retained run outcome, and deterministic attention ordering from a typed product projection."
+    },
+    "applications.catalog.delivery-status": {
+      "destination": "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+      "rationale": "The adapter must keep runtime readiness and deployment-source delivery state distinct instead of deriving either in the browser."
+    },
+    "applications.detail.scope-tabs": {
+      "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+      "rationale": "Application, workload, and detail-tab URL state must round-trip through one route controller without mounting the wrong scope."
+    },
+    "applications.detail.overview-projection": {
+      "destination": "tests/test_application_product_contract.py",
+      "rationale": "The Python response schema must make source, workload, batch, relationship, and completeness evidence explicit before the overview can render it."
+    },
+    "applications.detail.topology": {
+      "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+      "rationale": "Authorized application topology, workload focus, resource navigation, and source-inventory differences require route-level interaction coverage."
+    },
+    "applications.detail.history": {
+      "destination": "tests/test_application_product_router.py",
+      "rationale": "Authorized application history must preserve partial-source evidence, deployment anchors, incidents, and source links without exposing provider payloads."
+    },
+    "applications.detail.identity-switcher": {
+      "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+      "rationale": "Environment-instance switching, popover dismissal, focus, and reduced-motion behavior must be exercised in the product route."
+    },
+    "applications.detail.parity": {
+      "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+      "rationale": "The existing generic five-tab detail test is expanded into application-detail parity coverage only after its typed projection exists."
+    },
+    "applications.public-api": {
+      "destination": "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+      "rationale": "The route-level application tab and workload-scope contract remains consumable without importing the isolated upstream component barrel."
+    },
+    "gitops.detail.operation-gate": {
+      "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+      "rationale": "The provider-neutral detail surface renders server-observed operation gating and refresh/sync capability reasons without creating a browser command."
+    },
+    "gitops.detail.revision-meta": {
+      "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+      "rationale": "The detail surface renders only the server-projected source revision; author and signature evidence remain a later provider integration."
+    },
+    "gitops.graph-filter.input": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Topology resource filtering must use the shared accessible input boundary and preserve the controlled query across graph updates."
+    },
+    "gitops.list.operation-gate": {
+      "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+      "rationale": "Fleet row actions must make the operation-in-progress reason visible and must not submit a second conflicting Argo sync."
+    },
+    "gitops.list.search-input": {
+      "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+      "rationale": "GitOps list search must remain a controlled, keyboard-accessible query without duplicating raw input behavior."
+    },
+    "gitops.list.labels-input": {
+      "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+      "rationale": "Label search and AND-selection must preserve focus, outside dismissal, and the server-authorized row set."
+    },
+    "gitops.managed-resources.disclosure": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Managed-resource and kind disclosures must retain lazy content, resource navigation, and reduced-motion-safe state changes."
+    },
+    "gitops.sync-countdown.duration": {
+      "destination": "frontend/src/features/gitops/workflowModel.test.ts",
+      "rationale": "A controller-provided duration and observed timestamp must produce a safe countdown without browser-derived controller state."
+    },
+    "gitops.sync-options.payload": {
+      "destination": "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+      "rationale": "Application and resource sync payloads must preserve selective-sync safety invariants and typed command identity at the adapter boundary."
+    },
+    "gitops.sync-options.validation": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Selective dry-run state, validation reset, operation gating, and outcome disclosure must be exercised through the product route."
+    },
+    "gitops.sync-options.feedback": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Dry-run success, failure, inconclusive, and redacted diagnostic feedback must be rendered from a typed server result."
+    },
+    "gitops.insights.resource-diff": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "A revision-bound desired-versus-live diff must handle loading, redaction, errors, fullscreen dismissal, and no-change evidence."
+    },
+    "gitops.insights.resource-filters": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Resources search, OR facets, all-versus-declared inventory, apply order, and status sorting require route-level projection coverage."
+    },
+    "gitops.insights.focus-disclosure": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Issue-to-resource focus must clear incompatible local filters, scroll once, expand diagnostics, and respect reduced-motion preference."
+    },
+    "gitops.insights.resource-actions": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Resource open, missing-source navigation, selective sync eligibility, and inline drift/event disclosure must be capability-gated by the projection."
+    },
+    "gitops.insights.availability": {
+      "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+      "rationale": "Application detail renders revision-bound comparison availability and an explicit unavailable reason without inventing a resource diff."
+    },
+    "gitops.insights.helpers": {
+      "destination": "frontend/src/features/gitops/workflowModel.test.ts",
+      "rationale": "Typed resource search, facet predicates, eligibility, and severity ordering must be deterministic outside rendering."
+    },
+    "gitops.insights.status-summary": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "A synchronized but degraded resource must remain visible as degraded in the GitOps summary projection."
+    },
+    "gitops.insights.disclosure-motion": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Historical issue, raw-error, compact issue, and resource disclosures must retain semantic expanded state with reduced-motion-safe transitions."
+    },
+    "gitops.tree.icon-and-portal": {
+      "destination": "frontend/src/pages/gitops/GitOpsPage.test.tsx",
+      "rationale": "Topology node icons must use the shared resource registry and never make the root resource a recursive detail portal."
+    },
+    "gitops.provider-assets.provenance": {
+      "destination": "frontend/src/shared/brand/gitOpsProviderAssets.test.ts",
+      "rationale": "The product-owned provider asset registry and copied bytes remain pinned to immutable upstream source hashes without importing the isolated source runtime."
+    },
+    "build.entrypoint.baseline": {
+      "destination": "frontend/src/app/buildBaseline.test.ts",
+      "rationale": "The standalone product package and document root retain an explicit compatibility baseline without importing or publishing the isolated upstream runtime."
+    },
+    "helm.release-list.scope": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "The scoped release list must show only inventory-observed Helm storage metadata and must disclose incomplete label coverage."
+    },
+    "helm.release-detail.availability": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "Release detail must keep history metadata separate from unavailable manifest, values, owned-resource, and command integrations."
+    },
+    "helm.release-contract": {
+      "destination": "tests/test_helm_release_router.py",
+      "rationale": "The Python HTTP boundary must apply workspace and inventory-read scope before emitting any storage metadata."
+    },
+    "traffic.overview.unavailable": {
+      "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
+      "rationale": "The route must show authorized scope freshness and explicit collector absence; it must never turn unavailable traffic evidence into zero counts or an empty graph."
+    },
+    "traffic.overview.contract": {
+      "destination": "tests/test_traffic_router.py",
+      "rationale": "The Python boundary must apply workspace and inventory-read scope to the normalized overview and keep unavailable flow fields null."
+    },
+    "traffic.filters.collector-gate": {
+      "destination": "frontend/src/pages/traffic/TrafficPage.test.tsx",
+      "rationale": "Namespace, protocol, and status flow filters remain unavailable until collector-backed flow records and filter facets are specified by the server."
+    },
+    "cost.overview.unavailable": {
+      "destination": "frontend/src/pages/cost/CostPage.test.tsx",
+      "rationale": "The Cost surface must disclose authorized scope and collector absence without rendering a currency, zero amount, projection, or recommendation."
+    },
+    "cost.overview.contract": {
+      "destination": "tests/test_cost_router.py",
+      "rationale": "The Python boundary applies workspace and inventory-read scope and keeps every monetary field null until a provider-backed observation exists."
+    },
+    "topology.graph.contract": {
+      "destination": "tests/test_relations_topology_router.py",
+      "rationale": "The Python topology boundary must keep the authorized cluster scope, graph evidence, unavailable projection, and server refresh policy explicit."
+    },
+    "topology.graph.surface": {
+      "destination": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
+      "rationale": "The resource relationship surface must render only the authorized evidence graph and disclose partial or unavailable results."
+    },
+    "topology.graph.freshness": {
+      "destination": "frontend/src/pages/resources/useRelationTopologyDataFrame.test.tsx",
+      "rationale": "The relationship frame must use the server-provided refresh interval and retain the last verified graph during a refresh."
+    },
+    "topology.controls.scope": {
+      "destination": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
+      "rationale": "Topology view, grouping, and visibility controls require route-level scope, focus, keyboard, and reduced-motion coverage before they can be claimed."
+    },
+    "topology.search.scope": {
+      "destination": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
+      "rationale": "Topology search must prove selected-resource navigation and keyboard dismissal against the current authorized graph scope."
+    },
+    "design.warning-foreground.token": {
+      "destination": "frontend/src/styles/tokens.test.ts",
+      "rationale": "Warning text must resolve through one semantic light/dark token and one Tailwind theme alias, not page-local hue classes."
+    },
+    "design.warning-foreground.badge": {
+      "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
+      "rationale": "The shared warning badge must consume semantic foreground, surface, and border tokens so every future feature reuses the same state treatment."
+    },
+    "design.sheet.drawer-shadow.boundary": {
+      "destination": "frontend/src/shared/ui/primitives/sheet.test.tsx",
+      "rationale": "The four-direction product Sheet owns its tested overlay, focus, motion, and elevation boundary; a one-direction upstream drawer shadow cannot be substituted silently."
+    },
+    "design.resource-kind.palette": {
+      "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
+      "rationale": "The product Badge deliberately exposes typed semantic variants only; resource-kind palette support needs a server-described resource presentation contract before it can be added."
+    },
+    "shared-ui.collapse.disclosure": {
+      "destination": "frontend/src/shared/ui/primitives/collapse.test.tsx",
+      "rationale": "A controlled disclosure must preserve lazy mounting while keeping retained closed controls out of focus and accessibility traversal, including when reduced motion is requested."
+    },
+    "shared-ui.multi-select.controlled": {
+      "destination": "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx",
+      "rationale": "The reusable picker must filter only its controlled item list, apply bulk changes only to visible values, and leave all displayed strings to the owner-provided labels."
+    },
+    "shared-ui.select-menu.dismissal": {
+      "destination": "frontend/src/shared/ui/primitives/select.test.tsx",
+      "rationale": "The shared select must preserve selection, keyboard Escape, outside-pointer dismissal, focus restoration, and a reduced-motion-safe open indicator."
+    },
+    "shared-ui.confirmation-dialog.safety": {
+      "destination": "frontend/src/shared/ui/primitives/confirmation-dialog.test.tsx",
+      "rationale": "The shared confirmation dialog must make owner-provided validation and pending state authoritative before an action can run or a modal can be dismissed."
+    },
+    "shared-ui.dialog.nested-escape": {
+      "destination": "frontend/src/shared/ui/primitives/primitives.accessibility.test.tsx",
+      "rationale": "Nested modal Escape handling must close only the topmost dialog and preserve the parent dialog's focus and interaction boundary."
+    },
+    "shared-ui.pane-loader.geometry": {
+      "destination": "frontend/src/shared/ui/primitives/pane-loader.test.tsx",
+      "rationale": "A pane-local loading status must keep its decorative spinner centered while owner-provided title and detail occupy a stable bounded label area below it."
+    },
+    "helm.release-list.search-shortcut": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "The route-owned release-list shortcut must focus the shared typed input without stealing an editable, modal, or already-handled key event."
+    },
+    "shared-ui.input.identifier-policy": {
+      "destination": "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+      "rationale": "The common input must disable browser text mutation for Kubernetes identifiers while retaining an explicit caller override and a typed native ref boundary."
+    },
+    "shared-ui.search-pill.input-policy": {
+      "destination": "frontend/src/shared/ui/SearchPillInput.test.tsx",
+      "rationale": "Structured search filters must consume the product-owned identifier-safe input primitive instead of restoring a raw browser input."
+    },
+    "shared-ui.search-box.lifecycle": {
+      "destination": "frontend/src/pages/helm/HelmPage.test.tsx",
+      "rationale": "A future collapsible search owner must retain its externally owned focus, duplicate-registration, and blur lifecycle contract."
+    },
+    "shared-ui.code-viewer.search": {
+      "destination": "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
+      "rationale": "A future safe code-viewer projection must test find-state, keyboard ownership, and identifier-safe search input against an authorized manifest source."
+    },
+    "shared-ui.resource-bar.capacity": {
+      "destination": "frontend/src/shared/ui/primitives/progress.test.tsx",
+      "rationale": "A future utilization bar must test server-observed used, allocatable, marker, and severity data without treating a percentage alone as capacity evidence."
+    },
+    "logs.stream.clean-end.adapter": {
+      "destination": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+      "rationale": "The authenticated SSE adapter must preserve a typed clean-end reason through the product-owned log stream boundary."
+    },
+    "logs.stream.terminal-state": {
+      "destination": "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+      "rationale": "A clean terminal event must retain discovered workload pods, end the matching tab, and suppress a false retry affordance."
+    },
+    "logs.viewer.shared-input": {
+      "destination": "frontend/src/features/log-viewer/LogViewer.test.tsx",
+      "rationale": "Log search must consume the reusable accessible input primitive rather than maintaining a second raw input implementation."
+    },
+    "logs.viewer.empty-diagnostic": {
+      "destination": "frontend/src/app/LogStreamTab.test.tsx",
+      "rationale": "A future empty-log diagnostic must be a typed, redacted server projection; the tab test will cover its unavailable and rendered states."
+    },
+    "logs.workload.empty-diagnostic": {
+      "destination": "frontend/src/features/bottom-dock/BottomDockProvider.test.tsx",
+      "rationale": "A future workload-empty diagnostic must retain stream identity and be rendered only from an authenticated typed endpoint event."
+    },
+    "compare.picker.keyboard": {
+      "destination": "frontend/src/pages/compare/CompareRoute.test.tsx",
+      "rationale": "The compare candidate picker must retain canonical URL replacement, server-authorized candidates, partial inventory evidence, and IME-safe keyboard selection."
+    },
+    "resources.physical-topology.stream-lifecycle": {
+      "destination": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
+      "rationale": "The typed physical-topology stream must expose connecting before its authenticated browser transport is connected and must keep its bounded delivery policy authoritative."
+    },
+    "logs.scheduled-run.target": {
+      "destination": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+      "rationale": "A future scheduled-workload log target must prove its server-authorized run identity before it opens the existing bounded log stream."
+    },
+    "namespace.scope.rescope": {
+      "destination": "frontend/src/features/filters/UnifiedFilterProvider.test.tsx",
+      "rationale": "A future namespace-rescope controller must prove authorized catalog replacement, URL state, and active-session invalidation without browser-derived scope."
+    }
+  },
+  "classifications": {
+    "packages/k8s-ui/src/components/compare/CompareResourcePicker.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:compare:picker:keyboard-selection:v1",
+          "legacyContractIds": [],
+          "symbol": "CompareResourcePicker",
+          "interaction": "a side-specific compare picker filters only server-authorized compatible candidates, excludes its source resource, preserves partial-inventory evidence, and maps IME-safe roving keyboard selection to canonical comparison URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/compare/compareContract.ts",
+              "frontend/src/pages/compare/CompareRoute.tsx",
+              "frontend/src/pages/compare/CompareRoute.test.tsx",
+              "src/packages/contracts/comparable_manifest.py",
+              "src/domains/compare/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.comparable_manifest",
+              "domains.compare.router"
+            ],
+            "plannedTestIds": [
+              "compare.picker.keyboard"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product candidate endpoint already applies workspace, cluster, and inventory authorization before returning a compatible descriptor set. The route owns canonical URL replacement while the picker reuses the shared identifier-safe input instead of source runtime code."
+          }
+        }
+      ]
+    },
+    "web/src/hooks/useEventSource.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:stream:connecting-lifecycle:v1",
+          "legacyContractIds": [],
+          "symbol": "useEventSource connecting lifecycle",
+          "interaction": "the topology consumer exposes a distinct connecting state until its authenticated realtime browser transport reports connected, and returns to connecting before each new connection attempt",
+          "transport": "ws",
+          "realtime": {
+            "resume": "visibility or sequence-integrity reconnects discard the previous client state and require a fresh server snapshot",
+            "backpressure": "the gateway hello policy bounds pending messages and the browser coalesces accepted records at the negotiated maximum frame rate",
+            "merge": "only ordered server snapshot and delta records for the active workspace and cluster mutate the overlay; invalid sequence requests a resync"
+          },
+          "motion": {
+            "reducedMotion": "connecting and connection-state feedback remain semantic while realtime paint coalescing avoids decorative animation dependence.",
+            "evidence": [
+              "references/upstream/web/src/hooks/useEventSource.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/composition/surfaces/resources.ts",
+              "frontend/src/features/resources/physicalTopologyRealtimeContract.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts",
+              "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
+              "src/packages/contracts/realtime.py",
+              "src/services/realtime/realtime-gateway/app.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.realtime",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "resources.physical-topology.stream-lifecycle"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source delta is limited to connecting lifecycle semantics. Opsia deliberately uses its authenticated typed WebSocket gateway rather than the source EventSource runtime, preserving a stricter negotiated policy, resync, and scope model."
+          }
+        }
+      ]
+    },
+    "web/src/components/dock/WorkloadLogsTab.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:scheduled:run-routing:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadLogsTab scheduled-kind routing",
+          "interaction": "scheduled workload kinds route to a retained-run selector before opening the selected run's bounded workload log stream",
+          "transport": "sse",
+          "realtime": {
+            "resume": "a selected immutable run target opens a new authorized stream; a terminal run does not infer a replacement target",
+            "backpressure": "the selected stream retains its bounded ordered log buffer and animation-frame batching",
+            "merge": "events apply only to the selected immutable run target and its current stream generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.scheduled-run.target"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python log-stream target permits only deployments, statefulsets, and daemonsets; it has no authorized scheduled-owner-to-run catalog or immutable run-target projection.",
+            "rationale": "Routing by a browser-maintained scheduled-kind allowlist would be hardcoded and could open logs for the wrong execution, so the source behavior remains blocked until a typed Python run catalog exists."
+          }
+        }
+      ]
+    },
+    "web/src/components/logs/ScheduledWorkloadLogsViewer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:scheduled:run-picker:v1",
+          "legacyContractIds": [],
+          "symbol": "ScheduledWorkloadLogsViewer",
+          "interaction": "a scheduled workload exposes its retained executions, chooses a valid default run, makes the selected run visible, and forwards only that run to the shared workload log viewer",
+          "transport": "sse",
+          "realtime": {
+            "resume": "a run catalog refresh may replace a missing selection only with a server-authorized default run before the stream opens",
+            "backpressure": "run catalog refresh and the selected log stream require independent bounded update policies",
+            "merge": "a selected run identity must match the catalog generation and log stream target before its status or lines render"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.scheduled-run.target"
+            ],
+            "state": "blocked",
+            "blockedReason": "No Python contract describes retained scheduled executions, their lifecycle, a default-run rule, or a scoped projection from a scheduler owner to the concrete workload target.",
+            "rationale": "The product must not infer a Job, Workflow, or pod name from a CronJob-like owner in the browser; the picker waits for the server-owned execution projection."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/namespace-switcher/NamespacePicker.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:namespace:scope:authorized-rescope:v1",
+          "legacyContractIds": [],
+          "symbol": "NamespacePicker cache-scoped rescope",
+          "interaction": "a cache-scoped namespace selector exposes only authorized namespaces, applies one replacement scope, communicates the rescope lifecycle, and invalidates incompatible active sessions",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/filters/filterContract.ts",
+              "frontend/src/features/filters/UnifiedFilterProvider.tsx",
+              "frontend/src/features/filters/UnifiedFilterProvider.test.tsx",
+              "src/packages/contracts/parity.py",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "domains.inventory_filter.router"
+            ],
+            "plannedTestIds": [
+              "namespace.scope.rescope"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Python APIs accept namespace filters but do not project an authorized namespace catalog, cache-scope ownership, rescope lifecycle, or the required invalidation of terminal and port-forward sessions.",
+            "rationale": "URL namespace values alone cannot establish whether a namespace is listable, cache-scoped, or safe to switch, so the product retains only its existing normalized filter state until the server contract exists."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/package.json": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:toolchain:shared-ui:dependency-baseline:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json dependencies and devDependencies",
+          "interaction": "noninteractive build configuration: shared UI dependency upgrades are represented by the product-owned standalone package baseline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The standalone package already pins the updated UI dependency baseline in one product-owned manifest. This is build compatibility evidence only and does not claim that every dependent source surface is ported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:shared-ui:typescript-transition:v1",
+          "legacyContractIds": [],
+          "symbol": "scripts.tsc and scripts.tsc:ts6",
+          "interaction": "noninteractive build configuration: a transitional external TypeScript compiler launcher is exposed for the reusable source package",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product is one standalone Vite application and pins its supported TypeScript build through `tsc -b`; adding the isolated package's cross-package future-compiler shim would create a second unsupported build authority.",
+            "rationale": "The product test records the one supported compiler entrypoint so this source-only transition cannot be mistaken for a completed runtime port."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/Badge.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:badge:warning:foreground-variant:v1",
+          "legacyContractIds": [],
+          "symbol": "SEVERITY.warning",
+          "interaction": "noninteractive warning badge presentation resolves its foreground through a shared semantic token rather than a theme-specific hue class",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.badge"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Badge now exposes one warning variant that consumes shared status surface, border, and semantic foreground tokens. No feature page owns a copied warning color."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:badge:resource-kind:palette:v1",
+          "legacyContractIds": [],
+          "symbol": "KIND.Workflow, KIND.CronWorkflow, KIND.WorkflowTemplate, KIND.ClusterWorkflowTemplate, KIND.ScaledJob",
+          "interaction": "noninteractive resource-kind palette extends upstream color choices for workflow and scaled-job resource labels",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.resource-kind.palette"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no server-described resource presentation palette or typed resource-kind Badge API. Copying upstream kind-to-hue strings into a generic primitive would make browser-owned Kubernetes taxonomy and duplicate feature styling.",
+            "rationale": "The shared Badge test keeps the current semantic-only API explicit; workflow and scaled-job colors remain unported until the resource contract owns their presentation metadata."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/Collapse.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:collapse:lazy-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "Collapse and CollapseChevron",
+          "interaction": "controlled disclosure lazily mounts heavy content, retains it after first open, and removes closed content from keyboard and accessibility traversal while its grid row collapses",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "The grid-row disclosure and its rotating caret keep state feedback but suppress transitions when reduced motion is requested.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/Collapse.tsx",
+              "frontend/src/shared/ui/primitives/collapse.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/collapse.tsx",
+              "frontend/src/shared/ui/primitives/collapse.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.collapse.disclosure"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned primitive uses a controlled state boundary and canonical slots. It retains source lazy-mount behavior while adding `aria-hidden` alongside `inert` so hidden interactive descendants cannot be reached by assistive technology."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/MultiSelectPicker.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:multi-select:render-contract-test:v1",
+          "legacyContractIds": [],
+          "symbol": "MultiSelectPicker SSR render contract",
+          "interaction": "controlled multi-select verification covers option rows, search threshold, empty states, selected summary, unavailable clear action, and visible-set bulk labels",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/multi-select-picker.tsx",
+              "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.multi-select.controlled"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product test exercises the same reusable picker through actual user interactions instead of source-runtime SSR markup, including owner-controlled selection and completion callbacks."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/MultiSelectPicker.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:multi-select:controlled-filter:v1",
+          "legacyContractIds": [],
+          "symbol": "MultiSelectPicker",
+          "interaction": "controlled multi-select filters a host-provided item list, toggles checkbox values, applies bulk changes only to visible values, and returns clear and completion events to its owner",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/multi-select-picker.tsx",
+              "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.multi-select.controlled"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product primitive keeps data and all visible copy owner-provided. It does not derive resource kinds, namespaces, authorization, or labels in the browser, so every scoped filter can reuse one behavior safely."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/SelectMenu.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:select-menu:keyboard-dismissal:v1",
+          "legacyContractIds": [],
+          "symbol": "SelectMenu",
+          "interaction": "single-select menu opens from a named trigger, exposes option selection, dismisses on Escape and outside pointer input without mutation, and indicates open state with a rotating caret",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "The open-state caret retains its semantic expanded state while its transform transition is disabled for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/SelectMenu.tsx",
+              "frontend/src/shared/ui/primitives/select.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/select.tsx",
+              "frontend/src/shared/ui/primitives/select.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.select-menu.dismissal"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Base UI Select supplies the source menu semantics with stronger keyboard and focus handling. Its trigger now owns a shared expanded-state caret motion token rather than feature-local chevrons."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/ConfirmDialog.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:confirmation-dialog:action-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "ConfirmDialog confirmDisabled and className",
+          "interaction": "confirmation dialog keeps an owner-supplied action unavailable while validation is incomplete, supports custom panel width, and preserves pending dismissal policy",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/confirmation-dialog.tsx",
+              "frontend/src/shared/ui/primitives/confirmation-dialog.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.confirmation-dialog.safety"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned ConfirmationDialog takes labels, detail, validation, pending state, and custom content from its caller. It centralizes action gating without deriving command data or hardcoding feature copy."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/DialogPortal.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:dialog-portal:nested-escape:v1",
+          "legacyContractIds": [],
+          "symbol": "DialogPortal Escape dispatch and modal ordering",
+          "interaction": "modal portal transfers focus, closes only the topmost dialog on Escape, and keeps nested dialog dismissal from leaking to an outer modal",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "Dialog backdrop and panel preserve their open/closed state while animation and duration are disabled for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/DialogPortal.tsx",
+              "frontend/src/shared/ui/primitives/dialog.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/dialog.tsx",
+              "frontend/src/shared/ui/primitives/primitives.accessibility.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.dialog.nested-escape"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product dialog delegates portal ordering, focus return, and nested dismissal to the shared Base UI primitive. The accessibility test now proves the source topmost-Escape invariant without importing the source runtime."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/PaneLoader.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:pane-loader:stable-label:v1",
+          "legacyContractIds": [],
+          "symbol": "PaneLoader children and bounded label geometry",
+          "interaction": "pane-local loading indicator keeps the spinner at the geometric center while an owner-supplied label and optional detail render in a bounded region below it",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "The shared spinner keeps status semantics but stops its decorative rotation when reduced motion is requested.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/PaneLoader.tsx",
+              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/primitives/spinner.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/primitives/pane-loader.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.pane-loader.geometry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product PaneLoader ports the changed stable-label and optional-detail behavior with the shared accessible Spinner. The unchanged source-specific image asset is intentionally not imported into the product runtime."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/Input.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "Input",
+          "interaction": "a reusable text input defaults browser autocorrection and automatic capitalization off for Kubernetes identifiers while allowing an explicit caller override and typed native focus ownership",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.input.identifier-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Input now exposes a typed forwarded HTMLInputElement ref and applies identifier-safe defaults without taking style, value, validation, or copy ownership away from its caller."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/SearchBox.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:search-box:focus:external-ref-handoff:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchBox inputRef",
+          "interaction": "a route-owned list shortcut focuses the exact externally owned shared search input instead of a detached local ref",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases"
+            ],
+            "plannedTestIds": [
+              "helm.release-list.search-shortcut"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Helm list retains one route-owned shortcut listener and passes its typed ref directly to the shared Input, preventing the prior detached-ref focus failure without DOM queries or selectors."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:search-box:shortcut:registration-ownership:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchBox shortcutEnabled",
+          "interaction": "a reusable search wrapper can suppress its own slash registration when a parent already owns the same shortcut",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/shortcutRegistry.ts",
+              "frontend/src/pages/helm/HelmPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.search-box.lifecycle"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product shortcut registry intentionally has no extensible route-scoped single-key registration API or help-overlay descriptor for this generic control. Helm has one route-owned listener, so duplicating the source wrapper registration would create a second shortcut authority.",
+            "rationale": "The completed Helm focus path has one owner; reusable registration metadata remains deferred until it can join the product shortcut authority rather than bypass it."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:search-box:lifecycle:blur-callback:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchBox onBlur",
+          "interaction": "a collapsible search owner can react to input blur without forcing the shared input to own expansion state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases"
+            ],
+            "plannedTestIds": [
+              "shared-ui.search-box.lifecycle"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Helm release search is permanently visible and has no typed collapsed/expanded presentation state. Adding a no-op blur callback would not preserve the source lifecycle.",
+            "rationale": "This stays explicit until a product route exposes a real owner-controlled collapsible search contract."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/SearchPillInput.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:structured-search:input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchPillInput Input",
+          "interaction": "the editable segment of a structured filter delegates browser text-mutation policy to the one shared typed input primitive",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/shared/ui/SearchPillInput.test.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.search-pill.input-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing structured filter already consumes the shared Input; its regression test now proves the source policy is inherited rather than copied as raw input attributes."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/CodeViewer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:code-viewer:find-input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "CodeViewer find Input",
+          "interaction": "the code-viewer find control uses the shared identifier-safe input rather than a raw browser input",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.resource_manifests"
+            ],
+            "plannedTestIds": [
+              "shared-ui.code-viewer.search"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has an authorized YAML editor but no server-backed code-viewer/find projection. Adding an isolated client-side find box would not preserve source search, selection, or source-freshness semantics.",
+            "rationale": "The shared Input is ready, but no code-viewer surface claims this behavior until its read contract exists."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/ResourceBar.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resource-bar:capacity:quiet-inline-marker:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceBar quiet layout and marker",
+          "interaction": "a resource-capacity bar supports a non-alarmist utilization palette, inline label layout, and a separate scheduler-capacity marker",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "Any future capacity fill must retain its percentage and threshold meaning while width transitions are disabled for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/ResourceBar.tsx",
+              "frontend/src/shared/ui/primitives/progress.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/progress.tsx",
+              "frontend/src/features/home/homeContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.home.overview"
+            ],
+            "plannedTestIds": [
+              "shared-ui.resource-bar.capacity"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Home projection supplies percentages only; it does not supply typed used, allocatable, request-marker, or scheduling-pressure evidence. Mapping a percentage to the source capacity bar would fabricate a denominator and threshold state in the browser.",
+            "rationale": "The existing generic Progress remains correct for determinate operation state. A capacity-specific primitive waits for a server-owned capacity contract."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/theme/tailwind-theme.css": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:warning:utility-alias:v1",
+          "legacyContractIds": [],
+          "symbol": "@theme inline --color-warning-text",
+          "interaction": "noninteractive Tailwind theme alias exposes the semantic warning foreground to shared component utilities",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/styles/tokens.css",
+              "frontend/src/styles/tokens.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.token"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product @theme alias maps `text-warning-foreground` to one shared CSS variable, keeping the upstream warning-text behavior available without feature-local aliases."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/theme/variables.css": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:warning:foreground-token:v1",
+          "legacyContractIds": [],
+          "symbol": ":root --warning-text",
+          "interaction": "noninteractive warning text foreground supplies distinct accessible light and dark values",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/styles/tokens.css",
+              "frontend/src/styles/tokens.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.token"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product token layer owns the exact upstream light `#92400E` and dark `#FBBF24` foreground values, exposed only through the reusable warning-foreground semantic name."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:design:sheet:drawer-shadow:v1",
+          "legacyContractIds": [],
+          "symbol": ".dark --shadow-drawer",
+          "interaction": "noninteractive dark drawer elevation retunes a one-direction horizontal shadow and adds a light outline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/sheet.tsx",
+              "frontend/src/shared/ui/primitives/sheet.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.sheet.drawer-shadow.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product Sheet is a tested four-direction overlay primitive, while this upstream token defines only one horizontal drawer shadow. Applying that left-facing shadow to top, bottom, and opposite-side panels would create a directionally incorrect elevation treatment.",
+            "rationale": "The product keeps its canonical Sheet elevation, focus, overlay, and reduced-motion boundary visible in the primitive test. A directional shadow port is deferred until a side-aware token contract covers all four product panel directions."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/assets/gitops/argocd.png": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:argocd:provider-asset:v1",
+          "legacyContractIds": [],
+          "symbol": "assets/gitops/argocd.png",
+          "interaction": "noninteractive asset: Argo CD provider mark is preserved byte-for-byte behind the shared GitOps provider identity registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
+              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.provider-assets.provenance"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/assets/gitops/flux.svg": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:flux:provider-asset:v1",
+          "legacyContractIds": [],
+          "symbol": "assets/gitops/flux.svg",
+          "interaction": "noninteractive asset: Flux provider mark is preserved byte-for-byte behind the shared GitOps provider identity registry",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/brand/gitOpsProviderAssets.ts",
+              "frontend/src/shared/brand/gitOpsProviderAssets.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.provider-assets.provenance"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The canonical shared registry now owns the exact product asset and its provenance test. No GitOps, application, or topology product surface consumes this mark yet, so this evidence records only the completed static-asset boundary and does not claim UI parity."
+          }
+        }
+      ]
+    },
+    "web/index.html": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:document:standalone:mount-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "index.html mount element",
+          "interaction": "noninteractive document configuration: a reusable host stylesheet isolates its mount selector from the host application root",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/index.html",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product is a standalone web and desktop application, not an embeddable host stylesheet. Its single `#root` mount is intentional and the source mount identifier is a prohibited legacy product term.",
+            "rationale": "The document test proves that the product has exactly one explicit root and local bootstrap script without copying the isolated host-library mount convention."
+          }
+        }
+      ]
+    },
+    "web/package.json": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:dependency-baseline:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json dependency and lint baseline",
+          "interaction": "noninteractive build configuration: web dependency and lint upgrades are represented by the current standalone product manifest",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product manifest already pins the matching browser dependency and lint/test baseline under its own package boundary. This proves only build compatibility, not a claim that source library consumers are supported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:library-publishing:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json main, types, exports, files, and sideEffects",
+          "interaction": "noninteractive build configuration: the source app publishes a reusable browser library with host-facing entrypoints",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product ships one authenticated web application and a Tauri shell, not a reusable browser library; publishing source entrypoints would expose the isolated runtime and violate the product boundary.",
+            "rationale": "The product manifest test proves that no library main or export surface is silently introduced."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:typescript-transition:v1",
+          "legacyContractIds": [],
+          "symbol": "scripts.build, scripts.tsc, scripts.tsc:ts6, and scripts.test",
+          "interaction": "noninteractive build configuration: source library scripts delegate to a transitional compiler launcher and package-local test command",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product owns one TypeScript project-reference build and whole-console test command. The source transitional compiler launcher and source-local test scope cannot be adopted without adding a parallel package build contract.",
+            "rationale": "The product test keeps the supported build and test commands explicit while preserving the source delta as blocked rather than ported."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline/index.ts",
+          "interaction": "public timeline primitives compose through one product-owned route surface",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.public-api.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route already owns the shell and contract boundary; the upstream barrel is reference-only."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/scrubber-math.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:scrubber-math:range-invariants-test:v1",
+          "legacyContractIds": [],
+          "symbol": "scrubber-math.test.ts",
+          "interaction": "range, lens, and zoom-rung calculations keep a positive bounded selection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "frontend/src/features/timeline/timelineUrlState.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.math"
+            ],
+            "state": "blocked",
+            "blockedReason": "TimelineCapabilityDescriptor does not yet describe lens minimums or server-approved zoom rungs.",
+            "rationale": "The browser must not invent range limits or a day-based zoom ladder."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/scrubber-math.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:scrubber-math:range-invariants:v1",
+          "legacyContractIds": [],
+          "symbol": "scrubber-math",
+          "interaction": "pointer and keyboard lens changes clamp within the selected query range",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "range changes expose their final value without animated movement",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/scrubber-math.ts",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "frontend/src/pages/timeline/TimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.math",
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "Server capability data for minimum lens window, keyboard step, and zoom rungs is absent.",
+            "rationale": "The retained strip must use descriptor values rather than hardcoded range arithmetic."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/shared.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:shared:marker-semantics-test:v1",
+          "legacyContractIds": [],
+          "symbol": "shared.test.tsx",
+          "interaction": "timeline marker and severity presentation remains semantically stable",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.shared.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Current event cards already consume typed activity, event type, and severity values."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/shared.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:shared:marker-semantics:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline shared renderers",
+          "interaction": "semantic event identity drives consistent list and lane markers",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/timelineLabels.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.shared.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Typed event labels and views are product-owned and do not import upstream renderers."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-filters.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:filters:canonical-url-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-filters.test.ts",
+          "interaction": "activity, kinds, deletion, search, and selected-event filters round-trip through URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.test.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.requests",
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.filters.url"
+            ],
+            "state": "blocked",
+            "blockedReason": "The server has no facet response to drive filter availability and independent counts.",
+            "rationale": "URL parsing exists, but dynamic toolbar choices must come from an authorized aggregation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-filters.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:filters:canonical-url:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-filters",
+          "interaction": "filter predicates use canonical activity and kind selections without client fixture data",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineContract.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "src/domains/timeline/predicate.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.requests",
+              "domains.timeline.predicate",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.filters.url",
+              "timeline.toolbar.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "Facet aggregation and the server control catalog are not yet defined.",
+            "rationale": "Existing predicates accept filters, but the UI cannot safely infer selectable values or counts."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-lane-sort.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:lane-sort:projection-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-lane-sort.test.ts",
+          "interaction": "importance, recency, and name lane ordering is deterministic for one authorized projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+              "frontend/src/features/timeline/timelinePresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.lanes.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The snapshot has events but no server lane aggregation or sort projection for large timelines.",
+            "rationale": "Client-only grouping would duplicate data logic and exceed smooth-update limits."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-lane-sort.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:lane-sort:projection:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-lane-sort",
+          "interaction": "lane order follows a server-defined grouping and sort projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelinePresentation.ts",
+              "frontend/src/pages/timeline/TimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.lanes.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "Grouping and sort enum values exist, but the backend does not emit a bounded lane projection.",
+            "rationale": "The product must not hardcode upstream lane ordering heuristics."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-live.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:live:window-state-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-live.test.ts",
+          "interaction": "live and frozen range state preserves its cursor and reports unseen events",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "bounded snapshot reducer keyed by source event identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.streams"
+            ],
+            "plannedTestIds": [
+              "timeline.live.stream"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current stream has no overview-derived frozen-window unseen-event count.",
+            "rationale": "Snapshot and SSE behavior exist, while the Go-live affordance needs a truthful server count."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/timeline-live.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:live:window-state:v1",
+          "legacyContractIds": [],
+          "symbol": "timeline-live",
+          "interaction": "live selection advances through server sessions while frozen selection remains stable until Go live",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "replace expired live sessions with a fresh bounded snapshot"
+          },
+          "motion": {
+            "reducedMotion": "live return updates selection without smooth scrolling",
+            "evidence": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.streams",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.live.stream",
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "The live default window and frozen-window update counter are not server-described.",
+            "rationale": "The client already follows a negotiated stream policy and must extend that policy rather than poll."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineList.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:list:event-detail:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineList",
+          "interaction": "ordered events open a detail view using a ledger-unique selected event key",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.list.detail"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product list and detail sheet already use the typed sourceKey selection model."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineStrip.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:strip:controls-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineStrip.test.tsx",
+          "interaction": "query-range controls, histogram lens interaction, escape handling, and Go live are verified together",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "No overview response or control descriptor exists to supply range presets, bucket data, and lens constraints.",
+            "rationale": "The strip cannot be tested honestly until its input data is server-owned."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineStrip.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:strip:controls:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineStrip",
+          "interaction": "range picker refetches selection while drag, resize, draw, and keyboard controls change a local lens",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "lens, live return, and calendar selection do not animate under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/TimelineStrip.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "packages.contracts.timeline.models",
+              "domains.timeline.coverage"
+            ],
+            "plannedTestIds": [
+              "timeline.strip.controls",
+              "timeline.strip.math"
+            ],
+            "state": "blocked",
+            "blockedReason": "TimelineCapabilityDescriptor and snapshot contracts do not yet contain retained overview, preset, or lens descriptor fields.",
+            "rationale": "Selection and lens must be structurally separate and driven by server limits."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineSwimlanes.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:swimlanes:grouping-pins-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineSwimlanes.test.tsx",
+          "interaction": "grouped lanes, pinned lanes, and pinned-only filtering honor capability and persisted user state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+              "frontend/src/features/timeline/timelinePresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.pins",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.swimlanes.grouping"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no persisted pin contract and pinned_only is intentionally absent from server predicate and replay identity.",
+            "rationale": "A localStorage copy would be a false multi-workspace and multi-device implementation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineSwimlanes.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:swimlanes:grouping-pins:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineSwimlanes",
+          "interaction": "lane grouping, sorting, and pins present one stable timeline projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "lane updates retain final order without layout animation",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/TimelineSwimlanes.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelinePresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "domains.timeline.aggregation",
+              "packages.contracts.timeline.pins"
+            ],
+            "plannedTestIds": [
+              "timeline.swimlanes.grouping",
+              "timeline.lanes.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The service has no lane aggregation or authenticated user pin projection.",
+            "rationale": "Current swimlanes may show typed events, but cannot implement upstream pin semantics truthfully."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineToolbar.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:toolbar:controls-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineToolbar.test.tsx",
+          "interaction": "search, activity, kinds, deletion, view, sort, and overlay controls are keyboard and focus tested",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.toolbar.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "The server does not describe the control catalog or return facet counts for the toolbar.",
+            "rationale": "A hardcoded menu would diverge from the authorized data source."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineToolbar.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:toolbar:controls:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineToolbar",
+          "interaction": "slash search, escape, activity and problem chips, kinds picker, deleted filter, view menu, legend, and view toggle write canonical state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "popover state and filter result changes remain legible without animated transitions",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/timeline/TimelineToolbar.tsx",
+              "frontend/src/shared/ui/primitives.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineUrlState.ts",
+              "frontend/src/features/timeline/useTimelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.toolbar.controls",
+              "timeline.filters.url"
+            ],
+            "state": "blocked",
+            "blockedReason": "Control availability, kind facets, activity counts, and pin capability are not server-described.",
+            "rationale": "The current URL state is reusable, but its controls must consume a strict descriptor and aggregation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/timeline/TimelineToolbarState.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:toolbar:state-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineToolbarState.test.tsx",
+          "interaction": "activity and problem controls project to canonical backend activity filters",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.test.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.requests",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.toolbar.state"
+            ],
+            "state": "blocked",
+            "blockedReason": "Activity source and problem projection availability are not part of the existing capability descriptor.",
+            "rationale": "The mapping must be verified against backend-defined activity semantics, not display text."
+          }
+        }
+      ]
+    },
+    "web/src/api/timelineSource.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:source-api:contract-test:v1",
+          "legacyContractIds": [],
+          "symbol": "timelineSource.test.ts",
+          "interaction": "timeline source API requests preserve selected mode and retained-range behavior",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated max frames per second",
+            "merge": "snapshot then ordered stream frames"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.test.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.requests",
+              "packages.contracts.timeline.overview"
+            ],
+            "plannedTestIds": [
+              "timeline.source-contract",
+              "timeline.adapter.source"
+            ],
+            "state": "blocked",
+            "blockedReason": "The overview endpoint and expanded control descriptor are not yet available at the Python API boundary.",
+            "rationale": "Existing adapter tests cover snapshot and stream; expanded requests require one typed API contract."
+          }
+        }
+      ]
+    },
+    "web/src/api/timelineSource.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:source-api:contract:v1",
+          "legacyContractIds": [],
+          "symbol": "timelineSource",
+          "interaction": "source transport reads retained history and live events without importing the upstream runtime",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated max frames per second",
+            "merge": "snapshot then ordered stream frames"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/timeline.ts",
+              "frontend/src/features/timeline/createTimelineAdapter.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.requests",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.source-contract",
+              "timeline.adapter.source"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product already isolates HTTP and SSE behind a typed TimelinePort adapter."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/LocalTimelineScrubber.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:local-scrubber:source-range:v1",
+          "legacyContractIds": [],
+          "symbol": "LocalTimelineScrubber",
+          "interaction": "local timeline source selects an explicit range without bypassing route capabilities",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/createTimelineSurface.tsx",
+              "frontend/src/features/timeline/timelineContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.local-scrubber"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Local versus retained source mode is already authenticated and capability-gated before route render."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/RetainedTimelineScrubber.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:retained-scrubber:overview-lens:v1",
+          "legacyContractIds": [],
+          "symbol": "RetainedTimelineScrubber",
+          "interaction": "retained-history overview renders bucketed evidence, coverage gaps, lens selection, and frozen-window new-event count",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "lens changes are direct and do not smooth-scroll under reduced motion",
+            "evidence": [
+              "references/upstream/web/src/components/timeline/RetainedTimelineScrubber.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/pages/timeline/TimelineCoverageNotice.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.overview",
+              "domains.timeline.coverage",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.retained-overview",
+              "timeline.strip.controls"
+            ],
+            "state": "blocked",
+            "blockedReason": "Python currently returns coverage intervals but no retained overview buckets, facets, or frozen-window counter.",
+            "rationale": "The histogram must be rendered from authoritative aggregation, never synthesized from a capped event list."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/TimelineList.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:web-list:event-detail:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineList",
+          "interaction": "web list rendering preserves selection and event navigation through URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineEventViews.tsx",
+              "frontend/src/pages/timeline/TimelineEventDetailSheet.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models"
+            ],
+            "plannedTestIds": [
+              "timeline.list.detail"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The current surface already restores event focus and uses the non-colliding source key."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/TimelineView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:web-view:route-state:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineView",
+          "interaction": "timeline route composes source mode, URL state, filters, list or lanes, retained range, and live stream lifecycle",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "bounded snapshot reducer with resync on invalid cursor"
+          },
+          "motion": {
+            "reducedMotion": "status and selection changes retain feedback without smooth scroll or layout motion",
+            "evidence": [
+              "references/upstream/web/src/components/timeline/TimelineView.tsx",
+              "frontend/src/pages/timeline/TimelineEventViews.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "frontend/src/pages/timeline/useTimelineDataFrame.ts",
+              "frontend/src/features/timeline/useTimelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.overview",
+              "domains.timeline.streams",
+              "domains.timeline.aggregation"
+            ],
+            "plannedTestIds": [
+              "timeline.view.integration",
+              "timeline.url.history",
+              "timeline.live.stream"
+            ],
+            "state": "blocked",
+            "blockedReason": "The route lacks the server-described toolbar and retained overview contracts required for full parity.",
+            "rationale": "The existing route is the migration destination, but must retain its Python/SSE architecture rather than execute upstream code."
+          }
+        }
+      ]
+    },
+    "web/src/components/timeline/TimelineView.urlparams.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:web-view:url-history-test:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineView.urlparams.test.ts",
+          "interaction": "view, range, activity, kinds, deletion, pin, grouping, sort, and event keys restore through deep links and history",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineUrlState.test.ts",
+              "frontend/src/features/timeline/timelineUrlState.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "packages.contracts.timeline.pins"
+            ],
+            "plannedTestIds": [
+              "timeline.url.history"
+            ],
+            "state": "blocked",
+            "blockedReason": "pinnedOnly is currently inert because no authenticated pin contract or replay-identity revision exists.",
+            "rationale": "All other URL keys can remain reusable; pin state must not be claimed until it has server semantics."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/applications/AppChips.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog:batch-signal-chip:v1",
+          "legacyContractIds": [],
+          "symbol": "BatchSignalChip",
+          "interaction": "a catalog or detail row exposes one typed batch signal badge and its explanatory tooltip only when the authorized projection supplies a signal",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime",
+              "applications.detail.overview-projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python-owned batch runtime projection and shared catalog/detail channel now carry availability, completeness, status, and retained-run counters without browser inference; source-equivalent grouping and explanatory tooltip coverage remain in progress."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/applications/ApplicationDetail.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:detail:scope-and-view-parity-test:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationDetail shell tests",
+          "interaction": "controlled application versus workload scope, overview/topology/history/cost selection, single-workload defaulting, and invalid workload recovery preserve the selected route state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationsSurface.test.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.scope-tabs",
+              "applications.detail.parity"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Typed opaque workload scope now comes only from authorized direct manifest-bound inventory; the workspace defaults only one exact workload and canonicalizes unavailable keys without disclosing them. Direct workspace tests prove URL state and app/workload data isolation, while optional cost remains explicitly unavailable."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:evidence-and-batch-parity-test:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationDetail evidence tests",
+          "interaction": "overview and history avoid duplicating current incidents, distinguish runtime from delivery health, preserve source provenance and conflicts, and report batch outcomes without treating idle jobs as serving failures",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+              "tests/test_application_product_contract.py",
+              "tests/test_application_product_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.delivery-status",
+              "applications.detail.overview-projection",
+              "applications.detail.history"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Strict Python and Zod contracts now distinguish runtime, delivery, batch, source conflict, and bounded partial history; focused router, contract, adapter, and surface tests prove the implemented evidence while remaining source-specific interactions are tracked separately."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/applications/ApplicationDetail.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:detail:scope-tabs-and-cost:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationDetail, ApplicationWorkspace, ApplicationViewTabs",
+          "interaction": "back navigation, controlled application/workload scope, overview/topology/history tabs, and an optional cost tab select exactly one application workspace without rendering workload runtime in app scope",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "tab and scope selection retain their final selected state without transform or color-transition motion when reduced motion is requested",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:ApplicationViewTabs",
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:ApplicationScopeSelector"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationFilters.ts",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.scope-tabs",
+              "applications.detail.parity"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The normalized Python contract and route-owning workspace now provide URL-backed application/workload scope, workload-only overview/topology/history, and strict tab/data isolation. Workload runtime and unavailable history use only workload evidence; optional cost is explicitly unavailable while source-specific cost-tab parity remains in progress."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:overview-evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationOverview and overview panels",
+          "interaction": "overview combines operational issues, runtime and deployment delivery verdicts, restart warnings, workload matrix, retained batch activity, deployment-source provenance, and authorized entrypoint/dependency resource links",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx",
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.overview-projection",
+              "applications.catalog.delivery-status"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail projection now supplies independent runtime, delivery, batch, source provenance/conflict, and server-authorized relationship evidence to the existing overview; workload-matrix and full source-specific navigation parity remain in progress."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:topology-drilldown:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationTopology and TopologyWorkloadLegend",
+          "interaction": "authorized application topology colors workload ownership, hover-focuses the matching rail row, expands stable ReplicaSets, drills workload nodes into runtime, routes generated runs to their parent, routes related resources to detail, and labels deployment-source-only versus runtime-only resources",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "hover focus, legend selection, and ReplicaSet expansion remain immediate state changes without graph camera or layout animation under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:ApplicationTopology",
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:TopologyWorkloadLegend"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.detail.topology"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail contract now renders server-authorized inventory graph nodes and ownership, scheduling, selector, or routing edges with completeness and freshness evidence; interactive graph focus, ReplicaSet expansion, and source-equivalent drilldowns remain in progress."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:history-and-source-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationHistoryView, ApplicationLatestHistory, ApplicationLatestChangeFact",
+          "interaction": "history exposes loading and partial-source state, current incidents, deployment anchors, retained latest-change or incident preview, direct workload navigation only for unambiguous objects, and source-view navigation without duplicate actions",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/ApplicationDeploymentsPanel.tsx",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.history"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail contract now supplies ordered, bounded deployment and incident history with explicit partial-source reason codes and source provenance/conflict evidence; direct workload and source-view navigation remain in progress."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:detail:identity-environment-switcher:v1",
+          "legacyContractIds": [],
+          "symbol": "EnvSwitcher and ApplicationScopeSelector",
+          "interaction": "environment siblings switch among real application instances, show confidence/evidence and promotion lag, scale from inline pills to a searchable listbox, and dismiss scope/environment popovers on outside pointer or Escape",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "chevron rotation and color transitions are suppressed while popover open/close and selection remain fully perceivable under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:EnvSwitcher",
+              "references/upstream/packages/k8s-ui/src/components/applications/ApplicationDetail.tsx:useDismissablePopover"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationFilters.ts",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "frontend/src/features/applications/createApplicationsAdapter.ts",
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "src/domains/applications/product_projection.py",
+              "src/domains/applications/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.router"
+            ],
+            "plannedTestIds": [
+              "applications.detail.identity-switcher",
+              "applications.detail.scope-tabs"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python detail contract now projects only authorized immutable deployment-binding identities with workspace, cluster, namespace, and freshness evidence. The typed adapter and URL-backed selector scope detail, deployments, and drift reads to that server-selected identity; searchable large-list UX, promotion-lag evidence, and workload scope parity remain in progress."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/applications/ApplicationsView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog:job-runtime-and-sort:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationRuntimeCell and runtimeSortValue",
+          "interaction": "catalog status strips, runtime cells, status facets, and ready-column sorting use batch runtime state for job apps while retaining serving readiness for non-job apps; grouped rows explain mixed runtime states in a tooltip",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationsSurface.tsx",
+              "frontend/src/features/applications/ApplicationsTable.tsx",
+              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime",
+              "applications.catalog.delivery-status"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Catalog cards and table rows now consume server-projected runtime, delivery, and batch-runtime evidence without browser inference; source-equivalent workload-class grouping and sort precedence remain in progress."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:catalog:batch-signal-priority:v1",
+          "legacyContractIds": [],
+          "symbol": "firstBatchSignal and list row badges",
+          "interaction": "single and folded application rows show the highest-severity non-job batch signal with a shared explanatory tooltip while job rows present their runtime state instead",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationCard.tsx",
+              "frontend/src/features/applications/ApplicationsTable.tsx",
+              "frontend/src/features/applications/applicationPresentation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Shared catalog surfaces now render one server-supplied batch-runtime channel with availability and completeness rather than deriving raw workload state; source-equivalent grouped highest-severity selection remains in progress."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/applications/applications-view.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog:delivery-batch-aggregation-test:v1",
+          "legacyContractIds": [],
+          "symbol": "buildSingleAppEntry parity tests",
+          "interaction": "catalog aggregation verifies delivery degradation overrides runtime-only display when appropriate and a successful retained batch outcome is not falsely presented as an unhealthy serving workload",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+              "tests/test_application_product_contract.py",
+              "src/domains/applications/product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.catalog.batch-runtime",
+              "applications.catalog.delivery-status",
+              "applications.detail.overview-projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Python contract and projection tests plus adapter and surface tests now cover independent runtime, delivery, and retained batch evidence; the remaining source-specific aggregation precedence is still in progress."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/applications/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:public-api:application-view-type:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationView type export",
+          "interaction": "a product-owned application detail boundary exposes a typed application view selection instead of coupling consumers to the source component implementation",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "applications.public-api",
+              "applications.detail.scope-tabs"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "ApplicationDetailWorkspace already owns a typed private tab union and URL controller; it is the correct starting point for a reusable product boundary, although it does not yet expose source-equivalent views."
+          }
+        }
+      ]
+    },
+    "web/src/context/TimelineSource.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:source-context:composition:v1",
+          "legacyContractIds": [],
+          "symbol": "TimelineSourceProvider",
+          "interaction": "source selection and transport are composed outside individual timeline controls",
+          "transport": "sse",
+          "realtime": {
+            "resume": "opaque cursor resume",
+            "backpressure": "server negotiated frame-rate coalescing",
+            "merge": "single TimelinePort stream ownership per read session"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/createTimelineAdapter.ts",
+              "frontend/src/pages/timeline/createTimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline.models",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.source-context",
+              "timeline.adapter.source"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Composition already occurs through TimelinePort and the capability-gated route factory."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/GitOpsDetailLayout.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:detail:argo-operation-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsDetailLayout / ArgoActionHandlers",
+          "interaction": "an Argo sync action is disabled with a reason while an operation owns the application slot, while authorized refresh actions remain independently available",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the audited command stream from its durable operation cursor",
+            "backpressure": "coalesce non-terminal progress updates per command attempt",
+            "merge": "accept terminal state only when command, attempt, resource identity, and scope match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.operation-gate"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The provider-neutral detail projection now carries a typed GitOpsApplication ResourceRef, observed Opsia workflow gate, and separate authorized refresh/sync capability reasons. Both commands remain disabled until a provider-neutral audited CommandReceipt executor and event stream exist."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:detail:revision-metadata-slot:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsDetailLayout.renderRevisionMeta",
+          "interaction": "the detail status strip can render host-supplied commit author and signature metadata beside the exact latest revision",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.revision-meta"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The detail projection now carries only an observed source revision, bound to the application detail response. Commit author, signature, and controller provenance remain unavailable rather than inferred in the browser."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/GitOpsGraphFilterRail.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:topology:controlled-filter-input:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsGraphFilterRail search Input",
+          "interaction": "a shared controlled text input filters an authorized GitOps topology while preset and facet callbacks remain owned by the route",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.graph-filter.input"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia has a reusable accessible input primitive but no GitOps topology route, typed tree projection, or graph filter state to consume it.",
+            "rationale": "The generic Input is not evidence of source-equivalent resource filtering until it is connected to a server-authorized GitOps tree."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/GitOpsTableView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:row-operation-conflict-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "buildRowActionItems",
+          "interaction": "an Argo fleet-row Sync action exposes an operation-in-progress reason and refuses a conflicting second sync while keeping refresh semantics separate",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume each row command from the command receipt cursor",
+            "backpressure": "coalesce progress events by command attempt without losing a terminal event",
+            "merge": "merge only events whose scope and immutable resource reference equal the open row"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.operation-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "GitOpsSyncTableView lists deployment bindings and polling status only; it does not receive Argo operation phase, per-resource capabilities, or row command receipts.",
+            "rationale": "The row must be driven by the same server operation state as the detail action, never by local pending flags alone."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:controlled-search-input:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsTableView search Input",
+          "interaction": "the fleet search field remains a controlled shared input for application, repository, and path filtering",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.search-input"
+            ],
+            "state": "blocked",
+            "blockedReason": "The existing sync table has no application/repository/path query state and its adapter cannot project the controller fields searched by the source view.",
+            "rationale": "Filtering must operate on a typed GitOps catalog projection, not on browser-normalized unknown payloads."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:label-dropdown-input:v1",
+          "legacyContractIds": [],
+          "symbol": "LabelsDropdown search Input",
+          "interaction": "the labels popup autofocuses a controlled search, combines selected labels with AND semantics, clears selection, and dismisses outside the popup",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.labels-input"
+            ],
+            "state": "blocked",
+            "blockedReason": "No GitOps catalog contract exposes authorized labels, label facet counts, or a stable row identity for the current sync table.",
+            "rationale": "A local label dropdown would silently invent a client-only subset and cannot be considered an equivalent fleet filter."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/ManagedResourcesList.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:managed-resources:lazy-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "ManagedResourcesList / ResourceKindGroup",
+          "interaction": "managed-resource and kind disclosures lazily mount grouped inventory, retain show-all state, and expose expanded state with a shared collapse affordance",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "disclosure state remains visible while the port disables nonessential expand and chevron animation under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/ManagedResourcesList.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.managed-resources.disclosure"
+            ],
+            "state": "blocked",
+            "blockedReason": "No GitOps detail inventory projection or managed-resource identity exists in the current Python and React GitOps boundary.",
+            "rationale": "Lazy disclosure must be layered over controller inventory, not reconstructed from release-plan steps."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:managed-resources:resource-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceItem",
+          "interaction": "a managed resource invokes route-owned resource navigation and exposes that affordance only when a destination exists",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "gitops.managed-resources.disclosure"
+            ],
+            "state": "blocked",
+            "blockedReason": "Current GitOps data has no Kubernetes ResourceRef/UID per inventory item and therefore cannot navigate safely to an authorized resource drawer.",
+            "rationale": "Navigation needs immutable resource identity rather than a display name and namespace string."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/SyncCountdown.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:reconciliation:duration-countdown:v1",
+          "legacyContractIds": [],
+          "symbol": "SyncCountdown / parseInterval",
+          "interaction": "a controller-provided reconciliation interval and observed sync time produce a resilient countdown that treats imminent work as a distinct state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the imminent indicator remains distinguishable without pulse animation",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/SyncCountdown.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/workflowModel.ts",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-countdown.duration"
+            ],
+            "state": "blocked",
+            "blockedReason": "GitOpsSyncTarget exposes poll observation time but not controller reconciliation interval, suspended state, or an authoritative next-run value.",
+            "rationale": "The browser must only count down from server-projected controller facts and cannot invent a reconciliation schedule."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/SyncOptionsDialog.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:sync-options:selective-payload-test:v1",
+          "legacyContractIds": [],
+          "symbol": "buildArgoSyncOpts tests",
+          "interaction": "tests prove selective resource sync strips revision, prune, and apply-only fields while retaining typed force and sync-option choices",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+              "frontend/src/features/gitops/gitOpsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.payload"
+            ],
+            "state": "blocked",
+            "blockedReason": "The GitOps port defines release-plan actions only and has no typed Argo application or selective resource-sync command payload.",
+            "rationale": "The safety invariant belongs at the product adapter and Python command contract before a dialog can submit it."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/SyncOptionsDialog.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:sync-options:application-and-resource-payload:v1",
+          "legacyContractIds": [],
+          "symbol": "SyncOptionsDialog / buildArgoSyncOpts",
+          "interaction": "full application sync and selective resource sync expose distinct options, reset stale form state on open, and prevent resource sync from enabling prune, revision, or apply-only semantics",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the resulting command by CommandReceipt audit cursor",
+            "backpressure": "retain each terminal validation or execution state and coalesce intermediate progress",
+            "merge": "apply status only to the dialog whose application and resource ResourceRef match the receipt"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.payload",
+              "gitops.sync-options.validation"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no server endpoint or typed CommandRequest for Argo application/resource sync, no resource identity, and no capability check for selective sync in the current GitOps domain.",
+            "rationale": "The dialog cannot reuse generic release-plan submission because Argo selective sync has materially different safety fields and scope."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:sync-options:selective-dry-run-feedback:v1",
+          "legacyContractIds": [],
+          "symbol": "ValidationResult",
+          "interaction": "a selective dry-run shows pending, succeeded, failed, inconclusive, and server-error states, resets stale validation after option changes, and keeps execution gated while an operation is active",
+          "transport": "sse",
+          "realtime": {
+            "resume": "reconnect a validation or command operation using its durable receipt cursor",
+            "backpressure": "coalesce progress but preserve the final outcome and redacted diagnostic evidence",
+            "merge": "reject events whose receipt, resource identity, or validation generation differs from the open dialog"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.validation",
+              "gitops.sync-options.feedback"
+            ],
+            "state": "blocked",
+            "blockedReason": "Current release-plan readiness is plan-level and has no resource-scoped dry-run receipt, outcome enum, redacted diagnostic payload, or operation conflict state.",
+            "rationale": "A client-side success banner would be false; validation feedback must originate from an audited server/agent operation."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/ArgoResourceDiff.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:resource-diff:revision-bound-viewer:v1",
+          "legacyContractIds": [],
+          "symbol": "ArgoResourceDiff / ArgoResourceDiffOverlay",
+          "interaction": "an authorized desired-versus-live resource diff renders loading, error, no-change, secret-masked, inline, and fullscreen states; outside click and Escape close the fullscreen overlay",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the loading skeleton and fullscreen transition render a stable non-animated state when reduced motion is requested",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/insights/ArgoResourceDiff.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "src/domains/gitops/diffing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.diffing",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-diff"
+            ],
+            "state": "blocked",
+            "blockedReason": "domains.gitops.diffing handles repository patch workflows, not an authenticated Argo desired/live resource-diff projection; no frontend GitOps detail surface or immutable resource scope exists.",
+            "rationale": "Diff body, masking, revision, and live-observation provenance must be supplied by Python/agent contracts rather than assembled from browser YAML."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/GitOpsInsightViews.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:revision-health-and-disclosures:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsStatusStrip / GitOpsIssuesBand",
+          "interaction": "revision provenance is rendered beside a health summary that does not mask degraded resources as synchronized, while historical issue and raw-error disclosures retain semantic expanded state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "collapse content and chevrons preserve expanded state without animated transitions under reduced motion",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/insights/GitOpsInsightViews.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.revision-meta",
+              "gitops.insights.status-summary",
+              "gitops.insights.disclosure-motion"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current page has release-plan readiness and feedback, not a GitOps resource summary, controller issue history, health evidence, or revision provenance projection.",
+            "rationale": "Summary normalization and disclosure state must consume one typed detail response so one controller failure is not fabricated as many client-side issues."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-filter-and-sort:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsChangesView / sortChanges",
+          "interaction": "the resources surface switches declared versus all inventory, searches name/kind/namespace/group, OR-filters OutOfSync/Degraded/Missing, resets filters, and sorts by apply order, resource, sync, or health",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/workflowModel.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-filters",
+              "gitops.insights.helpers"
+            ],
+            "state": "blocked",
+            "blockedReason": "No current GitOps contract carries controller-declared resources, generated descendants, apply wave/order, normalized sync/health, drift, or event fields.",
+            "rationale": "Only route-owned local view state may filter a complete server-authorized resource set; the browser may not synthesize inventory from workflow steps."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:issue-focus-and-resource-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsChangesView / ChangeRow",
+          "interaction": "an issue deep-link clears incompatible filters, scrolls once to and expands the matching row, then exposes structured drift, recent events, live-resource navigation, or source navigation for a missing resource",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "focus navigation preserves the selected row and disclosure without smooth scrolling when reduced motion is active",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/gitops/insights/GitOpsInsightViews.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.focus-disclosure",
+              "gitops.insights.resource-actions"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia has no GitOps issue-to-ResourceRef relation, per-resource drift/events, or safe source-link projection for a missing live resource.",
+            "rationale": "The focus target must use immutable resource identity and capability-gated destinations, not a name-only browser search."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:diff-availability-and-ignored-differences:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsChangesView diff capability disclosures",
+          "interaction": "the page truthfully distinguishes Argo diff availability, connection/setup guidance, comparison-unavailable sync state, ignored-difference coverage, and a lazily mounted full resource diff",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.availability",
+              "gitops.insights.resource-diff"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The application-detail contract now reports revision-bound desired/live comparison availability and reason codes, and the UI renders the unavailable state without a browser diff. Controller connection guidance, ignored-difference coverage, and resource diff content remain a later provider integration."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:insights:selective-resource-sync:v1",
+          "legacyContractIds": [],
+          "symbol": "ChangeRow.onSyncResource",
+          "interaction": "only declared, non-hook, OutOfSync or Missing Argo resources expose selective sync; disabled reasons are shown without removing the action",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the resource command from its durable receipt cursor",
+            "backpressure": "coalesce non-terminal command updates while preserving cancellation and terminal facts",
+            "merge": "attach an event only when its ResourceRef, application identity, scope, and command attempt match the row"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-actions",
+              "gitops.sync-options.validation"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no GitOps resource eligibility projection, Argo application ownership proof, or resource-scoped command endpoint in the existing Python contracts.",
+            "rationale": "Eligibility and disabled reasons are server authority decisions; they cannot be recreated from browser status strings."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/index.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-diff-public-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "insights/index.ts",
+          "interaction": "the GitOps insights boundary exports the resource diff viewer without requiring consumers to import an isolated upstream runtime path",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/features/gitops/gitOpsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.resource-diff"
+            ],
+            "state": "blocked",
+            "blockedReason": "No product-owned GitOps insight or diff component boundary exists because the corresponding route and contracts have not been ported.",
+            "rationale": "The eventual export must be product-owned and consume the GitOpsPort, never re-export code from references/upstream."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/insights-helpers.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-predicate-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "insights-helpers tests",
+          "interaction": "tests cover normalized status severity, search and OR-facet predicates, independent resource counts, selective-sync eligibility, and urgency sort order",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/workflowModel.test.ts",
+              "frontend/src/pages/gitops/GitOpsPage.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.helpers",
+              "gitops.insights.resource-filters"
+            ],
+            "state": "blocked",
+            "blockedReason": "No equivalent typed GitOps resource model exists in frontend/src/features/gitops, so these predicates cannot be tested without embedding source-shaped unknown records.",
+            "rationale": "Pure helper tests are added only after the Python projection defines the resource fields they normalize."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/insights/insights-helpers.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-predicates-and-order:v1",
+          "legacyContractIds": [],
+          "symbol": "changeMatchesFacets / resourceStatusCounts / isArgoResourceSyncEligible",
+          "interaction": "resource status normalization keeps sync and health independent, applies OR facets, ranks urgent states first, and excludes generated or hook resources from selective sync",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/workflowModel.ts",
+              "frontend/src/features/gitops/gitOpsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.helpers",
+              "gitops.insights.resource-filters"
+            ],
+            "state": "blocked",
+            "blockedReason": "Release-plan workflow models do not contain controller resource sync, health, hook, generated, or desired/live fields needed for these pure predicates.",
+            "rationale": "The port must normalize a Python-owned GitOps resource projection instead of casting arbitrary controller payloads in the browser."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/gitops/tree/GitOpsTreeGraph.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:topology:shared-search-and-icon-registry:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsTreeToolbar / GitOpsResourceNode",
+          "interaction": "topology search uses the shared controlled input and node kind presentation uses a shared resource-icon registry rather than CSS class name construction",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.graph-filter.input",
+              "gitops.tree.icon-and-portal"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current GitOps route has no topology graph, typed node kind registry, or controller-tree query to bind to the existing shared input primitive.",
+            "rationale": "A product tree must use a centralized resource icon registry and typed node kinds, never source CSS selectors or a browser-derived graph."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:gitops:topology:root-not-recursive-portal:v1",
+          "legacyContractIds": [],
+          "symbol": "gitopsToolForNode",
+          "interaction": "a GitOps-managed child node may offer a detail portal, but the root node is explicitly excluded so the current detail page cannot recursively navigate to itself",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "domains.gitops.router"
+            ],
+            "plannedTestIds": [
+              "gitops.tree.icon-and-portal"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no GitOps detail route or typed tree node role in Opsia, so current navigation cannot distinguish a root subject from a managed child portal.",
+            "rationale": "This invariant must be encoded in the eventual route model before child GitOps CR navigation is exposed."
+          }
+        }
+      ]
+    },
+    "web/src/components/helm/HelmReleaseDrawer.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-detail:availability-test:v1",
+          "legacyContractIds": [],
+          "symbol": "HelmReleaseDrawer tests",
+          "interaction": "release detail behavior distinguishes observed release metadata from unavailable provider and command integrations",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "tests/test_helm_release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-detail.availability",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product port tests its own typed projection; it never executes or imports the upstream drawer runtime."
+          }
+        }
+      ]
+    },
+    "web/src/components/helm/HelmReleaseDrawer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-detail:availability:v1",
+          "legacyContractIds": [
+            "reference.feature.184"
+          ],
+          "symbol": "HelmReleaseDrawer",
+          "interaction": "selecting a release exposes its scoped identity and revision history while manifest, values, owned resources, and mutation availability remain explicit",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-detail.availability",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Only non-secret storage metadata already observed by the inventory is projected; provider reads and Helm execution are unavailable until dedicated integrations exist."
+          }
+        }
+      ]
+    },
+    "web/src/components/helm/HelmView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:release-list:scope-rbac:v1",
+          "legacyContractIds": [
+            "reference.feature.183"
+          ],
+          "symbol": "HelmView release list",
+          "interaction": "the releases table filters inventory-observed release metadata by the authorized cluster scope and opens a selected release detail",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded 30-second typed release read when the visible scope changes",
+            "backpressure": "coalesce refresh requests while a prior list request remains active",
+            "merge": "replace the list only when the returned authorized scope key still matches the current selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/helmContract.ts",
+              "src/domains/helm/release_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.release-list.scope",
+              "helm.release-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The source uses a stale 30-second release read; this port retains bounded polling and exposes inventory completeness rather than manufacturing release values."
+          }
+        }
+      ]
+    },
+    "web/src/components/traffic/TrafficFilterSidebar.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:traffic:flow-filters:collector-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "TrafficFilterSidebar",
+          "interaction": "namespace, protocol, and status controls refine observed flows only after a collector supplies typed flow records and server-owned facets",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/features/traffic/trafficContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic.observations",
+              "domains.traffic.router"
+            ],
+            "plannedTestIds": [
+              "traffic.filters.collector-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no collector-backed flow records or authoritative filter facets; rendering upstream controls would require browser-derived data.",
+            "rationale": "The initial port preserves the selected namespace scope but intentionally does not render inert protocol or status controls."
+          }
+        }
+      ]
+    },
+    "web/src/components/traffic/TrafficView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:traffic:flow-snapshot:scope-availability:v1",
+          "legacyContractIds": [
+            "reference.feature.181"
+          ],
+          "symbol": "TrafficView observed flow surface",
+          "interaction": "the scoped read presents actual collector availability, selected namespace scope, and freshness before any graph, flow list, or aggregate is rendered",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart a bounded 30-second typed scope read when the visible selection changes",
+            "backpressure": "share one request per normalized scope and abort only after the final consumer releases it",
+            "merge": "replace the overview only when the response belongs to the current authorized scope; unavailable evidence remains null"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/features/traffic/createTrafficAdapter.ts",
+              "src/domains/traffic/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic.observations",
+              "domains.traffic.router"
+            ],
+            "plannedTestIds": [
+              "traffic.overview.unavailable",
+              "traffic.overview.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The collector is not integrated, so the vertical truthfully returns unavailable status and null counts/edges instead of inferred connections or synthetic zero values."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/CostView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:overview:availability-scope:v1",
+          "legacyContractIds": [
+            "reference.feature.217"
+          ],
+          "symbol": "CostView availability surface",
+          "interaction": "the scoped Cost read discloses provider-observation availability and inventory freshness before any currency, allocation, or recommendation is rendered",
+          "transport": "poll",
+          "realtime": {
+            "resume": "use the server-provided refresh policy only after a successful scoped response",
+            "backpressure": "share one request for each normalized authorized cluster scope and release it when the view unmounts",
+            "merge": "replace the overview only for the current scope; unavailable monetary fields remain null"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/features/cost/createCostAdapter.ts",
+              "src/domains/cost/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.overview.unavailable",
+              "cost.overview.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The vertical preserves source availability semantics while refusing to fabricate money from inventory or resource metrics."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/topology/TopologyGraph.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:graph:evidence-graph:v1",
+          "legacyContractIds": [
+            "reference.feature.118"
+          ],
+          "symbol": "TopologyGraph",
+          "interaction": "the scoped topology renders only graph nodes and directed relationships backed by inventory evidence, preserving an explicit partial or unavailable state instead of deriving missing relationships in the browser",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the typed relation read when the selected scope or snapshot revision changes",
+            "backpressure": "abort a superseded read and retain the last verified graph while one server-scheduled refresh is in flight",
+            "merge": "replace the graph only when its normalized authorized scope still matches the active route; unavailable evidence remains an empty graph"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/features/resources/relationTopologyCanonical.ts",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph",
+              "domains.inventory_filter.router",
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.graph.contract",
+              "topology.graph.surface",
+              "topology.graph.freshness"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The initial vertical is evidence-backed and scope-pinned, but source grouping, export, focus, and large-cluster behavior remain separate work items."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/topology/TopologyFilterSidebar.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:filters:kind-visibility:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyFilterSidebar",
+          "interaction": "available resource kinds are derived from the observed graph and can be hidden or restored without fabricating nodes or relationships",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/features/resources/relationTopologyGraphModel.ts"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.graph.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The initial canvas derives visible kinds from the verified graph; category grouping, bulk controls, and large-kind confirmation remain unported."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/topology/K8sResourceNode.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:node:evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "K8sResourceNode",
+          "interaction": "a graph node presents its observed resource identity and health, and routes selection only through the product-owned resource detail boundary",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyNode.tsx",
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.graph.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The initial card is driven by typed graph identity and observed status; source-specific issue explainers and workload expansion require additional evidence contracts."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/topology/TopologyControls.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:controls:contract:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyControls",
+          "interaction": "view-mode, grouping, policy-effect, and keyboard menu controls change a typed topology presentation without inventing capabilities in the client",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "control and menu state must remain visible without transition-dependent feedback",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/TopologyControls.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.topology_preferences"
+            ],
+            "plannedTestIds": [
+              "topology.controls.scope"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no typed topology presentation preference, policy-effect projection, or route-owned control catalog, so reproducing the upstream controls would be inert or browser-derived.",
+            "rationale": "The evidence graph is available first; controls will be added only after their scope and capabilities are part of the product contract."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/topology/TopologySearch.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:search:contract:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologySearch",
+          "interaction": "keyboard-opened topology search selects an authorized graph resource, focuses it, and closes predictably with Escape or outside dismissal",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "search open and close retain a stable focus order without transition-dependent feedback",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/TopologySearch.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/RelationTopologyCanvas.tsx",
+              "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.search.scope"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current relationship canvas has no route-owned search/focus controller or keyboard interaction test, so adding a local string filter would not preserve source navigation semantics.",
+            "rationale": "Search is deferred until it can focus the same typed resource identity that is used by the resource detail route."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/logs/useLogStream.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:stream:clean-end-event:v1",
+          "legacyContractIds": [],
+          "symbol": "LogStreamHandlers.onEnd and end event listener",
+          "interaction": "an authenticated log SSE clean-end envelope stops only its current stream generation and carries the typed terminal reason to the matching log tab",
+          "transport": "sse",
+          "realtime": {
+            "resume": "restart only a newly requested authorized target or a user-initiated retry; a clean end never reconnects itself",
+            "backpressure": "coalesce log events once per animation frame while retaining the bounded ordered line buffer",
+            "merge": "apply events only to the immutable target tab and mark it ended with the server-provided reason"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/features/log-stream/logStreamEndpointContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/features/bottom-dock/bottomDockState.ts",
+              "frontend/src/app/LogStreamTab.tsx",
+              "src/domains/log_stream/router.py",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.stream.clean-end.adapter",
+              "logs.stream.terminal-state"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product owns a strict fetch-SSE reader and Python-owned envelope contract. It maps the end reason through a typed adapter and reducer without importing the source EventSource hook."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/logs/LogCore.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:logs:viewer:shared-input-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "LogCore search Input",
+          "interaction": "the controlled log search uses the shared accessible input boundary while keeping query, regex, case, and navigation state owned by the log viewer",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/log-viewer/LogViewer.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/features/log-viewer/LogViewer.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream"
+            ],
+            "plannedTestIds": [
+              "logs.viewer.shared-input"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product's typed log viewer already owns all search state and reuses the shared Input primitive; the regression test pins the canonical input slot without duplicating an untyped field."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:logs:viewer:empty-command-diagnostic:v1",
+          "legacyContractIds": [],
+          "symbol": "LogCore emptyCommand recovery control",
+          "interaction": "an empty log viewer may render a server-supplied diagnostic and offer a copy-only recovery command without constructing or executing a command in the browser",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.viewer.empty-diagnostic"
+            ],
+            "state": "blocked",
+            "blockedReason": "The log-stream envelope has typed end reasons only; it does not expose a redacted empty-message or copy-only recovery-command field bound to the authorized target.",
+            "rationale": "The browser must not derive, display, or execute a raw recovery command from log text. A future Python projection must supply a redacted diagnostic and copy-safe command explicitly."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/logs/WorkloadLogsViewer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workload-logs:stream:membership-terminal-state:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadLogsViewer pod-added, pod-removed, and onEnd handlers",
+          "interaction": "a workload log stream updates the current typed pod membership and preserves it when the matching server stream ends cleanly",
+          "transport": "sse",
+          "realtime": {
+            "resume": "open one authorized workload stream per explicit tab target and restart only after a user retry or target change",
+            "backpressure": "batch incoming per-tab events on the animation-frame boundary and retain a fixed maximum of ordered lines",
+            "merge": "merge pod membership and terminal state only into the tab whose immutable cluster, kind, namespace, and workload identity match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/features/bottom-dock/bottomDockState.ts",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+              "src/domains/log_stream/service.py",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.stream.terminal-state"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing product stream protocol carries typed pod membership and end envelopes. The dock reducer keeps membership and the terminal reason in the product-owned bounded state model."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workload-logs:empty:diagnostic-command:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadLogsResult emptyMessage and command",
+          "interaction": "a workload empty state may use an authorized diagnostic and copy-only command supplied by the server rather than browser inference",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "src/packages/contracts/log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "logs.workload.empty-diagnostic"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python workload log contract exposes membership and terminal reasons but no typed redacted empty diagnostic or copy-safe command for this stream target.",
+            "rationale": "Rendering an invented kubectl command would bypass the product's audited target and capability model, so the source behavior remains explicitly blocked until the server contract exists."
+          }
+        }
+      ]
+    }
+  }
+}

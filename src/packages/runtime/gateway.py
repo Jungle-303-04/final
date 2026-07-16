@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, fields, is_dataclass
-from typing import cast
+from typing import Any, cast
 
 from packages.config.errors import require
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -21,6 +22,7 @@ from packages.storage.engine import has_active_connection
 from packages.storage.retry import to_thread_db_retry
 
 LOGGER = get_logger(__name__)
+TransactionalStage = Callable[[Any, EventEnvelope], None]
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class ApiEventGateway:
         correlation_id: str | None = None,
         causation_id: str | None = None,
         actor: Actor | None = None,
+        transactional_stage: TransactionalStage | None = None,
     ) -> AcceptedEvent:
         event_payload = dict(payload)
         if actor is not None:
@@ -64,6 +67,7 @@ class ApiEventGateway:
             event_payload,
             correlation_id,
             causation_id,
+            transactional_stage,
         )
         if durable is not None:
             self._log_accepted_event(durable.event, actor=actor, durable=True)
@@ -71,6 +75,8 @@ class ApiEventGateway:
         evt = await self.events.emit(
             subject, self.source, event_payload, correlation_id, causation_id
         )
+        if transactional_stage is not None:
+            raise RuntimeError("transactional event staging requires an outbox-capable recorder")
         self._log_accepted_event(evt, actor=actor, durable=False)
         return AcceptedEvent(evt)
 
@@ -80,6 +86,7 @@ class ApiEventGateway:
         payload: JsonObject,
         correlation_id: str | None,
         causation_id: str | None,
+        transactional_stage: TransactionalStage | None,
     ) -> AcceptedEvent | None:
         recorder = self.events.recorder
         unit_of_work = getattr(recorder, "unit_of_work", None)
@@ -93,6 +100,8 @@ class ApiEventGateway:
             with unit_of_work() as conn:
                 recorder.record_event(evt)
                 stage_events(conn, [evt])
+                if transactional_stage is not None:
+                    transactional_stage(conn, evt)
 
         if has_active_connection():
             await asyncio.to_thread(stage)
@@ -106,6 +115,7 @@ class ApiEventGateway:
         correlation_id: str | None = None,
         causation_id: str | None = None,
         actor: Actor | None = None,
+        transactional_stage: TransactionalStage | None = None,
     ) -> AcceptedEvent:
         subject = getattr(body, "__subject__", None)
         require(isinstance(subject, str), f"{body.__class__.__name__} 에 subject 없음", TypeError)
@@ -114,6 +124,8 @@ class ApiEventGateway:
             _body_payload_with_actor(body, actor),
             correlation_id,
             causation_id,
+            actor,
+            transactional_stage,
         )
 
     def _log_accepted_event(

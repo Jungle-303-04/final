@@ -6,6 +6,8 @@ import type { WorkflowsMessageKey } from "./keys/workflows";
 import type { DockMessageKey } from "./keys/dock";
 import type { ShellMessageKey } from "./keys/shell";
 import type { AlertsMessageKey } from "./keys/alerts";
+import type { TimelineMessageKey } from "./keys/timeline";
+import type { DesktopMessageKey } from "./keys/desktop";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -16,6 +18,7 @@ export type SupportedLocale = "en" | "ko";
  */
 type CoreMessageKey =
   | "product.name"
+  | "shell.brand.landing"
   | "common.action.back"
   | "common.action.cancel"
   | "common.action.clear"
@@ -95,6 +98,8 @@ type CoreMessageKey =
   | "settings.policy.approval"
   | "state.empty.body"
   | "state.empty.title"
+  | "state.notFound.body"
+  | "state.notFound.title"
   | "state.error.body"
   | "state.error.title"
   | "state.forbidden.body"
@@ -144,6 +149,9 @@ type CoreMessageKey =
   | "auth.session.retry"
   | "home.cluster.label"
   | "home.cluster.available"
+  | "home.cluster.grid.aria"
+  | "home.cluster.grid.title"
+  | "home.cluster.grid.description"
   | "home.cluster.select"
   | "home.cluster.unknown.description"
   | "home.cluster.unknown.title"
@@ -229,11 +237,13 @@ export type MessageKey =
   | CoreMessageKey
   | AlertsMessageKey
   | DockMessageKey
+  | DesktopMessageKey
   | ShellMessageKey
   | ClustersMessageKey
   | IssuesMessageKey
   | MetricsMessageKey
   | ResourcesMessageKey
+  | TimelineMessageKey
   | WorkflowsMessageKey;
 
 export type TranslationParameter = string | number | bigint;

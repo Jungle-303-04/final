@@ -249,13 +249,6 @@ spec:
           image: kubeheal-service:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/target/cluster-agent/app.py"]
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 1000m
-              memory: 1Gi
           envFrom:
             - configMapRef:
                 name: target-runtime-config

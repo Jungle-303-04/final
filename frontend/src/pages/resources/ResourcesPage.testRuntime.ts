@@ -31,10 +31,14 @@ export function resourcesCapabilitiesPort(
 export function resourcesActionsPort(
   overrides: Partial<ResourceActionsPort> = {},
 ): ResourceActionsPort {
-  const receipt = { accepted: true, eventId: "event-1", correlationId: "correlation-1" };
+  const receipt = {
+    accepted: true,
+    eventId: "event-1",
+    correlationId: "correlation-1",
+    commandId: "command-1",
+  };
   return {
-    restartDeployment: vi.fn().mockResolvedValue(receipt),
-    scaleDeployment: vi.fn().mockResolvedValue(receipt),
+    execute: vi.fn().mockResolvedValue(receipt),
     ...overrides,
   };
 }

@@ -6,9 +6,12 @@ import { resourcesKo } from "./catalogs/ko/resources";
 import { workflowsKo } from "./catalogs/ko/workflows";
 import { shellKo } from "./catalogs/ko/shell";
 import { alertsKo } from "./catalogs/ko/alerts";
+import { timelineKo } from "./catalogs/ko/timeline";
+import { desktopKo } from "./catalogs/ko/desktop";
 
 export const ko = {
   "product.name": "Opsia",
+  "shell.brand.landing": "{route} 화면 열기",
   "common.action.back": "뒤로",
   "common.action.cancel": "취소",
   "common.action.clear": "지우기",
@@ -66,6 +69,11 @@ export const ko = {
   "shell.dock.title": "로그 독",
   "shell.dock.tabs": "열린 로그",
   "shell.dock.tab": "[로그: {name}]",
+  "shell.dock.operationCenter": "작업 센터",
+  "shell.dock.openOperationCenter": "작업 센터 열기",
+  "shell.dock.openLogs": "로그 열기",
+  "shell.dock.operationSummary": "작업 {count}개 추적 중 · 확인 필요 {attention}개",
+  "shell.dock.reopenOperationCenter": "작업 센터 다시 열기",
   "shell.dock.collapse": "로그 독 접기",
   "shell.dock.expand": "로그 독 펼치기",
   "shell.dock.closeTab": "{name} 로그 닫기",
@@ -131,6 +139,8 @@ export const ko = {
   "settings.policy.approval": "승인 필요",
   "state.empty.body": "현재 범위와 조건에 일치하는 데이터가 없습니다.",
   "state.empty.title": "표시할 데이터가 없습니다",
+  "state.notFound.body": "항목이 삭제되었거나 현재 권한 범위 밖에 있을 수 있습니다.",
+  "state.notFound.title": "항목을 찾을 수 없습니다",
   "state.error.body": "잠시 후 다시 시도해 주세요. 문제가 계속되면 연결 상태를 확인하세요.",
   "state.error.title": "정보를 불러오지 못했습니다",
   "state.forbidden.body": "현재 계정에 필요한 조회 권한이 없습니다.",
@@ -181,6 +191,9 @@ export const ko = {
   "home.action.reconnect": "다시 연결",
   "home.action.reload": "다시 불러오기",
   "home.cluster.available": "조회 가능한 클러스터",
+  "home.cluster.grid.aria": "클러스터 리소스 탐색",
+  "home.cluster.grid.title": "클러스터별 리소스 탐색",
+  "home.cluster.grid.description": "클러스터를 선택하면 해당 리소스 화면으로 이동합니다.",
   "home.cluster.label": "클러스터",
   "home.cluster.select": "클러스터 선택",
   "home.cluster.unknown.description": "{cluster} 클러스터를 찾을 수 없습니다. 위 선택기에서 다른 클러스터를 골라 주세요.",
@@ -262,6 +275,8 @@ export const ko = {
   "home.status.connected": "연결됨",
   ...shellKo,
   ...alertsKo,
+  ...timelineKo,
+  ...desktopKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,

@@ -138,15 +138,39 @@ describe("ProductShell bottom log dock", () => {
 });
 
 function flushEventFrame(emit: () => void) {
-  const original = globalThis.requestAnimationFrame;
-  let scheduled: FrameRequestCallback | null = null;
-  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    scheduled = callback;
-    return 17;
-  }));
-  act(emit);
-  act(() => scheduled?.(performance.now()));
-  vi.stubGlobal("requestAnimationFrame", original);
+  const originalRequestFrame = globalThis.requestAnimationFrame;
+  const originalCancelFrame = globalThis.cancelAnimationFrame;
+  const frames = new QueuedAnimationFrames();
+  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => frames.request(callback)));
+  vi.stubGlobal("cancelAnimationFrame", vi.fn((frame) => frames.cancel(frame)));
+  try {
+    act(emit);
+    act(() => frames.flush());
+  } finally {
+    vi.stubGlobal("requestAnimationFrame", originalRequestFrame);
+    vi.stubGlobal("cancelAnimationFrame", originalCancelFrame);
+  }
+}
+
+class QueuedAnimationFrames {
+  private nextId = 1;
+  private readonly callbacks = new Map<number, FrameRequestCallback>();
+
+  request(callback: FrameRequestCallback): number {
+    const id = this.nextId++;
+    this.callbacks.set(id, callback);
+    return id;
+  }
+
+  cancel(id: number): void {
+    this.callbacks.delete(id);
+  }
+
+  flush(): void {
+    const callbacks = [...this.callbacks.values()];
+    this.callbacks.clear();
+    for (const callback of callbacks) callback(performance.now());
+  }
 }
 
 function streamPort() {

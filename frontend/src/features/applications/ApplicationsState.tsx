@@ -1,5 +1,39 @@
+import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { RefreshAction } from "../../motion/RefreshAction";
+import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationsFailure } from "./applicationsContract";
+import type { ApplicationsResource } from "./useApplicationsData";
+
+export function ApplicationsRefreshControl<T>({
+  onRefresh,
+  resource,
+}: {
+  onRefresh: () => void;
+  resource: Extract<ApplicationsResource<T>, { phase: "ready" }>;
+}) {
+  const { locale } = useI18n();
+  const copy = applicationsCopy(locale);
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <RefreshAction
+        hasFailed={resource.refreshFailure !== null}
+        iconOnly
+        isRefreshing={resource.refreshing}
+        label={copy.refresh}
+        onRefresh={onRefresh}
+        size="icon"
+        statusCopy={{
+          cancelled: copy.refreshCancelled,
+          failed: copy.refreshFailed,
+          pending: copy.refreshing,
+          reconnecting: copy.refreshReconnecting,
+          succeeded: copy.refreshSucceeded,
+        }}
+      />
+    </div>
+  );
+}
 
 export function ApplicationsFailureState({
   failure,

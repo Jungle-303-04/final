@@ -5,13 +5,20 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.inventory.kubernetes_events import (
+    EVENT_CAPTURE_REASON_COMPLETE,
+    EVENT_CAPTURE_SUMMARY_KEY,
+    KubernetesEventFactBatch,
+    kubernetes_event_fact_timeline_events,
+)
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
@@ -21,7 +28,10 @@ from domains.inventory_filter.repository import (
     inventory_snapshot_lock_key,
     sync_inventory_filter_projection,
 )
+from domains.timeline.coverage import project_kubernetes_event_capture_coverage
+from domains.timeline.mapping import inventory_timeline_event
 from packages.contracts.event_bus.interfaces import JsonObject
+from packages.contracts.timeline import TimelineCoverage, TimelineEvent, TimelineWindow
 from packages.storage.engine import DatabaseConnection, iso_or_none
 
 # 스냅샷 리소스 배치 업서트 청크 크기 — 다중 VALUES 1문으로 실행되는 행 수 상한.
@@ -42,6 +52,38 @@ FLEET_ROLLUP_RESOURCE_TYPES = (POD_RESOURCE_TYPE, NODE_RESOURCE_TYPE, WORKLOAD_R
 POD_RUNNING_STATUS = "Running"
 NODE_READY_STATUS = "Ready"
 DEGRADED_HEALTH = "degraded"
+
+# 이 필드들은 수집 시점·read-model bookkeeping 이 아니라 실제 inventory resource의
+# 상태를 뜻한다. 스냅샷 ID/관측시각은 매 수집마다 달라질 수 있으므로 timeline 변경 판정에
+# 포함하지 않는다.
+INVENTORY_TIMELINE_SEMANTIC_FIELDS = (
+    "resource_type",
+    "api_version",
+    "kind",
+    "namespace",
+    "name",
+    "uid",
+    "resource_version",
+    "status",
+    "health",
+    "labels",
+    "annotations",
+    "summary",
+    "raw",
+)
+InventoryTimelineChange = Literal["add", "update", "delete"]
+
+
+@dataclass(frozen=True)
+class InventorySnapshotMutation:
+    """수집 저장의 내부 결과.
+
+    ``timeline_events``는 ledger append 전의 도메인 사실이다. HTTP 응답은 ``result``만
+    사용하므로 내부 mutation/ledger sequence가 외부 계약으로 새지 않는다.
+    """
+
+    result: JsonObject
+    timeline_events: tuple[TimelineEvent, ...] = ()
 
 
 def live_inventory_snapshot_clause(table: Any) -> Any:
@@ -218,6 +260,192 @@ def snapshot_summary(payload: JsonObject) -> JsonObject:
     }
 
 
+def inventory_timeline_events(
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    observed_at: datetime,
+    previous_rows: Sequence[Mapping[str, object]],
+    current_rows: Sequence[Mapping[str, object]],
+    resources_complete: bool,
+    previous_event_batch: KubernetesEventFactBatch | None = None,
+    current_event_batch: KubernetesEventFactBatch | None = None,
+) -> tuple[TimelineEvent, ...]:
+    """Derive durable inventory and Kubernetes Event facts from one collection cut.
+
+    An incomplete collection may be missing arbitrary namespaces or resource kinds, so it
+    cannot truthfully establish inventory additions or deletions. Kubernetes Event facts
+    use a separate complete-capture proof because Event absence never means deletion.
+    """
+    inventory_events: tuple[TimelineEvent, ...] = ()
+    if resources_complete:
+        previous_by_key = {
+            str(row["inventory_key"]): row
+            for row in previous_rows
+            if is_timeline_inventory_resource(row)
+        }
+        current_by_key = {
+            str(row["inventory_key"]): row
+            for row in current_rows
+            if is_timeline_inventory_resource(row)
+        }
+        changes: list[tuple[InventoryTimelineChange, Mapping[str, object]]] = []
+        for inventory_key in sorted(current_by_key):
+            current = current_by_key[inventory_key]
+            previous = previous_by_key.get(inventory_key)
+            if previous is None:
+                changes.append(("add", current))
+            elif inventory_resource_changed(previous, current):
+                changes.append(("update", current))
+        for inventory_key in sorted(set(previous_by_key) - set(current_by_key)):
+            changes.append(("delete", previous_by_key[inventory_key]))
+        inventory_events = tuple(
+            inventory_change_timeline_event(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                observed_at=observed_at,
+                event_type=event_type,
+                resource=resource,
+            )
+            for event_type, resource in changes
+        )
+    event_events = (
+        kubernetes_event_fact_timeline_events(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            observed_at=observed_at,
+            previous=previous_event_batch,
+            current=current_event_batch,
+        )
+        if current_event_batch is not None
+        else ()
+    )
+    return inventory_events + event_events
+
+
+def latest_complete_kubernetes_event_batch(
+    conn: Any,
+    *,
+    workspace_id: str,
+    cluster_id: str,
+) -> KubernetesEventFactBatch | None:
+    """Read the newest complete Event fact cut, never an inventory Event resource row."""
+    snapshot = ClusterInventorySnapshotRecord.__table__
+    capture = snapshot.c.summary["summary"][EVENT_CAPTURE_SUMMARY_KEY]
+    statement = (
+        select(snapshot.c.summary)
+        .where(
+            snapshot.c.workspace_id == workspace_id,
+            snapshot.c.cluster_id == cluster_id,
+            snapshot.c.status != "ignored_stale",
+            capture["complete"].as_boolean().is_(True),
+            capture["truncated"].as_boolean().is_(False),
+            capture["reason"].astext == EVENT_CAPTURE_REASON_COMPLETE,
+        )
+        .order_by(snapshot.c.collected_at.desc(), snapshot.c.created_at.desc())
+        .limit(1)
+    )
+    rows = conn.execute(statement).mappings().all()
+    row = rows[0] if rows else None
+    if not isinstance(row, Mapping):
+        return None
+    snapshot_summary = row.get("summary")
+    if not isinstance(snapshot_summary, Mapping):
+        return None
+    source_summary = snapshot_summary.get("summary")
+    if not isinstance(source_summary, Mapping):
+        return None
+    batch = KubernetesEventFactBatch.from_snapshot_summary(source_summary)
+    return batch if batch.capture.authoritative else None
+
+
+def is_timeline_inventory_resource(resource: Mapping[str, object]) -> bool:
+    """Exclude derived rollups and Event facts from generic inventory change mapping."""
+    return str(resource.get("resource_type") or "") not in {
+        HEALTH_RESOURCE_TYPE,
+        USAGE_RESOURCE_TYPE,
+        # Kubernetes Event has UID/count/last-occurrence semantics and enters
+        # Timeline only through domains.inventory.kubernetes_events.
+        EVENT_RESOURCE_TYPE,
+    }
+
+
+def inventory_resource_changed(
+    previous: Mapping[str, object], current: Mapping[str, object]
+) -> bool:
+    """Compare persisted resource facts without collection bookkeeping noise."""
+    return any(
+        inventory_timeline_semantic_value(field, previous.get(field))
+        != inventory_timeline_semantic_value(field, current.get(field))
+        for field in INVENTORY_TIMELINE_SEMANTIC_FIELDS
+    )
+
+
+def inventory_timeline_semantic_value(field: str, value: object) -> object:
+    """Strip a known collection-only annotation before comparing source facts."""
+    if field == "summary" and isinstance(value, Mapping):
+        summary = dict(value)
+        summary.pop("collected_at", None)
+        return summary
+    return value
+
+
+def inventory_change_timeline_event(
+    *,
+    workspace_id: str,
+    cluster_id: str,
+    observed_at: datetime,
+    event_type: InventoryTimelineChange,
+    resource: Mapping[str, object],
+) -> TimelineEvent:
+    """Map one resource delta without exposing raw resource data or ledger position."""
+    inventory_key = str(resource["inventory_key"])
+    kind = str(resource.get("kind") or resource.get("resource_type") or "Resource")
+    name = str(resource.get("name") or inventory_key)
+    namespace_value = resource.get("namespace")
+    namespace = str(namespace_value) if namespace_value is not None else None
+    uid_value = resource.get("uid")
+    uid = str(uid_value) if uid_value is not None else None
+    source_key = inventory_timeline_source_key(event_type, resource)
+    verb = {"add": "added", "update": "updated", "delete": "deleted"}[event_type]
+    return inventory_timeline_event(
+        event_id=source_key,
+        source_key=source_key,
+        native_id=inventory_key,
+        occurred_at=observed_at,
+        workspace_id=workspace_id,
+        cluster_id=cluster_id,
+        api_version=str(resource.get("api_version") or ""),
+        resource_kind=kind,
+        namespace=namespace,
+        name=name,
+        uid=uid,
+        title=f"{kind} {name} {verb}",
+        event_type=event_type,
+    )
+
+
+def inventory_timeline_source_key(
+    event_type: InventoryTimelineChange,
+    resource: Mapping[str, object],
+) -> str:
+    """Use a fact fingerprint, never a generated snapshot ID, for ledger idempotency."""
+    inventory_key = str(resource["inventory_key"])
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                field: inventory_timeline_semantic_value(field, resource.get(field))
+                for field in INVENTORY_TIMELINE_SEMANTIC_FIELDS
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+    ).hexdigest()
+    return f"inventory:{event_type}:{inventory_key}:{fingerprint}"
+
+
 def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
     """K8s 리소스 raw/summary 에서 첫 컨테이너 이미지를 찾음(workload → pod → summary 순)."""
     for path in (("spec", "template", "spec", "containers"), ("spec", "containers")):
@@ -236,6 +464,55 @@ def first_container_image(raw: JsonObject, summary: JsonObject) -> str | None:
 
 
 class InventoryRepository(DatabaseConnection):
+    def snapshot_timeline_coverage(
+        self,
+        read_scope: Any,
+        *,
+        window: TimelineWindow,
+    ) -> tuple[TimelineCoverage, ...]:
+        """Read durable global Event capture evidence for an authorized Timeline scope.
+
+        Snapshot evidence, rather than the Timeline event ledger, is the source
+        of completeness.  The pure projector proves both failure and recovery
+        bounds and emits no coverage where either bound is unknown.
+        """
+        cluster_ids = frozenset(
+            str(cluster_id).strip()
+            for cluster_id in getattr(read_scope, "kubernetes_event_cluster_ids", frozenset())
+            if str(cluster_id).strip()
+        )
+        if not cluster_ids:
+            return ()
+        workspace_id = str(getattr(read_scope, "workspace_id", "") or "").strip()
+        if not workspace_id:
+            return ()
+        snapshots = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(
+                snapshots.c.cluster_id,
+                snapshots.c.status,
+                snapshots.c.summary,
+            )
+            .where(
+                snapshots.c.workspace_id == workspace_id,
+                snapshots.c.cluster_id.in_(tuple(sorted(cluster_ids))),
+                snapshots.c.status != "ignored_stale",
+            )
+            .order_by(
+                snapshots.c.cluster_id.asc(),
+                snapshots.c.collected_at.asc(),
+                snapshots.c.created_at.asc(),
+                snapshots.c.snapshot_id.asc(),
+            )
+        )
+        with self.connection() as conn:
+            rows = tuple(dict(row) for row in conn.execute(statement).mappings())
+        return project_kubernetes_event_capture_coverage(
+            read_scope,
+            window=window,
+            snapshots=rows,
+        )
+
     def save_live_cluster_usage_sample(
         self,
         *,
@@ -287,6 +564,27 @@ class InventoryRepository(DatabaseConnection):
         agent_id: str,
         payload: JsonObject,
     ) -> JsonObject:
+        """Compatibility persistence entry point without exposing internal timeline facts.
+
+        The delegated mutation retains the complete-cut replacement boundary
+        (``snapshot_id != current snapshot``); callers of this legacy response-only method
+        cannot observe its internal timeline facts.
+        """
+        return self.save_inventory_snapshot_mutation(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            agent_id=agent_id,
+            payload=payload,
+        ).result
+
+    def save_inventory_snapshot_mutation(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        agent_id: str,
+        payload: JsonObject,
+    ) -> InventorySnapshotMutation:
         snapshot_id = str(uuid.uuid4())
         observed_at = parse_observed_at(payload.get("collected_at"))
         resources = snapshot_resources(payload)
@@ -311,6 +609,7 @@ class InventoryRepository(DatabaseConnection):
         seen_types = {resource["resource_type"] for resource in normalized}
         marked_deleted = 0
         source_summary = dict(summary.get("summary") or {})
+        current_event_batch = KubernetesEventFactBatch.from_snapshot_summary(source_summary)
         collection_limits = source_summary.get("collection_limits")
         source_truncated = (
             isinstance(collection_limits, dict) and collection_limits.get("truncated") is True
@@ -355,14 +654,56 @@ class InventoryRepository(DatabaseConnection):
                         summary=summary,
                     )
                 )
-                return {
-                    "accepted": False,
-                    "snapshot_id": snapshot_id,
-                    "cluster_id": cluster_id,
-                    "resource_count": len(normalized),
-                    "marked_deleted": 0,
-                    "resource_types": sorted(seen_types),
-                }
+                return InventorySnapshotMutation(
+                    result={
+                        "accepted": False,
+                        "snapshot_id": snapshot_id,
+                        "cluster_id": cluster_id,
+                        "resource_count": len(normalized),
+                        "marked_deleted": 0,
+                        "resource_types": sorted(seen_types),
+                    }
+                )
+            # Read the prior live cut only after taking the same transaction-scoped advisory
+            # lock used by all inventory writers. This makes concurrent collectors observe a
+            # single ordered state transition before either one builds timeline facts.
+            previous_rows = [
+                dict(row)
+                for row in conn.execute(
+                    select(resource_table).where(
+                        resource_table.c.workspace_id == workspace_id,
+                        resource_table.c.cluster_id == cluster_id,
+                        resource_table.c.deleted_at.is_(None),
+                    )
+                )
+                .mappings()
+                .all()
+            ]
+            # A non-authoritative cut cannot emit Event Timeline entries, so avoid
+            # reading an older fact batch that it must never compare or append from.
+            previous_event_batch = (
+                latest_complete_kubernetes_event_batch(
+                    conn,
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                )
+                if current_event_batch.capture.authoritative
+                else None
+            )
+            timeline_events = inventory_timeline_events(
+                workspace_id=workspace_id,
+                cluster_id=cluster_id,
+                observed_at=observed_at,
+                previous_rows=previous_rows,
+                current_rows=normalized,
+                resources_complete=resources_complete,
+                previous_event_batch=previous_event_batch,
+                current_event_batch=current_event_batch,
+            )
+            missing_inventory_keys = sorted(
+                {str(row["inventory_key"]) for row in previous_rows}
+                - {str(row["inventory_key"]) for row in normalized}
+            )
             conn.execute(
                 pg_insert(snapshot_table).values(
                     snapshot_id=snapshot_id,
@@ -427,13 +768,14 @@ class InventoryRepository(DatabaseConnection):
                         usage=summary["usage"],
                     )
                 )
-            if resources_complete:
+            if resources_complete and missing_inventory_keys:
                 result = conn.execute(
                     update(resource_table)
                     .where(
                         resource_table.c.workspace_id == workspace_id,
                         resource_table.c.cluster_id == cluster_id,
                         resource_table.c.snapshot_id != snapshot_id,
+                        resource_table.c.inventory_key.in_(missing_inventory_keys),
                         resource_table.c.deleted_at.is_(None),
                     )
                     .values(deleted_at=func.now(), updated_at=func.now())
@@ -451,14 +793,17 @@ class InventoryRepository(DatabaseConnection):
                 partial_reason_codes=partial_reason_codes,
             )
 
-        return {
-            "accepted": True,
-            "snapshot_id": snapshot_id,
-            "cluster_id": cluster_id,
-            "resource_count": len(normalized),
-            "marked_deleted": marked_deleted,
-            "resource_types": sorted(seen_types),
-        }
+        return InventorySnapshotMutation(
+            result={
+                "accepted": True,
+                "snapshot_id": snapshot_id,
+                "cluster_id": cluster_id,
+                "resource_count": len(normalized),
+                "marked_deleted": marked_deleted,
+                "resource_types": sorted(seen_types),
+            },
+            timeline_events=timeline_events,
+        )
 
     def list_inventory_resources(
         self,
@@ -523,6 +868,81 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_resource(dict(row)) if row else None
 
+    def get_inventory_resource_by_api_version(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        api_version: str,
+        kind: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> JsonObject | None:
+        """Read one resource only when its complete API-version identity matches.
+
+        ``kind``/``namespace``/``name`` alone are not a Kubernetes identity:
+        dynamic resources from different API groups can use the same kind and
+        object name.  Contextual routes that carry an API group/version must
+        use this query rather than the legacy detail lookup above.
+        """
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == resource_type.strip().lower(),
+                table.c.api_version == api_version.strip(),
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.name == name,
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.last_seen_at.desc())
+            .limit(1)
+        )
+        if namespace is None:
+            statement = statement.where(table.c.namespace.is_(None))
+        else:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self.serialize_inventory_resource(dict(row)) if row else None
+
+    def list_inventory_resources_by_api_version(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        api_version: str,
+        kind: str,
+        limit: int = 200,
+    ) -> list[JsonObject]:
+        """List only one complete API identity for safe contextual consumers.
+
+        This is deliberately separate from the generic resource list: callers
+        that carry a Kubernetes group/version must never broaden a candidate
+        set by kind alone.
+        """
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == resource_type.strip().lower(),
+                table.c.api_version == api_version.strip(),
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.namespace.nullsfirst(), table.c.name)
+            .limit(max(1, min(limit, 1000)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self.serialize_inventory_resource(dict(row)) for row in rows]
+
     def get_inventory_resource_by_key(
         self,
         *,
@@ -579,85 +999,18 @@ class InventoryRepository(DatabaseConnection):
 
         if resource_type == "service":
             selector = selector_labels(summary.get("selector"))
-            pods = self.list_inventory_resources(
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                resource_type=POD_RESOURCE_TYPE,
-                namespace=str(namespace) if namespace is not None else None,
-                include_deleted=False,
-                limit=1000,
-            )
-            related_pods: list[JsonObject] = []
             if selector:
-                related_pods = [
+                pods = self.list_inventory_resources(
+                    workspace_id=workspace_id,
+                    cluster_id=cluster_id,
+                    resource_type=POD_RESOURCE_TYPE,
+                    namespace=str(namespace) if namespace is not None else None,
+                    include_deleted=False,
+                    limit=1000,
+                )
+                related["pods"] = [
                     pod for pod in pods if labels_match(selector, pod_summary_labels(pod))
-                ]
-            if not related_pods:
-                endpoints = self.list_inventory_resources(
-                    workspace_id=workspace_id,
-                    cluster_id=cluster_id,
-                    resource_type="endpoint",
-                    namespace=str(namespace) if namespace is not None else None,
-                    include_deleted=False,
-                    limit=1000,
-                )
-                pod_refs = endpoint_pod_refs(
-                    endpoint
-                    for endpoint in endpoints
-                    if endpoint_service_name(endpoint) == name
-                )
-                if pod_refs:
-                    related_pods = [
-                        pod for pod in pods if pod_matches_endpoint_ref(pod, pod_refs)
-                    ]
-            if selector or related_pods:
-                related["pods"] = related_pods[: max(1, min(limit, 1000))]
-            return related
-
-        if resource_type == "endpoint":
-            pods = self.list_inventory_resources(
-                workspace_id=workspace_id,
-                cluster_id=cluster_id,
-                resource_type=POD_RESOURCE_TYPE,
-                namespace=str(namespace) if namespace is not None else None,
-                include_deleted=False,
-                limit=1000,
-            )
-            pod_refs = endpoint_pod_refs([resource])
-            related_pods: list[JsonObject] = []
-            if pod_refs:
-                related_pods = [
-                    pod for pod in pods if pod_matches_endpoint_ref(pod, pod_refs)
-                ]
-            if not related_pods:
-                service_name = endpoint_service_name(resource)
-                services = self.list_inventory_resources(
-                    workspace_id=workspace_id,
-                    cluster_id=cluster_id,
-                    resource_type="service",
-                    namespace=str(namespace) if namespace is not None else None,
-                    include_deleted=False,
-                    limit=1000,
-                )
-                service = next(
-                    (
-                        item
-                        for item in services
-                        if str(item.get("name") or "") == service_name
-                    ),
-                    None,
-                )
-                selector = selector_labels(
-                    dict(service.get("summary") or {}).get("selector")
-                    if service is not None
-                    else None
-                )
-                if selector:
-                    related_pods = [
-                        pod for pod in pods if labels_match(selector, pod_summary_labels(pod))
-                    ]
-            if pod_refs or related_pods:
-                related["pods"] = related_pods[: max(1, min(limit, 1000))]
+                ][: max(1, min(limit, 1000))]
             return related
 
         if resource_type == WORKLOAD_RESOURCE_TYPE:
@@ -1060,59 +1413,6 @@ def pod_summary_labels(pod: JsonObject) -> dict[str, str]:
 
 def labels_match(selector: dict[str, str], labels: dict[str, str]) -> bool:
     return bool(selector) and all(labels.get(key) == value for key, value in selector.items())
-
-
-def endpoint_service_name(endpoint: JsonObject) -> str:
-    summary = endpoint.get("summary") if isinstance(endpoint.get("summary"), dict) else {}
-    service_name = summary.get("service_name")
-    if isinstance(service_name, str) and service_name:
-        return service_name
-    labels = endpoint.get("labels") if isinstance(endpoint.get("labels"), dict) else {}
-    label_service_name = labels.get("kubernetes.io/service-name")
-    return str(label_service_name or "")
-
-
-def endpoint_pod_refs(endpoints: Iterable[JsonObject]) -> set[tuple[str | None, str | None, str]]:
-    refs: set[tuple[str | None, str | None, str]] = set()
-    for endpoint in endpoints:
-        summary = endpoint.get("summary") if isinstance(endpoint.get("summary"), Mapping) else {}
-        endpoint_namespace = endpoint.get("namespace")
-        for item in summary.get("endpoints") if isinstance(summary.get("endpoints"), list) else []:
-            if not isinstance(item, Mapping):
-                continue
-            target = item.get("targetRef")
-            if not isinstance(target, Mapping):
-                target = item.get("target_ref")
-            if not isinstance(target, Mapping):
-                continue
-            if str(target.get("kind") or "").lower() != "pod":
-                continue
-            name = str(target.get("name") or "").strip()
-            if not name:
-                continue
-            namespace = str(target.get("namespace") or endpoint_namespace or "").strip() or None
-            uid = str(target.get("uid") or "").strip() or None
-            refs.add((namespace, uid, name))
-    return refs
-
-
-def pod_matches_endpoint_ref(
-    pod: JsonObject,
-    refs: set[tuple[str | None, str | None, str]],
-) -> bool:
-    pod_namespace = str(pod.get("namespace") or "").strip() or None
-    pod_uid = str(pod.get("uid") or "").strip() or None
-    pod_name = str(pod.get("name") or "").strip()
-    for namespace, uid, name in refs:
-        if namespace is not None and pod_namespace != namespace:
-            continue
-        if uid is not None and pod_uid is not None:
-            if uid == pod_uid:
-                return True
-            continue
-        if pod_name == name:
-            return True
-    return False
 
 
 def pod_owner_matches(pod: JsonObject, *, kind: str, name: str) -> bool:

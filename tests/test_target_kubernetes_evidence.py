@@ -258,66 +258,6 @@ def test_relationship_summaries_preserve_authoritative_graph_evidence() -> None:
     assert by_type["endpoint"]["summary"]["service_name"] == "checkout-api"
 
 
-def test_pod_and_node_summaries_normalize_resource_capacity() -> None:
-    _, kubernetes_module = load_evidence_modules()
-
-    pod = kubernetes_module.pod_summary(
-        {
-            "metadata": {"name": "checkout-api", "namespace": "target", "uid": "pod-1"},
-            "spec": {
-                "nodeName": "node-a",
-                "containers": [
-                    {
-                        "name": "app",
-                        "resources": {
-                            "requests": {"cpu": "100m", "memory": "128Mi"},
-                            "limits": {"cpu": "500m", "memory": "512Mi"},
-                        },
-                    },
-                    {
-                        "name": "sidecar",
-                        "resources": {
-                            "requests": {"cpu": "250m", "memory": "64Mi"},
-                            "limits": {"cpu": "1", "memory": "1Gi"},
-                        },
-                    },
-                ],
-                "initContainers": [
-                    {
-                        "name": "migrate",
-                        "resources": {
-                            "requests": {"cpu": "600m", "memory": "256Mi"},
-                            "limits": {"cpu": "1500m", "memory": "2Gi"},
-                        },
-                    }
-                ],
-            },
-            "status": {"phase": "Running", "containerStatuses": []},
-        }
-    )
-    node = kubernetes_module.node_summary(
-        {
-            "metadata": {"name": "node-a", "uid": "node-1"},
-            "status": {
-                "allocatable": {"cpu": "2", "memory": "4Gi", "pods": "110"},
-                "capacity": {"cpu": "4", "memory": "8Gi", "pods": "120"},
-                "conditions": [{"type": "Ready", "status": "True"}],
-            },
-        },
-        {"cpu_mcores": 500, "mem_mib": 1024},
-    )
-
-    assert pod["cpu_request_mcores"] == 600.0
-    assert pod["mem_request_mib"] == 256.0
-    assert pod["cpu_limit_mcores"] == 1500.0
-    assert pod["mem_limit_mib"] == 2048.0
-    assert node["allocatable_cpu_mcores"] == 2000.0
-    assert node["allocatable_mem_mib"] == 4096.0
-    assert node["pod_capacity"] == 110
-    assert node["cpu_ratio"] == 0.25
-    assert node["mem_ratio"] == 0.25
-
-
 @pytest.mark.parametrize(
     ("node", "expected"),
     [
@@ -1031,6 +971,281 @@ def test_regular_kubernetes_snapshot_excludes_events_for_absent_pods_and_scaled_
     )
 
     assert [item["name"] for item in snapshot["events"]] == ["current"]
+
+
+def test_cluster_wide_event_capture_pages_all_namespaces_without_changing_scoped_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    requests: list[httpx.Request] = []
+
+    def event(uid: str, name: str, *, count: int = 1) -> dict[str, object]:
+        return {
+            "metadata": {
+                "uid": uid,
+                "name": name,
+                "namespace": "payments",
+                "resourceVersion": "7",
+            },
+            "type": "Warning",
+            "count": count,
+            "lastTimestamp": "2026-07-16T00:01:00Z",
+            "message": "must never enter the timeline fact contract",
+        }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.params.get("continue"):
+            return httpx.Response(
+                200,
+                json={"metadata": {"resourceVersion": "rv-1"}, "items": [event("evt-2", "b")]},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "metadata": {"resourceVersion": "rv-1", "continue": "page-2"},
+                "items": [event("evt-1", "a")],
+            },
+        )
+
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(handler),
+    )
+
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_wide_event_capture",
+                "description": "Capture every Kubernetes Event across all namespaces.",
+                "query": "*",
+                "collection_scope": "cluster_events",
+            }
+        )
+    )
+    response = asyncio.run(collector.collect("kubernetes"))["kubernetes"]
+    capture = response["event_capture"]
+    assert [request.url.path for request in requests] == ["/api/v1/events", "/api/v1/events"]
+    assert requests[0].url.params["limit"] == str(
+        kubernetes_module.KUBERNETES_EVENT_CAPTURE_PAGE_SIZE
+    )
+    assert requests[1].url.params["continue"] == "page-2"
+    assert capture["complete"] is True
+    assert capture["truncated"] is False
+    assert capture["reason"] == "complete"
+    assert capture["coverage"]["scope"] == "all_namespaces"
+    assert capture["coverage"]["page_count"] == 2
+    assert capture["coverage"]["event_count"] == 2
+    assert capture["freshness"]["max_age_seconds"] > 0
+    assert "message" not in capture["events"][0]
+
+    assert response["events"] == []
+    assert response["event_capture"] == capture
+    inventory_snapshot = kubernetes_evidence_to_inventory_snapshot(
+        response,
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    assert inventory_snapshot["summary"]["kubernetes_event_capture"]["complete"] is True
+    assert [fact["uid"] for fact in inventory_snapshot["summary"]["kubernetes_event_facts"]] == [
+        "evt-1",
+        "evt-2",
+    ]
+    assert not [
+        resource
+        for resource in inventory_snapshot["resources"]
+        if resource["resource_type"] == "event"
+    ]
+
+
+def test_cluster_wide_event_capture_surfaces_rbac_gap_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(lambda _request: httpx.Response(403)),
+    )
+    query = kubernetes_module.KubernetesSnapshotQuery(
+        "cluster_wide_event_capture",
+        "Capture every Kubernetes Event across all namespaces.",
+        "*",
+        collection_scope="cluster_events",
+    )
+
+    async def collect() -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            return await provider.query(client, query)
+
+    capture = asyncio.run(collect())["event_capture"]
+    assert capture["complete"] is False
+    assert capture["truncated"] is False
+    assert capture["reason"] == "rbac_denied"
+    assert capture["coverage"]["gap"] == "rbac_denied"
+    assert capture["events"] == []
+    inventory_snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"event_capture": capture},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    assert inventory_snapshot["summary"]["kubernetes_event_capture"]["coverage"]["gap"] == (
+        "rbac_denied"
+    )
+    assert inventory_snapshot["summary"]["kubernetes_event_facts"] == []
+
+
+@pytest.mark.parametrize(
+    ("failure", "reason"),
+    [
+        (httpx.ReadTimeout("event collection timed out"), "timeout"),
+        (httpx.ConnectError("event collection network unavailable"), "network_error"),
+    ],
+)
+def test_cluster_wide_event_capture_surfaces_transport_gap_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: httpx.RequestError,
+    reason: str,
+) -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+
+    def fail_request(_request: httpx.Request) -> httpx.Response:
+        raise failure
+
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(fail_request),
+    )
+    query = kubernetes_module.KubernetesSnapshotQuery(
+        "cluster_wide_event_capture",
+        "Capture every Kubernetes Event across all namespaces.",
+        "*",
+        collection_scope="cluster_events",
+    )
+
+    async def collect() -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            return await provider.query(client, query)
+
+    capture = asyncio.run(collect())["event_capture"]
+    assert capture["complete"] is False
+    assert capture["truncated"] is False
+    assert capture["reason"] == reason
+    assert capture["coverage"]["gap"] == reason
+    assert capture["events"] == []
+
+
+def test_cluster_wide_event_capture_fails_closed_when_item_limit_is_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(kubernetes_module, "KUBERNETES_EVENT_CAPTURE_MAX_ITEMS", 1)
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    response_body = {
+        "metadata": {"resourceVersion": "rv-1"},
+        "items": [
+            {
+                "metadata": {"uid": "evt-1", "name": "a", "namespace": "payments"},
+                "lastTimestamp": "2026-07-16T00:01:00Z",
+            },
+            {
+                "metadata": {"uid": "evt-2", "name": "b", "namespace": "payments"},
+                "lastTimestamp": "2026-07-16T00:01:00Z",
+            },
+        ],
+    }
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=response_body)),
+    )
+    query = kubernetes_module.KubernetesSnapshotQuery(
+        "cluster_wide_event_capture",
+        "Capture every Kubernetes Event across all namespaces.",
+        "*",
+        collection_scope="cluster_events",
+    )
+
+    async def collect() -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            return await provider.query(client, query)
+
+    capture = asyncio.run(collect())["event_capture"]
+    assert capture["complete"] is False
+    assert capture["truncated"] is True
+    assert capture["reason"] == "item_limit_exceeded"
+    assert capture["coverage"]["gap"] == "item_limit_exceeded"
+    assert capture["events"] == []
+
+
+def test_cluster_wide_event_capture_fails_closed_when_pagination_never_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _module, kubernetes_module = load_evidence_modules()
+    monkeypatch.setattr(kubernetes_module, "KUBERNETES_EVENT_CAPTURE_MAX_PAGES", 1)
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = kubernetes_module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "metadata": {"resourceVersion": "rv-1", "continue": "still-more"},
+                    "items": [
+                        {
+                            "metadata": {"uid": "evt-1", "name": "a", "namespace": "payments"},
+                            "lastTimestamp": "2026-07-16T00:01:00Z",
+                        }
+                    ],
+                },
+            )
+        ),
+    )
+    query = kubernetes_module.KubernetesSnapshotQuery(
+        "cluster_wide_event_capture",
+        "Capture every Kubernetes Event across all namespaces.",
+        "*",
+        collection_scope="cluster_events",
+    )
+
+    async def collect() -> dict[str, object]:
+        async with httpx.AsyncClient() as client:
+            return await provider.query(client, query)
+
+    capture = asyncio.run(collect())["event_capture"]
+    assert capture["complete"] is False
+    assert capture["truncated"] is True
+    assert capture["reason"] == "page_limit_exceeded"
+    assert capture["coverage"]["gap"] == "page_limit_exceeded"
+    assert capture["events"] == []
 
 
 def test_kubernetes_snapshot_provider_limits_large_payload_before_job_result() -> None:

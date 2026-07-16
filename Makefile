@@ -8,12 +8,21 @@ TARGET_CLUSTER ?=
 ENV_TEMPLATE ?= config/env/app.env.example
 LOCAL_TEST_ENV ?= .env.local-test
 FAST_TESTS ?= tests/test_dev_gate_contract.py
+REFERENCE_PROVENANCE ?= references/provenance/source.json
+REFERENCE_REVISION ?= $(shell node scripts/reference-provenance.mjs revision)
+REFERENCE_UI_BASE_REVISION ?= $(shell node scripts/reference-provenance.mjs ui-base-revision)
+REFERENCE_UPSTREAM_GIT ?= /tmp/opsia-upstream-verify
+REFERENCE_UPSTREAM_REPOSITORY ?= $(shell node scripts/reference-provenance.mjs repository)
 
 export IMAGE_NAME
 export MGMT_CLUSTER
 export TARGET_CLUSTER
+export REFERENCE_REVISION
+export REFERENCE_UI_BASE_REVISION
+export REFERENCE_UPSTREAM_GIT
+export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check release-governance gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -64,7 +73,52 @@ test: ## 린트와 테스트 실행
 manifest-check: ## Kubernetes manifest 렌더/파싱 확인
 	bash scripts/manifest-check.sh
 
-gate: ## CI용 백엔드·manifest·프론트 전체 게이트
+product-brand-boundary-check: ## 제품 표면의 이전 제품명·조직명 경계 확인
+	node scripts/verify-product-brand-boundary.mjs
+
+reference-ledger: ## 고정 원본의 해시·이식 상태 ledger 생성
+	node scripts/reference-ledger.mjs --source references/upstream --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-source-ledger.json
+
+reference-ledger-check: ## 고정 원본과 ledger의 완전성 확인
+	node scripts/reference-ledger.mjs --source references/upstream --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-source-ledger.json --check
+
+reference-feature-ledger: ## 원본 기능·계약 전수 ledger 생성
+	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json
+
+reference-feature-ledger-check: ## 원본 기능 ledger의 완전성 확인
+	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check
+
+reference-upstream-prepare: ## strict UI delta 검증용 승인 원본 Git object 준비
+	@if [[ -e "$(REFERENCE_UPSTREAM_GIT)" ]]; then \
+		git -C "$(REFERENCE_UPSTREAM_GIT)" rev-parse --is-inside-work-tree >/dev/null; \
+	else \
+		git init --quiet "$(REFERENCE_UPSTREAM_GIT)"; \
+	fi
+	@remote="$$(git -C "$(REFERENCE_UPSTREAM_GIT)" remote get-url origin 2>/dev/null || true)"; \
+	if [[ -z "$$remote" ]]; then \
+		git -C "$(REFERENCE_UPSTREAM_GIT)" remote add origin "$(REFERENCE_UPSTREAM_REPOSITORY)"; \
+	elif [[ "$$remote" != "$(REFERENCE_UPSTREAM_REPOSITORY)" ]]; then \
+		echo "reference upstream remote differs: $$remote" >&2; exit 1; \
+	fi
+	git -C "$(REFERENCE_UPSTREAM_GIT)" fetch --no-tags --depth=1 origin "$(REFERENCE_UI_BASE_REVISION)" "$(REFERENCE_REVISION)"
+	git -C "$(REFERENCE_UPSTREAM_GIT)" cat-file -e "$(REFERENCE_UI_BASE_REVISION)^{tree}"
+	git -C "$(REFERENCE_UPSTREAM_GIT)" cat-file -e "$(REFERENCE_REVISION)^{tree}"
+
+reference-ui-delta-ledger: ## 최신 원본 UI delta를 pending 상태로 결정적으로 생성
+	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --classification-input docs/migration/reference-ui-delta-classifications.json --output docs/migration/reference-ui-delta-ledger.json
+
+reference-ui-delta-ledger-check: ## UI delta의 path·blob·SHA-256 결정성 확인(분류 완료는 요구하지 않음)
+	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --classification-input docs/migration/reference-ui-delta-classifications.json --output docs/migration/reference-ui-delta-ledger.json --check
+
+reference-ui-delta-rebaseline-check: ## 출하/재기준화용: revision 일치와 UI delta 전수 분류를 모두 요구
+	node scripts/reference-source-delta-ledger.mjs --repository "$(REFERENCE_UPSTREAM_GIT)" --base "$(REFERENCE_UI_BASE_REVISION)" --target "$(REFERENCE_REVISION)" --inventory docs/spec/frontend/reference-feature-inventory.md --feature-ledger docs/migration/reference-feature-ledger.json --classification-input docs/migration/reference-ui-delta-classifications.json --output docs/migration/reference-ui-delta-ledger.json --check --require-rebased --require-classified
+
+reference-feature-parity-check: reference-ui-delta-rebaseline-check ## 출하용: UI delta와 모든 제품 기능이 실제 구현 상태인지 확인
+	node scripts/reference-feature-ledger.mjs --source docs/spec/frontend/reference-feature-inventory.md --revision "$(REFERENCE_REVISION)" --output docs/migration/reference-feature-ledger.json --contracts-output src/packages/contracts/reference_feature_catalog.json --port-map docs/migration/reference-feature-port-map.json --check --require-complete
+
+release-governance: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check ## 출하 차단용 최신 원본 동등성 gate
+
+gate: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## PR 진단용 백엔드·manifest·프론트 전체 gate
 	bash scripts/test.sh
 	bash scripts/manifest-check.sh
 	cd frontend && npm ci --include=dev --no-audit --no-fund

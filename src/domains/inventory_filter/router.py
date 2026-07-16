@@ -28,7 +28,6 @@ from domains.inventory_filter.query import (
     parse_facet_values,
     parse_resource_filters,
 )
-from domains.inventory_filter.relations_topology import build_relations_topology
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -65,7 +64,8 @@ FILTER_CURSOR_SIGNING_KEY_ENV = "FILTER_CURSOR_SIGNING_KEY"
 INVALID_REQUEST_DETAIL = "resource filter request is invalid"
 SCOPE_NOT_FOUND_DETAIL = "resource filter scope not found"
 CURSOR_UNAVAILABLE_DETAIL = "resource filter cursor is unavailable"
-TOPOLOGY_UNAVAILABLE_DETAIL = "resource topology snapshot is unavailable"
+TOPOLOGY_REFRESH_AFTER_SECONDS = 5
+TOPOLOGY_PROJECTION_UNAVAILABLE = "topology_projection_unavailable"
 
 FacetAxis = Literal["clusters", "namespaces", "applications"]
 
@@ -185,49 +185,31 @@ async def get_topology(
         if int(pinned_global.get("snapshot_revision") or 0) != target_revision:
             raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
 
+    if view == "relations":
+        graph = await _read_resource_graph_snapshot(
+            db,
+            authorized=authorized,
+            cluster_id=cluster_id,
+            filters=filters,
+            latest_revision=latest_revision,
+            target_revision=target_revision,
+            node_limit=DEFAULT_GRAPH_NODE_LIMIT,
+            edge_limit=DEFAULT_GRAPH_EDGE_LIMIT,
+        )
+        return RelationsTopologyResponse(
+            **graph.model_dump(),
+            availability=(
+                "unavailable" if graph.relation_completeness == "unavailable" else "available"
+            ),
+            refresh_after_seconds=TOPOLOGY_REFRESH_AFTER_SECONDS,
+        )
+
     cluster_context = await asyncio.to_thread(
         db.filter_snapshot_context,
         authorized.workspace_id,
         {cluster_id},
         at_revision=target_revision,
     )
-    if view == "relations":
-        if (
-            target_revision <= 0
-            or int(cluster_context.get("snapshot_revision") or 0) != target_revision
-        ):
-            raise HTTPException(status_code=503, detail=TOPOLOGY_UNAVAILABLE_DETAIL)
-        result = await asyncio.to_thread(
-            db.list_filtered_resources,
-            workspace_id=authorized.workspace_id,
-            allowed_cluster_ids={cluster_id},
-            allowed_application_ids=set(authorized.application_ids),
-            filters=filters,
-            snapshot_revision=target_revision,
-            position=None,
-            limit=DEFAULT_GRAPH_NODE_LIMIT,
-            graph_priority=True,
-        )
-        items = list(result.get("items") or [])
-        filtered_count = int(result.get("filtered_count") or 0)
-        reasons = list(cluster_context.get("partial_reason_codes") or [])
-        if any(item.get("application_binding_completeness") != "exact" for item in items):
-            reasons.append("restricted_application_bindings")
-        graph = build_resource_graph(
-            items,
-            snapshot_revision=target_revision,
-            filter_fingerprint=filter_fingerprint(filters),
-            source_complete=bool(cluster_context.get("resources_complete")),
-            labels_complete=bool(cluster_context.get("labels_complete")),
-            truncated=bool(result.get("has_more")),
-            node_limit=DEFAULT_GRAPH_NODE_LIMIT,
-            edge_limit=DEFAULT_GRAPH_EDGE_LIMIT,
-            omitted_node_count=max(0, filtered_count - len(items)),
-            partial_reason_codes=reasons,
-            cluster={"cluster_id": cluster_id, "name": None, "provider": None},
-            authorization_revision=authorized.authorization_revision,
-        )
-        return RelationsTopologyResponse.model_validate(build_relations_topology(graph))
 
     topology_result, usage_by_cluster, cluster_identities = await asyncio.gather(
         asyncio.to_thread(
@@ -357,12 +339,50 @@ async def get_resource_graph(
         if int(pinned_global.get("snapshot_revision") or 0) != target_revision:
             raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL)
 
+    return await _read_resource_graph_snapshot(
+        db,
+        authorized=authorized,
+        cluster_id=cluster_id,
+        filters=filters,
+        latest_revision=latest_revision,
+        target_revision=target_revision,
+        node_limit=max_nodes,
+        edge_limit=max_edges,
+    )
+
+
+async def _read_resource_graph_snapshot(
+    db: Any,
+    *,
+    authorized: AuthorizedFilterScope,
+    cluster_id: str,
+    filters: ResourceFilters,
+    latest_revision: int,
+    target_revision: int,
+    node_limit: int,
+    edge_limit: int,
+) -> ResourceGraphSnapshotResponse:
+    """Read one authorized graph cut without manufacturing relation evidence."""
+    fingerprint = filter_fingerprint(filters)
     cluster_context = await asyncio.to_thread(
         db.filter_snapshot_context,
         authorized.workspace_id,
         {cluster_id},
         at_revision=target_revision,
     )
+    cluster_revision = int(cluster_context.get("snapshot_revision") or 0)
+    if target_revision <= 0 or cluster_revision != target_revision:
+        return _unavailable_resource_graph_snapshot(
+            authorized=authorized,
+            cluster_id=cluster_id,
+            cluster_context=cluster_context,
+            fingerprint=fingerprint,
+            latest_revision=latest_revision,
+            target_revision=target_revision,
+            node_limit=node_limit,
+            edge_limit=edge_limit,
+        )
+
     result = await asyncio.to_thread(
         db.list_filtered_resources,
         workspace_id=authorized.workspace_id,
@@ -371,13 +391,11 @@ async def get_resource_graph(
         filters=filters,
         snapshot_revision=target_revision,
         position=None,
-        limit=max_nodes,
+        limit=node_limit,
         graph_priority=True,
     )
     items = list(result.get("items") or [])
     filtered_count = int(result.get("filtered_count") or 0)
-    omitted_node_count = max(0, filtered_count - len(items))
-    fingerprint = filter_fingerprint(filters)
     reasons = list(cluster_context.get("partial_reason_codes") or [])
     if any(item.get("application_binding_completeness") != "exact" for item in items):
         reasons.append("restricted_application_bindings")
@@ -393,16 +411,16 @@ async def get_resource_graph(
         source_complete=bool(cluster_context.get("resources_complete")),
         labels_complete=bool(cluster_context.get("labels_complete")),
         truncated=bool(result.get("has_more")),
-        node_limit=max_nodes,
-        edge_limit=max_edges,
-        omitted_node_count=omitted_node_count,
+        node_limit=node_limit,
+        edge_limit=edge_limit,
+        omitted_node_count=max(0, filtered_count - len(items)),
         partial_reason_codes=reasons,
         cluster=cluster_identity,
         authorization_revision=authorized.authorization_revision,
     )
     return ResourceGraphSnapshotResponse(
         **graph,
-        cluster_projection_revision=int(cluster_context.get("snapshot_revision") or 0),
+        cluster_projection_revision=cluster_revision,
         counts=_counts(
             result,
             context=cluster_context,
@@ -416,6 +434,55 @@ async def get_resource_graph(
             observed_at=cluster_context.get("observed_at"),
             stale=target_revision < latest_revision,
             partial_reason_codes=sorted(set(reasons)),
+        ),
+    )
+
+
+def _unavailable_resource_graph_snapshot(
+    *,
+    authorized: AuthorizedFilterScope,
+    cluster_id: str,
+    cluster_context: Mapping[str, Any],
+    fingerprint: str,
+    latest_revision: int,
+    target_revision: int,
+    node_limit: int,
+    edge_limit: int,
+) -> ResourceGraphSnapshotResponse:
+    reasons = {
+        TOPOLOGY_PROJECTION_UNAVAILABLE,
+        *(str(reason) for reason in cluster_context.get("partial_reason_codes") or []),
+    }
+    cluster = {"cluster_id": cluster_id, "name": None, "provider": None}
+    graph = build_resource_graph(
+        [],
+        snapshot_revision=0,
+        filter_fingerprint=fingerprint,
+        source_complete=False,
+        labels_complete=False,
+        truncated=False,
+        node_limit=node_limit,
+        edge_limit=edge_limit,
+        partial_reason_codes=sorted(reasons),
+        cluster=cluster,
+        authorization_revision=authorized.authorization_revision,
+    )
+    return ResourceGraphSnapshotResponse(
+        **graph,
+        cluster_projection_revision=int(cluster_context.get("snapshot_revision") or 0),
+        counts=FilterResultCounts(
+            filtered_count=None,
+            unfiltered_count=None,
+            filtered_count_completeness="unavailable",
+            unfiltered_count_completeness="unavailable",
+        ),
+        snapshot=FilterSnapshotMeta(
+            snapshot_revision=target_revision,
+            authorization_revision=authorized.authorization_revision,
+            filter_fingerprint=fingerprint,
+            observed_at=None,
+            stale=target_revision < latest_revision,
+            partial_reason_codes=sorted(reasons),
         ),
     )
 

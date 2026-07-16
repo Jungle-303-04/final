@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { describe, expect, it } from "vitest";
 import { createProductComposition } from "./productComposition";
+import { createProductSurfaceLoader } from "./surfaceLoader";
 import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
 import type { AiAssistantPort } from "../features/ai-assistant/aiAssistantContract";
@@ -40,9 +41,9 @@ describe("product composition", () => {
 
   it("sorts registered surfaces by the canonical navigation order", () => {
     const composition = createProductComposition([
-      { id: "settings", Component: EmptySurface },
-      { id: "home", Component: EmptySurface },
-      { id: "issues", Component: EmptySurface },
+      { id: "settings", loader: surfaceLoader(EmptySurface) },
+      { id: "home", loader: surfaceLoader(EmptySurface) },
+      { id: "issues", loader: surfaceLoader(EmptySurface) },
     ], testAuthPort, testClusterScopePort);
 
     expect(composition.surfaces.map((surface) => surface.id)).toEqual([
@@ -93,8 +94,12 @@ describe("product composition", () => {
 
   it("rejects duplicate registrations instead of choosing one implicitly", () => {
     expect(() => createProductComposition([
-      { id: "home", Component: EmptySurface },
-      { id: "home", Component: EmptySurface },
+      { id: "home", loader: surfaceLoader(EmptySurface) },
+      { id: "home", loader: surfaceLoader(EmptySurface) },
     ], testAuthPort, testClusterScopePort)).toThrow(/duplicate product surface: home/u);
   });
 });
+
+function surfaceLoader(Component: ComponentType) {
+  return createProductSurfaceLoader(async () => ({ default: Component }));
+}

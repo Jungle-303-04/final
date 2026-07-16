@@ -167,6 +167,8 @@ def test_schema_defines_expected_tables() -> None:
         "rca_reports",
         "pull_requests",
         "agent_commands",
+        "command_operation_event_cursors",
+        "command_operation_events",
         "audit_log",
         "user_accounts",
         "workspaces",
@@ -2034,6 +2036,101 @@ def test_fail_expired_agent_commands_sweeps_abandoned_leases_atomically() -> Non
     assert compiled.params["status"] == "failed"
 
 
+def test_fail_expired_agent_commands_stages_terminal_operation_event_in_same_transaction() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[tuple[int, Any]] = []
+
+    class StubResult:
+        def __init__(
+            self,
+            *,
+            rows: list[dict[str, object]] | None = None,
+            scalar: int | None = None,
+        ) -> None:
+            self.rows = rows or []
+            self.scalar = scalar
+
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return self.rows
+
+        def one(self) -> dict[str, object]:
+            return self.rows[0]
+
+        def scalar_one_or_none(self) -> int | None:
+            return self.scalar
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append((id(self), statement))
+            if len(recorded) == 1:
+                return StubResult(
+                    rows=[
+                        {
+                            "command_id": "cmd-expired",
+                            "workspace_id": "workspace-1",
+                            "cluster_id": "cluster-1",
+                            "correlation_id": "corr-expired",
+                            "result": {
+                                "status": "failed",
+                                "applied": False,
+                                "message": "command lease expired",
+                            },
+                        }
+                    ]
+                )
+            if len(recorded) == 3:
+                return StubResult(scalar=2)
+            return StubResult(
+                rows=[
+                    {
+                        "command_id": "cmd-expired",
+                        "sequence": 2,
+                        "kind": "failed",
+                        "payload": {
+                            "cluster_id": "cluster-1",
+                            "status": "failed",
+                        },
+                        "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+                    }
+                ]
+            )
+
+    connection = StubConnection()
+
+    @contextmanager
+    def stub_connection():
+        yield connection
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.connection = stub_connection  # type: ignore[method-assign]
+
+    assert repository.fail_expired_agent_commands() == [
+        {
+            "command_id": "cmd-expired",
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "correlation_id": "corr-expired",
+            "result": {
+                "status": "failed",
+                "applied": False,
+                "message": "command lease expired",
+            },
+        }
+    ]
+
+    assert len(recorded) == 4
+    assert {connection_id for connection_id, _ in recorded} == {id(connection)}
+    sql = [str(statement.compile(dialect=postgresql.dialect())) for _, statement in recorded]
+    assert "UPDATE agent_commands" in sql[0]
+    assert "INSERT INTO command_operation_event_cursors" in sql[1]
+    assert "UPDATE command_operation_event_cursors" in sql[2]
+    assert "INSERT INTO command_operation_events" in sql[3]
+
+
 def test_expire_stale_open_rca_incidents_closes_old_rows_atomically() -> None:
     from domains.dashboard.repository import DashboardRepository
 
@@ -2442,11 +2539,167 @@ def test_queue_agent_command_reports_insert_and_notifies_only_new_commands() -> 
 
     assert repository.queue_agent_command("corr-1", plan, "queued") is True
     assert repository.queue_agent_command("corr-1", plan, "queued") is False
-    assert len(recorded) == 3
+    # Worker projection now persists the immutable first execution attempt in
+    # addition to the logical command row before waking the target agent.
+    assert len(recorded) == 4
     assert "RETURNING agent_commands.command_id" in str(
         recorded[0].compile(dialect=postgresql.dialect())
     )
-    assert "pg_notify" in str(recorded[1])
+    assert "agent_command_attempts" in str(recorded[1].compile(dialect=postgresql.dialect()))
+    assert "pg_notify" in str(recorded[2])
+
+
+def test_operation_event_replay_is_workspace_scoped_and_strictly_ordered() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def mappings(self) -> StubResult:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return [
+                {
+                    "command_id": "cmd-1",
+                    "sequence": 2,
+                    "kind": "progress",
+                    "payload": {"cluster_id": "cluster-1", "status": "running"},
+                    "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+                }
+            ]
+
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @asynccontextmanager
+    async def stub_async_connection():
+        yield StubAsyncConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
+
+    events = asyncio.run(
+        repository.list_command_operation_events(
+            "workspace-1",
+            "cmd-1",
+            after_sequence=1,
+        )
+    )
+
+    assert [event.sequence for event in events] == [2]
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "command_operation_events.workspace_id =" in sql
+    assert "command_operation_events.command_id =" in sql
+    assert "command_operation_events.sequence >" in sql
+    assert "ORDER BY command_operation_events.sequence ASC" in sql
+    assert "workspace-1" in compiled.params.values()
+    assert "cmd-1" in compiled.params.values()
+
+
+def test_completed_command_stages_terminal_operation_event_in_the_same_transaction() -> None:
+    """A stored FAILED/COMPLETED state cannot survive without its terminal SSE fact."""
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def __init__(self, index: int) -> None:
+            self.index = index
+
+        def mappings(self) -> StubResult:
+            return self
+
+        def first(self) -> dict[str, object]:
+            return {"correlation_id": "corr-1"}
+
+        def one(self) -> dict[str, object]:
+            return {
+                "command_id": "cmd-1",
+                "sequence": 1,
+                "kind": "failed",
+                "payload": {"cluster_id": "cluster-1", "status": "failed"},
+                "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+            }
+
+        def scalar_one_or_none(self) -> int:
+            return 1
+
+    class StubConnection:
+        def __init__(self) -> None:
+            self.index = 0
+
+        async def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            self.index += 1
+            return StubResult(self.index)
+
+    @asynccontextmanager
+    async def transaction():
+        yield StubConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.async_engine = SimpleNamespace(begin=transaction)  # type: ignore[method-assign]
+
+    completed = asyncio.run(
+        repository.complete_agent_command_and_stage_event(
+            "cmd-1",
+            "workspace-1",
+            "cluster-1",
+            {"status": "failed", "message": "agent failed"},
+            "lease-1",
+            "agent-1",
+            "api-gateway",
+        )
+    )
+
+    assert completed is not None
+    sql = "\n".join(str(statement.compile(dialect=postgresql.dialect())) for statement in recorded)
+    assert "command_operation_event_cursors" in sql
+    assert "command_operation_events" in sql
+
+
+def test_command_receipt_operation_event_can_stage_inside_the_event_outbox_transaction() -> None:
+    from domains.command.repository import stage_command_operation_event_in_transaction
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def scalar_one_or_none(self) -> int:
+            return 1
+
+        def mappings(self) -> StubResult:
+            return self
+
+        def one(self) -> dict[str, object]:
+            return {
+                "command_id": "cmd-receipt",
+                "sequence": 1,
+                "kind": "progress",
+                "payload": {"cluster_id": "cluster-1", "status": "queued"},
+                "occurred_at": datetime(2026, 7, 15, tzinfo=UTC),
+            }
+
+    class StubConnection:
+        def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    event = stage_command_operation_event_in_transaction(
+        StubConnection(),
+        workspace_id="workspace-1",
+        command_id="cmd-receipt",
+        kind="progress",
+        payload={"cluster_id": "cluster-1", "status": "queued"},
+    )
+
+    assert event is not None
+    sql = "\n".join(str(statement.compile(dialect=postgresql.dialect())) for statement in recorded)
+    assert "command_operation_event_cursors" in sql
+    assert "command_operation_events" in sql
 
 
 def test_agent_commands_by_correlation_is_workspace_scoped_newest_and_bounded() -> None:

@@ -155,6 +155,8 @@ def run_to_plan(payload: ClusterEvidenceReceivedBody, correlation_id: str) -> li
     incident_outs = run_handler(
         incident_worker.on_evidence_built, evidence_outs[0], db=db, correlation_id=correlation_id
     )
+    if not incident_outs:
+        return evidence_outs
     if incident_outs[-1].__subject__ != "evidence.bundle.built":
         return evidence_outs + incident_outs
     plan_outs = run_handler(plan_worker.on_evidence_bundle_built, incident_outs[-1])
@@ -600,9 +602,7 @@ def test_unattributed_5xx_log_does_not_create_synthetic_incident_target() -> Non
 
     events = run_to_plan(payload, correlation_id="corr-unattributed-log")
 
-    detected = event_by_subject(events, "incident.detected")
-    assert detected.detected is False
-    assert detected.incident is None
+    assert subjects_of(events) == ["evidence.built"]
 
 
 def test_demo_intentional_error_log_opens_incident_and_completes_rca() -> None:
@@ -678,10 +678,7 @@ def test_stale_demo_error_log_does_not_open_incident_after_recovery() -> None:
     )
     events = run_to_plan(payload, correlation_id="corr-stale-demo-5xx")
 
-    detected = event_by_subject(events, "incident.detected")
-    assert detected.detected is False
-    assert detected.incident is None
-    assert "evidence.bundle.built" not in subjects_of(events)
+    assert subjects_of(events) == ["evidence.built"]
 
 
 FAULT_COMPLETION_CASES: dict[str, tuple[ClusterEvidenceReceivedBody, str]] = {
@@ -827,14 +824,7 @@ def test_ambiguous_snapshot_does_not_open_incident() -> None:
 
     events = run_to_plan(evidence_payload(healthy), correlation_id="corr-ambiguous")
 
-    assert subjects_of(events) == [
-        "evidence.built",
-        "incident.detected",
-    ]
-    detected = event_by_subject(events, "incident.detected")
-    assert detected.detected is False
-    assert detected.incident is None
-    assert detected.affected == []
+    assert subjects_of(events) == ["evidence.built"]
 
 
 def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> None:
@@ -857,14 +847,7 @@ def test_stale_warning_event_does_not_open_incident_when_pod_is_healthy() -> Non
         correlation_id="corr-stale-warning",
     )
 
-    assert subjects_of(events) == [
-        "evidence.built",
-        "incident.detected",
-    ]
-    detected = event_by_subject(events, "incident.detected")
-    assert detected.detected is False
-    assert detected.incident is None
-    assert detected.affected == []
+    assert subjects_of(events) == ["evidence.built"]
 
 
 @pytest.mark.parametrize("include_recovered_pod", [False, True])
@@ -891,9 +874,7 @@ def test_recent_probe_event_does_not_reopen_recovered_pod(
         correlation_id=f"corr-recovered-probe-{include_recovered_pod}",
     )
 
-    detected = event_by_subject(events, "incident.detected")
-    assert detected.detected is False
-    assert detected.incident is None
+    assert subjects_of(events) == ["evidence.built"]
 
 
 @pytest.mark.parametrize(

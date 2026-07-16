@@ -1,6 +1,8 @@
 import { GitBranch, LayoutGrid, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
+import { useMatch } from "react-router-dom";
 import type { GitOpsPort, ReleasePlan } from "../../features/gitops/gitOpsContract";
+import { gitOpsApplicationDetailIdFromRoute } from "../../features/gitops/gitOpsApplicationDetailRoute";
 import { WORKFLOW_VIEWS, settingString, type WorkflowView } from "../../features/gitops/workflowModel";
 import { useI18n } from "../../shared/i18n";
 import { Button } from "../../shared/ui/primitives/button";
@@ -17,12 +19,19 @@ import { WorkflowOverview } from "./WorkflowOverview";
 import { WorkflowInlineHeading } from "./WorkflowInlineHeading";
 import { WorkflowPlanPicker } from "./WorkflowPlanPicker";
 import { GitOpsSyncTableView } from "./GitOpsSyncTableView";
+import { GitOpsApplicationDetailPage } from "./GitOpsApplicationDetailPage";
 
 type GitOpsSection = "changes" | "sync";
 
 export function GitOpsPage({ port }: { port: GitOpsPort }) {
   const { t } = useI18n();
+  const detailMatch = useMatch("/gitops/detail/*");
   const [section, setSection] = useState<GitOpsSection>("changes");
+  const applicationId = gitOpsApplicationDetailIdFromRoute(detailMatch?.params["*"]);
+
+  if (applicationId !== null) {
+    return <GitOpsApplicationDetailPage applicationId={applicationId} port={port} />;
+  }
 
   return (
     <ProductPageFrame className="gap-4">

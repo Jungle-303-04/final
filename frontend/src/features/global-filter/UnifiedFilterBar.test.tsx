@@ -33,6 +33,21 @@ afterEach(cleanup);
 afterAll(() => vi.unstubAllGlobals());
 
 describe("UnifiedFilterBar", () => {
+  it("announces a pending search with the shared reduced-motion-safe spinner", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<readonly GlobalFilterSuggestion[]>();
+    renderFilter({ search: vi.fn(() => pending.promise) });
+
+    await user.click(screen.getByRole("button", { name: filterPlaceholder }));
+
+    const status = (await screen.findByText("Loading")).closest<HTMLElement>('[role="status"]');
+    expect(status?.textContent).toContain("Loading");
+    const spinner = status?.querySelector<HTMLElement>('[data-slot="spinner"]');
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.classList.contains("motion-reduce:animate-none")).toBe(true);
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("renders server-defined groups and writes typed selections to the canonical URL", async () => {
     const user = userEvent.setup();
     const search = vi.fn<GlobalFilterPort["search"]>(async (query) =>
@@ -178,6 +193,23 @@ describe("UnifiedFilterBar", () => {
     expect(within(control).queryByText("team=platform")).toBeNull();
   });
 
+  it("closes the non-modal popover when Tab leaves the filter controls", async () => {
+    const user = userEvent.setup();
+    renderFilter(
+      { search: vi.fn(async () => structuralSuggestions) },
+      "/resources?clusters=cluster-a",
+    );
+
+    await user.click(screen.getByRole("textbox", { name: filterPlaceholder }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Clear all filters" }));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Next content" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("aborts superseded requests and never paints a stale response", async () => {
     const user = userEvent.setup();
     const first = deferred<readonly GlobalFilterSuggestion[]>();
@@ -281,6 +313,7 @@ function renderFilter(port: GlobalFilterPort, initialEntry = "/resources") {
             <UnifiedFilterProvider>
               <UnifiedFilterBar port={port} />
               <LocationProbe />
+              <button type="button">Next content</button>
             </UnifiedFilterProvider>
           </I18nProvider>
         ),

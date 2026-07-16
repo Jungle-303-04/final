@@ -176,6 +176,14 @@ describe("ProductStateScreen", () => {
     expect(screen.getByRole("alert").textContent).toContain("forbidden");
   });
 
+  it("gives a missing item its own quiet state", () => {
+    renderWithLocale(<ProductStateScreen kind="not-found" />, "en-US");
+
+    expect(screen.getByRole("heading", { name: "We couldn't find that item" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("renders state and retry copy from the English catalog", () => {
     renderWithLocale(
       <ProductStateScreen

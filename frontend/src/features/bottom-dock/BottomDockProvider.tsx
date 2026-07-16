@@ -24,6 +24,7 @@ import {
   type BottomDockState,
 } from "./bottomDockState";
 import { useOptionalI18n } from "../../shared/i18n";
+import { createRafStreamCoalescer } from "../../shared/streaming/rafStreamCoalescer";
 
 export interface BottomDockController extends BottomDockState {
   openLogs: (target: LogStreamTarget) => void;
@@ -48,6 +49,11 @@ const EMPTY_CONTROLLER: BottomDockController = {
 
 const BottomDockContext = createContext<BottomDockController>(EMPTY_CONTROLLER);
 
+interface QueuedDockEvent {
+  id: string;
+  event: LogStreamEvent;
+}
+
 export function BottomDockProvider({
   children,
   port = EMPTY_LOG_STREAM_PORT,
@@ -58,9 +64,10 @@ export function BottomDockProvider({
   const [state, dispatch] = useReducer(bottomDockReducer, INITIAL_BOTTOM_DOCK_STATE);
   const stateRef = useRef(state);
   const subscriptions = useRef(new Map<string, { close: () => void; generation: number }>());
-  const queuedEvents = useRef(new Map<string, LogStreamEvent[]>());
-  const frame = useRef<number | null>(null);
   const generation = useRef(0);
+  const eventCoalescerRef = useRef<ReturnType<typeof createRafStreamCoalescer<QueuedDockEvent>> | null>(null);
+  const pendingSetupEvents = useRef<QueuedDockEvent[]>([]);
+  const acceptsEvents = useRef(true);
   const { reportUnauthorized } = useAuthSessionGate();
   const i18n = useOptionalI18n();
 
@@ -68,33 +75,47 @@ export function BottomDockProvider({
     stateRef.current = state;
   }, [state]);
 
-  const flushQueuedEvents = useCallback(() => {
-    frame.current = null;
-    const batches = [...queuedEvents.current].map(([id, events]) => ({ id, events }));
-    queuedEvents.current.clear();
-    if (batches.length > 0) dispatch({ type: "events", batches });
+  const queueEvent = useCallback((id: string, event: LogStreamEvent) => {
+    if (!acceptsEvents.current) return;
+    const queued = { id, event };
+    const eventCoalescer = eventCoalescerRef.current;
+    if (eventCoalescer) {
+      eventCoalescer.enqueue(queued);
+      return;
+    }
+    // Child effects can open a stream before this provider's effect owns the scheduler.
+    pendingSetupEvents.current.push(queued);
   }, []);
 
-  const queueEvent = useCallback((id: string, event: LogStreamEvent) => {
-    const events = queuedEvents.current.get(id);
-    if (events) events.push(event);
-    else queuedEvents.current.set(id, [event]);
-    if (frame.current !== null) return;
-    if (typeof requestAnimationFrame === "function") {
-      frame.current = requestAnimationFrame(flushQueuedEvents);
-    } else {
-      frame.current = -1;
-      queueMicrotask(flushQueuedEvents);
-    }
-  }, [flushQueuedEvents]);
+  const discardQueuedEvents = useCallback((predicate: (event: QueuedDockEvent) => boolean) => {
+    const buffered = pendingSetupEvents.current;
+    const retained = buffered.filter((event) => !predicate(event));
+    const discardedBuffered = buffered.length - retained.length;
+    pendingSetupEvents.current = retained;
+    return (eventCoalescerRef.current?.discard(predicate) ?? 0) + discardedBuffered;
+  }, []);
 
-  useEffect(() => () => {
-    for (const subscription of subscriptions.current.values()) subscription.close();
-    subscriptions.current.clear();
-    queuedEvents.current.clear();
-    if (frame.current !== null && frame.current >= 0 && typeof cancelAnimationFrame === "function") {
-      cancelAnimationFrame(frame.current);
-    }
+  useEffect(() => {
+    const activeSubscriptions = subscriptions.current;
+    const eventCoalescer = createRafStreamCoalescer<QueuedDockEvent>({
+      onFlush(events) {
+        dispatch({ type: "events", batches: dockEventBatches(events) });
+      },
+      policy: { hiddenTab: "coalesce", maxFramesPerSecond: 60 },
+    });
+    eventCoalescerRef.current = eventCoalescer;
+    acceptsEvents.current = true;
+    for (const queued of pendingSetupEvents.current) eventCoalescer.enqueue(queued);
+    pendingSetupEvents.current = [];
+
+    return () => {
+      acceptsEvents.current = false;
+      if (eventCoalescerRef.current === eventCoalescer) eventCoalescerRef.current = null;
+      pendingSetupEvents.current = [];
+      for (const subscription of activeSubscriptions.values()) subscription.close();
+      activeSubscriptions.clear();
+      eventCoalescer.dispose();
+    };
   }, []);
 
   const start = useCallback((id: string, target: LogStreamTarget) => {
@@ -139,7 +160,7 @@ export function BottomDockProvider({
         if (evicted) {
           subscriptions.current.get(evicted.id)?.close();
           subscriptions.current.delete(evicted.id);
-          queuedEvents.current.delete(evicted.id);
+          discardQueuedEvents((event) => event.id === evicted.id);
         }
       }
       dispatch({ type: "open", id, target });
@@ -151,7 +172,7 @@ export function BottomDockProvider({
     closeTab(id) {
       subscriptions.current.get(id)?.close();
       subscriptions.current.delete(id);
-      queuedEvents.current.delete(id);
+      discardQueuedEvents((event) => event.id === id);
       dispatch({ type: "close", id });
     },
     selectTab: (id) => dispatch({ type: "select", id }),
@@ -163,7 +184,7 @@ export function BottomDockProvider({
     },
     setCollapsed: (collapsed) => dispatch({ type: "collapse", collapsed }),
     setHeight: (height) => dispatch({ type: "resize", height }),
-  }), [state, start]);
+  }), [discardQueuedEvents, state, start]);
 
   const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId) ?? null;
   const connectionAnnouncement = activeTab === null
@@ -182,6 +203,19 @@ export function BottomDockProvider({
       {children}
     </BottomDockContext.Provider>
   );
+}
+
+function dockEventBatches(events: readonly QueuedDockEvent[]): Array<{
+  id: string;
+  events: LogStreamEvent[];
+}> {
+  const byId = new Map<string, LogStreamEvent[]>();
+  for (const queued of events) {
+    const batch = byId.get(queued.id);
+    if (batch) batch.push(queued.event);
+    else byId.set(queued.id, [queued.event]);
+  }
+  return [...byId].map(([id, batch]) => ({ id, events: batch }));
 }
 
 export function useBottomDock(): BottomDockController {

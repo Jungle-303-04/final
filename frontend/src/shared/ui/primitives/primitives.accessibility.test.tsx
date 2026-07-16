@@ -78,6 +78,35 @@ describe("product-owned primitive accessibility", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("closes only the topmost nested dialog on Escape", async () => {
+    const user = userEvent.setup();
+    render(
+      <Dialog>
+        <DialogTrigger render={<Button variant="outline" />}>외부 대화상자 열기</DialogTrigger>
+        <DialogContent>
+          <DialogTitle>외부 대화상자</DialogTitle>
+          <DialogDescription>상위 대화상자 내용</DialogDescription>
+          <Dialog>
+            <DialogTrigger render={<Button variant="outline" />}>내부 대화상자 열기</DialogTrigger>
+            <DialogContent>
+              <DialogTitle>내부 대화상자</DialogTitle>
+              <DialogDescription>하위 대화상자 내용</DialogDescription>
+            </DialogContent>
+          </Dialog>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "외부 대화상자 열기" }));
+    await user.click(await screen.findByRole("button", { name: "내부 대화상자 열기" }));
+    expect(await screen.findByRole("dialog", { name: "내부 대화상자" })).toBeTruthy();
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "내부 대화상자" })).toBeNull());
+    expect(screen.getByRole("dialog", { name: "외부 대화상자" })).toBeTruthy();
+  });
+
   it("renders keyboard input and its group with matching kbd elements", () => {
     const groupRef = createRef<HTMLElement>();
     render(

@@ -6,12 +6,20 @@ import {
   useState,
 } from "react";
 
-import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
+import type {
+  PhysicalTopologyRealtimePort,
+  PhysicalTopologyRealtimeStreamPolicy,
+} from "../../features/resources/physicalTopologyRealtimeContract";
 import type { ResourceSummary } from "../../features/resources/resourcesContract";
 import {
   ResourceTimelineModel,
   podTimelineIdentity,
 } from "../../features/resource-timeline";
+import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
+import {
+  createRafStreamCoalescer,
+  type RafStreamCoalescer,
+} from "../../shared/streaming/rafStreamCoalescer";
 import type { ResourceMetricLiveSeries } from "./resourceMetricLiveSeries";
 import { mergePhysicalTopologyRealtime } from "./mergePhysicalTopologyRealtime";
 import {
@@ -61,6 +69,7 @@ export function usePhysicalTopologyRealtime(input: {
   const [overlay, setOverlay] = useState<RealtimeOverlay>(() => createRealtimeOverlay(null));
   const [timelineRevision, setTimelineRevision] = useState(0);
   const timeline = useMemo(() => createResourceTimeline(scope), [scope]);
+  const reducedMotion = usePrefersReducedMotion();
   const currentReplayAt = useEffectEvent(() => replayAtMs);
   const currentActualView = useEffectEvent(() => ({ frame, rows }));
 
@@ -107,6 +116,10 @@ export function usePhysicalTopologyRealtime(input: {
     if (scope === null || clusterId === null || workspaceId === null) return undefined;
     let disposed = false;
     let disconnect: (() => void) | null = null;
+    let activePolicy: PhysicalTopologyRealtimeStreamPolicy | null = null;
+    let coalescer: RafStreamCoalescer<unknown> | null = null;
+    let coalescerAbort: AbortController | null = null;
+    let resyncQueued = false;
     const initiallyVisible = document.visibilityState !== "hidden";
     queueMicrotask(() => {
       if (disposed) return;
@@ -115,69 +128,6 @@ export function usePhysicalTopologyRealtime(input: {
         initiallyVisible ? "connecting" : "disconnected",
       ));
     });
-    const handlers = {
-      onMessage(message) {
-        if (disposed) return;
-        const ingest = timeline.ingest(message);
-        if (ingest.resyncRequired) {
-          setTimelineRevision((current) => current + 1);
-          setOverlay((current) => current.scope === scope
-            ? {
-                ...current,
-                live: {
-                  ...current.live,
-                  status: "reconnecting",
-                  degradedReason: "stream-sequence-integrity",
-                },
-              }
-            : current);
-          queueMicrotask(() => {
-            if (disposed) return;
-            close();
-            open();
-          });
-          return;
-        }
-        const actualView = currentActualView();
-        if (clusterId !== null && actualView.frame.phase === "ready") {
-          timeline.captureActualView(
-            clusterId,
-            actualView.frame.data.pods,
-            actualView.rows,
-            actualView.frame.data.servers,
-            actualView.frame.data.metricsObservedAt,
-          );
-        }
-        const requestedReplayAt = currentReplayAt();
-        if (requestedReplayAt !== undefined && timeline.getCursor().mode === "live") {
-          try {
-            timeline.setReplayCursor(requestedReplayAt);
-          } catch {
-            // Keep waiting for the first real sample at this scope.
-          }
-        }
-        if (ingest.accepted) {
-          setTimelineRevision((current) => current + 1);
-        }
-        setOverlay((current) => {
-          if (current.scope !== scope) return current;
-          const next = reducePhysicalTopologyRealtimeOverlay(current, message, clusterId);
-          syncTimelineConnection(timeline, next.live);
-          return next;
-        });
-      },
-      onStatusChange(connectionStatus) {
-        if (disposed) return;
-        const status = toPhysicalTopologyLiveStatus(connectionStatus);
-        if (status === null) return;
-        setOverlay((current) => {
-          if (current.scope !== scope) return current;
-          const next = { ...current, live: { ...current.live, status } };
-          syncTimelineConnection(timeline, next.live);
-          return next;
-        });
-      },
-    } satisfies Parameters<PhysicalTopologyRealtimePort["connect"]>[1];
     const open = () => {
       if (disposed || disconnect !== null || document.visibilityState === "hidden") return;
       disconnect = port.connect({ workspaceId, clusterId }, handlers);
@@ -187,9 +137,139 @@ export function usePhysicalTopologyRealtime(input: {
       disconnect = null;
       activeDisconnect?.();
     };
+    const discardPendingFrame = () => {
+      coalescerAbort?.abort();
+      coalescerAbort = null;
+      coalescer = null;
+      activePolicy = null;
+    };
+    const requestResync = () => {
+      if (disposed || resyncQueued) return;
+      resyncQueued = true;
+      discardPendingFrame();
+      setTimelineRevision((current) => current + 1);
+      setOverlay((current) => current.scope === scope
+        ? {
+            ...current,
+            live: {
+              ...current.live,
+              status: "reconnecting",
+              degradedReason: "stream-sequence-integrity",
+            },
+          }
+        : current);
+      queueMicrotask(() => {
+        if (disposed) return;
+        resyncQueued = false;
+        close();
+        open();
+      });
+    };
+    const flushFrame = (messages: readonly unknown[]) => {
+      if (disposed || messages.length === 0) return;
+      let accepted = false;
+      const actualView = currentActualView();
+      for (const message of messages) {
+        const ingest = timeline.ingest(message);
+        if (ingest.resyncRequired) {
+          requestResync();
+          return;
+        }
+        accepted ||= ingest.accepted;
+        if (ingest.accepted && actualView.frame.phase === "ready") {
+          // Samples retain the exact graph/table cut that was current at their
+          // own server revision, even when several records share one paint.
+          timeline.captureActualView(
+            clusterId,
+            actualView.frame.data.pods,
+            actualView.rows,
+            actualView.frame.data.servers,
+            actualView.frame.data.metricsObservedAt,
+          );
+        }
+      }
+      const requestedReplayAt = currentReplayAt();
+      if (requestedReplayAt !== undefined && timeline.getCursor().mode === "live") {
+        try {
+          timeline.setReplayCursor(requestedReplayAt);
+        } catch {
+          // Keep waiting for the first real sample at this scope.
+        }
+      }
+      if (accepted) setTimelineRevision((current) => current + 1);
+      setOverlay((current) => {
+        if (current.scope !== scope) return current;
+        const next = messages.reduce<RealtimeOverlay>(
+          (reduced, message) => reducePhysicalTopologyRealtimeOverlay(reduced, message, clusterId),
+          current,
+        );
+        syncTimelineConnection(timeline, next.live);
+        return next;
+      });
+    };
+    const configurePolicy = (policy: PhysicalTopologyRealtimeStreamPolicy) => {
+      discardPendingFrame();
+      if (!validStreamPolicy(policy)) {
+        requestResync();
+        return;
+      }
+      try {
+        const controller = new AbortController();
+        coalescerAbort = controller;
+        activePolicy = policy;
+        coalescer = createRafStreamCoalescer({
+          // The hub sends an already ordered, server-revisioned stream. Keep
+          // that FIFO order intact so ResourceTimelineModel can detect a bad
+          // revision rather than silently dropping it in the paint scheduler.
+          onFlush: flushFrame,
+          policy,
+          reducedMotion,
+          signal: controller.signal,
+        });
+      } catch {
+        requestResync();
+      }
+    };
+    const handlers = {
+      onMessage(message) {
+        if (disposed) return;
+        if (coalescer === null || activePolicy === null) {
+          requestResync();
+          return;
+        }
+        if (coalescer.pendingCount() >= activePolicy.maxPendingMessages) {
+          requestResync();
+          return;
+        }
+        try {
+          coalescer.enqueue(message);
+        } catch {
+          requestResync();
+        }
+      },
+      onPolicy: configurePolicy,
+      onStatusChange(connectionStatus) {
+        if (disposed) return;
+        const status = toPhysicalTopologyLiveStatus(connectionStatus);
+        if (status === null) return;
+        if (status === "reconnecting" || status === "disconnected") {
+          // A lifecycle boundary may arrive before rAF. Publish its admitted
+          // records once, then require the next hello/snapshot policy cut.
+          coalescer?.flush();
+          discardPendingFrame();
+        }
+        setOverlay((current) => {
+          if (current.scope !== scope) return current;
+          const next = { ...current, live: { ...current.live, status } };
+          syncTimelineConnection(timeline, next.live);
+          return next;
+        });
+      },
+    } satisfies Parameters<PhysicalTopologyRealtimePort["connect"]>[1];
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         close();
+        discardPendingFrame();
         setOverlay((current) => current.scope === scope
           ? { ...current, live: { ...current.live, status: "disconnected" } }
           : current);
@@ -205,9 +285,10 @@ export function usePhysicalTopologyRealtime(input: {
     return () => {
       disposed = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      discardPendingFrame();
       close();
     };
-  }, [clusterId, port, scope, timeline, workspaceId]);
+  }, [clusterId, port, reducedMotion, scope, timeline, workspaceId]);
 
   const scopedOverlay = overlay.scope === scope
     ? overlay
@@ -259,6 +340,15 @@ export function usePhysicalTopologyRealtime(input: {
 function createResourceTimeline(scope: string | null): ResourceTimelineModel {
   void scope;
   return new ResourceTimelineModel();
+}
+
+function validStreamPolicy(
+  policy: PhysicalTopologyRealtimeStreamPolicy,
+): boolean {
+  return Number.isSafeInteger(policy.revision)
+    && policy.revision > 0
+    && Number.isSafeInteger(policy.maxPendingMessages)
+    && policy.maxPendingMessages > 0;
 }
 
 function selectTimelineFrame(

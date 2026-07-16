@@ -3,7 +3,7 @@ title: VP-016 — 실행 계획 (수직 슬라이스 · 소단위 커밋 · 단�
 status: spec-approved
 date: 2026-07-14
 owner: 단독 세션 (구현) / 우녕 (확정)
-governing: VP-015(골격) · VP-010~014 · radar-parity-map
+governing: VP-015(골격) · VP-010~014 · reference-parity-map
 ---
 
 # VP-016 — 실행 계획
@@ -263,7 +263,7 @@ GET /topology?view=physical&clusters=<id>&<filters>
 - 축약(12개)은 **서버가 문제 우선으로 정렬해서** 자른다.
 
 **프론트**
-- @xyflow/react + ELK 레이아웃 (Radar `topology/layout.ts` 이식)
+- @xyflow/react + ELK 레이아웃 (기준 원본 `topology/layout.ts` 이식)
 - **서버 카드** (아이콘 + CPU/MEM 막대)
 - **파드** — 크기 고정 / 채움=사용률 / 배지=비정상 (VP-015 §4.2)
 - 필터 안 맞는 파드는 opacity 20%, 클릭 불가
@@ -313,7 +313,7 @@ GET /metrics/history?ids=...      → 스파크라인 시계열
   다시 교차 검증한다. 데이터 없으면 빈 points/null. **0으로 그리지 않는다.**
 
 **프론트**
-- Radar의 `KNOWN_COLUMNS`/`CellContent` 패턴을 참고하되 raw Kubernetes detail renderer를
+- 기준 원본의 `KNOWN_COLUMNS`/`CellContent` 패턴을 참고하되 raw Kubernetes detail renderer를
   목록에 섞지 않는다. Opsia canonical facts가 있는 pod/node/workload/service/event만 smart column.
 - canonical fact 정렬 · snapshot-safe cursor 페이지네이션 · 행/스파크라인 상세 선택
 - 단일 batch 추세 스파크라인 (Recharts). 실측 CPU가 2점 미만이면 빈칸.
@@ -384,7 +384,7 @@ POST /ai/chat { context: { screen, filters, selection, time }, message }
 → { answer, evidence: [{ type, id, label, link }] }   ← 근거 필수
 
 GET /ai/suggestions?context=...   → 맥락 기반 제안 질문
-GET /ai/resources/{kind}/...      → 토큰 최적화 데이터 (Radar 패턴)
+GET /ai/resources/{kind}/...      → 토큰 최적화 데이터 (기준 원본 패턴)
 ```
 - **근거 없이 답하지 않는다.** `evidence`가 비면 "그 데이터가 없습니다".
 
@@ -426,7 +426,7 @@ SSE /workloads/{kind}/{ns}/{name}/logs/stream
 ```
 
 **프론트**
-- Radar `dock/` 이식 (LocalTerminal 제외)
+- 기준 원본 `dock/` 이식 (LocalTerminal 제외)
 - 탭으로 여러 개 (`[로그: checkout]` `[로그: payment]`)
 - 파드 선택 후 `l` → 독에 로그 (화면 전환 없이)
 - 독 높이 드래그 · 접기
@@ -527,7 +527,7 @@ GET /changes?from=<epoch-ms>&to=<epoch-ms>&bucket=<ms>
   표시한다. 이벤트가 0건이라는 이유만으로 gap을 만들지 않으며 보간·synthetic은 금지한다.
 - 이벤트 1,000건 또는 관측 200,000건 상한을 넘으면 부분 응답 대신 422 fail-closed한다.
 
-**프론트** — Radar `TimelineStrip` + `scrubber-math.ts` 이식
+**프론트** — 기준 원본 `TimelineStrip` + `scrubber-math.ts` 이식
 - QUERY(조회 범위) vs WINDOW(보기 범위) 분리
 - 히스토그램 + 드래그 밴드
 - **우리 추가**: 인시던트 마커(빨간 눈금, 클릭 점프) + 재생 버튼
@@ -593,7 +593,7 @@ GET  /changes/active
 
 ### S14~S17
 
-- **S14 GitOps** — [변경] 탭(PR·3-way 경고) + [동기화 상태] 탭(Radar 23파일)
+- **S14 GitOps** — [변경] 탭(PR·3-way 경고) + [동기화 상태] 탭(기준 원본 23파일)
 - **S15 Checks** — 31개 감사 체크 + 수정 PR
 - **S16 Settings** — 워크스페이스·클러스터·저장소·멤버·알림·**정책(즉시/승인)**
 - **S17 Home** — 위젯 조합 시스템 (BQ-035 catalog 선행)
@@ -654,7 +654,7 @@ GET  /changes/active
 | 2 | **백엔드 FULL 배포** | live 백엔드가 07-13 구버전이다. 계약을 만들어도 배포가 안 된다 |
 | 3 | **에이전트 재등록** | DB 재생성으로 agent token이 날아갔다 (부트스트랩 §5-4). 클러스터 데이터가 없으면 S1부터 못 만든다 |
 | 4 | **VP-015/016 착륙** | 기획 정본이 dev에 있어야 세션이 읽는다 |
-| 5 | **Radar 서브트리 + NOTICE** | 라이선스 준수. 이식 전에 해야 한다 |
+| 5 | **기준 원본 서브트리 + NOTICE** | 라이선스 준수. 이식 전에 해야 한다 |
 
 **1~3이 안 되면 S1도 시작할 수 없다. 이것부터.**
 

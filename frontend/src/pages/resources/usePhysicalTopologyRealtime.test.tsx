@@ -15,9 +15,112 @@ import {
 } from "./usePhysicalTopologyRealtime";
 import type { PhysicalTopologyFrame } from "./usePhysicalTopologyDataFrame";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+const STREAM_POLICY = {
+  revision: 1,
+  maxFramesPerSecond: 60,
+  hiddenTab: "coalesce" as const,
+  maxPendingMessages: 32,
+};
 
 describe("physical topology realtime overlay", () => {
+  it("reports connecting before the authenticated typed stream becomes connected", async () => {
+    const harness = realtimeHarness();
+    const rendered = renderHook(() => usePhysicalTopologyRealtime({
+      active: true,
+      clusterId: "cluster-1",
+      frame: readyFrame(),
+      port: harness.port,
+      workspaceId: "default",
+    }));
+
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
+    await waitFor(() => expect(rendered.result.current.live.status).toBe("connecting"));
+
+    act(() => harness.latestHandlers().onStatusChange("connected"));
+    expect(rendered.result.current.live.status).toBe("connected");
+  });
+
+  it("fails closed and reconnects when a record arrives before the server delivery policy", async () => {
+    const harness = realtimeHarness({ announcePolicy: false });
+    const rendered = renderHook(() => usePhysicalTopologyRealtime({
+      active: true,
+      clusterId: "cluster-1",
+      frame: readyFrame(),
+      port: harness.port,
+      workspaceId: "default",
+    }));
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
+
+    act(() => harness.latestHandlers().onMessage({
+      type: "snapshot",
+      seq: 1,
+      state: { resources: {} },
+    }));
+
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledTimes(2));
+    expect(harness.disconnects[0]).toHaveBeenCalledOnce();
+    expect(rendered.result.current.live).toMatchObject({
+      status: "reconnecting",
+      degradedReason: "stream-sequence-integrity",
+    });
+  });
+
+  it("coalesces server-revisioned records into one reduced-motion-safe paint frame", async () => {
+    const animationFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("matchMedia", () => ({
+      addEventListener: vi.fn(),
+      matches: true,
+      removeEventListener: vi.fn(),
+    }));
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const harness = realtimeHarness();
+    const rendered = renderHook(() => usePhysicalTopologyRealtime({
+      active: true,
+      clusterId: "cluster-1",
+      frame: readyFrame(),
+      port: harness.port,
+      workspaceId: "default",
+    }));
+    await waitFor(() => expect(harness.port.connect).toHaveBeenCalledOnce());
+
+    act(() => {
+      harness.latestHandlers().onMessage({
+        type: "snapshot",
+        seq: 1,
+        state: {
+          resources: {
+            "cluster-1/shop/pod/checkout-api-0": livePodValue(35, 25),
+          },
+        },
+      });
+      harness.latestHandlers().onMessage({
+        type: "resource.delta",
+        seq: 2,
+        op: "replace",
+        key: "cluster-1/shop/pod/checkout-api-0",
+        value: livePodValue(85, 40),
+      });
+    });
+
+    expect(animationFrames).toHaveLength(1);
+    expect(livePod(rendered.result.current).usagePercent).toBe(12);
+    act(() => animationFrames.shift()?.(0));
+    await waitFor(() => expect(livePod(rendered.result.current).usagePercent).toBe(85));
+    expect(animationFrames).toHaveLength(0);
+
+    rendered.unmount();
+    expect(harness.disconnects[0]).toHaveBeenCalledOnce();
+  });
+
   it("connects the existing browser stream and applies snapshot then delta metrics immediately", async () => {
     const harness = realtimeHarness();
     const rendered = renderHook(() => usePhysicalTopologyRealtime({
@@ -50,7 +153,7 @@ describe("physical topology realtime overlay", () => {
       harness.latestHandlers().onStatusChange("connected");
     });
 
-    expect(livePod(rendered.result.current).usagePercent).toBe(35);
+    await waitFor(() => expect(livePod(rendered.result.current).usagePercent).toBe(35));
     expect(livePod(rendered.result.current).cpuMillicores).toBe(210);
     expect(livePod(rendered.result.current).cpuRequestMillicores).toBe(600);
     expect(livePod(rendered.result.current).memoryMebibytes).toBe(128);
@@ -71,7 +174,7 @@ describe("physical topology realtime overlay", () => {
       });
     });
 
-    expect(livePod(rendered.result.current).usagePercent).toBe(85);
+    await waitFor(() => expect(livePod(rendered.result.current).usagePercent).toBe(85));
     expect(livePod(rendered.result.current).cpuMillicores).toBe(210);
     expect(rendered.result.current.live.updatedAt).toBeGreaterThan(0);
 
@@ -137,7 +240,7 @@ describe("physical topology realtime overlay", () => {
       });
     });
 
-    expect(livePod(rendered.result.current).usagePercent).toBeNull();
+    await waitFor(() => expect(livePod(rendered.result.current).usagePercent).toBeNull());
     expect(livePod(rendered.result.current).cpuRequestMillicores).toBeNull();
     expect(livePod(rendered.result.current).memoryRequestMebibytes).toBe(512);
   });
@@ -182,7 +285,7 @@ describe("physical topology realtime overlay", () => {
       });
       harness.latestHandlers().onStatusChange("connected");
     });
-    expect(livePod(rendered.result.current).usagePercent).toBe(88);
+    await waitFor(() => expect(livePod(rendered.result.current).usagePercent).toBe(88));
     expect(rendered.result.current.live.status).toBe("connected");
   });
 
@@ -214,6 +317,7 @@ describe("physical topology realtime overlay", () => {
       });
     });
 
+    await waitFor(() => expect(livePod(rendered.result.current).cpuMillicores).toBe(384));
     const graph = livePod(rendered.result.current);
     const table = rendered.result.current.selectTableRows([tablePodFixture()])[0]!;
     expect(graph.cpuMillicores).toBe(384);
@@ -271,6 +375,8 @@ describe("physical topology realtime overlay", () => {
       });
     });
 
+    await waitFor(() => expect(livePod(rendered.result.current).cpuMillicores).toBe(420));
+
     rendered.rerender({ replayAtMs: Date.parse("2026-07-15T04:00:00.500Z") });
     await waitFor(() => expect(rendered.result.current.replay.status).toBe("ready"));
 
@@ -288,7 +394,7 @@ describe("physical topology realtime overlay", () => {
       });
     });
 
-    expect(livePod(rendered.result.current).cpuMillicores).toBe(180);
+    await waitFor(() => expect(livePod(rendered.result.current).cpuMillicores).toBe(180));
     const replayTable = rendered.result.current.selectTableRows([tablePodFixture()])[0]!;
     expect(replayTable.facts.type).toBe("pod");
     if (replayTable.facts.type !== "pod") throw new Error("expected pod row");
@@ -297,7 +403,7 @@ describe("physical topology realtime overlay", () => {
 
     rendered.rerender({ replayAtMs: undefined });
     await waitFor(() => expect(rendered.result.current.replay.status).toBe("live"));
-    expect(livePod(rendered.result.current).cpuMillicores).toBe(570);
+    await waitFor(() => expect(livePod(rendered.result.current).cpuMillicores).toBe(570));
     const liveTable = rendered.result.current.selectTableRows([tablePodFixture()])[0]!;
     expect(liveTable.facts.type).toBe("pod");
     if (liveTable.facts.type !== "pod") throw new Error("expected pod row");
@@ -340,6 +446,7 @@ describe("physical topology realtime overlay", () => {
         },
       },
     }));
+    await waitFor(() => expect(livePod(rendered.result.current).cpuMillicores).toBe(180));
     rendered.rerender({
       frame: frameWithServerMetrics(83, 67, "2026-07-15T04:00:02.000Z"),
       replayAtMs: undefined,
@@ -501,7 +608,13 @@ describe("physical topology realtime overlay", () => {
   });
 });
 
-function realtimeHarness() {
+function realtimeHarness({
+  announcePolicy = true,
+  policy = STREAM_POLICY,
+}: {
+  announcePolicy?: boolean;
+  policy?: typeof STREAM_POLICY;
+} = {}) {
   const subscriptions: Array<{ workspaceId: string; clusterId: string }> = [];
   const handlers: PhysicalTopologyRealtimeHandlers[] = [];
   const disconnects: Array<ReturnType<typeof vi.fn>> = [];
@@ -509,6 +622,7 @@ function realtimeHarness() {
     connect: vi.fn((subscription, nextHandlers) => {
       subscriptions.push(subscription);
       handlers.push(nextHandlers);
+      if (announcePolicy) nextHandlers.onPolicy(policy);
       const disconnect = vi.fn();
       disconnects.push(disconnect);
       return disconnect;

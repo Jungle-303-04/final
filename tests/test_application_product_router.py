@@ -75,7 +75,22 @@ class ProductApplicationsDb:
         limit: int,
     ) -> list[dict[str, object]]:
         assert (workspace_id, application_id, limit) == ("workspace-a", "app-a", 500)
-        return [{"cluster_id": "cluster-a", "environment": "prod"}]
+        return [
+            {
+                "binding_id": "binding-prod-a",
+                "cluster_id": "cluster-a",
+                "namespace": "shop",
+                "environment": "prod",
+                "status": "active",
+            },
+            {
+                "binding_id": "binding-hidden-b",
+                "cluster_id": "cluster-b",
+                "namespace": "shop",
+                "environment": "stage",
+                "status": "active",
+            },
+        ]
 
     def list_application_workflow_runs(
         self,
@@ -90,6 +105,7 @@ class ProductApplicationsDb:
         return [
             {
                 "workflow_run_id": "run-a",
+                "binding_id": "binding-prod-a",
                 "cluster_id": "cluster-a",
                 "environment": "prod",
                 "commit_sha": "abc123",
@@ -204,6 +220,71 @@ class ProductApplicationsWildcardAdminDb(ProductApplicationsDb):
         return {"app-a"}
 
 
+class WorkloadProductApplicationsDb(ProductApplicationsDb):
+    def get_application_inventory_evidence(self, **_kwargs: Any) -> list[dict[str, object]]:
+        return [
+            {
+                "id": "workload-a",
+                "cluster_id": "cluster-a",
+                "resource_type": "workload",
+                "api_version": "apps/v1",
+                "kind": "Deployment",
+                "namespace": "shop",
+                "name": "checkout",
+                "uid": "deployment-uid",
+                "status": "1/1",
+                "health": "healthy",
+                "labels": {"app": "checkout"},
+                "binding_complete": True,
+                "summary": {"selector": {"matchLabels": {"app": "checkout"}}},
+                "observed_at": "2026-07-14T10:00:00Z",
+            }
+        ]
+
+    def filter_snapshot_context(
+        self,
+        workspace_id: str,
+        cluster_ids: set[str],
+    ) -> dict[str, object]:
+        context = super().filter_snapshot_context(workspace_id, cluster_ids)
+        return context | {"labels_complete": True, "observed_at": "2026-07-14T10:00:00Z"}
+
+    def get_application_workload_runtime_evidence(self, **kwargs: Any) -> dict[str, object]:
+        assert kwargs == {
+            "workspace_id": "workspace-a",
+            "cluster_id": "cluster-a",
+            "namespace": "shop",
+            "pod_limit": 199,
+        }
+        return {
+            "truncated": False,
+            "rows": [
+                {
+                    "id": "pod-a",
+                    "cluster_id": "cluster-a",
+                    "resource_type": "pod",
+                    "api_version": "v1",
+                    "kind": "Pod",
+                    "namespace": "shop",
+                    "name": "checkout-a",
+                    "uid": "pod-uid",
+                    "status": "Running",
+                    "health": "healthy",
+                    "labels": {"app": "checkout"},
+                    "summary": {
+                        "owner_kind": "Deployment",
+                        "owner_name": "checkout",
+                        "owner_uid": "deployment-uid",
+                        "owner_references_complete": True,
+                        "conditions": [{"type": "Ready", "status": "True"}],
+                        "restart_total": 0,
+                    },
+                    "observed_at": "2026-07-14T10:00:00Z",
+                }
+            ],
+        }
+
+
 def _client(
     db: ProductApplicationsDb,
     *,
@@ -246,17 +327,128 @@ def test_product_application_reads_are_strict_allowlisted_and_linkable() -> None
         "default_branch",
         "manifest_path",
         "health",
+        "runtime_readiness",
         "current_deployment",
+        "delivery",
+        "batch_runtime",
         "has_drift",
         "drift_summary",
         "resource_counts",
         "resource_counts_completeness",
         "open_incidents",
     }
-    assert detail.json()["application"]["recent_incidents"][0]["id"] == "incident-a"
+    assert detail.json()["application"]["recent_incidents"] == []
+    assert detail.json()["application"]["scope"] == {
+        "availability": "available",
+        "completeness": "exact",
+        "selected_instance_id": "binding-prod-a",
+        "instances": [
+            {
+                "id": "binding-prod-a",
+                "environment": "prod",
+                "status": "active",
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-a",
+                    "namespaces": ["shop"],
+                    "freshness": "disconnected",
+                },
+            }
+        ],
+        "partial_reason_codes": [],
+        "selected_scope": "application",
+        "workload_scope": {
+            "availability": "available",
+            "completeness": "exact",
+            "application_scope_available": True,
+            "selected_workload_key": None,
+            "workloads": [],
+            "partial_reason_codes": [],
+        },
+    }
+    assert detail.json()["application"]["topology"]["availability"] == "available"
+    assert detail.json()["application"]["history"]["partial_reason_codes"] == [
+        "bounded_workflow_history",
+        "incident_source_incomplete",
+        "instance_incident_scope_unavailable",
+    ]
+    assert detail.json()["application"]["source"]["repository_ref"] == "org/checkout"
     assert deployments.json()["deployments"][0]["id"] == "run-a"
     assert drift.json()["differences"][0]["field_path"] == "spec.replicas"
     assert "must-not-leak" not in " ".join((listed.text, detail.text, deployments.text, drift.text))
+
+
+def test_product_application_instance_scope_rejects_unavailable_direct_urls() -> None:
+    client = _client(ProductApplicationsDb())
+
+    selected = client.get("/applications/app-a", params={"instance": "binding-prod-a"})
+    denied = client.get("/applications/app-a", params={"instance": "binding-hidden-b"})
+    denied_deployments = client.get(
+        "/applications/app-a/deployments",
+        params={"instance": "binding-hidden-b"},
+    )
+    denied_drift = client.get(
+        "/applications/app-a/drift",
+        params={"instance": "binding-hidden-b"},
+    )
+
+    assert selected.status_code == 200
+    assert selected.json()["application"]["scope"]["selected_instance_id"] == "binding-prod-a"
+    assert denied.status_code == 404
+    assert "binding-hidden-b" not in denied.text
+    assert denied_deployments.status_code == denied_drift.status_code == 404
+    assert "binding-hidden-b" not in (denied_deployments.text + denied_drift.text)
+
+
+def test_product_application_workload_scope_is_bound_to_authorized_manifest_evidence() -> None:
+    client = _client(WorkloadProductApplicationsDb())
+
+    selected = client.get("/applications/app-a", params={"workload": "workload-a"})
+    invalid = client.get("/applications/app-a", params={"workload": "not-authorized"})
+
+    assert selected.status_code == invalid.status_code == 200
+    selected_application = selected.json()["application"]
+    assert selected_application["scope"]["selected_scope"] == "workload"
+    assert selected_application["scope"]["workload_scope"] == {
+        "availability": "available",
+        "completeness": "exact",
+        "application_scope_available": False,
+        "selected_workload_key": "workload-a",
+        "workloads": [
+            {
+                "key": "workload-a",
+                "resource": {
+                    "api_group": "apps",
+                    "version": "v1",
+                    "kind": "Deployment",
+                    "namespace": "shop",
+                    "name": "checkout",
+                    "uid": "deployment-uid",
+                },
+                "scope": {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-a",
+                    "namespaces": ["shop"],
+                    "freshness": "disconnected",
+                },
+                "observed_at": "2026-07-14T10:00:00Z",
+            }
+        ],
+        "partial_reason_codes": [],
+    }
+    assert selected_application["workload"]["runtime_readiness"]["ready_pods"] == 1
+    assert selected_application["workload"]["history"] == {
+        "availability": "unavailable",
+        "reason_codes": ["workload_history_link_not_persisted"],
+    }
+    assert selected_application["workload"]["cost"]["availability"] == "unavailable"
+    assert selected_application["workload"]["actions"]["availability"] == "unavailable"
+    assert invalid.json()["application"]["scope"]["selected_scope"] == "application"
+    assert invalid.json()["application"]["scope"]["workload_scope"]["selected_workload_key"] is None
+    assert invalid.json()["application"]["scope"]["workload_scope"]["partial_reason_codes"] == [
+        "requested_workload_unavailable"
+    ]
+    assert "not-authorized" not in invalid.text
 
 
 def test_product_application_filter_scope_fails_closed_before_projection_query() -> None:
@@ -294,6 +486,13 @@ def test_product_application_openapi_exposes_four_strict_bq_contracts() -> None:
     assert schema["paths"]["/applications/{application_id}"]["get"]["responses"]["200"]["content"][
         "application/json"
     ]["schema"]["$ref"].endswith("ApplicationProductDetailResponse")
+    assert {"scope", "topology", "history", "source", "workload"}.issubset(
+        schema["components"]["schemas"]["ApplicationProductDetail"]["properties"]
+    )
+    assert {
+        parameter["name"]
+        for parameter in schema["paths"]["/applications/{application_id}"]["get"]["parameters"]
+    } >= {"application_id", "instance", "workload"}
     assert schema["paths"]["/applications/{application_id}/deployments"]["get"]["responses"]["200"][
         "content"
     ]["application/json"]["schema"]["$ref"].endswith("ApplicationDeploymentHistoryResponse")

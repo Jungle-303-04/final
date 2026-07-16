@@ -1,12 +1,4 @@
 export {
-  restartDeployment,
-  scaleDeployment,
-  DEPLOYMENT_MAX_REASON_LENGTH,
-  DEPLOYMENT_MAX_REPLICAS,
-  type DeploymentActionOptions,
-  type ScaleDeploymentOptions,
-} from "../deployments";
-export {
   approveResourceManifestEdit,
   getResourceManifestSource,
   previewResourceManifestEdit,
@@ -28,22 +20,12 @@ export {
   type SubmitCommandOptions,
 } from "../commands";
 export {
-  deploymentActionAcceptedSchema,
-  deploymentActionReasonSchema,
-  deploymentRestartRequestSchema,
-  deploymentScaleRequestSchema,
-  type DeploymentActionAccepted,
-  type DeploymentRestartRequest,
-  type DeploymentScaleRequest,
-} from "../deployments-schemas";
-export {
   commandAcceptedSchema,
   type CommandAccepted,
 } from "../commands-schemas";
 export {
   openPodLogStream,
   openWorkloadLogStream,
-  parseFrames,
   type LogStreamEndpointHandlers,
 } from "../log-stream";
 export {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { routeDefinitionForSurface } from "../../app/productRoutes";
 import { createEmptyUnifiedFilterState } from "../../features/filters/filterContract";
 import { parseProductFilterUrl } from "../../features/filters/filterUrl";
 import { clusterResourcesHref } from "./clusterNavigation";
@@ -13,7 +14,7 @@ describe("cluster resource navigation", () => {
     const href = clusterResourcesHref(state, "cluster-2");
     const parsed = parseProductFilterUrl(href.slice(href.indexOf("?")));
 
-    expect(href.startsWith("/resources?")).toBe(true);
+    expect(href.startsWith(`${routeDefinitionForSurface("resources").path}?`)).toBe(true);
     expect(parsed.state.common.clusters).toEqual(["cluster-2"]);
     expect(parsed.state.common.applications).toEqual(["checkout"]);
     expect(parsed.state.resources.health).toEqual(["warning"]);

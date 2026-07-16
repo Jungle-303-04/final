@@ -1,5 +1,6 @@
 import {
   CircleAlert,
+  FileSearch,
   Inbox,
   LockKeyhole,
   ShieldCheck,
@@ -28,6 +29,7 @@ import { ProductLoadingScreen } from "./ProductLoadingScreen";
 export type ProductStateKind =
   | "loading"
   | "empty"
+  | "not-found"
   | "forbidden"
   | "offline"
   | "error"
@@ -67,6 +69,7 @@ export type ProductStateScreenProps =
       loadingPreview?: ReactNode;
     })
   | (StateBase & { kind: "empty"; issue?: never; retry?: never })
+  | (StateBase & { kind: "not-found"; issue?: never; retry?: never })
   | (StateBase & {
       kind: "offline";
       issue: ProductStateIssue & { code: "network" };
@@ -99,6 +102,10 @@ const stateCopy: Record<Exclude<ProductStateKind, "loading">, {
   empty: {
     titleKey: "state.empty.title",
     bodyKey: "state.empty.body",
+  },
+  "not-found": {
+    titleKey: "state.notFound.title",
+    bodyKey: "state.notFound.body",
   },
   forbidden: {
     titleKey: "state.forbidden.title",
@@ -180,6 +187,7 @@ export function ProductStateScreen(props: ProductStateScreenProps) {
 function StateIcon({ kind }: { kind: Exclude<ProductStateKind, "loading"> }) {
   const iconByKind: Record<Exclude<ProductStateKind, "loading">, ReactNode> = {
     empty: <Inbox aria-hidden="true" />,
+    "not-found": <FileSearch aria-hidden="true" />,
     forbidden: <LockKeyhole aria-hidden="true" />,
     offline: <WifiOff aria-hidden="true" />,
     error: <CircleAlert aria-hidden="true" />,

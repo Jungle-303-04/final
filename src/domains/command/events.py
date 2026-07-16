@@ -27,6 +27,9 @@ class CommandRequestedBody(EventBody):
     namespace: str
     reason: str
     diff: Diff
+    # API 접수 UoW가 생성하는 안정적 trace ID. 과거 이벤트는 None으로 decode되어
+    # worker의 기존 hash 기반 fallback을 유지한다.
+    command_id: str | None = None
     workspace_id: str = DEFAULT_WORKSPACE_ID
     application_id: str = DEFAULT_APPLICATION_ID
     workflow_run_id: str = DEFAULT_WORKFLOW_RUN_ID
@@ -39,6 +42,8 @@ class CommandRequestedBody(EventBody):
     policy_decision_ref: str | None = None
     approval_decided_by: str | None = None
     approval_expires_at: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
     payload: JsonObject = field(default_factory=dict)
 
 
@@ -93,6 +98,8 @@ class Plan(EventBody):
     policy_decision_ref: str | None = None
     approval_decided_by: str | None = None
     approval_expires_at: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -133,6 +140,8 @@ class CommandQueuedForAgentBody(EventBody):
     policy_decision_ref: str | None = None
     approval_decided_by: str | None = None
     approval_expires_at: str | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 @event(EventSubject.COMMAND_REJECTED)
@@ -142,6 +151,30 @@ class CommandRejectedBody(EventBody):
 
     reason: str
     requested: JsonObject
+
+
+@event(EventSubject.COMMAND_CANCEL_REQUESTED)
+@dataclass(frozen=True)
+class CommandCancelRequestedBody(EventBody):
+    """Immutable, auditable cancel intent.  The repository owns its state transition."""
+
+    command_id: str
+    workspace_id: str
+    reason: str | None = None
+    requested_by: str | None = None
+    actor: JsonObject | None = None
+
+
+@event(EventSubject.COMMAND_RETRY_REQUESTED)
+@dataclass(frozen=True)
+class CommandRetryRequestedBody(EventBody):
+    """Immutable, auditable manual retry intent for one failed logical command."""
+
+    command_id: str
+    workspace_id: str
+    reason: str | None = None
+    requested_by: str | None = None
+    actor: JsonObject | None = None
 
 
 @event(EventSubject.COMMAND_COMPLETED)

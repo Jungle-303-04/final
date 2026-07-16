@@ -1,4 +1,4 @@
-# Radar Live Traffic learning setup for EKS + VPC CNI.
+# Opsia live-traffic learning setup for EKS + VPC CNI.
 #
 # The upstream Caretta 0.0.16 chart predates Kubernetes 1.25 and enables
 # PodSecurityPolicy by default. EKS 1.34 no longer serves that API, so every
@@ -13,7 +13,7 @@ enableDnsResolving: true
 image:
   pullPolicy: IfNotPresent
 
-# Radar reads traffic from the cluster's existing Prometheus service. These
+# Opsia reads traffic from the cluster's existing Prometheus service. These
 # annotations add the Caretta agents to that Prometheus pod-discovery job.
 podAnnotations:
   prometheus.io/scrape: "true"

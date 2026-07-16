@@ -16,6 +16,7 @@ from packages.contracts.realtime import (
     LiveSummary,
     LiveSummaryMessage,
     PingMessage,
+    RealtimeIngressLimits,
     ResourceDelta,
     SnapshotMessage,
     Subscription,
@@ -115,3 +116,31 @@ def test_delta_key_parts() -> None:
         "checkout-abc",
     )
     assert delta_key_parts(CLUSTER) == (CLUSTER, "", "", "")
+
+
+def test_resource_delta_rejects_invalid_key_shape_and_unbounded_value() -> None:
+    with pytest.raises(ValidationError):
+        ResourceDelta(key=f"{CLUSTER}/sandbox/pod")
+
+    limits = RealtimeIngressLimits(delta_value_max_bytes=24)
+    with pytest.raises(ValueError, match="delta_value_too_large"):
+        parse_realtime_message(
+            {
+                "type": "resource.delta",
+                "op": "replace",
+                "key": f"{CLUSTER}/sandbox/pod/checkout",
+                "value": {"payload": "x" * 64},
+            },
+            limits=limits,
+        )
+
+
+def test_resource_delta_replace_requires_a_value() -> None:
+    with pytest.raises(ValueError, match="replace requires a value"):
+        parse_realtime_message(
+            {
+                "type": "resource.delta",
+                "op": "replace",
+                "key": f"{CLUSTER}/sandbox/pod/checkout",
+            }
+        )

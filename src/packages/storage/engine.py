@@ -66,6 +66,31 @@ AGENT_COMMAND_COMPAT_COLUMNS = {
     "leased_until": "alter table agent_commands add column if not exists leased_until timestamptz",
     "started_at": "alter table agent_commands add column if not exists started_at timestamptz",
     "completed_at": "alter table agent_commands add column if not exists completed_at timestamptz",
+    "confirmation_event_id": (
+        "alter table agent_commands add column if not exists confirmation_event_id text"
+    ),
+    "impact_identity": "alter table agent_commands add column if not exists impact_identity text",
+    "direct_execution": (
+        "alter table agent_commands add column if not exists direct_execution boolean not null default false"
+    ),
+    "attempt_count": (
+        "alter table agent_commands add column if not exists attempt_count integer not null default 0"
+    ),
+    "active_attempt_id": "alter table agent_commands add column if not exists active_attempt_id text",
+    "cancel_requested_at": (
+        "alter table agent_commands add column if not exists cancel_requested_at timestamptz"
+    ),
+    "cancel_requested_by": (
+        "alter table agent_commands add column if not exists cancel_requested_by text"
+    ),
+    "cancel_reason": "alter table agent_commands add column if not exists cancel_reason text",
+    "cancel_accepted_at": (
+        "alter table agent_commands add column if not exists cancel_accepted_at timestamptz"
+    ),
+    "cancel_generation": (
+        "alter table agent_commands add column if not exists cancel_generation integer not null default 0"
+    ),
+    "terminal_event_id": "alter table agent_commands add column if not exists terminal_event_id text",
 }
 EVENT_COMPAT_COLUMNS = {
     "causation_id": "alter table events add column if not exists causation_id text",
@@ -185,6 +210,18 @@ OPERATIONAL_INDEXES = (
     (
         "create index if not exists ix_events_correlation_created "
         "on events (correlation_id, created_at)"
+    ),
+    (
+        "create index if not exists ix_agent_command_attempts_due "
+        "on agent_command_attempts (workspace_id, cluster_id, status, available_at)"
+    ),
+    (
+        "create index if not exists ix_agent_command_attempts_command "
+        "on agent_command_attempts (workspace_id, command_id, attempt_no)"
+    ),
+    (
+        "create index if not exists ix_command_control_actions_command "
+        "on command_control_actions (workspace_id, command_id, created_at)"
     ),
     (
         "create index if not exists ix_ai_llm_invocation_correlation_created "

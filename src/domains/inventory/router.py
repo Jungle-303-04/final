@@ -14,6 +14,7 @@ from domains.identity.dependencies import (
 )
 from domains.inventory.capabilities import resource_capabilities_response
 from domains.inventory.events import InventorySnapshotRecordedBody
+from domains.inventory.ingest import ingest_inventory_snapshot
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
@@ -27,8 +28,7 @@ from packages.contracts.gateway.responses import (
     ResourceCapabilitiesResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
-from packages.runtime.dependencies import get_db, get_events
-from packages.storage.engine import unit_of_work_or_null
+from packages.runtime.dependencies import get_db, get_events, get_timeline_fanout
 
 router = APIRouter()
 
@@ -42,26 +42,36 @@ async def record_inventory_snapshot(
     identity: ClusterAgentIdentity = Depends(require_cluster_agent),
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
+    timeline_fanout: Any = Depends(get_timeline_fanout),
 ) -> InventorySnapshotResponse:
     if payload.cluster_id != identity.cluster_id:
         raise HTTPException(status_code=403, detail="cluster_id does not match agent identity")
-    with unit_of_work_or_null(db):
-        result = db.save_inventory_snapshot(
-            workspace_id=identity.workspace_id,
-            cluster_id=identity.cluster_id,
-            agent_id=payload.agent_id,
-            payload=payload.model_dump(),
-        )
+
+    async def record_snapshot_event(result: dict[str, Any]) -> None:
+        # An ignored stale observation is retained only for collection audit; it
+        # must not impersonate an accepted inventory state transition downstream.
+        if result.get("accepted") is not True:
+            return
         await events.accept_body(
             InventorySnapshotRecordedBody(
                 workspace_id=identity.workspace_id,
                 cluster_id=identity.cluster_id,
-                snapshot_id=result["snapshot_id"],
+                snapshot_id=str(result["snapshot_id"]),
                 agent_id=payload.agent_id,
-                resource_count=result["resource_count"],
-                resource_types=result["resource_types"],
+                resource_count=int(result["resource_count"]),
+                resource_types=list(result["resource_types"]),
             )
         )
+
+    result = await ingest_inventory_snapshot(
+        db=db,
+        workspace_id=identity.workspace_id,
+        cluster_id=identity.cluster_id,
+        agent_id=payload.agent_id,
+        payload=payload.model_dump(),
+        fanout=timeline_fanout,
+        after_persist=record_snapshot_event,
+    )
     return InventorySnapshotResponse(**result)
 
 

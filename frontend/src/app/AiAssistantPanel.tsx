@@ -27,10 +27,14 @@ import { Alert, AlertDescription } from "../shared/ui/primitives/alert";
 import { Badge } from "../shared/ui/primitives/badge";
 import { Button } from "../shared/ui/primitives/button";
 import { aiAssistantContextChips } from "./aiAssistantContext";
-import { AiAssistantResizeHandle } from "./AiAssistantResizeHandle";
+import {
+  AI_ASSISTANT_PANEL_DEFAULT_WIDTH,
+  AiAssistantResizeHandle,
+  clampAiAssistantPanelWidth,
+} from "./AiAssistantResizeHandle";
 import { AiAlertRuleActionCard } from "./AiAlertRuleActionCard";
 
-const DEFAULT_WIDTH = 420;
+const AI_ASSISTANT_PANEL_WIDTH_STORAGE_KEY = "opsia.ai-assistant.panel-width";
 
 interface TranscriptEntry {
   id: number;
@@ -58,11 +62,12 @@ export function AiAssistantPanel({
   const { locale, t } = useI18n();
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingController = useRef<AbortController | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [width, setWidth] = useState(readAiAssistantPanelWidth);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<{
@@ -156,8 +161,9 @@ export function AiAssistantPanel({
         data-width={width}
         inert={!open}
         onKeyDown={(event) => event.key === "Escape" && onOpenChange(false)}
+        ref={panelRef}
       >
-        <AiAssistantResizeHandle onWidthChange={setWidth} width={width} />
+        <AiAssistantResizeHandle hostRef={panelRef} onWidthCommit={commitPanelWidth} width={width} />
         <div
           className="flex h-full min-h-0 max-w-dvw flex-col"
           data-inner-width={width}
@@ -314,7 +320,7 @@ export function AiAssistantPanel({
       {!open ? <Button
         aria-expanded={open}
         aria-label={t("shell.ai.open")}
-        className="fixed right-6 bottom-6 z-50 size-14 rounded-full shadow-lg"
+        className="fixed right-[var(--product-floating-action-inline-inset)] bottom-[var(--product-floating-action-block-end)] z-50 size-[var(--product-floating-action-size)] rounded-full shadow-lg"
         data-slot="ai-assistant-trigger"
         onClick={() => onOpenChange(!open)}
         type="button"
@@ -341,6 +347,34 @@ export function AiAssistantPanel({
     setPending(false);
     setPendingQuestion(null);
     inputRef.current?.focus();
+  }
+
+  function commitPanelWidth(nextWidth: number) {
+    const committedWidth = clampAiAssistantPanelWidth(nextWidth);
+    setWidth(committedWidth);
+    persistAiAssistantPanelWidth(committedWidth);
+  }
+}
+
+function readAiAssistantPanelWidth(): number {
+  if (typeof window === "undefined") return AI_ASSISTANT_PANEL_DEFAULT_WIDTH;
+  try {
+    const storedValue = window.localStorage.getItem(AI_ASSISTANT_PANEL_WIDTH_STORAGE_KEY);
+    if (storedValue === null) return AI_ASSISTANT_PANEL_DEFAULT_WIDTH;
+    const storedWidth = Number(storedValue);
+    return Number.isFinite(storedWidth)
+      ? clampAiAssistantPanelWidth(storedWidth)
+      : AI_ASSISTANT_PANEL_DEFAULT_WIDTH;
+  } catch {
+    return AI_ASSISTANT_PANEL_DEFAULT_WIDTH;
+  }
+}
+
+function persistAiAssistantPanelWidth(width: number): void {
+  try {
+    window.localStorage.setItem(AI_ASSISTANT_PANEL_WIDTH_STORAGE_KEY, `${width}`);
+  } catch {
+    // A disabled storage backend must not block panel resizing.
   }
 }
 

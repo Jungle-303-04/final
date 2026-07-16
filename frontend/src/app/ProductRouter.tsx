@@ -1,12 +1,25 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ProductStateScreen } from "../shared/ui/ProductStateScreen";
+import { useI18n } from "../shared/i18n";
 import { AuthSessionControl } from "../features/auth/AuthSessionControl";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { ClusterScopeProvider } from "../features/cluster-scope/ClusterScopeProvider";
 import { UnifiedFilterProvider, useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
+import { OperationStatusStoreProvider } from "../features/operations/OperationStatusStore";
 import { ProductShell } from "./ProductShell";
+import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
 import type { ProductComposition } from "./productComposition";
-import { routeDefinitionForSurface } from "./productRoutes";
+import { RouteSurface } from "./RouteSurface";
+import { WorkloadDetailRoute } from "../pages/workload-detail/WorkloadDetailRoute";
+import { CompareRoute } from "../pages/compare/CompareRoute";
+import {
+  landingProductRouteForReleasedSurfaces,
+  PRODUCT_ROUTE_CATALOG,
+  productRoutePaths,
+  routeDefinitionForSurface,
+  type ProductRouteDefinition,
+} from "./productRoutes";
+import { navLabelKeys } from "./ProductShellNavigation";
 
 export function ProductRouter({
   auth,
@@ -24,18 +37,19 @@ export function ProductRouter({
     );
   }
 
-  const fallbackRoute = routeDefinitionForSurface(composition.surfaces[0].id);
-  const landingRoute = composition.releasedSurfaceIds.has("clusters")
-    ? routeDefinitionForSurface("clusters")
-    : fallbackRoute;
+  const landingRoute = landingProductRouteForReleasedSurfaces(
+    composition.releasedSurfaceIds,
+  );
 
   return (
-    <UnifiedFilterProvider>
-      <ClusterScopeProvider
-        authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
-        port={composition.clusterScope}
-      >
-        <Routes>
+    <OperationStatusStoreProvider store={composition.operationStatusStore}>
+      <UnifiedFilterProvider>
+        <ClusterScopeProvider
+          authorityKey={`${auth.session.workspaceId}:${auth.session.userId}`}
+          port={composition.clusterScope}
+        >
+          <DesktopRuntimeSync />
+          <Routes>
           <Route element={(
             <ProductShell
               auth={auth}
@@ -47,25 +61,73 @@ export function ProductRouter({
             />
           )}>
             <Route index element={<ProductFallbackRedirect path={landingRoute.path} />} />
-            {composition.surfaces.map(({ id, Component }) => {
+            {composition.surfaces.flatMap((registration) => {
+              const { id } = registration;
               const routeDefinition = routeDefinitionForSurface(id);
-              const routePath = routeDefinition.match === "prefix"
-                ? `${routeDefinition.path}/*`
-                : routeDefinition.path;
-              const element = id === "home" && composition.releasedSurfaceIds.has("clusters")
-                ? <ProductFallbackRedirect path="/clusters" />
-                : <Component />;
-              return <Route key={id} path={routePath} element={element} />;
+              return [
+                <Route
+                  element={<RouteSurface registration={registration} />}
+                  key={id}
+                  path={routePathForDefinition(routeDefinition, routeDefinition.path)}
+                />,
+                ...routeDefinition.aliases.map((routePath) => (
+                  <Route
+                    element={<ProductFallbackRedirect path={routeDefinition.path} />}
+                    key={`alias:${id}:${routePath}`}
+                    path={routePathForDefinition(routeDefinition, routePath)}
+                  />
+                )),
+              ];
             })}
-            {composition.releasedSurfaceIds.has("gitops") ? (
-              <Route path="/workflows/*" element={<ProductFallbackRedirect path="/gitops" />} />
-            ) : null}
-            <Route path="*" element={<ProductFallbackRedirect path={fallbackRoute.path} />} />
+            {PRODUCT_ROUTE_CATALOG
+              .filter((routeDefinition) => !composition.releasedSurfaceIds.has(routeDefinition.id))
+              .flatMap((routeDefinition) => productRoutePaths(routeDefinition).map((routePath) => (
+                <Route
+                  element={<ProductUnavailableRoute routeDefinition={routeDefinition} />}
+                  key={`unavailable:${routeDefinition.id}:${routePath}`}
+                  path={routePathForDefinition(routeDefinition, routePath)}
+                />
+              )))}
+            <Route
+              element={<WorkloadDetailRoute port={composition.workloadDetail} />}
+              path="/workload/:kind/:namespace/:name"
+            />
+            <Route element={<CompareRoute port={composition.compare} />} path="/compare" />
+            <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
-        </Routes>
-      </ClusterScopeProvider>
-    </UnifiedFilterProvider>
+          </Routes>
+        </ClusterScopeProvider>
+      </UnifiedFilterProvider>
+    </OperationStatusStoreProvider>
   );
+}
+
+function ProductUnavailableRoute({ routeDefinition }: { routeDefinition: ProductRouteDefinition }) {
+  const { t } = useI18n();
+  const label = t(navLabelKeys[routeDefinition.id]);
+  return (
+    <section
+      aria-labelledby="unavailable-product-route-title"
+      className="grid min-h-full place-items-center bg-background p-6 text-foreground"
+    >
+      <div className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-sm">
+        <p className="text-sm font-medium text-muted-foreground">{t("shell.command.unavailable")}</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight" id="unavailable-product-route-title">
+          {t("shell.route.unavailable.title", { route: label })}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {t("shell.route.unavailable.description", { route: label })}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function routePathForDefinition(
+  routeDefinition: ProductRouteDefinition,
+  path: `/${string}`,
+): string {
+  return routeDefinition.match === "prefix" ? `${path}/*` : path;
 }
 
 function ProductFallbackRedirect({ path }: { path: `/${string}` }) {

@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.changes.repository import MAX_CHANGE_EVENTS
 from domains.changes.timeline import build_change_timeline
-from domains.identity.dependencies import (
-    require_session,
-    resolve_allowed_application_ids,
-    resolve_allowed_cluster_ids,
-)
+from domains.identity.dependencies import require_session
 from domains.inventory_filter.query import ResourceFilters, parse_resource_filters
+from domains.timeline.access import (
+    require_requested_timeline_scope,
+    resolve_authorized_timeline_scope,
+    selected_timeline_cluster_ids,
+)
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import ChangeTimelineResponse
-from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
 MIN_BUCKET_MS = 1_000
@@ -27,19 +26,9 @@ MAX_RANGE_MS = 24 * 60 * 60 * 1_000
 MAX_BUCKETS = 1_440
 MAX_EPOCH_MS = 253_402_300_799_000
 INVALID_REQUEST_DETAIL = "change timeline request is invalid"
-SCOPE_NOT_FOUND_DETAIL = "change timeline scope not found"
 RESULT_LIMIT_DETAIL = "change timeline result exceeds the bounded read limit"
 
 router = APIRouter()
-
-
-@dataclass(frozen=True)
-class AuthorizedChangeScope:
-    workspace_id: str
-    cluster_ids: frozenset[str]
-    application_ids: frozenset[str]
-    incident_cluster_ids: frozenset[str]
-    deployment_application_ids: frozenset[str]
 
 
 @router.get(
@@ -71,9 +60,9 @@ async def list_changes(
         query=resources_q,
         include_deleted=False,
     )
-    authorized = await _authorized_scope(db, current)
-    _require_requested_scope(authorized, filters)
-    required_clusters = _selected_cluster_ids(authorized, filters)
+    authorized = await resolve_authorized_timeline_scope(db, current)
+    require_requested_timeline_scope(authorized, filters)
+    required_clusters = selected_timeline_cluster_ids(authorized, filters)
     if not required_clusters:
         return ChangeTimelineResponse(buckets=[], events=[], gaps=[])
 
@@ -118,70 +107,3 @@ def _parse_filters(**kwargs: Any) -> ResourceFilters:
         return parse_resource_filters(**kwargs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=INVALID_REQUEST_DETAIL) from exc
-
-
-async def _authorized_scope(db: Any, current: Any) -> AuthorizedChangeScope:
-    workspace_id = str(getattr(current, "workspace_id", "") or "").strip()
-    user_id = str(getattr(current, "user_id", "") or "").strip()
-    if not workspace_id or not user_id:
-        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
-
-    def resolve() -> tuple[set[str], set[str], set[str], set[str]]:
-        return (
-            resolve_allowed_cluster_ids(
-                db,
-                current,
-                workspace_id,
-                Permission.INVENTORY_READ.value,
-            ),
-            resolve_allowed_application_ids(
-                db,
-                current,
-                workspace_id,
-                Permission.APPLICATION_READ.value,
-            ),
-            resolve_allowed_cluster_ids(
-                db,
-                current,
-                workspace_id,
-                Permission.RCA_READ.value,
-            ),
-            resolve_allowed_application_ids(
-                db,
-                current,
-                workspace_id,
-                Permission.DEPLOYMENT_READ.value,
-            ),
-        )
-
-    clusters, applications, incident_clusters, deployment_applications = await asyncio.to_thread(
-        resolve
-    )
-    return AuthorizedChangeScope(
-        workspace_id=workspace_id,
-        cluster_ids=frozenset(clusters),
-        application_ids=frozenset(applications),
-        incident_cluster_ids=frozenset(incident_clusters),
-        deployment_application_ids=frozenset(deployment_applications),
-    )
-
-
-def _require_requested_scope(
-    authorized: AuthorizedChangeScope,
-    filters: ResourceFilters,
-) -> None:
-    requested_clusters = set(filters.clusters) | {
-        cluster_id for cluster_id, _namespace in filters.namespaces
-    }
-    if not requested_clusters.issubset(authorized.cluster_ids):
-        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
-    if not set(filters.applications).issubset(authorized.application_ids):
-        raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
-
-
-def _selected_cluster_ids(
-    authorized: AuthorizedChangeScope,
-    filters: ResourceFilters,
-) -> set[str]:
-    selected = set(filters.clusters) | {cluster_id for cluster_id, _namespace in filters.namespaces}
-    return selected if selected else set(authorized.cluster_ids)

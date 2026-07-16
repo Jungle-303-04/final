@@ -231,8 +231,13 @@ def test_command_completion_uses_authoritative_workspace_for_manual_outbox() -> 
     statements: list[Any] = []
 
     class Result:
-        def __init__(self, row: dict[str, object] | None = None) -> None:
+        def __init__(
+            self,
+            row: dict[str, object] | None = None,
+            scalar: int | None = None,
+        ) -> None:
             self.row = row
+            self.scalar = scalar
 
         def mappings(self) -> Result:
             return self
@@ -240,11 +245,30 @@ def test_command_completion_uses_authoritative_workspace_for_manual_outbox() -> 
         def first(self) -> dict[str, object] | None:
             return self.row
 
+        def one(self) -> dict[str, object]:
+            assert self.row is not None
+            return self.row
+
+        def scalar_one_or_none(self) -> int | None:
+            return self.scalar
+
     class Connection:
         async def execute(self, statement: Any) -> Result:
             statements.append(statement)
             if len(statements) == 1:
                 return Result({"correlation_id": "corr-1"})
+            if len(statements) == 3:
+                return Result(scalar=1)
+            if len(statements) == 4:
+                return Result(
+                    {
+                        "command_id": "command-1",
+                        "sequence": 1,
+                        "kind": "completed",
+                        "payload": {"cluster_id": "cluster-1", "status": "completed"},
+                        "occurred_at": "2026-07-16T00:00:00+00:00",
+                    }
+                )
             return Result()
 
     class Begin:
@@ -270,8 +294,19 @@ def test_command_completion_uses_authoritative_workspace_for_manual_outbox() -> 
     )
 
     assert completed is not None
-    assert completed.workspace_id == "workspace-authority"
-    outbox = statements[2].compile(dialect=postgresql.dialect())
+    assert completed.event.workspace_id == "workspace-authority"
+    assert completed.operation_event is not None
+    assert completed.operation_event.command_id == "command-1"
+    assert completed.operation_event.sequence == 1
+    assert completed.operation_event.kind == "completed"
+    assert len(statements) == 7
+
+    compiled = [statement.compile(dialect=postgresql.dialect()) for statement in statements]
+    # Command completion, cursor/event, terminal marker, and outbox all use the authority.
+    for statement in (compiled[0], compiled[1], compiled[2], compiled[3], compiled[4], compiled[6]):
+        assert "workspace-authority" in statement.params.values()
+
+    outbox = compiled[6]
     assert outbox.params["workspace_id"] == "workspace-authority"
 
 

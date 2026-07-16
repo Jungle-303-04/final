@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 import {
   PRODUCT_ROUTE_CATALOG,
   type ProductSurfaceId,
@@ -21,10 +20,24 @@ import {
   EMPTY_ALERT_EVENTS_PORT,
   type AlertEventsPort,
 } from "../features/alerts/alertEventsContract";
+import {
+  EMPTY_WORKLOAD_DETAIL_PORT,
+  type WorkloadDetailPort,
+} from "../features/workload-detail/workloadDetailContract";
+import {
+  EMPTY_COMPARE_PORT,
+  type ComparePort,
+} from "../features/compare/compareContract";
+import {
+  createOperationStatusStore,
+  type OperationStatusStore,
+} from "../features/operations/OperationStatusStore";
+import { EMPTY_OPERATION_EVENTS_PORT } from "../features/operations/operationEventsContract";
+import type { ProductSurfaceLoader } from "./surfaceLoader";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
-  Component: ComponentType;
+  loader: ProductSurfaceLoader;
 }
 
 export interface ProductComposition {
@@ -34,8 +47,12 @@ export interface ProductComposition {
   aiAssistant: AiAssistantPort;
   logStream: LogStreamPort;
   alertEvents: AlertEventsPort;
+  workloadDetail: WorkloadDetailPort;
+  compare: ComparePort;
+  operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
+  dispose(): void;
 }
 
 export function createProductComposition(
@@ -46,6 +63,10 @@ export function createProductComposition(
   aiAssistant: AiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStream: LogStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEvents: AlertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  operationStatusStore: OperationStatusStore = createOperationStatusStore(EMPTY_OPERATION_EVENTS_PORT),
+  dispose: () => void = () => undefined,
+  workloadDetail: WorkloadDetailPort = EMPTY_WORKLOAD_DETAIL_PORT,
+  compare: ComparePort = EMPTY_COMPARE_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -74,7 +95,11 @@ export function createProductComposition(
     aiAssistant,
     logStream,
     alertEvents,
+    workloadDetail,
+    compare,
+    operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
+    dispose,
   };
 }

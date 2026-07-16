@@ -10,11 +10,128 @@ export {
   ApiError,
   apiRequest,
   apiRequestNoContent,
+  apiStreamRequest,
   apiStreamResponse,
   isApiError,
   type ApiErrorKind,
   type ApiPath,
 } from "./client";
+export {
+  getTimelineCapabilities,
+  getTimelineOverview,
+  getTimelinePins,
+  getTimelineSnapshot,
+  removeTimelinePin,
+  subscribeTimelineEvents,
+  TIMELINE_CAPABILITIES_PATH,
+  TIMELINE_OVERVIEW_PATH,
+  TIMELINE_PINS_PATH,
+  TIMELINE_SNAPSHOTS_PATH,
+  TIMELINE_STREAM_PATH,
+  upsertTimelinePin,
+  type TimelineSnapshotEndpoint,
+  type TimelineStreamLifecycle,
+  type TimelineStreamSubscription,
+} from "./timeline";
+export {
+  getHelmRelease,
+  HELM_RELEASE_PATH,
+  HELM_RELEASES_PATH,
+  listHelmReleases,
+  type HelmReleaseListQuery,
+} from "./helm-releases";
+export {
+  helmReleaseDetailSchema,
+  helmReleaseHistoryEntrySchema,
+  helmReleaseListSchema,
+  helmReleaseSchema,
+  type HelmReleaseDetailEndpoint,
+  type HelmReleaseListEndpoint,
+} from "./helm-releases-schemas";
+export {
+  getTrafficOverview,
+  TRAFFIC_OVERVIEW_PATH,
+  type TrafficOverviewQuery,
+} from "./traffic-overview";
+export {
+  trafficClusterScopeSchema,
+  trafficObservationStatusSchema,
+  trafficObservationSummarySchema,
+  trafficOverviewSchema,
+  trafficRelationshipsSchema,
+  trafficScopeCoverageSchema,
+  type TrafficOverviewEndpoint,
+} from "./traffic-overview-schemas";
+export {
+  getCostOverview,
+  COST_OVERVIEW_PATH,
+  type CostOverviewQuery,
+} from "./cost-overview";
+export {
+  costClusterScopeSchema,
+  costObservationStatusSchema,
+  costObservationSummarySchema,
+  costOverviewSchema,
+  costScopeCoverageSchema,
+  type CostOverviewEndpoint,
+} from "./cost-overview-schemas";
+export {
+  CHECKS_OVERVIEW_PATH,
+  checksDetailPath,
+  getChecksDetail,
+  getChecksOverview,
+  type ChecksQuery,
+} from "./checks";
+export {
+  checksCatalogSchema,
+  checksClusterScopeSchema,
+  checksDetailResponseSchema,
+  checksDetailSchema,
+  checksOverviewSchema,
+  checksResultSetSchema,
+  checksScopeCoverageSchema,
+  type ChecksDetailEndpoint,
+  type ChecksOverviewEndpoint,
+} from "./checks-schemas";
+export {
+  timelineCapabilityDescriptorSchema,
+  timelineCoverageSchema,
+  timelineCursorSchema,
+  timelineEventSchema,
+  timelineFiltersSchema,
+  timelineQuerySchema,
+  timelineRealtimePolicySchema,
+  timelineOverviewRequestSchema,
+  timelineOverviewSchema,
+  timelinePinDeleteRequestSchema,
+  timelinePinIdSchema,
+  timelinePinMutationSchema,
+  timelinePinSetSchema,
+  timelinePinTargetSchema,
+  timelinePinUpsertRequestSchema,
+  timelineScopeSchema,
+  timelineSnapshotRequestSchema,
+  timelineStreamFrameSchema,
+  timelineStreamRequestSchema,
+  timelineSubjectSchema,
+  timelineWindowSchema,
+  type TimelineEndpointCoverage,
+  type TimelineEndpointCapabilityDescriptor,
+  type TimelineEndpointCursor,
+  type TimelineEndpointEvent,
+  type TimelineEndpointOverview,
+  type TimelineEndpointPinMutation,
+  type TimelineEndpointPinSet,
+  type TimelineEndpointPinUpsert,
+  type TimelineEndpointQuery,
+  type TimelineEndpointRealtimePolicy,
+  type TimelineEndpointScope,
+  type TimelineEndpointStreamFrame,
+  type TimelineSnapshotRequest,
+  type TimelineOverviewRequest,
+  type TimelinePinDeleteRequest,
+  type TimelineStreamRequest,
+} from "./timeline-schemas";
 export {
   getSession,
   login,
@@ -22,6 +139,36 @@ export {
   type LoginCredentials,
 } from "./auth";
 export { getFleetSummary } from "./fleet";
+export {
+  getWorkloadDetail,
+  WORKLOAD_DETAIL_PATH,
+  type WorkloadDetailQuery,
+} from "./workload-detail";
+export {
+  workloadDetailSchema,
+  workloadDetailResourceRefSchema,
+  type WorkloadDetailEndpoint,
+} from "./workload-detail-schemas";
+export {
+  COMPARE_CANDIDATES_PATH,
+  COMPARE_DESCRIPTORS_PATH,
+  COMPARE_RESOURCES_PATH,
+  getCompareCandidates,
+  getCompareDescriptors,
+  getCompareResourcePair,
+  type CompareIdentityQuery,
+  type ComparePairQuery,
+} from "./compare";
+export {
+  compareCandidateListSchema,
+  compareDescriptorListSchema,
+  compareDescriptorSchema,
+  compareResourcePairSchema,
+  compareResourceRefSchema,
+  type CompareCandidateListEndpoint,
+  type CompareDescriptorListEndpoint,
+  type CompareResourcePairEndpoint,
+} from "./compare-schemas";
 export {
   listClusters,
   unregisterCluster,
@@ -105,12 +252,41 @@ export {
   getResourceCapabilities,
   RESOURCE_CAPABILITIES_PATH,
 } from "./resource-capabilities";
+export { executeResourceCapability } from "./resource-capability-actions";
+export {
+  resourceActionAcceptedSchema,
+  type ResourceActionAccepted,
+} from "./resource-capability-actions-schemas";
+export {
+  cancelCommand,
+  retryCommand,
+  submitCommand,
+  type CommandControlInput,
+  type CommandControlOptions,
+  type SubmitCommandInput,
+  type SubmitCommandOptions,
+} from "./commands";
+export {
+  commandAcceptedSchema,
+  commandControlAcceptedSchema,
+  type CommandAccepted,
+  type CommandControlAccepted,
+} from "./commands-schemas";
+export {
+  subscribeCommandOperationEvents,
+} from "./operation-events";
+export {
+  commandOperationEventSchema,
+  type CommandOperationEventEndpoint,
+} from "./operation-events-schemas";
 export {
   resourceActionCapabilityIdSchema,
   resourceActionCapabilitySchema,
+  resourceCapabilityInputSchema,
   resourceCapabilitiesSchema,
   resourceCapabilitySubjectSchema,
   type ResourceActionCapabilityId,
+  type ResourceCapabilityInputEndpoint,
   type ResourceCapabilitiesEndpoint,
 } from "./resource-capabilities-schemas";
 export {

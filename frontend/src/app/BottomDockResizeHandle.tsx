@@ -1,50 +1,36 @@
 import { GripHorizontal } from "lucide-react";
-import type { KeyboardEvent, PointerEvent } from "react";
-import { useEffect, useRef } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 
 import {
-  clampHeight,
   MAX_DOCK_HEIGHT,
   MIN_DOCK_HEIGHT,
 } from "../features/bottom-dock/bottomDockState";
+import { useRafDimensionPreview } from "../motion";
 import { useI18n } from "../shared/i18n";
 
 export function BottomDockResizeHandle({
   height,
+  hostRef,
   onHeightChange,
 }: {
   height: number;
+  hostRef: RefObject<HTMLElement | null>;
   onHeightChange: (height: number) => void;
 }) {
   const { t } = useI18n();
-  const cleanupRef = useRef<() => void>(() => undefined);
-  useEffect(() => () => cleanupRef.current(), []);
-  const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    cleanupRef.current();
-    const startY = event.clientY;
-    const startHeight = height;
-    const handle = event.currentTarget;
-    const pointerId = event.pointerId;
-    handle.setPointerCapture(pointerId);
-    const move = (next: globalThis.PointerEvent) => {
-      onHeightChange(clampHeight(startHeight + startY - next.clientY));
-    };
-    const finish = () => {
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", finish);
-      document.removeEventListener("pointercancel", finish);
-      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
-      cleanupRef.current = () => undefined;
-    };
-    cleanupRef.current = finish;
-    document.addEventListener("pointermove", move);
-    document.addEventListener("pointerup", finish, { once: true });
-    document.addEventListener("pointercancel", finish, { once: true });
-  };
+  const { beginPointerPreview, clamp } = useRafDimensionPreview({
+    axis: "height",
+    hostRef,
+    max: MAX_DOCK_HEIGHT,
+    min: MIN_DOCK_HEIGHT,
+    onCommit: onHeightChange,
+    previewProperty: "--dock-height",
+    step: 20,
+  });
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
-    onHeightChange(clampHeight(height + (event.key === "ArrowUp" ? 20 : -20)));
+    onHeightChange(clamp(height + (event.key === "ArrowUp" ? 20 : -20)));
   };
   return (
     <div
@@ -55,7 +41,7 @@ export function BottomDockResizeHandle({
       aria-valuenow={height}
       className="absolute inset-x-0 top-0 z-10 flex h-3 -translate-y-1/2 cursor-row-resize items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onKeyDown={keyDown}
-      onPointerDown={pointerDown}
+      onPointerDown={(event) => beginPointerPreview(event, height)}
       role="separator"
       tabIndex={0}
     >

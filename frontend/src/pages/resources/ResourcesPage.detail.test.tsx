@@ -42,8 +42,7 @@ describe("ResourcesPage URL-backed detail", () => {
       { timeout: 5_000 },
     );
     detail.resolve(POD_DETAIL);
-    expect((await within(dialog).findAllByText("Running", {}, { timeout: 5_000 })).length)
-      .toBeGreaterThan(0);
+    expect(await within(dialog).findByText("Running", {}, { timeout: 5_000 })).toBeTruthy();
   }, 15_000);
 
   it("resolves a direct same-route detail deep link from canonical identity", async () => {

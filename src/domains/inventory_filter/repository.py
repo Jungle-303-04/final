@@ -526,6 +526,53 @@ class InventoryFilterRepository(DatabaseConnection):
                 "application_bindings_complete": True,
                 "partial_reason_codes": [],
             }
+        contexts = self.filter_snapshot_contexts(
+            workspace_id,
+            cluster_ids,
+            at_revision=at_revision,
+        )
+        reasons = {
+            str(reason)
+            for context in contexts.values()
+            for reason in (context.get("partial_reason_codes") or [])
+        }
+        observed = max(
+            (
+                context.get("observed_at")
+                for context in contexts.values()
+                if context.get("observed_at")
+            ),
+            default=None,
+        )
+        return {
+            "snapshot_revision": max(
+                (int(context.get("snapshot_revision") or 0) for context in contexts.values()),
+                default=0,
+            ),
+            "observed_at": iso_or_none(observed),
+            "labels_complete": all(
+                bool(context.get("labels_complete")) for context in contexts.values()
+            ),
+            "resources_complete": all(
+                bool(context.get("resources_complete")) for context in contexts.values()
+            ),
+            "application_bindings_complete": all(
+                bool(context.get("application_bindings_complete")) for context in contexts.values()
+            ),
+            "partial_reason_codes": sorted(reasons),
+        }
+
+    def filter_snapshot_contexts(
+        self,
+        workspace_id: str,
+        allowed_cluster_ids: Collection[str],
+        *,
+        at_revision: int | None = None,
+    ) -> dict[str, JsonObject]:
+        """Read the latest inventory freshness state for every requested cluster in one query."""
+        cluster_ids = _ids(allowed_cluster_ids)
+        if not workspace_id or not cluster_ids:
+            return {}
         table = InventoryFilterRevision.__table__
         ranked = (
             select(
@@ -547,22 +594,10 @@ class InventoryFilterRepository(DatabaseConnection):
         statement = select(ranked).where(ranked.c.rank == 1)
         with self.connection() as conn:
             rows = [dict(row) for row in conn.execute(statement).mappings().all()]
-        reasons = {
-            str(reason) for row in rows for reason in (row.get("partial_reason_codes") or [])
-        }
-        if len(rows) != len(cluster_ids):
-            reasons.add("missing_inventory_projection")
-        observed = max((row["observed_at"] for row in rows), default=None)
+        by_cluster = {str(row["cluster_id"]): row for row in rows}
         return {
-            "snapshot_revision": max((int(row["revision_id"]) for row in rows), default=0),
-            "observed_at": iso_or_none(observed),
-            "labels_complete": len(rows) == len(cluster_ids)
-            and all(bool(row["labels_complete"]) for row in rows),
-            "resources_complete": len(rows) == len(cluster_ids)
-            and all(bool(row["resources_complete"]) for row in rows),
-            "application_bindings_complete": len(rows) == len(cluster_ids)
-            and all(bool(row["application_bindings_complete"]) for row in rows),
-            "partial_reason_codes": sorted(reasons),
+            cluster_id: _snapshot_context_by_cluster(by_cluster.get(cluster_id))
+            for cluster_id in cluster_ids
         }
 
     def list_filter_clusters(
@@ -1460,28 +1495,7 @@ def _physical_topology_statements(
         snapshot_revision,
         include_deleted=filters.include_deleted,
     )
-    observed = ClusterInventoryResourceRecord.__table__.alias(
-        "physical_topology_observed_resources"
-    )
-    base = (
-        select(current)
-        .select_from(
-            current.join(
-                observed,
-                and_(
-                    observed.c.workspace_id == current.c.workspace_id,
-                    observed.c.cluster_id == current.c.cluster_id,
-                    observed.c.inventory_key == current.c.inventory_key,
-                    observed.c.snapshot_id == current.c.as_of_snapshot_id,
-                    observed.c.deleted_at.is_(None),
-                ),
-            )
-        )
-        .where(
-            current.c.rank == 1,
-        )
-        .cte("physical_topology_inventory")
-    )
+    base = select(current).where(current.c.rank == 1).cte("physical_topology_inventory")
     filtered = _apply_resource_filters(
         base,
         filters=filters,
@@ -1811,6 +1825,29 @@ def _ids(values: Collection[str]) -> tuple[str, ...]:
     return tuple(
         sorted({value.strip() for value in values if isinstance(value, str) and value.strip()})
     )
+
+
+def _snapshot_context_by_cluster(row: Mapping[str, Any] | None) -> JsonObject:
+    """Normalize one latest revision, keeping a missing cluster explicit."""
+    if row is None:
+        return {
+            "snapshot_revision": 0,
+            "observed_at": None,
+            "labels_complete": False,
+            "resources_complete": False,
+            "application_bindings_complete": False,
+            "partial_reason_codes": ["missing_inventory_projection"],
+        }
+    return {
+        "snapshot_revision": int(row["revision_id"]),
+        "observed_at": iso_or_none(row.get("observed_at")),
+        "labels_complete": bool(row["labels_complete"]),
+        "resources_complete": bool(row["resources_complete"]),
+        "application_bindings_complete": bool(row["application_bindings_complete"]),
+        "partial_reason_codes": sorted(
+            {str(reason) for reason in (row.get("partial_reason_codes") or [])}
+        ),
+    }
 
 
 def _provider(settings: object) -> str:

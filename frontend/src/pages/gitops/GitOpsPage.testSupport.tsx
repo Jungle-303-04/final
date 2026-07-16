@@ -51,6 +51,49 @@ function LocationProbe() {
 
 export function gitOpsPort(): GitOpsPort {
   return {
+    getApplicationDetail: vi.fn().mockResolvedValue({
+      applicationId: "checkout-api",
+      name: "Checkout API",
+      resource: {
+        apiGroup: "opsia.io",
+        version: "v1",
+        kind: "GitOpsApplication",
+        namespace: "checkout",
+        name: "Checkout API",
+        uid: "checkout-api",
+      },
+      scope: { availability: "unavailable", scope: null, reasonCode: "binding_scope_unavailable" },
+      source: { repositoryRef: null, defaultBranch: null, manifestPath: null },
+      desiredLiveDiff: {
+        availability: "unavailable",
+        sourceRevision: null,
+        liveObservationRevision: null,
+        reasonCode: "source_revision_unavailable",
+      },
+      operation: {
+        availability: "unavailable",
+        inProgress: null,
+        workflowRunId: null,
+        status: null,
+        observedAt: null,
+        reasonCode: "workflow_operation_unobserved",
+      },
+      capabilities: [{
+        action: "refresh",
+        authorization: "denied",
+        availability: "unavailable",
+        enabled: false,
+        operationBlocked: false,
+        reasonCode: "not_authorized",
+      }, {
+        action: "sync",
+        authorization: "denied",
+        availability: "unavailable",
+        enabled: false,
+        operationBlocked: false,
+        reasonCode: "not_authorized",
+      }],
+    }),
     listApplications: vi.fn().mockResolvedValue(applications),
     listSyncTargets: vi.fn().mockResolvedValue([{
       id: "checkout-api:production",

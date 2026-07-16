@@ -27,8 +27,9 @@ describe("ProductShell AI panel", () => {
     expect(closedPanel?.hasAttribute("inert")).toBe(true);
     const trigger = screen.getByRole("button", { name: "Opsia AI 열기" });
     expect(trigger.className).toContain("fixed");
-    expect(trigger.className).toContain("right-6");
-    expect(trigger.className).toContain("bottom-6");
+    expect(trigger.className).toContain("right-[var(--product-floating-action-inline-inset)]");
+    expect(trigger.className).toContain("bottom-[var(--product-floating-action-block-end)]");
+    expect(trigger.className).toContain("size-[var(--product-floating-action-size)]");
 
     await user.click(trigger);
     const panel = screen.getByRole("complementary", { name: "Opsia AI" });

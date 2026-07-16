@@ -31,7 +31,6 @@ def build_physical_topology(
         name = _text(row.get("name"))
         if not server_id or not name:
             continue
-        summary = _mapping(row.get("summary"))
         measured = _mapping(node_usage.get(name))
         cpu_pct = _usage_pct(measured, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
         mem_pct = _usage_pct(
@@ -39,12 +38,7 @@ def build_physical_topology(
             ("mem_pct", "memory_pct"),
             ("mem_ratio", "memory_ratio"),
         )
-        cpu_mcores = _number(measured.get("cpu_mcores"))
-        mem_mib = _number(_first(measured, "mem_mib", "memory_mib"))
-        allocatable_cpu = _number(summary.get("allocatable_cpu_mcores"))
-        allocatable_mem = _number(_first(summary, "allocatable_mem_mib", "allocatable_memory_mib"))
-        pod_capacity = _optional_non_negative_int(summary.get("pod_capacity"))
-        metric_values.extend((cpu_pct, mem_pct, cpu_mcores, mem_mib))
+        metric_values.extend((cpu_pct, mem_pct))
         counts = _mapping(pod_counts.get(name))
         server_id_by_name[name] = server_id
         servers.append(
@@ -53,11 +47,6 @@ def build_physical_topology(
                 "name": name,
                 "cpu_pct": cpu_pct,
                 "mem_pct": mem_pct,
-                "cpu_mcores": cpu_mcores,
-                "mem_mib": mem_mib,
-                "allocatable_cpu_mcores": allocatable_cpu,
-                "allocatable_mem_mib": allocatable_mem,
-                "pod_capacity": pod_capacity,
                 "status": _text(row.get("status")),
                 "matched_pod_count": (
                     None
@@ -92,7 +81,6 @@ def build_physical_topology(
         cpu_mcores = _number(measured.get("cpu_mcores"))
         mem_mib = _number(_first(measured, "mem_mib", "memory_mib"))
         cpu_request_mcores, mem_request_mib = _request_denominators(summary)
-        cpu_limit_mcores, mem_limit_mib = _limit_denominators(summary)
         usage_pct = _requests_usage_pct(
             cpu_mcores=cpu_mcores,
             cpu_request_mcores=cpu_request_mcores,
@@ -111,8 +99,6 @@ def build_physical_topology(
                 "cpu_request_mcores": cpu_request_mcores,
                 "mem_mib": mem_mib,
                 "mem_request_mib": mem_request_mib,
-                "cpu_limit_mcores": cpu_limit_mcores,
-                "mem_limit_mib": mem_limit_mib,
                 "phase": _text(row.get("status") or summary.get("phase"), "Unknown"),
                 "health": _text(row.get("health"), "unknown"),
                 "restarts": _non_negative_int(summary.get("restart_total")),
@@ -191,15 +177,6 @@ def _request_denominators(summary: Mapping[str, Any]) -> tuple[float | None, flo
     )
 
 
-def _limit_denominators(summary: Mapping[str, Any]) -> tuple[float | None, float | None]:
-    return (
-        _positive_number(
-            _first(summary, "cpu_limit_mcores", "limit_cpu_mcores", "limits_cpu_mcores")
-        ),
-        _positive_number(_first(summary, "mem_limit_mib", "limit_mem_mib", "limits_mem_mib")),
-    )
-
-
 def _usage_pct(
     usage: Mapping[str, Any],
     pct_keys: tuple[str, ...],
@@ -252,16 +229,6 @@ def _non_negative_int(value: object) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
-
-
-def _optional_non_negative_int(value: object) -> int | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed >= 0 else None
 
 
 def _text(value: object, default: str = "") -> str:

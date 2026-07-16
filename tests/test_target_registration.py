@@ -477,12 +477,6 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
     )
     assert 'NODE_COLLECTOR_IMAGE: "ghcr.io/acme/kubeheal-agent:test"' in manifest
     assert 'AGENT_TOKEN: "agent-secret"' in manifest
-    assert "requests:" in manifest
-    assert "cpu: 100m" in manifest
-    assert "memory: 256Mi" in manifest
-    assert "limits:" in manifest
-    assert "cpu: 1000m" in manifest
-    assert "memory: 1Gi" in manifest
     assert 'apiGroups: ["metrics.k8s.io"]' in manifest
     assert 'resources: ["pods", "nodes"]' in manifest
     assert 'resources: ["services"]' in manifest
@@ -545,7 +539,7 @@ def test_target_rca_cleanup_delete_permission_is_limited_to_owned_manifest_kinds
 
 def test_static_target_manifest_keeps_the_same_minimal_rca_cleanup_permissions() -> None:
     manifest_path = Path(__file__).resolve().parents[1] / "deploy/target/target.yaml"
-    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text(encoding="utf-8")) if doc]
+    docs = [doc for doc in yaml.safe_load_all(manifest_path.read_text()) if doc]
     sandbox_role = next(
         doc
         for doc in docs
@@ -668,11 +662,7 @@ def test_management_install_manifest_is_read_only() -> None:
 )
 def test_static_agent_manifests_grant_argocd_read_only(manifest_path: str) -> None:
     root = Path(__file__).resolve().parents[1]
-    docs = [
-        doc
-        for doc in yaml.safe_load_all((root / manifest_path).read_text(encoding="utf-8"))
-        if doc
-    ]
+    docs = [doc for doc in yaml.safe_load_all((root / manifest_path).read_text()) if doc]
     read_roles = [doc for doc in docs if doc.get("kind") == "ClusterRole"]
     argo_rules = [
         rule
@@ -864,7 +854,13 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
                 "in the management namespace."
             ),
             "query": "management",
-        }
+        },
+        {
+            "name": "cluster_wide_event_capture",
+            "description": "Paginated all-namespace Kubernetes Event capture with coverage proof.",
+            "query": "*",
+            "collection_scope": "cluster_events",
+        },
     ]
     assert all(
         provider_key == "kubernetes" or provider["enabled"] is False

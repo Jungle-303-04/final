@@ -89,7 +89,11 @@ class AgentCommandRegistry:
 
         typed_payload = self.validate_payload(spec, payload)
         if spec.kubernetes is not None:
-            self.kubernetes_policy.ensure_allowed(spec.kubernetes, typed_payload)
+            self.kubernetes_policy.ensure_allowed(
+                spec.kubernetes,
+                typed_payload,
+                direct_execution=bool((metadata or {}).get("direct_execution")),
+            )
 
         context = CommandContext(
             action=action,

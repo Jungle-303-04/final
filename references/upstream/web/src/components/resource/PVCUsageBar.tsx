@@ -56,3 +56,4 @@ export function PVCUsageBar({ namespace, name }: { namespace: string; name: stri
     </section>
   )
 }
+

@@ -39,9 +39,11 @@ async def emit_expired_command_completions(
         return 0
     for row in expired:
         command_id = str(row["command_id"])
-        body = CommandCompletedBody(command_id=command_id, result=dict(row["result"]))
+        workspace_id = str(row.get("workspace_id") or "default")
+        result = dict(row["result"])
+        body = CommandCompletedBody(command_id=command_id, result=result)
         correlation_id = str(row.get("correlation_id") or f"{COMMAND_JANITOR}:{command_id}")
-        with event_workspace(row.get("workspace_id")):
+        with event_workspace(workspace_id):
             await events.emit(
                 body.__subject__,
                 service_name,

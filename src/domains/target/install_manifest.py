@@ -22,10 +22,6 @@ CONTROL_PRIORITY_CLASS_NAME = "gitops-control-critical"
 FAST_LANE_PRIORITY_CLASS_NAME = "gitops-demo-fast"
 FAST_LANE_NODE_LABEL_KEY = "workload-tier"
 FAST_LANE_NODE_LABEL_VALUE = "demo-fast"
-CLUSTER_AGENT_RESOURCE_REQUEST_CPU = "100m"
-CLUSTER_AGENT_RESOURCE_REQUEST_MEMORY = "256Mi"
-CLUSTER_AGENT_RESOURCE_LIMIT_CPU = "1000m"
-CLUSTER_AGENT_RESOURCE_LIMIT_MEMORY = "1Gi"
 
 
 def yaml_string(value: str) -> str:
@@ -500,13 +496,6 @@ spec:
           image: {yaml_string(payload.image)}
           imagePullPolicy: IfNotPresent
           command: ["python", "src/services/target/cluster-agent/app.py"]
-          resources:
-            requests:
-              cpu: {CLUSTER_AGENT_RESOURCE_REQUEST_CPU}
-              memory: {CLUSTER_AGENT_RESOURCE_REQUEST_MEMORY}
-            limits:
-              cpu: {CLUSTER_AGENT_RESOURCE_LIMIT_CPU}
-              memory: {CLUSTER_AGENT_RESOURCE_LIMIT_MEMORY}
           envFrom:
             - configMapRef:
                 name: target-runtime-config

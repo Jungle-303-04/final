@@ -1,15 +1,31 @@
 import {
   GitOpsPortFailure,
   type GitOpsFailureCode,
+  type GitOpsActionCapability,
+  type GitOpsApplicationDetail,
+  type GitOpsApplicationScope,
+  type GitOpsClusterScope,
+  type GitOpsDesiredLiveDiffAvailability,
+  type GitOpsOperationObservation,
   type GitOpsPort,
+  type GitOpsResourceRef,
+  type GitOpsSource,
   type GitOpsSyncTarget,
   type ReleaseApplication,
   type ReleaseCluster,
 } from "./gitOpsContract";
-import type { GitOpsEndpointDependencies } from "./gitOpsEndpointContract";
+import type {
+  GitOpsApplicationDetailEndpoint,
+  GitOpsEndpointDependencies,
+} from "./gitOpsEndpointContract";
 
 export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitOpsPort {
   return {
+    async getApplicationDetail(applicationId, signal) {
+      return withPortFailure(async () => toApplicationDetail(
+        (await endpoints.getApplicationDetail(applicationId, signal)).application,
+      ));
+    },
     async listApplications(signal) {
       return withPortFailure(async () => {
         const response = await endpoints.listApplications(signal);
@@ -59,6 +75,102 @@ export function createGitOpsAdapter(endpoints: GitOpsEndpointDependencies): GitO
       withPortFailure(() => endpoints.submitSafePr(plan, stepIndex, signal)),
     runAction: (runId, action, reason, signal) =>
       withPortFailure(() => endpoints.runAction(runId, action, reason, signal)),
+  };
+}
+
+function toApplicationDetail(
+  value: GitOpsApplicationDetailEndpoint["application"],
+): GitOpsApplicationDetail {
+  return {
+    applicationId: value.application_id,
+    name: value.name,
+    resource: toResourceRef(value.resource),
+    scope: toScope(value.scope),
+    source: toSource(value.source),
+    desiredLiveDiff: toDesiredLiveDiff(value.desired_live_diff),
+    operation: toOperation(value.operation),
+    capabilities: [toCapability(value.capabilities[0]), toCapability(value.capabilities[1])],
+  };
+}
+
+function toResourceRef(
+  value: GitOpsApplicationDetailEndpoint["application"]["resource"],
+): GitOpsResourceRef {
+  return {
+    apiGroup: value.api_group,
+    version: value.version,
+    kind: value.kind,
+    namespace: value.namespace,
+    name: value.name,
+    uid: value.uid,
+  };
+}
+
+function toScope(
+  value: GitOpsApplicationDetailEndpoint["application"]["scope"],
+): GitOpsApplicationScope {
+  return {
+    availability: value.availability,
+    scope: value.scope ? toClusterScope(value.scope) : null,
+    reasonCode: value.reason_code,
+  };
+}
+
+function toClusterScope(
+  value: NonNullable<GitOpsApplicationDetailEndpoint["application"]["scope"]["scope"]>,
+): GitOpsClusterScope {
+  return {
+    workspaceId: value.workspace_id,
+    clusterId: value.cluster_id,
+    namespaces: value.namespaces,
+    freshness: value.freshness,
+  };
+}
+
+function toSource(
+  value: GitOpsApplicationDetailEndpoint["application"]["source"],
+): GitOpsSource {
+  return {
+    repositoryRef: value.repository_ref,
+    defaultBranch: value.default_branch,
+    manifestPath: value.manifest_path,
+  };
+}
+
+function toDesiredLiveDiff(
+  value: GitOpsApplicationDetailEndpoint["application"]["desired_live_diff"],
+): GitOpsDesiredLiveDiffAvailability {
+  return {
+    availability: value.availability,
+    sourceRevision: value.source_revision,
+    liveObservationRevision: value.live_observation_revision,
+    reasonCode: value.reason_code,
+  };
+}
+
+function toOperation(
+  value: GitOpsApplicationDetailEndpoint["application"]["operation"],
+): GitOpsOperationObservation {
+  return {
+    availability: value.availability,
+    inProgress: value.in_progress,
+    workflowRunId: value.workflow_run_id,
+    status: value.status,
+    observedAt: value.observed_at,
+    reasonCode: value.reason_code,
+  };
+}
+
+function toCapability(
+  value: GitOpsApplicationDetailEndpoint["application"]["capabilities"][number],
+): GitOpsActionCapability {
+  return {
+    action: value.action,
+    authorization: value.authorization,
+    availability: value.availability,
+    enabled: false,
+    operationBlocked: value.operation_blocked,
+    reasonCode: value.reason_code,
   };
 }
 

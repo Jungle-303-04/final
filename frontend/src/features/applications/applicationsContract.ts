@@ -33,6 +33,33 @@ export interface ApplicationHealth {
   restarts: number | null;
 }
 
+export type ApplicationProjectionCompleteness = "exact" | "partial" | "unavailable";
+export type ApplicationProjectionAvailability = "available" | "unavailable";
+
+export interface ApplicationRuntimeReadiness {
+  completeness: ApplicationProjectionCompleteness;
+  status: "healthy" | "degraded" | "unknown";
+  readyPods: number | null;
+  totalPods: number | null;
+  restarts: number | null;
+}
+
+export interface ApplicationDeliveryState {
+  availability: ApplicationProjectionAvailability;
+  status: "succeeded" | "failed" | "running" | "pending" | "unknown" | null;
+  workflowRunId: string | null;
+  observedAt: string | null;
+}
+
+export interface ApplicationBatchRuntime {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  status: "running" | "failed" | "succeeded" | "suspended" | "unknown" | null;
+  activeRuns: number | null;
+  failedRuns: number | null;
+  succeededRuns: number | null;
+}
+
 export interface ApplicationCurrentDeployment {
   version: string | null;
   image: string | null;
@@ -53,11 +80,14 @@ export interface ApplicationCardModel {
   environments: readonly string[];
   lifecycleStatus: string;
   health: ApplicationHealth;
+  runtimeReadiness: ApplicationRuntimeReadiness;
   currentDeployment: ApplicationCurrentDeployment | null;
+  delivery: ApplicationDeliveryState;
+  batchRuntime: ApplicationBatchRuntime;
   hasDrift: boolean | null;
   driftSummary: string | null;
   resourceCounts: readonly ApplicationResourceCount[] | null;
-  resourceCountsCompleteness: "exact" | "partial" | "unavailable";
+  resourceCountsCompleteness: ApplicationProjectionCompleteness;
   openIncidents: number | null;
   repositoryRef: string | null;
   defaultBranch: string | null;
@@ -85,11 +115,137 @@ export interface ApplicationEndpoint {
   address: string | null;
 }
 
+export interface ApplicationTopologyNode {
+  id: string;
+  clusterId: string;
+  resourceType: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  status: string;
+  health: string;
+  observedAt: string | null;
+}
+
+export interface ApplicationTopologyEdge {
+  id: string;
+  fromId: string;
+  toId: string;
+  type: "owns" | "runs_on" | "selects" | "routes_to";
+  evidenceType: string;
+  authority: "authoritative" | "derived";
+  observedAt: string | null;
+}
+
+export interface ApplicationTopology {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  observedAt: string | null;
+  nodes: readonly ApplicationTopologyNode[] | null;
+  edges: readonly ApplicationTopologyEdge[] | null;
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationHistoryEntry {
+  id: string;
+  type: "delivery" | "incident";
+  status: string;
+  summary: string | null;
+  occurredAt: string | null;
+  workflowRunId: string | null;
+  gitOpsChangeId: string | null;
+}
+
+export interface ApplicationHistory {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  entries: readonly ApplicationHistoryEntry[] | null;
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationSourceEvidence {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  conflict: "aligned" | "conflict" | "unknown" | null;
+  repositoryRef: string | null;
+  defaultBranch: string | null;
+  manifestPath: string | null;
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationInstanceScope {
+  id: string;
+  environment: string;
+  status: string;
+  scope: {
+    workspaceId: string;
+    clusterId: string;
+    namespaces: readonly string[];
+    freshness: "live" | "stale" | "partial" | "disconnected";
+  };
+}
+
+export interface ApplicationWorkloadResourceRef {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+}
+
+export interface ApplicationWorkloadScopeItem {
+  key: string;
+  resource: ApplicationWorkloadResourceRef;
+  scope: ApplicationInstanceScope["scope"];
+  observedAt: string | null;
+}
+
+export interface ApplicationWorkloadScope {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  applicationScopeAvailable: boolean;
+  selectedWorkloadKey: string | null;
+  workloads: readonly ApplicationWorkloadScopeItem[];
+  partialReasonCodes: readonly string[];
+}
+
+export interface ApplicationUnavailableEvidence {
+  availability: "unavailable";
+  reasonCodes: readonly string[];
+}
+
+export interface ApplicationWorkloadDetail {
+  workload: ApplicationWorkloadScopeItem;
+  runtimeReadiness: ApplicationRuntimeReadiness;
+  resourceCounts: readonly ApplicationResourceCount[] | null;
+  resourceCountsCompleteness: ApplicationProjectionCompleteness;
+  topology: ApplicationTopology;
+  history: ApplicationUnavailableEvidence;
+  cost: ApplicationUnavailableEvidence;
+  actions: ApplicationUnavailableEvidence;
+}
+
+export interface ApplicationDetailScope {
+  availability: ApplicationProjectionAvailability;
+  completeness: ApplicationProjectionCompleteness;
+  selectedInstanceId: string | null;
+  instances: readonly ApplicationInstanceScope[];
+  partialReasonCodes: readonly string[];
+  selectedScope: "application" | "workload";
+  workloadScope: ApplicationWorkloadScope;
+}
+
 export interface ApplicationDetailModel extends ApplicationCardModel {
+  scope: ApplicationDetailScope;
   endpoints: readonly ApplicationEndpoint[] | null;
   endpointsCompleteness: "exact" | "partial" | "unavailable";
   recentActivity: readonly ApplicationActivity[];
   recentIncidents: readonly ApplicationIncidentPreview[];
+  topology: ApplicationTopology;
+  history: ApplicationHistory;
+  source: ApplicationSourceEvidence;
+  workload: ApplicationWorkloadDetail | null;
 }
 
 export interface ApplicationDeploymentModel {
@@ -128,12 +284,22 @@ export interface ApplicationsPort {
     filter: ApplicationCatalogFilter,
     signal?: AbortSignal,
   ): Promise<readonly ApplicationCardModel[]>;
-  getApplication(applicationId: string, signal?: AbortSignal): Promise<ApplicationDetailModel>;
+  getApplication(
+    applicationId: string,
+    signal?: AbortSignal,
+    instanceId?: string | null,
+    workloadKey?: string | null,
+  ): Promise<ApplicationDetailModel>;
   listDeployments(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<readonly ApplicationDeploymentModel[]>;
-  getDrift(applicationId: string, signal?: AbortSignal): Promise<ApplicationDriftModel>;
+  getDrift(
+    applicationId: string,
+    signal?: AbortSignal,
+    instanceId?: string | null,
+  ): Promise<ApplicationDriftModel>;
 }
 
 export interface ApplicationsApiDependencies {
@@ -153,14 +319,18 @@ export interface ApplicationsApiDependencies {
   getApplicationOverview(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
+    workloadKey?: string | null,
   ): Promise<ApplicationDetailEndpoint>;
   listApplicationDeploymentHistory(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<ApplicationDeploymentHistoryEndpoint>;
   getApplicationDrift(
     applicationId: string,
     signal?: AbortSignal,
+    instanceId?: string | null,
   ): Promise<ApplicationDriftEndpoint>;
 }
 
@@ -175,6 +345,13 @@ export interface ApplicationCatalogEndpointItem {
     total_pods: number | null;
     restarts: number | null;
   };
+  runtime_readiness: {
+    completeness: ApplicationProjectionCompleteness;
+    status: "healthy" | "degraded" | "unknown";
+    ready_pods: number | null;
+    total_pods: number | null;
+    restarts: number | null;
+  };
   current_deployment: {
     version: string | null;
     image: string | null;
@@ -183,10 +360,24 @@ export interface ApplicationCatalogEndpointItem {
     deployed_at: string | null;
     deployed_by: string | null;
   } | null;
+  delivery: {
+    availability: ApplicationProjectionAvailability;
+    status: "succeeded" | "failed" | "running" | "pending" | "unknown" | null;
+    workflow_run_id: string | null;
+    observed_at: string | null;
+  };
+  batch_runtime: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    status: "running" | "failed" | "succeeded" | "suspended" | "unknown" | null;
+    active_runs: number | null;
+    failed_runs: number | null;
+    succeeded_runs: number | null;
+  };
   has_drift: boolean | null;
   drift_summary: string | null;
   resource_counts: { kind: string; count: number }[] | null;
-  resource_counts_completeness: "exact" | "partial" | "unavailable";
+  resource_counts_completeness: ApplicationProjectionCompleteness;
   open_incidents: number | null;
   repository_ref: string | null;
   default_branch: string | null;
@@ -194,6 +385,49 @@ export interface ApplicationCatalogEndpointItem {
 }
 
 export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpointItem {
+  scope: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    selected_instance_id: string | null;
+    instances: {
+      id: string;
+      environment: string;
+      status: string;
+      scope: {
+        workspace_id: string;
+        cluster_id: string;
+        namespaces: string[];
+        freshness: "live" | "stale" | "partial" | "disconnected";
+      };
+    }[];
+    partial_reason_codes: string[];
+    selected_scope: "application" | "workload";
+    workload_scope: {
+      availability: ApplicationProjectionAvailability;
+      completeness: ApplicationProjectionCompleteness;
+      application_scope_available: boolean;
+      selected_workload_key: string | null;
+      workloads: {
+        key: string;
+        resource: {
+          api_group: string;
+          version: string;
+          kind: string;
+          namespace: string | null;
+          name: string;
+          uid: string;
+        };
+        scope: {
+          workspace_id: string;
+          cluster_id: string;
+          namespaces: string[];
+          freshness: "live" | "stale" | "partial" | "disconnected";
+        };
+        observed_at: string | null;
+      }[];
+      partial_reason_codes: string[];
+    };
+  };
   endpoints: { id: string; kind: string; name: string; url: string }[] | null;
   endpoints_completeness: "exact" | "partial" | "unavailable";
   recent_activity: {
@@ -208,6 +442,88 @@ export interface ApplicationDetailEndpointItem extends ApplicationCatalogEndpoin
     status: string;
     started_at: string | null;
   }[];
+  topology: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    observed_at: string | null;
+    nodes: {
+      id: string;
+      cluster_id: string;
+      resource_type: string;
+      kind: string;
+      namespace: string | null;
+      name: string;
+      status: string;
+      health: string;
+      observed_at: string | null;
+    }[] | null;
+    edges: {
+      id: string;
+      from_id: string;
+      to_id: string;
+      type: "owns" | "runs_on" | "selects" | "routes_to";
+      evidence_type: string;
+      authority: "authoritative" | "derived";
+      observed_at: string | null;
+    }[] | null;
+    partial_reason_codes: string[];
+  };
+  history: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    entries: {
+      id: string;
+      type: "delivery" | "incident";
+      status: string;
+      summary: string | null;
+      occurred_at: string | null;
+      workflow_run_id: string | null;
+      gitops_change_id: string | null;
+    }[] | null;
+    partial_reason_codes: string[];
+  };
+  source: {
+    availability: ApplicationProjectionAvailability;
+    completeness: ApplicationProjectionCompleteness;
+    conflict: "aligned" | "conflict" | "unknown" | null;
+    repository_ref: string | null;
+    default_branch: string | null;
+    manifest_path: string | null;
+    partial_reason_codes: string[];
+  };
+  workload: {
+    workload: {
+      key: string;
+      resource: {
+        api_group: string;
+        version: string;
+        kind: string;
+        namespace: string | null;
+        name: string;
+        uid: string;
+      };
+      scope: {
+        workspace_id: string;
+        cluster_id: string;
+        namespaces: string[];
+        freshness: "live" | "stale" | "partial" | "disconnected";
+      };
+      observed_at: string | null;
+    };
+    runtime_readiness: {
+      completeness: ApplicationProjectionCompleteness;
+      status: "healthy" | "degraded" | "unknown";
+      ready_pods: number | null;
+      total_pods: number | null;
+      restarts: number | null;
+    };
+    resource_counts: { kind: string; count: number }[] | null;
+    resource_counts_completeness: ApplicationProjectionCompleteness;
+    topology: ApplicationDetailEndpointItem["topology"];
+    history: { availability: "unavailable"; reason_codes: string[] };
+    cost: { availability: "unavailable"; reason_codes: string[] };
+    actions: { availability: "unavailable"; reason_codes: string[] };
+  } | null;
 }
 
 interface ApplicationCatalogEndpoint {

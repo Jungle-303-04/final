@@ -4,10 +4,10 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { createApiComposition } from "./apiComposition";
 import { createProductComposition } from "./productComposition";
 import { ProductRouter } from "./ProductRouter";
 import { I18nProvider } from "../shared/i18n";
+import type { AuthPort } from "../features/auth/authContract";
 import {
   installMatchMedia,
   renderShell,
@@ -15,6 +15,12 @@ import {
   testAuth,
   testClusterScope,
 } from "./__tests__/ProductShellInteractionSupport";
+
+const testAuthPort: AuthPort = {
+  loadSession: async () => ({ status: "unauthenticated" }),
+  signIn: async () => { throw new Error("not used"); },
+  signOut: async () => undefined,
+};
 
 beforeEach(() => {
   installMatchMedia(false);
@@ -40,7 +46,7 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
     expect(dialog.textContent).toContain("홈 화면 열기");
     expect(dialog.textContent).toContain("인시던트 화면 열기");
-    expect(dialog.textContent).not.toContain("토폴로지 화면 열기");
+    expect(dialog.textContent).toContain("토폴로지 화면 열기");
     expect(screen.getByRole("button", { name: "단축키 도움말 닫기" })).toBeTruthy();
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
     await user.keyboard("{Escape}");
@@ -109,6 +115,38 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByText("Home content")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect((input as HTMLInputElement).value).toBe("gi?");
+  });
+
+  it("opens the descriptor-backed command palette from Cmd/Ctrl+K and gives honest feedback for an unavailable route", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    });
+    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
+    const user = userEvent.setup();
+    try {
+      renderShell();
+
+      await user.keyboard("{Meta>}k{/Meta}");
+      const dialog = await screen.findByRole("dialog", { name: "명령 팔레트" });
+      expect(dialog.textContent).toContain("토폴로지");
+      expect(dialog.textContent).toContain("준비되지 않음");
+      await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
+
+      await user.keyboard("{Control>}k{/Control}");
+      expect(await screen.findByRole("dialog", { name: "명령 팔레트" })).toBeTruthy();
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "명령 팔레트" })).toBeNull());
+
+      await user.keyboard("gt");
+      expect(await screen.findByText("토폴로지 화면은 아직 사용할 수 없습니다.")).toBeTruthy();
+    } finally {
+      restoreScrollIntoView();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("collapses the desktop rail without remounting links and exposes focus tooltips only when slim", async () => {
@@ -197,6 +235,50 @@ describe("ProductShell keyboard and help interaction", () => {
     expect(screen.getByRole("heading", { name: "인시던트", level: 1 })).toBeTruthy();
   });
 
+  it("lets Tab leave the non-modal mobile filter popup for page content", async () => {
+    installMatchMedia(true);
+    vi.stubGlobal("ResizeObserver", class {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    });
+    const user = userEvent.setup();
+    try {
+      renderShell();
+
+      await user.click(screen.getByRole("button", { name: "클러스터, 앱, 라벨, 리소스 필터" }));
+      expect(await screen.findByRole("dialog")).toBeTruthy();
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "모든 필터 지우기" }));
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "화면 입력" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps the narrow header tab order aligned with its visual menu, controls, and filter rows", () => {
+    installMatchMedia(true);
+    const { container } = renderShell();
+    const header = container.querySelector("header");
+    if (!header) throw new Error("Product shell header is required");
+
+    const tabOrder = Array.from(header.querySelectorAll<HTMLElement>("button, input"))
+      .filter((element) => element.tabIndex >= 0 && !element.hasAttribute("disabled"))
+      .map((element) => element.getAttribute("aria-label"));
+
+    expect(tabOrder).toEqual([
+      "모바일 사이드바 열기",
+      "키보드 단축키",
+      "현재 언어: 한국어",
+      "클러스터, 앱, 라벨, 리소스 필터",
+      "클러스터, 앱, 라벨, 리소스 필터",
+      "모든 필터 지우기",
+    ]);
+  });
+
   it("switches every shell label immediately from the locale control", async () => {
     const user = userEvent.setup();
     renderShell();
@@ -242,7 +324,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
       const releaseGateComposition = createProductComposition(
         [],
-        createApiComposition().auth,
+        testAuthPort,
         testClusterScope,
       );
       render(

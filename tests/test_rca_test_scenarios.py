@@ -708,7 +708,7 @@ def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue
         ) -> StubResult:
             statements.append(statement)
             parameters.append(params)
-            values = [None, 0, "cmd-rca-test-inject-run-1", None]
+            values = [None, 0, "cmd-rca-test-inject-run-1", None, None]
             return StubResult(values[len(statements) - 1])
 
     @contextmanager
@@ -746,7 +746,7 @@ def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue
     )
 
     assert reserved is True
-    assert len(statements) == 4
+    assert len(statements) == 5
     assert "pg_advisory_xact_lock" in str(statements[0])
     assert parameters[0] == {
         "lock_key": rca_test_guard_lock_key(
@@ -769,7 +769,10 @@ def test_repository_guard_uses_expiry_and_finished_cleanup_before_atomic_enqueue
     assert len(expires_at_indexes) == 1
     assert "payload" in active_sql.params.values()
     assert "INSERT INTO agent_commands" in str(statements[2].compile(dialect=postgresql.dialect()))
-    assert "pg_notify" in str(statements[3])
+    attempt_sql = statements[3].compile(dialect=postgresql.dialect())
+    assert "INSERT INTO agent_command_attempts" in str(attempt_sql)
+    assert "workspace-1" in attempt_sql.params.values()
+    assert "pg_notify" in str(statements[4])
 
 
 def test_repository_rejects_active_reservation_before_command_insert() -> None:

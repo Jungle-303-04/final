@@ -1,13 +1,17 @@
 import { ThemeProvider } from "next-themes";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BrowserRouter } from "react-router-dom";
-import { createApiComposition } from "./app/apiComposition";
+import { createAuthBootstrap } from "./app/authBootstrap";
 import { ProductErrorBoundary } from "./app/ProductErrorBoundary";
-import { ProductRouter } from "./app/ProductRouter";
 import { AuthBarrier } from "./features/auth/AuthBarrier";
+import { ProductStateScreen } from "./shared/ui/ProductStateScreen";
 import { I18nProvider } from "./shared/i18n";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
+
+const AuthenticatedProductRuntime = lazy(async () => ({
+  default: (await import("./app/AuthenticatedProductRuntime")).AuthenticatedProductRuntime,
+}));
 
 export default function ProductApp() {
   return (
@@ -29,12 +33,20 @@ export default function ProductApp() {
 }
 
 function ProductRuntime() {
-  const [composition] = useState(createApiComposition);
+  const [authPort] = useState(createAuthBootstrap);
 
   return (
     <BrowserRouter>
-      <AuthBarrier port={composition.auth}>
-        {(auth) => <ProductRouter auth={auth} composition={composition} />}
+      <AuthBarrier port={authPort}>
+        {(auth) => (
+          <Suspense fallback={<ProductStateScreen kind="loading" />}>
+            <AuthenticatedProductRuntime
+              auth={auth}
+              authPort={authPort}
+              key={`${auth.session.workspaceId}:${auth.session.userId}`}
+            />
+          </Suspense>
+        )}
       </AuthBarrier>
     </BrowserRouter>
   );

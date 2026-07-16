@@ -101,6 +101,7 @@ APPROVAL_DECIDED_BY_MISSING_REASON = "write command approval_decided_by is missi
 APPROVAL_DECIDED_BY_MISMATCH_REASON = "write command approval_decided_by mismatch"
 APPROVAL_EXPIRED_REASON = "write command approval is expired"
 APPROVAL_EXPIRES_AT_INVALID_REASON = "write command approval_expires_at is invalid"
+DIRECT_EXECUTION_CONFIRMATION_REQUIRED_REASON = "direct command requires explicit confirmation"
 MANAGEMENT_READONLY_REASON = management_readonly_detail()["code"]
 COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS_ENV = "COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS"
 DEFAULT_COMMAND_APPROVAL_EVIDENCE_TTL_SECONDS = "3600"
@@ -145,6 +146,7 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     if (
         spec is not None
         and spec.requires_approval_for(command.namespace)
+        and not command.direct_execution
         and not approval_exempt_for_environment(command)
     ):
         if not command.approval_ref:
@@ -184,10 +186,18 @@ def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
 
 
 def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
+    if command.direct_execution:
+        return False
     spec = command_action_spec(command.action)
     if spec is None or not spec.requires_approval_for(command.namespace):
         return False
     return not approval_exempt_for_environment(command)
+
+
+def evaluate_direct_execution_confirmation(command: CommandRequestedBody) -> PolicyResult:
+    if command.direct_execution and not command.direct_execution_confirmed:
+        return PolicyResult.reject(DIRECT_EXECUTION_CONFIRMATION_REQUIRED_REASON)
+    return PolicyResult.allow()
 
 
 def utc_now() -> datetime:
@@ -322,6 +332,8 @@ async def _maybe_await(value: object) -> object:
 async def evaluate_management_guard(
     command: CommandRequestedBody, db: AgentCommandStore
 ) -> PolicyResult:
+    if command.direct_execution:
+        return PolicyResult.allow()
     registration_getter = getattr(db, "get_cluster_registration", None)
     registration = None
     if callable(registration_getter):
@@ -364,6 +376,8 @@ def idempotency_key(
         "cluster_id": command.cluster_id,
         "action": command.action,
         "namespace": command.namespace,
+        "direct_execution": command.direct_execution,
+        "direct_execution_confirmed": command.direct_execution_confirmed,
         "approval_ref": command.approval_ref,
         "policy_decision_ref": command.policy_decision_ref,
         "approval_decided_by": (
@@ -387,11 +401,15 @@ def build_plan(
     key = idempotency_key(command, correlation_id, approval_evidence)
     cluster_id = command.cluster_id or COMMAND_CONFIG.default_cluster_id
     workspace_id = command.workspace_id
+    action = command.action or COMMAND_CONFIG.default_command_action
+    action_spec = command_action_spec(action)
     return Plan(
-        command_id=f"cmd-{key[:32]}",
+        # API가 접수 UoW에서 만든 ID는 approval evidence가 나중에 보강돼도 절대
+        # 바뀌지 않는다. 과거/외부 이벤트만 기존 hash ID fallback을 유지한다.
+        command_id=command.command_id or f"cmd-{key[:32]}",
         idempotency_key=key,
         cluster_id=cluster_id,
-        action=command.action or COMMAND_CONFIG.default_command_action,
+        action=action,
         namespace=command.namespace or COMMAND_CONFIG.default_namespace,
         diff=command.diff.to_body(),
         payload=command.payload,
@@ -401,8 +419,12 @@ def build_plan(
             heartbeat_interval_seconds=COMMAND_CONFIG.heartbeat_interval_seconds,
         ),
         retry_policy=RetryPolicy(
-            max_attempts=COMMAND_CONFIG.retry_max_attempts,
-            retry_delay_seconds=COMMAND_CONFIG.retry_delay_seconds,
+            max_attempts=(
+                action_spec.max_attempts
+                if action_spec is not None and action_spec.supports_manual_retry
+                else 1
+            ),
+            retry_delay_seconds=(action_spec.retry_delay_seconds if action_spec is not None else 0),
         ),
         routing_constraint=RoutingConstraint(
             channel=COMMAND_CONFIG.agent_route_channel,
@@ -424,6 +446,8 @@ def build_plan(
         approval_expires_at=(
             approval_evidence.expires_at if approval_evidence else command.approval_expires_at
         ),
+        direct_execution=command.direct_execution,
+        direct_execution_confirmed=command.direct_execution_confirmed,
     )
 
 
@@ -431,10 +455,39 @@ def route_for_plan(plan: Plan) -> Route:
     return Route(channel=plan.routing_constraint.channel, cluster_id=plan.cluster_id)
 
 
-async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> None:
-    await ctx.db.queue_agent_command(
+async def queue_plan_for_agent(ctx: EventContext[AgentCommandStore], plan: Plan) -> bool:
+    return await ctx.db.queue_agent_command(
         ctx.correlation_id, plan.to_body(), COMMAND_CONFIG.command_status_queued
     )
+
+
+async def close_operation(ctx: EventContext[AgentCommandStore], plan: Plan, reason: str) -> None:
+    """Persist a terminal lifecycle fact when the command cannot reach an agent."""
+    fail_logical = getattr(ctx.db, "fail_logical_command_and_stage_event", None)
+    if callable(fail_logical):
+        await fail_logical(plan.workspace_id, plan.command_id, plan.cluster_id, reason)
+        return
+    append = getattr(ctx.db, "append_command_operation_event", None)
+    if not callable(append):
+        return
+    await append(
+        plan.workspace_id,
+        plan.command_id,
+        "failed",
+        {
+            "cluster_id": plan.cluster_id,
+            "status": CommandStatus.FAILED,
+            "reason": reason,
+        },
+    )
+
+
+async def reject_operation(
+    ctx: EventContext[AgentCommandStore], command: CommandRequestedBody, reason: str
+) -> CommandRejectedBody:
+    """Close the receipt's immutable operation stream for every worker rejection."""
+    await close_operation(ctx, build_plan(command, ctx.correlation_id), reason)
+    return CommandRejectedBody(reason=reason, requested=command.to_body())
 
 
 async def sweep_expired_agent_commands(
@@ -458,26 +511,34 @@ async def handle_command_requested(
         and evt.actor.get("auto_selected") is True
         and not env_enabled(AUTO_COMMANDS_ENABLED_ENV)
     ):
-        yield CommandRejectedBody(reason=AUTO_COMMANDS_DISABLED_REASON, requested=evt.to_body())
+        yield await reject_operation(ctx, evt, AUTO_COMMANDS_DISABLED_REASON)
         return
     management_result = await evaluate_management_guard(evt, ctx.db)
     if not management_result.allowed:
-        yield CommandRejectedBody(
-            reason=management_result.require_reason(), requested=evt.to_body()
-        )
+        yield await reject_operation(ctx, evt, management_result.require_reason())
+        return
+    direct_execution_result = evaluate_direct_execution_confirmation(evt)
+    if not direct_execution_result.allowed:
+        yield await reject_operation(ctx, evt, direct_execution_result.require_reason())
         return
     result = evaluate_command_policy(evt)
     if not result.allowed:
-        yield CommandRejectedBody(reason=result.require_reason(), requested=evt.to_body())
+        yield await reject_operation(ctx, evt, result.require_reason())
         return
     approval_result, approval_evidence = await evaluate_recorded_approval(evt, ctx.db)
     if not approval_result.allowed:
-        yield CommandRejectedBody(reason=approval_result.require_reason(), requested=evt.to_body())
+        yield await reject_operation(ctx, evt, approval_result.require_reason())
         return
 
     plan = build_plan(evt, ctx.correlation_id, approval_evidence)
     yield CommandDispatchedBody(plan=plan, route=route_for_plan(plan))
-    await queue_plan_for_agent(ctx, plan)
+    inserted = await queue_plan_for_agent(ctx, plan)
+    if not inserted:
+        await close_operation(ctx, plan, "agent command could not be queued")
+        yield CommandRejectedBody(
+            reason="agent command could not be queued", requested=evt.to_body()
+        )
+        return
     yield CommandQueuedForAgentBody(
         command_id=plan.command_id,
         cluster_id=plan.cluster_id,
@@ -491,4 +552,6 @@ async def handle_command_requested(
         policy_decision_ref=plan.policy_decision_ref,
         approval_decided_by=plan.approval_decided_by,
         approval_expires_at=plan.approval_expires_at,
+        direct_execution=plan.direct_execution,
+        direct_execution_confirmed=plan.direct_execution_confirmed,
     )

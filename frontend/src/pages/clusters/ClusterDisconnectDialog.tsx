@@ -2,7 +2,6 @@ import {
   Check,
   CircleCheck,
   Clipboard,
-  LoaderCircle,
   ShieldCheck,
   TriangleAlert,
   Unplug,
@@ -30,6 +29,7 @@ import {
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 
 export type DisconnectPhase =
   | "confirm"
@@ -272,7 +272,7 @@ export function ClusterDisconnectDialog({
             ) : pending ? (
               <div className="flex w-full items-center justify-between gap-3">
                 <p className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground" role="status">
-                  <LoaderCircle aria-hidden="true" className="size-4 shrink-0 motion-safe:animate-spin" />
+                  <Spinner className="size-4 shrink-0" decorative />
                   <span className="truncate">{phase === "submitting"
                     ? t("clusters.disconnect.submitting")
                     : t("clusters.disconnect.uninstalling")}</span>
@@ -318,7 +318,7 @@ function DisconnectProgress({ phase, t }: { phase: DisconnectPhase; t: Translati
           {step.state === "complete" ? (
             <Check aria-hidden="true" className="size-4 shrink-0 text-emerald-600" />
           ) : step.state === "active" ? (
-            <LoaderCircle aria-hidden="true" className="size-4 shrink-0 motion-safe:animate-spin" />
+            <Spinner className="size-4 shrink-0" decorative />
           ) : (
             <span aria-hidden="true" className="size-4 shrink-0 rounded-full border" />
           )}

@@ -1,21 +1,21 @@
 ---
 title: 외부 기준 저장소 기능 전수표
-status: p1-source-of-truth
+status: p1-observation-and-latest-source-rebaseline
 date: 2026-07-11
 runtime_url: http://127.0.0.1:9280
 runtime_version: 1.8.1
-source_tag: v1.8.1
-source_commit: 3ff2b1095151c690bf536e8e6ca685c2703fcd70
-next_gate: reference-contract-map.md 검토 승인
+source_tag: upstream-head
+source_commit: cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc
+next_gate: reference-ui-delta-rebaseline-check --require-classified
 ---
 
 # 외부 기준 저장소 기능 전수표
 
 ## 0. 목적과 사용 금지선
 
-이 문서는 P1 관찰 산출물이다. 기능, IA, 레이아웃, interaction, keyboard, refresh, API를
-실행 인스턴스와 동일 버전 소스에서 전수 확인한다. 우리 backend endpoint 연결 판정과 제품 구현은
-하지 않는다.
+이 문서는 P1 실행 관찰 산출물과 최신 기준 재기준화 canonical inventory다. `source_commit`은 동결 원본과 출하 gate가 따르는 최신 기준이고, 실행 관찰 당시 과거 provenance는
+아래 기준선과 재기준화 기록에 보존한다.
+기존 관찰 행은 과거 runtime evidence이며 최신 원본 proof나 제품 구현 완료를 뜻하지 않는다. 최신 source proof와 delta 분류는 별도 rebaseline ledger에서 추적한다. 우리 backend endpoint 연결 판정과 제품 구현은 이 문서만으로 하지 않는다.
 
 - P2 전에는 `직결 가능`, `어댑터 필요`, `백엔드 갭`을 확정하지 않는다.
 - 화면이나 숫자를 synthetic·fixture로 채우지 않는다.
@@ -27,8 +27,8 @@ next_gate: reference-contract-map.md 검토 승인
 
 | 판정 | 의미 |
 |---|---|
-| `runtime+source` | `:9280`에서 직접 관찰했고 v1.8.1 소스로 의미를 확정 |
-| `source-confirmed` | runtime에서 해당 screen·control·gated/empty/capability 상태를 관찰하고, 데이터·권한·안전 제한으로 끝까지 실행하지 않은 계약을 v1.8.1 call-chain으로 확정 |
+| `runtime+source` | `:9280`에서 직접 관찰했고 관찰 당시 v1.8.1 소스로 의미를 확정한 과거 runtime evidence |
+| `source-confirmed` | runtime에서 해당 screen·control·gated/empty/capability 상태를 관찰하고, 데이터·권한·안전 제한으로 끝까지 실행하지 않은 계약을 관찰 당시 v1.8.1 call-chain으로 확정한 과거 evidence |
 | `runtime-gated` | control 또는 route는 관찰됐지만 권한·capability·데이터 부재로 하위 동작이 차단됨 |
 
 ## 1. 조사 기준선
@@ -37,7 +37,7 @@ next_gate: reference-contract-map.md 검토 승인
 |---|---|---|
 | 실행 URL | `http://127.0.0.1:9280` | HTTP 200과 browser 관찰 |
 | 비교 실행 도구 | `1.8.1` | 로컬 CLI `--version` |
-| source | tag `v1.8.1`, commit `3ff2b1095151c690bf536e8e6ca685c2703fcd70` | 공식 저장소 tag와 실행 version 대조 |
+| source rebaseline target | upstream HEAD, commit `cf643dfee93a5ae8dfcd3c2a982620b793b2b4cc` | `references/provenance/source.json`과 동결 source ledger |
 | source license | Apache-2.0 | 동일 checkout의 `LICENSE` 직접 확인 |
 | 실행 context | `cluster-1`, `mgmt`; 관찰 시작 current=`mgmt` | `GET /api/contexts`, process argument |
 | 인증 | local no-auth (`authEnabled=false`, `authMode=none`) | `GET /api/auth/me` |
@@ -46,7 +46,7 @@ next_gate: reference-contract-map.md 검토 승인
 | 실시간 | `/api/events/stream` SSE | browser network와 `useEventSource` |
 | 화면 최소 폭 | standalone content 800px + rail 176px 또는 56px | `web/src/App.tsx` root layout |
 
-소스 근거는 위 commit의 상대 경로와 symbol로 적는다. 주요 진입점은 다음과 같다.
+실행 관찰 source tag `v1.8.1`, revision `3ff2b1095151c690bf536e8e6ca685c2703fcd70`의 경로·symbol은 historical evidence로 보존하며, 최신 기준 source proof는 UI delta ledger에서 별도로 분류·검증한다. 주요 historical 관찰 진입점은 다음과 같다.
 
 - route·shell·전역 interaction: `web/src/App.tsx`
 - app composition: `web/src/*App.tsx`

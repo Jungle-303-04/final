@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  MAX_SSE_FRAME_LENGTH,
-  openPodLogStream,
-  openWorkloadLogStream,
-  parseFrames,
-} from "./log-stream";
+import { openPodLogStream, openWorkloadLogStream } from "./log-stream";
+import { MAX_SSE_FRAME_LENGTH, parseSseFrames } from "../shared/streaming/sse";
 
 describe("log stream API", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -62,24 +58,24 @@ describe("log stream API", () => {
     expect(onFailure.mock.calls[0]?.[0]).toMatchObject({ kind: "invalid-payload" });
   });
 
-  it("handles heartbeat comments, chunk remainders, and rejects named event fields", () => {
-    expect(parseFrames(': heartbeat\n\ndata: {"type":"end","reason":"done"}\n\n'))
-      .toEqual({ payloads: ['{"type":"end","reason":"done"}'], remainder: "" });
-    expect(parseFrames('data: {"type":"connected"')).toEqual({
-      payloads: [],
+  it("handles heartbeat comments, chunk remainders, and preserves SSE event metadata", () => {
+    expect(parseSseFrames(': heartbeat\n\ndata: {"type":"end","reason":"done"}\n\n'))
+      .toEqual({ frames: [{ id: null, event: null, data: '{"type":"end","reason":"done"}' }], remainder: "" });
+    expect(parseSseFrames('data: {"type":"connected"')).toEqual({
+      frames: [],
       remainder: 'data: {"type":"connected"',
     });
-    expect(() => parseFrames("event: error\ndata: {}\n\n"))
-      .toThrow(/unsupported SSE field/u);
-    expect(parseFrames('data: {"type":"end","reason":"done"}\r')).toEqual({
-      payloads: [],
+    expect(parseSseFrames("event: operation\nid: 1\ndata: {}\n\n"))
+      .toEqual({ frames: [{ id: "1", event: "operation", data: "{}" }], remainder: "" });
+    expect(parseSseFrames('data: {"type":"end","reason":"done"}\r')).toEqual({
+      frames: [],
       remainder: 'data: {"type":"end","reason":"done"}\r',
     });
-    expect(parseFrames('data: {"type":"end","reason":"done"}\r\n\r\n')).toEqual({
-      payloads: ['{"type":"end","reason":"done"}'],
+    expect(parseSseFrames('data: {"type":"end","reason":"done"}\r\n\r\n')).toEqual({
+      frames: [{ id: null, event: null, data: '{"type":"end","reason":"done"}' }],
       remainder: "",
     });
-    expect(() => parseFrames(`data: ${"x".repeat(MAX_SSE_FRAME_LENGTH)}`))
+    expect(() => parseSseFrames(`data: ${"x".repeat(MAX_SSE_FRAME_LENGTH)}`))
       .toThrow(/exceeded limit/u);
   });
 

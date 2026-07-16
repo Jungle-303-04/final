@@ -2,17 +2,6 @@ from __future__ import annotations
 
 from packages.contracts.event_bus.interfaces import JsonObject
 
-NODE_COLLECTOR_CONTAINER_RESOURCES: JsonObject = {
-    "requests": {
-        "cpu": "25m",
-        "memory": "64Mi",
-    },
-    "limits": {
-        "cpu": "250m",
-        "memory": "256Mi",
-    },
-}
-
 
 def node_collector_daemonset(
     *,
@@ -78,7 +67,6 @@ def node_collector_container(
         "image": image,
         "imagePullPolicy": "IfNotPresent",
         "command": ["python", "src/services/target/node-collector/app.py"],
-        "resources": NODE_COLLECTOR_CONTAINER_RESOURCES,
         "env": [
             {"name": "PORT", "value": str(port)},
             {

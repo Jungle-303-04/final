@@ -25,6 +25,18 @@ describe("product form primitives", () => {
   it("does not render an empty error announcement", () => {
     expect(renderToStaticMarkup(<FieldError />)).toBe("");
   });
+
+  it("preserves Kubernetes identifiers by disabling text mutation unless a caller opts in", () => {
+    const defaults = renderToStaticMarkup(<Input aria-label="Resource name" />);
+    const override = renderToStaticMarkup(
+      <Input aria-label="Human title" autoCapitalize="sentences" autoCorrect="on" />,
+    );
+
+    expect(defaults).toContain('autoCapitalize="off"');
+    expect(defaults).toContain('autoCorrect="off"');
+    expect(override).toContain('autoCapitalize="sentences"');
+    expect(override).toContain('autoCorrect="on"');
+  });
 });
 
 // @ts-expect-error Product primitives own their slot identity.

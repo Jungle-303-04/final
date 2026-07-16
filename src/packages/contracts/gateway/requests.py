@@ -304,6 +304,11 @@ class CommandRequest(StrictModel):
     diff: dict[str, Any] | None = None
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    # 사용자가 대상·영향을 확인했다는 입력. 서버만 이 값을 direct execution
+    # 정책으로 승격한다. 아래 legacy 플래그는 실행 권한을 부여하지 않는다.
+    confirmation: Literal[True] | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 class DeploymentScaleRequest(StrictModel):
@@ -311,12 +316,18 @@ class DeploymentScaleRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    confirmation: Literal[True] | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 class DeploymentRestartRequest(StrictModel):
     reason: str | None = Field(default=None, max_length=500)
     approval_ref: str | None = None
     policy_decision_ref: str | None = None
+    confirmation: Literal[True] | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
 
 
 class AgentDebugQueryRequest(StrictModel):
@@ -549,10 +560,18 @@ class CommandStartRequest(StrictModel):
     workspace_id: str = DEFAULT_WORKSPACE_ID
     agent_id: str
     lease_id: str
+    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class CommandHeartbeatRequest(CommandStartRequest):
-    pass
+    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
+    # Agent only acknowledges a generation it actually observed.  The gateway
+    # never treats a browser request as an agent cancellation acknowledgement.
+    observed_cancel_generation: int | None = Field(default=None, ge=1)
+
+
+class CommandControlRequest(StrictModel):
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class AlertChannelUpsertRequest(StrictModel):
@@ -626,11 +645,12 @@ class AlertmanagerWebhookRequest(StrictModel):
 class CommandResultRequest(StrictModel):
     model_config = ConfigDict(extra="allow")
 
-    status: Literal["completed", "failed"] = DEFAULT_COMMAND_STATUS
+    status: Literal["completed", "failed", "cancelled"] = DEFAULT_COMMAND_STATUS
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     agent_id: str
     lease_id: str
+    attempt_id: str | None = Field(default=None, min_length=1, max_length=200)
     applied: bool = False
     message: str = EMPTY_COMMAND_MESSAGE
     retryable: bool = False

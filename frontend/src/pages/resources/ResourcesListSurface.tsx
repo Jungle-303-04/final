@@ -1,20 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
 import type { ResourceTopologyView } from "../../features/filters/resourceTopologyView";
 import type { TimelineRange } from "../../features/filters/filterContract";
 import type { ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
-import type {
-  ResourcesPort,
-  ResourceSummary,
-} from "../../features/resources/resourcesContract";
+import type { ResourceSummary } from "../../features/resources/resourcesContract";
 import {
   exactRelationNodeId,
   exactRelationResourceIdentity,
 } from "../../features/resources/relationTopologyGraphModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { captureRouteMorph } from "../../motion/useCameraMorph";
+import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
 import { useI18n } from "../../shared/i18n";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
@@ -22,7 +20,6 @@ import { Surface } from "../../shared/ui/Surface";
 import { Button } from "../../shared/ui/primitives/button";
 import { ResourcesGraphShell } from "./ResourcesGraphShell";
 import { ResourcesCatalog, ResourcesCatalogMobile } from "./ResourcesCatalog";
-import { ResourcesInfraMapView } from "./ResourcesInfraMapView";
 import { ResourcesListLoadingPreview } from "./ResourcesLoadingPreview";
 import { ResourcesListScopeStatus } from "./ResourcesListScopeStatus";
 import {
@@ -30,17 +27,10 @@ import {
   UnknownCompletenessEmpty,
 } from "./ResourcesPageFeedback";
 import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
-import { buildInfraMapModel } from "./resourcesInfraMapModel";
 import { ResourcesTable } from "./ResourcesTable";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
 import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
-import {
-  infraMapFocusItemFromResource,
-  selectedPodIdsFromFocusDetails,
-  useInfraMapFocusDetails,
-  type InfraMapFocusItem,
-} from "./useInfraMapFocusDetails";
 import { useResourcesPageState } from "./useResourcesPageState";
 import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
@@ -53,9 +43,7 @@ export function ResourcesListSurface({
   onNodePodsUnauthorized,
   onLoadMore,
   physicalTopology,
-  port,
   relationTopology,
-  reportUnauthorized,
   replay,
   selectTableRows,
   state,
@@ -71,9 +59,7 @@ export function ResourcesListSurface({
   onNodePodsUnauthorized: () => void;
   onLoadMore: () => void;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
-  port: ResourcesPort;
   relationTopology: RelationTopologyFrame;
-  reportUnauthorized: () => void;
   replay: PhysicalTopologyReplayState;
   selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
   state: ReturnType<typeof useResourcesPageState>;
@@ -84,7 +70,7 @@ export function ResourcesListSurface({
 }) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
-  const [infraMapFocusItems, setInfraMapFocusItems] = useState<InfraMapFocusItem[]>([]);
+  const scrollIntoView = useMotionAwareScrollIntoView();
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
@@ -103,10 +89,7 @@ export function ResourcesListSurface({
       "drill-in",
     );
     requestAnimationFrame(() => {
-      document.getElementById("resources-list-surface")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      scrollIntoView(document.getElementById("resources-list-surface"), { block: "start" });
     });
   };
   const rewindToCluster = () => filter.updateFilters(
@@ -164,49 +147,6 @@ export function ResourcesListSurface({
       ),
     })),
   ];
-  useEffect(() => {
-    setInfraMapFocusItems([]);
-  }, [state.selectedClusterId, state.selectedResourceType]);
-  const infraMapFocusOptions = useMemo(
-    () => filterList.phase === "ready" && filterList.data !== null
-      ? filterList.data.items.map((item) => infraMapFocusItemFromResource(item.resource))
-      : [],
-    [filterList],
-  );
-  const selectInfraMapFocusItem = useCallback((item: InfraMapFocusItem) => {
-    setInfraMapFocusItems((current) => current.some((candidate) => candidate.key === item.key)
-      ? current
-      : [...current, item]);
-  }, []);
-  const removeInfraMapFocusItem = useCallback((key: string) => {
-    setInfraMapFocusItems((current) => current.filter((item) => item.key !== key));
-  }, []);
-  const focusDetails = useInfraMapFocusDetails({
-    clusterId: state.selectedClusterId,
-    items: infraMapFocusItems,
-    port,
-    reportUnauthorized,
-    revision: state.revision,
-  });
-  const infraMapSelectedPodIds = useMemo(() => {
-    if (infraMapFocusItems.length === 0) return undefined;
-    if (focusDetails.phase !== "ready") {
-      return new Set(infraMapFocusItems
-        .filter((item) => item.identity.resourceType === "pod")
-        .map((item) => item.resourceId));
-    }
-    return selectedPodIdsFromFocusDetails(focusDetails.data, infraMapFocusItems);
-  }, [focusDetails, infraMapFocusItems]);
-  const infraMapModel = useMemo(
-    () => physicalTopology.phase === "ready"
-      ? buildInfraMapModel({
-          selectedPodIds: infraMapSelectedPodIds,
-          selectionActive: infraMapFocusItems.length > 0,
-          topology: physicalTopology.data,
-        })
-      : null,
-    [infraMapFocusItems.length, infraMapSelectedPodIds, physicalTopology],
-  );
   const timelineRange = filter.detail.timeRange ?? "1h";
   const changeTimelineRange = (range: TimelineRange) => filter.updateDetail(
     (current) => ({
@@ -256,17 +196,6 @@ export function ResourcesListSurface({
             onSelect={state.selectResourceType}
             selectedResourceType={state.selectedResourceType}
           />
-          <Surface aria-labelledby="resources-infra-map-title" className="min-w-0 overflow-hidden">
-            <ResourcesInfraMapView
-              focusOptions={infraMapFocusOptions}
-              model={infraMapModel}
-              onFocusRemove={removeInfraMapFocusItem}
-              onFocusSelect={selectInfraMapFocusItem}
-              onRetry={state.refresh}
-              phase={physicalTopology.phase}
-              selectedFocus={infraMapFocusItems}
-            />
-          </Surface>
           <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
             <ResourcesGraphShell
               breadcrumbs={breadcrumbs}

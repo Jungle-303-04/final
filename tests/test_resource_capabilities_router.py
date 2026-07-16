@@ -153,11 +153,33 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
     assert body["capabilities"] == [
         {
             "capability_id": "deployment.restart",
+            "label": "Restart",
+            "description": "Restart this deployment and stream the operation result.",
+            "execution": "command",
+            "confirmation_required": True,
+            "realtime": True,
+            "input_schema": [],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/restart",
         },
         {
             "capability_id": "deployment.scale",
+            "label": "Scale",
+            "description": "Change the desired replica count and stream the operation result.",
+            "execution": "command",
+            "confirmation_required": True,
+            "realtime": True,
+            "input_schema": [
+                {
+                    "key": "replicas",
+                    "label": "Replicas",
+                    "type": "integer",
+                    "required": True,
+                    "minimum": 0,
+                    "maximum": 100,
+                    "default": 1,
+                }
+            ],
             "method": "POST",
             "path": "/clusters/cluster-a/namespaces/sandbox/deployments/checkout-api/scale",
         },
@@ -167,12 +189,50 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
     assert [check[-1] for check in db.access_checks] == ["inventory.read", "deploy.run"]
 
 
+def test_capabilities_are_server_owned_execution_descriptors() -> None:
+    response = client(ResourceCapabilitiesDb()).get(
+        "/capabilities",
+        params={"resource": "resource-deployment-api"},
+    )
+
+    assert response.status_code == 200
+    restart, scale = response.json()["capabilities"]
+    assert restart["label"] == "Restart"
+    assert restart["confirmation_required"] is True
+    assert restart["execution"] == "command"
+    assert restart["realtime"] is True
+    assert restart["input_schema"] == []
+    assert scale["input_schema"] == [
+        {
+            "key": "replicas",
+            "label": "Replicas",
+            "type": "integer",
+            "required": True,
+            "minimum": 0,
+            "maximum": 100,
+            "default": 1,
+        }
+    ]
+
+
+def test_capabilities_include_management_cluster_actions_for_confirmed_direct_execution() -> None:
+    response = client(ResourceCapabilitiesDb(management=True)).get(
+        "/capabilities",
+        params={"resource": "resource-deployment-api"},
+    )
+
+    assert response.status_code == 200
+    assert [item["capability_id"] for item in response.json()["capabilities"]] == [
+        "deployment.restart",
+        "deployment.scale",
+    ]
+
+
 @pytest.mark.parametrize(
     "db",
     [
         ResourceCapabilitiesDb(deploy_permitted=False),
         ResourceCapabilitiesDb(command_supported=False),
-        ResourceCapabilitiesDb(management=True),
         ResourceCapabilitiesDb(resource={**deployment_resource(), "namespace": "kube-system"}),
         ResourceCapabilitiesDb(
             resource={
@@ -185,7 +245,6 @@ def test_capabilities_returns_only_real_authorized_deployment_actions() -> None:
     ids=[
         "permission-denied",
         "agent-unsupported",
-        "management-readonly",
         "namespace-policy",
         "not-applicable",
     ],
@@ -213,6 +272,12 @@ def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod()
     assert response.json()["capabilities"] == [
         {
             "capability_id": "pod.exec",
+            "label": "Terminal",
+            "description": "Open an audited terminal session and stream its output.",
+            "execution": "terminal",
+            "confirmation_required": True,
+            "realtime": True,
+            "input_schema": [],
             "method": "WEBSOCKET",
             "path": "/live/terminal",
         }
@@ -225,12 +290,11 @@ def test_capabilities_returns_pod_exec_only_for_exact_authorized_supported_pod()
     [
         ResourceCapabilitiesDb(resource=pod_resource(), pod_exec_permitted=False),
         ResourceCapabilitiesDb(resource=pod_resource(), pod_exec_supported=False),
-        ResourceCapabilitiesDb(resource=pod_resource(), management=True),
         ResourceCapabilitiesDb(
             resource={**pod_resource(), "namespace": "kube-system"},
         ),
     ],
-    ids=["permission-denied", "agent-unsupported", "management-readonly", "namespace-policy"],
+    ids=["permission-denied", "agent-unsupported", "namespace-policy"],
 )
 def test_capabilities_hides_pod_exec_when_any_safety_gate_fails(
     db: ResourceCapabilitiesDb,

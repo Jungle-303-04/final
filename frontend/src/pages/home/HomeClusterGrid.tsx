@@ -7,20 +7,16 @@ import { clusterResourcesHref } from "../clusters/clusterNavigation";
 
 export function HomeClusterGrid({ clusters }: { clusters: HomeClusterChoice[] }) {
   const filter = useUnifiedFilter();
-  const { locale } = useI18n();
+  const { t } = useI18n();
   return (
     <Surface
-      aria-label={locale === "ko" ? "클러스터 한눈에 보기" : "Cluster overview"}
+      aria-label={t("home.cluster.grid.aria")}
       className="min-w-0 overflow-hidden"
     >
       <div className="border-b px-4 py-3">
-        <h1 className="text-base font-semibold">
-          {locale === "ko" ? "클러스터" : "Clusters"}
-        </h1>
+        <h2 className="text-base font-semibold">{t("home.cluster.grid.title")}</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          {locale === "ko"
-            ? "클러스터를 선택해 서버와 파드 상태를 확인하세요."
-            : "Choose a cluster to inspect its servers and pods."}
+          {t("home.cluster.grid.description")}
         </p>
       </div>
       <div

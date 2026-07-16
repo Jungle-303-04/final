@@ -37,11 +37,14 @@ class ApplicationsProductRepository(DatabaseConnection):
                 resource.c.inventory_key,
                 resource.c.cluster_id,
                 resource.c.resource_type,
+                resource.c.api_version,
                 resource.c.kind,
                 resource.c.namespace,
                 resource.c.name,
+                resource.c.uid,
                 resource.c.status,
                 resource.c.health,
+                resource.c.labels,
                 resource.c.summary,
                 resource.c.application_binding_complete,
                 resource.c.observed_at,
@@ -78,11 +81,14 @@ class ApplicationsProductRepository(DatabaseConnection):
                 "id": str(row["inventory_key"]),
                 "cluster_id": str(row["cluster_id"]),
                 "resource_type": str(row["resource_type"]),
+                "api_version": str(row["api_version"]),
                 "kind": str(row["kind"]),
                 "namespace": str(row["namespace"]) if row.get("namespace") is not None else None,
                 "name": str(row["name"]),
+                "uid": _optional_text(row.get("uid")),
                 "status": str(row["status"]),
                 "health": str(row["health"]),
+                "labels": dict(row.get("labels") or {}),
                 "summary": dict(row.get("summary") or {}),
                 "binding_complete": bool(row["application_binding_complete"]),
                 "observed_at": iso_or_none(row.get("observed_at")),
@@ -163,6 +169,100 @@ class ApplicationsProductRepository(DatabaseConnection):
             ],
         }
 
+    def get_application_workload_runtime_evidence(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        namespace: str | None,
+        pod_limit: int,
+    ) -> JsonObject:
+        """Read bounded runtime neighbors for one already-authorized workload root.
+
+        The caller obtains the root from the direct rendered-manifest binding
+        first.  This method intentionally returns only current Pods in that
+        root's namespace and their explicitly named Nodes.  Relationship
+        membership is decided later by the graph module from owner UID or a
+        structured selector; no SQL label/name approximation makes a Pod part
+        of an application or workload.
+        """
+
+        if not workspace_id or not cluster_id or pod_limit < 1:
+            return {"rows": [], "truncated": False}
+        resource = InventoryResourceVersion.__table__
+        pod_statement = (
+            select(
+                resource.c.inventory_key,
+                resource.c.cluster_id,
+                resource.c.resource_type,
+                resource.c.api_version,
+                resource.c.kind,
+                resource.c.namespace,
+                resource.c.name,
+                resource.c.uid,
+                resource.c.status,
+                resource.c.health,
+                resource.c.labels,
+                resource.c.summary,
+                resource.c.observed_at,
+            )
+            .where(
+                resource.c.workspace_id == workspace_id,
+                resource.c.cluster_id == cluster_id,
+                resource.c.valid_to_revision.is_(None),
+                resource.c.resource_type == "pod",
+                resource.c.namespace == namespace,
+            )
+            .order_by(resource.c.name, resource.c.inventory_key)
+            .limit(pod_limit + 1)
+        )
+        with self.connection() as conn:
+            pod_records = conn.execute(pod_statement).mappings().all()
+            truncated = len(pod_records) > pod_limit
+            pod_records = pod_records[:pod_limit]
+            node_names = sorted(
+                {
+                    str(dict(row.get("summary") or {}).get("node_name") or "")
+                    for row in pod_records
+                    if str(dict(row.get("summary") or {}).get("node_name") or "")
+                }
+            )
+            node_records = []
+            if node_names:
+                node_records = (
+                    conn.execute(
+                        select(
+                            resource.c.inventory_key,
+                            resource.c.cluster_id,
+                            resource.c.resource_type,
+                            resource.c.api_version,
+                            resource.c.kind,
+                            resource.c.namespace,
+                            resource.c.name,
+                            resource.c.uid,
+                            resource.c.status,
+                            resource.c.health,
+                            resource.c.labels,
+                            resource.c.summary,
+                            resource.c.observed_at,
+                        )
+                        .where(
+                            resource.c.workspace_id == workspace_id,
+                            resource.c.cluster_id == cluster_id,
+                            resource.c.valid_to_revision.is_(None),
+                            resource.c.resource_type == "node",
+                            resource.c.name.in_(node_names),
+                        )
+                        .order_by(resource.c.name, resource.c.inventory_key)
+                    )
+                    .mappings()
+                    .all()
+                )
+        return {
+            "rows": [_runtime_evidence_row(row) for row in [*pod_records, *node_records]],
+            "truncated": truncated,
+        }
+
 
 def _ids(values: Collection[str]) -> tuple[str, ...]:
     return tuple(sorted({str(value) for value in values if str(value)}))
@@ -171,3 +271,21 @@ def _ids(values: Collection[str]) -> tuple[str, ...]:
 def _optional_text(value: Any) -> str | None:
     text = str(value).strip() if value is not None else ""
     return text or None
+
+
+def _runtime_evidence_row(row: Any) -> JsonObject:
+    return {
+        "id": str(row["inventory_key"]),
+        "cluster_id": str(row["cluster_id"]),
+        "resource_type": str(row["resource_type"]),
+        "api_version": str(row["api_version"]),
+        "kind": str(row["kind"]),
+        "namespace": _optional_text(row.get("namespace")),
+        "name": str(row["name"]),
+        "uid": _optional_text(row.get("uid")),
+        "status": str(row["status"]),
+        "health": str(row["health"]),
+        "labels": dict(row.get("labels") or {}),
+        "summary": dict(row.get("summary") or {}),
+        "observed_at": iso_or_none(row.get("observed_at")),
+    }

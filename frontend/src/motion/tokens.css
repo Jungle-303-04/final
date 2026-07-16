@@ -150,6 +150,11 @@
   transition: width var(--motion-ai) var(--ease-spring);
 }
 
+.motion-ai-panel[data-resizing="true"] {
+  transition: none;
+  will-change: width;
+}
+
 .motion-ai-panel[data-width="360"] { --ai-width: 360px; }
 .motion-ai-panel[data-width="380"] { --ai-width: 380px; }
 .motion-ai-panel[data-width="400"] { --ai-width: 400px; }
@@ -178,6 +183,11 @@
   --dock-height: 280px;
   height: var(--dock-height);
   transition: height var(--motion-dock) var(--ease-spring);
+}
+
+.motion-bottom-dock[data-resizing="true"] {
+  transition: none;
+  will-change: height;
 }
 
 .motion-bottom-dock[data-height="160"] { --dock-height: 160px; }

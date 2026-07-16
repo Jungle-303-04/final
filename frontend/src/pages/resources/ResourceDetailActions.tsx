@@ -1,11 +1,14 @@
-import { RotateCcw, Scaling } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 import type {
-  ResourceActionCapabilityId,
+  ResourceActionCapability,
   ResourceActionReceipt,
   ResourceActionsPort,
 } from "../../features/resources/resourceCapabilitiesContract";
+import {
+  useOptionalOperationStatusStore,
+} from "../../features/operations/OperationStatusStore";
+import { OperationStatusFeedback } from "../../features/operations/OperationStatusFeedback";
 import type { ResourceDetail } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
@@ -22,8 +25,6 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
 
-type Action = "restart" | "scale";
-
 export function ResourceDetailActions({
   actionsPort,
   capabilities,
@@ -34,34 +35,25 @@ export function ResourceDetailActions({
   detail: ResourceDetail;
 }) {
   const { t } = useI18n();
-  const [dialog, setDialog] = useState<Action | null>(null);
+  const operationStatusStore = useOptionalOperationStatusStore();
+  const [dialog, setDialog] = useState<ResourceActionCapability | null>(null);
   const [pending, setPending] = useState(false);
   const [receipt, setReceipt] = useState<ResourceActionReceipt | null>(null);
   const [failed, setFailed] = useState(false);
-  const [replicas, setReplicas] = useState(() => desiredReplicas(detail));
+  const [values, setValues] = useState<Record<string, string>>({});
   const enabled = useMemo(() => enabledActions(capabilities, detail), [capabilities, detail]);
 
-  if (enabled.size === 0) return null;
+  if (enabled.length === 0) return null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (dialog === null || detail.identity.namespace === null || pending) return;
+    if (dialog === null || pending) return;
     setPending(true);
     setFailed(false);
     try {
-      const result = dialog === "restart"
-        ? await actionsPort.restartDeployment(
-            detail.clusterId,
-            detail.identity.namespace,
-            detail.identity.name,
-          )
-        : await actionsPort.scaleDeployment(
-            detail.clusterId,
-            detail.identity.namespace,
-            detail.identity.name,
-            replicas,
-          );
+      const result = await actionsPort.execute(dialog, actionValues(dialog, values));
       setReceipt(result);
+      if (result.commandId) operationStatusStore?.start(result.commandId);
       setDialog(null);
     } catch {
       setFailed(true);
@@ -73,53 +65,56 @@ export function ResourceDetailActions({
   return (
     <div className="grid gap-2" data-slot="resource-detail-actions">
       <div className="flex flex-wrap items-center gap-2">
-        {enabled.has("deployment.restart") ? (
-          <Button onClick={() => open("restart")} size="sm" type="button" variant="outline">
-            <RotateCcw aria-hidden="true" />
-            {t("resources.detail.action.restart")}
+        {enabled.map((capability) => (
+          <Button
+            key={capability.capabilityId}
+            onClick={() => open(capability)}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {capability.label}
           </Button>
-        ) : null}
-        {enabled.has("deployment.scale") ? (
-          <Button onClick={() => open("scale")} size="sm" type="button" variant="outline">
-            <Scaling aria-hidden="true" />
-            {t("resources.detail.action.scale")}
-          </Button>
-        ) : null}
+        ))}
       </div>
       {receipt ? (
-        <output className="text-xs text-muted-foreground">
-          {t("resources.detail.action.accepted", { id: receipt.correlationId })}
-        </output>
+        receipt.commandId && operationStatusStore ? (
+          <OperationStatusFeedback
+            commandId={receipt.commandId}
+            correlationId={receipt.correlationId}
+          />
+        ) : (
+          <output className="text-xs text-muted-foreground">
+            {t("resources.detail.action.accepted", { id: receipt.correlationId })}
+          </output>
+        )
       ) : null}
       <Dialog onOpenChange={(open) => !open && !pending && setDialog(null)} open={dialog !== null}>
         <DialogContent showCloseButton={!pending}>
           <form className="grid gap-4" onSubmit={submit}>
             <DialogHeader>
-              <DialogTitle>
-                {dialog === "scale"
-                  ? t("resources.detail.action.scaleTitle")
-                  : t("resources.detail.action.restartTitle")}
-              </DialogTitle>
+              <DialogTitle>{dialog?.label}</DialogTitle>
               <DialogDescription>
-                {t("resources.detail.action.confirm", { name: detail.identity.name })}
+                {dialog?.description} {t("resources.detail.action.confirm", { name: detail.identity.name })}
               </DialogDescription>
             </DialogHeader>
-            {dialog === "scale" ? (
-              <div className="grid gap-2">
-                <Label htmlFor="resource-scale-replicas">
-                  {t("resources.detail.action.replicas")}
-                </Label>
+            {dialog?.inputSchema.map((input) => (
+              <div className="grid gap-2" key={input.key}>
+                <Label htmlFor={`resource-action-${input.key}`}>{input.label}</Label>
                 <Input
-                  id="resource-scale-replicas"
-                  max={100}
-                  min={0}
-                  onChange={(event) => setReplicas(Number(event.currentTarget.value))}
-                  required
-                  type="number"
-                  value={replicas}
+                  id={`resource-action-${input.key}`}
+                  max={input.maximum ?? undefined}
+                  min={input.minimum ?? undefined}
+                  onChange={(event) => setValues((current) => ({
+                    ...current,
+                    [input.key]: event.currentTarget.value,
+                  }))}
+                  required={input.required}
+                  type={input.type === "integer" ? "number" : "text"}
+                  value={values[input.key] ?? defaultInputValue(input.default)}
                 />
               </div>
-            ) : null}
+            ))}
             {failed ? (
               <Alert variant="destructive">
                 <AlertDescription>{t("resources.detail.action.failed")}</AlertDescription>
@@ -145,18 +140,18 @@ export function ResourceDetailActions({
     </div>
   );
 
-  function open(action: Action) {
+  function open(capability: ResourceActionCapability) {
     setFailed(false);
-    setReceipt(null);
-    setDialog(action);
+    setValues(defaultInputValues(capability));
+    setDialog(capability);
   }
 }
 
 function enabledActions(
   frame: ResourceCapabilitiesFrame,
   detail: ResourceDetail,
-): Set<ResourceActionCapabilityId> {
-  if (frame.phase !== "ready") return new Set();
+): ResourceActionCapability[] {
+  if (frame.phase !== "ready") return [];
   const subject = frame.data.subject;
   if (
     subject.resourceId !== detail.resource.inventoryKey ||
@@ -164,13 +159,29 @@ function enabledActions(
     subject.kind !== detail.identity.kind ||
     subject.namespace !== detail.identity.namespace ||
     subject.name !== detail.identity.name
-  ) return new Set();
-  return new Set(frame.data.capabilities.map((item) => item.capabilityId));
+  ) return [];
+  return frame.data.capabilities.filter((capability) => (
+    capability.execution === "command" && capability.method === "POST"
+  ));
 }
 
-function desiredReplicas(detail: ResourceDetail): number {
-  const facts = detail.resource.facts;
-  return facts.type === "workload" && facts.desiredReplicas !== null
-    ? facts.desiredReplicas
-    : 1;
+function defaultInputValues(capability: ResourceActionCapability): Record<string, string> {
+  return Object.fromEntries(capability.inputSchema.map((input) => [
+    input.key,
+    defaultInputValue(input.default),
+  ]));
+}
+
+function defaultInputValue(value: number | string | null): string {
+  return value === null ? "" : String(value);
+}
+
+function actionValues(
+  capability: ResourceActionCapability,
+  values: Readonly<Record<string, string>>,
+): Record<string, unknown> {
+  return Object.fromEntries(capability.inputSchema.map((input) => {
+    const value = values[input.key] ?? defaultInputValue(input.default);
+    return [input.key, input.type === "integer" ? Number(value) : value];
+  }));
 }

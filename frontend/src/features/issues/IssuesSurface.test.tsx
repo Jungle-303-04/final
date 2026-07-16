@@ -2,10 +2,48 @@
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IssuesSurface } from "./IssuesSurface";
-import { IssuesPortFailure } from "./issuesContract";
+import { IssuesPortFailure, type IssuesPort } from "./issuesContract";
 import { COPY, issuesPort, renderSurface } from "./IssuesSurface.testSupport";
 afterEach(cleanup);
 describe("IssuesSurface", () => {
+  it("uses motion-safe refresh feedback while the incident list is loading", () => {
+    const pending = deferred<Awaited<ReturnType<IssuesPort["listIssues"]>>>();
+    const port = issuesPort({ listIssues: vi.fn(() => pending.promise) });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    const refresh = screen.getByRole("button", { name: COPY.refresh });
+    expect(refresh.querySelector("svg")?.getAttribute("class")).toContain("motion-safe:animate-spin");
+    expect(refresh.querySelector("svg")?.getAttribute("class")).not.toContain(" animate-spin");
+  });
+
+  it("keeps recovery selection feedback inside the shared reduced-motion-safe spinner", async () => {
+    const pending = deferred<Awaited<ReturnType<IssuesPort["selectRecoveryAction"]>>>();
+    const port = issuesPort({ selectRecoveryAction: vi.fn(() => pending.promise) });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={port}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Elevated response latency" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Increase memory limit" }));
+
+    const pendingButton = (await screen.findByText(COPY.selectionPending)).closest("button");
+    const spinner = pendingButton?.querySelector<HTMLElement>('[data-slot="spinner"]');
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("shows a compact healthy empty state with scoped next actions", async () => {
     const port = issuesPort({
       listIssues: vi.fn().mockResolvedValue({
@@ -362,3 +400,11 @@ describe("IssuesSurface", () => {
     expect(port.selectRecoveryAction).not.toHaveBeenCalled();
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
+}

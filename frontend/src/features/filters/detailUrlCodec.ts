@@ -22,6 +22,10 @@ const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
   appendNullableStableText(pairs, "detail", detail.detail);
   appendNullableStableText(pairs, "app", detail.application ?? null);
+  if (detail.application !== null && detail.application !== undefined) {
+    appendNullableStableText(pairs, "instance", detail.applicationInstance ?? null);
+    appendNullableStableText(pairs, "workload", detail.applicationWorkload ?? null);
+  }
   if (detail.detail === null) {
     appendNullableStableText(pairs, "resource", detail.resource);
     appendNullableStableText(pairs, "resourceKind", detail.resourceKind);
@@ -54,6 +58,8 @@ export function parseProductDetailQuery(
   detail.detail = readStableText(params, "detail");
   const application = readStableText(params, "app");
   if (application !== null) detail.application = application;
+  if (application !== null) detail.applicationInstance = readStableText(params, "instance");
+  if (application !== null) detail.applicationWorkload = readStableText(params, "workload");
   detail.resource = readStableText(params, "resource");
   detail.resourceKind = readStableText(params, "resourceKind");
   if (!hasQueryKey(params, "resourceKind") && detail.resource !== null) {

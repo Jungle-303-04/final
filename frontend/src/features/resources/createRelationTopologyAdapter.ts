@@ -1,7 +1,7 @@
 import type { RelationTopologyEndpointDependencies } from "./relationTopologyEndpointContract";
 import type { RelationTopologyPort } from "./relationTopologyContract";
 import { toRelationTopology } from "./relationTopologyCanonical";
-import { createPhysicalTopologyRequest } from "./resourcesFilterRequest";
+import { createRelationTopologyRequest } from "./resourcesFilterRequest";
 import { ResourcesPortFailure } from "./resourcesContract";
 import {
   isResourcesAbortError,
@@ -15,9 +15,12 @@ export function createRelationTopologyAdapter(
   return {
     async loadRelationTopology(state, options = {}, signal) {
       try {
-        const query = createPhysicalTopologyRequest(state, options);
+        const query = createRelationTopologyRequest(state, options);
         if (!query.clusters?.[0]) throw new TypeError("relation topology cluster is required");
-        return toRelationTopology(await endpoints.getRelationTopology(query, signal));
+        return toRelationTopology(
+          query.clusters[0],
+          await endpoints.getRelationTopology(query, signal),
+        );
       } catch (error) {
         if (isResourcesAbortError(error) || error instanceof ResourcesPortFailure) throw error;
         if (error instanceof TypeError || error instanceof RangeError) {

@@ -49,16 +49,25 @@ export function listApplicationCatalog(
 export function getApplicationOverview(
   applicationId: string,
   signal?: AbortSignal,
+  instanceId?: string | null,
+  workloadKey?: string | null,
 ): Promise<ApplicationDetailEndpoint> {
-  return apiRequest(applicationPath(applicationId), applicationDetailSchema, { signal });
+  return apiRequest(
+    applicationScopedPath(applicationId, instanceId, workloadKey),
+    applicationDetailSchema,
+    { signal },
+  );
 }
 
 export function listApplicationDeploymentHistory(
   applicationId: string,
   signal?: AbortSignal,
+  instanceId?: string | null,
 ): Promise<ApplicationDeploymentHistoryEndpoint> {
   return apiRequest(
-    `${applicationPath(applicationId)}/deployments` as ApiPath,
+    withQuery(`${applicationPath(applicationId)}/deployments` as ApiPath, [
+      ["instance", normalizedInstanceId(instanceId)],
+    ]),
     applicationDeploymentHistorySchema,
     { signal },
   );
@@ -67,9 +76,12 @@ export function listApplicationDeploymentHistory(
 export function getApplicationDrift(
   applicationId: string,
   signal?: AbortSignal,
+  instanceId?: string | null,
 ): Promise<ApplicationDriftEndpoint> {
   return apiRequest(
-    `${applicationPath(applicationId)}/drift` as ApiPath,
+    withQuery(`${applicationPath(applicationId)}/drift` as ApiPath, [
+      ["instance", normalizedInstanceId(instanceId)],
+    ]),
     applicationDriftSchema,
     { signal },
   );
@@ -80,6 +92,32 @@ function applicationPath(applicationId: string): ApiPath {
     throw new RangeError("applicationId must not be empty");
   }
   return `/api/applications/${encodePathSegment(applicationId)}` as ApiPath;
+}
+
+function applicationScopedPath(
+  applicationId: string,
+  instanceId?: string | null,
+  workloadKey?: string | null,
+): ApiPath {
+  return withQuery(applicationPath(applicationId), [
+    ["instance", normalizedInstanceId(instanceId)],
+    ["workload", normalizedWorkloadKey(workloadKey)],
+  ]);
+}
+
+function normalizedInstanceId(instanceId: string | null | undefined): string | undefined {
+  if (instanceId === null || instanceId === undefined) return undefined;
+  const normalized = instanceId.trim();
+  if (normalized === "") throw new RangeError("instanceId must not be empty");
+  return normalized;
+}
+
+function normalizedWorkloadKey(workloadKey: string | null | undefined): string | undefined {
+  if (workloadKey === null || workloadKey === undefined) return undefined;
+  const normalized = workloadKey.trim();
+  if (normalized === "") throw new RangeError("workloadKey must not be empty");
+  if (normalized.length > 128) throw new RangeError("workloadKey is too long");
+  return normalized;
 }
 
 function joined(

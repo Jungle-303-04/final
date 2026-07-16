@@ -8,24 +8,14 @@ import {
   rfc3339TimestampSchema,
 } from "./resource-filter-schemas";
 
-const metricSchema = z.number().finite().nonnegative();
-const nullableMetricSchema = metricSchema.nullable();
-const backfilledNullableMetricSchema = metricSchema.nullish().transform((value) => value ?? null);
-const backfilledNullableIntegerSchema = z.number().int().nonnegative().nullish()
-  .transform((value) => value ?? null);
-const backfilledNullableRequestMetricSchema = z.number().finite().positive().nullish()
-  .transform((value) => value ?? null);
+const nullableMetricSchema = z.number().finite().nonnegative().nullable();
+const nullableRequestMetricSchema = z.number().finite().positive().nullable();
 
 export const physicalTopologyServerSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   cpu_pct: nullableMetricSchema,
   mem_pct: nullableMetricSchema,
-  cpu_mcores: backfilledNullableMetricSchema,
-  mem_mib: backfilledNullableMetricSchema,
-  allocatable_cpu_mcores: backfilledNullableMetricSchema,
-  allocatable_mem_mib: backfilledNullableMetricSchema,
-  pod_capacity: backfilledNullableIntegerSchema,
   status: z.string().min(1),
   matched_pod_count: z.number().int().nonnegative().nullable(),
   total_pod_count: z.number().int().nonnegative().nullable(),
@@ -64,11 +54,9 @@ export const physicalTopologyPodSchema = z.strictObject({
   server_id: z.string().min(1).nullable(),
   usage_pct: nullableMetricSchema,
   cpu_mcores: nullableMetricSchema,
-  cpu_request_mcores: backfilledNullableRequestMetricSchema,
+  cpu_request_mcores: nullableRequestMetricSchema,
   mem_mib: nullableMetricSchema,
-  mem_request_mib: backfilledNullableRequestMetricSchema,
-  cpu_limit_mcores: backfilledNullableRequestMetricSchema,
-  mem_limit_mib: backfilledNullableRequestMetricSchema,
+  mem_request_mib: nullableRequestMetricSchema,
   phase: z.string().min(1),
   health: z.string().min(1),
   restarts: z.number().int().nonnegative(),

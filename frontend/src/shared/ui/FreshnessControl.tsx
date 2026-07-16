@@ -1,21 +1,26 @@
-import { Check, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
+import { RefreshFeedbackGlyph } from "../../motion/RefreshFeedbackGlyph";
 import { cn } from "@/shared/lib/cn";
 import { msToNextFreshnessBucket } from "./freshnessTime";
+import { useRefreshFeedback } from "./RefreshFeedback";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./primitives/tooltip";
-import { useRefreshAnimation } from "./useRefreshAnimation";
+import type { RefreshPhase } from "./useRefreshAnimation";
 
 export type FreshnessMode = "polling" | "snapshot";
 export type FreshnessConnection = "connected" | "disconnected" | "connecting";
 
 export interface FreshnessCopy {
+  refreshCancelled: string;
+  refreshFailed: string;
   polling: string;
   pollingDescription: string;
   paused: string;
   pausedDescription: string;
+  refreshPending: string;
   reconnecting: string;
   reconnectingDescription: string;
   refreshNow: string;
+  refreshSucceeded: string;
   updated(elapsedMilliseconds: number): string;
   updatedAt(timestamp: number): string;
 }
@@ -61,7 +66,13 @@ export function FreshnessControl({
     return () => window.clearTimeout(timer);
   }, [dataUpdatedAt, showAge]);
 
-  const { phase, refresh } = useRefreshAnimation(() => onRefresh?.());
+  const { phase, refresh, state } = useRefreshFeedback({
+    dataUpdatedAt: showAge ? dataUpdatedAt : undefined,
+    hasFailed: connectionState === "disconnected",
+    isReconnecting: connectionState === "connecting",
+    isRefreshing: isFetching,
+    onRefresh: () => onRefresh?.(),
+  });
   const presentation = freshnessPresentation({
     connectionState,
     copy,
@@ -69,11 +80,13 @@ export function FreshnessControl({
     mode,
     paused,
   });
-  const spinning = isFetching || phase === "spinning";
+  const spinning = isFetching || phase === "pending";
+  const feedback = refreshFeedback(phase, copy);
 
   return (
     <div
-      className={cn("flex items-center gap-1.5 whitespace-nowrap", className)}
+      className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}
+      data-refresh-phase={phase}
       data-slot="freshness-control"
     >
       {presentation.label ? (
@@ -113,29 +126,44 @@ export function FreshnessControl({
               <button
                 aria-label={copy.refreshNow}
                 className="rounded-lg p-1.5 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none"
-                disabled={phase === "spinning"}
+                aria-busy={spinning || undefined}
+                disabled={phase === "pending" || isFetching}
                 onClick={refresh}
                 type="button"
               />
             }
           >
-            {phase === "success" ? (
-              <Check aria-hidden="true" className="size-3.5 text-success" />
-            ) : (
-              <RefreshCw
-                aria-hidden="true"
-                className={cn(
-                  "size-3.5",
-                  spinning && "motion-safe:animate-spin",
-                )}
-              />
-            )}
+            <RefreshFeedbackGlyph iconClassName="size-3.5" state={state} />
           </TooltipTrigger>
           <TooltipContent side="bottom">{copy.refreshNow}</TooltipContent>
         </Tooltip>
       ) : null}
+      {feedback ? (
+        <span
+          aria-atomic="true"
+          aria-live="polite"
+          className={cn(
+            "min-w-0 text-xs",
+            phase === "failed" ? "text-destructive" : "text-muted-foreground",
+          )}
+          role={phase === "failed" ? "alert" : "status"}
+        >
+          {feedback}
+        </span>
+      ) : null}
     </div>
   );
+}
+
+function refreshFeedback(
+  phase: RefreshPhase,
+  copy: FreshnessCopy,
+): string | null {
+  if (phase === "pending") return copy.refreshPending;
+  if (phase === "succeeded") return copy.refreshSucceeded;
+  if (phase === "failed") return copy.refreshFailed;
+  if (phase === "cancelled") return copy.refreshCancelled;
+  return null;
 }
 
 interface FreshnessPresentation {

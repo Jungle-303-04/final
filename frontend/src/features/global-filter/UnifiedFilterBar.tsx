@@ -2,7 +2,6 @@ import {
   AppWindow,
   Boxes,
   Braces,
-  LoaderCircle,
   Search,
   Server,
   Tags,
@@ -19,6 +18,7 @@ import {
   CommandList,
 } from "../../shared/ui/primitives/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../../shared/ui/primitives/popover";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 import {
   SearchPillInput,
   type SearchModifier,
@@ -160,7 +160,13 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
   };
 
   return (
-    <div className="min-w-0 flex-1 sm:max-w-xl" data-slot="unified-filter-bar">
+    <div
+      className="min-w-0 flex-1 sm:max-w-xl"
+      data-slot="unified-filter-bar"
+      onKeyDownCapture={(event) => {
+        if (event.key === "Tab") setOpen(false);
+      }}
+    >
       <Popover onOpenChange={changePopoverOpen} open={open}>
         <SearchPillInput
           aria-label={t("shell.filter.placeholder")}
@@ -236,7 +242,7 @@ export function UnifiedFilterBar({ port }: { port: GlobalFilterPort }) {
               })}
               {phase === "loading" ? (
                 <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground" role="status">
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="size-4" decorative />
                   {t("common.state.loading")}
                 </div>
               ) : null}

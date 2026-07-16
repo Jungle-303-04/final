@@ -162,7 +162,7 @@ secret 이름과 주입 경계는 [Secrets](secrets.md)를 본다.
 - [architecture](architecture.md)
 - [architecture-diagram](architecture-diagram.md)
 - [architecture/service-consolidation-plan](architecture/service-consolidation-plan.md)
-- [argocd-radar-learning-lab](argocd-radar-learning-lab.md)
+- [argocd-reference-learning-lab](argocd-reference-learning-lab.md)
 - [aws-testing-runbook](aws-testing-runbook.md)
 - [backend-f-progress](backend-f-progress.md)
 - [backend-f-workqueue](backend-f-workqueue.md)
@@ -270,6 +270,13 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [rca-production-onboarding/09-rca-rule-catalog-guide](rca-production-onboarding/09-rca-rule-catalog-guide.md)
 - [rca-production-onboarding/10-recovery-action-compatibility](rca-production-onboarding/10-recovery-action-compatibility.md)
 - [rca-production-onboarding/provider-evidence-request](rca-production-onboarding/provider-evidence-request.md)
+
+마이그레이션 기준 문서는 아래에 있다.
+
+- [migration/README](migration/README.md)
+- [migration/latest-reference-rebaseline](migration/latest-reference-rebaseline.md)
+- [migration/parity-supervision-plan](migration/parity-supervision-plan.md)
+- [migration/timeline-p0-url-state-mapping](migration/timeline-p0-url-state-mapping.md)
 
 팀 문서는 아래에 있다.
 
@@ -402,7 +409,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/reference-contract-map](spec/frontend/reference-contract-map.md)
 - [spec/frontend/reference-feature-inventory](spec/frontend/reference-feature-inventory.md)
 - [spec/frontend/reference-porting-contract](spec/frontend/reference-porting-contract.md)
-- [spec/frontend/radar-parity-map](spec/frontend/radar-parity-map.md)
+- [spec/frontend/reference-parity-map](spec/frontend/reference-parity-map.md)
 - [spec/frontend/theme-first-paint-evidence-20260713](spec/frontend/theme-first-paint-evidence-20260713.md)
 - [spec/frontend/topology-engine](spec/frontend/topology-engine.md)
 - [spec/frontend/topology-message-action-schema](spec/frontend/topology-message-action-schema.md)
@@ -417,7 +424,7 @@ Target / Telemetry 선형 작업 문서는 아래에 있다.
 - [spec/frontend/vp-016-delivery-plan](spec/frontend/vp-016-delivery-plan.md)
 - [spec/frontend/vp-017-motion-spec](spec/frontend/vp-017-motion-spec.md)
 - [spec/frontend/vp-018-shell-corrections](spec/frontend/vp-018-shell-corrections.md)
-- [spec/frontend/vp-019-radar-full-port](spec/frontend/vp-019-radar-full-port.md)
+- [spec/frontend/vp-019-reference-full-port](spec/frontend/vp-019-reference-full-port.md)
 - [spec/frontend/vp-020-alerts](spec/frontend/vp-020-alerts.md)
 - [spec/packages/ai](spec/packages/ai.md)
 - [spec/packages/config](spec/packages/config.md)

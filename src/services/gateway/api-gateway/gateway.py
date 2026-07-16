@@ -23,14 +23,19 @@ from domains.applications.router import router as applications_router
 from domains.audit.router import router as audit_router
 from domains.catalog.router import router as catalog_router
 from domains.changes.router import router as changes_router
+from domains.checks.router import router as checks_router
 from domains.command.router import router as command_router
+from domains.compare.router import router as compare_router
+from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
 from domains.diagnostics.router import router as diagnostics_router
+from domains.gitops.detail_router import router as gitops_detail_router
 from domains.gitops.repository_discovery_router import router as repository_discovery_router
 from domains.gitops.router import approval_router
 from domains.gitops.router import router as gitops_router
 from domains.gitops_filter.router import router as gitops_filter_router
+from domains.helm.release_router import router as helm_release_router
 from domains.identity.admin_router import router as identity_admin_router
 from domains.identity.dependencies import (
     ClusterAgentIdentity,
@@ -43,6 +48,7 @@ from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
 from domains.log_stream.router import router as log_stream_router
 from domains.manifest_editor.router import router as manifest_editor_router
+from domains.parity.router import router as parity_router
 from domains.providers.router import router as providers_router
 from domains.rca.query_router import router as rca_query_router
 from domains.rca.router import router as rca_router
@@ -53,6 +59,10 @@ from domains.release_flow.router import router as release_flow_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
+from domains.timeline.fanout import InMemoryTimelineEventFanout
+from domains.timeline.router import router as timeline_router
+from domains.traffic.router import router as traffic_router
+from domains.workload_detail.router import router as workload_detail_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
@@ -77,10 +87,16 @@ from packages.runtime.metrics import (
     render_multi_labeled_gauge,
     render_prometheus_metrics,
 )
+from packages.runtime.operation_events import RedisOperationEventBroker
 from packages.security.trusted_proxy import assert_trusted_proxy_config_safe
 from packages.storage.database import Database, wait_for_database
 from packages.storage.engine import unit_of_work_or_null
-from packages.storage.sessions import RedisSessionStore, RedisSessionStoreConfig, SessionStore
+from packages.storage.sessions import (
+    RedisSessionStore,
+    RedisSessionStoreConfig,
+    SessionStore,
+    SessionStoreUnavailable,
+)
 from services.ai.agent.playbooks.cause import registered_cause_profiles
 
 LOGGER = get_logger(__name__)
@@ -119,10 +135,18 @@ class ApiGateway:
         event_bus: EventConsumerBus | None = None,
         session_store: SessionStore | None = None,
     ) -> None:
+        if session_store is not None and not isinstance(session_store, SessionStore):
+            raise TypeError("api gateway requires a fail-closed session lifecycle")
         self.db = Database()
         self.bus = event_bus or NatsEventBus()
         self.events = ApiEventGateway(self.bus, self.db, Settings.SERVICE_NAME)
         self.sessions = session_store or RedisSessionStore(self._session_store_config())
+        self._session_store_started = False
+        self.operation_events = RedisOperationEventBroker(
+            env(Settings.REDIS_URL_ENV, RedisConfig.DEFAULT_URL),
+            self.db,
+        )
+        self.timeline_fanout = InMemoryTimelineEventFanout()
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
         self.app = FastAPI(
@@ -137,6 +161,8 @@ class ApiGateway:
         # 도메인 router 가 Depends 로 가져갈 공유 객체(클로저 대신 DI).
         self.app.state.db = self.db
         self.app.state.events = self.events
+        self.app.state.operation_events = self.operation_events
+        self.app.state.timeline_fanout = self.timeline_fanout
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
         self.app.state.rca_rule_profiles = registered_cause_profiles()
@@ -266,8 +292,9 @@ class ApiGateway:
         assert_trusted_proxy_config_safe()
         validate_test_scenario_catalog()
         await wait_for_database(self.db)
-        await self.sessions.connect()
+        await self._start_session_store()
         await self.bus.connect()
+        await self.operation_events.start()
         # 명령 롱폴 웨이크업 — 직결 URL 이 설정된 경우에만 LISTEN 시작.
         # (pgbouncer transaction pooling 경유로는 LISTEN 불가; 미설정 시 주기 폴링 유지)
         notify_url = env(COMMAND_NOTIFY_DATABASE_URL_ENV, "")
@@ -276,11 +303,21 @@ class ApiGateway:
         try:
             yield
         finally:
+            await self.timeline_fanout.close()
+            await self.operation_events.close()
             await WAKEUP.stop()
             await self.bus.close()
             await self.sessions.close()
             await self.db.dispose_async()
             self.db.dispose()
+
+    async def _start_session_store(self) -> None:
+        """Keep gateway live when Redis sessions are down, without changing auth authority."""
+        await self.sessions.start_degraded()
+        self._session_store_started = True
+
+    def _session_store_available(self) -> bool:
+        return self._session_store_started and self.sessions.available
 
     def configure_routes(self) -> None:
         # 라우트는 도메인별로 등록(가독성). 각 그룹은 self 클로저로 events/db/auth 사용.
@@ -288,6 +325,7 @@ class ApiGateway:
         self._register_frontend_proxy(app)
         self._register_health_routes(app)
         app.include_router(identity_router)  # identity 도메인 라우터(DI + 가드)
+        app.include_router(parity_router)  # 생성형 원본 기능 mapping catalog(세션 범위)
         app.include_router(alert_router)  # 알림 채널 라우팅 룰(admin)
         app.include_router(providers_router)  # 제품 설치 UI용 provider catalog/검증
         app.include_router(catalog_router)  # service catalog recipe + install-run 계획
@@ -300,6 +338,17 @@ class ApiGateway:
         app.include_router(gitops_filter_router)  # workspace GitOps 변경·승인 필터·facet
         app.include_router(target_router)  # target 등록 → agent/RBAC 설치 manifest 생성/적용
         app.include_router(gitops_router)  # gitops 도메인 라우터(webhook + HMAC 서명 검증)
+        app.include_router(gitops_detail_router)  # browser GitOps detail (session + RBAC)
+        app.include_router(
+            helm_release_router
+        )  # browser Helm storage metadata (session + inventory RBAC)
+        app.include_router(
+            traffic_router
+        )  # browser Traffic availability (session + inventory RBAC)
+        app.include_router(cost_router)  # browser Cost availability (session + inventory RBAC)
+        app.include_router(
+            checks_router
+        )  # browser Checks availability/detail (session + inventory RBAC)
         app.include_router(approval_router)  # approval grant/reject → workflow-controller
         self._register_ingest_routes(app)
         app.include_router(
@@ -310,8 +359,11 @@ class ApiGateway:
             manifest_editor_router
         )  # exact resource -> Git source -> approved Safe PR
         app.include_router(changes_router)  # Resources 시간 스크럽용 실측 변경·수집 gap
+        app.include_router(timeline_router)  # retained Timeline snapshot (source-specific RBAC)
         app.include_router(issue_filter_router)  # workspace Issues 필터·facet 서버 집계
         app.include_router(log_stream_router)  # bounded, redacted pod/workload log SSE
+        app.include_router(workload_detail_router)  # exact, read-only workload detail projection
+        app.include_router(compare_router)  # typed safe resource comparison (no raw manifest)
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(
             rca_query_router
@@ -487,6 +539,11 @@ class ApiGateway:
         )
         async def readyz() -> HealthResponse:
             # 가벼운 연결 확인만(스키마 보장은 시작 시 lifespan 에서 1회). DDL 실행 없음.
+            if not self._session_store_available():
+                raise HTTPException(
+                    status_code=Settings.SESSION_STORAGE_UNAVAILABLE_STATUS_CODE,
+                    detail=Settings.SESSION_STORAGE_UNAVAILABLE_MESSAGE,
+                )
             self.db.check_ready()
             return HealthResponse(status=Gateway.STATUS_READY)
 
@@ -680,6 +737,16 @@ class ApiGateway:
             return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 
     def _register_error_handler(self, app: FastAPI) -> None:
+        @app.exception_handler(SessionStoreUnavailable)
+        async def session_store_unavailable(
+            _request: Request, _exc: SessionStoreUnavailable
+        ) -> JSONResponse:
+            return JSONResponse(
+                status_code=Settings.SESSION_STORAGE_UNAVAILABLE_STATUS_CODE,
+                content={"detail": Settings.SESSION_STORAGE_UNAVAILABLE_MESSAGE},
+                headers={"Retry-After": "1"},
+            )
+
         @app.exception_handler(Exception)
         async def unhandled(_request: Request, exc: Exception) -> JSONResponse:
             LOGGER.error(

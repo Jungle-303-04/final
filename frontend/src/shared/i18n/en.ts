@@ -6,9 +6,12 @@ import { resourcesEn } from "./catalogs/en/resources";
 import { workflowsEn } from "./catalogs/en/workflows";
 import { shellEn } from "./catalogs/en/shell";
 import { alertsEn } from "./catalogs/en/alerts";
+import { timelineEn } from "./catalogs/en/timeline";
+import { desktopEn } from "./catalogs/en/desktop";
 
 export const en = {
   "product.name": "Opsia",
+  "shell.brand.landing": "Go to {route}",
   "common.action.back": "Back",
   "common.action.cancel": "Cancel",
   "common.action.clear": "Clear",
@@ -66,6 +69,11 @@ export const en = {
   "shell.dock.title": "Log dock",
   "shell.dock.tabs": "Open logs",
   "shell.dock.tab": "[Logs: {name}]",
+  "shell.dock.operationCenter": "Operation center",
+  "shell.dock.openOperationCenter": "Open operation center",
+  "shell.dock.openLogs": "Open logs",
+  "shell.dock.operationSummary": "{count} tracked operations · {attention} need attention",
+  "shell.dock.reopenOperationCenter": "Reopen operation center",
   "shell.dock.collapse": "Collapse log dock",
   "shell.dock.expand": "Expand log dock",
   "shell.dock.closeTab": "Close logs for {name}",
@@ -131,6 +139,8 @@ export const en = {
   "settings.policy.approval": "Approval required",
   "state.empty.body": "No data matches the current scope and filters.",
   "state.empty.title": "No data to show",
+  "state.notFound.body": "It may have been removed or is outside your current access.",
+  "state.notFound.title": "We couldn't find that item",
   "state.error.body": "Check server errors or response contract mismatches, then try again.",
   "state.error.title": "Unable to read the verified response",
   "state.forbidden.body": "The current account does not have the required read permission.",
@@ -181,6 +191,9 @@ export const en = {
   "home.action.reconnect": "Reconnect",
   "home.action.reload": "Reload",
   "home.cluster.available": "Available clusters",
+  "home.cluster.grid.aria": "Cluster resource explorer",
+  "home.cluster.grid.title": "Explore resources by cluster",
+  "home.cluster.grid.description": "Choose a cluster to explore its resources.",
   "home.cluster.label": "Cluster",
   "home.cluster.select": "Select cluster",
   "home.cluster.unknown.description": "The URL scope {cluster} is not in the current result. Another cluster was not selected automatically. Choose an accessible cluster above.",
@@ -262,6 +275,8 @@ export const en = {
   "home.status.connected": "Connected",
   ...shellEn,
   ...alertsEn,
+  ...timelineEn,
+  ...desktopEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

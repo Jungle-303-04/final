@@ -1,7 +1,14 @@
-export type ResourceActionCapabilityId =
-  | "deployment.restart"
-  | "deployment.scale"
-  | "pod.exec";
+export type ResourceActionCapabilityId = string;
+
+export interface ResourceCapabilityInput {
+  key: string;
+  label: string;
+  type: "integer" | "string";
+  required: boolean;
+  minimum: number | null;
+  maximum: number | null;
+  default: number | string | null;
+}
 
 export interface ResourceCapabilitySubject {
   resourceId: string;
@@ -15,6 +22,12 @@ export interface ResourceCapabilitySubject {
 
 export interface ResourceActionCapability {
   capabilityId: ResourceActionCapabilityId;
+  label: string;
+  description: string;
+  execution: "command" | "terminal";
+  confirmationRequired: boolean;
+  realtime: boolean;
+  inputSchema: ResourceCapabilityInput[];
   method: "POST" | "WEBSOCKET";
   path: string;
 }
@@ -25,6 +38,21 @@ export interface ResourceCapabilities {
   capabilities: ResourceActionCapability[];
 }
 
+/**
+ * Lifecycle states shared by resource-action receipts and the operation stream.
+ * Keep the in-progress cancellation states explicit so consumers never coerce a
+ * cancel request into a terminal result before the agent acknowledges it.
+ */
+export type ResourceActionStatus =
+  | "queued"
+  | "leased"
+  | "running"
+  | "cancel_requested"
+  | "cancelling"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
 export interface ResourceCapabilitiesPort {
   loadResourceCapabilities(
     resourceId: string,
@@ -33,23 +61,18 @@ export interface ResourceCapabilitiesPort {
 }
 
 export interface ResourceActionReceipt {
-  accepted: boolean;
+  accepted: true;
   eventId: string;
+  auditEventId: string;
   correlationId: string;
+  commandId: string;
+  status: ResourceActionStatus;
 }
 
 export interface ResourceActionsPort {
-  restartDeployment(
-    clusterId: string,
-    namespace: string,
-    deployment: string,
-    signal?: AbortSignal,
-  ): Promise<ResourceActionReceipt>;
-  scaleDeployment(
-    clusterId: string,
-    namespace: string,
-    deployment: string,
-    replicas: number,
+  execute(
+    capability: ResourceActionCapability,
+    values: Readonly<Record<string, unknown>>,
     signal?: AbortSignal,
   ): Promise<ResourceActionReceipt>;
 }

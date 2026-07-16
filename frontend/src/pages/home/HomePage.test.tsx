@@ -9,14 +9,16 @@ import { homePort, renderHome } from "./HomePage.testSupport";
 afterEach(cleanup);
 
 describe("HomePage", () => {
-  it("shows real cluster tiles when no cluster is selected", async () => {
+  it("shows the cluster resource explorer and preserves filters when no cluster is selected", async () => {
     const user = userEvent.setup();
-    renderHome(homePort(), ["/"]);
+    renderHome(homePort(), ["/?applications=checkout&resources.health=warning"]);
 
-    const overview = await screen.findByRole("region", {
-      name: "클러스터 한눈에 보기",
+    const explorer = await screen.findByRole("region", {
+      name: "클러스터 리소스 탐색",
     });
-    expect(overview).toBeTruthy();
+    expect(explorer).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "클러스터별 리소스 탐색" })).toBeTruthy();
+    expect(screen.getByText("클러스터를 선택하면 해당 리소스 화면으로 이동합니다.")).toBeTruthy();
     expect(screen.getByRole("img", {
       name: "Amazon Elastic Kubernetes Service",
     })).toBeTruthy();
@@ -26,7 +28,7 @@ describe("HomePage", () => {
 
     await user.click(screen.getByRole("link", { name: "cluster-1 리소스 열기" }));
     expect(screen.getByTestId("home-location").textContent)
-      .toContain("/resources?clusters=cluster-1");
+      .toBe("/resources?clusters=cluster-1&applications=checkout&resources.health=warning");
   });
 
   it("renders English by default without translating Kubernetes nouns or backend values", async () => {

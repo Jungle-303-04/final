@@ -1,6 +1,6 @@
 import { Activity, Settings } from "lucide-react";
-import { useCallback, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { lazy, Suspense, useCallback, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
 import {
@@ -32,8 +32,11 @@ import {
 } from "../features/global-filter/globalFilterContract";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
 import {
+  landingProductRouteForReleasedSurfaces,
+  productKeyboardNavigationRoutes,
   productNavigationForReleasedSurfaces,
   productRouteForPath,
+  routeDefinitionForSurface,
   type ProductSurfaceId,
 } from "./productRoutes";
 import { shellShortcutDefinitions } from "./shortcutRegistry";
@@ -57,6 +60,12 @@ import {
   EMPTY_ALERT_EVENTS_PORT,
   type AlertEventsPort,
 } from "../features/alerts/alertEventsContract";
+import type { ProductRouteDefinition } from "./productRoutes";
+import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
+
+const ProductCommandPalette = lazy(async () => ({
+  default: (await import("./ProductCommandPalette")).ProductCommandPalette,
+}));
 
 interface ProductShellProps {
   auth: AuthenticatedAuthState;
@@ -104,8 +113,10 @@ function ProductShellFrame({
   globalFilterPort,
 }: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const filter = useUnifiedFilter();
   const dock = useBottomDock();
   const { isMobile } = useSidebar();
@@ -116,10 +127,9 @@ function ProductShellFrame({
   const primaryNavigationRoutes = navigationRoutes.filter(({ id }) => id !== "settings");
   const settingsRoute = navigationRoutes.find(({ id }) => id === "settings");
   const matchedRoute = productRouteForPath(location.pathname);
-  const currentRoute = matchedRoute && releasedSurfaceIds.has(matchedRoute.id)
-    ? matchedRoute
-    : navigationRoutes[0];
-  const activeSurfaceId = currentRoute?.id;
+  const currentRoute = matchedRoute ?? navigationRoutes[0];
+  const activeSurfaceKey = currentRoute?.id ?? "";
+  const activeSurfaceId = activeSurfaceKey || undefined;
   const detailWorkspaceOpen = activeSurfaceId === "resources" && (
     filter.detail.detail !== null ||
     filter.detail.resource !== null ||
@@ -135,15 +145,39 @@ function ProductShellFrame({
   const toggleShortcutHelp = useCallback(() => {
     setShortcutHelpOpen((value) => !value);
   }, []);
+  const selectProductRoute = useCallback((routeDefinition: ProductRouteDefinition): boolean => {
+    if (!releasedSurfaceIds.has(routeDefinition.id)) {
+      toast.warning(t("shell.route.unavailable.toast", {
+        route: t(navLabelKeys[routeDefinition.id]),
+      }));
+      return false;
+    }
+    const target = filter.navigationHref(routeDefinition.path);
+    if (
+      location.pathname !== routeDefinition.path ||
+      location.hash !== "" ||
+      filter.needsCanonicalWrite ||
+      hasProductDetail(filter.detail)
+    ) {
+      navigate(target);
+    }
+    queueMicrotask(() => document.getElementById("product-main")?.focus());
+    return true;
+  }, [filter, location.hash, location.pathname, navigate, releasedSurfaceIds, t]);
   useProductShortcuts({
     definitions: shortcutDefinitions,
+    isCommandPaletteOpen,
     isHelpOpen: isShortcutHelpOpen,
+    onCommandPaletteOpen: () => setCommandPaletteOpen(true),
     onHelpToggle: toggleShortcutHelp,
+    onRouteSelect: selectProductRoute,
     onThemeToggle: themeController.toggle,
   });
   if (!currentRoute) {
     throw new Error("ProductShell requires at least one released surface");
   }
+  const landingRoute = landingProductRouteForReleasedSurfaces(releasedSurfaceIds);
+  const settingsHref = filter.navigationHref(routeDefinitionForSurface("settings").path);
   const currentRouteLabel = t(navLabelKeys[currentRoute.id]);
   const changeAiOpen = (next: boolean) => {
     if (next && detailWorkspaceOpen && isNarrowAiViewport()) {
@@ -177,14 +211,18 @@ function ProductShellFrame({
         mobileTitle={t("shell.menu.mobileTitle")}
       >
         <SidebarHeader className="h-14 flex-row items-center gap-2 px-2 py-0">
-          <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[state=collapsed]/sidebar:hidden">
+          <Link
+            aria-label={t("shell.brand.landing", { route: t(navLabelKeys[landingRoute.id]) })}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[state=collapsed]/sidebar:justify-center"
+            to={filter.navigationHref(landingRoute.path)}
+          >
             <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
               <Activity aria-hidden="true" className="size-4" />
             </span>
-            <SidebarText className="text-sm font-semibold tracking-tight">
+            <SidebarText className="text-sm font-semibold tracking-tight group-data-[state=collapsed]/sidebar:sr-only">
               {t("product.name")}
             </SidebarText>
-          </div>
+          </Link>
           {!isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
         </SidebarHeader>
 
@@ -246,7 +284,7 @@ function ProductShellFrame({
           <Separator className="mx-2 data-horizontal:w-auto" />
           <SidebarProfileMenu
             auth={auth}
-            settingsHref={filter.navigationHref("/settings")}
+            settingsHref={settingsHref}
             themeController={themeController}
           />
         </SidebarFooter>
@@ -258,16 +296,28 @@ function ProductShellFrame({
             {isMobile ? <ProductSidebarTrigger labelMode="sr-only" /> : null}
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
-          <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
-          </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}
               open={isShortcutHelpOpen}
             />
+            {isCommandPaletteOpen ? (
+              <Suspense fallback={null}>
+                <ProductCommandPalette
+                  availableSurfaceIds={releasedSurfaceIds}
+                  onOpenChange={setCommandPaletteOpen}
+                  onSelectRoute={selectProductRoute}
+                  open
+                  routeDefinitions={productKeyboardNavigationRoutes()}
+                />
+              </Suspense>
+            ) : null}
+            <DesktopLocalTerminalEntry />
             <LocaleToggle />
+          </div>
+          <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
+            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
           </div>
         </header>
 
@@ -296,4 +346,10 @@ function ProductShellFrame({
 }
 function isNarrowAiViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(max-width: 895px)").matches;
+}
+
+function hasProductDetail(detail: ReturnType<typeof useUnifiedFilter>["detail"]): boolean {
+  return detail.detail !== null || detail.resource !== null ||
+    detail.resourceKind !== null || detail.tab !== null ||
+    detail.full || detail.node !== null;
 }

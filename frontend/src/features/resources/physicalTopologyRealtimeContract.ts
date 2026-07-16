@@ -1,3 +1,5 @@
+import type { RafStreamPolicy } from "../../shared/streaming/rafStreamCoalescer";
+
 export type PhysicalTopologyRealtimeConnectionStatus =
   | "idle"
   | "connecting"
@@ -11,8 +13,15 @@ export interface PhysicalTopologyRealtimeSubscription {
   clusterId: string;
 }
 
+/** Gateway-issued delivery policy. Sequence values remain server-owned. */
+export interface PhysicalTopologyRealtimeStreamPolicy extends RafStreamPolicy {
+  revision: number;
+  maxPendingMessages: number;
+}
+
 export interface PhysicalTopologyRealtimeHandlers {
   onMessage(message: unknown): void;
+  onPolicy(policy: PhysicalTopologyRealtimeStreamPolicy): void;
   onStatusChange(status: PhysicalTopologyRealtimeConnectionStatus): void;
 }
 

@@ -12,12 +12,13 @@ import inspect
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
-from hub import BrowserClient, RealtimeHub
+from hub import BrowserClient, RealtimeHub, RealtimeSnapshotLimitError
 from terminal_sessions import (
     TerminalAuditor,
     TerminalAuthorizer,
@@ -33,6 +34,7 @@ from domains.identity.dependencies import (
 from packages.config.constants import Auth
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
+from packages.config.realtime import realtime_gateway_limits
 from packages.config.settings import env
 from packages.contracts.gateway.fields import Gateway
 from packages.contracts.identity import (
@@ -47,10 +49,14 @@ from packages.contracts.realtime import (
     HelloMessage,
     LiveSummaryMessage,
     PingMessage,
+    RealtimeIngressLimits,
+    RealtimeLimitError,
     ResourceDelta,
+    ResyncRequiredMessage,
     Subscription,
     delta_key_parts,
     parse_realtime_message,
+    serialized_json_bytes,
 )
 from packages.contracts.terminal import BROWSER_TERMINAL_PATH
 from packages.runtime.service import FastApiService
@@ -72,12 +78,40 @@ BROWSER_PING_INTERVAL_SECONDS = 15.0
 CLOSE_BAD_REQUEST = 4400
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_PROTOCOL_VIOLATION = 1008
+CLOSE_TRY_AGAIN_LATER = 1013
 
 # authenticate: 원문 토큰 → {"workspace_id", "cluster_id"} | None (fail-closed)
 AgentAuthenticator = Callable[[str], Any]
 BrowserSessionAuthenticator = Callable[[str | None], Awaitable[Any]]
 BrowserClusterAuthorizer = Callable[[Any, str, str], Awaitable[bool]]
 LiveUsagePersister = Callable[[str, str, datetime, dict[str, Any]], Any]
+
+
+@dataclass
+class AgentIngressBudget:
+    """Per-agent rolling ingress budget; breach closes only that producer connection."""
+
+    limits: RealtimeIngressLimits
+    window_started_at: float = field(default_factory=time.monotonic)
+    message_count: int = 0
+    byte_count: int = 0
+
+    def consume(self, payload: object, *, now: float | None = None) -> None:
+        observed_at = time.monotonic() if now is None else now
+        if observed_at - self.window_started_at >= self.limits.agent_ingress_window_seconds:
+            self.window_started_at = observed_at
+            self.message_count = 0
+            self.byte_count = 0
+        payload_bytes = serialized_json_bytes(payload)
+        if payload_bytes > self.limits.agent_message_max_bytes:
+            raise RealtimeLimitError("agent_message_too_large")
+        if self.message_count + 1 > self.limits.agent_messages_per_window:
+            raise RealtimeLimitError("agent_message_rate_exceeded")
+        if self.byte_count + payload_bytes > self.limits.agent_bytes_per_window:
+            raise RealtimeLimitError("agent_byte_rate_exceeded")
+        self.message_count += 1
+        self.byte_count += payload_bytes
+
 
 REDIS_URL_ENV = "REDIS_URL"
 SESSION_KEY_PREFIX = "session"
@@ -177,6 +211,7 @@ def create_app(
     authorize_browser_terminal: TerminalAuthorizer | None = None,
     audit_terminal: TerminalAuditor | None = None,
     persist_live_usage: LiveUsagePersister | None = None,
+    realtime_limits: RealtimeIngressLimits | None = None,
 ) -> FastAPI:
     if db is None and (authenticate_agent is None or authorize_browser_cluster is None):
         db = Database()
@@ -215,7 +250,8 @@ def create_app(
                     usage=usage,
                 )
 
-    hub = RealtimeHub()
+    limits = realtime_limits or realtime_gateway_limits()
+    hub = RealtimeHub(limits=limits)
     terminal_broker = TerminalSessionBroker(
         authorize=authorize_browser_terminal,
         audit=audit_terminal,
@@ -262,16 +298,28 @@ def create_app(
             return
 
         agent_channel = await terminal_broker.register_agent(cluster_id, websocket)
+        ingress_budget = AgentIngressBudget(limits)
         await websocket.send_json(HelloMessage().model_dump(mode="json"))
         LOGGER.info("agent_stream_connected", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}})
         try:
             while True:
                 payload = await websocket.receive_json()
+                try:
+                    ingress_budget.consume(payload)
+                except (RealtimeLimitError, ValueError):
+                    LOGGER.warning(
+                        "agent_ingress_limit_exceeded",
+                        extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}},
+                    )
+                    await websocket.close(code=CLOSE_PROTOCOL_VIOLATION)
+                    return
                 terminal_result = await terminal_broker.handle_agent_payload(cluster_id, payload)
                 if terminal_result is True:
                     continue
                 message = (
-                    _ingest(hub, cluster_id, payload) if terminal_result is not False else None
+                    _ingest(hub, cluster_id, payload, limits=limits)
+                    if terminal_result is not False
+                    else None
                 )
                 if message is None:
                     await websocket.close(code=CLOSE_PROTOCOL_VIOLATION)
@@ -432,27 +480,33 @@ def session_roles(session: Any) -> set[str]:
     return {str(role) for role in raw_roles}
 
 
-def _ingest(hub: RealtimeHub, cluster_id: str, payload: Any) -> Any | None:
+def _ingest(
+    hub: RealtimeHub,
+    cluster_id: str,
+    payload: Any,
+    *,
+    limits: RealtimeIngressLimits | None = None,
+) -> Any | None:
     """agent 수신 1건 처리. 계약 위반/권한 밖 클러스터는 None(연결 종료)."""
     try:
-        message = parse_realtime_message(payload)
-    except ValueError:
+        message = parse_realtime_message(payload, limits=limits)
+        if isinstance(message, PingMessage):
+            return message
+        if isinstance(message, LiveSummaryMessage):
+            if message.cluster_id != cluster_id or message.summary.cluster_id != cluster_id:
+                return None
+            hub.publish_summary(message.summary)
+            return message
+        if isinstance(message, ResourceDelta):
+            if delta_key_parts(message.key)[0] != cluster_id:
+                return None
+            hub.publish_delta(message)
+            return message
+    except (RealtimeLimitError, ValueError):
         LOGGER.warning(
             "agent_message_invalid", extra={CONTEXT_KEY: {Gateway.CLUSTER_ID: cluster_id}}
         )
         return None
-    if isinstance(message, PingMessage):
-        return message
-    if isinstance(message, LiveSummaryMessage):
-        if message.cluster_id != cluster_id or message.summary.cluster_id != cluster_id:
-            return None
-        hub.publish_summary(message.summary)
-        return message
-    if isinstance(message, ResourceDelta):
-        if delta_key_parts(message.key)[0] != cluster_id:
-            return None
-        hub.publish_delta(message)
-        return message
     return None  # hello/snapshot 은 gateway → client 방향 전용
 
 
@@ -507,7 +561,13 @@ def live_usage_payload(
 async def _browser_send_loop(websocket: WebSocket, hub: RealtimeHub, client: BrowserClient) -> None:
     """접속 인사(hello + snapshot) 후 queue 를 소비. 한가하면 ping 으로 keepalive."""
     await websocket.send_json(HelloMessage().model_dump(mode="json"))
-    await websocket.send_json(hub.snapshot_for(client.subscription).model_dump(mode="json"))
+    try:
+        snapshot = hub.snapshot_for(client.subscription)
+    except RealtimeSnapshotLimitError:
+        await websocket.send_json(ResyncRequiredMessage().model_dump(mode="json"))
+        await websocket.close(code=CLOSE_TRY_AGAIN_LATER)
+        return
+    await websocket.send_json(snapshot.model_dump(mode="json"))
     while True:
         try:
             message = await asyncio.wait_for(
@@ -517,6 +577,9 @@ async def _browser_send_loop(websocket: WebSocket, hub: RealtimeHub, client: Bro
             await websocket.send_json(PingMessage(ts=time.time()).model_dump(mode="json"))
             continue
         await websocket.send_json(message.model_dump(mode="json"))
+        if isinstance(message, ResyncRequiredMessage):
+            await websocket.close(code=CLOSE_TRY_AGAIN_LATER)
+            return
 
 
 def main() -> None:

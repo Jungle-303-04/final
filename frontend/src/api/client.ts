@@ -127,10 +127,29 @@ export async function apiStreamResponse(
   path: ApiPath,
   mediaType: string,
   signal?: AbortSignal,
+  extraHeaders?: HeadersInit,
 ): Promise<Response> {
+  return apiStreamRequest(path, mediaType, { headers: extraHeaders, signal });
+}
+
+/**
+ * Read a same-origin streaming response with the shared auth/CSRF boundary.
+ *
+ * Unlike `apiStreamResponse`, this accepts the complete request init so a
+ * stream whose query is too complex for a URL can use a POST body.  It is not
+ * a mutation helper: the normal request policy still decides whether a method
+ * receives the CSRF header.
+ */
+export async function apiStreamRequest(
+  path: ApiPath,
+  mediaType: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("accept", mediaType);
   const response = await request(path, {
-    headers: { accept: mediaType },
-    signal,
+    ...init,
+    headers,
   });
   if (response.ok) return response;
   const body = await readResponseBody(response);

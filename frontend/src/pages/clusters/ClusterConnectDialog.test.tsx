@@ -17,6 +17,30 @@ afterEach(() => {
 });
 
 describe("ClusterConnectDialog", () => {
+  it("marks registration as busy and uses the shared reduced-motion-safe spinner", async () => {
+    const user = userEvent.setup();
+    const pending = deferred<Awaited<ReturnType<ClustersPort["connect"]>>>();
+    const port = waitingPort();
+    vi.mocked(port.connect).mockReturnValue(pending.promise);
+    renderDialog(port);
+
+    await user.type(screen.getByRole("textbox", { name: "Cluster name" }), "Production");
+    await user.click(screen.getByRole("button", { name: "Generate install command" }));
+
+    const register = screen.getByRole("button", { name: "Generate install command" });
+    const spinner = register.querySelector<HTMLElement>('[data-slot="spinner"]');
+    expect(register.getAttribute("aria-busy")).toBe("true");
+    expect(spinner?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+
+    pending.resolve({
+      clusterId: "production-a1b2",
+      installCommand: "curl secret-command | kubectl apply -f -",
+      expiresAt: "2026-07-14T06:00:00Z",
+    });
+    expect(await screen.findByText("curl secret-command | kubectl apply -f -")).toBeTruthy();
+  });
+
   it("shows only the server command, copies it, and polls without logging the credential", async () => {
     const user = userEvent.setup();
     const port = waitingPort();
@@ -283,4 +307,12 @@ function ConnectionHarness({ port }: { port: ClustersPort }) {
       />
     </>
   );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
 }

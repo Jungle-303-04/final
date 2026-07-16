@@ -13,6 +13,12 @@ class CommandActionSpec:
     allowed_namespaces: tuple[str, ...] = ()  # 빈 튜플 = 네임스페이스 제한 없음
     requires_approval: bool = False
     requires_approval_outside_sandbox: bool = False
+    # Control policy is declared with the action, never inferred from a route
+    # name or browser button.  ``max_attempts`` includes the initial attempt.
+    supports_cancel: bool = True
+    supports_manual_retry: bool = False
+    max_attempts: int = 1
+    retry_delay_seconds: int = 0
 
     def matches_recovery_action(self, value: str) -> bool:
         return value == self.action or value in self.recovery_aliases
@@ -40,13 +46,25 @@ class CommandCatalog:
         allowed_namespaces: tuple[str, ...] = (),
         requires_approval: bool = False,
         requires_approval_outside_sandbox: bool = False,
+        supports_cancel: bool = True,
+        supports_manual_retry: bool = False,
+        max_attempts: int = 1,
+        retry_delay_seconds: int = 0,
     ) -> Callable[[type], type]:
+        if max_attempts < 1 or retry_delay_seconds < 0:
+            raise ValueError("command retry policy is invalid")
+        if supports_manual_retry and max_attempts < 2:
+            raise ValueError("retryable command requires at least two attempts")
         spec = CommandActionSpec(
             action=action,
             recovery_aliases=recovery_aliases,
             allowed_namespaces=allowed_namespaces,
             requires_approval=requires_approval,
             requires_approval_outside_sandbox=requires_approval_outside_sandbox,
+            supports_cancel=supports_cancel,
+            supports_manual_retry=supports_manual_retry,
+            max_attempts=max_attempts,
+            retry_delay_seconds=retry_delay_seconds,
         )
 
         def decorator(marker: type) -> type:

@@ -21,6 +21,12 @@ TARGETS_PATH = "/targets"
 INSTALL_MANIFEST_PATH = "/install/{agent_token}"
 COMMANDS_PATH = "/commands"
 COMMAND_STATUS_PATH = "/commands/{command_id}"
+COMMAND_EVENTS_PATH = "/commands/{command_id}/events"
+COMMAND_CANCEL_PATH = "/commands/{command_id}/cancel"
+COMMAND_RETRY_PATH = "/commands/{command_id}/retry"
+# 원본 전수 기능 mapping의 생성형 계약 catalog. 제품 UI는 이 경로를 통해
+# 기능·스트리밍 여부를 발견하며, 소스 목록을 다시 하드코딩하지 않는다.
+FEATURE_CONTRACTS_PATH = "/feature-contracts"
 APPROVAL_GRANT_PATH = "/approvals/{approval_id}/grant"
 APPROVAL_REJECT_PATH = "/approvals/{approval_id}/reject"
 DEAD_LETTERS_PATH = "/dead-letters"
@@ -39,6 +45,14 @@ AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
 # path constants own only the target identity portion.
 POD_LOG_STREAM_PATH = "/pods/{namespace}/{name}/logs/stream"
 WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
+# Contextual Workload Detail.  API group/version and exact cluster identity are
+# query-owned because the upstream path is intentionally cluster agnostic.
+WORKLOAD_DETAIL_PATH = "/workloads/{kind}/{namespace}/{name}"
+# Safe contextual Compare.  Source-compatible kind/apiGroup/a/b are query
+# owned; the product adds cluster_id and an exact apiVersion when resolved.
+COMPARE_DESCRIPTORS_PATH = "/compare/descriptors"
+COMPARE_CANDIDATES_PATH = "/compare/candidates"
+COMPARE_RESOURCES_PATH = "/compare/resources"
 # 관리 콘솔 — 조직/그룹/멤버/권한 (프론트 콘솔 전용, admin 세션)
 ORGS_PATH = "/orgs"
 ORG_PATH = "/orgs/{org_id}"
@@ -70,6 +84,13 @@ APPLICATION_FILTER_FACETS_PATH = "/applications/filter-facets"
 APPLICATION_LABEL_FACETS_PATH = "/applications/label-facets"
 GITOPS_FILTER_RESULTS_PATH = "/gitops/filter-results"
 GITOPS_FILTER_FACETS_PATH = "/gitops/filter-facets"
+GITOPS_APPLICATION_DETAIL_PATH = "/gitops/applications/{application_id}"
+HELM_RELEASES_PATH = "/helm/releases"
+HELM_RELEASE_PATH = "/helm/releases/{namespace}/{release_name}"
+TRAFFIC_OVERVIEW_PATH = "/traffic/overview"
+COST_OVERVIEW_PATH = "/cost/overview"
+CHECKS_OVERVIEW_PATH = "/checks/overview"
+CHECKS_DETAIL_PATH = "/checks/{check_id}"
 REPOSITORY_DISCOVERY_PROBE_PATH = "/repositories/discovery/probe"
 REPOSITORY_DISCOVERY_BRANCHES_PATH = "/repositories/discovery/branches"
 REPOSITORY_DISCOVERY_MANIFESTS_PATH = "/repositories/discovery/manifests"
@@ -145,6 +166,14 @@ RESOURCES_GRAPH_PATH = "/resources/graph"
 TOPOLOGY_PATH = "/topology"
 # Resources time scrubber: actual observed changes plus explicit collection gaps.
 CHANGES_PATH = "/changes"
+# Retained, immutable product Timeline history.  Snapshot is NDJSON so a
+# browser/desktop adapter can use the same frame parser as resumable SSE.
+TIMELINE_CAPABILITIES_PATH = "/timeline/capabilities"
+TIMELINE_PINS_PATH = "/timeline/pins"
+TIMELINE_PIN_PATH = "/timeline/pins/{pin_id}"
+TIMELINE_OVERVIEW_PATH = "/timeline/overview"
+TIMELINE_SNAPSHOTS_PATH = "/timeline/snapshots"
+TIMELINE_STREAM_PATH = "/timeline/stream"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서
 # fan-out하지 않도록 서버 batch 경계를 별도로 둔다.
 RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"

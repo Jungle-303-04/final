@@ -4,7 +4,7 @@ status: spec-approved
 date: 2026-07-14
 owner: 단독 세션 (구현) / 우녕 (기획 확정)
 governing: 화면 골격의 최상위 정본. VP-010~014는 이 골격 위에서 동작한다. 충돌하면 이 문서가 이긴다.
-reference: skyhook-io/radar (Apache-2.0) — radar-parity-map.md
+reference: references/provenance/source.json (Apache-2.0) — reference-parity-map.md
 feedback: 2026-07-13 코치 피드백 (91분 회의 전사) 전면 반영
 ---
 
@@ -331,7 +331,7 @@ CrashLoop         ▢✕       회색 채움(사용률 0), ✕ 배지 ← "죽�
 ```
 선택한 타입만 그린다. **1층 검색 칩과 AND 결합.**
 
-Radar `topology/TopologyGraph.tsx` + `layout.ts`(ELK) 이식.
+기준 원본 `topology/TopologyGraph.tsx` + `layout.ts`(ELK) 이식.
 [D-028]의 "Live Traffic 흡수"가 여기다. **트래픽 수치는 계약이 있을 때만** 엣지에 표시.
 
 ### 4.5 네임스페이스 — 그리지 않는다 (혼란의 근원 제거)
@@ -509,7 +509,7 @@ AI  최소 폭 = 360px
 파드 선택 후 `l` → 하단 독에 로그. **화면 전환 없이.**
 독 안에서도 **✦ AI 질문** 가능 — 지금 보는 로그를 물고 묻는다.
 
-**제외:** Radar의 `LocalTerminalTab`(로컬 셸). 우리는 웹이라 불가능하다. 만들지 않는다.
+**제외:** 기준 원본의 `LocalTerminalTab`(로컬 셸). 우리는 웹이라 불가능하다. 만들지 않는다.
 **exec 터미널**은 에이전트 WS 터널이 필요하다 (BQ-067, P1). **계약이 없으면 탭 자체를 렌더하지 않는다.**
 
 ### 5.7 모바일 (명시)
@@ -790,18 +790,18 @@ Git 커밋 → 웹훅 수신 → 열려 있는 에이전트 연결로 즉시 통
 
 ## 8. 권한 — 없는 버튼은 그리지 않는다
 
-`GET /api/capabilities` (BQ-061, Radar 패턴).
+`GET /api/capabilities` (BQ-061, 기준 원본 패턴).
 
 **권한이 없으면 버튼을 렌더하지 않는다.**
 disabled로 보여주고 누르면 403이 나는 것은 **거짓말이다.** BE-Gap 규율의 확장.
 
 ---
 
-## 9. Radar 이식 — 디자인은 우리 것
+## 9. 기준 원본 이식 — 디자인은 우리 것
 
-**Radar 컴포넌트를 가져오되 우리 shadcn 토큰으로 다시 칠한다.**
+**기준 원본 컴포넌트를 가져오되 우리 shadcn 토큰으로 다시 칠한다.**
 
-| Radar | → 우리 |
+| 기준 원본 | → 우리 |
 |---|---|
 | `topology/TopologyGraph, layout.ts(ELK)` | 2층 그래프 (노드 렌더링만 **물리 뷰로 재작성**) |
 | `timeline/TimelineStrip, scrubber-math.ts` | 시간 스크럽 (VP-012 §1.2 **교체**) |
@@ -814,7 +814,7 @@ disabled로 보여주고 누르면 403이 나는 것은 **거짓말이다.** BE-
 
 ### 9.1 primitive 매핑 — **정본은 `components/ui/` 한 곳뿐**
 
-| Radar `ui/` | shadcn |
+| 기준 원본 `ui/` | shadcn |
 |---|---|
 | Badge · Tooltip · Collapse · CardSection | `badge` `tooltip` `collapsible` `card` |
 | ConfirmDialog · ForceDeleteConfirmDialog | `alert-dialog` |
@@ -824,17 +824,17 @@ disabled로 보여주고 누르면 403이 나는 것은 **거짓말이다.** BE-
 | **대응 없음**: YamlEditor(Monaco) · CodeViewer · HealthRing · DistributionBar · SummaryTile · Facet · FilterPill · SortableTh · MiddleEllipsis · ResourceBar | **shadcn primitive를 조합해서 만든다.** 새 primitive를 손으로 짜지 않는다. |
 
 **금지:**
-- Radar의 **색·간격·모서리·duration을 하드코딩**으로 가져오는 것 → 토큰만
-- Radar의 theme CSS 변수를 그대로 쓰는 것 → 우리 `theme.css`로 치환
+- 기준 원본의 **색·간격·모서리·duration을 하드코딩**으로 가져오는 것 → 토큰만
+- 기준 원본의 theme CSS 변수를 그대로 쓰는 것 → 우리 `theme.css`로 치환
 - primitive가 **두 곳에 존재**하는 것
 
 **아이콘**: 둘 다 lucide. 그대로.
-**차트**: 우리는 **recharts 단일화**. Radar `charts/`는 재작성.
+**차트**: 우리는 **recharts 단일화**. 기준 원본 `charts/`는 재작성.
 
 ### 9.2 라이선스 (필수)
 
-Radar는 **Apache-2.0**. 반드시:
-1. 루트 `NOTICE` — 원저작자(Skyhook) · 라이선스 · 출처 URL
+기준 원본는 **Apache-2.0**. 반드시:
+1. 루트 `NOTICE` — 원저작자(원본 제공자) · 라이선스 · 출처 URL
 2. 파일별 헤더는 추가하지 않고 루트 `NOTICE`에 상당한 수정·재작성 사실 표기
 3. `README.md`에 명시
 4. `references/upstream/` 고정 커밋 서브트리
@@ -882,7 +882,7 @@ Radar는 **Apache-2.0**. 반드시:
 - 권한 없는 버튼을 disabled로 보여주는 것 → **렌더하지 않는다**
 - 계약 없는 필드를 0·disabled로 렌더하는 것
 - primitive가 두 곳에 존재하는 것
-- Radar의 색·간격을 하드코딩으로 가져오는 것
+- 기준 원본의 색·간격을 하드코딩으로 가져오는 것
 
 ---
 
@@ -895,7 +895,7 @@ Radar는 **Apache-2.0**. 반드시:
 | BQ-074 | `GET /topology?view=physical` — **서버 + 파드 배치 + 사용률 + 상태** |
 | BQ-075 | `GET /topology?view=relations` — 오브젝트 관계 엣지 |
 
-기존 BQ-054~068(Radar 패리티) · BQ-039~053(VP-014) · BQ-035~038(대시보드)과 병행.
+기존 BQ-054~068(기준 원본 패리티) · BQ-039~053(VP-014) · BQ-035~038(대시보드)과 병행.
 
 ---
 
@@ -905,11 +905,11 @@ Radar는 **Apache-2.0**. 반드시:
 |---|---|
 | VP-010 | 메뉴에 **Clusters 최상단**. Live Traffic 삭제 |
 | VP-011 | Home은 **골격 예외**임을 명시 |
-| VP-012 | 시간 스크럽 → **Radar TimelineStrip 모델 교체**. **하단 독 추가**. 그래프 → 이 문서 §4 |
+| VP-012 | 시간 스크럽 → **기준 원본 TimelineStrip 모델 교체**. **하단 독 추가**. 그래프 → 이 문서 §4 |
 | VP-013 | **primitive 매핑표**(§9.1) 추가 |
 | VP-014 | GitOps **2탭**. **AI 채팅 메뉴 살림**. AI 기하학 → 이 문서 §5.4 |
 | VP-017 | **신설.** 모션 규격 (§4.6·§5.2의 수치 정본) |
-| SESSION-BOOTSTRAP | **`scripts/radar.sh` 삭제 지시 취소** |
+| SESSION-BOOTSTRAP | **`scripts/reference.sh` 삭제 지시 취소** |
 | night-directives | [D-048] VP-015 확정 |
 
 ---

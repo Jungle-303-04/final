@@ -171,11 +171,28 @@ def test_relations_topology_openapi_declares_exact_strict_wire_contract() -> Non
         "#/components/schemas/RelationsTopologyResponse",
     }
     relation_schema = schema["components"]["schemas"]["RelationsTopologyResponse"]
-    edge_schema = schema["components"]["schemas"]["RelationsTopologyEdge"]
-    assert set(relation_schema["properties"]) == {"nodes", "edges"}
+    edge_schema = schema["components"]["schemas"]["ResourceGraphEdge"]
+    assert {
+        "view",
+        "availability",
+        "refresh_after_seconds",
+        "nodes",
+        "edges",
+        "snapshot",
+        "relation_completeness",
+    }.issubset(relation_schema["properties"])
     assert relation_schema["additionalProperties"] is False
-    assert set(edge_schema["properties"]) == {"from", "to", "type"}
-    assert edge_schema["properties"]["type"]["enum"] == [
+    assert set(edge_schema["properties"]) == {
+        "edge_id",
+        "from_node_id",
+        "to_node_id",
+        "kind",
+        "plane",
+        "direction",
+        "state",
+        "evidence",
+    }
+    assert edge_schema["properties"]["kind"]["enum"] == [
         "owns",
         "runs_on",
         "selects",
@@ -202,14 +219,16 @@ def test_relations_topology_uses_authorized_filtered_pinned_snapshot() -> None:
 
     assert response.status_code == 200
     body = RelationsTopologyResponse.model_validate(response.json())
-    assert set(response.json()) == {"nodes", "edges"}
-    assert [(node.id, node.kind, node.name) for node in body.nodes] == [
+    assert body.availability == "available"
+    assert body.refresh_after_seconds == 5
+    assert [(node.node_id, node.identity.kind, node.identity.name) for node in body.nodes] == [
         ("deployment-a", "Deployment", "checkout"),
         ("pod-a", "Pod", "checkout-a"),
     ]
     assert body.edges[0].from_node_id == "deployment-a"
     assert body.edges[0].to_node_id == "pod-a"
-    assert body.edges[0].type == "owns"
+    assert body.edges[0].kind == "owns"
+    assert body.edges[0].evidence.type == "owner_reference"
     assert "secret" not in response.text.casefold()
 
     global_call, pinned_call, cluster_call, resource_call = db.data_calls
@@ -234,7 +253,12 @@ def test_relations_topology_rejects_unavailable_or_future_snapshot_before_rows()
         "/topology",
         params={"view": "relations", "clusters": "cluster-a"},
     )
-    assert unavailable_response.status_code == 503
+    assert unavailable_response.status_code == 200
+    unavailable_body = RelationsTopologyResponse.model_validate(unavailable_response.json())
+    assert unavailable_body.availability == "unavailable"
+    assert unavailable_body.nodes == []
+    assert unavailable_body.edges == []
+    assert "topology_projection_unavailable" in unavailable_body.partial_reason_codes
     assert [kind for kind, _call in unavailable.data_calls] == ["snapshot", "snapshot"]
 
     future = RelationsTopologyDb(clusters={"cluster-a"})

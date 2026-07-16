@@ -1,5 +1,5 @@
 ---
-title: 코덱스 지시서 (통합·최종) — Radar 전면 이식 + 셸 정정 + 실시간
+title: 코덱스 지시서 (통합·최종) — 기준 원본 전면 이식 + 셸 정정 + 실시간
 status: active
 issued: 2026-07-14
 supersedes: codex-goal-directive-20260714.md · codex-directive-vp018-corrections.md
@@ -12,7 +12,7 @@ priority: R0~R2 · C1~C10 이 S11 이후 신규 슬라이스보다 **먼저다**
 
 | # | 문서 | 무엇의 정본인가 |
 |---|---|---|
-| 1 | **`docs/spec/frontend/vp-019-radar-full-port.md`** | **이식 범위·방법.** Radar에서 뭘 가져오고 뭘 안 가져오나 |
+| 1 | **`docs/spec/frontend/vp-019-reference-full-port.md`** | **이식 범위·방법.** 기준 원본에서 뭘 가져오고 뭘 안 가져오나 |
 | 2 | **`docs/spec/frontend/vp-018-shell-corrections.md`** | **셸 정정.** 상세 3상태 · 검색 · 그래프 · AI · 테마 · shadcn 문법 |
 | 3 | `docs/spec/frontend/vp-015-global-shell.md` | 골격 (VP-018/019와 충돌하면 **VP-018/019가 이긴다**) |
 | 4 | `docs/spec/frontend/vp-017-motion-spec.md` | 모션 수치 (계약이다) |
@@ -28,13 +28,13 @@ priority: R0~R2 · C1~C10 이 S11 이후 신규 슬라이스보다 **먼저다**
 
 | 층 | 정본 | 결정하는 것 |
 |---|---|---|
-| **기능·구조·라벨** | **Radar** (`references/upstream/`) | 어떤 화면·컴포넌트·컬럼·kind 렌더러·감사 체크·라벨이 있는가. **가져올 수 있는 건 전부 가져온다** |
-| **디자인** | **shadcn/ui** | 색·간격·타이포·radius·primitive·문법. **Radar의 시각 언어는 버린다** |
+| **기능·구조·라벨** | **기준 원본** (`references/upstream/`) | 어떤 화면·컴포넌트·컬럼·kind 렌더러·감사 체크·라벨이 있는가. **가져올 수 있는 건 전부 가져온다** |
+| **디자인** | **shadcn/ui** | 색·간격·타이포·radius·primitive·문법. **기준 원본의 시각 언어는 버린다** |
 | **차별화** | **VP-010~019** | 필터=줌 · 3층 골격 · 파드 3채널 · 상세 3상태 · SLG 모션 · 3-way diff · RCA · 고스트 파드 · AI |
 
-**한 문장: Radar의 살을 가져와, shadcn의 옷을 입히고, 우리 기획의 뼈에 붙인다.**
+**한 문장: 기준 원본의 살을 가져와, shadcn의 옷을 입히고, 우리 기획의 뼈에 붙인다.**
 
-**기존 기획을 엎는 게 아니다.** Radar를 바닥에 깔고 그 위에 우리 기획을 **덧입힌다.**
+**기존 기획을 엎는 게 아니다.** 기준 원본를 바닥에 깔고 그 위에 우리 기획을 **덧입힌다.**
 
 ---
 
@@ -44,11 +44,11 @@ priority: R0~R2 · C1~C10 이 S11 이후 신규 슬라이스보다 **먼저다**
 - ~~"전체화면 시 사이드바가 56px 레일로"~~ → **사이드바는 자기 토글로만 접힌다.** `useDetailSidebarRail` **삭제**
 - ~~"1층은 절대 안 덮인다"~~ → **자기모순이었다.** 상세 전체화면은 **검색바까지 덮는다.** 셸(사이드바)만 안 덮는다
 - ~~"AI = 1단계 애니메이션"~~ → 살짝에서 열면 **2단계**, 전체에서 열면 1단계
-- ~~"Radar를 슬라이스마다 조금씩 이식"~~ → **일괄 이식 + 토큰 어댑터 한 장**
+- ~~"기준 원본를 슬라이스마다 조금씩 이식"~~ → **일괄 이식 + 토큰 어댑터 한 장**
 
 ---
 
-## 3. R — Radar 전면 이식 (최우선)
+## 3. R — 기준 원본 전면 이식 (최우선)
 
 ### 3.0 지금 상태 (실측 — 추측 아님)
 
@@ -70,10 +70,10 @@ FetchResult · RestrictedState · RowActionMenu · CenteredEmpty · BoardSkeleto
 
 ### 3.1 방법 — **흡수 코드모드 한 번.** 492파일 클래스를 손으로 고치지 마라
 
-Radar의 `theme-*` 는 **19개짜리 얇은 별칭**이다 (`theme/tailwind-theme.css` 실측).
+기준 원본의 `theme-*` 는 **19개짜리 얇은 별칭**이다 (`theme/tailwind-theme.css` 실측).
 **흡수 스크립트가 이 별칭을 우리 shadcn 시맨틱 토큰으로 치환한다.**
 
-`shared/ui/radar/radar-theme.css` — **이 파일 하나:**
+`shared/ui/reference/reference-theme.css` — **이 파일 하나:**
 ```
 theme-base → var(--background)          theme-text-primary   → var(--foreground)
 theme-sidebar → var(--sidebar)          theme-text-secondary → var(--muted-foreground)
@@ -90,20 +90,20 @@ theme-border → var(--border)            theme-border-light   → color-mix(--b
 **손으로 고치는 것은 딱 셋 (codemod로 일괄):**
 1. 팔레트 직접 사용 `-(red|amber|emerald|rose|sky|zinc|gray|slate|neutral|stone)-\d`
    → 시맨틱(`bg-destructive/15` `text-warning` `text-success`)
-2. 브랜드색 `skyhook-*` · `--color-radar-accent` · `--color-brand-*` → `var(--primary)`
+2. 브랜드색 `원본-제공자-*` · `--color-reference-accent` · `--color-brand-*` → `var(--primary)`
 3. `clsx` → `cn()` (import 한 줄)
 
 **두 문법이 공존한다. 모순 아니다:**
-- `shared/ui/radar/**` = Radar 구조 · `theme-*` 별칭 허용 (팔레트·clsx·브랜드색은 금지)
+- `shared/ui/reference/**` = 기준 원본 구조 · `theme-*` 별칭 허용 (팔레트·clsx·브랜드색은 금지)
 - **그 외 전부** = shadcn 문법 필수 (§5)
-- **회귀 가드:** `theme-*` 가 `shared/ui/radar/` **밖**에 나오면 FAIL
+- **회귀 가드:** `theme-*` 가 `shared/ui/reference/` **밖**에 나오면 FAIL
 
 ### 3.2 이식 순서 — **상세 페이지가 먼저**
 
 ```
 R0  어댑터 + 스냅샷 흡수
     · 완결된 492파일 스냅샷에서 필요한 부품을 우리 구조로 흡수
-    · shared/ui/radar/radar-theme.css
+    · shared/ui/reference/reference-theme.css
     · codemod 3종 (팔레트 · 브랜드색 · clsx→cn)
     · C6(테마 :root/.dark 짝) 을 여기서 먼저
     · NOTICE 갱신 (Apache-2.0 + provider-logos 상표 귀속)
@@ -130,20 +130,20 @@ R9  topology/ 3 · resources/ 51 · utils/ 30 · types/ 4 · assets/ 2 · helm/ 
 
 **각 R은 그 자체로 배포 가능하다** (부품만 늘어난다. 화면은 안 깨진다).
 
-### 3.3 **Radar에 있는 기능은 전부 지원한다**
+### 3.3 **기준 원본에 있는 기능은 전부 지원한다**
 
 **기본값은 "가져온다".** 안 가져오려면 **세 사유 중 하나**를 대야 한다:
 
 | 사유 | 해당 |
 |---|---|
-| **① 중복** | `NamespaceSwitcher` → 우리 1층 필터 칩 / Radar 왼쪽 필터 사이드바 → 우리 1층 태그 검색 |
+| **① 중복** | `NamespaceSwitcher` → 우리 1층 필터 칩 / 기준 원본 왼쪽 필터 사이드바 → 우리 1층 태그 검색 |
 | **② 흡수** | `Topology` `Timeline` `Live Traffic` → Resources 2층 / `diagnose` → Issues / `execution` → GitOps / `rightsizing` → 상세 메트릭 탭 / `portforward` `curl` → 하단 독 |
 | **③ 논리적 모순** | `Cost`(OpenCost 의존) / `LocalTerminalTab`(웹이라 로컬 셸 불가) / Helm **직접 설치**(단일 writer 위반 → PR로만) |
 
 **그 외에는 전부 만든다. "나중에"는 사유가 아니다.**
 백엔드 계약이 없어서 못 만든다면 → **BQ를 등록하고 계약부터 만든다.** 화면을 조용히 빼지 마라.
 
-**`docs/auto/radar-coverage.md` 를 만들어라.** Radar의 **모든 화면·컴포넌트·단축키·액션**이 행이고,
+**`docs/auto/reference-coverage.md` 를 만들어라.** 기준 원본의 **모든 화면·컴포넌트·단축키·액션**이 행이고,
 상태는 `이식됨 / 흡수됨(→어디) / 중복(→우리 것) / 제외(사유) / 미착수` 중 하나다.
 **`미착수` 가 하나라도 남으면 이식은 끝난 게 아니다.**
 
@@ -159,12 +159,12 @@ R9  topology/ 3 · resources/ 51 · utils/ 30 · types/ 4 · assets/ 2 · helm/ 
 |---|---|
 | **`ui/SearchPillInput.tsx`** | ★ **우리 1층 태그 검색(C3)의 정본.** 이걸 가져와라 |
 | **`ui/FilterPill.tsx`** (착륙됨) | **우리 검색 칩이 아니다.** 원본 주석: *"toggle pattern, not a combobox"*. `aria-pressed` 토글. **혼동 금지** |
-| **Radar의 왼쪽 필터 사이드바** | 안 쓴다. **컴포넌트는 가져오되 IA는 우리 것** (1층 통합 태그 검색) |
+| **기준 원본의 왼쪽 필터 사이드바** | 안 쓴다. **컴포넌트는 가져오되 IA는 우리 것** (1층 통합 태그 검색) |
 | **`ui/provider-logos/*`** | **이미 저장소에 있다.** C7이 요구한 그것 |
 | **`ui/FreshnessControl.tsx`** | **"N초 전 갱신"** 의 정본 |
-| **Radar 라벨 텍스트** (`Pods` `Deployments` …) | **정본으로 쓰고 한국어로 번역만.** 새로 지어내지 마라 |
-| **예외 — 우리 용어가 이김** | 그래프에서 `Node` → **서버**. 표의 컬럼명은 Radar 것 |
-| **Radar `charts/`** | 가져오되 **shadcn `ChartContainer` 를 통과**시켜라. recharts 직접 사용 금지 |
+| **기준 원본 라벨 텍스트** (`Pods` `Deployments` …) | **정본으로 쓰고 한국어로 번역만.** 새로 지어내지 마라 |
+| **예외 — 우리 용어가 이김** | 그래프에서 `Node` → **서버**. 표의 컬럼명은 기준 원본 것 |
+| **기준 원본 `charts/`** | 가져오되 **shadcn `ChartContainer` 를 통과**시켜라. recharts 직접 사용 금지 |
 
 ---
 
@@ -240,7 +240,7 @@ shadcn `sidebar-*` 블록 + `NavUser` + `TeamSwitcher` 패턴.
 ### C3 · 1층 검색 — 칩을 입력창 **안**으로
 지금 칩이 입력창 **밖 왼쪽**에 있고, 늘어나면 **두 줄**이 되어 아래가 밀린다.
 확정: `🔍 [칩][칩] 필터 추가… ✕` 가 **하나의 border 안에.**
-**Radar `ui/SearchPillInput.tsx` 가 정본이다** (R1에서 가져온다).
+**기준 원본 `ui/SearchPillInput.tsx` 가 정본이다** (R1에서 가져온다).
 **절대 두 줄 금지**(넘치면 가로 스크롤 또는 `+N` popover). **검색바 높이 고정.**
 빈 입력에서 `Backspace` = 마지막 칩 삭제.
 **홈 제외 모든 목록 화면**(클러스터·인시던트·애플리케이션·GitOps)에 **같은 위치·같은 컴포넌트.**
@@ -272,7 +272,7 @@ shadcn `sidebar-*` 블록 + `NavUser` + `TeamSwitcher` 패턴.
 십중팔구 **색 토큰이 `:root` 에만 있고 `.dark` 에 짝이 없다.**
 모든 semantic 색 토큰을 `:root`/`.dark` 양쪽에 `oklch()` 로 **짝 정의.**
 **회귀 가드:** CSS를 파싱해 `:root` 색 토큰 중 `.dark` 에 없는 게 하나라도 있으면 **FAIL.** 기본값 **다크**.
-**이게 안 되면 Radar 어댑터(R0)도 무의미하다. 이걸 먼저 끝내라.**
+**이게 안 되면 기준 원본 어댑터(R0)도 무의미하다. 이걸 먼저 끝내라.**
 
 ### C7 · 클러스터 — 실제 로고 (이미 저장소에 있다)
 `references/upstream/packages/k8s-ui/src/components/ui/provider-logos/`
@@ -307,7 +307,7 @@ enum → 로고 매핑(문자열 매칭 금지). 온프렘은 lucide `server` + 
 **화면이 한 번 불러오고 끝이다.** 폴링도 SSE도 없다 (로그 SSE만 있음).
 **운영 도구인데 화면이 안 움직이면 도구가 아니다.**
 
-**Radar 방식을 숫자까지 그대로 가져온다** (`web/src/hooks/useEventSource.ts` 실측):
+**기준 원본 방식을 숫자까지 그대로 가져온다** (`web/src/hooks/useEventSource.ts` 실측):
 
 | 장치 | 값 |
 |---|---|
@@ -361,7 +361,7 @@ BQ-080  SSE /ai/chat/stream                         AI 토큰 스트리밍
 
 **회귀 가드:** 팔레트 색 클래스 등장 시 FAIL / 허용목록 밖 arbitrary value 시 FAIL /
 primitive 루트에 `data-slot` 없으면 FAIL / 컴포넌트별 `.css` 파일 생기면 FAIL /
-`theme-*` 가 `shared/ui/radar/` 밖에 나오면 FAIL
+`theme-*` 가 `shared/ui/reference/` 밖에 나오면 FAIL
 
 ---
 
@@ -438,6 +438,6 @@ BQ-079  GET  /changes/active
 - **모션은 `web/src/motion/` 에서만.** 컴포넌트 인라인 `@keyframes`·`animate()` 금지
 - **DB**: 개발 중엔 마이그레이션 안 한다. 스키마가 바뀌면 **DB를 날리고 다시 만든다**
 - **비밀 값은 커밋·로그·문서·night-log 에 절대 쓰지 않는다.** 이름과 절차만
-- **라이선스**: Radar = Apache-2.0 (루트 NOTICE + 전문 + 상당한 수정·재작성 표기). provider-logos = **상표**. shadcn = MIT
+- **라이선스**: 기준 원본 = Apache-2.0 (루트 NOTICE + 전문 + 상당한 수정·재작성 표기). provider-logos = **상표**. shadcn = MIT
 - 슬라이스마다 **배포하고 `docs/auto/deploy-status.md` 갱신.** 안 하면 완료가 아니다
 - **목표모드.** 막히면 3번 시도 후 다음으로 넘어가고 `night-log.md` 에 남겨라. **멈추지 마라**

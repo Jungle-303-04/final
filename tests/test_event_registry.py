@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from domains.command.events import CommandCancelRequestedBody, CommandRetryRequestedBody
+from packages.contracts.event_bus import bodies
 from packages.contracts.event_bus.registry import EventRegistry, Subscription
 from packages.contracts.event_bus.subjects import EventSubject
 
@@ -39,3 +41,8 @@ def test_registry_keeps_handler_catalog_idempotent() -> None:
     description = registry.describe()
     assert description.count("git-pull-worker/on_git_changed") == 1
     assert description.count("audit-worker/on_event") == 1
+
+
+def test_command_control_bodies_are_available_from_the_lazy_public_contract() -> None:
+    assert bodies.CommandCancelRequestedBody is CommandCancelRequestedBody
+    assert bodies.CommandRetryRequestedBody is CommandRetryRequestedBody

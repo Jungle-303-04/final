@@ -11,7 +11,7 @@ import type { ApplicationCardModel } from "./applicationsContract";
 afterEach(cleanup);
 
 describe("application catalog items", () => {
-  it("separates readiness, deployment, drift, and incident evidence on a card", async () => {
+  it("separates runtime readiness, latest delivery, last success, and batch evidence on a card", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
     renderUi(<ApplicationCard application={application} onOpen={onOpen} />);
@@ -26,6 +26,9 @@ describe("application catalog items", () => {
     const deployment = screen.getByTestId("application-deployment-channel");
     expect(within(deployment).getByText("v2.4.1")).toBeTruthy();
     expect(within(deployment).getByText("a3f9c2e")).toBeTruthy();
+    expect(screen.getByTestId("application-delivery-state-channel").textContent).toContain("Failed");
+    expect(screen.getByTestId("application-batch-runtime-channel").textContent).toContain("Running");
+    expect(screen.getByTestId("application-batch-runtime-channel").textContent).toContain("active 1");
 
     expect(screen.getByTestId("application-drift-channel").textContent).toContain("spec.replicas differs");
     expect(screen.getByTestId("application-incident-channel").textContent).toContain("Open incidents 1");
@@ -44,6 +47,13 @@ describe("application catalog items", () => {
             id: "app-worker",
             name: "worker",
             health: { ...application.health, readyPods: null, totalPods: null },
+            runtimeReadiness: {
+              completeness: "unavailable",
+              status: "unknown",
+              readyPods: null,
+              totalPods: null,
+              restarts: null,
+            },
             currentDeployment: null,
             hasDrift: null,
             driftSummary: null,
@@ -72,6 +82,13 @@ const application: ApplicationCardModel = {
   environments: ["prod"],
   lifecycleStatus: "active",
   health: { status: "degraded", readyPods: 2, totalPods: 3, restarts: 4 },
+  runtimeReadiness: {
+    completeness: "exact",
+    status: "degraded",
+    readyPods: 2,
+    totalPods: 3,
+    restarts: 4,
+  },
   currentDeployment: {
     version: "v2.4.1",
     image: "registry/checkout:v2.4.1",
@@ -79,6 +96,20 @@ const application: ApplicationCardModel = {
     gitSha: "a3f9c2e0123",
     deployedAt: "2026-07-14T09:00:00+00:00",
     deployedBy: "operator",
+  },
+  delivery: {
+    availability: "available",
+    status: "failed",
+    workflowRunId: "run-2",
+    observedAt: "2026-07-14T10:00:00+00:00",
+  },
+  batchRuntime: {
+    availability: "available",
+    completeness: "exact",
+    status: "running",
+    activeRuns: 1,
+    failedRuns: 0,
+    succeededRuns: 2,
   },
   hasDrift: true,
   driftSummary: "spec.replicas differs",

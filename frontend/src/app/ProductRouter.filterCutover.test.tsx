@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { ThemeProvider } from "next-themes";
+import type { ComponentType } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import {
 } from "react-router-dom";
 import { ProductRouter } from "./ProductRouter";
 import { createProductComposition } from "./productComposition";
+import { createProductSurfaceLoader } from "./surfaceLoader";
 import { AuthSessionGateProvider } from "../features/auth/AuthSessionGate";
 import type { AuthPort } from "../features/auth/authContract";
 import type { ClusterScopePort } from "../features/cluster-scope/clusterScopeContract";
@@ -131,7 +133,7 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("PUSH");
   });
 
-  it("preserves every filter and drops detail when a route shortcut changes surfaces", async () => {
+  it("preserves every filter and drops detail when the Home shortcut changes surfaces", async () => {
     const user = userEvent.setup();
     const { router } = renderProductRouter(
       `/resources${FILTER_SEARCH}#detail`,
@@ -141,9 +143,9 @@ describe("ProductRouter unified filter cutover", () => {
     await user.keyboard("gh");
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
-    expect(router.state.historyAction).toBe("REPLACE");
+    expect(router.state.historyAction).toBe("PUSH");
   });
 
   it("drops detail when a route shortcut targets the already active surface", async () => {
@@ -161,14 +163,14 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("PUSH");
   });
 
-  it("replaces an unknown path with the fallback while preserving filters and dropping detail", async () => {
+  it("replaces an unknown path with the declared Home landing while preserving filters and dropping detail", async () => {
     const { router } = renderProductRouter(
       `/not-released${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
   });
@@ -186,16 +188,38 @@ describe("ProductRouter unified filter cutover", () => {
     expect(router.state.historyAction).toBe("REPLACE");
   });
 
-  it("uses the cluster operating screen as the temporary landing screen", async () => {
+  it("uses the declared Home landing at the bare root even when Clusters is released", async () => {
     const { router } = renderProductRouter(
       `/${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
     await waitFor(() => {
-      expect(currentLocation(router)).toBe(`/clusters${FILTER_ONLY_SEARCH}`);
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
     });
     expect(router.state.historyAction).toBe("REPLACE");
+  });
+
+  it("keeps the explicit Home route on Home even when Clusters is released", async () => {
+    const { router } = renderProductRouter(
+      `/home${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Home surface")).toBeTruthy();
+    });
+    expect(currentLocation(router)).toBe(`/home${FILTER_SEARCH}#detail`);
+  });
+
+  it("keeps a known but unregistered upstream screen at its URL and explains that it is unavailable", async () => {
+    const { router } = renderProductRouter(
+      `/topology${FILTER_SEARCH}#detail`,
+      emptyClusterScope,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Topology is unavailable" })).toBeTruthy();
+    expect(currentLocation(router)).toBe(`/topology${FILTER_SEARCH}#detail`);
   });
 });
 
@@ -209,11 +233,11 @@ function renderProductRouter(
   includeWorkflows = false,
 ) {
   const composition = createProductComposition([
-    { id: "home", Component: HomeSurface },
-    { id: "clusters", Component: ClustersSurface },
-    { id: "resources", Component: ResourcesSurface },
-    { id: "issues", Component: IssuesSurface },
-    ...(includeWorkflows ? [{ id: "gitops" as const, Component: WorkflowsSurface }] : []),
+    { id: "home", loader: surfaceLoader(HomeSurface) },
+    { id: "clusters", loader: surfaceLoader(ClustersSurface) },
+    { id: "resources", loader: surfaceLoader(ResourcesSurface) },
+    { id: "issues", loader: surfaceLoader(IssuesSurface) },
+    ...(includeWorkflows ? [{ id: "gitops" as const, loader: surfaceLoader(WorkflowsSurface) }] : []),
   ], authPort, clusterScope);
   const router = createMemoryRouter([{
     path: "*",
@@ -233,6 +257,10 @@ function renderProductRouter(
     ...render(<RouterProvider router={router} />),
     router,
   };
+}
+
+function surfaceLoader(Component: ComponentType) {
+  return createProductSurfaceLoader(async () => ({ default: Component }));
 }
 
 function HomeSurface() {

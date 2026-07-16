@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
 from fastapi import HTTPException
 
 from domains.command.events import CommandRequestedBody
@@ -10,6 +12,8 @@ from domains.command.handler import build_plan
 from domains.command.router import (
     RESOURCE_ACCESS_DENIED,
     agent_debug_query,
+    cancel_command,
+    command_events,
     command_heartbeat,
     command_result,
     command_start,
@@ -17,12 +21,14 @@ from domains.command.router import (
     commands,
     lease_next_command,
     restart_deployment,
+    retry_command,
     scale_deployment,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
+    CommandControlRequest,
     CommandHeartbeatRequest,
     CommandRequest,
     CommandResultRequest,
@@ -31,6 +37,7 @@ from packages.contracts.gateway.requests import (
     DeploymentScaleRequest,
 )
 from packages.contracts.gateway.responses import AcceptedResponse
+from packages.runtime.operation_events import InMemoryOperationEventBroker
 
 AGENT_IDENTITY = ClusterAgentIdentity(
     workspace_id="trusted-workspace",
@@ -83,12 +90,115 @@ class SpyEvents:
     def __init__(self) -> None:
         self.body: object | None = None
         self.actor: object | None = None
+        self.accept_kwargs: dict[str, object] = {}
 
-    async def accept_body(self, body: object, actor: object) -> object:
+    async def accept_body(self, body: object, actor: object, **kwargs: object) -> object:
         self.body = body
         self.actor = actor
+        self.accept_kwargs = kwargs
         event = SimpleNamespace(event_id="evt-1", correlation_id="corr-1")
         return SimpleNamespace(event=event)
+
+
+class ControlStageResult:
+    def __init__(
+        self, *, first: dict[str, object] | None = None, one: dict[str, object] | None = None
+    ):
+        self._first = first
+        self._one = one
+
+    def mappings(self) -> ControlStageResult:
+        return self
+
+    def first(self) -> dict[str, object] | None:
+        return self._first
+
+    def one(self) -> dict[str, object]:
+        assert self._one is not None
+        return self._one
+
+    def scalar_one_or_none(self) -> int:
+        return 1
+
+
+class ControlStageConnection:
+    def __init__(self, command: dict[str, object], *, operation_event_call: int = 6) -> None:
+        self.command = command
+        self.operation_event_call = operation_event_call
+        self.calls = 0
+
+    def execute(self, _statement: object, *_args: object, **_kwargs: object) -> ControlStageResult:
+        self.calls += 1
+        if self.calls == 1:
+            return ControlStageResult(first=self.command)
+        if self.calls == 2:
+            return ControlStageResult(first=None)
+        if self.calls == self.operation_event_call:
+            return ControlStageResult(
+                one={
+                    "command_id": self.command["command_id"],
+                    "sequence": 2,
+                    "kind": "cancelled",
+                    "payload": {
+                        "cluster_id": self.command["cluster_id"],
+                        "status": "cancelled",
+                    },
+                    "occurred_at": datetime(2026, 7, 16, tzinfo=UTC),
+                }
+            )
+        return ControlStageResult()
+
+
+class ControlEvents:
+    def __init__(self, connection: ControlStageConnection) -> None:
+        self.connection = connection
+        self.body: object | None = None
+
+    async def accept_body(self, body: object, **kwargs: object) -> object:
+        self.body = body
+        event = SimpleNamespace(event_id="evt-control-1", correlation_id="corr-1")
+        stage = kwargs["transactional_stage"]
+        assert callable(stage)
+        stage(self.connection, event)
+        return SimpleNamespace(event=event)
+
+
+class DuplicateControlEvents:
+    async def accept_body(self, _body: object, **_kwargs: object) -> object:
+        from domains.command.repository import DuplicateCommandControl
+
+        raise DuplicateCommandControl(
+            {
+                "command_id": "cmd-control-1",
+                "action": "cancel",
+                "event_id": "evt-control-1",
+                "audit_event_id": "evt-control-1",
+                "attempt_id": None,
+                "details": {"correlation_id": "corr-1", "status_after": "cancel_requested"},
+            }
+        )
+
+
+class ControlDb(SpyAccessDb):
+    def __init__(
+        self,
+        command: dict[str, object],
+        *,
+        allowed: bool = True,
+        cluster_role: str = "target",
+    ) -> None:
+        super().__init__(allowed, cluster_role=cluster_role)
+        self.command = command
+
+    async def get_agent_command(
+        self, _command_id: str, _workspace_id: str
+    ) -> dict[str, object] | None:
+        return self.command
+
+    def list_cluster_agent_statuses(
+        self, _workspace_id: str, _cluster_id: str
+    ) -> list[dict[str, object]]:
+        return [{"status": "connected", "capabilities": ["command_receiver"]}]
 
 
 def current_session() -> SimpleNamespace:
@@ -186,6 +296,153 @@ def manual_diff() -> dict[str, str]:
     }
 
 
+def control_command(*, status: str = "queued", direct_execution: bool = False) -> dict[str, object]:
+    return {
+        "command_id": "cmd-control-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "correlation_id": "corr-1",
+        "action": Command.DEFAULT_ACTION,
+        "status": status,
+        "result": {"retryable": True} if status == "failed" else {},
+        "payload": {
+            "action": Command.DEFAULT_ACTION,
+            "namespace": "sandbox",
+            "diff": {},
+            "payload": {},
+            "retry_policy": {"max_attempts": 3, "retry_delay_seconds": 0},
+        },
+        "direct_execution": direct_execution,
+        "confirmation_event_id": "evt-original" if direct_execution else None,
+        "impact_identity": "mismatch" if direct_execution else None,
+        "attempt_count": 1,
+        "active_attempt_id": None,
+        "cancel_generation": 0,
+    }
+
+
+def test_cancel_control_stages_audit_state_and_terminal_sse_before_202() -> None:
+    async def run() -> None:
+        command = control_command()
+        connection = ControlStageConnection(command)
+        events = ControlEvents(connection)
+        response = await cancel_command(
+            "cmd-control-1",
+            CommandControlRequest(reason="operator stopped rollout"),
+            "cancel-key-1",
+            current_session(),
+            ControlDb(command),
+            events,
+            InMemoryOperationEventBroker(),
+        )
+
+        assert response.accepted is True
+        assert response.status == "cancelled"
+        assert response.audit_event_id == response.event_id == "evt-control-1"
+        assert connection.calls == 7
+
+    asyncio.run(run())
+
+
+def test_cancel_control_same_idempotency_key_returns_original_receipt() -> None:
+    async def run() -> None:
+        command = control_command(status="cancel_requested")
+        response = await cancel_command(
+            "cmd-control-1",
+            CommandControlRequest(),
+            "cancel-key-1",
+            current_session(),
+            ControlDb(command),
+            DuplicateControlEvents(),
+            InMemoryOperationEventBroker(),
+        )
+
+        assert response.idempotent is True
+        assert response.status == "cancel_requested"
+        assert response.event_id == "evt-control-1"
+
+    asyncio.run(run())
+
+
+def test_retry_rechecks_current_rbac_before_it_can_reuse_a_failed_command() -> None:
+    async def run() -> None:
+        command = control_command(status="failed")
+        with pytest.raises(HTTPException) as error:
+            await retry_command(
+                "cmd-control-1",
+                CommandControlRequest(),
+                "retry-key-1",
+                current_session(),
+                ControlDb(command, allowed=False),
+                DuplicateControlEvents(),
+                InMemoryOperationEventBroker(),
+            )
+        assert error.value.status_code == 403
+
+    asyncio.run(run())
+
+
+def test_retry_rechecks_current_management_cluster_policy() -> None:
+    async def run() -> None:
+        command = control_command(status="failed")
+        with pytest.raises(HTTPException) as error:
+            await retry_command(
+                "cmd-control-1",
+                CommandControlRequest(),
+                "retry-key-1",
+                current_session(),
+                ControlDb(command, cluster_role="management"),
+                DuplicateControlEvents(),
+                InMemoryOperationEventBroker(),
+            )
+        assert error.value.status_code == 400
+        assert error.value.detail["code"] == "management_readonly"
+
+    asyncio.run(run())
+
+
+def test_direct_retry_rejects_mismatched_impact_without_reusing_confirmation() -> None:
+    async def run() -> None:
+        command = control_command(status="failed", direct_execution=True)
+        with pytest.raises(HTTPException) as error:
+            await retry_command(
+                "cmd-control-1",
+                CommandControlRequest(),
+                "retry-key-1",
+                current_session(),
+                ControlDb(command),
+                DuplicateControlEvents(),
+                InMemoryOperationEventBroker(),
+            )
+        assert error.value.status_code == 409
+        assert "fresh confirmed request" in str(error.value.detail)
+
+    asyncio.run(run())
+
+
+def test_retry_control_creates_a_new_attempt_without_changing_logical_command_id() -> None:
+    from domains.command.repository import stage_command_control_in_transaction
+
+    command = control_command(status="failed")
+    connection = ControlStageConnection(command, operation_event_call=8)
+    staged = stage_command_control_in_transaction(
+        connection,
+        workspace_id="workspace-1",
+        command_id="cmd-control-1",
+        action="retry",
+        idempotency_key="retry-key-1",
+        requested_by="user-1",
+        reason="retry after transient error",
+        event_id="evt-retry-1",
+        audit_event_id="evt-retry-1",
+    )
+
+    assert staged.command_id == "cmd-control-1"
+    assert staged.status == "queued"
+    assert staged.attempt_id is not None
+    assert connection.calls == 9
+
+
 def test_uninstall_completed_ack_revokes_registration() -> None:
     async def run() -> None:
         db = SpyUninstallResultDb(action=Command.CLUSTER_AGENT_UNINSTALL_ACTION)
@@ -278,8 +535,29 @@ def test_non_approval_command_receipt_matches_worker_command_id() -> None:
     asyncio.run(run())
 
 
-def test_approval_command_receipt_stays_null_until_worker_resolves_evidence() -> None:
+def test_command_receipt_requests_outbox_transactional_operation_staging() -> None:
     async def run() -> None:
+        events = SpyEvents()
+        response = await commands(
+            CommandRequest(cluster_id="cluster-1", diff=manual_diff()),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+        )
+
+        stage = events.accept_kwargs.get("transactional_stage")
+        assert callable(stage)
+        assert isinstance(events.body, CommandRequestedBody)
+        # The exact callback is executed by the event UoW with the durable event
+        # correlation.  Its plan must retain the server-issued receipt ID.
+        assert build_plan(events.body, response.correlation_id).command_id == response.command_id
+
+    asyncio.run(run())
+
+
+def test_approval_command_receipt_has_server_trace_before_worker_resolves_evidence() -> None:
+    async def run() -> None:
+        events = SpyEvents()
         response = await commands(
             CommandRequest(
                 cluster_id="cluster-1",
@@ -290,10 +568,17 @@ def test_approval_command_receipt_stays_null_until_worker_resolves_evidence() ->
             ),
             current_session(),
             SpyAccessDb(allowed=True),
-            SpyEvents(),
+            events,
         )
 
-        assert response.command_id is None
+        assert response.command_id.startswith("cmd-")
+        assert response.status == "queued"
+        assert response.event_id == "evt-1"
+        assert response.audit_event_id == response.event_id
+        assert response.audit_id is None
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.command_id == response.command_id
+        assert build_plan(events.body, response.correlation_id).command_id == response.command_id
 
     asyncio.run(run())
 
@@ -586,6 +871,81 @@ def test_scale_deployment_rejects_management_cluster_at_gateway() -> None:
     asyncio.run(run())
 
 
+def test_scale_deployment_direct_execution_accepts_management_cluster_after_confirmation() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await scale_deployment(
+            "kubernetes-ops",
+            "sandbox",
+            "api",
+            DeploymentScaleRequest(
+                replicas=2,
+                confirmation=True,
+            ),
+            current_session(),
+            SpyAccessDb(allowed=True, cluster_role="management"),
+            events,
+        )
+
+        assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.direct_execution is True
+        assert events.body.direct_execution_confirmed is True
+
+    asyncio.run(run())
+
+
+def test_manual_command_rejects_dedicated_scale_action_before_a_false_receipt() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        with pytest.raises(HTTPException) as excinfo:
+            await commands(
+                CommandRequest(
+                    cluster_id="kubernetes-ops",
+                    action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                    namespace="sandbox",
+                    diff=manual_diff(),
+                    confirmation=True,
+                ),
+                current_session(),
+                SpyAccessDb(allowed=True, cluster_role="management"),
+                events,
+            )
+
+        assert excinfo.value.status_code == 422
+        assert "typed dedicated command endpoint" in excinfo.value.detail
+        assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_manual_direct_command_requires_explicit_confirmation() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        try:
+            await commands(
+                CommandRequest(
+                    cluster_id="cluster-1",
+                    action=Command.DEFAULT_ACTION,
+                    namespace="sandbox",
+                    diff=manual_diff(),
+                    direct_execution=True,
+                ),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                events,
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 422
+            assert exc.detail == "direct command requires explicit confirmation"
+        else:
+            raise AssertionError("expected HTTPException")
+
+        assert events.body is None
+
+    asyncio.run(run())
+
+
 def test_agent_debug_query_denies_without_cluster_read_access() -> None:
     async def run() -> None:
         db = SpyDebugQueryDb(allowed=False)
@@ -653,6 +1013,31 @@ def test_command_heartbeat_extends_current_lease() -> None:
         assert db.calls == [
             ("cmd-1", "trusted-workspace", "trusted-cluster", "lease-1", "agent-1", 60)
         ]
+
+    asyncio.run(run())
+
+
+def test_command_start_publishes_realtime_operation_event() -> None:
+    async def run() -> None:
+        broker = InMemoryOperationEventBroker()
+        subscription = await broker.subscribe("cmd-1", workspace_id="trusted-workspace")
+        await command_start(
+            "cmd-1",
+            CommandStartRequest(agent_id="agent-1", lease_id="lease-1"),
+            identity=AGENT_IDENTITY,
+            db=SpyCommandLeaseDb(correlation_id="corr-1"),
+            operation_events=broker,
+        )
+
+        event = await subscription.next()
+        assert event.command_id == "cmd-1"
+        assert event.kind == "progress"
+        assert event.payload == {
+            "status": "running",
+            "cluster_id": "trusted-cluster",
+            "correlation_id": "corr-1",
+        }
+        await subscription.close()
 
     asyncio.run(run())
 
@@ -733,6 +1118,170 @@ def test_command_status_missing_command_is_not_found() -> None:
         else:
             raise AssertionError("expected HTTPException")
 
+    asyncio.run(run())
+
+
+def test_command_events_sse_starts_with_authorized_durable_snapshot() -> None:
+    async def run() -> None:
+        broker = InMemoryOperationEventBroker()
+        response = await command_events(
+            "cmd-debug-abc",
+            current=current_session(),
+            db=SpyCommandStatusDb(allowed=True, row=completed_command_row()),
+            operation_events=broker,
+        )
+        stream = response.body_iterator
+        first = await anext(stream)
+
+        assert first.startswith("id: 1\nevent: operation\ndata: ")
+        assert '"command_id":"cmd-debug-abc"' in first
+        assert '"kind":"completed"' in first
+        assert '"status":"completed"' in first
+        await stream.aclose()
+
+    asyncio.run(run())
+
+
+def test_command_events_replays_durable_cursor_without_waiting_for_command_row() -> None:
+    class DurableEventDb(SpyAccessDb):
+        async def list_command_operation_events(
+            self,
+            workspace_id: str,
+            command_id: str,
+            *,
+            after_sequence: int,
+        ) -> list[object]:
+            assert (workspace_id, command_id, after_sequence) == ("workspace-1", "cmd-accepted", 1)
+            from packages.contracts.parity import OperationEvent
+
+            return [
+                OperationEvent(
+                    command_id="cmd-accepted",
+                    sequence=2,
+                    kind="completed",
+                    payload={"cluster_id": "cluster-1", "status": "completed"},
+                )
+            ]
+
+        async def get_agent_command(self, *_args: object) -> None:
+            raise AssertionError("receipt event must not wait for agent_commands projection")
+
+    async def run() -> None:
+        response = await command_events(
+            "cmd-accepted",
+            after=1,
+            current=current_session(),
+            db=DurableEventDb(allowed=True),
+            operation_events=InMemoryOperationEventBroker(),
+        )
+        stream = response.body_iterator
+        first = await anext(stream)
+
+        assert first.startswith("id: 2\nevent: operation\ndata: ")
+        assert '"status":"completed"' in first
+        await stream.aclose()
+
+    asyncio.run(run())
+
+
+def test_command_events_keeps_a_durable_receipt_cursor_open_before_projection_exists() -> None:
+    """A reconnect after the receipt must not turn an unprojected command into 404."""
+
+    class ReceiptOnlyDb(SpyAccessDb):
+        async def list_command_operation_events(
+            self,
+            workspace_id: str,
+            command_id: str,
+            *,
+            after_sequence: int,
+        ) -> list[object]:
+            assert (workspace_id, command_id, after_sequence) == ("workspace-1", "cmd-accepted", 1)
+            return []
+
+        async def get_command_operation_event_context(
+            self, workspace_id: str, command_id: str
+        ) -> dict[str, object] | None:
+            assert (workspace_id, command_id) == ("workspace-1", "cmd-accepted")
+            return {
+                "cluster_id": "cluster-1",
+                "last_sequence": 1,
+                "terminal_sequence": None,
+            }
+
+        async def get_agent_command(self, *_args: object) -> None:
+            raise AssertionError("durable receipt cursor must not query the delayed projection")
+
+    async def run() -> None:
+        response = await command_events(
+            "cmd-accepted",
+            after=1,
+            current=current_session(),
+            db=ReceiptOnlyDb(allowed=True),
+            operation_events=InMemoryOperationEventBroker(),
+        )
+        await response.body_iterator.aclose()
+
+    asyncio.run(run())
+
+
+def test_command_events_replays_durable_updates_when_cross_replica_wakeups_are_unavailable(
+    monkeypatch,
+) -> None:
+    """Redis loss may delay wakeups but may never hide a committed terminal event."""
+
+    class ReplayDb(SpyAccessDb):
+        def __init__(self) -> None:
+            super().__init__(allowed=True)
+            self.cursors: list[int] = []
+
+        async def list_command_operation_events(
+            self,
+            workspace_id: str,
+            command_id: str,
+            *,
+            after_sequence: int,
+        ) -> list[object]:
+            self.cursors.append(after_sequence)
+            assert (workspace_id, command_id) == ("workspace-1", "cmd-redis-gap")
+            from packages.contracts.parity import OperationEvent
+
+            if after_sequence == 0:
+                return [
+                    OperationEvent(
+                        command_id="cmd-redis-gap",
+                        sequence=1,
+                        kind="progress",
+                        payload={"cluster_id": "cluster-1", "status": "running"},
+                    )
+                ]
+            if after_sequence == 1:
+                return [
+                    OperationEvent(
+                        command_id="cmd-redis-gap",
+                        sequence=2,
+                        kind="failed",
+                        payload={"cluster_id": "cluster-1", "status": "failed"},
+                    )
+                ]
+            return []
+
+    async def run() -> None:
+        db = ReplayDb()
+        response = await command_events(
+            "cmd-redis-gap",
+            current=current_session(),
+            db=db,
+            operation_events=InMemoryOperationEventBroker(),
+        )
+        stream = response.body_iterator
+        assert '"sequence":1' in await anext(stream)
+        assert '"sequence":2' in await asyncio.wait_for(anext(stream), timeout=0.5)
+        assert db.cursors[:2] == [0, 1]
+        await stream.aclose()
+
+    monkeypatch.setattr(
+        "domains.command.router.OPERATION_EVENT_REPLAY_POLL_SECONDS", 0.01, raising=False
+    )
     asyncio.run(run())
 
 

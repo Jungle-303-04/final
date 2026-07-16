@@ -1,7 +1,8 @@
 import {
-  productNavigationForReleasedSurfaces,
+  productKeyboardNavigationRoutes,
   type ProductSurfaceId,
 } from "./productRoutes";
+import type { ProductRouteDefinition } from "./productRoutes";
 import type { MessageKey, TranslationParameters } from "../shared/i18n";
 import { resourcesShortcutDefinitions } from "./resourcesShortcutDefinitions";
 
@@ -29,7 +30,9 @@ export interface ShortcutDefinition {
   sequence: readonly string[];
   allowInInputs?: boolean;
   allowRepeat?: boolean;
-  targetPath?: `/${string}`;
+  available?: boolean;
+  modifier?: "meta-or-control";
+  targetRoute?: ProductRouteDefinition;
 }
 
 export interface ShortcutKeyEvent {
@@ -61,6 +64,12 @@ const shortcutRouteLabelKeys = {
   issues: "shell.shortcut.route.issues",
   alerts: "settings.section.alerts",
   resources: "shell.shortcut.route.resources",
+  topology: "shell.shortcut.route.topology",
+  timeline: "shell.shortcut.route.timeline",
+  traffic: "shell.shortcut.route.traffic",
+  helm: "shell.shortcut.route.helm",
+  checks: "shell.shortcut.route.checks",
+  cost: "shell.shortcut.route.cost",
   settings: "shell.shortcut.route.settings",
 } satisfies Record<ProductSurfaceId, MessageKey>;
 
@@ -68,12 +77,13 @@ export function shellShortcutDefinitions(
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>,
   activeSurfaceId?: ProductSurfaceId,
 ): readonly ShortcutDefinition[] {
-  const navigation = productNavigationForReleasedSurfaces(releasedSurfaceIds).map((routeDefinition) => ({
+  const navigation = productKeyboardNavigationRoutes().map((routeDefinition) => ({
     id: `route:${routeDefinition.id}`,
     labelKey: shortcutRouteLabelKeys[routeDefinition.id],
     group: "navigation" as const,
     sequence: routeDefinition.shortcut.split(" "),
-    targetPath: routeDefinition.path,
+    targetRoute: routeDefinition,
+    available: releasedSurfaceIds.has(routeDefinition.id),
   }));
 
   const context = activeSurfaceId === "resources" && releasedSurfaceIds.has("resources")
@@ -83,6 +93,14 @@ export function shellShortcutDefinitions(
   return [
     ...navigation,
     ...context,
+    {
+      id: "command",
+      labelKey: "shell.shortcut.command",
+      group: "global",
+      sequence: ["k"],
+      modifier: "meta-or-control",
+      allowInInputs: true,
+    },
     {
       id: "theme",
       labelKey: "shell.shortcut.theme",
@@ -123,9 +141,12 @@ export function createShortcutMatcher(
     if (definition.sequence.length === 0 || definition.sequence.length > 2) {
       throw new Error(`unsupported shortcut length: ${definition.id}`);
     }
+    if (definition.modifier && definition.sequence.length !== 1) {
+      throw new Error(`modified shortcut must have one key: ${definition.id}`);
+    }
 
     const normalizedSequence = definition.sequence.map(normalizeDefinitionKey);
-    const sequenceKey = serializeSequence(normalizedSequence);
+    const sequenceKey = serializeDefinitionSequence(normalizedSequence, definition.modifier);
     if (definitionsBySequence.has(sequenceKey)) {
       throw new Error(`duplicate shortcut sequence: ${normalizedSequence.join(" ")}`);
     }
@@ -134,11 +155,11 @@ export function createShortcutMatcher(
       ...definition,
       sequence: normalizedSequence,
     });
-    if (normalizedSequence.length === 2) chordPrefixes.add(normalizedSequence[0]);
+    if (!definition.modifier && normalizedSequence.length === 2) chordPrefixes.add(normalizedSequence[0]);
   }
 
   for (const prefix of chordPrefixes) {
-    if (definitionsBySequence.has(serializeSequence([prefix]))) {
+    if (definitionsBySequence.has(serializeDefinitionSequence([prefix]))) {
       throw new Error(`ambiguous shortcut prefix: ${prefix}`);
     }
   }
@@ -162,7 +183,7 @@ export function createShortcutMatcher(
 
   return {
     handle(event) {
-      if (shouldIgnoreEvent(event)) {
+      if (isUnavailableForAllShortcuts(event)) {
         reset();
         return null;
       }
@@ -173,8 +194,22 @@ export function createShortcutMatcher(
         return null;
       }
 
+      const modifiedDefinition = definitionForModifiedEvent(definitionsBySequence, key, event);
+      if (modifiedDefinition) {
+        reset();
+        if (event.repeat && !modifiedDefinition.allowRepeat) return null;
+        if (isEditableEvent(event) && !modifiedDefinition.allowInInputs) return null;
+        event.preventDefault();
+        return modifiedDefinition;
+      }
+
+      if (shouldIgnoreEvent(event)) {
+        reset();
+        return null;
+      }
+
       if (isEditableEvent(event)) {
-        const inputAllowedDefinition = definitionsBySequence.get(serializeSequence([key]));
+        const inputAllowedDefinition = definitionsBySequence.get(serializeDefinitionSequence([key]));
         reset();
         if (!inputAllowedDefinition?.allowInInputs) return null;
         if (event.repeat && !inputAllowedDefinition.allowRepeat) return null;
@@ -183,7 +218,7 @@ export function createShortcutMatcher(
       }
 
       if (pendingPrefix !== null) {
-        const sequenceKey = serializeSequence([pendingPrefix, key]);
+        const sequenceKey = serializeDefinitionSequence([pendingPrefix, key]);
         const definition = definitionsBySequence.get(sequenceKey) ?? null;
         reset();
         if (event.repeat && !definition?.allowRepeat) return null;
@@ -191,7 +226,7 @@ export function createShortcutMatcher(
         return definition;
       }
 
-      const directDefinition = definitionsBySequence.get(serializeSequence([key])) ?? null;
+      const directDefinition = definitionsBySequence.get(serializeDefinitionSequence([key])) ?? null;
       if (directDefinition) {
         if (event.repeat && !directDefinition.allowRepeat) return null;
         event.preventDefault();
@@ -211,6 +246,15 @@ export function createShortcutMatcher(
   };
 }
 
+function definitionForModifiedEvent(
+  definitionsBySequence: ReadonlyMap<string, ShortcutDefinition>,
+  key: string,
+  event: ShortcutKeyEvent,
+): ShortcutDefinition | null {
+  if (event.altKey || (!event.metaKey && !event.ctrlKey)) return null;
+  return definitionsBySequence.get(serializeDefinitionSequence([key], "meta-or-control")) ?? null;
+}
+
 function shouldIgnoreEvent(event: ShortcutKeyEvent): boolean {
   if (
     event.defaultPrevented
@@ -225,6 +269,11 @@ function shouldIgnoreEvent(event: ShortcutKeyEvent): boolean {
   }
 
   return false;
+}
+
+function isUnavailableForAllShortcuts(event: ShortcutKeyEvent): boolean {
+  return event.defaultPrevented || event.isComposing || event.keyCode === 229 ||
+    event.altKey || event.getModifierState?.("AltGraph") === true;
 }
 
 function isEditableEvent(event: ShortcutKeyEvent): boolean {
@@ -263,6 +312,9 @@ function normalizeEventKey(key: string, shiftKey: boolean): string | null {
   const isShiftedLetter = /^[A-Z]$/u.test(key);
   return shiftKey || isShiftedLetter ? `shift+${normalized}` : normalized;
 }
-function serializeSequence(sequence: readonly string[]): string {
-  return sequence.join("\u0000");
+function serializeDefinitionSequence(
+  sequence: readonly string[],
+  modifier?: ShortcutDefinition["modifier"],
+): string {
+  return `${modifier ?? "none"}\u0000${sequence.join("\u0000")}`;
 }

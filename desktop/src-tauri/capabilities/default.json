@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "The sole local webview and the exact Vite development URL may call the explicitly listed local bridge commands.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://localhost:5173/*"]
+  },
+  "permissions": [
+    "core:default",
+    "allow-desktop-capabilities",
+    "allow-desktop-set-active-cluster-title",
+    "allow-desktop-open-external-url",
+    "allow-desktop-save-file",
+    "allow-desktop-open-saved-file",
+    "allow-desktop-reveal-saved-file",
+    "allow-desktop-system-theme",
+    "allow-desktop-local-terminal-start",
+    "allow-desktop-local-terminal-input",
+    "allow-desktop-local-terminal-resize",
+    "allow-desktop-local-terminal-close",
+    "allow-desktop-local-terminal-ack-output"
+  ]
+}

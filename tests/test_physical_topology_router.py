@@ -65,12 +65,7 @@ class PhysicalTopologyDb:
                     "inventory_key": "node-key-a",
                     "name": "node-a",
                     "status": "Ready",
-                    "summary": {
-                        "private": "must-not-leak",
-                        "allocatable_cpu_mcores": 1000,
-                        "allocatable_mem_mib": 2048,
-                        "pod_capacity": 110,
-                    },
+                    "summary": {"private": "must-not-leak"},
                 }
             ],
             "pods": [
@@ -83,10 +78,6 @@ class PhysicalTopologyDb:
                     "summary": {
                         "node_name": "node-a",
                         "restart_total": 3,
-                        "cpu_request_mcores": 200,
-                        "mem_request_mib": 512,
-                        "cpu_limit_mcores": 500,
-                        "mem_limit_mib": 1024,
                         "secret": "must-not-leak",
                     },
                     "placement_node_name": "node-a",
@@ -125,14 +116,7 @@ class PhysicalTopologyDb:
                 {
                     "sampled_at": "2026-07-14T05:01:00Z",
                     "usage": {
-                        "nodes": {
-                            "node-a": {
-                                "cpu_mcores": 420,
-                                "mem_mib": 1500,
-                                "cpu_ratio": 0.42,
-                                "mem_ratio": 0.734,
-                            }
-                        },
+                        "nodes": {"node-a": {"cpu_ratio": 0.42, "mem_ratio": 0.734}},
                         "pods": {"shop/checkout-a": {"cpu_mcores": 120.5, "mem_mib": 256}},
                     },
                 }
@@ -218,22 +202,12 @@ def test_physical_topology_uses_authorized_snapshot_and_server_filter_membership
     assert body.cluster_projection_revision == 42
     assert body.servers[0].cpu_pct == 42.0
     assert body.servers[0].mem_pct == 73.4
-    assert body.servers[0].cpu_mcores == 420.0
-    assert body.servers[0].mem_mib == 1500.0
-    assert body.servers[0].allocatable_cpu_mcores == 1000.0
-    assert body.servers[0].allocatable_mem_mib == 2048.0
-    assert body.servers[0].pod_capacity == 110
     assert body.servers[0].matched_pod_count == 1
     assert body.servers[0].total_pod_count == 18
     assert body.pods[0].server_id == "node-key-a"
     assert body.pods[0].matches_filter is True
-    assert body.pods[0].usage_pct == 60.2
+    assert body.pods[0].usage_pct is None
     assert body.pods[0].cpu_mcores == 120.5
-    assert body.pods[0].mem_mib == 256.0
-    assert body.pods[0].cpu_request_mcores == 200.0
-    assert body.pods[0].mem_request_mib == 512.0
-    assert body.pods[0].cpu_limit_mcores == 500.0
-    assert body.pods[0].mem_limit_mib == 1024.0
     assert body.pods[0].restarts == 3
     assert body.truncated == {"node-key-a": 6}
     assert body.projection_completeness == "partial"
@@ -262,8 +236,6 @@ def test_physical_topology_reports_partial_projection_and_missing_metrics_as_nul
     assert body["projection_completeness"] == "partial"
     assert body["metrics_completeness"] == "unavailable"
     assert body["servers"][0]["cpu_pct"] is None
-    assert body["servers"][0]["allocatable_cpu_mcores"] == 1000.0
-    assert body["pods"][0]["cpu_request_mcores"] == 200.0
     assert body["servers"][0]["matched_pod_count_completeness"] == "partial"
     assert body["servers"][0]["total_pod_count_completeness"] == "partial"
     assert body["counts"]["filtered_count_completeness"] == "partial"
@@ -297,4 +269,3 @@ def test_physical_topology_does_not_mix_latest_metrics_into_historical_snapshot(
     assert body["metrics_observed_at"] is None
     assert body["servers"][0]["cpu_pct"] is None
     assert body["pods"][0]["cpu_mcores"] is None
-    assert body["pods"][0]["cpu_request_mcores"] == 200.0

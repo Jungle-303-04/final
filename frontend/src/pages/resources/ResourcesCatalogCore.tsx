@@ -1,6 +1,7 @@
 import type { ResourceCatalogItem } from "../../features/resources/resourcesContract";
 import { Pin, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useMotionAwareScrollIntoView } from "../../motion/scrollIntoView";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -39,6 +40,7 @@ export function ResourcesCatalog({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const selectedItemRef = useRef<HTMLButtonElement | null>(null);
   const highlightedItemRef = useRef<HTMLButtonElement | null>(null);
+  const scrollIntoView = useMotionAwareScrollIntoView();
   const entries = useMemo(() => groups.flatMap((group) => group.items.map((item) => {
     const presentation = resourceTypePresentation(item.resourceType);
     return {
@@ -94,11 +96,11 @@ export function ResourcesCatalog({
 
   useEffect(() => writePinnedResourceTypes(pinnedResourceTypes), [pinnedResourceTypes]);
   useEffect(() => {
-    selectedItemRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-  }, [selectedResourceType]);
+    scrollIntoView(selectedItemRef.current, { block: "nearest" });
+  }, [scrollIntoView, selectedResourceType]);
   useEffect(() => {
-    highlightedItemRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-  }, [highlightedType]);
+    scrollIntoView(highlightedItemRef.current, { block: "nearest" });
+  }, [highlightedType, scrollIntoView]);
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories((current) => {

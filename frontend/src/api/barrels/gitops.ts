@@ -1,4 +1,20 @@
 export {
+  getGitOpsApplicationDetail,
+  GITOPS_APPLICATION_DETAIL_PATH,
+} from "../gitops-application-detail";
+export {
+  gitOpsActionCapabilitySchema,
+  gitOpsApplicationDetailResponseSchema,
+  gitOpsApplicationDetailSchema,
+  gitOpsApplicationScopeSchema,
+  gitOpsClusterScopeSchema,
+  gitOpsDesiredLiveDiffAvailabilitySchema,
+  gitOpsOperationObservationSchema,
+  gitOpsResourceRefSchema,
+  gitOpsSourceSchema,
+  type GitOpsApplicationDetailEndpoint,
+} from "../gitops-application-detail-schemas";
+export {
   getApplication,
   listApplicationDeployments,
   listApplicationRuns,

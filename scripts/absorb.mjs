@@ -5,17 +5,26 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { referenceProvenance } from './reference-provenance.mjs'
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..')
 const DEFAULT_SOURCE = path.join(REPO_ROOT, 'references/upstream/packages/k8s-ui/src')
 const DEFAULT_OUTPUT = path.join(REPO_ROOT, 'references/absorbed')
 const DEFAULT_REPORT = path.join(REPO_ROOT, 'docs/auto/absorb-report.json')
-const SOURCE_REVISION = '10461f40bcfaf6dd578b24262c8f8fb84ae20766'
+const SOURCE_REVISION = referenceProvenance.revision
 
 const TEXT_EXTENSIONS = new Set(['.css', '.json', '.md', '.svg', '.ts', '.tsx'])
 const UTILITY_PREFIXES =
   '(?:bg|text|border|ring|ring-offset|divide|from|via|to|outline|fill|stroke|shadow|placeholder|accent)'
-const FORBIDDEN_CONTENT = /radar|skyhook|theme-(?:base|surface|elevated|hover|active|border|text)/i
+const [LEGACY_PRODUCT, LEGACY_ORGANIZATION] = referenceProvenance.legacyProductTerms
+const LEGACY_TERM_PATTERN = referenceProvenance.legacyProductTerms
+  .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  .join('|')
+const FORBIDDEN_CONTENT = new RegExp(
+  `${LEGACY_TERM_PATTERN}|theme-(?:base|surface|elevated|hover|active|border|text)`,
+  'i',
+)
 
 const THEME_TOKENS = new Map([
   ['base', ['background', null]],
@@ -61,12 +70,11 @@ export function normalizeRelativePath(relativePath) {
     .split(path.sep)
     .map((segment) => {
       if (segment === 'theme') return 'styles'
-      if (segment === 'radar' || segment === 'skyhook') return 'product'
+      if (referenceProvenance.legacyProductTerms.includes(segment.toLowerCase())) return 'product'
       return segment
         .replace(/tailwind-theme/gi, 'tailwind-semantic')
-        .replace(/radar-icon-loading/gi, 'loading-icon')
-        .replace(/skyhook/gi, 'product')
-        .replace(/radar/gi, 'product')
+        .replace(new RegExp(`${LEGACY_PRODUCT}-icon-loading`, 'gi'), 'loading-icon')
+        .replace(new RegExp(LEGACY_TERM_PATTERN, 'gi'), 'product')
     })
     .join(path.sep)
 }
@@ -143,28 +151,37 @@ function replaceBrandTokens(input, stats) {
 
   output = replaceWithCount(
     output,
-    new RegExp(`\\b(${UTILITY_PREFIXES})-skyhook(?:-[0-9]+)?(?:/([0-9]+))?`, 'gi'),
+    new RegExp(`\\b(${UTILITY_PREFIXES})-${LEGACY_ORGANIZATION}(?:-[0-9]+)?(?:/([0-9]+))?`, 'gi'),
     (_match, prefix, opacity) => `${prefix}-primary${opacity ? `/${opacity}` : ''}`,
     stats,
     'brandPaletteUtilities',
   )
   output = replaceWithCount(
     output,
-    /var\(--(?:color-radar-accent|color-brand(?:-[a-z0-9-]+)?|color-skyhook(?:-[a-z0-9-]+)?|brand-rgb)\)/gi,
+    new RegExp(
+      `var\\(--(?:color-${LEGACY_PRODUCT}-accent|color-brand(?:-[a-z0-9-]+)?|color-${LEGACY_ORGANIZATION}(?:-[a-z0-9-]+)?|brand-rgb)\\)`,
+      'gi',
+    ),
     'var(--primary)',
     stats,
     'brandVariableReferences',
   )
   output = replaceWithCount(
     output,
-    /^[ \t]*--(?:color-brand(?:-[a-z0-9-]+)?|color-skyhook(?:-[a-z0-9-]+)?|brand-rgb):[^;]+;[ \t]*\n?/gim,
+    new RegExp(
+      `^[ \\t]*--(?:color-brand(?:-[a-z0-9-]+)?|color-${LEGACY_ORGANIZATION}(?:-[a-z0-9-]+)?|brand-rgb):[^;]+;[ \\t]*\\n?`,
+      'gim',
+    ),
     '',
     stats,
     'removedBrandVariableDefinitions',
   )
   output = replaceWithCount(
     output,
-    /--(?:color-radar-accent|color-brand(?:-[a-z0-9-]+)?|color-skyhook(?:-[a-z0-9-]+)?|brand-rgb)\b/gi,
+    new RegExp(
+      `--(?:color-${LEGACY_PRODUCT}-accent|color-brand(?:-[a-z0-9-]+)?|color-${LEGACY_ORGANIZATION}(?:-[a-z0-9-]+)?|brand-rgb)\\b`,
+      'gi',
+    ),
     '--primary',
     stats,
     'brandVariableNames',
@@ -189,7 +206,7 @@ function replaceReferenceNames(input, stats) {
   let output = input
 
   const pathReplacements = [
-    [/assets\/radar\/radar-icon-loading\.svg/gi, 'assets/product/loading-icon.svg'],
+    [new RegExp(`assets/${LEGACY_PRODUCT}/${LEGACY_PRODUCT}-icon-loading\\.svg`, 'gi'), 'assets/product/loading-icon.svg'],
     [/theme\/tailwind-theme\.css/gi, 'styles/tailwind-semantic.css'],
     [/\btheme\/(variables|components)\.css/gi, 'styles/$1.css'],
   ]
@@ -197,16 +214,15 @@ function replaceReferenceNames(input, stats) {
     output = replaceWithCount(output, pattern, replacement, stats, 'referencePaths')
   }
 
-  const names = [
-    [/SKYHOOK/g, 'OPSIA'],
-    [/Skyhook/g, 'Opsia'],
-    [/skyhook/g, 'opsia'],
-    [/RADAR/g, 'OPSIA'],
-    [/Radar/g, 'Opsia'],
-    [/radar/g, 'opsia'],
-  ]
-  for (const [pattern, replacement] of names) {
-    output = replaceWithCount(output, pattern, replacement, stats, 'referenceNames')
+  for (const term of referenceProvenance.legacyProductTerms) {
+    const names = [
+      [new RegExp(term.toUpperCase(), 'g'), 'OPSIA'],
+      [new RegExp(`${term[0].toUpperCase()}${term.slice(1)}`, 'g'), 'Opsia'],
+      [new RegExp(term, 'g'), 'opsia'],
+    ]
+    for (const [pattern, replacement] of names) {
+      output = replaceWithCount(output, pattern, replacement, stats, 'referenceNames')
+    }
   }
   return output
 }
@@ -347,7 +363,7 @@ async function absorb({ source, output, report }) {
 
   const forbiddenPath = files
     .map((file) => normalizeRelativePath(path.relative(source, file)))
-    .find((relativePath) => /radar|skyhook|(?:^|[/_-])theme(?:[/_.-]|$)/i.test(relativePath))
+    .find((relativePath) => new RegExp(`${LEGACY_TERM_PATTERN}|(?:^|[/_-])theme(?:[/_.-]|$)`, 'i').test(relativePath))
   if (forbiddenPath) throw new Error(`출력 경로에 금지 이름이 남았습니다: ${forbiddenPath}`)
 
   const reportValue = {

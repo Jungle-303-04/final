@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.parity import ResourceRef
 
 JsonMap = dict[str, Any]
 AuditJourneyStage = Literal[
@@ -90,6 +91,8 @@ class CommandStartedResponse(StrictModel):
 class CommandHeartbeatResponse(StrictModel):
     accepted: bool
     correlation_id: str
+    cancel_requested: bool = False
+    cancel_generation: int | None = None
 
 
 class AgentDebugQueryResponse(StrictModel):
@@ -705,7 +708,8 @@ class InventoryResourceDetailResponse(StrictModel):
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 
 
-ResourceActionCapabilityId = Literal["deployment.restart", "deployment.scale", "pod.exec"]
+ResourceCapabilityExecution = Literal["command", "terminal"]
+ResourceCapabilityInputType = Literal["integer", "string"]
 
 
 class ResourceCapabilitySubject(StrictModel):
@@ -720,10 +724,43 @@ class ResourceCapabilitySubject(StrictModel):
     name: str = Field(min_length=1)
 
 
-class ResourceActionCapability(StrictModel):
-    """현재 actor가 바로 진입할 수 있는 실제 gateway action."""
+class ResourceCapabilityInput(StrictModel):
+    """Server-owned field definition for one executable resource capability."""
 
-    capability_id: ResourceActionCapabilityId
+    key: str = Field(min_length=1, max_length=120, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=120)
+    type: ResourceCapabilityInputType
+    required: bool = True
+    minimum: int | None = None
+    maximum: int | None = None
+    default: int | str | None = None
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("capability input minimum must not exceed maximum")
+        if self.type == "integer" and isinstance(self.default, str):
+            raise ValueError("integer capability input default must be an integer")
+        if self.type == "string" and isinstance(self.default, int):
+            raise ValueError("string capability input default must be a string")
+        if isinstance(self.default, int):
+            if self.minimum is not None and self.default < self.minimum:
+                raise ValueError("capability input default is below minimum")
+            if self.maximum is not None and self.default > self.maximum:
+                raise ValueError("capability input default is above maximum")
+        return self
+
+
+class ResourceActionCapability(StrictModel):
+    """A server-owned, immediately executable action for the exact resource."""
+
+    capability_id: str = Field(min_length=1, max_length=160, pattern=r"^[a-z][a-z0-9._-]*$")
+    label: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+    execution: ResourceCapabilityExecution
+    confirmation_required: bool = True
+    realtime: bool = True
+    input_schema: list[ResourceCapabilityInput] = Field(default_factory=list)
     method: Literal["POST", "WEBSOCKET"] = "POST"
     path: str = Field(min_length=1, pattern=r"^/")
 
@@ -1102,39 +1139,39 @@ class ResourceGraphSnapshotResponse(StrictModel):
 
 
 RelationsTopologyEdgeType = Literal["owns", "runs_on", "selects", "routes_to"]
+TopologyAvailability = Literal["available", "unavailable"]
 
 
-class RelationsTopologyNode(StrictModel):
-    id: str = Field(min_length=1)
-    kind: str = Field(min_length=1)
-    name: str = Field(min_length=1)
-    status: str
+class RelationsTopologyResponse(ResourceGraphSnapshotResponse):
+    """Evidence-backed Resources relationship graph for the /topology surface.
 
+    The projection deliberately inherits the full resource-graph evidence model.
+    It must never turn an unavailable inventory projection into guessed nodes or
+    edges merely to keep the canvas populated.
+    """
 
-class RelationsTopologyEdge(StrictModel):
-    from_node_id: str = Field(alias="from", min_length=1)
-    to_node_id: str = Field(alias="to", min_length=1)
-    type: RelationsTopologyEdgeType
-
-
-class RelationsTopologyResponse(StrictModel):
-    nodes: list[RelationsTopologyNode] = Field(default_factory=list)
-    edges: list[RelationsTopologyEdge] = Field(default_factory=list)
+    view: Literal["relations"] = "relations"
+    availability: TopologyAvailability
+    refresh_after_seconds: int = Field(ge=1, le=60)
 
     @model_validator(mode="after")
-    def validate_graph_integrity(self) -> Self:
-        node_ids = [node.id for node in self.nodes]
-        known_nodes = set(node_ids)
-        if len(known_nodes) != len(node_ids):
-            raise ValueError("relations topology node identities must be unique")
-        edge_keys = [(edge.from_node_id, edge.to_node_id, edge.type) for edge in self.edges]
-        if len(set(edge_keys)) != len(edge_keys):
-            raise ValueError("relations topology edges must be unique")
-        if any(
-            edge.from_node_id not in known_nodes or edge.to_node_id not in known_nodes
-            for edge in self.edges
+    def validate_topology_availability(self) -> Self:
+        unavailable = self.availability == "unavailable"
+        if unavailable and (
+            self.relation_completeness != "unavailable"
+            or self.nodes
+            or self.edges
+            or self.root_node_ids
+            or self.node_count != 0
+            or self.edge_count != 0
+            or self.counts.filtered_count is not None
+            or self.counts.unfiltered_count is not None
+            or self.counts.filtered_count_completeness != "unavailable"
+            or self.counts.unfiltered_count_completeness != "unavailable"
         ):
-            raise ValueError("relations topology edges must reference returned nodes")
+            raise ValueError("unavailable topology must not claim graph evidence")
+        if not unavailable and self.relation_completeness == "unavailable":
+            raise ValueError("available topology requires relationship evidence state")
         return self
 
 
@@ -1143,11 +1180,6 @@ class PhysicalTopologyServer(StrictModel):
     name: str = Field(min_length=1)
     cpu_pct: float | None = Field(default=None, ge=0)
     mem_pct: float | None = Field(default=None, ge=0)
-    cpu_mcores: float | None = Field(default=None, ge=0)
-    mem_mib: float | None = Field(default=None, ge=0)
-    allocatable_cpu_mcores: float | None = Field(default=None, ge=0)
-    allocatable_mem_mib: float | None = Field(default=None, ge=0)
-    pod_capacity: int | None = Field(default=None, ge=0)
     status: str
     matched_pod_count: int | None = Field(default=None, ge=0)
     total_pod_count: int | None = Field(default=None, ge=0)
@@ -1176,8 +1208,6 @@ class PhysicalTopologyPod(StrictModel):
     cpu_request_mcores: float | None = Field(default=None, gt=0)
     mem_mib: float | None = Field(default=None, ge=0)
     mem_request_mib: float | None = Field(default=None, gt=0)
-    cpu_limit_mcores: float | None = Field(default=None, gt=0)
-    mem_limit_mib: float | None = Field(default=None, gt=0)
     phase: str
     health: str
     restarts: int = Field(ge=0)
@@ -2051,8 +2081,20 @@ class AiResourceSummary(StrictModel):
 
 
 ApplicationProjectionCompleteness = Literal["exact", "partial", "unavailable"]
+ApplicationProjectionAvailability = Literal["available", "unavailable"]
 ApplicationHealthStatus = Literal["healthy", "degraded", "unknown"]
 ApplicationDeploymentStatus = Literal["succeeded", "failed", "running", "pending", "unknown"]
+ApplicationBatchRuntimeStatus = Literal[
+    "running",
+    "failed",
+    "succeeded",
+    "suspended",
+    "unknown",
+]
+ApplicationTopologyEdgeType = Literal["owns", "runs_on", "selects", "routes_to"]
+ApplicationTopologyAuthority = Literal["authoritative", "derived"]
+ApplicationHistoryEntryType = Literal["delivery", "incident"]
+ApplicationSourceConflict = Literal["aligned", "conflict", "unknown"]
 ApplicationDriftStatus = Literal["in_sync", "drifted", "unknown"]
 ApplicationActivityType = Literal["deployment", "incident", "change"]
 ApplicationDriftScalar = str | int | float | bool | None
@@ -2072,6 +2114,74 @@ class ApplicationHealthSummary(StrictModel):
             and self.ready_pods > self.total_pods
         ):
             raise ValueError("ready pod count cannot exceed total pod count")
+        return self
+
+
+class ApplicationRuntimeReadiness(StrictModel):
+    completeness: ApplicationProjectionCompleteness
+    status: ApplicationHealthStatus
+    ready_pods: int | None = Field(default=None, ge=0)
+    total_pods: int | None = Field(default=None, ge=0)
+    restarts: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_runtime_readiness(self) -> Self:
+        if (
+            self.ready_pods is not None
+            and self.total_pods is not None
+            and self.ready_pods > self.total_pods
+        ):
+            raise ValueError("ready pod count cannot exceed total pod count")
+        if self.completeness == "unavailable" and (
+            self.status != "unknown"
+            or self.ready_pods is not None
+            or self.total_pods is not None
+            or self.restarts is not None
+        ):
+            raise ValueError("unavailable runtime readiness must not claim runtime evidence")
+        return self
+
+
+class ApplicationDeliveryState(StrictModel):
+    availability: ApplicationProjectionAvailability
+    status: ApplicationDeploymentStatus | None = None
+    workflow_run_id: str | None = None
+    observed_at: str | None = None
+
+    @model_validator(mode="after")
+    def validate_delivery_state(self) -> Self:
+        if self.availability == "unavailable" and any(
+            value is not None for value in (self.status, self.workflow_run_id, self.observed_at)
+        ):
+            raise ValueError("unavailable delivery state must not claim delivery evidence")
+        if self.availability == "available" and (
+            self.status is None or self.workflow_run_id is None
+        ):
+            raise ValueError("available delivery state requires an observed workflow run")
+        return self
+
+
+class ApplicationBatchRuntime(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    status: ApplicationBatchRuntimeStatus | None = None
+    active_runs: int | None = Field(default=None, ge=0)
+    failed_runs: int | None = Field(default=None, ge=0)
+    succeeded_runs: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_batch_runtime(self) -> Self:
+        counters = (self.active_runs, self.failed_runs, self.succeeded_runs)
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.status is not None
+            or any(value is not None for value in counters)
+        ):
+            raise ValueError("unavailable batch runtime must not claim batch evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or self.status is None
+        ):
+            raise ValueError("available batch runtime requires an observed batch state")
         return self
 
 
@@ -2098,7 +2208,10 @@ class ApplicationProductCard(StrictModel):
     default_branch: str | None = None
     manifest_path: str | None = None
     health: ApplicationHealthSummary
+    runtime_readiness: ApplicationRuntimeReadiness
     current_deployment: ApplicationCurrentDeployment | None = None
+    delivery: ApplicationDeliveryState
+    batch_runtime: ApplicationBatchRuntime
     has_drift: bool | None = None
     drift_summary: str | None = None
     resource_counts: list[ApplicationResourceKindCount] | None = None
@@ -2143,11 +2256,321 @@ class ApplicationRecentActivity(StrictModel):
     occurred_at: str | None = None
 
 
+class ApplicationTopologyNode(StrictModel):
+    id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    resource_type: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    health: str = Field(min_length=1)
+    observed_at: str | None = None
+
+
+class ApplicationTopologyEdge(StrictModel):
+    id: str = Field(min_length=1)
+    from_id: str = Field(min_length=1)
+    to_id: str = Field(min_length=1)
+    type: ApplicationTopologyEdgeType
+    evidence_type: str = Field(min_length=1)
+    authority: ApplicationTopologyAuthority
+    observed_at: str | None = None
+
+
+class ApplicationTopology(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    observed_at: str | None = None
+    nodes: list[ApplicationTopologyNode] | None = Field(default=None, max_length=200)
+    edges: list[ApplicationTopologyEdge] | None = Field(default=None, max_length=1000)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_topology(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.observed_at is not None
+            or self.nodes is not None
+            or self.edges is not None
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable topology must not claim topology evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or self.nodes is None or self.edges is None
+        ):
+            raise ValueError("available topology requires node and edge collections")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact topology cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial topology requires source reasons")
+        nodes = self.nodes or []
+        node_ids = {node.id for node in nodes}
+        if len(node_ids) != len(nodes):
+            raise ValueError("topology node identities must be unique")
+        edges = self.edges or []
+        if len({edge.id for edge in edges}) != len(edges):
+            raise ValueError("topology edge identities must be unique")
+        if any(edge.from_id not in node_ids or edge.to_id not in node_ids for edge in edges):
+            raise ValueError("topology edges must reference returned nodes")
+        return self
+
+
+class ApplicationHistoryEntry(StrictModel):
+    id: str = Field(min_length=1)
+    type: ApplicationHistoryEntryType
+    status: str = Field(min_length=1)
+    summary: str | None = None
+    occurred_at: str | None = None
+    workflow_run_id: str | None = None
+    gitops_change_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_history_reference(self) -> Self:
+        if self.type == "delivery" and self.workflow_run_id is None:
+            raise ValueError("delivery history requires a workflow run anchor")
+        if self.type == "incident" and (
+            self.workflow_run_id is not None or self.gitops_change_id is not None
+        ):
+            raise ValueError("incident history cannot claim deployment anchors")
+        return self
+
+
+class ApplicationHistory(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    entries: list[ApplicationHistoryEntry] | None = Field(default=None, max_length=6)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_history(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.entries is not None
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable history must not claim history evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or self.entries is None
+        ):
+            raise ValueError("available history requires entry collection")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact history cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial history requires source reasons")
+        entries = self.entries or []
+        if len({entry.id for entry in entries}) != len(entries):
+            raise ValueError("history entry identities must be unique")
+        return self
+
+
+class ApplicationSourceEvidence(StrictModel):
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    conflict: ApplicationSourceConflict | None = None
+    repository_ref: str | None = None
+    default_branch: str | None = None
+    manifest_path: str | None = None
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_source_evidence(self) -> Self:
+        values = (self.conflict, self.repository_ref, self.default_branch, self.manifest_path)
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or any(value is not None for value in values)
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable source must not claim source evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable"
+            or self.conflict is None
+            or self.repository_ref is None
+        ):
+            raise ValueError("available source requires repository provenance")
+        if self.completeness == "exact" and (
+            self.default_branch is None or self.manifest_path is None or self.partial_reason_codes
+        ):
+            raise ValueError("exact source requires branch, manifest, and no partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial source requires source reasons")
+        return self
+
+
+class ApplicationClusterScope(StrictModel):
+    """Wire-safe scope evidence for an authorized application instance.
+
+    This stays in the gateway response module so importing the public HTTP
+    response catalog never creates a cycle through the command parity models.
+    Its JSON shape is intentionally compatible with the shared cluster scope.
+    """
+
+    workspace_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    namespaces: tuple[str, ...] = ()
+    freshness: Literal["live", "stale", "partial", "disconnected"] = "live"
+
+    @field_validator("namespaces")
+    @classmethod
+    def canonicalize_namespaces(cls, namespaces: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(sorted({namespace.strip() for namespace in namespaces if namespace.strip()}))
+
+
+class ApplicationInstanceScope(StrictModel):
+    """One immutable deployment binding the caller may select in detail."""
+
+    id: str = Field(min_length=1)
+    environment: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    scope: ApplicationClusterScope
+
+
+class ApplicationWorkloadScopeItem(StrictModel):
+    """One direct, currently observed workload a caller may select.
+
+    ``key`` is an opaque inventory identity.  It is intentionally not a
+    browser-assembled ``kind/namespace/name`` string: the selected deployment
+    binding already fixes the cluster, and the immutable resource reference
+    keeps same-name recreation visible to consumers.
+    """
+
+    key: str = Field(min_length=1, max_length=128)
+    resource: ResourceRef
+    scope: ApplicationClusterScope
+    observed_at: str | None = None
+
+
+class ApplicationWorkloadScope(StrictModel):
+    """Authorized app/workload choices backed by rendered-manifest evidence."""
+
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    application_scope_available: bool
+    selected_workload_key: str | None = None
+    workloads: list[ApplicationWorkloadScopeItem] = Field(default_factory=list, max_length=200)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_workload_scope(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.application_scope_available
+            or self.selected_workload_key is not None
+            or self.workloads
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable workload scope must not claim workload evidence")
+        if self.availability == "available" and self.completeness == "unavailable":
+            raise ValueError("available workload scope requires a completeness value")
+        keys = [item.key for item in self.workloads]
+        if len(keys) != len(set(keys)):
+            raise ValueError("workload scope identities must be unique")
+        if self.selected_workload_key is not None and self.selected_workload_key not in keys:
+            raise ValueError("selected workload must be among server-authorized workloads")
+        if not self.application_scope_available and not (
+            self.completeness == "exact"
+            and len(self.workloads) == 1
+            and self.selected_workload_key == self.workloads[0].key
+        ):
+            raise ValueError("only one exact workload may hide application scope")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact workload scope cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial workload scope requires source reasons")
+        return self
+
+
+class ApplicationUnavailableEvidence(StrictModel):
+    """A deliberately unavailable workload channel with its server reason."""
+
+    availability: Literal["unavailable"] = "unavailable"
+    reason_codes: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def unique_reason_codes(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("unavailable evidence reasons must be unique")
+        if any(not value.strip() for value in values):
+            raise ValueError("unavailable evidence reasons must be non-empty")
+        return values
+
+
+class ApplicationWorkloadDetail(StrictModel):
+    """Only evidence that is genuinely scoped to the selected workload."""
+
+    workload: ApplicationWorkloadScopeItem
+    runtime_readiness: ApplicationRuntimeReadiness
+    resource_counts: list[ApplicationResourceKindCount] | None = None
+    resource_counts_completeness: ApplicationProjectionCompleteness
+    topology: ApplicationTopology
+    history: ApplicationUnavailableEvidence
+    cost: ApplicationUnavailableEvidence
+    actions: ApplicationUnavailableEvidence
+
+    @model_validator(mode="after")
+    def validate_workload_detail(self) -> Self:
+        if self.resource_counts_completeness == "unavailable" and self.resource_counts is not None:
+            raise ValueError("unavailable workload resource counts must be null")
+        if self.resource_counts_completeness != "unavailable" and self.resource_counts is None:
+            raise ValueError("available workload resource counts must be an array")
+        return self
+
+
+class ApplicationDetailScope(StrictModel):
+    """Server-authorized environment and instance choices for one application."""
+
+    availability: ApplicationProjectionAvailability
+    completeness: ApplicationProjectionCompleteness
+    selected_instance_id: str | None = None
+    instances: list[ApplicationInstanceScope] = Field(default_factory=list, max_length=500)
+    partial_reason_codes: list[str] = Field(default_factory=list)
+    selected_scope: Literal["application", "workload"] = "application"
+    workload_scope: ApplicationWorkloadScope
+
+    @model_validator(mode="after")
+    def validate_instance_scope(self) -> Self:
+        if self.availability == "unavailable" and (
+            self.completeness != "unavailable"
+            or self.selected_instance_id is not None
+            or self.instances
+            or self.partial_reason_codes
+        ):
+            raise ValueError("unavailable instance scope must not claim scope evidence")
+        if self.availability == "available" and (
+            self.completeness == "unavailable" or not self.instances
+        ):
+            raise ValueError("available instance scope requires selectable instances")
+        instance_ids = [instance.id for instance in self.instances]
+        if len(instance_ids) != len(set(instance_ids)):
+            raise ValueError("instance scope identities must be unique")
+        if self.availability == "available" and self.selected_instance_id not in instance_ids:
+            raise ValueError("available instance scope requires a selected allowed instance")
+        if self.completeness == "exact" and self.partial_reason_codes:
+            raise ValueError("exact instance scope cannot carry partial reasons")
+        if self.completeness == "partial" and not self.partial_reason_codes:
+            raise ValueError("partial instance scope requires source reasons")
+        if self.selected_scope == "workload" and self.workload_scope.selected_workload_key is None:
+            raise ValueError("workload selection requires a selected workload")
+        if (
+            self.selected_scope == "application"
+            and self.workload_scope.availability == "available"
+            and not self.workload_scope.application_scope_available
+        ):
+            raise ValueError("application selection is not available for one exact workload")
+        return self
+
+
 class ApplicationProductDetail(ApplicationProductCard):
     endpoints: list[ApplicationEndpointSummary] | None = None
     endpoints_completeness: ApplicationProjectionCompleteness
     recent_incidents: list[ApplicationRecentIncident] = Field(default_factory=list, max_length=3)
     recent_activity: list[ApplicationRecentActivity] = Field(default_factory=list, max_length=3)
+    topology: ApplicationTopology
+    history: ApplicationHistory
+    source: ApplicationSourceEvidence
+    scope: ApplicationDetailScope
+    workload: ApplicationWorkloadDetail | None = None
 
     @model_validator(mode="after")
     def validate_detail_semantics(self) -> Self:
@@ -2155,6 +2578,13 @@ class ApplicationProductDetail(ApplicationProductCard):
             raise ValueError("unavailable endpoints must be null")
         if self.endpoints_completeness != "unavailable" and self.endpoints is None:
             raise ValueError("available endpoints must be an array")
+        selected_workload = self.scope.selected_scope == "workload"
+        if selected_workload != (self.workload is not None):
+            raise ValueError("workload detail must match the selected scope")
+        if self.workload is not None and (
+            self.workload.workload.key != self.scope.workload_scope.selected_workload_key
+        ):
+            raise ValueError("workload detail must match the selected workload")
         return self
 
 

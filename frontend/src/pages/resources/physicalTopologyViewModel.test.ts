@@ -96,8 +96,6 @@ function pod(overrides: Partial<PhysicalTopologyPod>): PhysicalTopologyPod {
     cpuRequestMillicores: null,
     memoryMebibytes: null,
     memoryRequestMebibytes: null,
-    cpuLimitMillicores: null,
-    memoryLimitMebibytes: null,
     phase: "Running",
     health: "healthy",
     restartCount: 0,

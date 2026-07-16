@@ -62,9 +62,11 @@ class KubernetesCommandPolicy:
     def __init__(self, cluster_role: str) -> None:
         self.cluster_role = cluster_role
 
-    def ensure_allowed(self, spec: KubernetesCommandSpec, payload: object) -> None:
+    def ensure_allowed(
+        self, spec: KubernetesCommandSpec, payload: object, *, direct_execution: bool = False
+    ) -> None:
         if spec.scope == "user-workload":
-            self.ensure_user_workload_allowed(spec, payload)
+            self.ensure_user_workload_allowed(spec, payload, direct_execution=direct_execution)
             return
         if spec.scope != "target-agent":
             raise PermissionError(f"{spec.scope} Kubernetes commands are not enabled")
@@ -89,8 +91,10 @@ class KubernetesCommandPolicy:
         if spec.resource == "configmaps" and name != TARGET_AGENT_POLICY_CONFIGMAP_NAME:
             raise PermissionError("target-agent configmap control is name-scoped")
 
-    def ensure_user_workload_allowed(self, spec: KubernetesCommandSpec, payload: object) -> None:
-        if self.cluster_role != TARGET_CLUSTER_ROLE:
+    def ensure_user_workload_allowed(
+        self, spec: KubernetesCommandSpec, payload: object, *, direct_execution: bool = False
+    ) -> None:
+        if self.cluster_role != TARGET_CLUSTER_ROLE and not direct_execution:
             raise PermissionError("user workload control is only enabled on target clusters")
         if spec.verb != "patch":
             raise PermissionError(f"{spec.verb} user workload commands are not enabled")
