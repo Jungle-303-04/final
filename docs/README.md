@@ -271,6 +271,13 @@ RCA 프로덕션 온보딩 문서는 아래에 있다.
 - [rca-production-onboarding/10-recovery-action-compatibility](rca-production-onboarding/10-recovery-action-compatibility.md)
 - [rca-production-onboarding/provider-evidence-request](rca-production-onboarding/provider-evidence-request.md)
 
+마이그레이션 기준 문서는 아래에 있다.
+
+- [migration/README](migration/README.md)
+- [migration/latest-reference-rebaseline](migration/latest-reference-rebaseline.md)
+- [migration/parity-supervision-plan](migration/parity-supervision-plan.md)
+- [migration/timeline-p0-url-state-mapping](migration/timeline-p0-url-state-mapping.md)
+
 팀 문서는 아래에 있다.
 
 - [team/conventions](team/conventions.md)
