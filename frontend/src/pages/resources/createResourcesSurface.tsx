@@ -18,6 +18,7 @@ import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
+import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -33,6 +34,7 @@ export function createResourcesSurface(
   podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort?: ResourceManifestPort,
   resourceIssuesPort?: ResourceIssuesPort,
+  serviceAccessPort?: ServiceAccessPort,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -49,6 +51,7 @@ export function createResourcesSurface(
         podTerminalPort={podTerminalPort}
         resourceManifestPort={resourceManifestPort}
         resourceIssuesPort={resourceIssuesPort}
+        serviceAccessPort={serviceAccessPort}
         port={port}
       />
     );

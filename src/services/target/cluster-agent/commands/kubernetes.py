@@ -68,6 +68,9 @@ class KubernetesCommandPolicy:
         if spec.scope == "user-workload":
             self.ensure_user_workload_allowed(spec, payload, direct_execution=direct_execution)
             return
+        if spec.scope == "service-access":
+            self.ensure_service_access_allowed(spec, payload)
+            return
         if spec.scope != "target-agent":
             raise PermissionError(f"{spec.scope} Kubernetes commands are not enabled")
         self.ensure_target_agent_allowed(spec, payload)
@@ -104,6 +107,25 @@ class KubernetesCommandPolicy:
         self.field(payload, "name")
         if not control_namespace_allowed(namespace):
             raise PermissionError(CONTROL_NAMESPACE_DENIED_MESSAGE)
+
+    def ensure_service_access_allowed(
+        self,
+        spec: KubernetesCommandSpec,
+        payload: object,
+    ) -> None:
+        if (
+            spec.api_group not in {"", CORE_API_GROUP}
+            or spec.version != "v1"
+            or spec.resource != "services"
+            or spec.verb != "get"
+        ):
+            raise PermissionError("service access permits only core/v1 Service reads")
+        resource = getattr(payload, "resource", None)
+        namespace = getattr(resource, "namespace", None)
+        name = getattr(resource, "name", None)
+        uid = getattr(resource, "uid", None)
+        if not all(isinstance(value, str) and value for value in (namespace, name, uid)):
+            raise PermissionError("service access requires an exact namespaced Service")
 
     def target_agent_namespace(self) -> str:
         if self.cluster_role == MANAGEMENT_CLUSTER_ROLE:

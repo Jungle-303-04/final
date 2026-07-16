@@ -15,7 +15,7 @@ COMMAND_FAILED_STATUS = "failed"
 PayloadT = TypeVar("PayloadT")
 PayloadModel = type[BaseModel]
 KubernetesVerb = Literal["get", "patch", "apply", "delete"]
-KubernetesScope = Literal["target-agent", "system", "user-workload"]
+KubernetesScope = Literal["target-agent", "system", "user-workload", "service-access"]
 
 
 class KubernetesClient(Protocol):

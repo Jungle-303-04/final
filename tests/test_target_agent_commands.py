@@ -12,6 +12,11 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+    SERVICE_REQUEST_MAX_BODY_BYTES,
+)
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TARGET_AGENT_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "agent.py"
 
@@ -40,6 +45,7 @@ def load_agent_module():
         "commands.kubernetes",
         "commands.outbox",
         "commands.registry",
+        "commands.service_access",
         "control",
         "control.policy",
         "control.reconciler",
@@ -163,6 +169,17 @@ def register_agent_commands(module: object, agent: object) -> None:
     )
 
 
+class ServiceKubernetesClient(StubKubernetesClient):
+    def __init__(self, service: dict[str, object]) -> None:
+        super().__init__()
+        self.service = service
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        return self.service
+
+
 def approval_evidence(
     *,
     expires_at: str = "2099-01-01T00:00:00Z",
@@ -196,6 +213,144 @@ def test_agent_unwraps_queued_command_payload() -> None:
     )
 
     assert payload["query"]["source"] == "prometheus"
+
+
+def service_http_command(
+    module: object,
+    *,
+    uid: str = "uid-service-1",
+    port: int = 80,
+    path: str = "/ready",
+) -> dict[str, object]:
+    return {
+        "command_id": "cmd-service-1",
+        "action": module.SERVICE_HTTP_REQUEST_ACTION,
+        "payload": {
+            "resource": {
+                "api_group": "",
+                "version": "v1",
+                "kind": "Service",
+                "namespace": "shop",
+                "name": "checkout-api",
+                "uid": uid,
+            },
+            "port": port,
+            "scheme": "http",
+            "path": path,
+        },
+    }
+
+
+def service_api_object() -> dict[str, object]:
+    return {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "namespace": "shop",
+            "name": "checkout-api",
+            "uid": "uid-service-1",
+        },
+        "spec": {
+            "type": "ClusterIP",
+            "clusterIP": "10.96.0.10",
+            "ports": [
+                {
+                    "name": "http",
+                    "protocol": "TCP",
+                    "port": 80,
+                    "targetPort": 8080,
+                    "appProtocol": "http",
+                }
+            ],
+        },
+    }
+
+
+def configured_service_agent(module: object, transport: httpx.MockTransport):
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.kubernetes = ServiceKubernetesClient(service_api_object())
+    agent.service_http_transport = transport
+    register_agent_commands(module, agent)
+    return agent
+
+
+def test_service_http_command_revalidates_uid_and_returns_bounded_result() -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "application/json",
+                "set-cookie": "secret=session",
+            },
+            json={"ready": True},
+        )
+
+    agent = configured_service_agent(module, httpx.MockTransport(handler))
+    result = asyncio.run(agent.execute_command(service_http_command(module)))
+
+    assert result["status"] == "completed"
+    assert result["service_request"] == {
+        "status": 200,
+        "status_text": "OK",
+        "duration_ms": pytest.approx(result["service_request"]["duration_ms"]),
+        "headers": {"content-length": "14", "content-type": "application/json"},
+        "body": '{"ready":true}',
+        "truncated": False,
+        "body_bytes": 14,
+        "error": None,
+    }
+    assert requests[0].url == "http://checkout-api.shop.svc:80/ready"
+    assert agent.kubernetes.gets == [
+        {
+            "api_group": "core",
+            "version": "v1",
+            "namespace": "shop",
+            "resource": "services",
+            "name": "checkout-api",
+        }
+    ]
+
+
+def test_service_http_command_rejects_stale_uid_before_network_access() -> None:
+    module = load_agent_module()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200)
+
+    agent = configured_service_agent(module, httpx.MockTransport(handler))
+    result = asyncio.run(
+        agent.execute_command(service_http_command(module, uid="stale-service-uid"))
+    )
+
+    assert result["status"] == "failed"
+    assert result["error_code"] == "service_identity_changed"
+    assert requests == []
+
+
+def test_service_http_command_truncates_response_and_advertises_capability() -> None:
+    module = load_agent_module()
+    body = b"x" * (SERVICE_REQUEST_MAX_BODY_BYTES + 32)
+    agent = configured_service_agent(
+        module,
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=body)),
+    )
+
+    result = asyncio.run(agent.execute_command(service_http_command(module)))
+
+    assert result["status"] == "completed"
+    assert result["service_request"]["truncated"] is True
+    assert result["service_request"]["body_bytes"] == SERVICE_REQUEST_MAX_BODY_BYTES
+    assert len(result["service_request"]["body"].encode()) == SERVICE_REQUEST_MAX_BODY_BYTES
+    assert SERVICE_HTTP_REQUEST_AGENT_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
 
 
 def test_apply_manifest_keeps_plan_diff_payload() -> None:

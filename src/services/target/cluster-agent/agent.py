@@ -18,6 +18,11 @@ from commands import (
     command,
 )
 from commands.helm import run_catalog_helm_install
+from commands.service_access import (
+    ServiceAccessExecutionError,
+    ServiceRequestCancelled,
+    execute_service_http_request,
+)
 from control import (
     AgentControlStore,
     AgentPolicySync,
@@ -150,6 +155,11 @@ from packages.contracts.gateway.requests import (
 from packages.contracts.gitops import supported_kubernetes_resource
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_ACTION,
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+    ServiceHttpRequestCommandPayload,
+)
 
 LOGGER = get_logger(__name__)
 COMMAND_OUTPUT_LIMIT = 2000
@@ -240,6 +250,7 @@ class AgentConfig:
         "command_receiver",
         "command_control.cancel.v1",
         Command.CATALOG_HELM_INSTALL_CAPABILITY,
+        SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
     ]
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
     NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = (
@@ -1248,6 +1259,46 @@ class TargetClusterAgent:
             "telemetry query executed",
             query=definition.__dict__,
             result=result,
+        )
+
+    @command.k8s(
+        SERVICE_HTTP_REQUEST_ACTION,
+        api_group="core",
+        version="v1",
+        resource="services",
+        verb="get",
+        scope="service-access",
+        payload_model=ServiceHttpRequestCommandPayload,
+    )
+    async def service_http_request_command(
+        self,
+        ctx: CommandContext[ServiceHttpRequestCommandPayload],
+    ) -> JsonObject:
+        try:
+            result = await execute_service_http_request(
+                ctx,
+                transport=getattr(self, "service_http_transport", None),
+            )
+        except ServiceRequestCancelled:
+            return {
+                Gateway.STATUS: CommandStatus.CANCELLED,
+                Gateway.CLUSTER_ID: self.cluster_id,
+                Gateway.APPLIED: False,
+                Gateway.MESSAGE: "service request cancelled",
+                Gateway.RETRYABLE: False,
+                Gateway.RESOURCES: [],
+                Gateway.STDOUT: "",
+                Gateway.STDERR: "",
+            }
+        except ServiceAccessExecutionError as error:
+            return ctx.fail(
+                str(error),
+                error_code=error.code,
+                retryable=False,
+            )
+        return ctx.ok(
+            "service request completed",
+            service_request=result.model_dump(),
         )
 
     @command.handler(

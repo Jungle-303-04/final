@@ -222,6 +222,167 @@
         }
       }
     },
+    "reference.feature.160": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.service_access",
+      "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
+        "frontend/src/desktop/desktopBridge.test.ts"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "reason": "An active local listener registry is workstation authority and must never be synthesized by the Python gateway.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.tsx#createOperationStatusStore",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "desktop": {
+          "state": "blocked",
+          "destination": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "No Tauri local-port registry or window-owned session list exists, so Opsia cannot claim active native forward sessions.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        }
+      }
+    },
+    "reference.feature.161": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.service_access",
+      "frontendContract": "frontend/src/features/service-access/serviceAccessContract.ts",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "tests/test_service_access_router.py",
+        "frontend/src/features/service-access/createServiceAccessAdapter.test.ts",
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/service_access/router.py#get_service_access_capabilities",
+          "consumer": "src/packages/contracts/service_access.py#ServiceAccessCapabilities",
+          "test": "tests/test_service_access_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "consumer": "frontend/src/features/service-access/createServiceAccessAdapter.ts#createServiceAccessAdapter",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "desktop": {
+          "state": "not_required",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#buildKubectlPortForwardCommand",
+          "reason": "Exact Service port discovery and a manual loopback command are safe browser capabilities; only ownership of the listener requires Tauri.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        }
+      }
+    },
+    "reference.feature.162": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.service_access",
+      "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "tests/contracts/test_service_access.py",
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
+        "frontend/src/desktop/desktopBridge.test.ts"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "src/packages/contracts/service_access.py#LocalPortForwardRequest",
+          "reason": "Python validates the portable request shape but must never own a workstation listener.",
+          "test": "tests/contracts/test_service_access.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#buildKubectlPortForwardCommand",
+          "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "desktop": {
+          "state": "blocked",
+          "destination": "frontend/src/desktop/desktopBridge.ts#DesktopBridge",
+          "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "A typed Tauri start command, native listener/process registry, capacity policy, and ownership receipt are not implemented.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        }
+      }
+    },
+    "reference.feature.163": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.service_access",
+      "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
+      "verification": [
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
+        "frontend/src/desktop/desktopBridge.test.ts"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/desktop/desktopBridge.ts#DesktopBridge",
+          "reason": "Stopping or replacing a workstation listener is native desktop authority and must not traverse the gateway.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#DesktopBridge",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "desktop": {
+          "state": "blocked",
+          "destination": "frontend/src/desktop/desktopBridge.ts#DesktopBridge",
+          "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "No native forward session ID, stop command, or generation-safe recreate contract exists.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        }
+      }
+    },
+    "reference.feature.177": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.service_access",
+      "frontendContract": "frontend/src/features/service-access/serviceAccessContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/contracts/test_service_access.py",
+        "tests/test_service_access_router.py",
+        "tests/test_target_agent_commands.py",
+        "tests/test_command_worker.py",
+        "frontend/src/features/service-access/serviceAccessSchemas.test.ts",
+        "frontend/src/features/service-access/createServiceAccessAdapter.test.ts",
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
+        "frontend/src/features/operations/OperationStatusStore.test.ts"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/service_access/router.py#create_service_request",
+          "consumer": "src/services/target/cluster-agent/commands/service_access.py#execute_service_http_request",
+          "test": "tests/test_service_access_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "consumer": "frontend/src/features/service-access/createServiceAccessAdapter.ts#createServiceAccessAdapter",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "desktop": {
+          "state": "not_required",
+          "destination": "frontend/src/features/service-access/serviceAccessContract.ts#ServiceAccessPort",
+          "reason": "The HTTP request executes inside the target cluster agent and is consumed through the authenticated browser command stream; no workstation authority is needed.",
+          "test": "frontend/src/features/service-access/createServiceAccessAdapter.test.ts"
+        }
+      }
+    },
     "reference.feature.183": {
       "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.helm.releases",

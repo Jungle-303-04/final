@@ -2757,6 +2757,111 @@ def test_agent_commands_by_correlation_is_workspace_scoped_newest_and_bounded() 
     assert 20 in compiled.params.values()
 
 
+def test_active_agent_command_count_is_workspace_cluster_action_and_lifecycle_scoped() -> None:
+    from domains.command.repository import AgentCommandRepository
+
+    recorded: list[Any] = []
+
+    class StubResult:
+        def scalar_one(self) -> int:
+            return 7
+
+    class StubAsyncConnection:
+        async def execute(self, statement: Any) -> StubResult:
+            recorded.append(statement)
+            return StubResult()
+
+    @asynccontextmanager
+    async def stub_async_connection():
+        yield StubAsyncConnection()
+
+    repository = object.__new__(AgentCommandRepository)
+    repository.async_connection = stub_async_connection  # type: ignore[method-assign]
+
+    count = asyncio.run(
+        repository.count_active_agent_commands(
+            "workspace-1",
+            "cluster-1",
+            "service.http.request",
+        )
+    )
+
+    assert count == 7
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "agent_commands.workspace_id =" in sql
+    assert "agent_commands.cluster_id =" in sql
+    assert "agent_commands.action =" in sql
+    assert "agent_commands.status IN" in sql
+    assert "workspace-1" in compiled.params.values()
+    assert "cluster-1" in compiled.params.values()
+    assert "service.http.request" in compiled.params.values()
+
+
+def test_logical_command_capacity_is_locked_counted_and_inserted_in_one_transaction() -> None:
+    from domains.command.repository import (
+        AgentCommandCapacityExceeded,
+        stage_logical_command_acceptance_in_transaction,
+    )
+
+    statements: list[Any] = []
+
+    class StubResult:
+        def __init__(self, scalar: int | str | None) -> None:
+            self.scalar = scalar
+
+        def scalar_one(self) -> int:
+            assert isinstance(self.scalar, int)
+            return self.scalar
+
+        def scalar_one_or_none(self) -> str | None:
+            return str(self.scalar) if self.scalar is not None else None
+
+    class StubConnection:
+        def __init__(self, active: int) -> None:
+            self.active = active
+
+        def execute(self, statement: Any, _params: Any = None) -> StubResult:
+            statements.append(statement)
+            if len(statements) == 1:
+                return StubResult(None)
+            if len(statements) == 2:
+                return StubResult(self.active)
+            return StubResult("cmd-service-1")
+
+    plan = {
+        "command_id": "cmd-service-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "action": "service.http.request",
+        "namespace": "shop",
+        "payload": {},
+    }
+    assert stage_logical_command_acceptance_in_transaction(
+        StubConnection(active=15),
+        correlation_id="corr-service-1",
+        plan=plan,
+        confirmation_event_id="evt-service-1",
+        max_active_per_action=16,
+    )
+    assert "pg_advisory_xact_lock" in str(statements[0])
+    count_sql = str(statements[1].compile(dialect=postgresql.dialect()))
+    assert "agent_commands.workspace_id =" in count_sql
+    assert "agent_commands.cluster_id =" in count_sql
+    assert "agent_commands.action =" in count_sql
+
+    statements.clear()
+    with pytest.raises(AgentCommandCapacityExceeded):
+        stage_logical_command_acceptance_in_transaction(
+            StubConnection(active=16),
+            correlation_id="corr-service-2",
+            plan={**plan, "command_id": "cmd-service-2"},
+            confirmation_event_id="evt-service-2",
+            max_active_per_action=16,
+        )
+    assert len(statements) == 2
+
+
 def test_rca_report_save_writes_projection_columns() -> None:
     recorded: list[Any] = []
     repository = _repository_with_recorded_sql(RcaRepository, recorded)

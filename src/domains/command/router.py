@@ -144,6 +144,7 @@ async def accept_command_with_receipt_stage(
     command: CommandRequestedBody,
     *,
     actor: Actor,
+    max_active_per_action: int | None = None,
 ) -> tuple[Any, OperationEvent | None]:
     """Accept a command and stage its browser receipt in the same event outbox UoW."""
     staged: list[OperationEvent | None] = []
@@ -155,6 +156,7 @@ async def accept_command_with_receipt_stage(
             correlation_id=accepted_event.correlation_id,
             plan=plan.to_body(),
             confirmation_event_id=str(accepted_event.event_id),
+            max_active_per_action=max_active_per_action,
         )
         staged.append(
             stage_command_operation_event_in_transaction(

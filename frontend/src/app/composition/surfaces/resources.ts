@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   approveResourceManifestEdit,
+  cancelCommand,
   createRealtimeClient,
   executeResourceCapability,
   getChangeTimeline,
@@ -18,6 +19,8 @@ import {
   listResourceLabelFacets,
   openPodTerminal,
   previewResourceManifestEdit,
+  resolveServiceAccess,
+  startServiceRequest,
 } from "../../../api";
 import type { HomePort } from "../../../features/home/homeContract";
 import { createPodTerminalAdapter } from "../../../features/pod-terminal/createPodTerminalAdapter";
@@ -36,6 +39,7 @@ import type {
 } from "../../../features/resources/physicalTopologyRealtimeContract";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
 import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
+import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
 
 export function loadResourcesSurface(homePort: HomePort): ComponentType {
   const physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = {
@@ -87,6 +91,13 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
       previewResourceManifestEdit,
     }),
     createResourceIssuesAdapter({ getResourceIssues }),
+    createServiceAccessAdapter({
+      resolveServiceAccess,
+      startServiceRequest,
+      cancelCommand(input, signal) {
+        return cancelCommand(input, { signal });
+      },
+    }),
   );
 }
 

@@ -52,6 +52,7 @@ import {
   EMPTY_POD_TERMINAL_PORT,
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
+import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
 
 export function ResourcesPage({
   filterPort,
@@ -64,6 +65,7 @@ export function ResourcesPage({
   resourceCapabilitiesPort,
   resourceActionsPort,
   podTerminalPort = EMPTY_POD_TERMINAL_PORT,
+  serviceAccessPort,
   resourceManifestPort,
   resourceIssuesPort,
   port,
@@ -78,6 +80,7 @@ export function ResourcesPage({
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
   podTerminalPort?: PodTerminalPort;
+  serviceAccessPort?: ServiceAccessPort;
   resourceManifestPort?: ResourceManifestPort;
   resourceIssuesPort?: ResourceIssuesPort;
   port: ResourcesPort;
@@ -352,6 +355,7 @@ export function ResourcesPage({
             onTabChange={state.setDetailTab}
             tab={state.detailTab}
             terminalPort={podTerminalPort}
+            serviceAccessPort={serviceAccessPort}
           />
         </div>
       ) : null}

@@ -286,6 +286,12 @@ export {
 } from "./resource-capabilities";
 export { executeResourceCapability } from "./resource-capability-actions";
 export {
+  resolveServiceAccess,
+  startServiceRequest,
+  SERVICE_ACCESS_CAPABILITIES_PATH,
+  SERVICE_REQUESTS_PATH,
+} from "./service-access";
+export {
   resourceActionAcceptedSchema,
   type ResourceActionAccepted,
 } from "./resource-capability-actions-schemas";

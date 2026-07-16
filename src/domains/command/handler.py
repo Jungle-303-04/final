@@ -136,11 +136,17 @@ def evaluate_command_policy(command: CommandRequestedBody) -> PolicyResult:
     manifest_namespace = desired_manifest_namespace(command)
     if manifest_namespace is not None and manifest_namespace != command.namespace:
         return PolicyResult.reject(MANIFEST_NAMESPACE_MISMATCH_REASON)
-    result = POLICY.evaluate(ModelLookup(command))
-    if not result.allowed:
-        return result
     # 액션별 정책 메타데이터(@command.action allowed_namespaces) — 카탈로그가 기준.
     spec = command_action_spec(command.action)
+    if spec is None:
+        return PolicyResult.reject("unsupported command action")
+    result = PolicyResult.allow()
+    if spec.enforce_control_namespace:
+        result = POLICY.evaluate(ModelLookup(command))
+        if not result.allowed:
+            return result
+    elif command.action not in allowed_command_actions():
+        return PolicyResult.reject("unsupported command action")
     if spec is not None and not spec.allows_namespace(command.namespace):
         return PolicyResult.reject(ACTION_NAMESPACE_REASON)
     if (
@@ -334,6 +340,9 @@ async def evaluate_management_guard(
 ) -> PolicyResult:
     if command.direct_execution:
         return PolicyResult.allow()
+    spec = command_action_spec(command.action)
+    if spec is not None and spec.read_only:
+        return PolicyResult.allow()
     registration_getter = getattr(db, "get_cluster_registration", None)
     registration = None
     if callable(registration_getter):
@@ -430,7 +439,11 @@ def build_plan(
             channel=COMMAND_CONFIG.agent_route_channel,
             cluster_id=cluster_id,
             workspace_id=workspace_id,
-            required_capability=COMMAND_CONFIG.required_agent_capability,
+            required_capability=(
+                action_spec.required_agent_capability
+                if action_spec is not None
+                else COMMAND_CONFIG.required_agent_capability
+            ),
         ),
         workspace_id=workspace_id,
         application_id=command.application_id,

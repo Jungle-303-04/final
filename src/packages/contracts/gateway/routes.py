@@ -195,6 +195,9 @@ RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"
 # 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
 # disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
 RESOURCE_CAPABILITIES_PATH = "/capabilities"
+# Exact core/v1 Service capabilities and one bounded, audited in-cluster GET.
+SERVICE_ACCESS_CAPABILITIES_PATH = "/service-access/capabilities"
+SERVICE_REQUESTS_PATH = "/service-access/requests"
 # GitOps manifest editor. The selected live inventory resource is resolved to an
 # exact application/deployment binding; writes are emitted only as Safe PR events.
 RESOURCE_MANIFEST_SOURCE_PATH = "/resource-manifests/{resource_id}"

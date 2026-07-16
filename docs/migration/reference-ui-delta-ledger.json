@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 70,
+  "pendingCount": 67,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -9017,8 +9017,56 @@
         "blobId": "b4e66b440f8c1d47f6e03e35590cb625a8c53fe5",
         "sha256": "1e01f8fddb75f9ad448614610e5077f7a538b49f7ebf9f250487e1b5db97f2e5"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:service-access:http-request:bounded-session:v1",
+          "legacyContractIds": [
+            "reference.feature.177"
+          ],
+          "symbol": "ServiceCurlButton CurlPanel path Input",
+          "interaction": "an authorized operator selects one observed TCP Service port, scheme, and relative path, confirms one bounded in-cluster GET, follows its durable OperationEvent stream, may cancel it, and sees only the strictly bounded response",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the same command from the last durable OperationEvent sequence without replaying the HTTP request",
+            "backpressure": "the agent caps timeout, response headers and body while the frontend retains one bounded result preview",
+            "merge": "apply events only to the exact command ID and accept a terminal Service result only after strict schema validation"
+          },
+          "motion": {
+            "reducedMotion": "request, reconnect, completion, failure, and cancellation remain visible in text and status marks when decorative motion is disabled",
+            "evidence": [
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/features/operations/OperationStatusFeedback.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/service-access.ts",
+              "frontend/src/features/service-access/createServiceAccessAdapter.ts",
+              "frontend/src/features/service-access/serviceAccessSchemas.ts",
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "src/domains/service_access/router.py",
+              "src/packages/contracts/service_access.py",
+              "src/services/target/cluster-agent/commands/service_access.py",
+              "tests/test_service_access_router.py",
+              "tests/test_target_agent_commands.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.service_access.router",
+              "packages.contracts.service_access"
+            ],
+            "plannedTestIds": [
+              "service-access.backend.contract",
+              "service-access.agent.session",
+              "service-access.frontend.adapter",
+              "service-access.frontend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product now implements the bounded Python/FastAPI and target-agent request, exact ResourceRef and RBAC checks, durable audit receipt and OperationEvent lifecycle, plus strict shared-UI consumption. Broader upstream curl heuristics remain intentionally outside this exact Service contract."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -10480,8 +10528,51 @@
         "blobId": "4899ece988aefb11d5afd1434ad075c2f149fa75",
         "sha256": "d9cad6cac9d141d421e3e17e0b933ddff5d28e46130b119f81ab47280eeea7ab"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:service-access:service-port:capability-input:v1",
+          "legacyContractIds": [
+            "reference.feature.161"
+          ],
+          "symbol": "PortForwardButton available ports and local-port Input",
+          "interaction": "an exact Service exposes sorted TCP ports, a shared validated local-port input builds only a loopback kubectl command, and the browser never claims ownership of the workstation listener",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact Service capability after resource revision, permission, cluster connection, or explicit refresh changes",
+            "backpressure": "keep one capability request per selected resource and expose only the bounded sorted port list",
+            "merge": "replace ports only when workspace, cluster, ResourceRef UID, and capability revision still match the selected resource"
+          },
+          "motion": {
+            "reducedMotion": "the dialog and port validation retain their labels, errors, and final state without relying on transition motion",
+            "evidence": [
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/service-access/serviceAccessSchemas.ts",
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "src/domains/service_access/router.py",
+              "src/packages/contracts/service_access.py",
+              "tests/test_service_access_router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.service_access.router",
+              "packages.contracts.service_access"
+            ],
+            "plannedTestIds": [
+              "service-access.backend.contract",
+              "service-access.frontend.surface",
+              "service-access.desktop.boundary"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Exact Service TCP ports and shared input behavior are implemented. Pod port discovery and an Opsia-owned local forward remain unclaimed until the native Tauri boundary exists."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10495,8 +10586,105 @@
         "blobId": "4f8ae5254ed052b438f7cc895811ec4dcfb55ef7",
         "sha256": "07fc0c029c6000b7887b9f77df72a1940584e51328a2f392e906ba0e91c6244f"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:service-access:port-session:list-and-layout:v1",
+          "legacyContractIds": [
+            "reference.feature.160"
+          ],
+          "symbol": "PortForwardProvider and PortForwardPanel",
+          "interaction": "a bounded panel lists active local forward sessions, presents long resource names without widening the viewport, and refreshes out-of-band lifecycle changes",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload native sessions after window restoration or an explicit reconnect",
+            "backpressure": "cap retained native sessions and render them in one viewport-bounded panel",
+            "merge": "accept only sessions owned by the current desktop window and exact cluster/resource identity"
+          },
+          "motion": {
+            "reducedMotion": "session status, truncation, and controls remain visible without auto-minimize or transition dependence",
+            "evidence": [
+              "frontend/src/pages/resources/ServiceAccessActions.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/pages/resources/ServiceAccessActions.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.service_access"
+            ],
+            "plannedTestIds": [
+              "service-access.desktop.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "No typed Tauri local-port registry owns listeners, window-scoped sessions, process exits, or reconnect state; a browser list would falsely claim native ownership.",
+            "rationale": "The current UI limits the visible command/session width and states the boundary, but does not synthesize active local forwards from browser state."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:service-access:port-session:native-create:v1",
+          "legacyContractIds": [
+            "reference.feature.162"
+          ],
+          "symbol": "useStartPortForward",
+          "interaction": "a validated Service or Pod target starts one bounded local listener with an explicit local port and listen address",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reconnect creates a new native session after revalidating the exact target rather than replaying a stale browser mutation",
+            "backpressure": "cap concurrent listeners and reject duplicate or exhausted local bindings",
+            "merge": "bind session ownership to one Tauri window, exact resource UID, cluster, remote port, local port, and listen address"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "src/packages/contracts/service_access.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.service_access"
+            ],
+            "plannedTestIds": [
+              "service-access.desktop.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "Starting a listener requires a new Tauri command and native process/socket registry; the Python gateway and browser are intentionally forbidden from owning the workstation port.",
+            "rationale": "Port and listen-address validation exists as a shared contract, and the browser offers only a manual loopback kubectl command without creating a fake session."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:service-access:port-session:native-control:v1",
+          "legacyContractIds": [
+            "reference.feature.163"
+          ],
+          "symbol": "stop, toggle-listen, change-port and reconnect controls",
+          "interaction": "the owner can stop a native forward or recreate it after validated port/address changes without leaking an orphaned listener",
+          "transport": "poll",
+          "realtime": {
+            "resume": "a replacement is a new native session and never reuses an expired process identity",
+            "backpressure": "serialize stop and replacement for one session and bound teardown time",
+            "merge": "apply controls only to the current window-owned session ID and ignore stale completion from the replaced generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/pages/resources/ServiceAccessActions.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.service_access"
+            ],
+            "plannedTestIds": [
+              "service-access.desktop.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no native forward session ID or stop/recreate Tauri command, so browser controls cannot safely terminate a workstation listener.",
+            "rationale": "The product does not render stop or reconnect controls until native ownership and lifecycle receipts can be proven."
+          }
+        }
+      ]
     },
     {
       "status": "M",

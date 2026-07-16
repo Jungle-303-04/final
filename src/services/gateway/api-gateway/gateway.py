@@ -58,6 +58,7 @@ from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.rca_bundle.router import router as rca_bundle_router
 from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
+from domains.service_access.router import router as service_access_router
 from domains.target.events import AgentConnectedBody
 from domains.target.evidence_jobs import EVIDENCE_JOB_STATUS_LEASED, EVIDENCE_JOB_STATUS_QUEUED
 from domains.target.router import router as target_router
@@ -376,6 +377,7 @@ class ApiGateway:
         app.include_router(rca_bundle_router)  # RCA/recovery read projection bundle
         app.include_router(rca_changes_router)  # incident workload 최근 GitOps 변경
         app.include_router(command_router)  # command 도메인 라우터(+agent 가드 필터)
+        app.include_router(service_access_router)  # exact Service GET command session
         app.include_router(audit_router)  # workspace-scoped correlation 감사 타임라인
         app.include_router(dashboard_router)  # dashboard read model 조회(+cluster read 필터)
         app.include_router(fleet_router)  # fleet 롤업 + 클러스터 드릴다운(콘솔 루트 화면)

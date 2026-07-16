@@ -28,6 +28,8 @@ import {
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import { PodTerminalDialog } from "./PodTerminalDialog";
+import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import { ServiceAccessActions } from "./ServiceAccessActions";
 
 export function ResourceDetailWorkspace({
   detail,
@@ -44,6 +46,7 @@ export function ResourceDetailWorkspace({
   onUnauthorized,
   tab,
   terminalPort = EMPTY_POD_TERMINAL_PORT,
+  serviceAccessPort,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
@@ -59,6 +62,7 @@ export function ResourceDetailWorkspace({
   onUnauthorized?: () => void;
   tab: string;
   terminalPort?: PodTerminalPort;
+  serviceAccessPort?: ServiceAccessPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
@@ -184,6 +188,9 @@ export function ResourceDetailWorkspace({
               detail={detail.data}
               port={terminalPort}
             />
+            {serviceAccessPort ? (
+              <ServiceAccessActions detail={detail.data} port={serviceAccessPort} />
+            ) : null}
             <ResourceDetailActions
               actionsPort={actionsPort}
               capabilities={capabilities}

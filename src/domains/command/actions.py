@@ -19,6 +19,9 @@ class CommandActionSpec:
     supports_manual_retry: bool = False
     max_attempts: int = 1
     retry_delay_seconds: int = 0
+    enforce_control_namespace: bool = True
+    read_only: bool = False
+    required_agent_capability: str = "command_receiver"
 
     def matches_recovery_action(self, value: str) -> bool:
         return value == self.action or value in self.recovery_aliases
@@ -50,9 +53,14 @@ class CommandCatalog:
         supports_manual_retry: bool = False,
         max_attempts: int = 1,
         retry_delay_seconds: int = 0,
+        enforce_control_namespace: bool = True,
+        read_only: bool = False,
+        required_agent_capability: str = "command_receiver",
     ) -> Callable[[type], type]:
         if max_attempts < 1 or retry_delay_seconds < 0:
             raise ValueError("command retry policy is invalid")
+        if not required_agent_capability.strip():
+            raise ValueError("command agent capability is required")
         if supports_manual_retry and max_attempts < 2:
             raise ValueError("retryable command requires at least two attempts")
         spec = CommandActionSpec(
@@ -65,6 +73,9 @@ class CommandCatalog:
             supports_manual_retry=supports_manual_retry,
             max_attempts=max_attempts,
             retry_delay_seconds=retry_delay_seconds,
+            enforce_control_namespace=enforce_control_namespace,
+            read_only=read_only,
+            required_agent_capability=required_agent_capability,
         )
 
         def decorator(marker: type) -> type:

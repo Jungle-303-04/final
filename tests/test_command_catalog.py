@@ -12,6 +12,10 @@ from domains.command.actions import (
     registered_command_actions,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.service_access import (
+    SERVICE_HTTP_REQUEST_ACTION,
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
+)
 from packages.contracts.target import TARGET_NAMESPACE
 
 
@@ -26,11 +30,18 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
             expected = (TARGET_NAMESPACE,)
+        elif spec.action == SERVICE_HTTP_REQUEST_ACTION:
+            expected = ()
         elif spec.action == Command.DEFAULT_ACTION:
             expected = (Sandbox.NAMESPACE, "color-turf")
         else:
             expected = (Sandbox.NAMESPACE,)
         assert spec.allowed_namespaces == expected
+    service = command_action_spec(SERVICE_HTTP_REQUEST_ACTION)
+    assert service is not None
+    assert service.read_only is True
+    assert service.enforce_control_namespace is False
+    assert service.required_agent_capability == SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
 
 
 def test_spec_lookup_and_namespace_policy() -> None:
