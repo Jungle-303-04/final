@@ -11,6 +11,8 @@ const DESKTOP_COMMANDS: &[&str] = &[
     "desktop_local_terminal_resize",
     "desktop_local_terminal_close",
     "desktop_local_terminal_ack_output",
+    "desktop_port_forward_sessions",
+    "desktop_port_forward_stop",
 ];
 
 fn main() {

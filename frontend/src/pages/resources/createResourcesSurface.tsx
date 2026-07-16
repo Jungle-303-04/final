@@ -22,6 +22,7 @@ import {
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
@@ -42,6 +43,7 @@ export function createResourcesSurface(
   resourceManifestPort?: ResourceManifestPort,
   resourceIssuesPort?: ResourceIssuesPort,
   serviceAccessPort?: ServiceAccessPort,
+  portForwardSessions?: PortForwardSessionPort,
 ): ComponentType {
   function ResourcesSurface() {
     return (
@@ -61,6 +63,7 @@ export function createResourcesSurface(
         resourceManifestPort={resourceManifestPort}
         resourceIssuesPort={resourceIssuesPort}
         serviceAccessPort={serviceAccessPort}
+        portForwardSessions={portForwardSessions}
         port={port}
       />
     );

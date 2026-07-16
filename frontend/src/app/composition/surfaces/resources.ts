@@ -33,14 +33,16 @@ import { createResourcesFilterAdapter } from "../../../features/resources/create
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
 import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
 import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
+import { createPortForwardSessionAdapter } from "../../../features/service-access/createPortForwardSessionAdapter";
 import { createTopologyPorts } from "../topologyPorts";
+import { desktopBridge } from "../../../desktop/desktopBridge";
 import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
 import type { ResourcesRefreshPolicyKey } from "../../../features/resources/resourceMetricsHistoryContract";
 import type { TimelinePort } from "../../../features/timeline/timelineContract";
 
 export function loadResourcesSurface(
   homePort: HomePort,
-  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey | "port_sessions">,
   timelinePort: TimelinePort,
 ): ComponentType {
   const topologyPorts = createTopologyPorts();
@@ -87,5 +89,6 @@ export function loadResourcesSurface(
         return cancelCommand(input, { signal });
       },
     }),
+    createPortForwardSessionAdapter(desktopBridge, refreshPolicies),
   );
 }

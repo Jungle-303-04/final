@@ -11,6 +11,7 @@ import type {
   ServiceAccessPort,
   ServiceRequestScheme,
 } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import { toServiceRequestOperationResult } from "../../features/service-access/createServiceAccessAdapter";
 import {
   OperationStatusFeedback,
@@ -45,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../shared/ui/primitives/select";
+import { PortForwardSessionsPanel } from "./PortForwardSessionsPanel";
 
 type CapabilityState =
   | { phase: "loading" }
@@ -56,9 +58,11 @@ const SERVICE_BODY_PREVIEW_CHARACTERS = 32_768;
 export function ServiceAccessActions({
   detail,
   port,
+  portForwardSessions,
 }: {
   detail: ResourceDetail;
   port: ServiceAccessPort;
+  portForwardSessions?: PortForwardSessionPort;
 }) {
   const { t } = useI18n();
   const operationStore = useOptionalOperationStatusStore();
@@ -194,6 +198,7 @@ export function ServiceAccessActions({
           )}
         </div>
       ) : null}
+      {portForwardSessions ? <PortForwardSessionsPanel port={portForwardSessions} /> : null}
 
       <Dialog
         onOpenChange={(open) => !pending && setRequestOpen(open)}

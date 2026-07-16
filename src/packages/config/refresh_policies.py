@@ -68,7 +68,10 @@ _DEFAULT_POLICIES: dict[RefreshPolicyKey, dict[str, Any]] = {
     "cost_summary": {"stale_after_seconds": 30, "refresh_after_seconds": 60},
     "cost_trend": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
     "cost_nodes": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
-    "port_sessions": {"refresh_after_seconds": 30},
+    "port_sessions": {
+        "refresh_after_seconds": 10,
+        "post_mutation_refresh_after_seconds": 0.5,
+    },
 }
 
 

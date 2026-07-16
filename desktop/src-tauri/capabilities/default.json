@@ -19,6 +19,8 @@
     "allow-desktop-local-terminal-input",
     "allow-desktop-local-terminal-resize",
     "allow-desktop-local-terminal-close",
-    "allow-desktop-local-terminal-ack-output"
+    "allow-desktop-local-terminal-ack-output",
+    "allow-desktop-port-forward-sessions",
+    "allow-desktop-port-forward-stop"
   ]
 }

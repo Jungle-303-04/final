@@ -35,6 +35,8 @@ def test_refresh_inventory_is_complete_and_domain_values_share_the_registry() ->
     assert integral_refresh_after_seconds("cost_nodes") == 120
     assert integral_refresh_after_seconds("metrics_rightsizing") == 600
     assert post_mutation_refresh_after_seconds("helm_detail") == 1.2
+    assert integral_refresh_after_seconds("port_sessions") == 10
+    assert post_mutation_refresh_after_seconds("port_sessions") == 0.5
 
 
 def test_deployment_override_changes_policy_and_revision(

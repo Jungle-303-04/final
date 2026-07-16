@@ -14,6 +14,8 @@ export const DESKTOP_COMMAND = {
   localTerminalResize: "desktop_local_terminal_resize",
   localTerminalClose: "desktop_local_terminal_close",
   localTerminalAckOutput: "desktop_local_terminal_ack_output",
+  portForwardSessions: "desktop_port_forward_sessions",
+  portForwardStop: "desktop_port_forward_stop",
 } as const;
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "browser";
@@ -35,6 +37,7 @@ export interface DesktopCapabilitySet {
   externalUrl: DesktopCapability;
   safeFile: DesktopCapability;
   localTerminal: DesktopCapability;
+  portForwardSessions: DesktopCapability;
   updater: DesktopCapability;
 }
 
@@ -91,6 +94,22 @@ export type DesktopLocalTerminalEvent =
   | { sessionId: string; kind: "exit"; exitCode: number; message?: string }
   | { sessionId: string; kind: "error"; message: string };
 
+export interface DesktopPortForwardSession {
+  id: string;
+  clusterId: string;
+  namespace: string;
+  podName: string;
+  podPort: number;
+  localPort: number;
+  listenAddress: "127.0.0.1" | "0.0.0.0";
+  serviceName: string | null;
+  servicePort: number | null;
+  scheme: "http" | "https" | null;
+  startedAt: string;
+  status: "running" | "stopped" | "error";
+  error: string | null;
+}
+
 interface DesktopRuntime {
   core: {
     invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -114,6 +133,8 @@ export interface DesktopBridge {
   resizeLocalTerminal: (request: LocalTerminalResizeRequest) => Promise<void>;
   closeLocalTerminal: (sessionId: string) => Promise<void>;
   acknowledgeLocalTerminalOutput: (request: LocalTerminalOutputAckRequest) => Promise<void>;
+  listPortForwardSessions: () => Promise<readonly DesktopPortForwardSession[]>;
+  stopPortForwardSession: (sessionId: string) => Promise<void>;
   /**
    * Resolves only after the native event listener is installed.  A terminal
    * must wait for this before starting its PTY so the initial shell prompt is
@@ -133,6 +154,9 @@ const BROWSER_CAPABILITIES: DesktopCapabilitySet = {
   externalUrl: { state: "available" },
   safeFile: unsupported("Native save handles are available only in the desktop shell."),
   localTerminal: unsupported("Local PTY is available only in the native desktop shell."),
+  portForwardSessions: unsupported(
+    "Port-forward sessions are owned only by the native desktop shell.",
+  ),
   updater: unsupported("Application updates are available only in a signed desktop release."),
 };
 
@@ -183,6 +207,13 @@ export function createDesktopBridge(runtime: DesktopRuntime | undefined = create
       DESKTOP_COMMAND.localTerminalAckOutput,
       { request },
     ),
+    listPortForwardSessions: () => runtime.core.invoke<readonly DesktopPortForwardSession[]>(
+      DESKTOP_COMMAND.portForwardSessions,
+    ),
+    stopPortForwardSession: (sessionId) => runtime.core.invoke<void>(
+      DESKTOP_COMMAND.portForwardStop,
+      { request: { sessionId } },
+    ),
     onLocalTerminalEvent: (listener) => subscribeLocalTerminal(runtime, listener),
     onMenuAction: (listener) => subscribeDesktopMenu(runtime, listener),
   };
@@ -223,6 +254,12 @@ function browserDesktopBridge(): DesktopBridge {
     },
     acknowledgeLocalTerminalOutput: async () => {
       throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
+    },
+    listPortForwardSessions: async () => {
+      throw new Error(BROWSER_CAPABILITIES.portForwardSessions.reason);
+    },
+    stopPortForwardSession: async () => {
+      throw new Error(BROWSER_CAPABILITIES.portForwardSessions.reason);
     },
     onLocalTerminalEvent: async () => () => undefined,
     onMenuAction: () => () => undefined,

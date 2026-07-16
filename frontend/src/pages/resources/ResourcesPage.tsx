@@ -56,6 +56,7 @@ import {
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
@@ -73,6 +74,7 @@ export function ResourcesPage({
   resourceActionsPort,
   podTerminalPort = EMPTY_POD_TERMINAL_PORT,
   serviceAccessPort,
+  portForwardSessions,
   resourceManifestPort,
   resourceIssuesPort,
   port,
@@ -90,6 +92,7 @@ export function ResourcesPage({
   resourceActionsPort: ResourceActionsPort;
   podTerminalPort?: PodTerminalPort;
   serviceAccessPort?: ServiceAccessPort;
+  portForwardSessions?: PortForwardSessionPort;
   resourceManifestPort?: ResourceManifestPort;
   resourceIssuesPort?: ResourceIssuesPort;
   port: ResourcesPort;
@@ -375,6 +378,7 @@ export function ResourcesPage({
             tab={state.detailTab}
             terminalPort={podTerminalPort}
             serviceAccessPort={serviceAccessPort}
+            portForwardSessions={portForwardSessions}
           />
         </div>
       ) : null}

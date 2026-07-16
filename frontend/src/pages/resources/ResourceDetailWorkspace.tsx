@@ -29,6 +29,7 @@ import {
 } from "../../features/pod-terminal/podTerminalContract";
 import { PodTerminalDialog } from "./PodTerminalDialog";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import { ServiceAccessActions } from "./ServiceAccessActions";
 
 export function ResourceDetailWorkspace({
@@ -48,6 +49,7 @@ export function ResourceDetailWorkspace({
   tab,
   terminalPort = EMPTY_POD_TERMINAL_PORT,
   serviceAccessPort,
+  portForwardSessions,
 }: {
   detail: ResourcesResourceState<ResourceDetail>;
   identity: ResourceIdentity | null;
@@ -65,6 +67,7 @@ export function ResourceDetailWorkspace({
   tab: string;
   terminalPort?: PodTerminalPort;
   serviceAccessPort?: ServiceAccessPort;
+  portForwardSessions?: PortForwardSessionPort;
 }) {
   const { t } = useI18n();
   const dock = useBottomDock();
@@ -191,7 +194,11 @@ export function ResourceDetailWorkspace({
               port={terminalPort}
             />
             {serviceAccessPort ? (
-              <ServiceAccessActions detail={detail.data} port={serviceAccessPort} />
+              <ServiceAccessActions
+                detail={detail.data}
+                port={serviceAccessPort}
+                portForwardSessions={portForwardSessions}
+              />
             ) : null}
             <ResourceDetailActions
               actionsPort={actionsPort}

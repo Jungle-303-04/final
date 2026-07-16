@@ -14,6 +14,7 @@ const CAPABILITIES: DesktopCapabilitySet = {
   externalUrl: { state: "available" },
   safeFile: { state: "available" },
   localTerminal: { state: "available" },
+  portForwardSessions: { state: "available" },
   updater: { state: "unsupported", reason: "Not implemented." },
 };
 
@@ -25,8 +26,46 @@ describe("desktopBridge", () => {
     await expect(bridge.capabilities()).resolves.toMatchObject({
       platform: "browser",
       localTerminal: { state: "unsupported" },
+      portForwardSessions: { state: "unsupported" },
       updater: { state: "unsupported" },
     });
+  });
+
+  it("lists and stops only native-owned port-forward sessions through typed commands", async () => {
+    const calls: Array<{ command: string; args: Record<string, unknown> | undefined }> = [];
+    const invoke = async <T,>(
+      command: string,
+      args?: Record<string, unknown>,
+    ): Promise<T> => {
+      calls.push({ command, args });
+      return (command === DESKTOP_COMMAND.portForwardSessions ? [{
+          id: "0d47b74f-4218-4f5a-a149-53bfb0610217",
+          clusterId: "cluster-a",
+          namespace: "shop",
+          podName: "checkout-abc",
+          podPort: 8080,
+          localPort: 18080,
+          listenAddress: "127.0.0.1",
+          serviceName: "checkout",
+          servicePort: 80,
+          scheme: "http",
+          startedAt: "2026-07-17T03:00:00Z",
+          status: "running",
+          error: null,
+        }] : undefined) as T;
+    };
+    const bridge = createDesktopBridge({ core: { invoke } });
+
+    await expect(bridge.listPortForwardSessions()).resolves.toHaveLength(1);
+    await bridge.stopPortForwardSession("0d47b74f-4218-4f5a-a149-53bfb0610217");
+
+    expect(calls).toEqual([
+      { command: DESKTOP_COMMAND.portForwardSessions, args: undefined },
+      {
+        command: DESKTOP_COMMAND.portForwardStop,
+        args: { request: { sessionId: "0d47b74f-4218-4f5a-a149-53bfb0610217" } },
+      },
+    ]);
   });
 
   it("does not treat the legacy window global as a desktop capability", async () => {

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import { I18nProvider } from "../../shared/i18n";
 import { RESOURCE_DETAIL } from "../../features/resources/createResourcesAdapter.testSupport";
 import { toResourceDetail } from "../../features/resources/resourcesCanonical";
@@ -19,10 +20,14 @@ const DETAIL = toResourceDetail("cluster-1", {
 
 afterEach(cleanup);
 
-function renderActions(port: ServiceAccessPort) {
+function renderActions(port: ServiceAccessPort, portForwardSessions?: PortForwardSessionPort) {
   return render(
     <I18nProvider navigatorLanguage="en-US" storage={null}>
-      <ServiceAccessActions detail={DETAIL} port={port} />
+      <ServiceAccessActions
+        detail={DETAIL}
+        port={port}
+        portForwardSessions={portForwardSessions}
+      />
     </I18nProvider>,
   );
 }
@@ -110,5 +115,45 @@ describe("ServiceAccessActions", () => {
       "kubectl -n shop port-forward service/checkout 18080:80 --address 127.0.0.1",
     )).toBeTruthy();
     expect(port.start).not.toHaveBeenCalled();
+  });
+
+  it("renders the native session list without clipping long identities", async () => {
+    const sessions: PortForwardSessionPort = {
+      available: true,
+      list: vi.fn().mockResolvedValue({
+        sessions: [{
+          id: "session-native-a",
+          clusterId: "cluster-1",
+          namespace: "shop",
+          podName: "checkout-deployment-with-a-very-long-identity-abcdef",
+          podPort: 8080,
+          localPort: 18080,
+          listenAddress: "127.0.0.1",
+          serviceName: "checkout",
+          servicePort: 80,
+          scheme: "http",
+          startedAt: "2026-07-17T03:00:00Z",
+          status: "running",
+          error: null,
+        }],
+        refreshPolicy: {
+          staleAfterSeconds: null,
+          refreshAfterSeconds: 10,
+          keepLastSuccess: true,
+          pauseWhenHidden: true,
+          eventInvalidation: false,
+          retryAfterSeconds: null,
+          retryLimit: null,
+          postMutationRefreshAfterSeconds: 0.5,
+        },
+      }),
+      stop: vi.fn(),
+    };
+    renderActions(servicePort(), sessions);
+
+    expect(await screen.findByRole("heading", { name: "Port-forward sessions" })).toBeTruthy();
+    expect(screen.getByText("127.0.0.1:18080")).toBeTruthy();
+    const identity = screen.getByTitle("shop/checkout-deployment-with-a-very-long-identity-abcdef");
+    expect(identity.classList.contains("truncate")).toBe(true);
   });
 });
