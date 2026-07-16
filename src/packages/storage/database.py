@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 
 from domains.registry import Database as Database
+from packages.config.environments import is_protected_runtime_environment
 from packages.config.retry import retry_dependency
 from packages.config.settings import env
 from packages.contracts.interfaces import InitializableStore
@@ -36,14 +37,15 @@ __all__ = [
 DATABASE_STARTUP_MODE_ENV = "DATABASE_STARTUP_MODE"
 DATABASE_STARTUP_INITIALIZE = "initialize"
 DATABASE_STARTUP_VERIFY = "verify"
-PROTECTED_APP_ENVS = frozenset({"production", "staging"})
 
 
 def database_startup_mode() -> str:
     """DB 시작 모드 — 운영 계열은 읽기 전용 schema 검증이 기본이다."""
     app_env = env("APP_ENV", "").strip().lower()
     default = (
-        DATABASE_STARTUP_VERIFY if app_env in PROTECTED_APP_ENVS else DATABASE_STARTUP_INITIALIZE
+        DATABASE_STARTUP_VERIFY
+        if is_protected_runtime_environment(app_env)
+        else DATABASE_STARTUP_INITIALIZE
     )
     mode = env(DATABASE_STARTUP_MODE_ENV, default).strip().lower()
     if mode not in {DATABASE_STARTUP_INITIALIZE, DATABASE_STARTUP_VERIFY}:

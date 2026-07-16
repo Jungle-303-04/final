@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from domains.target.management_guard import MANAGEMENT_BOOTSTRAP_MODE, MANAGEMENT_CLUSTER_ROLE
+from packages.config.environments import normalize_environment
 from packages.config.realtime import derive_realtime_gateway_url
 from packages.config.security import (
     RCA_TEST_RUNS_ENABLED_ENV,
@@ -360,7 +361,7 @@ def pod_exec_namespaces_line(payload: TargetRegisterRequest) -> str:
 
 
 def rca_test_runtime_config_lines(payload: TargetRegisterRequest) -> str:
-    registration_environment = payload.environment.strip().lower()
+    registration_environment = normalize_environment(payload.environment)
     if (
         payload.cluster_role == MANAGEMENT_CLUSTER_ROLE
         or registration_environment not in RCA_TEST_TARGET_ENVIRONMENTS

@@ -140,6 +140,7 @@ from packages.config.control import (
     CONTROL_NAMESPACE_DENIED_MESSAGE,
     control_namespace_allowed,
 )
+from packages.config.environments import is_sandbox_environment, normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.security import RCA_TEST_RUNS_DISABLED_MESSAGE, rca_test_runs_enabled
 from packages.config.settings import env
@@ -1151,7 +1152,7 @@ class TargetClusterAgent:
             Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
             Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
         }:
-            return self.command_namespace_value(command).strip().lower() != Sandbox.NAMESPACE
+            return not is_sandbox_environment(self.command_namespace_value(command))
         return action in {
             AgentConfig.APPLY_MANIFEST_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
@@ -1215,12 +1216,12 @@ class TargetClusterAgent:
             if item.strip()
         }
         environments = {
-            item.strip().lower()
+            normalize_environment(item)
             for item in env("AGENT_AUTO_APPROVE_ENVIRONMENTS", "sandbox").split(",")
             if item.strip()
         }
-        environment = self.command_metadata_value(command, "environment").strip().lower()
-        namespace = self.command_namespace_value(command).strip().lower()
+        environment = normalize_environment(self.command_metadata_value(command, "environment"))
+        namespace = normalize_environment(self.command_namespace_value(command))
         return (
             action in actions
             and environment in environments

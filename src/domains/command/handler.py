@@ -40,6 +40,7 @@ from domains.target.management_guard import (
 )
 from packages.config.constants import Command, CommandStatus, Sandbox, Target
 from packages.config.control import CONTROL_NAMESPACE_DENIED_MESSAGE
+from packages.config.environments import is_sandbox_environment, normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.security import env_enabled
 from packages.config.settings import env
@@ -183,12 +184,12 @@ def approval_exempt_for_environment(command: CommandRequestedBody) -> bool:
     """
     actions = _csv_values(env(AUTO_APPROVE_ACTIONS_ENV, DEFAULT_AUTO_APPROVE_ACTIONS))
     environments = {
-        item.lower()
+        normalize_environment(item)
         for item in _csv_values(
             env(AUTO_APPROVE_ENVIRONMENTS_ENV, DEFAULT_AUTO_APPROVE_ENVIRONMENTS)
         )
     }
-    return command.action in actions and command.environment.strip().lower() in environments
+    return command.action in actions and normalize_environment(command.environment) in environments
 
 
 def command_requires_recorded_approval(command: CommandRequestedBody) -> bool:
@@ -264,7 +265,7 @@ def approval_status_result(command: CommandRequestedBody, record: JsonObject) ->
 
     details = record.get("details")
     policy_route = str(details.get("policy_route", "")) if isinstance(details, dict) else ""
-    if command.environment.strip().lower() == "sandbox" and policy_route == "safe_pr":
+    if is_sandbox_environment(command.environment) and policy_route == "safe_pr":
         return PolicyResult.allow()
     return PolicyResult.reject(APPROVAL_NOT_REQUIRED_SCOPE_REASON)
 

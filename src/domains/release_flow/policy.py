@@ -28,7 +28,6 @@ from domains.release_flow._support import (
     unique_non_empty,
 )
 from domains.release_flow.execution import (
-    PRODUCTION_ENVIRONMENTS,
     approval_granted,
     execution_profile,
     has_change_ticket,
@@ -41,6 +40,7 @@ from domains.release_flow.manifest import render_release_step_manifest
 from domains.scm.events import SafePrFilePatch, SafePrRequestedBody
 from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.config.constants import GitHub, Sandbox, Target
+from packages.config.environments import is_production_environment
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 
 APPROVAL_MAX_AGE_HOURS_ENV = "RELEASE_FLOW_APPROVAL_MAX_AGE_HOURS"
@@ -1111,11 +1111,9 @@ def release_production_steps_for_wave(
 def release_step_targets_production(plan: dict[str, Any], step: dict[str, Any]) -> bool:
     settings = plan_settings_value(plan)
     config = step_config(step)
-    environment = (
-        str(config.get("environment") or settings.get("environment") or "").strip().lower()
-    )
-    namespace = str(config.get("namespace") or settings.get("namespace") or "").strip().lower()
-    return environment in PRODUCTION_ENVIRONMENTS or namespace in PRODUCTION_ENVIRONMENTS
+    environment = str(config.get("environment") or settings.get("environment") or "")
+    namespace = str(config.get("namespace") or settings.get("namespace") or "")
+    return is_production_environment(environment) or is_production_environment(namespace)
 
 
 def active_release_run_blockers(db: Any, workspace_id: str, plan: dict[str, Any]) -> list[str]:

@@ -17,6 +17,7 @@ from domains.alert.measurements import (
     AlertRuleMeasurementLoader,
 )
 from domains.alert.repository import severity_matches
+from packages.config.environments import normalize_environment
 from packages.config.logs import CONTEXT_KEY, get_logger
 from packages.config.settings import env
 from packages.contracts.alert.provider import AlertProvider
@@ -73,7 +74,10 @@ def check_alert_policy(evt: AlertRequestedBody) -> AlertPolicyDecision:
     allowed_auto_command_envs = csv_values(
         env(ALERT_AUTO_COMMAND_ENVIRONMENTS_ENV, DEFAULT_ALERT_AUTO_COMMAND_ENVIRONMENTS)
     )
-    if evt.next_command is not None and evt.environment.lower() not in allowed_auto_command_envs:
+    if (
+        evt.next_command is not None
+        and normalize_environment(evt.environment) not in allowed_auto_command_envs
+    ):
         return AlertPolicyDecision(
             allowed=False,
             reason=AUTO_COMMAND_ENVIRONMENT_DENIED_REASON,

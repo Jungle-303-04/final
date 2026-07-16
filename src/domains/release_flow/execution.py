@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from packages.config.environments import is_production_environment
 from packages.config.settings import env
 from packages.contracts.event_bus.interfaces import JsonObject
 
@@ -15,7 +16,6 @@ RUNTIME_MODE_LIVE = "live"
 RUNTIME_MODES = {RUNTIME_MODE_DEMO, RUNTIME_MODE_LIVE}
 RELEASE_FLOW_LIVE_ENABLED_ENV = "RELEASE_FLOW_LIVE_ENABLED"
 RELEASE_FLOW_LIVE_WORKSPACES_ENV = "RELEASE_FLOW_LIVE_WORKSPACES"
-PRODUCTION_ENVIRONMENTS = {"prod", "production"}
 TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
 PLACEHOLDER_CHANGE_TICKETS = {"CHG-PREFLIGHT"}
 
@@ -143,7 +143,7 @@ def requires_manual_approval(policy: str, gate: str, environment: str) -> bool:
         return True
     if policy == "manual_each_step":
         return True
-    if policy == "production_only" and environment.lower() in PRODUCTION_ENVIRONMENTS:
+    if policy == "production_only" and is_production_environment(environment):
         return True
     return False
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from packages.config.environments import is_sandbox_environment
+
 
 @dataclass(frozen=True)
 class CommandActionSpec:
@@ -31,7 +33,7 @@ class CommandActionSpec:
 
     def requires_approval_for(self, namespace: str) -> bool:
         return self.requires_approval or (
-            self.requires_approval_outside_sandbox and namespace != "sandbox"
+            self.requires_approval_outside_sandbox and not is_sandbox_environment(namespace)
         )
 
 

@@ -10,6 +10,7 @@ import yaml
 from fastapi import APIRouter, Depends
 
 from domains.identity.dependencies import require_session
+from packages.config.environments import is_production_environment
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import DiagnosticsRequest
 from packages.contracts.gateway.responses import DiagnosticItem, DiagnosticsResponse
@@ -20,7 +21,6 @@ router = APIRouter()
 DNS_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 REPO_REF_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 MANIFEST_EXTENSIONS = (".yaml", ".yml", ".json")
-PRODUCTION_NAMESPACES = {"prod", "production"}
 SECRET_KEY_HINTS = ("password", "passwd", "secret", "token", "apikey", "api_key")
 EXECUTION_MODES = {"preview_only", "manual_dispatch", "sequential_apply", "promotion"}
 RUNTIME_MODES = {"demo", "live"}
@@ -188,7 +188,7 @@ def kubernetes_object_diagnostics(
                 path="metadata.namespace",
             )
         )
-    if namespace in PRODUCTION_NAMESPACES:
+    if is_production_environment(namespace):
         diagnostics.append(
             item(
                 "warning",
@@ -441,7 +441,7 @@ def settings_diagnostics(
                 path=scoped_path(path_prefix, "namespace"),
             )
         )
-    if namespace in PRODUCTION_NAMESPACES:
+    if is_production_environment(namespace):
         diagnostics.append(
             item(
                 "warning",
@@ -600,7 +600,9 @@ def release_policy_diagnostics(
     rollback_policy = str(settings.get("rollback_policy") or "")
     failure_policy = str(settings.get("failure_policy") or "")
     environments = [str(env).strip() for env in list_value(settings.get("environment_order"))]
-    if approval_policy == "auto_safe" and any(env in PRODUCTION_NAMESPACES for env in environments):
+    if approval_policy == "auto_safe" and any(
+        is_production_environment(environment) for environment in environments
+    ):
         diagnostics.append(
             item(
                 "warning",
@@ -611,7 +613,9 @@ def release_policy_diagnostics(
                 action="approval_required",
             )
         )
-    if rollback_policy == "disabled" and any(env in PRODUCTION_NAMESPACES for env in environments):
+    if rollback_policy == "disabled" and any(
+        is_production_environment(environment) for environment in environments
+    ):
         diagnostics.append(
             item(
                 "warning",
@@ -805,7 +809,7 @@ def step_policy_diagnostics(
     effective_gate = gate
     if gate == "inherit":
         effective_gate = str(plan_settings.get("approval_policy") or "auto_safe")
-    if effective_gate == "auto" and environment in PRODUCTION_NAMESPACES:
+    if effective_gate == "auto" and is_production_environment(environment):
         diagnostics.append(
             item(
                 "warning",
