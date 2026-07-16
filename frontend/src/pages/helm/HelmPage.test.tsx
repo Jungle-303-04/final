@@ -64,7 +64,7 @@ describe("HelmPage", () => {
     const search = await screen.findByRole("textbox", { name: "Filter releases" });
     fireEvent.keyDown(window, { key: "/" });
 
-    expect(document.activeElement).toBe(search);
+    await waitFor(() => expect(document.activeElement).toBe(search));
   });
 
   it("does not steal the list search shortcut from editable, modal, or already-handled owners", async () => {
