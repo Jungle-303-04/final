@@ -5509,27 +5509,34 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
-      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts#ResourcesFilterResourcePage",
       "desktopContract": null,
       "verification": [
         "tests/test_live_resource_metrics.py",
-        "frontend/src/pages/resources/ResourcesTable.tsx",
+        "tests/test_resource_table_metrics.py",
+        "tests/test_inventory_filter_router.py",
+        "tests/test_inventory_filter_response_contract.py",
+        "frontend/src/api/resource-filters.test.ts",
+        "frontend/src/features/resources/resourcesFilterCanonical.test.ts",
+        "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
-          "reason": "Pod usage, request, and limit evidence is collected, but no bounded authorized top-Pod ranking response joins it to the pinned inventory revision.",
-          "test": "tests/test_live_resource_metrics.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_filtered_resources",
+          "consumer": "src/domains/inventory_filter/resource_table_metrics.py#attach_resource_table_metrics",
+          "reason": "The existing authorized Resources page now owns a bounded Pod metric projection from the same pinned inventory row, retaining UID, source snapshot, observation boundary, usage, complete request and limit totals, and explicit missing-evidence reasons without a duplicate endpoint.",
+          "test": "tests/test_resource_table_metrics.py#test_pod_table_metrics_preserve_usage_requests_limits_uid_and_snapshot"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourcesTable.tsx",
-          "reason": "Resource table metric columns stay absent until the server supplies sortable values with completeness and units.",
-          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceTableSmartCell.tsx#ResourceTableSmartCell",
+          "consumer": "frontend/src/features/resources/resourcesFilterCanonical.ts#toResourcesResourcePage",
+          "reason": "The shared Resources table consumes only server-owned Pod measurements, sorts by measured CPU and memory, displays request and limit evidence, and keeps partial or unavailable values distinct from zero.",
+          "test": "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5550,27 +5557,33 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
-      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts#ResourcesFilterResourcePage",
       "desktopContract": null,
       "verification": [
+        "tests/test_resource_table_metrics.py",
         "tests/test_inventory_filter_router.py",
-        "frontend/src/pages/resources/ResourcesTable.tsx",
+        "tests/test_inventory_filter_response_contract.py",
+        "frontend/src/api/resource-filters.test.ts",
+        "frontend/src/features/resources/resourcesFilterCanonical.test.ts",
+        "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
-          "reason": "No authorized top-Node projection combines usage, allocatable capacity, and Pod count at one observation boundary.",
-          "test": "tests/test_inventory_filter_router.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_filtered_resources",
+          "consumer": "src/domains/inventory_filter/resource_table_metrics.py#attach_resource_table_metrics",
+          "reason": "The same bounded authorized Resources response combines Node CPU and memory usage, allocatable CPU and memory, scheduled Pod count, Pod allocatable capacity, UID, source snapshot, and observation boundary without browser-side cross-generation joins.",
+          "test": "tests/test_resource_table_metrics.py#test_node_table_metrics_preserve_allocatable_and_scheduled_pod_count"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourcesTable.tsx",
-          "reason": "Node ranking columns cannot be calculated from separate inventory and metric refresh generations in the browser.",
-          "test": "scripts/reference-resource-metrics-parity.test.mjs"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceTableSmartCell.tsx#ResourceTableSmartCell",
+          "consumer": "frontend/src/features/resources/resourcesFilterCanonical.ts#toResourcesResourcePage",
+          "reason": "The existing Node table renders and sorts the server-owned observation, showing actual versus allocatable CPU and memory plus scheduled versus allocatable Pods with explicit completeness.",
+          "test": "frontend/src/pages/resources/ResourceTableSmartCell.metrics.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

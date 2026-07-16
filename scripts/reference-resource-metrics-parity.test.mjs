@@ -28,8 +28,6 @@ const PROVIDER_BLOCKED = new Set([
   "reference.feature.140",
   "reference.feature.141",
   "reference.feature.142",
-  "reference.feature.147",
-  "reference.feature.148",
   "reference.feature.149",
   "reference.feature.150",
   "reference.feature.152",
