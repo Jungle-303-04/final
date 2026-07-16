@@ -85,10 +85,6 @@ export const DUMMY_CONVERSATION: AiConversation = {
       createdAt: new Date(Date.now() - 36_000).toISOString(),
       parts: [
         {
-          kind: "text",
-          markdown: "현재 화면 범위(클러스터 `cluster-2`)로 알림 규칙 초안을 제안합니다. 내용을 확인해 주세요.",
-        },
-        {
           kind: "action",
           proposal: {
             type: "create_alert_rule",
