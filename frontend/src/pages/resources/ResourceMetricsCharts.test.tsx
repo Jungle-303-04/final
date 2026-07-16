@@ -42,6 +42,25 @@ describe("resource detail metrics", () => {
             observedAt: "2026-07-15T05:01:00.000Z",
           },
         ],
+        currentObservation: {
+          observedAt: "2026-07-15T05:00:58.000Z",
+          measurementWindow: "30s",
+          cpuMillicores: 40,
+          memoryMebibytes: 160,
+          containerMetricsComplete: true,
+          containers: [
+            {
+              name: "app",
+              cpuMillicores: 30,
+              memoryMebibytes: 128,
+            },
+            {
+              name: "sidecar",
+              cpuMillicores: 10,
+              memoryMebibytes: 32,
+            },
+          ],
+        },
         resourceId: POD_DETAIL.resource.inventoryKey,
         resourceType: "pod",
       }],
@@ -66,6 +85,10 @@ describe("resource detail metrics", () => {
     expect(within(dialog).getAllByText("86.0m").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("160MiB").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("192MiB").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("app")).toBeTruthy();
+    expect(within(dialog).getByText("sidecar")).toBeTruthy();
+    expect(within(dialog).getByText("30.0m · 128MiB")).toBeTruthy();
+    expect(within(dialog).getByText("10.0m · 32.0MiB")).toBeTruthy();
     expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(2);
     await waitFor(() => expect(loadResourceMetricsHistory).toHaveBeenCalledWith(
       expect.anything(),
@@ -166,6 +189,8 @@ describe("resource detail metrics", () => {
                   measurementWindow: "30s",
                   cpuMillicores: 640.5,
                   memoryMebibytes: 4096,
+                  containerMetricsComplete: false,
+                  containers: [],
                 },
                 hasSparklinePoints: true,
                 name: "worker-a",

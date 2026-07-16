@@ -2021,29 +2021,33 @@
       }
     },
     "reference.feature.143": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
       "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_live_resource_metrics.py",
+        "tests/test_target_kubernetes_evidence.py",
+        "tests/test_resource_metrics_history_contract.py",
         "tests/test_inventory_filter_router.py",
+        "frontend/src/api/resource-metrics-history.test.ts",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
         "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
           "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
-          "reason": "Real Pod CPU and memory samples are persisted, but the normalized response aggregates containers and does not expose the source timestamp-window container shape.",
-          "test": "tests/test_live_resource_metrics.py"
+          "reason": "The existing bounded metrics contract retains the metrics-server Pod timestamp, measurement window, exact aggregate, and unique ordered per-container CPU and memory observations with an explicit completeness bit.",
+          "test": "tests/test_resource_metrics_history_contract.py#test_metric_history_preserves_real_nulls_and_completeness"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
           "consumer": "frontend/src/features/resources/createResourceMetricsHistoryAdapter.ts#createResourceMetricsHistoryAdapter",
-          "reason": "The detail chart shows current and peak aggregate measurements while a per-container live metric panel remains unavailable.",
+          "reason": "The detail chart keeps aggregate current and peak values and renders the exact server-observed per-container current CPU and memory list without splitting aggregate values in the browser.",
           "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
         }
       }

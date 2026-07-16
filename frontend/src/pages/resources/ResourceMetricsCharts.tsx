@@ -21,7 +21,10 @@ import type {
   ResourceMetricsHistoryFrame,
   ResourceMetricsUnavailableRetry,
 } from "./useResourceMetricsHistoryDataFrame";
-import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceMetricContainerObservation,
+  ResourceMetricTimeRange,
+} from "../../features/resources/resourceMetricsHistoryContract";
 import { TimelineRangeSelect } from "./ResourcesGraphChrome";
 
 interface MetricPoint {
@@ -136,7 +139,67 @@ export function ResourceMetricsCharts({
           />
         ) : null}
       </div>
+      {series.resourceType === "pod" && series.currentObservation ? (
+        <ContainerMetrics
+          complete={series.currentObservation.containerMetricsComplete}
+          containers={series.currentObservation.containers}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function ContainerMetrics({
+  complete,
+  containers,
+}: {
+  complete: boolean;
+  containers: ResourceMetricContainerObservation[];
+}) {
+  const { t } = useI18n();
+  if (containers.length === 0) {
+    return complete ? null : (
+      <p className="text-xs text-muted-foreground">
+        {t("resources.detail.metricsContainersUnavailable")}
+      </p>
+    );
+  }
+  const unavailable = t("common.value.unavailable");
+  return (
+    <section className="grid min-w-0 gap-2 rounded-xl border bg-card p-4 shadow-xs">
+      <header className="flex min-w-0 items-center justify-between gap-3">
+        <h3 className="truncate text-sm font-medium">
+          {t("resources.detail.metricsContainers")}
+        </h3>
+        {complete ? null : (
+          <Badge variant="outline">
+            {t("resources.detail.metricsContainersPartial")}
+          </Badge>
+        )}
+      </header>
+      <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
+        {containers.map((container) => (
+          <li
+            className="flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2"
+            key={container.name}
+          >
+            <span className="truncate text-sm font-medium" title={container.name}>
+              {container.name}
+            </span>
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+              {t("resources.detail.metricsContainerValue", {
+                cpu: container.cpuMillicores === null
+                  ? unavailable
+                  : `${formatNumber(container.cpuMillicores)}m`,
+                memory: container.memoryMebibytes === null
+                  ? unavailable
+                  : `${formatNumber(container.memoryMebibytes)}MiB`,
+              })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

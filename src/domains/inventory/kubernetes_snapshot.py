@@ -96,6 +96,16 @@ def _pod_usage(pods: list[JsonObject]) -> JsonObject:
             value = _float_or_none(pod.get(source_key))
             if value is not None:
                 payload[target_key] = value
+        for key in ("metrics_observed_at", "metrics_window"):
+            value = pod.get(key)
+            if isinstance(value, str) and value.strip():
+                payload[key] = value
+        container_metrics = pod.get("container_metrics")
+        if isinstance(container_metrics, list) and all(
+            isinstance(item, dict) for item in container_metrics
+        ):
+            payload["container_metrics"] = [dict(item) for item in container_metrics]
+            payload["container_metrics_complete"] = pod.get("container_metrics_complete") is True
         if payload:
             usage[f"{namespace}/{name}"] = payload
     return usage

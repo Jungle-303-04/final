@@ -36,7 +36,29 @@ def test_metric_history_preserves_real_nulls_and_completeness() -> None:
             "cluster-a": [
                 {
                     "sampled_at": "2026-07-14T05:00:00Z",
-                    "usage": {"pods": {"shop/checkout-a": {"cpu_mcores": 125.5}}},
+                    "usage": {
+                        "pods": {
+                            "shop/checkout-a": {
+                                "cpu_mcores": 125.5,
+                                "mem_mib": 192,
+                                "metrics_observed_at": "2026-07-14T04:59:58Z",
+                                "metrics_window": "30s",
+                                "container_metrics_complete": True,
+                                "container_metrics": [
+                                    {
+                                        "name": "app",
+                                        "cpu_mcores": 100.5,
+                                        "mem_mib": 128,
+                                    },
+                                    {
+                                        "name": "sidecar",
+                                        "cpu_mcores": 25,
+                                        "mem_mib": 64,
+                                    },
+                                ],
+                            }
+                        }
+                    },
                 },
                 {
                     "sampled_at": "2026-07-14T05:01:00Z",
@@ -57,6 +79,13 @@ def test_metric_history_preserves_real_nulls_and_completeness() -> None:
     assert response.series[0].completeness == "partial"
     assert response.series[0].points[0].cpu_mcores == 125.5
     assert response.series[0].points[1].cpu_mcores is None
+    assert response.series[0].current_observation is not None
+    assert response.series[0].current_observation.container_metrics_complete is True
+    assert [item.name for item in response.series[0].current_observation.containers] == [
+        "app",
+        "sidecar",
+    ]
+    assert response.series[0].current_observation.containers[1].cpu_mcores == 25
     assert "metrics_history_partial" in response.partial_reason_codes
 
 

@@ -1265,6 +1265,10 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "container_ports_complete": container_ports_complete,
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),
+        "metrics_observed_at": measured.get("metrics_observed_at"),
+        "metrics_window": measured.get("metrics_window"),
+        "container_metrics": measured.get("container_metrics", []),
+        "container_metrics_complete": measured.get("container_metrics_complete", False),
         "cpu_request_mcores": cpu_request_mcores,
         "mem_request_mib": mem_request_mib,
         "restart_total": sum(int(container.get("restart_count", 0)) for container in containers),
@@ -1645,23 +1649,44 @@ def node_metrics_by_name(rows: list[JsonObject]) -> dict[str, JsonObject]:
 
 
 def pod_metric_summary(item: JsonObject) -> JsonObject:
-    containers = item.get("containers") if isinstance(item.get("containers"), list) else []
+    raw_containers = item.get("containers")
+    containers = raw_containers if isinstance(raw_containers, list) else []
     cpu = 0.0
     memory = 0.0
     seen = False
+    names: set[str] = set()
+    container_metrics: list[JsonObject] = []
+    complete = isinstance(raw_containers, list)
     for container in containers:
         if not isinstance(container, dict):
+            complete = False
             continue
+        name = as_text(container.get("name"))
+        if not name or name in names:
+            complete = False
+            continue
+        names.add(name)
         usage = container.get("usage") if isinstance(container.get("usage"), dict) else {}
         cpu_value = parse_cpu_mcores(usage.get("cpu"))
         mem_value = parse_memory_mib(usage.get("memory"))
+        if cpu_value is None and mem_value is None:
+            complete = False
+            continue
+        container_metrics.append({"name": name, "cpu_mcores": cpu_value, "mem_mib": mem_value})
         if cpu_value is not None:
             cpu += cpu_value
             seen = True
         if mem_value is not None:
             memory += mem_value
             seen = True
-    return {"cpu_mcores": cpu if seen else None, "mem_mib": memory if seen else None}
+    return {
+        "cpu_mcores": cpu if seen else None,
+        "mem_mib": memory if seen else None,
+        "metrics_observed_at": as_text(item.get("timestamp")),
+        "metrics_window": as_text(item.get("window")),
+        "container_metrics": sorted(container_metrics, key=lambda value: str(value["name"])),
+        "container_metrics_complete": complete and len(container_metrics) == len(containers),
+    }
 
 
 def metric_usage_summary(item: JsonObject) -> JsonObject:

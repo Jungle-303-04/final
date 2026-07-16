@@ -81,6 +81,8 @@ describe("Resource metrics history adapter", () => {
           measurement_window: "30s",
           cpu_mcores: 640.5,
           mem_mib: 4096,
+          container_metrics_complete: false,
+          containers: [],
         },
         has_sparkline_points: true,
         completeness: "exact",
@@ -100,6 +102,8 @@ describe("Resource metrics history adapter", () => {
       measurementWindow: "30s",
       cpuMillicores: 640.5,
       memoryMebibytes: 4096,
+      containerMetricsComplete: false,
+      containers: [],
     });
   });
 

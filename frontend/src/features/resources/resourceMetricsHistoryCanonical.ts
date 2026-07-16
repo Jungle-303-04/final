@@ -33,6 +33,12 @@ export function toResourceMetricsHistory(
           measurementWindow: series.current_observation.measurement_window,
           cpuMillicores: series.current_observation.cpu_mcores,
           memoryMebibytes: series.current_observation.mem_mib,
+          containers: series.current_observation.containers.map((container) => ({
+            name: container.name,
+            cpuMillicores: container.cpu_mcores,
+            memoryMebibytes: container.mem_mib,
+          })),
+          containerMetricsComplete: series.current_observation.container_metrics_complete,
         },
       hasSparklinePoints: series.has_sparkline_points,
       completeness: series.completeness,

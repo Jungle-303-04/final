@@ -32,6 +32,12 @@ export interface ResourceMetricsHistoryEndpointResponse {
       measurement_window: string;
       cpu_mcores: number | null;
       mem_mib: number | null;
+      containers: Array<{
+        name: string;
+        cpu_mcores: number | null;
+        mem_mib: number | null;
+      }>;
+      container_metrics_complete: boolean;
     } | null;
     has_sparkline_points: boolean;
     completeness: Completeness;

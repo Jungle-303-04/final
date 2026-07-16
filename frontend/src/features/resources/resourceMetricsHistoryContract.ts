@@ -31,6 +31,14 @@ export interface ResourceMetricCurrentObservation {
   measurementWindow: string;
   cpuMillicores: number | null;
   memoryMebibytes: number | null;
+  containers: ResourceMetricContainerObservation[];
+  containerMetricsComplete: boolean;
+}
+
+export interface ResourceMetricContainerObservation {
+  name: string;
+  cpuMillicores: number | null;
+  memoryMebibytes: number | null;
 }
 
 export interface ResourceMetricHistorySeries {

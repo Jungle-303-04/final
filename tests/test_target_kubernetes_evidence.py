@@ -613,6 +613,12 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["pods"][0]["restart_total"] == 2
     assert validated.kubernetes["pods"][0]["cpu_mcores"] == 125.0
     assert validated.kubernetes["pods"][0]["mem_mib"] == 64.0
+    assert validated.kubernetes["pods"][0]["metrics_observed_at"] == "2026-07-16T02:00:00Z"
+    assert validated.kubernetes["pods"][0]["metrics_window"] == "30s"
+    assert validated.kubernetes["pods"][0]["container_metrics"] == [
+        {"name": "checkout-api", "cpu_mcores": 125.0, "mem_mib": 64.0}
+    ]
+    assert validated.kubernetes["pods"][0]["container_metrics_complete"] is True
     assert validated.kubernetes["events"][0]["reason"] == "BackOff"
     assert validated.kubernetes["events"][0]["reason_summary"] == {
         "category": "container_restart",

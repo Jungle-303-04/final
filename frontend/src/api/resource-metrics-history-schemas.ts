@@ -19,10 +19,28 @@ export const resourceMetricCurrentObservationSchema = z.strictObject({
   measurement_window: z.string().trim().min(1).max(64),
   cpu_mcores: nullableMetric,
   mem_mib: nullableMetric,
-}).refine(
-  (observation) => observation.cpu_mcores !== null || observation.mem_mib !== null,
-  { message: "current metric observation requires CPU or memory" },
-);
+  containers: z.array(z.strictObject({
+    name: z.string().trim().min(1).max(253),
+    cpu_mcores: nullableMetric,
+    mem_mib: nullableMetric,
+  }).refine(
+    (container) => container.cpu_mcores !== null || container.mem_mib !== null,
+    { message: "container metric observation requires CPU or memory" },
+  )),
+  container_metrics_complete: z.boolean(),
+}).superRefine((observation, context) => {
+    if (observation.cpu_mcores === null && observation.mem_mib === null) {
+      context.addIssue({ code: "custom", message: "current metric observation requires CPU or memory" });
+    }
+    const names = observation.containers.map((container) => container.name);
+    if (new Set(names).size !== names.length ||
+      names.some((name, index) => index > 0 && name <= names[index - 1]!)) {
+      context.addIssue({ code: "custom", message: "container metrics must be unique and ordered" });
+    }
+    if (observation.container_metrics_complete && observation.containers.length === 0) {
+      context.addIssue({ code: "custom", message: "complete container metrics require a container" });
+    }
+});
 
 export const resourceMetricHistorySeriesSchema = z.strictObject({
   resource_id: z.string().min(1),
@@ -41,6 +59,11 @@ export const resourceMetricHistorySeriesSchema = z.strictObject({
   }
   if (series.resource_type === "node" && series.namespace !== null) {
     context.addIssue({ code: "custom", message: "node metric history must be cluster scoped", path: ["namespace"] });
+  }
+  if (series.resource_type === "node" && series.current_observation &&
+    (series.current_observation.containers.length > 0 ||
+      series.current_observation.container_metrics_complete)) {
+    context.addIssue({ code: "custom", message: "node current metrics cannot expose containers", path: ["current_observation"] });
   }
   const observed = series.points.map((point) => point.observed_at);
   if (new Set(observed).size !== observed.length ||

@@ -1097,16 +1097,35 @@ class ResourceMetricHistoryPoint(StrictModel):
     mem_mib: float | None = Field(default=None, ge=0)
 
 
-class ResourceMetricCurrentObservation(StrictModel):
-    observed_at: str = Field(min_length=1)
-    measurement_window: str = Field(min_length=1, max_length=64)
+class ResourceMetricContainerObservation(StrictModel):
+    name: str = Field(min_length=1, max_length=253)
     cpu_mcores: float | None = Field(default=None, ge=0)
     mem_mib: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def require_observed_metric(self) -> Self:
         if self.cpu_mcores is None and self.mem_mib is None:
+            raise ValueError("container metric observation requires CPU or memory")
+        return self
+
+
+class ResourceMetricCurrentObservation(StrictModel):
+    observed_at: str = Field(min_length=1)
+    measurement_window: str = Field(min_length=1, max_length=64)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+    containers: list[ResourceMetricContainerObservation] = Field(default_factory=list)
+    container_metrics_complete: bool = False
+
+    @model_validator(mode="after")
+    def require_observed_metric(self) -> Self:
+        if self.cpu_mcores is None and self.mem_mib is None:
             raise ValueError("current metric observation requires CPU or memory")
+        names = [container.name for container in self.containers]
+        if names != sorted(names) or len(set(names)) != len(names):
+            raise ValueError("container metric observations must be unique and ordered")
+        if self.container_metrics_complete and not self.containers:
+            raise ValueError("complete container metrics require an observed container")
         return self
 
 
@@ -1128,6 +1147,15 @@ class ResourceMetricHistorySeries(StrictModel):
             raise ValueError("pod metric history requires a namespace")
         if self.resource_type == "node" and self.namespace is not None:
             raise ValueError("node metric history must be cluster scoped")
+        if (
+            self.resource_type == "node"
+            and self.current_observation is not None
+            and (
+                self.current_observation.containers
+                or self.current_observation.container_metrics_complete
+            )
+        ):
+            raise ValueError("node current metrics cannot expose Pod containers")
         observed_at = [point.observed_at for point in self.points]
         if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
             raise ValueError("resource metric history points must be unique and ordered")
