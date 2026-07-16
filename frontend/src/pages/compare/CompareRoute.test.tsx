@@ -43,7 +43,8 @@ describe("CompareRoute", () => {
 
     await screen.findByRole("heading", { name: "Compare" });
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("apiVersion=v1"));
-    await user.click(screen.getAllByRole("button", { name: "Change" })[0]!);
+    const changeButtons = await screen.findAllByRole("button", { name: "Change" });
+    await user.click(changeButtons[0]!);
     const picker = await screen.findByRole("dialog", { name: "Choose side A resource" });
     const filter = screen.getByRole("combobox", { name: "Filter comparison candidates" });
     expect(filter.getAttribute("data-slot")).toBe("input");
