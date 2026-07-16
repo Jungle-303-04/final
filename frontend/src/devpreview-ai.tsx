@@ -16,15 +16,36 @@ import type {
   AiMessagePart, AiPageLink, AiResultPart, AiStepsPart, AiTextPart, AiTone, AiTurn,
 } from "./features/ai-assistant/aiConversationContract";
 
-const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)";
-const AUTO_COLLAPSE_MS = 2800;
-// 애플 시스템 컬러
-const APPLE = { blue: "#0A84FF", red: "#FF3B30", orange: "#FF9500", green: "#30D158", gray: "#8E8E93" };
-const toneHex: Record<AiTone, string> = { healthy: APPLE.green, warning: APPLE.orange, critical: APPLE.red, neutral: APPLE.gray };
+const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)"; // 진입 등장 이징
+
+// ── 타이밍 상수 (한 곳에서 관리) ─────────────────────────────
+// collapse* 는 CSS 트랜지션과 공유(스타일 블록에 주입). 재생/타이핑 계열은 프리뷰 전용(배선 시 제거).
+const TIMING = {
+  autoCollapseMs: 2800,    // 답변 완료 후 자동 접힘까지
+  collapseSlideMs: 300,    // 접힘/펼침 높이 트랜지션
+  collapseFadeMs: 150,     // 내용↔요약 크로스페이드
+  typewriterStepMs: 11,    // 타이핑 간격
+  stepRevealMs: 560,       // 단계 노출 간격
+  stepCollapseMs: 900,     // 단계 완료 후 한 줄 접힘
+  partReadyMs: 440,        // 비텍스트 파트 준비 지연
+  revealGapMs: 520,        // 유저 발화 후 다음 노출 간격
+  thinkMs: 650,            // 답변 전 "생각 중"
+  sendThinkMs: 800,        // 전송 후 응답까지
+  actionCreateMs: 900,     // 알림 생성 처리
+  actionCollapseMs: 1100,  // 생성 후 한 줄 접힘
+  userShownMs: 480,        // 유저 말풍선 노출
+  collapsedShownMs: 260,   // 접힌 요약 노출
+  replayStep1Ms: 450, replayStep2Ms: 980, // ▶ 재생 시 초기 노출
+} as const;
+
+// ── 색상: 애플 팔레트는 CSS 변수(.opsia-ai)로 정의, 여기선 토큰만 참조 ──
+const toneHex: Record<AiTone, string> = {
+  healthy: "var(--ap-green)", warning: "var(--ap-orange)", critical: "var(--ap-red)", neutral: "var(--ap-gray)",
+};
 const ICON = 1.75; // SF Symbols 느낌의 일관된 스트로크
 const linkIcon = (i?: AiPageLink["icon"]) => i === "resources" ? Boxes : i === "incident" ? CircleAlert : i === "gitops" ? GitBranch : i === "cluster" ? Server : i === "alert" ? BellPlus : ArrowUpRight;
 const evIcon = (t: string) => t === "event" ? CircleAlert : t === "metric" ? Activity : FileText;
-const LINK = "font-medium underline underline-offset-[3px] decoration-[#0A84FF]/30 text-[#0A84FF] transition-colors hover:decoration-[#0A84FF]";
+const LINK = "ap-link"; // 스타일은 .ap-link (스타일 블록)
 const md = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
   .replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" class="${LINK}">$1</a>`).replace(/\n/g, "<br/>");
@@ -37,7 +58,7 @@ function TextPart({ part, active, onReady }: { part: AiTextPart; active: boolean
     if (!active) { setN(part.markdown.length); return; }
     if (!part.markdown) { onReady(); return; }
     setN(0); let i = 0;
-    const id = window.setInterval(() => { i += 2; setN(i); if (i >= part.markdown.length) { window.clearInterval(id); onReady(); } }, 11);
+    const id = window.setInterval(() => { i += 2; setN(i); if (i >= part.markdown.length) { window.clearInterval(id); onReady(); } }, TIMING.typewriterStepMs);
     return () => window.clearInterval(id);
   }, [active]);
   if (!part.markdown) return null;
@@ -63,8 +84,8 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
     const id = window.setInterval(() => {
       d += 1; setDone(d);
       const finished = part.running ? d >= total - 1 : d >= total;
-      if (finished) { window.clearInterval(id); if (!part.running) { onReady(); window.setTimeout(() => setCollapsed(true), 900); } }
-    }, 560);
+      if (finished) { window.clearInterval(id); if (!part.running) { onReady(); window.setTimeout(() => setCollapsed(true), TIMING.stepCollapseMs); } }
+    }, TIMING.stepRevealMs);
     return () => window.clearInterval(id);
   }, [active]);
   const complete = !part.running && done >= total;
@@ -74,7 +95,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
       <button onClick={() => setCollapsed(false)} type="button"
         className="group/s flex w-fit items-center gap-1.5 rounded-full text-[11.5px] font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
-        <span className="grid size-4 place-items-center rounded-full bg-[#30D158]/15"><Check className="size-2.5 text-[#30D158]" /></span>
+        <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span>
         <span>근거 {total}단계 확인{evidenceCount ? ` · ${evidenceCount}건` : ""}</span>
         <ChevronDown className="size-3 opacity-0 transition-opacity group-hover/s:opacity-50" />
       </button>
@@ -83,7 +104,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground">
-        {complete ? <Check className="size-3.5 text-[#30D158]" /> : <Spinner className="size-3.5 text-[#0A84FF]" decorative />}
+        {complete ? <Check className="size-3.5 ap-ok" /> : <Spinner className="size-3.5 ap-accent" decorative />}
         <span className="tracking-[-0.01em]">{complete ? "근거 확인 완료" : "확인하는 중"}</span>
         <span className="tabular-nums opacity-60">{Math.min(done + (part.running ? 1 : 0), total)}/{total}</span>
       </div>
@@ -95,7 +116,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
           return (
             <li key={s.id} className="relative flex items-center gap-2 text-[12.5px]" style={{ animation: `stepIn 0.42s ${SPRING}` }}>
               <span className="absolute -left-[21px] grid size-4 place-items-center rounded-full bg-card ring-4 ring-card">
-                {isDone ? <span className="grid size-4 place-items-center rounded-full bg-[#30D158]/15"><Check className="size-2.5 text-[#30D158]" /></span> : <Spinner className="size-3 text-[#0A84FF]" decorative />}
+                {isDone ? <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span> : <Spinner className="size-3 ap-accent" decorative />}
               </span>
               <span className="font-medium text-foreground/90">{s.label}</span>
               {isDone && s.detail ? <span className="truncate text-muted-foreground/80">· {s.detail}</span> : isRunning ? <span className="text-muted-foreground/70">…</span> : null}
@@ -158,14 +179,14 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
   const [collapsed, setCollapsed] = useState(false);
   const created = state === "created";
   useEffect(() => { onIdleChange?.(state === "idle"); }, [state]);
-  useEffect(() => { if (created) { const id = window.setTimeout(() => setCollapsed(true), 1100); return () => window.clearTimeout(id); } }, [created]);
+  useEffect(() => { if (created) { const id = window.setTimeout(() => setCollapsed(true), TIMING.actionCollapseMs); return () => window.clearTimeout(id); } }, [created]);
 
   if (created && collapsed) {
     return (
       <button onClick={() => setCollapsed(false)} type="button"
         className="flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
-        <span className="grid size-4 place-items-center rounded-full bg-[#30D158]/15"><Check className="size-2.5 text-[#30D158]" /></span>
+        <span className="grid size-4 place-items-center rounded-full ap-ok-bg"><Check className="size-2.5 ap-ok" /></span>
         <span className="font-medium text-foreground/90">{p.name}</span><span>생성됨</span>
         <span className="mx-0.5 text-muted-foreground/40">·</span>
         <a href="#" className={LINK} onClick={(e) => e.stopPropagation()}>규칙 보기</a>
@@ -175,7 +196,7 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
   return (
     <div className={`grid gap-2.5 ${first ? "" : "border-t border-black/[0.05] pt-3"}`} style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       <div className="flex items-center gap-2 text-[13px] font-semibold tracking-[-0.01em]">
-        <span className={`grid size-5 place-items-center rounded-md ${created ? "bg-[#30D158]/15 text-[#30D158]" : "bg-black/[0.05] text-foreground/70"}`}>
+        <span className={`grid size-5 place-items-center rounded-md ${created ? "ap-ok-bg ap-ok" : "bg-black/[0.05] text-foreground/70"}`}>
           {created ? <Check className="size-3" strokeWidth={ICON} /> : <BellPlus className="size-3" strokeWidth={ICON} />}
         </span>
         {created ? "알림 규칙 생성됨" : "알림 규칙 만들기"}
@@ -188,7 +209,7 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
       </dl>
       {!created ? (
         <div className="flex items-center gap-2 pt-0.5">
-          <button type="button" disabled={state === "creating"} onClick={() => { setState("creating"); setTimeout(() => setState("created"), 900); }}
+          <button type="button" disabled={state === "creating"} onClick={() => { setState("creating"); setTimeout(() => setState("created"), TIMING.actionCreateMs); }}
             className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition-all hover:brightness-105 active:scale-[0.97] disabled:opacity-60">
             {state === "creating" ? <Spinner className="size-4" decorative /> : <BellPlus className="size-4" />}
             {state === "creating" ? "만드는 중" : "만들기"}
@@ -206,7 +227,7 @@ function PartView({ part, active, onReady, evidenceCount, onIdleChange, first }:
   useEffect(() => { fired.current = false; }, [active]);
   useEffect(() => {
     if (active && !(part.kind === "text" || part.kind === "steps")) {
-      const id = window.setTimeout(ready, 440); return () => window.clearTimeout(id);
+      const id = window.setTimeout(ready, TIMING.partReadyMs); return () => window.clearTimeout(id);
     }
   }, [active]);
   if (part.kind === "text") return <TextPart active={active} onReady={ready} part={part} />;
@@ -216,7 +237,7 @@ function PartView({ part, active, onReady, evidenceCount, onIdleChange, first }:
   if (part.kind === "links") return <LinksPart part={part} />;
   if (part.kind === "action") return <ActionPart first={first} onIdleChange={onIdleChange} part={part} />;
   if (part.kind === "status" && part.state === "pending")
-    return <span className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground"><Spinner className="size-3.5 text-[#0A84FF]" decorative /> 확인하고 있습니다…</span>;
+    return <span className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground"><Spinner className="size-3.5 ap-accent" decorative /> 확인하고 있습니다…</span>;
   return null;
 }
 
@@ -262,7 +283,7 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   // 자동 접힘: 완료 후 1회
   useEffect(() => {
     if (didAuto.current || !canCollapse || collapsed) return;
-    const id = window.setTimeout(() => { didAuto.current = true; setCollapsed(true); }, AUTO_COLLAPSE_MS);
+    const id = window.setTimeout(() => { didAuto.current = true; setCollapsed(true); }, TIMING.autoCollapseMs);
     return () => window.clearTimeout(id);
   }, [canCollapse, collapsed]);
 
@@ -304,12 +325,12 @@ function Thinking() {
 }
 
 function UserTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
-  useEffect(() => { const id = window.setTimeout(onShown, 480); return () => window.clearTimeout(id); }, []);
+  useEffect(() => { const id = window.setTimeout(onShown, TIMING.userShownMs); return () => window.clearTimeout(id); }, []);
   return <p className="ml-auto w-fit max-w-[80%] rounded-[18px] rounded-br-md bg-primary px-3.5 py-2 text-[13.5px] font-medium leading-relaxed tracking-[-0.006em] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_50%,transparent)]" style={{ animation: `userIn 0.42s ${SPRING}` }}>{turn.question}</p>;
 }
 
 function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void }) {
-  useEffect(() => { const id = window.setTimeout(onShown, 260); return () => window.clearTimeout(id); }, []);
+  useEffect(() => { const id = window.setTimeout(onShown, TIMING.collapsedShownMs); return () => window.clearTimeout(id); }, []);
   return (
     <div className="group mr-auto flex w-full items-center gap-2.5 rounded-full border border-black/[0.06] bg-card/85 px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-px" style={{ animation: `islandIn 0.5s ${SPRING}` }}>
       <span className="size-2 shrink-0 rounded-full island-pulse" style={{ background: toneHex.critical }} />
@@ -362,15 +383,19 @@ function Panel() {
   const idSeq = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { turnsRef.current = turns; }, [turns]);
-  useLayoutEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); });
+  useLayoutEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    // 사용자가 이미 바닥 근처일 때만 따라감 (위로 스크롤해 읽는 중엔 끌어내리지 않음)
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 140) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  });
 
   const reveal = () => setCount((c) => {
     const t = turnsRef.current;
     const next = c + 1; if (next > t.length) return c;
-    if (t[next - 1].role === "user") window.setTimeout(reveal, 520);
+    if (t[next - 1].role === "user") window.setTimeout(reveal, TIMING.revealGapMs);
     return next;
   });
-  const afterAssistant = () => { if (count < turnsRef.current.length) { setThinking(true); window.setTimeout(() => { setThinking(false); reveal(); }, 650); } };
+  const afterAssistant = () => { if (count < turnsRef.current.length) { setThinking(true); window.setTimeout(() => { setThinking(false); reveal(); }, TIMING.thinkMs); } };
 
   const send = (text: string) => {
     const t = text.trim(); if (!t) return;
@@ -383,19 +408,19 @@ function Panel() {
       setThinking(false); idSeq.current += 1;
       const withA = [...turnsRef.current, scriptedReply(`a${idSeq.current}`, t)];
       turnsRef.current = withA; setTurns(withA); setCount(withA.length);
-    }, 800);
+    }, TIMING.sendThinkMs);
   };
 
   useEffect(() => {
     setTurns(DUMMY_CONVERSATION.turns); turnsRef.current = DUMMY_CONVERSATION.turns;
     setCount(1);
-    const a = window.setTimeout(() => setCount(2), 450);
-    const b = window.setTimeout(() => setCount(3), 980);
+    const a = window.setTimeout(() => setCount(2), TIMING.replayStep1Ms);
+    const b = window.setTimeout(() => setCount(3), TIMING.replayStep2Ms);
     return () => { window.clearTimeout(a); window.clearTimeout(b); };
   }, [runId]);
 
   return (
-    <div className="relative flex h-screen w-[460px] flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl" key={runId}>
+    <div className="opsia-ai relative flex h-screen w-[460px] flex-col overflow-hidden border-l border-black/[0.06] bg-gradient-to-b from-[oklch(0.99_0.002_255)] to-[oklch(0.97_0.003_255)] shadow-2xl" key={runId}>
       <header className="flex items-center gap-2.5 border-b border-black/[0.05] bg-white/60 px-3.5 py-3 backdrop-blur-xl">
         <span className="grid size-9 shrink-0 place-items-center rounded-[13px] bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_75%,black)] text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]"><Sparkles className="size-4" /></span>
         <div className="min-w-0 flex-1"><h2 className="text-[14px] font-semibold leading-tight tracking-[-0.01em]">Opsia AI</h2><p className="truncate text-[11.5px] text-muted-foreground">현재 화면 맥락으로 질문하고 근거를 확인합니다</p></div>
@@ -452,11 +477,19 @@ function Panel() {
         .chatscroll::-webkit-scrollbar-track { background: transparent; }
         .chatscroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.14); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
         .chatscroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.24); background-clip: padding-box; }
+        /* 애플 팔레트 토큰 + 유틸 */
+        .opsia-ai { --ap-blue:#0A84FF; --ap-red:#FF3B30; --ap-orange:#FF9500; --ap-green:#30D158; --ap-gray:#8E8E93; }
+        .ap-accent { color: var(--ap-blue); }
+        .ap-ok { color: var(--ap-green); }
+        .ap-ok-bg { background: color-mix(in srgb, var(--ap-green) 15%, transparent); }
+        .ap-link { font-weight: 500; color: var(--ap-blue); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--ap-blue) 30%, transparent); transition: color .15s, text-decoration-color .15s; }
+        .ap-link:hover { color: color-mix(in srgb, var(--ap-blue) 82%, black); text-decoration-color: var(--ap-blue); }
+        /* 접힘/펼침 아코디언 (grid-rows 0fr↔1fr, 타이밍은 TIMING 주입) */
         .ac-cap, .ac-full { display: grid; }
-        .ac-cap { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease; }
-        .ac-full { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease 150ms; }
-        .is-collapsed .ac-cap { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease 150ms; }
-        .is-collapsed .ac-full { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease; }
+        .ac-cap { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows ${TIMING.collapseSlideMs}ms cubic-bezier(0.4,0,0.2,1), opacity ${TIMING.collapseFadeMs}ms ease; }
+        .ac-full { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows ${TIMING.collapseSlideMs}ms cubic-bezier(0.4,0,0.2,1), opacity ${TIMING.collapseFadeMs}ms ease ${TIMING.collapseFadeMs}ms; }
+        .is-collapsed .ac-cap { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows ${TIMING.collapseSlideMs}ms cubic-bezier(0.4,0,0.2,1), opacity ${TIMING.collapseFadeMs}ms ease ${TIMING.collapseFadeMs}ms; }
+        .is-collapsed .ac-full { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows ${TIMING.collapseSlideMs}ms cubic-bezier(0.4,0,0.2,1), opacity ${TIMING.collapseFadeMs}ms ease; }
         .island-pulse { animation: islandPulse 2s ease-in-out infinite; }
         @keyframes islandPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--destructive) 45%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--destructive) 0%, transparent); } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
