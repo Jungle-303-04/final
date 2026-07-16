@@ -4,6 +4,7 @@
   "aliases": {
     "reference.feature.109": "upstream-ui:desktop:external-link:native-bridge:v1",
     "reference.feature.126": "upstream-ui:resources:renderers:public-contract-boundary:v1",
+    "reference.feature.159": "upstream-ui:observability:local-terminal:native-pty:v1",
     "reference.feature.183": "upstream-ui:helm:release-list:scope-rbac:v1",
     "reference.feature.184": "upstream-ui:helm:release-detail:availability:v1",
     "reference.feature.181": "upstream-ui:traffic:flow-snapshot:scope-availability:v1",

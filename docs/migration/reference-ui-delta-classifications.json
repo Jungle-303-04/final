@@ -551,6 +551,10 @@
       "destination": "frontend/src/desktop/desktopBridge.test.ts",
       "rationale": "Desktop external navigation must accept only credential-free HTTP(S) URLs and cross the typed Tauri bridge rather than a server shell."
     },
+    "desktop.local-terminal.protocol": {
+      "destination": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx",
+      "rationale": "The local PTY must remain device-local, window-scoped, bounded by explicit output acknowledgements, and recover through a new session instead of replaying unsafe shell state."
+    },
     "applications.topology.projection": {
       "destination": "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx",
       "rationale": "Application topology must preserve bounded server nodes, exact API identity, source evidence, edge endpoints, completeness, and partial reasons without browser graph inference."
@@ -6451,6 +6455,46 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The dock composes two reusable session stores: bounded redacted log SSE and persisted command OperationEvent streams, without duplicating their lifecycle reducers."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:observability:local-terminal:native-pty:v1",
+          "legacyContractIds": [
+            "reference.feature.159"
+          ],
+          "symbol": "BottomDock local-terminal tab",
+          "interaction": "a capability-gated local terminal opens a device-local PTY, streams bounded output, accepts input and resize events, closes explicitly, and never sends local shell authority through the Python gateway",
+          "transport": "ws",
+          "realtime": {
+            "resume": "a closed or failed PTY is never replayed; reconnect creates a new window-owned native session after explicit user action",
+            "backpressure": "the native registry caps frame and outstanding output bytes while the frontend acknowledges consumed byte lengths and bounds buffered chunks",
+            "merge": "output, exit, and error events apply only to the current validated session ID and mounted terminal generation"
+          },
+          "motion": {
+            "reducedMotion": "connection, exit, and failure meaning remains in localized text and status badges while shared sheet transitions are disabled under reduced motion",
+            "evidence": [
+              "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+              "frontend/src/shared/i18n/catalogs/ko/desktop.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+              "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx",
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/desktop/localTerminalOutputBuffer.ts",
+              "desktop/src-tauri/src/local_terminal.rs",
+              "desktop/src-tauri/tests/reference_parity.rs"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "desktop.local-terminal.protocol"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The implemented Tauri PTY is main-window scoped, validates session identities and terminal dimensions, enforces input and output windows, and exposes a capability-gated React surface without a server-side shell path."
           }
         }
       ]

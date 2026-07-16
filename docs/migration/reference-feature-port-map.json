@@ -80,18 +80,41 @@
       }
     },
     "reference.feature.159": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
         "frontend/src/desktop/desktopBridge.test.ts",
+        "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx",
+        "frontend/src/desktop/localTerminalOutputBuffer.test.ts",
+        "desktop/src-tauri/src/local_terminal.rs",
         "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "desktop/src-tauri/src/local_terminal.rs#LocalTerminalRegistry",
+          "reason": "Local shell authority and credentials stay on the desktop device; the Python gateway and target agents must never proxy this session.",
+          "test": "desktop/src-tauri/src/local_terminal.rs"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/DesktopLocalTerminalSheet.tsx#DesktopLocalTerminalSurface",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#createDesktopBridge",
+          "test": "frontend/src/desktop/DesktopLocalTerminalSheet.test.tsx"
+        },
         "desktop": {
-          "state": "blocked",
-          "destination": "desktop/src-tauri/src/bridge.rs#DesktopCapabilitySet",
-          "consumer": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
-          "reason": "The local PTY protocol is intentionally absent. It must be implemented only in Tauri and must never be proxied through the Python gateway or target agent.",
+          "state": "implemented",
+          "destination": "desktop/src-tauri/src/local_terminal.rs#LocalTerminalRegistry",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#startLocalTerminal",
           "test": "desktop/src-tauri/tests/reference_parity.rs"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "desktop/src-tauri/src/local_terminal.rs#LocalTerminalRegistry",
+          "consumer": "frontend/src/desktop/localTerminalOutputBuffer.ts#LocalTerminalOutputBuffer",
+          "test": "frontend/src/desktop/localTerminalOutputBuffer.test.ts"
         }
       }
     },
