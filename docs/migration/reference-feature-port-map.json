@@ -1324,7 +1324,7 @@
       }
     },
     "reference.feature.076": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.cost.observations",
       "frontendContract": "frontend/src/features/cost/costContract.ts",
       "desktopContract": null,
@@ -1347,10 +1347,10 @@
           "test": "tests/test_cost_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/cost/CostPage.tsx#CostPage",
           "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
-          "reason": "Summary and trend use the server 60-second policy, while the paginated authorized Node identity, capacity, and observed usage panel uses the independent server 120-second policy with last-success retention. Monetary rate remains explicitly unavailable because no actual pricing or OpenCost observation source is integrated; no estimate is fabricated.",
+          "reason": "Summary uses the server 60-second policy, while trend and the paginated authorized Node panel use independent server 120-second policies with last-success retention. Monetary observations remain explicitly unavailable when no pricing source exists and do not alter refresh-policy parity.",
           "test": "frontend/src/pages/cost/useCostNodesData.test.tsx"
         }
       }
