@@ -7,11 +7,15 @@ import {
   Cylinder,
   Database,
   FileSliders,
+  FileText,
   FolderTree,
   Gauge,
   HardDrive,
   HeartPulse,
+  IdCard,
   KeyRound,
+  LockKeyhole,
+  MonitorDot,
   Network,
   Package,
   Play,
@@ -22,8 +26,12 @@ import {
   Route,
   Server,
   Settings2,
+  ShieldCheck,
+  Workflow,
   type LucideIcon,
+  type LucideProps,
 } from "lucide-react";
+import { createElement, type ReactElement } from "react";
 import type { MessageKey } from "../../shared/i18n";
 
 export interface ResourceCategoryPresentation {
@@ -75,6 +83,36 @@ const PRESENTATIONS: Record<string, {
   usage: { labelKey: "resources.type.usage", category: "activity", icon: Gauge, order: 30 },
 };
 
+/**
+ * One product-owned icon registry for every topology and resource catalog.
+ * Unknown CRDs intentionally use the same neutral fallback instead of growing
+ * a second surface-local map or a CSS selector per source kind.
+ */
+const TOPOLOGY_KIND_ICONS: Readonly<Record<string, LucideIcon>> = {
+  deployment: Boxes,
+  replicaset: Boxes,
+  statefulset: Boxes,
+  daemonset: Boxes,
+  rollout: Boxes,
+  workflow: Workflow,
+  workflowtemplate: FileText,
+  clusterworkflowtemplate: FileText,
+  cronworkflow: Clock3,
+  serviceaccount: IdCard,
+  servicemonitor: MonitorDot,
+  podmonitor: MonitorDot,
+  sealedsecret: LockKeyhole,
+  networkpolicy: ShieldCheck,
+  endpoint: Radio,
+  endpoints: Radio,
+  endpointslice: Radio,
+  gateway: Route,
+  httproute: Route,
+  grpcroute: Route,
+  tcproute: Route,
+  tlsroute: Route,
+};
+
 export function resourceTypePresentation(resourceType: string): ResourceTypePresentation {
   const known = PRESENTATIONS[resourceType.toLowerCase()];
   return known
@@ -92,6 +130,19 @@ export function resourceTypePresentation(resourceType: string): ResourceTypePres
         icon: Puzzle,
         order: 999,
       };
+}
+
+export function resourceKindIcon(kind: string): LucideIcon {
+  const normalized = normalizeResourceKind(kind);
+  return TOPOLOGY_KIND_ICONS[normalized] ?? PRESENTATIONS[normalized]?.icon ?? Puzzle;
+}
+
+export function renderResourceKindIcon(kind: string, props: LucideProps): ReactElement {
+  return createElement(resourceKindIcon(kind), props);
+}
+
+export function normalizeResourceKind(kind: string): string {
+  return kind.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function category(

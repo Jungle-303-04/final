@@ -62,6 +62,9 @@ describe("ResourcesPage S9 relationship topology", () => {
     expect(screen.getByText(
       "The current filters work better as a relationship graph.",
     )).toBeTruthy();
+    expect(document.querySelector('[data-slot="topology-overlay-bar"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="resources-graph-auto-hint"]')?.className)
+      .toContain("motion-topology-overlay");
     await waitFor(() => expect(vi.mocked(window.setTimeout)).toHaveBeenCalledWith(
       expect.any(Function),
       6_000,

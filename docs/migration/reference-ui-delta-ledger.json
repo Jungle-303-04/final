@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 188,
+  "pendingCount": 181,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3670,8 +3670,34 @@
         "blobId": "d232c625620089e7d8951452e7602a76f0d0e9c8",
         "sha256": "2e8009180a2d2325951a35108f68055cca2dacb89fb4a310dffec48e21e17a76"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:group-node:shared-kind-icon:v1",
+          "legacyContractIds": [],
+          "symbol": "GroupNode kind pills and workload-card kind icon",
+          "interaction": "group summaries and resource cards resolve observed Kubernetes kinds through one product-owned icon registry instead of per-kind CSS selectors",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/resourcePresentation.ts",
+              "frontend/src/pages/resources/RelationTopologyNode.tsx",
+              "frontend/src/pages/resources/resourcePresentation.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.kind-icon.registry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The relation topology now consumes the same registry as the resource catalog and covers the newly observed workflow and monitoring kinds. Group-card display levels remain a separate projection item."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3685,8 +3711,34 @@
         "blobId": "4e99cc7eb0666ed1edf8c5387ed09c9f40e95b62",
         "sha256": "d9ab07960b831238a650e4f24e3980ee3654b3da6ee6a24e0da117e5df0ff8b8"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:public:chrome-composition:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyOverlayBar and TopologyBreadcrumb public exports",
+          "interaction": "the first-class topology route composes product-owned graph chrome without importing or executing the isolated source package barrel",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/composition/surfaces/topology.ts",
+              "frontend/src/shared/ui/TopologyOverlayBar.tsx",
+              "frontend/src/pages/resources/ResourcesGraphChrome.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.public-composition"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route owns its imports and reuses the verified Resources graph projection; no source-runtime barrel is introduced."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -3697,8 +3749,34 @@
         "blobId": "1686547ddfc9f72196f3cf80e2201be0f39024b5",
         "sha256": "7bd56e9164a15244dd776a40cd5fe30779966517a4af683fa5a1e53363028a5b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:node:workflow-subtitle-contract:v1",
+          "legacyContractIds": [],
+          "symbol": "baseSubtitle workflow-template and monitoring-kind regression",
+          "interaction": "a topology node may present workflow entrypoint, template count, workload identity, or scrape endpoint count only when those values are explicit fields in the authorized graph projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/relationTopologyContract.ts",
+              "src/packages/contracts/gateway/responses.py",
+              "tests/test_relations_topology_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.workflow-card.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The authorized relation graph currently exposes id, kind, name, and status only; it has no typed entrypoint, templateCount, endpointCount, or workload-identity presentation fields.",
+            "rationale": "The product does not derive source subtitles from untyped resource payloads. The shared icon registry covers kind identity while subtitle evidence waits for a Python contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3752,8 +3830,35 @@
         "blobId": "1a09e91fa32eb9fead66066b598d83a9ef054e1e",
         "sha256": "efaed0382a0607d523403a9be021e74fd049e94f10a6a12d82fcf3faec9ef6a1"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:layout:workflow-group-card:v1",
+          "legacyContractIds": [],
+          "symbol": "computeWorkloadCards workflow kinds and KIND_PRIORITY",
+          "interaction": "workflow, scheduled workflow, template, service-account, and monitoring resources may participate in grouped topology cards only from a typed server-described grouping and subtitle projection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/relationTopologyContract.ts",
+              "frontend/src/features/resources/relationTopologyGraphModel.ts",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph",
+              "packages.contracts.inventory_filter.topology_preferences"
+            ],
+            "plannedTestIds": [
+              "topology.workflow-card.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Python relation projection has no group identity, server ordering, workload-card membership, or typed subtitle evidence for these resource kinds.",
+            "rationale": "Adding a browser-only priority table would create an uncontracted second topology model, so only the shared kind icon presentation is ported now."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3767,8 +3872,40 @@
         "blobId": "3d132572cad8c186141ec468e78c89b9bad90acf",
         "sha256": "482ad4fd8cca50d6ea545812fa38111e3e0195d22e3b74db882e4a016959ab4b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:style:remove-kind-css-map:v1",
+          "legacyContractIds": [],
+          "symbol": "removed topology-icon-* resource-kind palette",
+          "interaction": "topology kind identity uses reusable SVG components and semantic surface tokens instead of a hardcoded selector and color for every resource kind",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "topology node and overlay presentation must remain stable without entrance animation or transform-dependent feedback",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/topology.css"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/resourcePresentation.ts",
+              "frontend/src/pages/resources/RelationTopologyNode.tsx",
+              "frontend/src/motion/tokens.css"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.kind-icon.registry",
+              "topology.overlay.composition"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The duplicated CSS kind palette is not copied. The resource catalog and relation topology share one SVG registry, while motion remains centralized under the product motion boundary."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -3779,8 +3916,38 @@
         "blobId": "c38fccad703fb24c73c7476ecaceee3585389659",
         "sha256": "6a38c58a25ca4270a6883775b17b0c01b49ebdae1563183ec514a0324042d1cd"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:breadcrumb:scope-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyBreadcrumb",
+          "interaction": "the graph announces its current scope as a location and exposes every broader authorized scope as a keyboard-operable navigation control",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "breadcrumb focus and current-location feedback remain visible without color-transition timing",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/TopologyBreadcrumb.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourcesGraphChrome.tsx",
+              "frontend/src/pages/resources/ResourcesGraphChrome.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.breadcrumb.keyboard"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product breadcrumb supports cluster and server depth rather than one hardcoded namespace label, while preserving clear-to-broader-scope semantics and localized copy."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3927,8 +4094,41 @@
         "blobId": "336cbf77c5be2bcc10aa60688f27378e491eefe2",
         "sha256": "21159de76afa092185210145dc7c91e5e6b6105c6e6ad4ec26aaec86a26a04d9"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:topology:overlay:stacked-pointer-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "TopologyOverlayBar",
+          "interaction": "canvas overlays stack in source order without blocking pan gestures in empty gaps, while each interactive child explicitly restores pointer and keyboard behavior",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the short overlay entrance is removed entirely when reduced motion is requested",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/topology/TopologyOverlayBar.tsx",
+              "frontend/src/motion/tokens.css"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/TopologyOverlayBar.tsx",
+              "frontend/src/pages/resources/ResourcesGraphShell.tsx",
+              "frontend/src/motion/tokens.css",
+              "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.graph"
+            ],
+            "plannedTestIds": [
+              "topology.overlay.composition"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared product component is layout-only and is exercised by the server-derived relationship view hint; its 180ms entrance uses the centralized motion token and has an explicit reduced-motion override."
+          }
+        }
+      ]
     },
     {
       "status": "M",
