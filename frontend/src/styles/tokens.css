@@ -21,6 +21,9 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-border: var(--primary-soft-border);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -72,6 +75,9 @@
   --popover-foreground: #111827;
   --primary: #b8d900;
   --primary-foreground: #172000;
+  --primary-soft: #eef6c4;
+  --primary-soft-border: #d5e86e;
+  --primary-soft-foreground: #334000;
   --secondary: #eef2f6;
   --secondary-foreground: #1f2937;
   --muted: #f1f4f7;
@@ -118,6 +124,9 @@
   --popover-foreground: #f4f7fa;
   --primary: #dfff00;
   --primary-foreground: #10140a;
+  --primary-soft: #202914;
+  --primary-soft-border: #52651f;
+  --primary-soft-foreground: #edf7c6;
   --secondary: #18212c;
   --secondary-foreground: #f4f7fa;
   --muted: #18212c;

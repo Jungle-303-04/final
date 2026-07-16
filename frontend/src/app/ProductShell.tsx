@@ -178,7 +178,7 @@ function ProductShellFrame({
       >
         <SidebarHeader className="h-14 flex-row items-center gap-2 px-2 py-0">
           <div className="flex min-w-0 flex-1 items-center gap-2 group-data-[state=collapsed]/sidebar:hidden">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-primary-soft-border bg-primary-soft text-primary-soft-foreground">
               <Activity aria-hidden="true" className="size-4" />
             </span>
             <SidebarText className="text-sm font-semibold tracking-tight">

@@ -45,7 +45,7 @@ export function SidebarProfileMenu({
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuPopoverTrigger label={openLabel} tooltip={profile.fullIdentity}>
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-sidebar-primary text-[0.65rem] font-semibold text-sidebar-primary-foreground">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full border border-primary-soft-border bg-primary-soft text-[0.65rem] font-semibold text-primary-soft-foreground">
               {profile.avatarLabel}
             </span>
             <SidebarText className="flex-1" title={profile.fullIdentity}>
@@ -64,7 +64,7 @@ export function SidebarProfileMenu({
         side={isMobile ? "top" : "right"}
       >
         <div className="flex min-w-0 items-center gap-3 px-2 py-2">
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full border border-primary-soft-border bg-primary-soft text-xs font-semibold text-primary-soft-foreground">
             {profile.avatarLabel}
           </span>
           <div className="min-w-0" title={profile.fullIdentity}>
