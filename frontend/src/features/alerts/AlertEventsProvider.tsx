@@ -14,6 +14,7 @@ import { toast } from "../../shared/ui/primitives/sonner";
 import { useI18n } from "../../shared/i18n";
 import type { AlertEvent, AlertEventsPort } from "./alertEventsContract";
 import { useOptionalActivityNotifications } from "../notifications/ActivityNotificationsProvider";
+import type { HeaderNotificationAttentionHandler } from "../notifications/headerNotificationAttention";
 
 const POLL_INTERVAL_MS = 5_000;
 const EVENT_TOAST_DURATION_MS = 5_000;
@@ -39,10 +40,14 @@ const AlertEventsContext = createContext<AlertEventsContextValue | null>(null);
 
 export function AlertEventsProvider({
   children,
+  onSuppressedNotification,
   port,
+  suppressFloatingNotifications = false,
 }: {
   children: ReactNode;
+  onSuppressedNotification?: HeaderNotificationAttentionHandler;
   port: AlertEventsPort;
+  suppressFloatingNotifications?: boolean;
 }) {
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -69,6 +74,11 @@ export function AlertEventsProvider({
   }, [events]);
 
   useEffect(() => {
+    if (!suppressFloatingNotifications) return;
+    for (const event of events) toast.dismiss(event.event_id);
+  }, [events, suppressFloatingNotifications]);
+
+  useEffect(() => {
     let active = true;
     let inFlight = false;
     let controller: AbortController | null = null;
@@ -86,19 +96,30 @@ export function AlertEventsProvider({
             .filter((event) => event.status === "firing" && !seen.current?.has(event.event_id))
             .sort((left, right) => Date.parse(left.fired_at) - Date.parse(right.fired_at));
           for (const event of newFiringEvents) {
-            const options = {
-              id: event.event_id,
-              duration: EVENT_TOAST_DURATION_MS,
-              description: alertTarget(event),
-              action: {
-                label: t("alerts.toast.view"),
-                onClick: () => {
-                  markNotificationRead(event.event_id);
-                  navigate("/alerts");
+            const title = event.rule_name ?? t("alerts.toast.new");
+            const description = alertTarget(event);
+            if (suppressFloatingNotifications) {
+              onSuppressedNotification?.({
+                id: event.event_id,
+                title,
+                description,
+                tone: alertAttentionTone(event),
+              });
+            } else {
+              const options = {
+                id: event.event_id,
+                duration: EVENT_TOAST_DURATION_MS,
+                description,
+                action: {
+                  label: t("alerts.toast.view"),
+                  onClick: () => {
+                    markNotificationRead(event.event_id);
+                    navigate("/alerts");
+                  },
                 },
-              },
-            };
-            showEventToast(event, event.rule_name ?? t("alerts.toast.new"), options);
+              };
+              showEventToast(event, title, options);
+            }
           }
         }
         seen.current = currentIds;
@@ -125,7 +146,15 @@ export function AlertEventsProvider({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [markNotificationRead, navigate, port, refreshKey, t]);
+  }, [
+    markNotificationRead,
+    navigate,
+    onSuppressedNotification,
+    port,
+    refreshKey,
+    suppressFloatingNotifications,
+    t,
+  ]);
 
   const runMutation = useCallback(async (
     eventId: string,
@@ -264,6 +293,12 @@ function showEventToast(
     return;
   }
   toast.warning(title, options);
+}
+
+function alertAttentionTone(event: AlertEvent) {
+  if (event.severity === "critical" || event.severity === "high") return "critical" as const;
+  if (event.severity === "warning" || event.severity === "medium") return "warning" as const;
+  return "info" as const;
 }
 
 function isAbortError(error: unknown): boolean {

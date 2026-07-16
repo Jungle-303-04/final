@@ -5,17 +5,20 @@ import {
   ChevronDown,
   CircleCheck,
   CircleX,
-  ExternalLink,
   LoaderCircle,
   PauseCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAlertEvents } from "../features/alerts/AlertEventsProvider";
 import type { AlertEvent } from "../features/alerts/alertEventsContract";
 import { useActivityNotifications } from "../features/notifications/ActivityNotificationsProvider";
 import type { ActivityNotification } from "../features/notifications/activityNotificationsContract";
+import type {
+  HeaderNotificationAttention,
+  HeaderNotificationAttentionTone,
+} from "../features/notifications/headerNotificationAttention";
 import { useI18n } from "../shared/i18n";
 import { cn } from "../shared/lib/cn";
 import { Badge } from "../shared/ui/primitives/badge";
@@ -31,13 +34,19 @@ import { Separator } from "../shared/ui/primitives/separator";
 
 interface HeaderAlertsPopoverProps {
   alertsHref: string;
+  attention: HeaderNotificationAttention | null;
+  onAttentionDismiss: () => void;
 }
 
 type HeaderNotification =
   | { kind: "alert"; id: string; timestamp: string; event: AlertEvent }
   | { kind: "activity"; id: string; timestamp: string; activity: ActivityNotification };
 
-export function HeaderAlertsPopover({ alertsHref }: HeaderAlertsPopoverProps) {
+export function HeaderAlertsPopover({
+  alertsHref,
+  attention,
+  onAttentionDismiss,
+}: HeaderAlertsPopoverProps) {
   const alerts = useAlertEvents();
   const activityNotifications = useActivityNotifications();
   const navigate = useNavigate();
@@ -98,34 +107,50 @@ export function HeaderAlertsPopover({ alertsHref }: HeaderAlertsPopoverProps) {
   );
 
   return (
-    <Popover onOpenChange={changeOpen} open={open}>
-      <PopoverTrigger
-        render={(
-          <Button
-            aria-label={t("alerts.header.open", { count: notificationCount })}
-            className="relative"
-            size="icon"
-            variant="ghost"
-          />
-        )}
-      >
-        <Bell aria-hidden="true" />
-        {notificationCount > 0 ? (
-          <span
+    <div className="relative flex items-center">
+      {attention ? (
+        <HeaderAttentionPreview
+          attention={attention}
+          key={attention.sequence}
+          onDismiss={onAttentionDismiss}
+          onOpen={() => setOpen(true)}
+        />
+      ) : null}
+      <Popover onOpenChange={changeOpen} open={open}>
+        <PopoverTrigger
+          render={(
+            <Button
+              aria-label={t("alerts.header.open", { count: notificationCount })}
+              className={cn(
+                "relative",
+                attention && "bg-accent text-accent-foreground ring-2 ring-primary/15",
+              )}
+              size="icon"
+              variant="ghost"
+            />
+          )}
+        >
+          <Bell
             aria-hidden="true"
-            className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold leading-4 text-primary-foreground motion-safe:animate-in motion-safe:zoom-in-75"
-          >
-            {notificationCount > 99 ? "99+" : notificationCount}
-          </span>
-        ) : null}
-      </PopoverTrigger>
+            className={attention ? "motion-notification-bell-ring" : undefined}
+            key={attention?.sequence ?? "steady"}
+          />
+          {notificationCount > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold leading-4 text-primary-foreground motion-safe:animate-in motion-safe:zoom-in-75"
+            >
+              {notificationCount > 99 ? "99+" : notificationCount}
+            </span>
+          ) : null}
+        </PopoverTrigger>
 
-      <PopoverContent
-        align="end"
-        className="w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0 shadow-xl"
-        side="bottom"
-        sideOffset={8}
-      >
+        <PopoverContent
+          align="end"
+          className="w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0 shadow-xl"
+          side="bottom"
+          sideOffset={8}
+        >
         <div className="flex min-h-12 items-center justify-between gap-3 bg-muted/25 px-4 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="font-semibold">{t("alerts.title")}</h2>
@@ -178,42 +203,89 @@ export function HeaderAlertsPopover({ alertsHref }: HeaderAlertsPopoverProps) {
           </div>
         ) : null}
 
-        <Separator />
-        <div className="bg-muted/20 p-2">
-          {import.meta.env.DEV ? (
-            <div className="mb-2 rounded-lg border border-primary/20 bg-primary/5 p-2">
-              <Button
-                className="w-full"
-                disabled={alerts.initialLoading || alerts.creatingTestEvent}
-                onClick={() => void alerts.createTestEvent()}
-                type="button"
-                variant="outline"
-              >
-                {alerts.creatingTestEvent ? (
-                  <LoaderCircle aria-hidden="true" className="animate-spin" />
-                ) : (
-                  <BellRing aria-hidden="true" />
-                )}
-                {alerts.creatingTestEvent
-                  ? t("alerts.header.testing")
-                  : t("alerts.header.test")}
-              </Button>
-              <p className="px-1 pt-2 text-xs leading-relaxed text-muted-foreground">
-                {t("alerts.header.testHint")}
-              </p>
+        {import.meta.env.DEV ? (
+          <>
+            <Separator />
+            <div className="bg-muted/20 p-2">
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-2">
+                <Button
+                  className="w-full"
+                  disabled={alerts.initialLoading || alerts.creatingTestEvent}
+                  onClick={() => void alerts.createTestEvent()}
+                  type="button"
+                  variant="outline"
+                >
+                  {alerts.creatingTestEvent ? (
+                    <LoaderCircle aria-hidden="true" className="animate-spin" />
+                  ) : (
+                    <BellRing aria-hidden="true" />
+                  )}
+                  {alerts.creatingTestEvent
+                    ? t("alerts.header.testing")
+                    : t("alerts.header.test")}
+                </Button>
+                <p className="px-1 pt-2 text-xs leading-relaxed text-muted-foreground">
+                  {t("alerts.header.testHint")}
+                </p>
+              </div>
             </div>
-          ) : null}
-          <Button className="w-full" onClick={() => {
-            changeOpen(false);
-            navigate(alertsHref);
-          }} type="button" variant="ghost">
-            {t("alerts.header.viewAll")}
-            <ExternalLink aria-hidden="true" />
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+          </>
+        ) : null}
+        </PopoverContent>
+      </Popover>
+    </div>
   );
+}
+
+function HeaderAttentionPreview({
+  attention,
+  onDismiss,
+  onOpen,
+}: {
+  attention: HeaderNotificationAttention;
+  onDismiss: () => void;
+  onOpen: () => void;
+}) {
+  useEffect(() => {
+    const timer = window.setTimeout(onDismiss, 3_000);
+    return () => window.clearTimeout(timer);
+  }, [onDismiss]);
+
+  return (
+    <div
+      aria-live="polite"
+      className="absolute top-1/2 right-full z-50 mr-2 max-w-[min(28rem,48vw)] -translate-y-1/2 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-right-2 motion-safe:duration-200"
+      role="status"
+    >
+      <Button
+        className="h-9 max-w-full gap-2 overflow-hidden rounded-full border-border/80 bg-popover px-3 text-popover-foreground shadow-lg"
+        onClick={() => {
+          onDismiss();
+          onOpen();
+        }}
+        title={`${attention.title} · ${attention.description}`}
+        type="button"
+        variant="outline"
+      >
+        <span
+          aria-hidden="true"
+          className={cn("size-2 shrink-0 rounded-full", attentionDotClass(attention.tone))}
+        />
+        <span className="min-w-0 truncate font-semibold">{attention.title}</span>
+        <span className="hidden min-w-0 truncate font-normal text-muted-foreground xl:inline">
+          {attention.description}
+        </span>
+      </Button>
+    </div>
+  );
+}
+
+function attentionDotClass(tone: HeaderNotificationAttentionTone): string {
+  if (tone === "critical") return "bg-destructive";
+  if (tone === "warning") return "bg-amber-500";
+  if (tone === "success") return "bg-emerald-500";
+  if (tone === "progress") return "bg-sky-500 animate-pulse motion-reduce:animate-none";
+  return "bg-sky-500";
 }
 
 function NotificationRow({

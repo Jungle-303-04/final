@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
 import type { ActivityNotificationsPort } from "./activityNotificationsContract";
+import type { HeaderNotificationAttentionHandler } from "./headerNotificationAttention";
 import {
   ActivityNotificationsProvider,
   useActivityNotifications,
@@ -108,6 +109,25 @@ describe("ActivityNotificationsProvider", () => {
     );
     expect(screen.getByTestId("activity-state").textContent).toContain("ai:succeeded:1");
   });
+
+  it("keeps background progress in the header while floating notifications are suppressed", async () => {
+    const onSuppressedNotification = vi.fn();
+    renderProvider({
+      loadIncidentEvents: async () => [],
+      loadSafePrEvents: async () => [],
+    }, {
+      onSuppressedNotification,
+      suppressFloatingNotifications: true,
+    });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "incident" }));
+
+    expect(onSuppressedNotification).toHaveBeenCalledWith(expect.objectContaining({
+      id: "incident-analysis:correlation-1",
+      tone: "progress",
+    }));
+    expect(toastSpies.loading).not.toHaveBeenCalled();
+  });
 });
 
 function ActivityProbe() {
@@ -160,11 +180,17 @@ function ActivityProbe() {
   );
 }
 
-function renderProvider(port: ActivityNotificationsPort) {
+function renderProvider(
+  port: ActivityNotificationsPort,
+  options: {
+    onSuppressedNotification?: HeaderNotificationAttentionHandler;
+    suppressFloatingNotifications?: boolean;
+  } = {},
+) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <MemoryRouter>
-        <ActivityNotificationsProvider port={port} storageScope="test">
+        <ActivityNotificationsProvider port={port} storageScope="test" {...options}>
           <ActivityProbe />
         </ActivityNotificationsProvider>
       </MemoryRouter>

@@ -68,6 +68,10 @@ import {
   EMPTY_ACTIVITY_NOTIFICATIONS_PORT,
   type ActivityNotificationsPort,
 } from "../features/notifications/activityNotificationsContract";
+import type {
+  HeaderNotificationAttention,
+  HeaderNotificationAttentionInput,
+} from "../features/notifications/headerNotificationAttention";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -94,20 +98,54 @@ export function ProductShell({
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
   activityNotificationsPort = EMPTY_ACTIVITY_NOTIFICATIONS_PORT,
 }: ProductShellProps) {
+  const [isAiOpen, setAiOpen] = useState(false);
+  const [headerAttention, setHeaderAttention] = useState<HeaderNotificationAttention | null>(null);
+  const location = useLocation();
+  const filter = useUnifiedFilter();
+  const activeSurfaceId = productRouteForPath(location.pathname)?.id;
+  const detailWorkspaceOpen = activeSurfaceId === "resources" && (
+    filter.detail.detail !== null ||
+    filter.detail.resource !== null ||
+    filter.detail.resourceKind !== null
+  );
+  const timelineEventDetailOpen = activeSurfaceId === "timeline"
+    && new URLSearchParams(location.search).has("event");
+  const suppressFloatingNotifications = isAiOpen
+    || detailWorkspaceOpen
+    || timelineEventDetailOpen;
+  const showHeaderAttention = useCallback((input: HeaderNotificationAttentionInput) => {
+    setHeaderAttention((current) => ({
+      ...input,
+      sequence: (current?.sequence ?? 0) + 1,
+    }));
+  }, []);
+  const dismissHeaderAttention = useCallback(() => setHeaderAttention(null), []);
+
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
           <BottomDockProvider port={logStreamPort}>
             <ActivityNotificationsProvider
+              onSuppressedNotification={showHeaderAttention}
               port={activityNotificationsPort}
               storageScope={`${auth.session.workspaceId}:${auth.session.userId}`}
+              suppressFloatingNotifications={suppressFloatingNotifications}
             >
-              <AlertEventsProvider port={alertEventsPort}>
+              <AlertEventsProvider
+                onSuppressedNotification={showHeaderAttention}
+                port={alertEventsPort}
+                suppressFloatingNotifications={suppressFloatingNotifications}
+              >
                 <ProductShellFrame
                   auth={auth}
                   aiAssistantPort={aiAssistantPort}
+                  detailWorkspaceOpen={detailWorkspaceOpen}
                   globalFilterPort={globalFilterPort}
+                  headerAttention={headerAttention}
+                  isAiOpen={isAiOpen}
+                  onAiOpenChange={setAiOpen}
+                  onHeaderAttentionDismiss={dismissHeaderAttention}
                   releasedSurfaceIds={releasedSurfaceIds}
                 />
               </AlertEventsProvider>
@@ -122,12 +160,22 @@ export function ProductShell({
 function ProductShellFrame({
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   auth,
+  detailWorkspaceOpen,
+  headerAttention,
+  isAiOpen,
+  onAiOpenChange,
+  onHeaderAttentionDismiss,
   releasedSurfaceIds,
   globalFilterPort,
-}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds">) {
+}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds"> & {
+  detailWorkspaceOpen: boolean;
+  headerAttention: HeaderNotificationAttention | null;
+  isAiOpen: boolean;
+  onAiOpenChange: (open: boolean) => void;
+  onHeaderAttentionDismiss: () => void;
+}) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [isAiOpen, setAiOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
@@ -143,11 +191,6 @@ function ProductShellFrame({
   const currentRoute = matchedRoute ?? navigationRoutes[0];
   const activeSurfaceKey = currentRoute?.id ?? "";
   const activeSurfaceId = activeSurfaceKey || undefined;
-  const detailWorkspaceOpen = activeSurfaceId === "resources" && (
-    filter.detail.detail !== null ||
-    filter.detail.resource !== null ||
-    filter.detail.resourceKind !== null
-  );
   const aiContext = createAiAssistantContext(
     activeSurfaceId ?? "home",
     filter.state,
@@ -204,7 +247,7 @@ function ProductShellFrame({
       }), "detail-close");
       toast.info(t("shell.ai.narrowDetailClosed"));
     }
-    setAiOpen(next);
+    onAiOpenChange(next);
   };
 
   return (
@@ -310,7 +353,11 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
-            <HeaderAlertsPopover alertsHref={filter.navigationHref("/alerts")} />
+            <HeaderAlertsPopover
+              alertsHref={filter.navigationHref("/alerts")}
+              attention={headerAttention}
+              onAttentionDismiss={onHeaderAttentionDismiss}
+            />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}

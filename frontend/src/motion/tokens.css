@@ -100,6 +100,29 @@
   }
 }
 
+@keyframes motion-notification-bell-ring {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  20% {
+    transform: rotate(-16deg);
+  }
+
+  40% {
+    transform: rotate(14deg);
+  }
+
+  60% {
+    transform: rotate(-9deg);
+  }
+
+  80% {
+    transform: rotate(5deg);
+  }
+}
+
 .motion-pod-pop {
   animation: motion-pod-pop var(--motion-pop) var(--ease-pop) backwards;
 }
@@ -131,6 +154,11 @@
 
 .motion-topology-overlay {
   animation: motion-topology-overlay-enter var(--motion-quick) var(--ease-out) backwards;
+}
+
+.motion-notification-bell-ring {
+  animation: motion-notification-bell-ring 620ms var(--ease-in-out) 1;
+  transform-origin: 50% 12%;
 }
 
 .motion-live-preview {
@@ -249,6 +277,7 @@
 
   .motion-wizard-stage,
   .motion-topology-overlay,
+  .motion-notification-bell-ring,
   .motion-live-preview,
   .motion-live-preview-value {
     animation: none !important;

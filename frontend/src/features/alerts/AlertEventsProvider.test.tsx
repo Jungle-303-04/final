@@ -6,10 +6,12 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
+import type { HeaderNotificationAttentionHandler } from "../notifications/headerNotificationAttention";
 import type { AlertEvent, AlertEventsPort } from "./alertEventsContract";
 import { AlertEventsProvider, useAlertEvents } from "./AlertEventsProvider";
 
 const toastSpies = vi.hoisted(() => ({
+  dismiss: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
   success: vi.fn(),
@@ -86,6 +88,38 @@ describe("AlertEventsProvider notifications", () => {
       expect.objectContaining({ id: "ale-test-1" }),
     ));
   });
+
+  it("stores a new event in the header without showing a floating toast while suppressed", async () => {
+    const first = alertEvent({ event_id: "ale-first", rule_name: "First alert" });
+    const newest = alertEvent({
+      event_id: "ale-newest",
+      rule_name: "New alert",
+      fired_at: "2026-07-15T03:00:00Z",
+    });
+    const list = vi.fn()
+      .mockResolvedValueOnce([first])
+      .mockResolvedValue([newest, first]);
+    const onSuppressedNotification = vi.fn();
+    renderProvider({
+      list,
+      acknowledge: async () => { throw new Error("not used"); },
+      promote: async () => { throw new Error("not used"); },
+    }, {
+      onSuppressedNotification,
+      suppressFloatingNotifications: true,
+    });
+
+    expect(await screen.findByText("First alert")).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: "refresh" }));
+
+    await waitFor(() => expect(onSuppressedNotification).toHaveBeenCalledWith({
+      id: "ale-newest",
+      title: "New alert",
+      description: "cluster-1 · default · api-0",
+      tone: "critical",
+    }));
+    expect(toastSpies.error).not.toHaveBeenCalled();
+  });
 });
 
 function NotificationProbe() {
@@ -99,11 +133,17 @@ function NotificationProbe() {
   );
 }
 
-function renderProvider(port: AlertEventsPort) {
+function renderProvider(
+  port: AlertEventsPort,
+  options: {
+    onSuppressedNotification?: HeaderNotificationAttentionHandler;
+    suppressFloatingNotifications?: boolean;
+  } = {},
+) {
   return render(
     <I18nProvider navigatorLanguage="ko-KR" storage={null}>
       <MemoryRouter>
-        <AlertEventsProvider port={port}>
+        <AlertEventsProvider port={port} {...options}>
           <NotificationProbe />
         </AlertEventsProvider>
       </MemoryRouter>

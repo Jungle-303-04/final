@@ -271,6 +271,7 @@ describe("ProductShell keyboard and help interaction", () => {
 
     expect(tabOrder).toEqual([
       "모바일 사이드바 열기",
+      "알림 열기, 읽지 않은 알림 0개",
       "키보드 단축키",
       "현재 언어: 한국어",
       "클러스터, 앱, 라벨, 리소스 필터",

@@ -18,6 +18,7 @@ import type {
   IncidentActivityEvent,
   SafePrActivityEvent,
 } from "./activityNotificationsContract";
+import type { HeaderNotificationAttentionHandler } from "./headerNotificationAttention";
 
 const OBSERVATION_INTERVAL_MS = 2_000;
 const TERMINAL_TOAST_DURATION_MS = 5_000;
@@ -57,12 +58,16 @@ const ActivityNotificationsContext = createContext<ActivityNotificationsContextV
 
 export function ActivityNotificationsProvider({
   children,
+  onSuppressedNotification,
   port,
   storageScope,
+  suppressFloatingNotifications = false,
 }: {
   children: ReactNode;
+  onSuppressedNotification?: HeaderNotificationAttentionHandler;
   port: ActivityNotificationsPort;
   storageScope: string;
+  suppressFloatingNotifications?: boolean;
 }) {
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -73,6 +78,11 @@ export function ActivityNotificationsProvider({
   const activitiesRef = useRef(activities);
   const sequence = useRef(0);
   const aiOpener = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!suppressFloatingNotifications) return;
+    for (const activity of activitiesRef.current) toast.dismiss(activity.id);
+  }, [suppressFloatingNotifications]);
 
   const commit = useCallback((next: readonly ActivityNotification[]) => {
     const sorted = sortActivities(next).slice(0, MAX_STORED_ACTIVITIES);
@@ -112,9 +122,20 @@ export function ActivityNotificationsProvider({
       toast.dismiss(activity.id);
       return;
     }
+    const description = activityDescription(activity, t);
+    if (suppressFloatingNotifications) {
+      toast.dismiss(activity.id);
+      onSuppressedNotification?.({
+        id: activity.id,
+        title: activity.title,
+        description,
+        tone: activityAttentionTone(activity),
+      });
+      return;
+    }
     const options = {
       id: activity.id,
-      description: activityDescription(activity, t),
+      description,
       action: {
         label: activity.kind === "ai" ? t("alerts.activity.ai.open") : t("alerts.activity.view"),
         onClick: () => openActivity(activity.id),
@@ -129,7 +150,7 @@ export function ActivityNotificationsProvider({
     } else {
       toast.error(activity.title, { ...options, duration: Infinity });
     }
-  }, [openActivity, t]);
+  }, [onSuppressedNotification, openActivity, suppressFloatingNotifications, t]);
 
   const update = useCallback((
     id: string,
@@ -622,6 +643,13 @@ function activityDescription(
         total: activity.totalSteps,
       })}`
     : activity.description;
+}
+
+function activityAttentionTone(activity: ActivityNotification) {
+  if (activity.status === "failed") return "critical" as const;
+  if (activity.status === "waiting") return "warning" as const;
+  if (activity.status === "succeeded") return "success" as const;
+  return "progress" as const;
 }
 
 function failedActivityCopy(
