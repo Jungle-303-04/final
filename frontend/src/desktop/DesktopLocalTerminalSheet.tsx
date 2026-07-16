@@ -15,6 +15,7 @@ import {
   desktopBridge,
   type DesktopLocalTerminalEvent,
 } from "./desktopBridge";
+import { LocalTerminalOutputBuffer } from "./localTerminalOutputBuffer";
 import { usePrefersReducedMotion } from "../motion/usePrefersReducedMotion";
 import { useI18n } from "../shared/i18n";
 import { cn } from "../shared/lib/cn";
@@ -121,6 +122,8 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
     let disposed = false;
     let sessionId: string | null = null;
     const pendingEvents: DesktopLocalTerminalEvent[] = [];
+    let outputBuffer: LocalTerminalOutputBuffer | null = null;
+    let outputFrame: number | null = null;
     const terminal = new Terminal({
       cursorBlink: !reducedMotion,
       fontFamily: "var(--font-mono)",
@@ -145,8 +148,12 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       sessionId = null;
       return currentSessionId;
     };
-    const fail = (nextFailure: TerminalFailure) => {
-      invalidateSession();
+    const fail = (nextFailure: TerminalFailure, shouldCloseNativeSession = false) => {
+      const activeSessionId = invalidateSession();
+      outputBuffer?.clear();
+      if (shouldCloseNativeSession && activeSessionId) {
+        void desktopBridge.closeLocalTerminal(activeSessionId).catch(() => undefined);
+      }
       setFailure(nextFailure);
       setPhase("failed");
     };
@@ -158,11 +165,34 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
         rows: terminal.rows || DEFAULT_TERMINAL_ROWS,
       };
     };
-    const writeEvent = (event: DesktopLocalTerminalEvent) => {
-      if (event.kind === "output") {
-        terminal.write(event.data);
+    const scheduleOutputFlush = () => {
+      if (outputFrame !== null || !outputBuffer?.hasPendingOutput) return;
+      outputFrame = requestAnimationFrame(() => {
+        outputFrame = null;
+        const activeSessionId = sessionId;
+        const batch = outputBuffer?.takeFrame();
+        if (!activeSessionId || !batch) return;
+        terminal.write(batch.data, () => {
+          if (disposed || sessionId !== activeSessionId) return;
+          void desktopBridge.acknowledgeLocalTerminalOutput({
+            sessionId: activeSessionId,
+            byteLength: batch.byteLength,
+          }).catch(() => {
+            if (!disposed) fail({ kind: "operation" }, true);
+          });
+        });
+        scheduleOutputFlush();
+      });
+    };
+    const enqueueOutput = (event: Extract<DesktopLocalTerminalEvent, { kind: "output" }>) => {
+      if (!outputBuffer?.enqueue(event)) {
+        fail({ kind: "operation" }, true);
         return;
       }
+      scheduleOutputFlush();
+    };
+    const writeEvent = (event: DesktopLocalTerminalEvent) => {
+      if (event.kind === "output") return enqueueOutput(event);
       if (event.kind === "exit") {
         invalidateSession();
         if (event.exitCode === 0) {
@@ -197,7 +227,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       if (!sessionId || disposed) return;
       void desktopBridge.sendLocalTerminalInput({ sessionId, data }).catch(() => {
         if (!disposed) {
-          fail({ kind: "operation" });
+          fail({ kind: "operation" }, true);
         }
       });
     });
@@ -209,7 +239,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       if (sessionId) {
         void desktopBridge.resizeLocalTerminal({ sessionId, ...next }).catch(() => {
           if (!disposed) {
-            fail({ kind: "operation" });
+            fail({ kind: "operation" }, true);
           }
         });
       }
@@ -230,6 +260,10 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
           return;
         }
         sessionId = started.sessionId;
+        outputBuffer = new LocalTerminalOutputBuffer(
+          started.outputWindowBytes,
+          started.outputFrameBytes,
+        );
         setShell(started.shell);
         setPhase("connected");
         terminal.focus();
@@ -239,8 +273,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
         resize();
       } catch {
         if (!disposed) {
-          setFailure({ kind: "start" });
-          setPhase("failed");
+          fail({ kind: "start" }, true);
         }
       }
     };
@@ -257,6 +290,8 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       if (startTimer !== null) clearTimeout(startTimer);
       observer.disconnect();
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+      if (outputFrame !== null) cancelAnimationFrame(outputFrame);
+      outputBuffer?.clear();
       inputDisposable.dispose();
       unlisten();
       terminal.dispose();

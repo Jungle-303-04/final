@@ -40,6 +40,11 @@ fn desktop_build_uses_the_shared_frontend_from_the_desktop_working_directory() {
     assert!(config.contains("\"beforeBuildCommand\": \"npm --prefix ../frontend run build\""));
     assert!(config.contains("\"active\": true"));
     assert!(config.contains("\"create\": false"));
+    assert!(config.contains("\"withGlobalTauri\": false"));
+    assert!(config.contains("\"freezePrototype\": true"));
+    assert!(config.contains("\"csp\":"));
+    assert!(config.contains("\"devCsp\":"));
+    assert!(!config.contains("unsafe-eval"));
 }
 
 #[test]
