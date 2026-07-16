@@ -80,6 +80,8 @@ describe("shell shortcut registry", () => {
       "resources:last-row",
       "resources:open-row",
       "resources:open-logs",
+      "resources:previous-kind",
+      "resources:next-kind",
       "command",
       "theme",
       "help",
@@ -94,6 +96,8 @@ describe("shell shortcut registry", () => {
       "g g",
       "shift+g",
       "d",
+      "[",
+      "]",
       "t",
       "?",
     ]));
@@ -105,6 +109,8 @@ describe("shell shortcut registry", () => {
     expect(matcher.handle(keyEvent("G"))?.id).toBe("resources:last-row");
     expect(matcher.handle(keyEvent("g", { shiftKey: true }))?.id)
       .toBe("resources:last-row");
+    expect(matcher.handle(keyEvent("["))?.id).toBe("resources:previous-kind");
+    expect(matcher.handle(keyEvent("]"))?.id).toBe("resources:next-kind");
   });
 
   it("does not publish Resources context actions outside the active Resources surface", () => {

@@ -1,5 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { cn } from "@/shared/lib/cn";
+import {
+  isProductContextShortcutId,
+  PRODUCT_SHORTCUT_EVENT,
+  type ProductShortcutEventDetail,
+} from "../../app/shortcutRegistry";
 import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useOptionalProductSession } from "../../features/auth/ProductSessionContext";
 import type { HomePort } from "../../features/home/homeContract";
@@ -236,6 +241,16 @@ export function ResourcesPage({
   useEffect(() => {
     if (resourcesView === "graph") setResourcesView("table");
   }, [resourcesView, setResourcesView]);
+  useEffect(() => {
+    const handleShortcut = (event: Event) => {
+      const detail = (event as CustomEvent<ProductShortcutEventDetail>).detail;
+      if (!detail || !isProductContextShortcutId(detail.id)) return;
+      if (detail.id === "resources:previous-kind") state.cycleResourceType(-1);
+      if (detail.id === "resources:next-kind") state.cycleResourceType(1);
+    };
+    window.addEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+    return () => window.removeEventListener(PRODUCT_SHORTCUT_EVENT, handleShortcut);
+  }, [state]);
   if (state.choices.phase === "idle" || state.choices.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
   }

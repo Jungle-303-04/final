@@ -37,4 +37,16 @@ export const resourcesShortcutDefinitions: readonly ShortcutDefinition[] = [
     group: "context",
     sequence: ["l"],
   },
+  {
+    id: "resources:previous-kind",
+    labelKey: "shell.shortcut.resources.previousKind",
+    group: "context",
+    sequence: ["["],
+  },
+  {
+    id: "resources:next-kind",
+    labelKey: "shell.shortcut.resources.nextKind",
+    group: "context",
+    sequence: ["]"],
+  },
 ];

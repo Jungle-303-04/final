@@ -100,6 +100,8 @@ export const shellKo = {
   "shell.shortcut.resources.nextRow": "다음 리소스",
   "shell.shortcut.resources.openRow": "리소스 상세 열기",
   "shell.shortcut.resources.openLogs": "선택 리소스 로그 열기",
+  "shell.shortcut.resources.previousKind": "이전 리소스 종류",
+  "shell.shortcut.resources.nextKind": "다음 리소스 종류",
   "shell.shortcut.resources.previousRow": "이전 리소스",
   "shell.shortcut.route.applications": "애플리케이션 화면 열기",
   "shell.shortcut.route.clusters": "클러스터 화면 열기",

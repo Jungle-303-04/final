@@ -339,6 +339,15 @@
         "frontend": {"state": "implemented", "destination": "frontend/src/pages/resources/ResourcesTable.tsx#ResourcesTable", "consumer": "frontend/src/pages/resources/ResourcesTable.tsx#useRowShortcuts", "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"}
       }
     },
+    "reference.feature.056": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/pages/resources/useResourcesPageState.ts#cycleResourceType", "reason": "Resource-kind cycling consumes the existing server catalog and is browser keyboard state.", "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/resourcesShortcutDefinitions.ts#resourcesShortcutDefinitions", "consumer": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage", "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"}
+      }
+    },
     "reference.feature.057": {
       "deliveryStatus": "implemented",
       "desktopContract": null,

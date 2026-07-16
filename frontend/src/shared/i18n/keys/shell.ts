@@ -98,6 +98,8 @@ export type ShellMessageKey =
   | "shell.shortcut.resources.nextRow"
   | "shell.shortcut.resources.openRow"
   | "shell.shortcut.resources.openLogs"
+  | "shell.shortcut.resources.previousKind"
+  | "shell.shortcut.resources.nextKind"
   | "shell.shortcut.resources.previousRow"
   | "shell.shortcut.route.applications"
   | "shell.shortcut.route.clusters"

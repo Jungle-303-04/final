@@ -2289,11 +2289,11 @@
     {
       "id": "reference-feature-056",
       "contractId": "reference.feature.056",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.056"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 269,
       "cells": [
@@ -2305,17 +2305,27 @@
       "streaming": false,
       "area": "keyboard-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/pages/resources/useResourcesPageState.ts#cycleResourceType",
+          "reason": "Resource-kind cycling consumes the existing server catalog and is browser keyboard state.",
+          "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/resourcesShortcutDefinitions.ts#resourcesShortcutDefinitions",
+          "consumer": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+          "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

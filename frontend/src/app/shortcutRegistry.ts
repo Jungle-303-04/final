@@ -16,7 +16,9 @@ export type ProductContextShortcutId =
   | "resources:first-row"
   | "resources:last-row"
   | "resources:open-row"
-  | "resources:open-logs";
+  | "resources:open-logs"
+  | "resources:previous-kind"
+  | "resources:next-kind";
 
 export interface ProductShortcutEventDetail {
   id: ProductContextShortcutId;
@@ -319,12 +321,12 @@ function isEditableCandidate(candidate: unknown): boolean {
 
 function normalizeDefinitionKey(key: string): string {
   const normalized = key.toLocaleLowerCase("en-US");
-  if (/^(?:[a-z0-9?]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
+  if (/^(?:[a-z0-9?]|\[|\]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
   throw new Error(`invalid shortcut key: ${key}`);
 }
 
 function normalizeEventKey(key: string, shiftKey: boolean): string | null {
-  if (key === "?") return key;
+  if (key === "?" || key === "[" || key === "]") return key;
   if (key.length !== 1) return null;
   const normalized = key.toLocaleLowerCase("en-US");
   if (!/^[a-z0-9]$/u.test(normalized)) return null;
