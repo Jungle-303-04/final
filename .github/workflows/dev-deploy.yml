@@ -539,7 +539,7 @@ jobs:
             | kubectl --context "${MGMT_CONTEXT}" apply --filename -
 
       - name: Record successful console SHA in cluster
-        if: env.DEPLOYMENT_SCOPE == 'CONSOLE'
+        if: env.DEPLOYMENT_SCOPE == 'FULL' || env.DEPLOYMENT_SCOPE == 'CONSOLE'
         id: console_status
         shell: bash
         run: |

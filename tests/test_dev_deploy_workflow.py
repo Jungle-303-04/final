@@ -316,7 +316,7 @@ def test_full_deploy_pins_agent_runtime_config_before_consumers_restart() -> Non
     assert {"configMapRef": {"name": "management-runtime-config"}} in gateway_env_from
 
 
-def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety() -> None:
+def test_console_rollouts_record_the_source_sha_for_full_and_console_scopes() -> None:
     steps = steps_by_name()
     validation = steps["Validate non-secret deployment inputs"]["run"]
     smoke = steps["Run post-deploy console smoke"]
@@ -328,7 +328,7 @@ def test_console_scope_preserves_services_and_versioning_but_keeps_digest_safety
     assert smoke["run"] == "bash scripts/post-deploy-console-smoke.sh"
     assert "steps.console_image.outputs.image" in smoke["env"]["EXPECTED_CONSOLE_IMAGE"]
     assert steps["Record successful console SHA in cluster"]["if"] == (
-        "env.DEPLOYMENT_SCOPE == 'CONSOLE'"
+        "env.DEPLOYMENT_SCOPE == 'FULL' || env.DEPLOYMENT_SCOPE == 'CONSOLE'"
     )
     assert "opsia-console-deploy-status" in steps["Record successful console SHA in cluster"]["run"]
     assert 'if [[ "${DEPLOYMENT_SCOPE}" == "FULL" ]]' in rollback
