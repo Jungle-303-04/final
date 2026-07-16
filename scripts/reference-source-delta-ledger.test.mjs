@@ -542,7 +542,7 @@ test('check는 분류 interaction을 보존하면서 feature ledger에 없는 le
   }
 })
 
-test('동결된 최신 UI delta ledger는 생성 입력의 Timeline·Applications·GitOps 분류를 보존하고 실제 pending만 보고한다', async () => {
+test('동결된 최신 UI delta ledger는 생성 입력의 전수 분류를 보존하고 pending 없이 출하 분류를 통과한다', async () => {
   const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
   const ledgerPath = path.join(scriptDirectory, '..', 'docs', 'migration', 'reference-ui-delta-ledger.json')
   const classificationPath = path.join(
@@ -593,6 +593,7 @@ test('동결된 최신 UI delta ledger는 생성 입력의 Timeline·Application
 
   const actualPending = ledger.files.filter((row) => row.classification === 'pending').length
   assert.equal(ledger.pendingCount, actualPending)
+  assert.equal(actualPending, 0)
   assert.deepEqual(validateDeltaLedger(ledger), [])
-  assert.throws(() => assertDeltaLedgerClassified(ledger), new RegExp(`${actualPending}개 pending`))
+  assert.doesNotThrow(() => assertDeltaLedgerClassified(ledger))
 })

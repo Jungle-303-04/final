@@ -8,6 +8,7 @@ import {
 import type {
   ResourceDetail,
   ResourceIdentity,
+  ResourceSummary,
 } from "../../features/resources/resourcesContract";
 import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
 import {
@@ -20,6 +21,7 @@ import { StatusMark } from "../../shared/ui/StatusMark";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
+import { Button } from "../../shared/ui/primitives/button";
 import {
   Tabs,
   TabsContent,
@@ -42,6 +44,7 @@ export function ResourceDetailBody({
   metricHistory,
   metricRange,
   onMetricRangeChange,
+  onNavigateResource,
   resourceIssues,
   onTabChange,
   tab,
@@ -52,6 +55,7 @@ export function ResourceDetailBody({
   metricHistory: ResourceMetricsHistoryFrame;
   metricRange: ResourceMetricTimeRange;
   onMetricRangeChange: (range: ResourceMetricTimeRange) => void;
+  onNavigateResource: (identity: ResourceIdentity) => void;
   resourceIssues: ResourceIssuesFrame;
   onTabChange: (tab: string) => void;
   tab: string;
@@ -176,8 +180,15 @@ export function ResourceDetailBody({
                   key={item.id}
                 >
                   <OverflowIdentity
-                    className="min-w-0 flex-1"
-                    render={<span data-slot="resource-related-identity" />}
+                    className="h-auto min-w-0 flex-1 justify-start px-0 text-left"
+                    render={(
+                      <Button
+                        data-slot="resource-related-identity"
+                        onClick={() => onNavigateResource(resourceIdentity(item))}
+                        type="button"
+                        variant="link"
+                      />
+                    )}
                     value={`${item.kind} · ${item.namespace ?? t("resources.detail.clusterScope")}/${item.name}`}
                   />
                   <StatusMark label={item.healthStatus} tone={item.health} />
@@ -245,6 +256,15 @@ export function ResourceDetailBody({
       </TabsContent>
     </Tabs>
   );
+}
+
+function resourceIdentity(resource: ResourceSummary): ResourceIdentity {
+  return {
+    resourceType: resource.resourceType,
+    kind: resource.kind,
+    namespace: resource.namespace,
+    name: resource.name,
+  };
 }
 
 function hasMetricPoints(frame: ResourceMetricsHistoryFrame, resourceId: string): boolean {

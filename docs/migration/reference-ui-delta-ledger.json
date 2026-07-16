@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 13,
+  "pendingCount": 0,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -5115,8 +5115,40 @@
         "blobId": "39c0c9f465a022e51010fd46a91f660425587814",
         "sha256": "ce9f1336f9d40f42e6a4880ff5d70df5dccc40172fd0998d8244ab3cc67949b4"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:catalog:count-availability-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourcesSidebar count visibility tests",
+          "interaction": "the resource catalog distinguishes a confirmed zero from an unavailable count, keeps an unavailable, selected, or pinned type reachable, and never turns a missing count field into proof of emptiness",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the authorized catalog for the same cluster and namespace scope after visibility resume or explicit refresh",
+            "backpressure": "share one bounded catalog read for the exact scope rather than starting one request per resource type",
+            "merge": "replace a count only when the cluster, namespace scope, resource type, and catalog observation still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourcesContract.ts",
+              "frontend/src/pages/resources/ResourcesCatalog.tsx",
+              "frontend/src/pages/resources/ResourcesCatalog.test.tsx",
+              "src/domains/inventory/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.router",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.catalog.count-availability"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current catalog contract contains only observed resource types with integer counts. It does not yet expose authorized API discovery plus unavailable, forbidden, and confirmed-zero count states for unobserved kinds.",
+            "rationale": "Existing tests preserve pinned observed types and confirmed zero counts. The missing-count cases remain unrendered instead of being hardcoded as zero or copied from the source browser."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5130,8 +5162,45 @@
         "blobId": "4735d3b8502689120fe6464d819839b2c218d464",
         "sha256": "3b20ab8d45d977730ce8752633c999b8b3ce20e8da5a4dc449864a0cbfb689eb"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:catalog:count-aware-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourcesSidebar count-aware category and favorite disclosure",
+          "interaction": "search, category disclosure, favorites, selected type, and count badges operate over one authorized catalog while unavailable and confirmed-empty states remain semantically distinct",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the exact catalog scope on the shared Resources refresh clock",
+            "backpressure": "one catalog response supplies all visible category counts and health summaries",
+            "merge": "discard catalog results from a superseded cluster or namespace scope"
+          },
+          "motion": {
+            "reducedMotion": "category, favorite, and selection state remain visible through aria-expanded, aria-pressed, text, and count labels without animation",
+            "evidence": [
+              "frontend/src/pages/resources/ResourcesCatalog.tsx",
+              "frontend/src/pages/resources/ResourcesCatalog.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourcesCatalog.tsx",
+              "frontend/src/pages/resources/ResourcesCatalogCore.tsx",
+              "frontend/src/pages/resources/ResourcesCatalog.test.tsx",
+              "frontend/src/features/resources/resourcesContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.catalog.count-availability"
+            ],
+            "state": "blocked",
+            "blockedReason": "The UI can render observed zero counts, search, and persisted favorites, but it cannot truthfully expose unavailable discovered types until the Python catalog carries count availability and discovery evidence.",
+            "rationale": "The product keeps its existing category and favorite component. No source sidebar or per-kind request fan-out is copied."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -5142,8 +5211,41 @@
         "blobId": "55165ed8c71d489bc6be6a0ffa6afc0919c0242a",
         "sha256": "394c05e8fcb050a4ca1b326b2f4d418e64ab9ff92e4ae2b1cc77e30ff8d7bd1f"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:navigation:kind-query-generation-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "selected-kind canonicalization and stale-query tests",
+          "interaction": "a selected resource type resolves from canonical URL state, accepts only its exact request generation, preserves group and kind identity through detail navigation, and cannot display rows returned for the previously selected type",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the exact list and detail scope after visibility resume or explicit refresh",
+            "backpressure": "share and abort requests by cluster, resource type, namespace, include-deleted, and revision key",
+            "merge": "commit list and detail results only when their stored scope equals the active URL-derived scope"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/filters/filterUrlCodec.ts",
+              "frontend/src/pages/resources/useResourcesDataFrame.ts",
+              "frontend/src/pages/resources/useResourcesDetailState.ts",
+              "frontend/src/pages/resources/ResourcesPage.relatedNavigation.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.router",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.navigation.scope",
+              "resources.dynamic-navigation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product uses a server resourceType plus exact kind, namespace, name, and UID rather than source plural-name heuristics. This slice fixes cross-kind related navigation so resourceType changes atomically with detail identity and full mode remains stable."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5157,8 +5259,112 @@
         "blobId": "97eef57e2f24bb4bd9f92b8664a8b5336e6dde9b",
         "sha256": "67728a1e64f2ffb7864e0ed16580ec77513e630c99558fbb5a22fd342655b296"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:view:url-generation-and-filter-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourcesView selected type, filters, keyboard and URL state",
+          "interaction": "resource type selection, text filtering, sorting, row keyboard navigation, detail open, tab selection, and full mode share canonical URL state and exact typed list and detail scopes",
+          "transport": "poll",
+          "realtime": {
+            "resume": "the visible Resources refresh clock reacquires the exact catalog, list, detail, metrics, issues, and topology scopes",
+            "backpressure": "shared requests and generation-bound frames prevent duplicate reads and stale kind results",
+            "merge": "each response is committed only to its matching scope and same-scope refresh failures retain the last verified data"
+          },
+          "motion": {
+            "reducedMotion": "detail open, close, full mode, focus restoration, table selection, and status feedback remain operable with layout transitions disabled",
+            "evidence": [
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+              "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourcesPage.tsx",
+              "frontend/src/pages/resources/ResourcesListSurface.tsx",
+              "frontend/src/pages/resources/ResourcesTable.tsx",
+              "frontend/src/pages/resources/useResourcesDataFrame.ts",
+              "frontend/src/features/filters/filterUrlCodec.ts"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.router",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.navigation.scope",
+              "resources.dynamic-navigation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing ResourcesPage is the canonical product surface. Exact request scoping replaces source query tags and this slice adds missing cross-kind related navigation without introducing a second view."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:view:regex-and-count-cache-contract:v1",
+          "legacyContractIds": [],
+          "symbol": "regex URL mode and loaded-count cache",
+          "interaction": "regex search and temporary loaded-count recovery may be exposed only through a typed backend query and catalog availability contract, never by interpreting a missing count or executing an unbounded browser regex over authoritative scope",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the same server query and catalog observation after refresh",
+            "backpressure": "server-side pagination and query budgets bound the result set before browser rendering",
+            "merge": "cached presentation state may never override a newer server count, scope, or completeness marker"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourcesFilterContract.ts",
+              "frontend/src/features/filters/filterContract.ts",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.router",
+              "packages.contracts.inventory_filter"
+            ],
+            "plannedTestIds": [
+              "resources.catalog.count-availability"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product filter contract currently defines bounded literal text search and server count completeness, not regex mode or an API-discovery count cache. Adding only browser state would diverge from the Python contract.",
+            "rationale": "Literal search remains available through the shared filter port. Regex and inferred count recovery stay absent until the backend contract exists."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:view:workflow-kind-presentation:v1",
+          "legacyContractIds": [],
+          "symbol": "CronWorkflow and workflow-template list and log affordances",
+          "interaction": "observed Workflow, CronWorkflow, WorkflowTemplate, and ClusterWorkflowTemplate identities use the shared kind registry, typed provider detail discriminator, exact related references, and only server-authorized log actions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact workflow resource identity after visibility resume or explicit refresh",
+            "backpressure": "share one bounded detail request and cap referenced workflow identities in Python",
+            "merge": "replace workflow presentation only when its resource UID, kind, and provider-detail discriminator still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/resourcePresentation.ts",
+              "frontend/src/features/resources/providerResourceContract.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.contract",
+              "resources.extension-detail.presentation",
+              "resources.kind-icons.registry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "CronWorkflow and Workflow projections and icons are present. Dynamic discovery and scheduled log eligibility remain server-owned and are not inferred from a kind string."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5172,8 +5378,42 @@
         "blobId": "69dcdd4bce183a753fe6b672f9c6709683ba6b2d",
         "sha256": "d4fed53a860359c623c0cd596f8f5c697300fd941e28362935428a2c4c84b253"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:detail-shell:semantic-surface-tokens:v1",
+          "legacyContractIds": [],
+          "symbol": "DetailShell background, header and tab composition",
+          "interaction": "resource detail uses one product-owned semantic surface, header, command bar, controlled tab list, overflow boundary, and loading or failure state in drawer and full layouts",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the detail shell preserves geometry, focus, tabs, close, and full-mode state while entrance and exit animation is disabled",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
+              "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+              "frontend/src/shared/ui/Surface.tsx",
+              "frontend/src/styles/tokens.css"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.detail.composition",
+              "design.sheet.drawer-shadow.boundary"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Semantic product tokens and the existing detail workspace replace the source shell; no wrapper or source theme class is copied."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5227,8 +5467,78 @@
         "blobId": "49a0a5ec6fe50f71f9c6117af6245ada3f3e793c",
         "sha256": "155b60839d3707b5dbab7502bea86f92b378e2cd46e79eb74dea2fc179264e61"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:actions:capability-command-and-log-composition:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceActionsBar workload logs and imperative operations",
+          "interaction": "the resource command bar renders only exact CapabilitySet actions, confirms typed inputs once, returns a durable command receipt, follows OperationEvent progress, and opens logs through the shared authenticated dock",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the same command and log stream identity from durable sequence state without replaying the mutation",
+            "backpressure": "the operation store and log viewer retain bounded event and line windows",
+            "merge": "apply capability, receipt, and stream events only to the exact resource and command identities"
+          },
+          "motion": {
+            "reducedMotion": "pending, accepted, running, cancellation, completion, failure, and log state retain text and status marks without spinner dependence",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/operations/OperationStatusFeedback.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+              "frontend/src/features/resources/createResourceActionsAdapter.ts",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.command.router",
+              "packages.contracts.command"
+            ],
+            "plannedTestIds": [
+              "resources.detail.composition",
+              "logs.stream.terminal-state"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The generic capability port prevents duplicate kind-specific action code. Unsupported operations remain absent rather than guessed from kind names."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:actions:revision-diff-and-rollback:v1",
+          "legacyContractIds": [],
+          "symbol": "RevisionHistoryDialog and shared diff classifier",
+          "interaction": "revision history, a typed current-to-selected diff, and rollback may appear only after the server returns immutable revisions, exact capability revision, confirmation impact, command receipt, and observed completion",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume the accepted rollback command from durable OperationEvent sequence",
+            "backpressure": "bound revision history and diff size before browser delivery",
+            "merge": "apply a rollback only to the exact workload UID, selected revision, capability revision, and command generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.command.router",
+              "packages.contracts.command"
+            ],
+            "plannedTestIds": [
+              "resources.detail.composition"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Python resource capability contract can execute advertised commands but does not yet expose a bounded workload revision catalog or typed rollback preview for this surface.",
+            "rationale": "No browser-derived revision list, template diff, or rollback button is added until the backend owns all three."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -5242,8 +5552,43 @@
         "blobId": "2c83bfb3455b6196528b75c6322bbe82666f0da0",
         "sha256": "6d5440eb921993820337dd7ce37fbf038005a7007f19127b9014e8604b593818"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:detail:typed-renderer-dispatch-and-health:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceRendererDispatch provider discriminator and health hint",
+          "interaction": "resource detail dispatches a bounded server-owned provider discriminator, common facts, conditions, related references, metrics, issues, and health without importing the source renderer registry or reading a raw Kubernetes object",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact detail identity on the Resources refresh clock",
+            "backpressure": "share one bounded detail request and cap provider collections in Python",
+            "merge": "replace detail only while cluster, resource type, kind, namespace, name, UID, and discriminator still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.extension-detail.public-boundary",
+              "resources.extension-detail.contract",
+              "resources.extension-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The current typed provider union includes Workflow and CronWorkflow projections and shares one localized panel. Remaining dynamic CRD discovery is tracked separately."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -6823,8 +7168,48 @@
         "blobId": "f98d7129d7e1e92df1a79f05440b0ae30d265625",
         "sha256": "bad19431b6bbe49eda029997915d78219a3ac44f955040b91388a32a50b2e848"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:detail:related-navigation-and-overflow:v1",
+          "legacyContractIds": [],
+          "symbol": "RelatedResourcesSection, ResourceRefBadge and overflow-safe detail primitives",
+          "interaction": "related resources preserve exact resource type, kind, namespace and name, remain keyboard reachable and tooltip recoverable, and navigate within the canonical detail URL without losing full mode",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the active related-resource detail after visibility resume or explicit refresh",
+            "backpressure": "share one bounded detail request for the exact related identity",
+            "merge": "navigate and replace detail only when the authorized related resource type and identity remain exact"
+          },
+          "motion": {
+            "reducedMotion": "related navigation and overflow disclosure remain fully operable without hover or layout animation",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+              "frontend/src/pages/resources/ResourcesPage.detailOverflow.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+              "frontend/src/pages/resources/useResourcesDetailState.ts",
+              "frontend/src/shared/ui/OverflowIdentity.tsx",
+              "frontend/src/pages/resources/ResourcesPage.relatedNavigation.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.router",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.navigation.scope",
+              "resources.extension-detail.reference-navigation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "This slice adds the missing exact related-resource navigation to the existing detail body. Relationship families not projected by Python remain absent instead of being inferred from raw objects."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -7336,8 +7721,42 @@
         "blobId": "0193d045be19666d76b231c4c881b8b0ad207143",
         "sha256": "2e8036055a8bd61d9d741be8c28747906e4934c508fca51859ec918cd4d135ee"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:detail:drawer-panel-coexistence:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceDetailDrawer right inset and expand-collapse morph",
+          "interaction": "peek and full resource detail coexist with the navigation rail, AI panel, bottom dock, and narrow viewport without overlap while close, expand, collapse, Escape, focus, and reduced motion retain one URL state",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the side-by-side flex layout and detail controls remain correct when entrance, exit, and size transitions are disabled",
+            "evidence": [
+              "frontend/src/app/ProductShell.interaction.test.tsx",
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/pages/resources/ResourcesPage.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx",
+              "frontend/src/motion/tokens.css"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.navigation.scope",
+              "design.sheet.drawer-shadow.boundary"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "ProductShell reserves AI and dock space structurally, so no pixel rightInset prop or duplicate absolute drawer is needed."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -7351,8 +7770,112 @@
         "blobId": "1296f79269a23043e24d74c023b2105265f4fc0e",
         "sha256": "a63a210e56b92422ecdc7f40bcb29121b23b274181778fe46634adc3c2db56ff"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workload:detail:typed-tabs-and-drawer-composition:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadView detail tabs, header, drawer and URL fallback",
+          "interaction": "an exact workload route derives visible overview, pods, events, logs, and execution tabs from the authorized Python projection, keeps the selected tab in canonical URL state, and never renders an unavailable section as empty evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the same exact workload identity and visible tab after document resume",
+            "backpressure": "share one abortable workload detail request and one bounded active execution refresh",
+            "merge": "commit data only when cluster, API group, version, kind, namespace, name, and request generation still match"
+          },
+          "motion": {
+            "reducedMotion": "header, tab, drawer, full view, loading, partial, and failure states remain semantic without transition animation",
+            "evidence": [
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/workload-detail/workloadDetailContract.ts",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "src/domains/workload_detail/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.workload_detail.router",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "workload.public-api.surface",
+              "workload.detail.composition"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route already owns exact identity, availability, partial coverage, log eligibility, and execution selection. Unsupported tabs are omitted rather than copied as client-only placeholders."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workload:overview:runtime-ownership-and-serving-evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "runtime overview cards, ownership heading, pods, scaling and serving path",
+          "interaction": "runtime health, rollout state, pod readiness, autoscaler evidence, ownership, service entry points, dependencies, and bounded overflow disclosures may render only from server-resolved workload, application, relationship, and serving-resource evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh all sections against one workload observation snapshot",
+            "backpressure": "bound pods, relationships, events, and serving details in Python before browser delivery",
+            "merge": "combine sections only when their workload UID and observation snapshot are identical"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/workload-detail/workloadDetailContract.ts",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "src/domains/workload_detail/projection.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.workload_detail.projection",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "workload.detail.composition"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current workload detail contract projects replicas, labels, direct Pods, events, log availability, rightsizing availability, and capabilities, but not application ownership, autoscaler diagnosis, serving resources, dependency groups, or rollout facts.",
+            "rationale": "The source browser status heuristics and raw relationship parsing are not copied. These cards remain absent until Python resolves and bounds their evidence."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workload:evidence:timeline-metrics-cost-and-gitops:v1",
+          "legacyContractIds": [],
+          "symbol": "Timeline, Metrics, Cost, GitOps and Helm workload sections",
+          "interaction": "timeline, metrics, cost, GitOps, Helm, issue, and source navigation sections share the exact workload identity and observation snapshot and disclose unavailable collectors or providers instead of fabricating evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reacquire only visible evidence sections and resume any accepted operation stream",
+            "backpressure": "use bounded server windows, series, events, and provider projections",
+            "merge": "attach evidence only when the workload UID, scope, range, provider identity, and snapshot revision match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/workload-detail/workloadDetailContract.ts",
+              "frontend/src/features/cost/WorkloadCostPanel.tsx",
+              "frontend/src/features/rightsizing/RightsizingStrip.tsx",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "src/domains/workload_detail/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.workload_detail.router",
+              "packages.contracts.workload_detail",
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "workload.detail.composition",
+              "rightsizing.workload",
+              "cost.workload.collector-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The workload detail response does not yet carry topology, historical metrics, retained timeline, application issue, GitOps owner, Helm owner, or provider-backed cost observations. Rightsizing is explicitly unavailable until its provider repository is connected.",
+            "rationale": "Only the typed rightsizing unavailable union is mounted today. Other source tabs are not advertised without their Python contracts."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -13345,8 +13868,40 @@
         "blobId": "d4f778be74b75dcac77ce764d9e52c714671e01e",
         "sha256": "43ba95b58fa05356f38bc6ffe0de687de83b5692a862202a07fbc22c16bfc6b8"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:detail:web-drawer-composition-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "web ResourceDetailDrawer wrapper and right-panel inset",
+          "interaction": "the web route composes the canonical resource detail workspace beside product-owned AI and dock surfaces without a source wrapper, duplicate renderer registry, or pixel-coupled panel contract",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "resource detail, AI, and dock geometry remains stable when layout animation is disabled",
+            "evidence": [
+              "frontend/src/app/ProductShell.interaction.test.tsx",
+              "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/pages/resources/ResourcesPage.tsx",
+              "frontend/src/pages/resources/ResourceDetailWorkspace.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "resources.detail.composition"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product layout already reserves sibling surface width through flex composition, so copying the source wrapper and rightInset prop would duplicate ownership."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -13360,8 +13915,42 @@
         "blobId": "12b65f9b0b4cf9fb6fe15f4fec38d092d0d6fe74",
         "sha256": "204c20bd2bc1674bef9f94c1b76a2e0c055f31be0f7a341c99519a672cffbef9"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:view:guarded-count-and-query-identity:v1",
+          "legacyContractIds": [],
+          "symbol": "web ResourcesView count guard and selected query identity",
+          "interaction": "the product requests one server-bounded resource page for the canonical selected type, treats unavailable totals separately from zero, and discards results from superseded cluster, type, namespace, filter, cursor, or snapshot generations",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the exact visible catalog and resource page after document resume",
+            "backpressure": "server pagination, result limits, shared requests, and abortable generations replace client large-list heuristics",
+            "merge": "append only pages from the same snapshot chain and retain the current verified page on append failure"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourcesFilterContract.ts",
+              "frontend/src/pages/resources/useResourcesFilterDataFrame.ts",
+              "frontend/src/pages/resources/useResourcesDataFrame.ts",
+              "frontend/src/pages/resources/ResourcesListSurface.tsx",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory_filter.router",
+              "packages.contracts.inventory_filter"
+            ],
+            "plannedTestIds": [
+              "resources.navigation.scope",
+              "resources.catalog.count-availability"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python filter page exposes explicit count completeness and bounded pagination. Full API discovery count availability remains blocked in the separate catalog interaction."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -14413,8 +15002,84 @@
         "blobId": "1f0381b65be98104cf019a0adfcc2d9b51e6390b",
         "sha256": "f4f446c932feb5813d888349d5ce17c1f3f92eba84330525e898906d0d99300a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:workload:web:authorized-detail-execution-and-logs:v1",
+          "legacyContractIds": [],
+          "symbol": "WorkloadViewRoute typed detail, scheduled execution and log composition",
+          "interaction": "the web workload route loads an exact authorized observation, exposes only available tabs, refreshes active scheduled runs, opens immutable server-selected log targets in the shared dock, and preserves explicit partial and unavailable evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the workload detail on visibility resume and continue the accepted log stream from its durable cursor",
+            "backpressure": "one abortable detail request, one five-second active-run refresh, and bounded dock lines protect the browser",
+            "merge": "apply detail, runs, lifecycle, and logs only to their exact workload and immutable run identities"
+          },
+          "motion": {
+            "reducedMotion": "refresh, tab, run selection, stream, partial, and failure feedback remain textual and semantic without animation",
+            "evidence": [
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx",
+              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "src/domains/workload_detail/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.workload_detail.router",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "workload.public-api.surface",
+              "execution.catalog.contract",
+              "execution.catalog.adapter",
+              "execution.catalog.presentation",
+              "workload.execution.integrations"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python route and strict adapter replace source hooks and raw status parsing. Scheduled run identity and lifecycle guidance are server-owned."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:workload:web:provider-evidence-and-action-gates:v1",
+          "legacyContractIds": [],
+          "symbol": "workload topology, metrics, cost, issues, GitOps, Helm, service actions and duplicate flow",
+          "interaction": "topology, metrics, cost, issues, GitOps, Helm, serving-resource actions, duplication, and mutation controls appear only when exact server projections and capabilities exist and every accepted mutation returns an observed receipt",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume accepted operations and refresh visible provider evidence without replaying commands",
+            "backpressure": "bound all evidence collections and serialize mutations for one exact workload capability revision",
+            "merge": "apply provider evidence and operation events only to the matching workspace, cluster, workload UID, provider identity, capability revision, and command"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/workload-detail/workloadDetailContract.ts",
+              "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "src/domains/workload_detail/router.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.workload_detail.router",
+              "domains.command.router",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "workload.detail.composition",
+              "resources.detail.composition"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current workload detail contract does not expose these provider evidence sections or a duplicate-resource workflow, and provider-backed cost and rightsizing observations are not connected.",
+            "rationale": "The product does not copy source hooks, raw-object ownership parsing, local mutations, or placeholder tabs. Each section remains explicitly unavailable until its Python contract and capability gate exist."
+          }
+        }
+      ]
     },
     {
       "status": "M",

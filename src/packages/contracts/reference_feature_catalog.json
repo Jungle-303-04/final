@@ -3694,7 +3694,8 @@
         "tests/test_inventory_provider_detail.py",
         "frontend/src/api/inventory.test.ts",
         "frontend/src/features/resources/providerResourceCanonical.test.ts",
-        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.relatedNavigation.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -3707,7 +3708,7 @@
           "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx#ResourceDetailSheet",
           "consumer": "frontend/src/features/resources/providerResourceCanonical.ts#toProviderResourceDetail",
-          "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
+          "test": "frontend/src/pages/resources/ResourcesPage.relatedNavigation.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

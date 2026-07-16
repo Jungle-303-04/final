@@ -353,6 +353,7 @@ export function ResourcesPage({
             onUnauthorized={reportUnauthorized}
             onClose={state.closeDetail}
             onFullChange={state.setDetailFull}
+            onNavigateResource={state.navigateDetail}
             onTabChange={state.setDetailTab}
             tab={state.detailTab}
             terminalPort={podTerminalPort}

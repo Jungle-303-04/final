@@ -44,6 +44,7 @@ export function ResourceDetailWorkspace({
   resourceIssues,
   manifestPort,
   onUnauthorized,
+  onNavigateResource,
   tab,
   terminalPort = EMPTY_POD_TERMINAL_PORT,
   serviceAccessPort,
@@ -60,6 +61,7 @@ export function ResourceDetailWorkspace({
   resourceIssues: ResourceIssuesFrame;
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
+  onNavigateResource: (identity: ResourceIdentity) => void;
   tab: string;
   terminalPort?: PodTerminalPort;
   serviceAccessPort?: ServiceAccessPort;
@@ -220,6 +222,7 @@ export function ResourceDetailWorkspace({
             }),
             "time-range",
           )}
+          onNavigateResource={onNavigateResource}
           resourceIssues={resourceIssues}
           onTabChange={onTabChange}
           tab={tab}
