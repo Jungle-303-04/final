@@ -48,6 +48,24 @@ fn desktop_build_uses_the_shared_frontend_from_the_desktop_working_directory() {
 }
 
 #[test]
+fn desktop_bundle_uses_the_generated_platform_icon_set() {
+    let config = include_str!("../tauri.conf.json");
+
+    for icon in [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico",
+    ] {
+        assert!(
+            config.contains(icon),
+            "desktop bundle configuration must include {icon}"
+        );
+    }
+}
+
+#[test]
 fn desktop_capabilities_do_not_grant_a_wildcard_remote_origin() {
     let capability = include_str!("../capabilities/default.json");
 

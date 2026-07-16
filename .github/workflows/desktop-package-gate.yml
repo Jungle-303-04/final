@@ -80,6 +80,9 @@ jobs:
       - name: Install pinned Tauri CLI
         run: cargo install tauri-cli --version 2.10.0 --locked
 
+      - name: Verify generated desktop icons
+        run: node desktop/scripts/check-icons.mjs
+
       - name: Build platform installer bundles
         run: cargo tauri build --bundles ${{ matrix.bundles }}
         working-directory: desktop

@@ -25,3 +25,24 @@ separate security principal.
 
 `updater` remains unsupported until signed release metadata and platform
 signing keys are configured. It has no Python fallback.
+
+## Platform icons
+
+`frontend/public/favicon.svg` is the only authored desktop brand source. The
+Tauri bundle icons are generated from it; do not edit generated PNG, ICO, or
+ICNS files directly.
+
+After changing the brand source, regenerate the platform artifacts and verify
+them before packaging:
+
+```sh
+node desktop/scripts/generate-icons.mjs
+node desktop/scripts/check-icons.mjs
+```
+
+The verification regenerates the declared Tauri artifacts in a temporary
+directory, checks the byte-stable PNG/ICO outputs plus all container formats
+and dimensions, and rejects the old unmanaged `icon.png` path. The ICNS
+container is validated structurally because Tauri may encode its lossless image
+entries differently on separate runs. The desktop package CI runs the same
+verification after installing its pinned Tauri CLI.
