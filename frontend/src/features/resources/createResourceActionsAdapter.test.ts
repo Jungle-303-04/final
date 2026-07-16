@@ -131,7 +131,10 @@ describe("resource action adapter", () => {
       command_id: "command-1",
       status: "queued",
     });
-    const port = createResourceActionsAdapter({ executeResourceCapability });
+    const port = createResourceActionsAdapter({
+      executeResourceCapability,
+      getResourceDeletionPreview: vi.fn(),
+    });
     const cronjobCapability = {
       ...CAPABILITY,
       capabilityId: "cronjob.trigger",
