@@ -16,10 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gate:
-    name: Full gate
+  source-proof:
+    name: Commit and deployment proof
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -69,6 +69,16 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  backend:
+    name: Backend and manifest gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -84,8 +94,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Helm
         uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -98,5 +106,40 @@ jobs:
       - name: Verify commit message gate rules
         run: uv run pytest -q tests/test_commit_msg_gate.py
 
-      - name: Run canonical gate
-        run: make gate
+      - name: Run backend and manifest gate
+        run: make gate-backend
+
+  frontend:
+    name: Frontend gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run frontend gate
+        run: make gate-frontend
+
+  gate:
+    name: Full gate
+    if: ${{ always() }}
+    needs: [source-proof, backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every parallel gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.source-proof.result }}" = "success"
+          test "${{ needs.backend.result }}" = "success"
+          test "${{ needs.frontend.result }}" = "success"

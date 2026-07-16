@@ -17,9 +17,9 @@ def workflow_document() -> dict[str, object]:
     return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
 
 
-def steps_by_name() -> dict[str, dict]:
+def proof_steps_by_name() -> dict[str, dict]:
     document = workflow_document()
-    return {step["name"]: step for step in document["jobs"]["gate"]["steps"]}
+    return {step["name"]: step for step in document["jobs"]["source-proof"]["steps"]}
 
 
 def git(repository: Path, *args: str) -> str:
@@ -106,7 +106,7 @@ def classify_scope(
 
 def test_gate_keeps_commit_audit_bounded_but_classifies_from_last_deployment() -> None:
     document = workflow_document()
-    steps = steps_by_name()
+    steps = proof_steps_by_name()
     audit = steps["Enforce commit message convention"]
     classify = steps["Classify automatic deployment scope"]
     upload = steps["Upload automatic deployment scope"]
@@ -123,6 +123,46 @@ def test_gate_keeps_commit_audit_bounded_but_classifies_from_last_deployment() -
         "if-no-files-found": "error",
         "retention-days": 1,
     }
+
+
+def test_gate_runs_independent_backend_and_frontend_checks_in_parallel() -> None:
+    jobs = workflow_document()["jobs"]
+
+    assert set(jobs) == {"source-proof", "backend", "frontend", "gate"}
+    assert all("needs" not in jobs[job_id] for job_id in ("source-proof", "backend", "frontend"))
+    assert jobs["backend"]["steps"][-1] == {
+        "name": "Run backend and manifest gate",
+        "run": "make gate-backend",
+    }
+    assert jobs["frontend"]["steps"][-1] == {
+        "name": "Run frontend gate",
+        "run": "make gate-frontend",
+    }
+
+
+def test_full_gate_status_fails_closed_over_every_parallel_job() -> None:
+    gate = workflow_document()["jobs"]["gate"]
+
+    assert gate["name"] == "Full gate"
+    assert gate["if"] == "${{ always() }}"
+    assert gate["needs"] == ["source-proof", "backend", "frontend"]
+    assertion = gate["steps"][0]["run"]
+    assert 'test "${{ needs.source-proof.result }}" = "success"' in assertion
+    assert 'test "${{ needs.backend.result }}" = "success"' in assertion
+    assert 'test "${{ needs.frontend.result }}" = "success"' in assertion
+
+
+def test_parallel_jobs_preserve_exact_gated_source_checkout() -> None:
+    jobs = workflow_document()["jobs"]
+    expected = {
+        "ref": "${{ github.event.pull_request.head.sha || github.sha }}",
+    }
+
+    for job_id in ("source-proof", "backend", "frontend"):
+        checkout = next(
+            step for step in jobs[job_id]["steps"] if step.get("uses") == "actions/checkout@v4"
+        )
+        assert checkout["with"] == expected
 
 
 def test_scope_includes_backend_changes_from_an_earlier_undeployed_push(tmp_path: Path) -> None:

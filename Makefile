@@ -22,7 +22,7 @@ export REFERENCE_UI_BASE_REVISION
 export REFERENCE_UPSTREAM_GIT
 export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-backend gate-frontend gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -128,9 +128,15 @@ release-governance-web: reference-ledger-check reference-ui-delta-rebaseline-che
 
 release-governance-web-patch: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-ledger-check ## Dev 증분 패치용 원본 무결성·계약 구조 gate
 
-gate: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## PR 진단용 백엔드·manifest·프론트 전체 gate
+gate: ## PR 진단용 백엔드·manifest·프론트 전체 gate
+	$(MAKE) gate-backend
+	$(MAKE) gate-frontend
+
+gate-backend: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## 백엔드·manifest 전체 gate
 	bash scripts/test.sh
 	bash scripts/manifest-check.sh
+
+gate-frontend: ## 프론트 정적 검사·테스트·빌드 전체 gate
 	cd frontend && npm ci --include=dev --no-audit --no-fund
 	cd frontend && npm run typecheck
 	cd frontend && npm run lint
