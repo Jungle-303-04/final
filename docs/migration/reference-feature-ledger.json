@@ -3010,7 +3010,7 @@
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
@@ -3018,6 +3018,7 @@
         "tests/test_refresh_policies.py",
         "tests/test_gitops_filter_router.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/shared/data/serverRefreshScheduler.test.ts",
         "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
@@ -3028,10 +3029,10 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "GitOps rows support manual authorized reloads, but do not schedule the server 120-second cadence or the bounded cold-empty two-second retry.",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "GitOps rows consume the server-owned 120-second cadence, preserve last success, pause while hidden, and apply the server-declared two-second cold-empty retry at most four times.",
           "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
         },
         "desktop": null,
@@ -3057,7 +3058,7 @@
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
       "desktopContract": null,
@@ -3065,6 +3066,7 @@
         "tests/test_refresh_policies.py",
         "tests/test_gitops_filter_router.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/shared/data/serverRefreshScheduler.test.ts",
         "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
@@ -3075,10 +3077,10 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "GitOps counts are derived with rows and can be refreshed manually, but no consumer schedules the independent server 60-second count policy.",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "GitOps counts consume the independent server-owned 60-second policy while sharing the authorized rows request, so either policy refreshes rows and counts without duplicate API calls.",
           "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
         },
         "desktop": null,
