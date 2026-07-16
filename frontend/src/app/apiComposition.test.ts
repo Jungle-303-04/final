@@ -42,6 +42,8 @@ describe("API composition root", () => {
     expect(composition.releasedSurfaceIds.has("cost")).toBe(true);
     expect(composition.releasedSurfaceIds.has("checks")).toBe(true);
     expect(composition.surfaces.map((surface) => surface.id)).not.toContain("topology");
+    expect(composition.runtimeStatus.loadDiagnostics).toEqual(expect.any(Function));
+    expect(composition.runtimeStatus.checkVersion).toEqual(expect.any(Function));
     expect(fetchSpy).not.toHaveBeenCalled();
     composition.dispose();
     fetchSpy.mockRestore();

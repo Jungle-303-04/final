@@ -16,6 +16,8 @@ import {
   grantDiagnoseConsent,
   getScheduledWorkloadRuns,
   getSettingsAccessProfile,
+  getRuntimeDiagnostics,
+  getVersionCheck,
   getNodePodsSummary,
   getNamespaceScope,
   getUiPreferences,
@@ -51,6 +53,7 @@ import { createOperationEventsAdapter } from "../features/operations/createOpera
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
 import { createShellStateAdapter } from "../features/shell-state/createShellStateAdapter";
 import { createSettingsAdapter } from "../features/settings/createSettingsAdapter";
+import { createRuntimeStatusAdapter } from "../features/runtime-status/createRuntimeStatusAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
 
@@ -117,6 +120,10 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     listDiagnoseRuns,
     stopDiagnoseRun,
     subscribeDiagnoseEvents,
+  });
+  const runtimeStatusPort = createRuntimeStatusAdapter({
+    getRuntimeDiagnostics,
+    getVersionCheck,
   });
 
   return createProductComposition([
@@ -203,5 +210,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort);
+  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort);
 }

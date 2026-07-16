@@ -62,6 +62,7 @@ export function ProductRouter({
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
               shellStatePort={composition.shellState}
+              runtimeStatusPort={composition.runtimeStatus}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>

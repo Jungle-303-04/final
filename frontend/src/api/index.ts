@@ -58,6 +58,18 @@ export {
   REFRESH_POLICIES_PATH,
 } from "./refresh-policies";
 export {
+  getRuntimeDiagnostics,
+  getVersionCheck,
+  RUNTIME_DIAGNOSTICS_PATH,
+  VERSION_CHECK_PATH,
+} from "./bootstrap-status";
+export {
+  runtimeDiagnosticsSchema,
+  versionCheckSchema,
+  type RuntimeDiagnosticsEndpoint,
+  type VersionCheckEndpoint,
+} from "./bootstrap-status-schemas";
+export {
   browserRefreshPoliciesSchema,
   browserRefreshPolicySchema,
   refreshPolicyKeys,

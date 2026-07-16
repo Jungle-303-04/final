@@ -68,6 +68,12 @@ import {
   EMPTY_SHELL_STATE_PORT,
   type ShellStatePort,
 } from "../features/shell-state/shellStateContract";
+import {
+  EMPTY_RUNTIME_STATUS_PORT,
+  type RuntimeStatusPort,
+} from "../features/runtime-status/runtimeStatusContract";
+import { RuntimeDiagnosticsDialog } from "../features/runtime-status/RuntimeDiagnosticsDialog";
+import { VersionUpdateNotice } from "../features/runtime-status/VersionUpdateNotice";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -82,6 +88,7 @@ interface ProductShellProps {
   logStreamPort?: LogStreamPort;
   alertEventsPort?: AlertEventsPort;
   shellStatePort?: ShellStatePort;
+  runtimeStatusPort?: RuntimeStatusPort;
 }
 
 export function ProductShell({
@@ -93,6 +100,7 @@ export function ProductShell({
   logStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
   shellStatePort = EMPTY_SHELL_STATE_PORT,
+  runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
@@ -106,6 +114,7 @@ export function ProductShell({
                 globalFilterPort={globalFilterPort}
                 releasedSurfaceIds={releasedSurfaceIds}
                 shellStatePort={shellStatePort}
+                runtimeStatusPort={runtimeStatusPort}
               />
             </AlertEventsProvider>
           </BottomDockProvider>
@@ -121,7 +130,8 @@ function ProductShellFrame({
   releasedSurfaceIds,
   globalFilterPort,
   shellStatePort = EMPTY_SHELL_STATE_PORT,
-}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "shellStatePort">) {
+  runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
+}: Pick<ProductShellProps, "aiAssistantPort" | "auth" | "globalFilterPort" | "releasedSurfaceIds" | "runtimeStatusPort" | "shellStatePort">) {
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
@@ -310,6 +320,8 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
+            <VersionUpdateNotice port={runtimeStatusPort} />
+            <RuntimeDiagnosticsDialog port={runtimeStatusPort} />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}

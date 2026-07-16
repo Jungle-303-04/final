@@ -42,6 +42,10 @@ import {
   type ShellStatePort,
 } from "../features/shell-state/shellStateContract";
 import type { ProductSurfaceLoader } from "./surfaceLoader";
+import {
+  EMPTY_RUNTIME_STATUS_PORT,
+  type RuntimeStatusPort,
+} from "../features/runtime-status/runtimeStatusContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -59,6 +63,7 @@ export interface ProductComposition {
   compare: ComparePort;
   diagnose: DiagnosePort;
   shellState: ShellStatePort;
+  runtimeStatus: RuntimeStatusPort;
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -79,6 +84,7 @@ export function createProductComposition(
   compare: ComparePort = EMPTY_COMPARE_PORT,
   diagnose: DiagnosePort = EMPTY_DIAGNOSE_PORT,
   shellState: ShellStatePort = EMPTY_SHELL_STATE_PORT,
+  runtimeStatus: RuntimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -111,6 +117,7 @@ export function createProductComposition(
     compare,
     diagnose,
     shellState,
+    runtimeStatus,
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
