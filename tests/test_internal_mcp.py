@@ -6,10 +6,37 @@ from typing import Any
 
 import httpx
 
+from packages.security.trusted_proxy import TRUSTED_PROXY_AUTH_SECRET_ENV
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
-from services.mcp.internal_control.config import McpConfigurationError, McpSettings
+from services.mcp.internal_control.config import (
+    MANAGEMENT_BASE_URL_ENV,
+    OPSIA_MCP_API_BASE_URL_ENV,
+    OPSIA_MCP_BEARER_TOKEN_ENV,
+    OPSIA_MCP_COOKIE_ENV,
+    OPSIA_MCP_MAX_RESPONSE_BYTES_ENV,
+    OPSIA_MCP_SESSION_COOKIE_ENV,
+    OPSIA_MCP_SESSION_COOKIE_NAME_ENV,
+    OPSIA_MCP_TIMEOUT_SECONDS_ENV,
+    OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV,
+    McpConfigurationError,
+    McpSettings,
+    load_settings,
+)
 from services.mcp.internal_control.server import InternalControlMcpServer
 from services.mcp.internal_control.tools import default_tool_registry
+
+MCP_ENV_NAMES = (
+    OPSIA_MCP_API_BASE_URL_ENV,
+    OPSIA_MCP_BEARER_TOKEN_ENV,
+    OPSIA_MCP_COOKIE_ENV,
+    OPSIA_MCP_SESSION_COOKIE_ENV,
+    OPSIA_MCP_SESSION_COOKIE_NAME_ENV,
+    OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV,
+    OPSIA_MCP_TIMEOUT_SECONDS_ENV,
+    OPSIA_MCP_MAX_RESPONSE_BYTES_ENV,
+    MANAGEMENT_BASE_URL_ENV,
+    TRUSTED_PROXY_AUTH_SECRET_ENV,
+)
 
 
 def test_settings_fail_closed_without_auth() -> None:
@@ -21,6 +48,36 @@ def test_settings_fail_closed_without_auth() -> None:
         assert "required" in str(exc)
     else:
         raise AssertionError("MCP settings must require an authentication mechanism")
+
+
+def test_load_settings_ignores_global_trusted_proxy_secret(monkeypatch: Any) -> None:
+    for name in MCP_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(MANAGEMENT_BASE_URL_ENV, "http://opsia.test")
+    monkeypatch.setenv(TRUSTED_PROXY_AUTH_SECRET_ENV, "x" * 32)
+
+    try:
+        load_settings()
+    except McpConfigurationError as exc:
+        assert "exactly one" in str(exc)
+    else:
+        raise AssertionError("load_settings must not borrow the Gateway trusted proxy secret")
+
+
+def test_load_settings_uses_explicit_mcp_environment(monkeypatch: Any) -> None:
+    for name in MCP_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(OPSIA_MCP_API_BASE_URL_ENV, "http://opsia.test/api/")
+    monkeypatch.setenv(OPSIA_MCP_BEARER_TOKEN_ENV, " token-1 ")
+    monkeypatch.setenv(OPSIA_MCP_TIMEOUT_SECONDS_ENV, "5")
+    monkeypatch.setenv(OPSIA_MCP_MAX_RESPONSE_BYTES_ENV, "4096")
+
+    settings = load_settings()
+
+    assert settings.api_base_url == "http://opsia.test/api"
+    assert settings.bearer_token == "token-1"
+    assert settings.timeout_seconds == 5
+    assert settings.max_response_bytes == 4096
 
 
 def test_settings_validate_api_base_url_and_session_cookie_auth() -> None:
@@ -61,6 +118,13 @@ def test_settings_reject_mixed_auth_and_unsafe_url_or_header_values() -> None:
         McpSettings(api_base_url="http://user:pass@opsia.test", bearer_token="token-1"),
         McpSettings(api_base_url="http://opsia.test/api?debug=true", bearer_token="token-1"),
         McpSettings(api_base_url="http://opsia.test", bearer_token="token-1\r\nx-test: y"),
+        McpSettings(api_base_url="http://opsia.test", trusted_proxy_secret="too-short"),
+        McpSettings(api_base_url="http://opsia.test", bearer_token="token-1", timeout_seconds=61),
+        McpSettings(
+            api_base_url="http://opsia.test",
+            bearer_token="token-1",
+            max_response_bytes=9 * 1024 * 1024,
+        ),
         McpSettings(
             api_base_url="http://opsia.test",
             session_cookie="session-token",
@@ -91,6 +155,17 @@ def test_registry_exposes_only_read_tools() -> None:
         "list_resources",
     }
     assert all(tool["inputSchema"]["additionalProperties"] is False for tool in tools)
+    assert all(
+        tool["annotations"] == {
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+        }
+        for tool in tools
+    )
+
+    tools[0]["inputSchema"]["additionalProperties"] = True
+    assert default_tool_registry().list_tools()[0]["inputSchema"]["additionalProperties"] is False
 
 
 def test_list_clusters_calls_existing_gateway_with_auth_and_safety_metadata() -> None:
@@ -225,7 +300,7 @@ def test_get_log_evidence_rejects_source_override() -> None:
     asyncio.run(run())
 
 
-def test_get_log_evidence_returns_empty_when_window_has_no_logs() -> None:
+def test_get_log_evidence_returns_unavailable_without_invented_payload_when_window_has_no_logs() -> None:
     async def run() -> None:
         seen: list[httpx.Request] = []
 
@@ -245,7 +320,7 @@ def test_get_log_evidence_returns_empty_when_window_has_no_logs() -> None:
             "evidence_key": "evidence-1",
             "source": "logs",
             "available": False,
-            "payload": {"logs": []},
+            "payload": None,
             "reason": "logs evidence source is not available for this evidence window",
         }
         assert len(seen) == 2
@@ -325,6 +400,28 @@ def test_management_api_response_size_is_bounded() -> None:
     asyncio.run(run())
 
 
+def test_management_api_rejects_unsafe_paths_and_query_values() -> None:
+    async def run() -> None:
+        client = _client(lambda _: httpx.Response(200, json={}))
+
+        for path in ("clusters", "//evil.test/clusters", "/clusters?debug=true", "/clusters\nx"):
+            try:
+                await client.get_json(path)
+            except ManagementApiError as exc:
+                assert "unsafe management API path" in exc.detail
+            else:
+                raise AssertionError(f"unsafe path should fail closed: {path!r}")
+
+        try:
+            await client.get_json("/clusters", {"cluster_id": "cluster-1\nx"})
+        except ManagementApiError as exc:
+            assert "unsafe management API query parameter value" in exc.detail
+        else:
+            raise AssertionError("unsafe query values should fail closed")
+
+    asyncio.run(run())
+
+
 def test_server_internal_errors_do_not_expose_exception_details() -> None:
     async def run() -> None:
         class ExplodingRegistry:
@@ -400,6 +497,30 @@ def test_server_reports_validation_errors_as_tool_errors() -> None:
         result = response["result"]
         assert result["isError"] is True
         assert result["structuredContent"]["error"] == "invalid_tool_input"
+
+    asyncio.run(run())
+
+
+def test_tool_arguments_reject_control_characters() -> None:
+    async def run() -> None:
+        response = await InternalControlMcpServer(
+            default_tool_registry(),
+            _client(lambda _: httpx.Response(500)),
+        ).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "get_cluster_summary",
+                    "arguments": {"cluster_id": "cluster-1\nx"},
+                },
+            }
+        )
+
+        assert response["result"]["isError"] is True
+        assert response["result"]["structuredContent"]["error"] == "invalid_tool_input"
+        assert "unsafe control characters" in response["result"]["structuredContent"]["detail"]
 
     asyncio.run(run())
 

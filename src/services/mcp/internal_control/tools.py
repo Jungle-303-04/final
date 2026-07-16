@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -19,6 +20,11 @@ DEFAULT_EVENT_LIMIT = 50
 MAX_LIST_LIMIT = 1000
 MAX_QUERY_LIMIT = 200
 LOG_EVIDENCE_SOURCE = "logs"
+READ_ONLY_TOOL_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+}
 
 
 class ToolInputError(ValueError):
@@ -38,12 +44,17 @@ class McpTool:
             "name": self.name,
             "title": self.title,
             "description": self.description,
-            "inputSchema": self.input_schema,
+            "inputSchema": deepcopy(self.input_schema),
+            "annotations": dict(READ_ONLY_TOOL_ANNOTATIONS),
         }
 
 
 class ToolRegistry:
     def __init__(self, tools: list[McpTool]) -> None:
+        names = [tool.name for tool in tools]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate MCP tool names: {', '.join(duplicates)}")
         self._tools = {tool.name: tool for tool in tools}
 
     def list_tools(self) -> list[dict[str, Any]]:
@@ -340,7 +351,7 @@ async def get_log_evidence(
             "evidence_key": evidence_key,
             "source": LOG_EVIDENCE_SOURCE,
             "available": False,
-            "payload": {LOG_EVIDENCE_SOURCE: []},
+            "payload": None,
             "reason": "logs evidence source is not available for this evidence window",
         }
     return _read_result("get_log_evidence", path, data)
@@ -429,6 +440,8 @@ def _optional_str(arguments: dict[str, Any], name: str, *, max_length: int) -> s
     text = value.strip()
     if not text:
         return None
+    if _has_control_character(text):
+        raise ToolInputError(f"{name} contains unsafe control characters")
     if len(text) > max_length:
         raise ToolInputError(f"{name} must be at most {max_length} characters")
     return text
@@ -459,6 +472,10 @@ def _optional_bool(arguments: dict[str, Any], name: str, *, default: bool) -> bo
 def _format_path(template: str, **values: str) -> str:
     escaped = {key: quote(value, safe="") for key, value in values.items()}
     return template.format(**escaped)
+
+
+def _has_control_character(value: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
 def dumps_tool_result(result: dict[str, Any]) -> str:

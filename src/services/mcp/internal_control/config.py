@@ -8,6 +8,7 @@ from urllib.parse import urlsplit, urlunsplit
 from packages.config.constants import Auth
 from packages.config.settings import env
 from packages.security.trusted_proxy import (
+    MINIMUM_SECRET_LENGTH,
     TRUSTED_PROXY_AUTH_HEADER,
 )
 
@@ -21,7 +22,9 @@ OPSIA_MCP_TIMEOUT_SECONDS_ENV = "OPSIA_MCP_REQUEST_TIMEOUT_SECONDS"
 OPSIA_MCP_MAX_RESPONSE_BYTES_ENV = "OPSIA_MCP_MAX_RESPONSE_BYTES"
 MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
 DEFAULT_TIMEOUT_SECONDS = 10.0
+MAX_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_RESPONSE_BYTES_CAP = 8 * 1024 * 1024
 SUPPORTED_API_BASE_URL_SCHEMES = frozenset({"http", "https"})
 COOKIE_NAME_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
@@ -58,8 +61,16 @@ class McpSettings:
         api_base_url = _normalize_api_base_url(self.api_base_url)
         if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
             raise McpConfigurationError(f"{OPSIA_MCP_TIMEOUT_SECONDS_ENV} must be positive")
+        if self.timeout_seconds > MAX_TIMEOUT_SECONDS:
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_TIMEOUT_SECONDS_ENV} must be at most {MAX_TIMEOUT_SECONDS:g}"
+            )
         if self.max_response_bytes <= 0:
             raise McpConfigurationError(f"{OPSIA_MCP_MAX_RESPONSE_BYTES_ENV} must be positive")
+        if self.max_response_bytes > MAX_RESPONSE_BYTES_CAP:
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_MAX_RESPONSE_BYTES_ENV} must be at most {MAX_RESPONSE_BYTES_CAP}"
+            )
         for name, value in (
             (OPSIA_MCP_BEARER_TOKEN_ENV, self.bearer_token),
             (OPSIA_MCP_COOKIE_ENV, self.cookie_header),
@@ -79,6 +90,14 @@ class McpSettings:
         if len(auth_mechanisms) > 1:
             raise McpConfigurationError(
                 "only one MCP authentication mechanism may be configured at a time"
+            )
+        if (
+            self.trusted_proxy_secret.strip()
+            and len(self.trusted_proxy_secret.strip()) < MINIMUM_SECRET_LENGTH
+        ):
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV} must be at least "
+                f"{MINIMUM_SECRET_LENGTH} characters"
             )
         return replace(
             self,
