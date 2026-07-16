@@ -100,6 +100,7 @@ export const shellEn = {
   "shell.shortcut.resources.lastRow": "Last resource",
   "shell.shortcut.resources.nextRow": "Next resource",
   "shell.shortcut.resources.openRow": "Open resource details",
+  "shell.shortcut.resources.openYaml": "Open YAML for selected resource",
   "shell.shortcut.resources.openLogs": "Open logs for selected resource",
   "shell.shortcut.resources.previousKind": "Previous resource kind",
   "shell.shortcut.resources.nextKind": "Next resource kind",

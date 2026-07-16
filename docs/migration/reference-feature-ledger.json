@@ -2266,11 +2266,11 @@
     {
       "id": "reference-feature-055",
       "contractId": "reference.feature.055",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.055"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 268,
       "cells": [
@@ -2282,17 +2282,30 @@
       "streaming": false,
       "area": "keyboard-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceManifestSourceResponse",
+      "frontendContract": "frontend/src/features/resources/resourceManifestContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_manifest_editor.py",
+        "tests/test_log_stream.py",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx",
+        "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/resourcesShortcutDefinitions.ts",
+          "reason": "The keyboard action reuses the separately verified manifest source and Pod/workload log-stream contracts without adding a second endpoint.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourcesTable.tsx#useRowShortcuts",
+          "consumer": "frontend/src/pages/resources/ResourceDetailWorkspace.tsx#ResourceDetailWorkspace",
+          "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

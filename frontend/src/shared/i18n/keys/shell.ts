@@ -98,6 +98,7 @@ export type ShellMessageKey =
   | "shell.shortcut.resources.lastRow"
   | "shell.shortcut.resources.nextRow"
   | "shell.shortcut.resources.openRow"
+  | "shell.shortcut.resources.openYaml"
   | "shell.shortcut.resources.openLogs"
   | "shell.shortcut.resources.previousKind"
   | "shell.shortcut.resources.nextKind"

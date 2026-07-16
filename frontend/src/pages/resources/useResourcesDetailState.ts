@@ -109,7 +109,7 @@ export function useResourcesDetailState(
   }, [filter, setRetryBlocks]);
 
   const openDetail = useCallback(
-    (identity: ResourceIdentity) => {
+    (identity: ResourceIdentity, tab: string | null = null) => {
       if (selectedClusterId === null) return;
       restoreRowKey.current = identityKey(identity);
       filter.updateFilters(
@@ -126,7 +126,7 @@ export function useResourcesDetailState(
           full: false,
           resource: null,
           resourceKind: null,
-          tab: null,
+          tab,
         }),
         "detail-open",
       );

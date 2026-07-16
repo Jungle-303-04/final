@@ -16,6 +16,7 @@ export type ProductContextShortcutId =
   | "resources:first-row"
   | "resources:last-row"
   | "resources:open-row"
+  | "resources:open-yaml"
   | "resources:open-logs"
   | "resources:previous-kind"
   | "resources:next-kind";

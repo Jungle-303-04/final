@@ -1,5 +1,11 @@
 import { GitPullRequestArrow, Play, RefreshCw, ShieldCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
 import {
   ResourceManifestPortFailure,
@@ -33,15 +39,19 @@ import { Spinner } from "../../shared/ui/primitives/spinner";
 
 type Phase = "idle" | "loading" | "ready" | "previewing" | "approving" | "applying" | "failed";
 
-export function ResourceManifestEditor({
-  detail,
-  port,
-  onUnauthorized,
-}: {
+export interface ResourceManifestEditorHandle {
+  open: () => void;
+}
+
+export const ResourceManifestEditor = forwardRef<ResourceManifestEditorHandle, {
   detail: ResourceDetail;
   port: ResourceManifestPort;
   onUnauthorized?: () => void;
-}) {
+}>(function ResourceManifestEditor({
+  detail,
+  port,
+  onUnauthorized,
+}, ref) {
   const { t } = useI18n();
   const operationStore = useOptionalOperationStatusStore();
   const operationSnapshots = useOptionalOperationStatusSnapshots();
@@ -148,6 +158,13 @@ export function ResourceManifestEditor({
     setPhase("failed");
   }
 
+  const openEditor = () => {
+    setOpen(true);
+    setReason("");
+    void load();
+  };
+  useImperativeHandle(ref, () => ({ open: openEditor }));
+
   const busy = ["loading", "previewing", "approving", "applying"].includes(phase);
   const operation = applyReceipt
     ? operationSnapshots.find((snapshot) => snapshot.commandId === applyReceipt.commandId) ?? null
@@ -168,11 +185,7 @@ export function ResourceManifestEditor({
   return (
     <>
       <Button
-        onClick={() => {
-          setOpen(true);
-          setReason("");
-          void load();
-        }}
+        onClick={openEditor}
         size="sm"
         type="button"
         variant="outline"
@@ -381,7 +394,7 @@ export function ResourceManifestEditor({
       </Dialog>
     </>
   );
-}
+});
 
 function editInput(source: ResourceManifestSource | null, applicationId: string, yaml: string) {
   if (!source?.baseSha || !source.sourceSha256 || !applicationId || !yaml) return null;

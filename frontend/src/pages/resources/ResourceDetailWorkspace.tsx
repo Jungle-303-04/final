@@ -18,7 +18,10 @@ import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
-import { ResourceManifestEditor } from "./ResourceManifestEditor";
+import {
+  ResourceManifestEditor,
+  type ResourceManifestEditorHandle,
+} from "./ResourceManifestEditor";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
 import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
@@ -74,6 +77,7 @@ export function ResourceDetailWorkspace({
   const filter = useUnifiedFilter();
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
+  const manifestEditorRef = useRef<ResourceManifestEditorHandle>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   const [closing, setClosing] = useState(false);
@@ -89,6 +93,11 @@ export function ResourceDetailWorkspace({
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     };
   }, []);
+  useEffect(() => {
+    if (tab !== "manifest" || detail.phase !== "ready" || !manifestPort) return;
+    manifestEditorRef.current?.open();
+    onTabChange("overview");
+  }, [detail.phase, manifestPort, onTabChange, tab]);
 
   const requestClose = () => {
     if (closing) return;
@@ -111,6 +120,16 @@ export function ResourceDetailWorkspace({
         if (event.key.toLowerCase() === "l" && !isEditingElement(event.target) && logTarget) {
           event.preventDefault();
           dock.openLogs(logTarget);
+          return;
+        }
+        if (
+          event.key.toLowerCase() === "y" &&
+          !isEditingElement(event.target) &&
+          detail.phase === "ready" &&
+          manifestPort
+        ) {
+          event.preventDefault();
+          manifestEditorRef.current?.open();
           return;
         }
         if (event.key === "Escape") {
@@ -210,6 +229,7 @@ export function ResourceDetailWorkspace({
                 detail={detail.data}
                 onUnauthorized={onUnauthorized}
                 port={manifestPort}
+                ref={manifestEditorRef}
               />
             ) : null}
           </div>

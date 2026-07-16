@@ -100,6 +100,7 @@ export const shellKo = {
   "shell.shortcut.resources.lastRow": "마지막 리소스",
   "shell.shortcut.resources.nextRow": "다음 리소스",
   "shell.shortcut.resources.openRow": "리소스 상세 열기",
+  "shell.shortcut.resources.openYaml": "선택 리소스 YAML 열기",
   "shell.shortcut.resources.openLogs": "선택 리소스 로그 열기",
   "shell.shortcut.resources.previousKind": "이전 리소스 종류",
   "shell.shortcut.resources.nextKind": "다음 리소스 종류",

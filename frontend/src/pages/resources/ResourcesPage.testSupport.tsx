@@ -16,6 +16,7 @@ import type {
   ResourcesRefreshPolicyKey,
 } from "../../features/resources/resourceMetricsHistoryContract";
 import type { ResourceActionsPort, ResourceCapabilitiesPort } from "../../features/resources/resourceCapabilitiesContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
 import type { ResourcesFilterPort, ResourcesFilterResourcePage } from "../../features/resources/resourcesFilterContract";
 import { I18nProvider, type SupportedLocale } from "../../shared/i18n";
@@ -63,6 +64,7 @@ export function renderResources(
   physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = EMPTY_PHYSICAL_TOPOLOGY_REALTIME_PORT,
   nodePodsPort: Pick<HomePort, "loadNodePods"> = resourcesNodePodsPort(),
   refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey> = resourcesRefreshPolicies(),
+  resourceManifestPort?: ResourceManifestPort,
 ) {
   const router = createMemoryRouter(
     [
@@ -91,6 +93,7 @@ export function renderResources(
                       refreshPolicies={refreshPolicies}
                       resourceCapabilitiesPort={resourceCapabilitiesPort}
                       resourceActionsPort={resourceActionsPort}
+                      resourceManifestPort={resourceManifestPort}
                       port={port}
                     />
                   </BottomDockProvider>

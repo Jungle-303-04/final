@@ -15,6 +15,7 @@ import {
   resourcesPort,
 } from "./ResourcesPage.testSupport";
 import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
+import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 
 let shortcutMatcher: ShortcutMatcher;
 let shortcutKeydown: (event: KeyboardEvent) => void;
@@ -159,6 +160,38 @@ describe("ResourcesPage keyboard navigation", () => {
     );
   }, 15_000);
 
+  it("opens the focused resource YAML with y", async () => {
+    const user = userEvent.setup();
+    const manifestPort: ResourceManifestPort = {
+      loadSource: vi.fn().mockResolvedValue({
+        resourceId: "pod:shop/checkout-api-0",
+        status: "unavailable",
+        choices: [],
+        selected: null,
+        baseSha: null,
+        sourceSha256: null,
+        content: null,
+        reason: "not configured",
+      }),
+      preview: vi.fn(),
+      approve: vi.fn(),
+      applyNow: vi.fn(),
+    };
+    renderWithManifest(manifestPort);
+    const table = await screen.findByRole("table", { name: "리소스 목록" });
+    within(table).getByRole("button", { name: /checkout-api-0/u }).focus();
+
+    await user.keyboard("y");
+
+    expect(await screen.findByRole("dialog", { name: "checkout-api-0 매니페스트 편집" }))
+      .toBeTruthy();
+    expect(manifestPort.loadSource).toHaveBeenCalledWith(
+      "pod:shop/checkout-api-0",
+      undefined,
+      expect.any(AbortSignal),
+    );
+  }, 15_000);
+
   it("opens the exact resource stream with l inside full detail", async () => {
     const user = userEvent.setup();
     const open = vi.fn().mockReturnValue(vi.fn());
@@ -196,5 +229,27 @@ function renderWithLogStream(
     undefined,
     undefined,
     logStreamPort,
+  );
+}
+
+function renderWithManifest(resourceManifestPort: ResourceManifestPort) {
+  return renderResources(
+    resourcesPort(),
+    "/resources?clusters=cluster-1&resources.types=pod",
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    resourceManifestPort,
   );
 }

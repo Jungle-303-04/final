@@ -307,6 +307,7 @@ function ResourcesListBody({
         items={items}
         metricHistory={metricHistory}
         onOpen={state.openDetail}
+        onOpenManifest={(identity) => state.openDetail(identity, "manifest")}
         registerRowButton={state.registerRowButton}
       />
       {filterList.data.hasMore || filterList.appending || filterList.appendFailure ? (
