@@ -149,6 +149,18 @@ def test_pod_port_capabilities_preserve_container_identity_and_fail_closed_witho
     )
     assert unavailable.local_port_forward == "unavailable"
 
+    with pytest.raises(ValidationError):
+        ServiceAccessCapabilities(
+            scope=scope(namespaces=("other",)),
+            resource=pod,
+            revision="d" * 64,
+            service_request="unavailable",
+            service_request_reason="pod_service_request_unsupported",
+            local_port_forward="desktop_required",
+            port_discovery="complete",
+            ports=capabilities.ports,
+        )
+
 
 def test_service_http_command_payload_does_not_accept_browser_scope_or_confirmation_fields() -> (
     None
