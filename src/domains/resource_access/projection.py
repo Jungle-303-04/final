@@ -47,8 +47,13 @@ class _Index:
         if not isinstance(observed_at, str) or not observed_at:
             raise ResourceAccessUnavailable("Kubernetes RBAC observation has no timestamp")
         self.observed_at = observed_at
-        self.roles = _roles(snapshot)
-        self.bindings = _bindings(snapshot)
+        try:
+            self.roles = _roles(snapshot)
+            self.bindings = _bindings(snapshot)
+            self.service_accounts = _identities(snapshot.get("service_accounts"))
+            self.pod_subjects = _pod_subjects(snapshot.get("pod_subjects"))
+        except ValueError as exc:
+            raise ResourceAccessUnavailable("Kubernetes RBAC observation is invalid") from exc
         self.bindings_by_subject: dict[tuple[str, str, str], list[_Binding]] = defaultdict(list)
         self.bindings_by_role: dict[tuple[str, str, str], list[_Binding]] = defaultdict(list)
         for binding in self.bindings:
@@ -58,8 +63,6 @@ class _Index:
                 self.bindings_by_subject[(subject.kind, subject.namespace, subject.name)].append(
                     binding
                 )
-        self.service_accounts = _identities(snapshot.get("service_accounts"))
-        self.pod_subjects = _pod_subjects(snapshot.get("pod_subjects"))
 
     def expanded(self, binding: _Binding) -> KubernetesBindingRules:
         role = binding.ref.role
@@ -85,6 +88,13 @@ def subject_access_projection(
 ) -> KubernetesSubjectAccessResponse:
     index = _Index(snapshot)
     subject = _subject(kind, namespace, name)
+    return _subject_access_from_index(index, subject)
+
+
+def _subject_access_from_index(
+    index: _Index,
+    subject: KubernetesSubject,
+) -> KubernetesSubjectAccessResponse:
     direct_bindings = list(
         index.bindings_by_subject.get((subject.kind, subject.namespace, subject.name), ())
     )
@@ -105,7 +115,7 @@ def subject_access_projection(
     flat, truncated = _flatten_rules((*direct, *inherited_rules))
     used_by_pods = tuple(
         KubernetesPodRef(namespace=pod_namespace, name=pod_name)
-        for pod_namespace, pod_name, service_account_name in index.pod_subjects
+        for _pod_uid, pod_namespace, pod_name, service_account_name in index.pod_subjects
         if subject.kind == "ServiceAccount"
         and pod_namespace == subject.namespace
         and service_account_name == subject.name
@@ -196,16 +206,23 @@ def resource_access_projection(
             name=name,
         )
     if kind == "Pod":
-        summary = resource.get("summary")
-        summary_map = summary if isinstance(summary, Mapping) else {}
-        service_account_name = summary_map.get("service_account_name")
-        if not isinstance(service_account_name, str) or not service_account_name:
-            return None
-        return subject_access_projection(
-            snapshot,
-            kind="ServiceAccount",
-            namespace=namespace,
-            name=service_account_name,
+        resource_uid = resource.get("uid")
+        if not isinstance(resource_uid, str) or not resource_uid or not namespace or not name:
+            raise ResourceAccessUnavailable("Pod access identity is incomplete")
+        index = _Index(snapshot)
+        access_subject = next(
+            (
+                (pod_uid, service_account_name)
+                for pod_uid, pod_namespace, pod_name, service_account_name in index.pod_subjects
+                if pod_namespace == namespace and pod_name == name
+            ),
+            None,
+        )
+        if access_subject is None or access_subject[0] != resource_uid:
+            raise ResourceAccessUnavailable("Pod access identity does not match inventory")
+        return _subject_access_from_index(
+            index,
+            _subject("ServiceAccount", namespace, access_subject[1]),
         )
     if kind in {"Role", "ClusterRole"}:
         return role_access_projection(
@@ -363,14 +380,15 @@ def _identities(value: object) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(set(rows)))
 
 
-def _pod_subjects(value: object) -> tuple[tuple[str, str, str], ...]:
+def _pod_subjects(value: object) -> tuple[tuple[str, str, str, str], ...]:
     if not isinstance(value, list):
         raise ResourceAccessUnavailable("Kubernetes Pod subject observation is invalid")
-    rows: list[tuple[str, str, str]] = []
+    rows: list[tuple[str, str, str, str]] = []
     for item in value:
         if not isinstance(item, Mapping):
             raise ResourceAccessUnavailable("Kubernetes Pod subject identity is invalid")
         row = (
+            str(item.get("uid") or ""),
             str(item.get("namespace") or ""),
             str(item.get("name") or ""),
             str(item.get("service_account_name") or ""),

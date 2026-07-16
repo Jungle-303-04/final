@@ -55,6 +55,7 @@ def access_snapshot(*, completeness: str = "exact") -> dict[str, object]:
         "service_accounts": [{"namespace": "shop", "name": "checkout"}],
         "pod_subjects": [
             {
+                "uid": "pod-checkout-0",
                 "namespace": "shop",
                 "name": "checkout-0",
                 "service_account_name": "checkout",

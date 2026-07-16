@@ -4,6 +4,8 @@ import type {
   KubernetesBindingRef,
   KubernetesBindingRules,
   KubernetesBindingWithSubjects,
+  KubernetesPolicyRule,
+  KubernetesRoleRef,
   ResourceAccessDetail,
 } from "../../features/resources/resourceAccessContract";
 import { useI18n } from "../../shared/i18n";
@@ -34,6 +36,11 @@ export function ResourceAccessPanel({ access }: { access: ResourceAccessDetail }
                 <BindingRules key={bindingKey(item.binding)} value={item} />
               ))}
             </div>
+          ))}
+        </AccessGroup>
+        <AccessGroup label={t("resources.access.effective")}>
+          {access.flat.map((rule, index) => (
+            <PolicyRule key={policyRuleKey(rule, index)} value={rule} />
           ))}
         </AccessGroup>
         <AccessGroup label={t("resources.access.pods")}>
@@ -93,14 +100,43 @@ function AccessGroup({ children, label }: { children: React.ReactNode; label: st
 }
 
 function BindingRules({ value }: { value: KubernetesBindingRules }) {
+  const { t } = useI18n();
   return (
     <div className="grid min-w-0 gap-2 rounded-lg bg-muted/40 p-3">
       <BindingIdentity value={value.binding} />
+      <code className="min-w-0 break-all text-xs text-muted-foreground">
+        {roleKey(value.role)}
+      </code>
+      {value.scopeNamespace ? (
+        <p className="text-xs text-muted-foreground">
+          {t("resources.access.scope")}: {value.scopeNamespace}
+        </p>
+      ) : null}
+      {value.rules.map((rule, index) => (
+        <PolicyRule key={policyRuleKey(rule, index)} value={rule} />
+      ))}
+    </div>
+  );
+}
+
+function PolicyRule({ value }: { value: KubernetesPolicyRule }) {
+  const { t } = useI18n();
+  const targets = policyRuleTargets(value);
+  return (
+    <div className="grid min-w-0 gap-1 rounded-md border bg-background/70 p-2">
       <div className="flex min-w-0 flex-wrap gap-1">
-        {value.rules.flatMap((rule, ruleIndex) => rule.verbs.map((verb) => (
-          <Badge key={`${ruleIndex}/${verb}`} variant="outline">{verb}</Badge>
-        )))}
+        {value.verbs.map((verb, index) => (
+          <Badge key={`${index}/${verb}`} variant="outline">{verb}</Badge>
+        ))}
       </div>
+      {targets.map((target, index) => (
+        <code className="min-w-0 break-all text-xs" key={`${index}/${target}`}>{target}</code>
+      ))}
+      {value.resourceNames.length > 0 ? (
+        <p className="min-w-0 break-all text-xs text-muted-foreground">
+          {t("resources.access.resourceNames")}: {value.resourceNames.join(", ")}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -126,4 +162,28 @@ function BindingIdentity({ value }: { value: KubernetesBindingRef }) {
 
 function bindingKey(value: KubernetesBindingRef): string {
   return `${value.kind}/${value.namespace ? `${value.namespace}/` : ""}${value.name}`;
+}
+
+function roleKey(value: KubernetesRoleRef): string {
+  return `${value.kind}/${value.namespace ? `${value.namespace}/` : ""}${value.name}`;
+}
+
+function policyRuleTargets(value: KubernetesPolicyRule): string[] {
+  const resources = value.resources.flatMap((resource) => (
+    (value.apiGroups.length > 0 ? value.apiGroups : [""]).map(
+      (group) => `${group || "core"}/${resource}`,
+    )
+  ));
+  return [...resources, ...value.nonResourceUrls];
+}
+
+function policyRuleKey(value: KubernetesPolicyRule, index: number): string {
+  return [
+    index,
+    value.verbs.join(","),
+    value.apiGroups.join(","),
+    value.resources.join(","),
+    value.resourceNames.join(","),
+    value.nonResourceUrls.join(","),
+  ].join("/");
 }

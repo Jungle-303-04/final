@@ -1232,8 +1232,10 @@ def required_identity_summary(value: JsonObject) -> JsonObject:
 
 def pod_subject_summary(value: JsonObject) -> JsonObject:
     identity = required_identity_summary(value)
+    pod_uid = _required_text(metadata(value).get("uid"))
     pod_spec = spec(value)
     return {
+        "uid": pod_uid,
         **identity,
         "service_account_name": _required_text(pod_spec.get("serviceAccountName")),
     }
