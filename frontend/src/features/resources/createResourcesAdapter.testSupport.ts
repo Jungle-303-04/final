@@ -1,6 +1,6 @@
 import { vi } from "vitest";
-import type { KubernetesApiResourcesEndpoint } from "../../api/api-resource-discovery-schemas";
 import type {
+  KubernetesApiResourcesEndpoint,
   ResourcesEndpointDependencies,
   ResourcesEndpointInventorySummary,
   ResourcesEndpointResource,

@@ -1,4 +1,3 @@
-import type { KubernetesApiResourcesEndpoint } from "../../api/api-resource-discovery-schemas";
 import type {
   ResourceCatalog,
   ResourceApiDiscovery,
@@ -11,6 +10,7 @@ import type {
   ResourceSummary,
 } from "./resourcesContract";
 import type {
+  KubernetesApiResourcesEndpoint,
   ResourcesEndpointInventorySummary,
   ResourcesEndpointResourceDetail,
   ResourcesEndpointResourceList,

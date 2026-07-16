@@ -1,4 +1,9 @@
 import { z } from "zod";
+import type {
+  ApiResourceDescriptorEndpoint,
+  ApiResourceDiscoveryObservationEndpoint,
+  KubernetesApiResourcesEndpoint,
+} from "../features/resources/resourcesEndpointContract";
 
 export const apiResourceDescriptorSchema = z.strictObject({
   group: z.string().max(253),
@@ -10,14 +15,14 @@ export const apiResourceDescriptorSchema = z.strictObject({
   namespaced: z.boolean(),
   is_crd: z.boolean().nullable(),
   verbs: z.array(z.string().min(1)).max(32),
-});
+}) satisfies z.ZodType<ApiResourceDescriptorEndpoint>;
 
 export const apiResourceDiscoveryObservationSchema = z.strictObject({
   observed_at: z.string().datetime({ offset: true }),
   completeness: z.enum(["exact", "partial", "unavailable"]),
   reason_codes: z.array(z.string().min(1)).max(132),
   resources: z.array(apiResourceDescriptorSchema).max(2_000),
-});
+}) satisfies z.ZodType<ApiResourceDiscoveryObservationEndpoint>;
 
 export const kubernetesApiResourcesSchema = z.strictObject({
   cluster_id: z.string().min(1),
@@ -31,10 +36,10 @@ export const kubernetesApiResourcesSchema = z.strictObject({
       message: "API resource discovery must be available or carry one unavailable reason",
     });
   }
-});
+}) satisfies z.ZodType<KubernetesApiResourcesEndpoint>;
 
-export type ApiResourceDescriptorEndpoint = z.infer<typeof apiResourceDescriptorSchema>;
-export type ApiResourceDiscoveryObservationEndpoint = z.infer<
-  typeof apiResourceDiscoveryObservationSchema
->;
-export type KubernetesApiResourcesEndpoint = z.infer<typeof kubernetesApiResourcesSchema>;
+export type {
+  ApiResourceDescriptorEndpoint,
+  ApiResourceDiscoveryObservationEndpoint,
+  KubernetesApiResourcesEndpoint,
+} from "../features/resources/resourcesEndpointContract";

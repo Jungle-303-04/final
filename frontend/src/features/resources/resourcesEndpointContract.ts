@@ -1,7 +1,32 @@
-import type { KubernetesApiResourcesEndpoint } from "../../api/api-resource-discovery-schemas";
 import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointContract";
 
 export type ResourcesEndpointJsonMap = Record<string, unknown>;
+
+export interface ApiResourceDescriptorEndpoint {
+  group: string;
+  version: string;
+  api_version: string;
+  name: string;
+  singular_name: string;
+  kind: string;
+  namespaced: boolean;
+  is_crd: boolean | null;
+  verbs: string[];
+}
+
+export interface ApiResourceDiscoveryObservationEndpoint {
+  observed_at: string;
+  completeness: "exact" | "partial" | "unavailable";
+  reason_codes: string[];
+  resources: ApiResourceDescriptorEndpoint[];
+}
+
+export interface KubernetesApiResourcesEndpoint {
+  cluster_id: string;
+  snapshot_id: string | null;
+  discovery: ApiResourceDiscoveryObservationEndpoint | null;
+  unavailable_reason: string | null;
+}
 
 export interface ResourcesEndpointInventorySummary {
   cluster_id: string;
