@@ -6485,11 +6485,11 @@
     },
     {
       "contractId": "reference.feature.169",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:workloads:rollback:revision-cas:v1",
       "legacyContractIds": [
         "reference.feature.169"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-169",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -6498,25 +6498,30 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.WorkloadRevisionHistoryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_command_catalog.py",
-        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        "tests/test_workload_rollback.py",
+        "tests/test_resource_capabilities_router.py",
+        "frontend/src/api/workload-rollbacks.test.ts",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command",
-          "reason": "No ReplicaSet or ControllerRevision history projection is exposed for an exact workload identity.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory/router.py#get_workload_revision_history",
+          "consumer": "src/domains/inventory/workload_revisions.py#workload_revision_history_response",
+          "reason": "The authorized projection returns a bounded same-snapshot history for the exact workload UID, validates complete ReplicaSet or ControllerRevision ownership, excludes the current template, and supplies server-owned template hashes and diffs without manufacturing missing revisions.",
+          "test": "tests/test_workload_rollback.py#test_revision_history_is_exact_bounded_and_excludes_the_current_template"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "No server-backed revision selector or rollback preview contract exists.",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "The existing shared resource action dialog loads the strict revision projection, renders the server diff, and requires one explicit revision selection before confirmation.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
@@ -6525,11 +6530,11 @@
     },
     {
       "contractId": "reference.feature.170",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:workloads:rollback:revision-cas:v1",
       "legacyContractIds": [
         "reference.feature.170"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-170",
       "section": "7.6 Resource·workload mutation",
       "endpoints": [
@@ -6538,26 +6543,30 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.WorkloadRollbackRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_command_catalog.py",
+        "tests/test_command_router.py",
         "tests/test_target_agent_commands.py",
-        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        "tests/test_target_kubernetes_evidence.py",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+        "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No workload revision rollback action, typed payload, diff, or target-agent executor is registered.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#execute_workload_rollback",
+          "consumer": "src/services/target/cluster-agent/commands/kubernetes.py#execute_workload_rollback",
+          "reason": "The typed command verifies capability revision, snapshot, workload UID and resourceVersion, target revision UID and resourceVersion, preview hash, RBAC, and idempotency before dispatch; the agent then re-reads the live controller and revision and performs the exact Kubernetes rollback patch.",
+          "test": "tests/test_command_router.py#test_workload_rollback_queues_one_audited_exact_revision_command"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "Rollback remains hidden because no authorized revision capability can be discovered.",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "Rollback is exposed only through the server capability, sends the exact selected CAS evidence with one idempotency key, and hands the returned receipt to the shared durable operation dock without optimistic success.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,

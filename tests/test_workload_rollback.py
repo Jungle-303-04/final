@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from domains.inventory.workload_revisions import workload_revision_history_response
 from packages.contracts.gateway.requests import WorkloadRollbackRequest
+from packages.contracts.gateway.responses import WorkloadRevisionHistoryResponse
 
 
 def workload() -> dict[str, object]:
@@ -173,3 +177,28 @@ def test_rollback_request_requires_exact_workload_and_revision_cas() -> None:
     assert request.workload.uid == "deployment-uid"
     assert request.target_revision.uid == "revision-uid-2"
     assert request.preview_revision.startswith("sha256:")
+
+
+def test_revision_history_contract_rejects_contradictory_availability() -> None:
+    preview = workload_revision_history_response(
+        RevisionDb(
+            [
+                revision(1, "checkout:v1"),
+                revision(2, "checkout:v2"),
+                revision(3, "checkout:v3"),
+            ]
+        ),
+        workspace_id="workspace-a",
+        resource=workload(),
+        cursor=0,
+        limit=20,
+    )
+
+    with pytest.raises(ValidationError):
+        WorkloadRevisionHistoryResponse.model_validate(
+            {
+                **preview.model_dump(),
+                "availability": "unavailable",
+                "reason": "revision_history_incomplete",
+            }
+        )

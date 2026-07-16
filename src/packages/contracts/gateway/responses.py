@@ -977,6 +977,24 @@ class WorkloadRevisionHistoryResponse(StrictModel):
     revisions: list[WorkloadRollbackRevision] = Field(default_factory=list, max_length=50)
     next_cursor: int | None = Field(default=None, ge=1)
 
+    @model_validator(mode="after")
+    def validate_availability(self) -> Self:
+        if self.availability == "available" and (
+            self.completeness != "exact" or self.reason is not None or not self.revisions
+        ):
+            raise ValueError("available rollback history requires exact revisions without a reason")
+        if self.availability == "unavailable" and (
+            self.reason is None or self.revisions or self.next_cursor is not None
+        ):
+            raise ValueError("unavailable rollback history cannot expose revisions")
+        revision_ids = [item.revision for item in self.revisions]
+        resource_ids = [(item.resource.uid, item.resource_version) for item in self.revisions]
+        if len(revision_ids) != len(set(revision_ids)) or len(resource_ids) != len(
+            set(resource_ids)
+        ):
+            raise ValueError("rollback revisions must have unique revision and resource identities")
+        return self
+
 
 class ResourceManifestSourceChoice(StrictModel):
     application_id: str

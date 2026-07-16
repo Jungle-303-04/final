@@ -121,6 +121,8 @@
     "reference.feature.166": "upstream-ui:api:client-boundary:request-orchestration:v1",
     "reference.feature.167": "upstream-ui:workloads:restart-scale:audited-actions:v1",
     "reference.feature.168": "upstream-ui:workloads:restart-scale:audited-actions:v1",
+    "reference.feature.169": "upstream-ui:workloads:rollback:revision-cas:v1",
+    "reference.feature.170": "upstream-ui:workloads:rollback:revision-cas:v1",
     "reference.feature.171": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
     "reference.feature.172": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
     "reference.feature.173": "upstream-ui:nodes:scheduling-control:audited-actions:v1",

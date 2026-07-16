@@ -33,6 +33,40 @@ export const workloadRollbackPreviewSchema = z.strictObject({
     })).max(200),
   })).max(50),
   next_cursor: z.number().int().positive().nullable(),
+}).superRefine((preview, context) => {
+  if (preview.availability === "available" && (
+    preview.completeness !== "exact" ||
+    preview.reason !== null ||
+    preview.revisions.length === 0
+  )) {
+    context.addIssue({
+      code: "custom",
+      message: "available rollback history requires exact revisions without a reason",
+      path: ["availability"],
+    });
+  }
+  if (preview.availability === "unavailable" && (
+    preview.reason === null ||
+    preview.revisions.length > 0 ||
+    preview.next_cursor !== null
+  )) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable rollback history cannot expose revisions",
+      path: ["availability"],
+    });
+  }
+  const revisions = preview.revisions.map((item) => item.revision);
+  const identities = preview.revisions.map((item) =>
+    `${item.resource.uid}\u001f${item.resource_version}`);
+  if (new Set(revisions).size !== revisions.length ||
+    new Set(identities).size !== identities.length) {
+    context.addIssue({
+      code: "custom",
+      message: "rollback revisions must have unique revision and resource identities",
+      path: ["revisions"],
+    });
+  }
 });
 
 export type WorkloadRollbackPreviewEndpoint = z.infer<typeof workloadRollbackPreviewSchema>;
