@@ -1,3 +1,20 @@
+import type {
+  HelmChartSource,
+  HelmChartSourceListRequest,
+  HelmChartSourcePage,
+  HelmChartSourceRegisterRequest,
+} from "./helmChartSourcesContract";
+
+export type {
+  HelmChartSource,
+  HelmChartSourceCredential,
+  HelmChartSourceListRequest,
+  HelmChartSourcePage,
+  HelmChartSourceProvider,
+  HelmChartSourceRegisterRequest,
+  HelmChartSourceStatus,
+} from "./helmChartSourcesContract";
+
 export type HelmAvailability = "available" | "partial" | "unavailable";
 export type HelmFreshness = "live" | "stale" | "partial" | "disconnected";
 
@@ -256,4 +273,12 @@ export interface HelmPort {
     request: HelmArtifactReadRequest,
     signal?: AbortSignal,
   ): Promise<HelmArtifactReceipt>;
+  listChartSources(
+    request?: HelmChartSourceListRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmChartSourcePage>;
+  registerChartSource(
+    request: HelmChartSourceRegisterRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmChartSource>;
 }

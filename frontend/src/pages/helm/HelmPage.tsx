@@ -48,6 +48,7 @@ import {
   TableRow,
 } from "../../shared/ui/primitives/table";
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
+import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
 import { useHelmReleaseDetail, useHelmReleaseList } from "./useHelmReleaseData";
 
 const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
@@ -123,6 +124,7 @@ function HelmReleaseListPage({
         searchInputRef={searchInputRef}
         setQuery={setQuery}
       />
+      <HelmChartSourcesPanel port={port} />
     </ProductPageFrame>
   );
 }

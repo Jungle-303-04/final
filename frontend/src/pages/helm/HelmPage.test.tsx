@@ -378,6 +378,8 @@ function helmPort(): HelmPort & {
   listReleases: ReturnType<typeof vi.fn>;
   getRelease: ReturnType<typeof vi.fn>;
   readArtifact: ReturnType<typeof vi.fn>;
+  listChartSources: ReturnType<typeof vi.fn>;
+  registerChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
     listReleases: vi.fn().mockResolvedValue({
@@ -394,6 +396,21 @@ function helmPort(): HelmPort & {
       correlationId: "corr-helm-1",
       commandId: "cmd-helm-1",
       status: "queued",
+    }),
+    listChartSources: vi.fn().mockResolvedValue({
+      items: [],
+      limit: 50,
+      hasMore: false,
+      nextCursor: null,
+    }),
+    registerChartSource: vi.fn().mockResolvedValue({
+      id: "source-repository",
+      provider: "repository",
+      name: "Stable",
+      reference: "https://charts.example.test/index.yaml",
+      status: "active",
+      credentialsConfigured: false,
+      observedAt: null,
     }),
   };
 }

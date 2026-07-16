@@ -86,6 +86,34 @@ export interface HelmReleaseDetailEndpoint {
   };
 }
 
+export interface HelmChartSourceEndpoint {
+  source_id: string;
+  provider: "repository" | "oci";
+  name: string;
+  reference: string;
+  status: "active" | "disabled";
+  credentials_configured: boolean;
+  observed_at: string | null;
+}
+
+export interface HelmChartSourcePageEndpoint {
+  items: HelmChartSourceEndpoint[];
+  limit: number;
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+export type HelmChartSourceCredentialEndpointInput =
+  | { kind: "bearer"; token: string }
+  | { kind: "basic"; username: string; password: string };
+
+export interface HelmChartSourceRegisterEndpointInput {
+  provider: "repository" | "oci";
+  name: string;
+  reference: string;
+  credential?: HelmChartSourceCredentialEndpointInput;
+}
+
 export interface HelmEndpointDependencies {
   listHelmReleases(
     query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
@@ -121,4 +149,12 @@ export interface HelmEndpointDependencies {
     command_id: string;
     status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
   }>;
+  listHelmChartSources(
+    query?: { limit?: number; cursor?: string },
+    signal?: AbortSignal,
+  ): Promise<HelmChartSourcePageEndpoint>;
+  registerHelmChartSource(
+    input: HelmChartSourceRegisterEndpointInput,
+    signal?: AbortSignal,
+  ): Promise<HelmChartSourceEndpoint>;
 }

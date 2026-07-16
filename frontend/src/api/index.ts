@@ -120,6 +120,21 @@ export {
   type HelmReleaseListEndpoint,
 } from "./helm-releases-schemas";
 export {
+  HELM_CHART_SOURCES_PATH,
+  listHelmChartSources,
+  registerHelmChartSource,
+  type HelmChartSourceCredentialRequest,
+  type HelmChartSourceListQuery,
+  type HelmChartSourceProviderEndpoint,
+  type HelmChartSourceRegisterRequest,
+} from "./helm-chart-sources";
+export {
+  helmChartSourcePageSchema,
+  helmChartSourceSchema,
+  type HelmChartSourceEndpoint,
+  type HelmChartSourcePageEndpoint,
+} from "./helm-chart-sources-schemas";
+export {
   getTrafficOverview,
   TRAFFIC_OVERVIEW_PATH,
   type TrafficOverviewQuery,
