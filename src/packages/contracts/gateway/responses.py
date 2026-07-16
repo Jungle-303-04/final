@@ -1940,6 +1940,7 @@ class ClusterConnectionStatusResponse(StrictModel):
     cluster_id: str
     connection_status: str
     connection_stage: str | None = None
+    refresh_after_seconds: float | None = Field(default=None, ge=0.25, le=30)
     last_agent_id: str | None = None
     last_seen_at: str | None = None
     agents: list[ClusterAgentStatus] = Field(default_factory=list)

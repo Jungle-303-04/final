@@ -14,6 +14,7 @@ describe("Clusters adapter", () => {
     await expect(port.loadConnection("production-a1b2")).resolves.toEqual({
       status: "waiting",
       stage: "agent_connected",
+      refreshAfterSeconds: 0.5,
       agentVersion: null,
       lastSeenAt: "2026-07-15T01:02:03Z",
     });
@@ -57,6 +58,7 @@ function dependencies() {
       cluster_id: "production-a1b2",
       connection_status: "online",
       connection_stage: "agent_connected" as const,
+      refresh_after_seconds: 0.5,
       last_agent_id: "agent-1",
       last_seen_at: "2026-07-15T01:02:03Z",
       agents: [{ details: {} }],

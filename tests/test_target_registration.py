@@ -1340,6 +1340,7 @@ def test_cluster_connection_status_route_returns_agent_details() -> None:
     assert response.cluster_id == "cluster-1"
     assert response.connection_status == "online"
     assert response.connection_stage == "ready"
+    assert response.refresh_after_seconds == 0.5
     assert response.last_agent_id == "agent-1"
     assert response.agents[0].capabilities == ["inventory", "commands"]
 
@@ -1358,6 +1359,7 @@ def test_cluster_connection_status_reports_pending_install_before_ttl() -> None:
 
     assert response.connection_status == "pending_install"
     assert response.connection_stage == "awaiting_install"
+    assert response.refresh_after_seconds == 0.5
     assert response.connect_timeout_seconds == 1800
     assert response.connect_expires_at == expires_at
 
@@ -1376,6 +1378,7 @@ def test_cluster_connection_status_reports_install_expired_after_ttl() -> None:
 
     assert response.connection_status == "install_expired"
     assert response.connection_stage == "expired"
+    assert response.refresh_after_seconds is None
 
 
 def test_cluster_summary_registered_provider_overrides_detected_provider() -> None:

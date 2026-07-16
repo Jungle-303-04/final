@@ -32,7 +32,6 @@ import { Spinner } from "../../shared/ui/primitives/spinner";
 import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
 import { clusterResourcesHref } from "./clusterNavigation";
 
-const POLL_INTERVAL_MS = 2_000;
 const providers: readonly {
   id: ClusterConnectProvider;
   logo: ProviderLogoKind | ComponentType<{ className?: string }>;
@@ -83,6 +82,7 @@ export function ClusterConnectDialog({
   const [serverNameConflict, setServerNameConflict] = useState(false);
   const connectAbort = useRef<AbortController | null>(null);
   const waitingStartedAt = useRef<number | null>(null);
+  const nextPollAfterSeconds = useRef<number | null>(null);
   const normalizedName = normalizeDisplayName(name);
   const duplicateName = normalizedName.length > 0 && existingNames.some(
     (existingName) => normalizeDisplayName(existingName) === normalizedName,
@@ -95,9 +95,11 @@ export function ClusterConnectDialog({
     let active = true;
     let timeout: number | undefined;
     const poll = async () => {
+      nextPollAfterSeconds.current = null;
       try {
         const connection = await port.loadConnection(receipt.clusterId, controller.signal);
         if (!active) return;
+        nextPollAfterSeconds.current = connection.refreshAfterSeconds;
         setConnectionStage(connection.stage);
         if (connection.status === "connected") {
           if (phase === "finishing") {
@@ -116,21 +118,32 @@ export function ClusterConnectDialog({
         }
       } catch (error) {
         if (!active || isAbortError(error)) return;
+        nextPollAfterSeconds.current = null;
         if (error instanceof ClustersPortFailure && error.code === "unauthorized") {
           reportUnauthorized();
           return;
         }
         setPhase("failed");
       } finally {
-        if (active && phase === "waiting") {
-          timeout = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
+        const refreshAfterSeconds = nextPollAfterSeconds.current;
+        if (active && phase === "waiting" && refreshAfterSeconds !== null) {
+          timeout = window.setTimeout(
+            () => void poll(),
+            refreshAfterSeconds * 1_000,
+          );
         }
       }
     };
     if (phase === "waiting") {
       void poll();
     } else {
-      timeout = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
+      const refreshAfterSeconds = nextPollAfterSeconds.current;
+      if (refreshAfterSeconds !== null) {
+        timeout = window.setTimeout(
+          () => void poll(),
+          refreshAfterSeconds * 1_000,
+        );
+      }
     }
     return () => {
       active = false;
@@ -170,6 +183,7 @@ export function ClusterConnectDialog({
     setConnectionStage("awaiting_install");
     setElapsedSeconds(0);
     waitingStartedAt.current = null;
+    nextPollAfterSeconds.current = null;
     setCopyState("idle");
     setServerNameConflict(false);
   };
@@ -185,6 +199,7 @@ export function ClusterConnectDialog({
       setReceipt(nextReceipt);
       setConnectionStage("awaiting_install");
       waitingStartedAt.current = Date.now();
+      nextPollAfterSeconds.current = null;
       setPhase("waiting");
       setStep(2);
     } catch (error) {
@@ -219,6 +234,7 @@ export function ClusterConnectDialog({
       setConnectionStage("awaiting_install");
       setElapsedSeconds(0);
       waitingStartedAt.current = Date.now();
+      nextPollAfterSeconds.current = null;
       setPhase("waiting");
     } catch (error) {
       if (isAbortError(error)) return;

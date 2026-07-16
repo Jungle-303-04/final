@@ -1432,16 +1432,27 @@ async def get_cluster_connection_status(
     latest_snapshot = (
         snapshot_getter(workspace_id, cluster_id) if callable(snapshot_getter) else None
     )
+    connection_status = registration_connection_status(registration, latest_agent)
+    connection_stage = cluster_connection_stage(registration, latest_agent, latest_snapshot)
     return ClusterConnectionStatusResponse(
         cluster_id=cluster_id,
-        connection_status=registration_connection_status(registration, latest_agent),
-        connection_stage=cluster_connection_stage(registration, latest_agent, latest_snapshot),
+        connection_status=connection_status,
+        connection_stage=connection_stage,
+        refresh_after_seconds=connection_refresh_after_seconds(connection_stage),
         last_agent_id=latest_agent.get("agent_id") if latest_agent else None,
         last_seen_at=latest_agent.get("last_seen_at") if latest_agent else None,
         agents=agents,
         connect_timeout_seconds=registration_connect_timeout(registration),
         connect_expires_at=registration_connect_expires_at(registration),
     )
+
+
+def connection_refresh_after_seconds(connection_stage: str | None) -> float | None:
+    """Return the server-owned connect polling policy for the current stage."""
+
+    if connection_stage in {"expired", "error"}:
+        return None
+    return 0.5
 
 
 @router.get(

@@ -21,6 +21,7 @@ interface ClusterConnectionWire {
   cluster_id: string;
   connection_status: string;
   connection_stage?: ClusterConnectStage;
+  refresh_after_seconds: number | null;
   last_agent_id: string | null;
   last_seen_at: string | null;
   agents: Array<{ details: Record<string, unknown> }>;
@@ -89,6 +90,7 @@ export function createClustersAdapter(
               ? "expired"
               : "waiting",
           stage,
+          refreshAfterSeconds: response.refresh_after_seconds,
           agentVersion,
           lastSeenAt: response.last_seen_at,
         } satisfies ClusterConnectionSnapshot;
