@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, replace
+from ipaddress import ip_address
 from urllib.parse import urlsplit, urlunsplit
 
 from packages.config.constants import Auth
@@ -15,6 +16,7 @@ OPSIA_MCP_SESSION_COOKIE_ENV = "OPSIA_MCP_SESSION_COOKIE"
 OPSIA_MCP_SESSION_COOKIE_NAME_ENV = "OPSIA_MCP_SESSION_COOKIE_NAME"
 OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV = "OPSIA_MCP_TRUSTED_PROXY_SECRET"
 OPSIA_MCP_ENABLE_WRITES_ENV = "OPSIA_MCP_ENABLE_WRITES"
+OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV = "OPSIA_MCP_ALLOW_INSECURE_HTTP"
 OPSIA_MCP_TIMEOUT_SECONDS_ENV = "OPSIA_MCP_REQUEST_TIMEOUT_SECONDS"
 OPSIA_MCP_MAX_RESPONSE_BYTES_ENV = "OPSIA_MCP_MAX_RESPONSE_BYTES"
 MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
@@ -39,6 +41,7 @@ class McpSettings:
     session_cookie_name: str = Auth.SESSION_COOKIE_NAME
     trusted_proxy_secret: str = ""
     writes_enabled: bool = False
+    allow_insecure_http: bool = False
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES
 
@@ -52,12 +55,16 @@ class McpSettings:
             f"session_cookie_name={self.session_cookie_name!r}, "
             f"trusted_proxy_secret={_redacted(self.trusted_proxy_secret)!r}, "
             f"writes_enabled={self.writes_enabled!r}, "
+            f"allow_insecure_http={self.allow_insecure_http!r}, "
             f"timeout_seconds={self.timeout_seconds!r}, "
             f"max_response_bytes={self.max_response_bytes!r})"
         )
 
     def validate(self) -> McpSettings:
-        api_base_url = _normalize_api_base_url(self.api_base_url)
+        api_base_url = _normalize_api_base_url(
+            self.api_base_url,
+            allow_insecure_http=self.allow_insecure_http,
+        )
         if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
             raise McpConfigurationError(f"{OPSIA_MCP_TIMEOUT_SECONDS_ENV} must be positive")
         if self.timeout_seconds > MAX_TIMEOUT_SECONDS:
@@ -160,6 +167,7 @@ def load_settings() -> McpSettings:
         session_cookie_name=env(OPSIA_MCP_SESSION_COOKIE_NAME_ENV, Auth.SESSION_COOKIE_NAME),
         trusted_proxy_secret=env(OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV, ""),
         writes_enabled=_bool_env(OPSIA_MCP_ENABLE_WRITES_ENV, False),
+        allow_insecure_http=_bool_env(OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV, False),
         timeout_seconds=timeout,
         max_response_bytes=max_response_bytes,
     ).validate()
@@ -204,7 +212,7 @@ def _bool_env(name: str, default: bool) -> bool:
     raise McpConfigurationError(f"{name} must be a boolean")
 
 
-def _normalize_api_base_url(value: str) -> str:
+def _normalize_api_base_url(value: str, *, allow_insecure_http: bool = False) -> str:
     raw = value.strip().rstrip("/")
     if not raw:
         raise McpConfigurationError(
@@ -221,12 +229,31 @@ def _normalize_api_base_url(value: str) -> str:
         raise McpConfigurationError("MCP API base URL must use http or https")
     if not parsed.hostname:
         raise McpConfigurationError("MCP API base URL must include a host")
+    if (
+        parsed.scheme.lower() == "http"
+        and not allow_insecure_http
+        and not _is_loopback_hostname(parsed.hostname)
+    ):
+        raise McpConfigurationError(
+            "MCP API base URL must use https unless it targets loopback; "
+            f"set {OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV}=true only for a trusted private network"
+        )
     if parsed.username is not None or parsed.password is not None:
         raise McpConfigurationError("MCP API base URL must not include credentials")
     if parsed.query or parsed.fragment:
         raise McpConfigurationError("MCP API base URL must not include query or fragment")
     path = parsed.path.rstrip("/")
     return urlunsplit((parsed.scheme.lower(), parsed.netloc, path, "", ""))
+
+
+def _is_loopback_hostname(hostname: str) -> bool:
+    normalized = hostname.strip().casefold().rstrip(".")
+    if normalized == "localhost" or normalized.endswith(".localhost"):
+        return True
+    try:
+        return ip_address(normalized).is_loopback
+    except ValueError:
+        return False
 
 
 def _validate_header_value(name: str, value: str) -> None:

@@ -41,7 +41,6 @@ SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
         "authorization",
         "cookie",
         "credential",
-        "data",
         "id_token",
         "password",
         "passwd",
@@ -49,10 +48,12 @@ SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
         "refresh_token",
         "secret",
         "ssh_key",
-        "stringdata",
         "token",
     }
 )
+SENSITIVE_PROPOSAL_EXACT_KEYS = frozenset({"data", "stringdata"})
+SENSITIVE_PROPOSAL_MARKER_KEYS = frozenset({"key", "name"})
+SENSITIVE_PROPOSAL_MARKER_VALUE_KEYS = frozenset({"default", "literal", "value"})
 DIRECT_EXECUTION_KEYS = frozenset(
     {"confirmation", "direct_execution", "direct_execution_confirmed"}
 )
@@ -752,10 +753,13 @@ def _operation_id_from_response(
 
 def _redact_proposal_value(value: Any) -> Any:
     if isinstance(value, dict):
+        has_sensitive_marker = _has_sensitive_proposal_marker(value)
         redacted: dict[str, Any] = {}
         for key, item in value.items():
             key_text = str(key)
-            if _is_sensitive_proposal_key(key_text):
+            if _is_sensitive_proposal_key(key_text) or (
+                has_sensitive_marker and _is_sensitive_marker_value_key(key_text)
+            ):
                 redacted[key_text] = REDACTED_VALUE
             else:
                 redacted[key_text] = _redact_proposal_value(item)
@@ -768,8 +772,37 @@ def _redact_proposal_value(value: Any) -> Any:
 
 
 def _is_sensitive_proposal_key(key: str) -> bool:
-    normalized = key.casefold().replace("-", "_")
-    return any(part in normalized for part in SENSITIVE_PROPOSAL_KEY_PARTS)
+    normalized = _normalized_proposal_identifier(key)
+    if normalized in SENSITIVE_PROPOSAL_EXACT_KEYS:
+        return True
+    return _contains_sensitive_proposal_part(normalized)
+
+
+def _has_sensitive_proposal_marker(value: dict[Any, Any]) -> bool:
+    for key, item in value.items():
+        if (
+            _normalized_proposal_identifier(str(key)) in SENSITIVE_PROPOSAL_MARKER_KEYS
+            and isinstance(item, str)
+            and _contains_sensitive_proposal_part(_normalized_proposal_identifier(item))
+        ):
+            return True
+    return False
+
+
+def _is_sensitive_marker_value_key(key: str) -> bool:
+    return _normalized_proposal_identifier(key) in SENSITIVE_PROPOSAL_MARKER_VALUE_KEYS
+
+
+def _contains_sensitive_proposal_part(value: str) -> bool:
+    compact = value.replace("_", "")
+    return any(
+        part in value or part.replace("_", "") in compact
+        for part in SENSITIVE_PROPOSAL_KEY_PARTS
+    )
+
+
+def _normalized_proposal_identifier(value: str) -> str:
+    return value.casefold().replace("-", "_").replace(".", "_").replace(" ", "_")
 
 
 def _schema(

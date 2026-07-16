@@ -11,6 +11,7 @@ from packages.security.trusted_proxy import TRUSTED_PROXY_AUTH_SECRET_ENV
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
 from services.mcp.internal_control.config import (
     MANAGEMENT_BASE_URL_ENV,
+    OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV,
     OPSIA_MCP_API_BASE_URL_ENV,
     OPSIA_MCP_BEARER_TOKEN_ENV,
     OPSIA_MCP_COOKIE_ENV,
@@ -32,6 +33,7 @@ MCP_ENV_NAMES = (
     OPSIA_MCP_BEARER_TOKEN_ENV,
     OPSIA_MCP_COOKIE_ENV,
     OPSIA_MCP_ENABLE_WRITES_ENV,
+    OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV,
     OPSIA_MCP_SESSION_COOKIE_ENV,
     OPSIA_MCP_SESSION_COOKIE_NAME_ENV,
     OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV,
@@ -43,7 +45,7 @@ MCP_ENV_NAMES = (
 
 
 def test_settings_fail_closed_without_auth() -> None:
-    settings = McpSettings(api_base_url="http://opsia.test")
+    settings = McpSettings(api_base_url="https://opsia.test")
 
     try:
         settings.validate()
@@ -56,7 +58,7 @@ def test_settings_fail_closed_without_auth() -> None:
 def test_load_settings_ignores_global_trusted_proxy_secret(monkeypatch: Any) -> None:
     for name in MCP_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv(MANAGEMENT_BASE_URL_ENV, "http://opsia.test")
+    monkeypatch.setenv(MANAGEMENT_BASE_URL_ENV, "https://opsia.test")
     monkeypatch.setenv(TRUSTED_PROXY_AUTH_SECRET_ENV, "x" * 32)
 
     try:
@@ -70,7 +72,7 @@ def test_load_settings_ignores_global_trusted_proxy_secret(monkeypatch: Any) -> 
 def test_load_settings_uses_explicit_mcp_environment(monkeypatch: Any) -> None:
     for name in MCP_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv(OPSIA_MCP_API_BASE_URL_ENV, "http://opsia.test/api/")
+    monkeypatch.setenv(OPSIA_MCP_API_BASE_URL_ENV, "https://opsia.test/api/")
     monkeypatch.setenv(OPSIA_MCP_BEARER_TOKEN_ENV, " token-1 ")
     monkeypatch.setenv(OPSIA_MCP_ENABLE_WRITES_ENV, "true")
     monkeypatch.setenv(OPSIA_MCP_TIMEOUT_SECONDS_ENV, "5")
@@ -78,7 +80,7 @@ def test_load_settings_uses_explicit_mcp_environment(monkeypatch: Any) -> None:
 
     settings = load_settings()
 
-    assert settings.api_base_url == "http://opsia.test/api"
+    assert settings.api_base_url == "https://opsia.test/api"
     assert settings.bearer_token == "token-1"
     assert settings.writes_enabled is True
     assert settings.timeout_seconds == 5
@@ -88,7 +90,7 @@ def test_load_settings_uses_explicit_mcp_environment(monkeypatch: Any) -> None:
 def test_settings_reject_invalid_write_enable_flag(monkeypatch: Any) -> None:
     for name in MCP_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv(OPSIA_MCP_API_BASE_URL_ENV, "http://opsia.test")
+    monkeypatch.setenv(OPSIA_MCP_API_BASE_URL_ENV, "https://opsia.test")
     monkeypatch.setenv(OPSIA_MCP_BEARER_TOKEN_ENV, "token-1")
     monkeypatch.setenv(OPSIA_MCP_ENABLE_WRITES_ENV, "maybe")
 
@@ -103,13 +105,13 @@ def test_settings_reject_invalid_write_enable_flag(monkeypatch: Any) -> None:
 
 def test_settings_validate_api_base_url_and_session_cookie_auth() -> None:
     settings = McpSettings(
-        api_base_url="http://opsia.test/api/",
+        api_base_url="https://opsia.test/api/",
         session_cookie="session-token",
     ).validate()
 
     headers = settings.auth_headers()
 
-    assert settings.api_base_url == "http://opsia.test/api"
+    assert settings.api_base_url == "https://opsia.test/api"
     assert headers["cookie"] == "service_session=session-token"
     assert "x-kubeheal-internal-auth" not in headers
     assert "session-token" not in repr(settings)
@@ -118,23 +120,23 @@ def test_settings_validate_api_base_url_and_session_cookie_auth() -> None:
 def test_settings_reject_mixed_auth_and_unsafe_url_or_header_values() -> None:
     invalid_settings = [
         McpSettings(
-            api_base_url="http://opsia.test",
+            api_base_url="https://opsia.test",
             session_cookie="session-token",
             trusted_proxy_secret="x" * 32,
         ),
         McpSettings(api_base_url="ftp://opsia.test", bearer_token="token-1"),
         McpSettings(api_base_url="http://user:pass@opsia.test", bearer_token="token-1"),
         McpSettings(api_base_url="http://opsia.test/api?debug=true", bearer_token="token-1"),
-        McpSettings(api_base_url="http://opsia.test", bearer_token="token-1\r\nx-test: y"),
-        McpSettings(api_base_url="http://opsia.test", trusted_proxy_secret="x" * 32),
-        McpSettings(api_base_url="http://opsia.test", bearer_token="token-1", timeout_seconds=61),
+        McpSettings(api_base_url="https://opsia.test", bearer_token="token-1\r\nx-test: y"),
+        McpSettings(api_base_url="https://opsia.test", trusted_proxy_secret="x" * 32),
+        McpSettings(api_base_url="https://opsia.test", bearer_token="token-1", timeout_seconds=61),
         McpSettings(
-            api_base_url="http://opsia.test",
+            api_base_url="https://opsia.test",
             bearer_token="token-1",
             max_response_bytes=9 * 1024 * 1024,
         ),
         McpSettings(
-            api_base_url="http://opsia.test",
+            api_base_url="https://opsia.test",
             session_cookie="session-token",
             session_cookie_name="bad cookie",
         ),
@@ -151,7 +153,7 @@ def test_settings_reject_mixed_auth_and_unsafe_url_or_header_values() -> None:
 
 def test_trusted_proxy_auth_is_not_available_to_mcp() -> None:
     settings = McpSettings(
-        api_base_url="http://opsia.test",
+        api_base_url="https://opsia.test",
         bearer_token="token-1",
         trusted_proxy_secret="x" * 32,
     )
@@ -163,6 +165,52 @@ def test_trusted_proxy_auth_is_not_available_to_mcp() -> None:
         assert "not supported" in str(exc)
     else:
         raise AssertionError("MCP must not accept trusted proxy service-admin authentication")
+
+
+def test_settings_reject_remote_http_without_explicit_opt_in() -> None:
+    try:
+        McpSettings(api_base_url="http://opsia.test", bearer_token="token-1").validate()
+    except McpConfigurationError as exc:
+        assert OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV in str(exc)
+        assert "https" in str(exc)
+    else:
+        raise AssertionError("remote MCP HTTP must fail closed")
+
+    local = McpSettings(
+        api_base_url="http://127.0.0.1:8000/api/",
+        bearer_token="token-1",
+    ).validate()
+    localhost = McpSettings(
+        api_base_url="http://localhost:8000/api/",
+        bearer_token="token-1",
+    ).validate()
+    localhost_subdomain = McpSettings(
+        api_base_url="http://api.localhost:8000/api/",
+        bearer_token="token-1",
+    ).validate()
+    explicit = McpSettings(
+        api_base_url="http://opsia.test/api/",
+        bearer_token="token-1",
+        allow_insecure_http=True,
+    ).validate()
+
+    assert local.api_base_url == "http://127.0.0.1:8000/api"
+    assert localhost.api_base_url == "http://localhost:8000/api"
+    assert localhost_subdomain.api_base_url == "http://api.localhost:8000/api"
+    assert explicit.api_base_url == "http://opsia.test/api"
+
+
+def test_load_settings_allows_remote_http_with_explicit_opt_in(monkeypatch: Any) -> None:
+    for name in MCP_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(OPSIA_MCP_API_BASE_URL_ENV, "http://api-gateway:8000/api/")
+    monkeypatch.setenv(OPSIA_MCP_BEARER_TOKEN_ENV, "token-1")
+    monkeypatch.setenv(OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV, "true")
+
+    settings = load_settings()
+
+    assert settings.api_base_url == "http://api-gateway:8000/api"
+    assert settings.allow_insecure_http is True
 
 
 def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
@@ -347,6 +395,30 @@ def test_write_proposal_redacts_sensitive_payload_values_without_changing_post_b
                 "metadata": {"name": "api-secret"},
                 "data": {"password": "plain-secret"},
                 "stringData": {"api_key": "token-value"},
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": "api",
+                                    "env": [
+                                        {"name": "DB_PASSWORD", "value": "db-pass"},
+                                        {"name": "LOG_LEVEL", "value": "debug"},
+                                        {
+                                            "name": "API_TOKEN",
+                                            "valueFrom": {
+                                                "secretKeyRef": {
+                                                    "name": "api-secret",
+                                                    "key": "token",
+                                                }
+                                            },
+                                        },
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                },
             },
         }
 
@@ -360,10 +432,16 @@ def test_write_proposal_redacts_sensitive_payload_values_without_changing_post_b
         assert seen == []
         assert proposal["body_redacted"] is True
         assert proposal["body"]["reason"] == "Authorization: Bearer [REDACTED]"
+        assert proposal["body"]["diff"]["metadata"] == {"name": "api-secret"}
         assert proposal["body"]["diff"]["data"] == "[REDACTED]"
         assert proposal["body"]["diff"]["stringData"] == "[REDACTED]"
+        env = proposal["body"]["diff"]["spec"]["template"]["spec"]["containers"][0]["env"]
+        assert env[0] == {"name": "DB_PASSWORD", "value": "[REDACTED]"}
+        assert env[1] == {"name": "LOG_LEVEL", "value": "debug"}
+        assert env[2]["valueFrom"] == {"secretKeyRef": "[REDACTED]"}
         assert "plain-secret" not in json.dumps(proposal, ensure_ascii=False)
         assert "token-value" not in json.dumps(proposal, ensure_ascii=False)
+        assert "db-pass" not in json.dumps(proposal, ensure_ascii=False)
 
         await default_tool_registry().call(
             "create_command_request",
@@ -800,7 +878,7 @@ def test_incident_and_log_tools_use_sanitized_read_apis() -> None:
         assert seen[1].url.path == "/evidence/windows"
         assert dict(seen[1].url.params) == {"limit": "4", "offset": "0"}
         assert str(seen[2].url).startswith(
-            "http://opsia.test/evidence/windows/ws%3Acluster%3Aevidence-1"
+            "https://opsia.test/evidence/windows/ws%3Acluster%3Aevidence-1"
         )
         assert dict(seen[2].url.params) == {"source": "logs"}
 
@@ -910,7 +988,7 @@ def test_management_api_response_size_is_bounded() -> None:
         )
         http_client = httpx.AsyncClient(transport=transport)
         settings = McpSettings(
-            api_base_url="http://opsia.test",
+            api_base_url="https://opsia.test",
             bearer_token="token-1",
             max_response_bytes=32,
         ).validate()
@@ -1096,7 +1174,7 @@ def _client(handler: Any, *, writes_enabled: bool = False) -> ManagementApiClien
     transport = httpx.MockTransport(handler)
     http_client = httpx.AsyncClient(transport=transport)
     settings = McpSettings(
-        api_base_url="http://opsia.test",
+        api_base_url="https://opsia.test",
         bearer_token="token-1",
         writes_enabled=writes_enabled,
     ).validate()

@@ -78,6 +78,7 @@
 - [services/gitops-scm-worker](services/gitops-scm-worker.md)
 - [services/gitops-workflow-controller](services/gitops-workflow-controller.md)
 - [services/mail-mail-worker](services/mail-mail-worker.md)
+- [services/mcp-internal-control](services/mcp-internal-control.md)
 - [services/projection-audit-worker](services/projection-audit-worker.md)
 - [services/projection-dashboard-worker](services/projection-dashboard-worker.md)
 - [services/projection-dead-letter-monitor](services/projection-dead-letter-monitor.md)
