@@ -158,6 +158,15 @@ export {
   type CostOverviewQuery,
 } from "./cost-overview";
 export {
+  COST_NODES_PATH,
+  getCostNodes,
+  type CostNodesQuery,
+} from "./cost-nodes";
+export {
+  costNodePageSchema,
+  type CostNodePageEndpoint,
+} from "./cost-nodes-schemas";
+export {
   costClusterScopeSchema,
   costObservationStatusSchema,
   costObservationSummarySchema,

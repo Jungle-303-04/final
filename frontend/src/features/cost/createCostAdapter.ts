@@ -23,8 +23,79 @@ export function createCostAdapter(
     async getOverview(request, signal) {
       return withPortFailure(async () => toOverview(await endpoints.getCostOverview({
         clusterIds: request.clusterIds,
+        namespaces: request.namespaces,
         timeRange: request.timeRange,
       }, signal)));
+    },
+    async getNodes(request, signal) {
+      return withPortFailure(async () => toNodePage(await endpoints.getCostNodes({
+        clusterIds: request.clusterIds,
+        namespaces: request.namespaces,
+        cursor: request.cursor,
+        limit: request.limit,
+      }, signal)));
+    },
+  };
+}
+
+function toNodePage(value: Awaited<ReturnType<CostEndpointDependencies["getCostNodes"]>>) {
+  return {
+    scopeCoverage: {
+      availability: value.scope_coverage.availability,
+      scopes: value.scope_coverage.scopes.map((scope) => ({
+        workspaceId: scope.workspace_id,
+        clusterId: scope.cluster_id,
+        namespaces: scope.namespaces,
+        freshness: scope.freshness,
+      })),
+      observedAt: value.scope_coverage.observed_at,
+      reasonCodes: value.scope_coverage.reason_codes,
+    },
+    items: value.items.map((item) => ({
+      resource: {
+        version: item.resource.version,
+        kind: item.resource.kind,
+        name: item.resource.name,
+        uid: item.resource.uid,
+      },
+      clusterId: item.cluster_id,
+      clusterName: item.cluster_name,
+      provider: item.provider,
+      providerId: item.provider_id,
+      instanceType: item.instance_type,
+      zone: item.zone,
+      capacityType: item.capacity_type,
+      status: item.status,
+      observedAt: item.observed_at,
+      capacity: {
+        cpuMillicores: item.capacity.cpu_mcores,
+        memoryMib: item.capacity.memory_mib,
+        pods: item.capacity.pods,
+      },
+      usage: {
+        availability: item.usage.availability,
+        observedAt: item.usage.observed_at,
+        cpuMillicores: item.usage.cpu_mcores,
+        memoryMib: item.usage.memory_mib,
+        cpuUtilizationPercent: item.usage.cpu_utilization_percent,
+        memoryUtilizationPercent: item.usage.memory_utilization_percent,
+        reasonCodes: item.usage.reason_codes,
+      },
+      pricing: {
+        availability: item.pricing.availability,
+        currency: item.pricing.currency,
+        hourlyRateMicros: item.pricing.hourly_rate_micros,
+        reasonCodes: item.pricing.reason_codes,
+      },
+    })),
+    total: value.total,
+    countCompleteness: value.count_completeness,
+    hasMore: value.has_more,
+    nextCursor: value.next_cursor,
+    snapshotRevision: value.snapshot_revision,
+    pricingCoverage: {
+      availability: value.pricing_coverage.availability,
+      reasonCodes: value.pricing_coverage.reason_codes,
     },
   };
 }

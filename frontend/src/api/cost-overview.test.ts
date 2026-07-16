@@ -10,6 +10,7 @@ describe("Cost overview API", () => {
 
     await expect(getCostOverview({
       clusterIds: ["cluster-b", "cluster-a", "cluster-a"],
+      namespaces: ["cluster-a/shop"],
       timeRange: "7d",
     })).resolves.toMatchObject({
       observation: { currency: null, data_window: null },
@@ -21,7 +22,7 @@ describe("Cost overview API", () => {
     });
 
     expect(COST_OVERVIEW_PATH).toBe("/api/cost/overview");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b&range=7d");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/cost/overview?clusters=cluster-a%2Ccluster-b&namespaces=cluster-a%2Fshop&range=7d");
   });
 
   it("accepts bounded observed trend series and rejects oversized responses", async () => {

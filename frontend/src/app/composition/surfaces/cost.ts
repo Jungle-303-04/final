@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { getCostOverview, getRightsizingScan } from "../../../api";
+import { getCostNodes, getCostOverview, getRightsizingScan } from "../../../api";
 import { createCostAdapter } from "../../../features/cost/createCostAdapter";
 import type { CostRefreshPolicyKey } from "../../../features/cost/costContract";
 import { createRightsizingAdapter } from "../../../features/rightsizing/createRightsizingAdapter";
@@ -10,7 +10,7 @@ export function loadCostSurface(
   refreshPolicies: BrowserRefreshPolicyRegistry<CostRefreshPolicyKey>,
 ): ComponentType {
   return createCostSurface(
-    createCostAdapter({ getCostOverview }, refreshPolicies),
+    createCostAdapter({ getCostOverview, getCostNodes }, refreshPolicies),
     createRightsizingAdapter({ getRightsizingScan }),
   );
 }

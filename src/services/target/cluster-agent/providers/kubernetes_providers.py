@@ -30,6 +30,7 @@ from packages.contracts.kubernetes_discovery import (
 )
 from packages.contracts.target import TARGET_NAMESPACE
 from packages.kubernetes_provider import detect_kubernetes_provider
+from packages.kubernetes_quantity import cpu_millicores, memory_mebibytes
 from providers.base import ConfigReader
 from providers.collection_limits import (
     attach_collection_limits,
@@ -1074,7 +1075,15 @@ def namespace_group_key(item: object) -> str:
 RCA_TEST_LABEL = "kubeheal.io/rca-test"
 RCA_TEST_RUN_LABEL = "kubeheal.io/rca-test-run"
 RCA_TEST_RESOURCE_PREFIX = "rca-test-"
-EVIDENCE_IDENTITY_LABELS = (RCA_TEST_RUN_LABEL, RCA_TEST_LABEL)
+EVIDENCE_IDENTITY_LABELS = (
+    RCA_TEST_RUN_LABEL,
+    RCA_TEST_LABEL,
+    "node.kubernetes.io/instance-type",
+    "beta.kubernetes.io/instance-type",
+    "topology.kubernetes.io/zone",
+    "failure-domain.beta.kubernetes.io/zone",
+    "karpenter.sh/capacity-type",
+)
 LIVE_SCOPED_EVENT_KINDS = frozenset({"Pod", K8S_KIND_REPLICA_SET})
 
 
@@ -1513,6 +1522,7 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "ready": ready_condition.get("status") == "True",
         "conditions": conditions,
         "taints": spec(item).get("taints", []),
+        "provider_id": as_text(spec(item).get("providerID")),
         "capacity": node_status.get("capacity", {}),
         "allocatable": allocatable,
         "cpu_mcores": cpu_mcores,
@@ -1572,44 +1582,11 @@ def metric_usage_summary(item: JsonObject) -> JsonObject:
 
 
 def parse_cpu_mcores(value: Any) -> float | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        if text.endswith("n"):
-            return float(text[:-1]) / 1_000_000
-        if text.endswith("u"):
-            return float(text[:-1]) / 1_000
-        if text.endswith("m"):
-            return float(text[:-1])
-        return float(text) * 1000
-    except ValueError:
-        return None
+    return cpu_millicores(value)
 
 
 def parse_memory_mib(value: Any) -> float | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    units = {
-        "Ki": 1 / 1024,
-        "Mi": 1,
-        "Gi": 1024,
-        "Ti": 1024 * 1024,
-        "K": 1000 / 1024 / 1024,
-        "M": 1000 * 1000 / 1024 / 1024,
-        "G": 1000 * 1000 * 1000 / 1024 / 1024,
-    }
-    for suffix, multiplier in units.items():
-        if text.endswith(suffix):
-            try:
-                return float(text[: -len(suffix)]) * multiplier
-            except ValueError:
-                return None
-    try:
-        return float(text) / 1024 / 1024
-    except ValueError:
-        return None
+    return memory_mebibytes(value)
 
 
 def safe_ratio(value: float | None, total: float | None) -> float | None:

@@ -109,7 +109,55 @@ export type CostRefreshPolicyKey = "cost_summary" | "cost_trend" | "cost_nodes";
 
 export interface CostOverviewRequest {
   clusterIds: readonly string[];
+  namespaces: readonly string[];
   timeRange: CostTimeRange;
+}
+
+export interface CostNodeItem {
+  resource: { version: string; kind: "Node"; name: string; uid: string };
+  clusterId: string;
+  clusterName: string;
+  provider: string;
+  providerId: string | null;
+  instanceType: string | null;
+  zone: string | null;
+  capacityType: string | null;
+  status: string;
+  observedAt: string;
+  capacity: { cpuMillicores: number | null; memoryMib: number | null; pods: number | null };
+  usage: {
+    availability: CostAvailability;
+    observedAt: string | null;
+    cpuMillicores: number | null;
+    memoryMib: number | null;
+    cpuUtilizationPercent: number | null;
+    memoryUtilizationPercent: number | null;
+    reasonCodes: readonly string[];
+  };
+  pricing: {
+    availability: "unavailable";
+    currency: null;
+    hourlyRateMicros: null;
+    reasonCodes: readonly string[];
+  };
+}
+
+export interface CostNodePage {
+  scopeCoverage: CostScopeCoverage;
+  items: readonly CostNodeItem[];
+  total: number;
+  countCompleteness: "exact" | "partial" | "unavailable";
+  hasMore: boolean;
+  nextCursor: string | null;
+  snapshotRevision: number;
+  pricingCoverage: { availability: "unavailable"; reasonCodes: readonly string[] };
+}
+
+export interface CostNodesRequest {
+  clusterIds: readonly string[];
+  namespaces: readonly string[];
+  cursor?: string;
+  limit?: number;
 }
 
 export type CostFailureCode =
@@ -140,4 +188,5 @@ export interface CostPort {
     signal?: AbortSignal,
   ): Promise<BrowserRefreshPolicy>;
   getOverview(request: CostOverviewRequest, signal?: AbortSignal): Promise<CostOverview>;
+  getNodes(request: CostNodesRequest, signal?: AbortSignal): Promise<CostNodePage>;
 }

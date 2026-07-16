@@ -20,18 +20,23 @@ import {
 
 export function useCostOverview(
   port: CostPort,
-  request: { clusterIds: readonly string[]; timeRange: CostTimeRange },
+  request: {
+    clusterIds: readonly string[];
+    namespaces: readonly string[];
+    timeRange: CostTimeRange;
+  },
   refreshChannel: CostRefreshChannel = "summary",
 ): {
   frame: AsyncResourceState<CostOverview, CostPortFailure>;
   refresh: () => void;
 } {
   const scopeKey = useMemo(
-    () => [...new Set(request.clusterIds)].sort().join("\u001f"),
-    [request.clusterIds],
+    () => `${[...new Set(request.clusterIds)].sort().join("\u001f")}\u001e${[...new Set(request.namespaces)].sort().join("\u001f")}`,
+    [request.clusterIds, request.namespaces],
   );
   const canonicalRequest = useMemo(() => ({
-    clusterIds: scopeKey ? scopeKey.split("\u001f") : [],
+    clusterIds: (scopeKey.split("\u001e")[0] ?? "").split("\u001f").filter(Boolean),
+    namespaces: (scopeKey.split("\u001e")[1] ?? "").split("\u001f").filter(Boolean),
     timeRange: request.timeRange,
   }), [request.timeRange, scopeKey]);
   const [revision, setRevision] = useState(0);

@@ -106,6 +106,7 @@ HELM_CHART_SOURCE_VERSIONS_PATH = "/helm/chart-sources/{source_id}/charts/{chart
 CLUSTER_HOME_INSIGHTS_PATH = "/clusters/{cluster_id}/home/insights"
 TRAFFIC_OVERVIEW_PATH = "/traffic/overview"
 COST_OVERVIEW_PATH = "/cost/overview"
+COST_NODES_PATH = "/cost/nodes"
 CHECKS_OVERVIEW_PATH = "/checks/overview"
 CHECKS_DETAIL_PATH = "/checks/{check_id}"
 SCHEDULED_WORKLOAD_RUNS_PATH = "/workloads/scheduled/{kind}/{namespace}/{name}/runs"

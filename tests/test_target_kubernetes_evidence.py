@@ -552,6 +552,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     }
     assert "reason_summary" not in validated.kubernetes["events"][3]
     assert validated.kubernetes["nodes"][0]["ready"] is True
+    assert validated.kubernetes["nodes"][0]["provider_id"] == "aws:///ap-northeast-2a/i-123"
     assert validated.kubernetes["nodes"][0]["cpu_mcores"] == 390.0
     assert validated.kubernetes["nodes"][0]["cpu_ratio"] == 0.1
     assert validated.kubernetes["nodes"][0]["mem_ratio"] == 0.125

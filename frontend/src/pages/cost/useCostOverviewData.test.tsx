@@ -14,6 +14,7 @@ describe("useCostOverview", () => {
     const port = costPort({ summary: 1 });
     const rendered = renderHook(() => useCostOverview(port, {
       clusterIds: ["cluster-a"],
+      namespaces: [],
       timeRange: "24h",
     }));
 
@@ -37,6 +38,7 @@ describe("useCostOverview", () => {
     const port = costPort({ nodes: 3 });
     const rendered = renderHook(() => useCostOverview(port, {
       clusterIds: ["cluster-a"],
+      namespaces: [],
       timeRange: "24h",
     }, "nodes"));
 
@@ -59,6 +61,7 @@ describe("useCostOverview", () => {
     const port = costPort({ summary: 1 });
     const rendered = renderHook(() => useCostOverview(port, {
       clusterIds: ["cluster-a"],
+      namespaces: [],
       timeRange: "24h",
     }));
     await act(async () => {
@@ -80,6 +83,7 @@ describe("useCostOverview", () => {
 function costPort(intervals: Partial<Record<"summary" | "trend" | "nodes", number>> = {}) {
   return {
     getOverview: vi.fn().mockResolvedValue(overview()),
+    getNodes: vi.fn().mockResolvedValue(nodePage()),
     loadRefreshPolicy: vi.fn(async (channel: "summary" | "trend" | "nodes") => ({
       staleAfterSeconds: 30,
       refreshAfterSeconds: intervals[channel] ?? 1,
@@ -93,6 +97,22 @@ function costPort(intervals: Partial<Record<"summary" | "trend" | "nodes", numbe
   } satisfies CostPort & {
     getOverview: ReturnType<typeof vi.fn>;
     loadRefreshPolicy: ReturnType<typeof vi.fn>;
+  };
+}
+
+function nodePage() {
+  return {
+    scopeCoverage: overview().scopeCoverage,
+    items: [],
+    total: 0,
+    countCompleteness: "exact" as const,
+    hasMore: false,
+    nextCursor: null,
+    snapshotRevision: 1,
+    pricingCoverage: {
+      availability: "unavailable" as const,
+      reasonCodes: ["node_pricing_observation_not_integrated"],
+    },
   };
 }
 
