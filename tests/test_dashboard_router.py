@@ -81,18 +81,88 @@ class DashboardApiDb:
         self,
         workspace_id: str,
         allowed_cluster_ids: set[str] | None,
+        *,
+        namespaces: tuple[tuple[str, str], ...],
+        severities: tuple[str, ...],
+        categories: tuple[str, ...],
+        limit: int,
+    ) -> dict[str, object]:
+        self.calls.append(
+            (
+                "issues",
+                workspace_id,
+                allowed_cluster_ids,
+                namespaces,
+                severities,
+                categories,
+                limit,
+            )
+        )
+        if allowed_cluster_ids == set():
+            return {
+                "items": [],
+                "total_matched": 0,
+                "visibility": {
+                    "state": "restricted",
+                    "completeness": "unavailable",
+                    "authorized_cluster_count": 0,
+                    "requested_namespaces": [],
+                    "reason_codes": ["no_authorized_clusters"],
+                },
+                "facets": {"namespaces": [], "severities": [], "categories": []},
+            }
+        row = _timeline_row(sorted(allowed_cluster_ids)[0]) if allowed_cluster_ids else self.row
+        return {
+            "items": [
+                {
+                    **row,
+                    "issue_severity": "critical",
+                    "severity_availability": "available",
+                    "severity_reason_code": None,
+                    "category": "container_restart",
+                    "category_availability": "available",
+                    "category_reason_code": None,
+                }
+            ],
+            "total_matched": 3,
+            "visibility": {
+                "state": "partial",
+                "completeness": "partial",
+                "authorized_cluster_count": 1,
+                "requested_namespaces": ["cluster-2/payments"],
+                "reason_codes": ["legacy_category_projection_incomplete"],
+            },
+            "facets": {
+                "namespaces": [{"value": "cluster-2/payments", "count": 3}],
+                "severities": [{"value": "critical", "count": 2}],
+                "categories": [{"value": "container_restart", "count": 2}],
+            },
+        }
+
+    def list_recent_workload_changes_for_incidents(
+        self,
+        workspace_id: str,
+        incident_ids: tuple[str, ...],
+        allowed_cluster_ids: set[str],
+        *,
         limit: int,
     ) -> list[dict[str, object]]:
-        self.calls.append(("issues", workspace_id, allowed_cluster_ids, limit))
-        if allowed_cluster_ids == set():
-            return []
-        row = _timeline_row(sorted(allowed_cluster_ids)[0]) if allowed_cluster_ids else self.row
+        self.calls.append(("issue_changes", workspace_id, incident_ids, allowed_cluster_ids, limit))
         return [
             {
-                **row,
-                "issue_severity": "critical",
-                "severity_availability": "available",
-                "severity_reason_code": None,
+                "incident_id": "incident-1",
+                "event_id": "change-1",
+                "changed_at": "2026-07-05T09:50:00Z",
+                "namespace": "payments",
+                "resource_kind": "deployment",
+                "resource_name": "checkout-api",
+                "image_before": "checkout:v1",
+                "image_after": "checkout:v2",
+                "pr_url": None,
+                "commit_sha": "abc123",
+                "repository_id": "repo-1",
+                "repo_ref": "github:org/repo",
+                "workflow_run_id": "run-1",
             }
         ]
 
@@ -213,6 +283,9 @@ def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> 
         db = DashboardApiDb(allowed=set(), has_access=True)
         response = await rca_issues(
             cluster_id="cluster-2",
+            namespaces="cluster-2/payments",
+            severity="critical",
+            category="container_restart",
             limit=10,
             current=_current_session(),
             db=db,
@@ -220,7 +293,22 @@ def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> 
 
         assert response.items[0].issue_severity == "critical"
         assert response.items[0].severity_availability == "available"
-        assert ("issues", "workspace-1", {"cluster-2"}, 10) in db.calls
+        assert response.items[0].category == "container_restart"
+        assert response.total == 1
+        assert response.total_matched == 3
+        assert response.count_completeness == "exact"
+        assert response.visibility.state == "partial"
+        assert response.recent_changes[0].incident_id == "incident-1"
+        assert response.facets.categories[0].value == "container_restart"
+        assert (
+            "issues",
+            "workspace-1",
+            {"cluster-2"},
+            (("cluster-2", "payments"),),
+            ("critical",),
+            ("container_restart",),
+            10,
+        ) in db.calls
         assert db.calls[0] == (
             "has_access",
             "user-1",
@@ -229,6 +317,13 @@ def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> 
             "cluster-2",
             "rca.read",
         )
+        assert (
+            "issue_changes",
+            "workspace-1",
+            ("incident-1",),
+            {"cluster-2"},
+            10,
+        ) in db.calls
 
     asyncio.run(run())
 
@@ -239,6 +334,9 @@ def test_rca_issues_denies_an_unauthorized_cluster_scope() -> None:
         try:
             await rca_issues(
                 cluster_id="cluster-1",
+                namespaces=None,
+                severity=None,
+                category=None,
                 limit=10,
                 current=_current_session(),
                 db=db,

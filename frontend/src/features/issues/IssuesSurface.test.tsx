@@ -94,6 +94,50 @@ describe("IssuesSurface", () => {
     expect(screen.queryByText("warning")).toBeNull();
   });
 
+  it("shows exact matched counts and incomplete visibility without discarding the last result", async () => {
+    const baseline = issuesPort();
+    const initial = await baseline.listIssues("cluster-1");
+    const listIssues = vi.fn().mockResolvedValue({
+      ...initial,
+      total: 1,
+      totalMatched: 9,
+      completeness: "partial",
+      visibility: {
+        state: "partial" as const,
+        completeness: "partial" as const,
+        authorizedClusterCount: 1,
+        requestedNamespaces: ["cluster-1/payments"],
+        reasonCodes: ["legacy_category_projection_incomplete"],
+      },
+    });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        filters={{
+          namespaces: ["cluster-1/payments"],
+          severities: ["critical"],
+          categories: ["container_restart"],
+        }}
+        port={issuesPort({ listIssues })}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+
+    expect(await screen.findByText("1 of 9")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Limited issue visibility" })).toBeTruthy();
+    expect(listIssues).toHaveBeenCalledWith(
+      "cluster-1",
+      50,
+      expect.any(AbortSignal),
+      {
+        namespaces: ["cluster-1/payments"],
+        severities: ["critical"],
+        categories: ["container_restart"],
+      },
+    );
+  });
+
   it("keeps recovery selection feedback inside the shared reduced-motion-safe spinner", async () => {
     const pending = deferred<Awaited<ReturnType<IssuesPort["selectRecoveryAction"]>>>();
     const port = issuesPort({ selectRecoveryAction: vi.fn(() => pending.promise) });
