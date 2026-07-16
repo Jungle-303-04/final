@@ -14,6 +14,7 @@ import type { AiAssistantPort } from "../../features/ai-assistant/aiAssistantCon
 import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
 import type { AlertEventsPort } from "../../features/alerts/alertEventsContract";
 import type { GlobalFilterPort } from "../../features/global-filter/globalFilterContract";
+import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
 import type { ProductSurfaceId } from "../productRoutes";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import {
@@ -67,12 +68,14 @@ export function renderShell({
   globalFilterPort,
   initialEntry = "/home?clusters=cluster-1",
   logStreamPort,
+  portForwardSessions,
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
   alertEventsPort?: AlertEventsPort;
   aiAssistantPort?: AiAssistantPort;
   globalFilterPort?: GlobalFilterPort;
   logStreamPort?: LogStreamPort;
+  portForwardSessions?: PortForwardSessionPort;
   initialEntry?: string;
   releasedSurfaceIds?: ReadonlySet<ProductSurfaceId>;
 } = {}) {
@@ -97,6 +100,7 @@ export function renderShell({
                         auth={testAuth}
                         globalFilterPort={globalFilterPort}
                         logStreamPort={logStreamPort}
+                        portForwardSessions={portForwardSessions}
                         releasedSurfaceIds={releasedSurfaceIds}
                       />
                     )}>
