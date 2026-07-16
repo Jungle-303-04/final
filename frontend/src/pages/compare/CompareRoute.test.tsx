@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthSessionGateProvider } from "../../features/auth/AuthSessionGate";
 import type { CompareCandidates, ComparePort, CompareResult } from "../../features/compare/compareContract";
 import { CompareRoute } from "./CompareRoute";
+
+afterEach(cleanup);
 
 describe("CompareRoute", () => {
   it("canonicalizes the resolved version and provides only safe presentation controls", async () => {
@@ -27,8 +29,58 @@ describe("CompareRoute", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Change" })[0]!);
     expect(await screen.findByRole("dialog", { name: "Choose side A resource" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "shop/api-c" }));
+    await user.click(screen.getByRole("option", { name: "shop/api-c" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("a=shop%2Fapi-c"));
+  });
+
+  it("filters authorized candidates and supports IME-safe roving keyboard selection", async () => {
+    const user = userEvent.setup();
+    const port: ComparePort = {
+      getComparison: vi.fn(async () => result()),
+      getCandidates: vi.fn(async () => candidates()),
+    };
+    renderRoute(port);
+
+    await screen.findByRole("heading", { name: "Compare" });
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("apiVersion=v1"));
+    await user.click(screen.getAllByRole("button", { name: "Change" })[0]!);
+    const picker = await screen.findByRole("dialog", { name: "Choose side A resource" });
+    const filter = screen.getByRole("combobox", { name: "Filter comparison candidates" });
+    expect(filter.getAttribute("data-slot")).toBe("input");
+    expect(picker.textContent).toContain("Candidate inventory is partial.");
+    expect(screen.queryByRole("option", { name: "shop/api-a" })).toBeNull();
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+
+    fireEvent.keyDown(filter, { key: "Enter", isComposing: true, keyCode: 229 });
+    expect(screen.getByTestId("location").textContent).not.toContain("a=shop%2Fapi-d");
+    fireEvent.keyDown(filter, { key: "ArrowDown" });
+    expect(filter.getAttribute("aria-activedescendant")).toContain("uid-c");
+    fireEvent.keyDown(filter, { altKey: true, key: "ArrowDown" });
+    expect(filter.getAttribute("aria-activedescendant")).toContain("uid-c");
+    fireEvent.keyDown(filter, { key: "End" });
+    expect(filter.getAttribute("aria-activedescendant")).toContain("uid-d");
+
+    await user.type(filter, "api-d");
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    fireEvent.keyDown(filter, { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("a=shop%2Fapi-d"));
+  });
+
+  it("keeps Escape local to the candidate picker", async () => {
+    const user = userEvent.setup();
+    const port: ComparePort = {
+      getComparison: vi.fn(async () => result()),
+      getCandidates: vi.fn(async () => candidates()),
+    };
+    renderRoute(port);
+
+    await screen.findAllByRole("button", { name: "Change" });
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("apiVersion=v1"));
+    await user.click(screen.getAllByRole("button", { name: "Change" })[1]!);
+    const filter = await screen.findByRole("combobox", { name: "Filter comparison candidates" });
+    fireEvent.keyDown(filter, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose side B resource" })).toBeNull());
+    expect(screen.getByTestId("location").textContent).toContain("a=shop%2Fapi-a");
   });
 });
 
@@ -73,16 +125,16 @@ function candidates(): CompareCandidates {
     scope: result().scope,
     descriptor: result().descriptor,
     coverage: result().coverage,
-    candidates: [{
-      resource: { apiGroup: "apps", version: "v1", kind: "Deployment", namespace: "shop", name: "api-c", uid: "uid-c" },
+    candidates: ["api-a", "api-b", "api-c", "api-d"].map((name) => ({
+      resource: { apiGroup: "apps", version: "v1", kind: "Deployment", namespace: "shop", name, uid: `uid-${name.slice(-1)}` },
       provenance: {
         observationSnapshotId: "snapshot-a",
         latestSnapshotId: "snapshot-a",
         observedAt: "2026-07-16T09:00:00Z",
-        availability: "available",
+        availability: "available" as const,
         reasonCodes: [],
       },
-    }],
+    })),
     excludedCount: 0,
   };
 }
