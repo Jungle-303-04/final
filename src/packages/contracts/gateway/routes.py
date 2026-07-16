@@ -207,6 +207,9 @@ TIMELINE_STREAM_PATH = "/timeline/stream"
 # Resources 표의 여러 pod 추세를 한 번에 읽는다. 단건 BQ-065를 클라이언트에서
 # fan-out하지 않도록 서버 batch 경계를 별도로 둔다.
 RESOURCE_METRICS_HISTORY_PATH = "/metrics/history"
+# Typed product metric reads resolve a server-owned subject and PromQL plan,
+# then reuse the existing audited target-agent query command path.
+SCOPED_RESOURCE_METRICS_QUERY_PATH = "/metrics/query"
 # 단일 inventory resource의 실행 가능 액션만 반환한다. 거부/미지원 액션을
 # disabled 항목으로 노출하지 않는 BQ-061 capability 경계다.
 RESOURCE_CAPABILITIES_PATH = "/capabilities"

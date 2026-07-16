@@ -257,6 +257,7 @@ export const resourcesEn = {
   "resources.detail.metrics": "Metrics",
   "resources.detail.metricsCpu": "CPU usage",
   "resources.detail.metricsMemory": "Memory usage",
+  "resources.detail.metricsVolume": "Volume usage",
   "resources.detail.metricsCurrent": "Current",
   "resources.detail.metricsPeak": "Peak",
   "resources.detail.metricsPartial": "Showing measurements for part of this range",

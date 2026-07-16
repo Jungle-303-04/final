@@ -186,7 +186,7 @@ export function ResourcesPage({
     [currentResourceRows, detailResource],
   );
   const metricHistory = useResourceMetricsHistoryDataFrame({
-    active: metricResourceIds.length > 0,
+    active: metricResourceIds.length > 0 || detailResource !== null,
     authorityKey,
     filterState: filter.state,
     port: resourceMetricsHistoryPort,
@@ -196,6 +196,8 @@ export function ResourcesPage({
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
     liveSeries: physicalRealtime.metricSeries,
+    observedResource: detailResource,
+    scopeSnapshot: filteredPage?.snapshot ?? null,
   });
   const resourceCapabilities = useResourceCapabilitiesDataFrame({
     active: state.detailRequested && detailResourceId !== null,

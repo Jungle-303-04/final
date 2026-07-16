@@ -257,6 +257,7 @@ export const resourcesKo = {
   "resources.detail.metrics": "메트릭",
   "resources.detail.metricsCpu": "CPU 사용량",
   "resources.detail.metricsMemory": "메모리 사용량",
+  "resources.detail.metricsVolume": "볼륨 사용량",
   "resources.detail.metricsCurrent": "현재",
   "resources.detail.metricsPeak": "최고",
   "resources.detail.metricsPartial": "일부 구간의 측정값만 표시 중",

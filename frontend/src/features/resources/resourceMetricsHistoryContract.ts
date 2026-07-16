@@ -3,6 +3,7 @@ import type {
   ResourcesFilterCompleteness,
   ResourcesFilterSnapshot,
 } from "./resourcesFilterContract";
+import type { ResourceSummary } from "./resourcesContract";
 
 export type ResourceMetricTimeRange = "15m" | "1h" | "6h" | "24h";
 export type ResourceMetricsRefreshPolicyKey =
@@ -20,12 +21,13 @@ export interface ResourceMetricHistoryPoint {
   observedAt: string;
   cpuMillicores: number | null;
   memoryMebibytes: number | null;
+  volumeUsagePercent?: number | null;
 }
 
 export interface ResourceMetricHistorySeries {
   resourceId: string;
   clusterId: string;
-  resourceType: "pod" | "node";
+  resourceType: "pod" | "node" | "pvc";
   namespace: string | null;
   name: string;
   points: ResourceMetricHistoryPoint[];
@@ -48,6 +50,13 @@ export interface ResourceMetricsHistoryOptions {
   limit?: number;
 }
 
+export interface ScopedResourceMetricsObservation {
+  series: ResourceMetricHistorySeries | null;
+  completeness: ResourcesFilterCompleteness;
+  partialReasonCodes: string[];
+  refreshPolicyKey: "metrics_prometheus" | "metrics_pvc";
+}
+
 export interface ResourceMetricsHistoryPort {
   loadResourceMetricsHistory(
     state: UnifiedFilterState,
@@ -55,4 +64,9 @@ export interface ResourceMetricsHistoryPort {
     options: ResourceMetricsHistoryOptions,
     signal?: AbortSignal,
   ): Promise<ResourceMetricsHistoryBatch>;
+  loadScopedResourceMetrics?(
+    resource: ResourceSummary,
+    range: ResourceMetricTimeRange,
+    signal?: AbortSignal,
+  ): Promise<ScopedResourceMetricsObservation>;
 }

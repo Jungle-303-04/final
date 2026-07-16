@@ -1,4 +1,4 @@
-import { Activity, MemoryStick } from "lucide-react";
+import { Activity, HardDrive, MemoryStick, type LucideIcon } from "lucide-react";
 import { useId, useMemo } from "react";
 import {
   Area,
@@ -27,6 +27,7 @@ import { TimelineRangeSelect } from "./ResourcesGraphChrome";
 interface MetricPoint {
   cpu: number | null;
   memory: number | null;
+  volume: number | null;
   time: number;
 }
 
@@ -36,6 +37,10 @@ const CPU_CONFIG = {
 
 const MEMORY_CONFIG = {
   value: { color: "var(--chart-2)", label: "Memory" },
+} satisfies ChartConfig;
+
+const VOLUME_CONFIG = {
+  value: { color: "var(--chart-3)", label: "Storage" },
 } satisfies ChartConfig;
 
 export function ResourceMetricsCharts({
@@ -65,9 +70,18 @@ export function ResourceMetricsCharts({
   const points = series.points.map((point) => ({
     cpu: point.cpuMillicores,
     memory: point.memoryMebibytes,
+    volume: point.volumeUsagePercent ?? null,
     time: Date.parse(point.observedAt),
   })).filter((point) => Number.isFinite(point.time));
-  if (points.length === 0) return <ResourceMetricsUnavailable retry={frame.unavailableRetry} />;
+  if (points.length === 0) {
+    return <ResourceMetricsUnavailable retry={frame.unavailableRetry} />;
+  }
+  const hasCpu = points.some((point) => point.cpu !== null);
+  const hasMemory = points.some((point) => point.memory !== null);
+  const hasVolume = points.some((point) => point.volume !== null);
+  if (!hasCpu && !hasMemory && !hasVolume) {
+    return <ResourceMetricsUnavailable retry={frame.unavailableRetry} />;
+  }
 
   const partial = frame.data.completeness !== "exact" || series.completeness !== "exact";
   return (
@@ -81,22 +95,36 @@ export function ResourceMetricsCharts({
         </Badge>
       ) : null}
       <div className={cn("grid gap-4", wide && "xl:grid-cols-2")}>
-        <ResourceMetricChart
-          config={CPU_CONFIG}
-          data={points}
-          dataKey="cpu"
-          icon={Activity}
-          title={t("resources.detail.metricsCpu")}
-          unit="m"
-        />
-        <ResourceMetricChart
-          config={MEMORY_CONFIG}
-          data={points}
-          dataKey="memory"
-          icon={MemoryStick}
-          title={t("resources.detail.metricsMemory")}
-          unit="MiB"
-        />
+        {hasCpu ? (
+          <ResourceMetricChart
+            config={CPU_CONFIG}
+            data={points}
+            dataKey="cpu"
+            icon={Activity}
+            title={t("resources.detail.metricsCpu")}
+            unit="m"
+          />
+        ) : null}
+        {hasMemory ? (
+          <ResourceMetricChart
+            config={MEMORY_CONFIG}
+            data={points}
+            dataKey="memory"
+            icon={MemoryStick}
+            title={t("resources.detail.metricsMemory")}
+            unit="MiB"
+          />
+        ) : null}
+        {hasVolume ? (
+          <ResourceMetricChart
+            config={VOLUME_CONFIG}
+            data={points}
+            dataKey="volume"
+            icon={HardDrive}
+            title={t("resources.detail.metricsVolume")}
+            unit="%"
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -112,8 +140,8 @@ function ResourceMetricChart({
 }: {
   config: ChartConfig;
   data: MetricPoint[];
-  dataKey: "cpu" | "memory";
-  icon: typeof Activity;
+  dataKey: "cpu" | "memory" | "volume";
+  icon: LucideIcon;
   title: string;
   unit: string;
 }) {
@@ -244,7 +272,7 @@ function ResourceMetricsUnavailable({ retry }: { retry: ResourceMetricsUnavailab
   );
 }
 
-function metricStats(data: MetricPoint[], key: "cpu" | "memory") {
+function metricStats(data: MetricPoint[], key: "cpu" | "memory" | "volume") {
   const values = data.map((point) => point[key]).filter((value): value is number => value !== null);
   return {
     current: values[values.length - 1] ?? null,

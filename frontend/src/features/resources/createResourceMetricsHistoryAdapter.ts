@@ -2,8 +2,14 @@ import {
   isResourcesAbortError,
   toResourcesPortFailure,
 } from "./createResourcesAdapter";
-import type { ResourceMetricsHistoryEndpointDependencies } from "./resourceMetricsHistoryEndpointContract";
-import type { ResourceMetricsHistoryPort } from "./resourceMetricsHistoryContract";
+import type {
+  ResourceMetricsHistoryEndpointDependencies,
+  ScopedMetricEndpointRun,
+} from "./resourceMetricsHistoryEndpointContract";
+import type {
+  ResourceMetricHistoryPoint,
+  ResourceMetricsHistoryPort,
+} from "./resourceMetricsHistoryContract";
 import { toResourceMetricsHistory } from "./resourceMetricsHistoryCanonical";
 import { createResourceMetricsHistoryRequest } from "./resourcesFilterRequest";
 import { ResourcesPortFailure } from "./resourcesContract";
@@ -12,7 +18,7 @@ import { ResourcesCanonicalError } from "./resourcesValidation";
 export function createResourceMetricsHistoryAdapter(
   endpoints: ResourceMetricsHistoryEndpointDependencies,
 ): ResourceMetricsHistoryPort {
-  return {
+  const base: ResourceMetricsHistoryPort = {
     async loadResourceMetricsHistory(state, resourceIds, options, signal) {
       return withMetricsFailure(async () => {
         const query = createResourceMetricsHistoryRequest(state, resourceIds, options);
@@ -23,6 +29,80 @@ export function createResourceMetricsHistoryAdapter(
         );
       });
     },
+  };
+  if (endpoints.runScopedMetricQuery === undefined) {
+    return base;
+  }
+  return {
+    ...base,
+    async loadScopedResourceMetrics(resource, range, signal) {
+      return withMetricsFailure(async () => {
+        const pvc = resource.kind === "PersistentVolumeClaim";
+        const run = await endpoints.runScopedMetricQuery!({
+          cluster_id: resource.clusterId,
+          subject: pvc
+            ? { kind: "pvc", resource_id: resource.inventoryKey }
+            : { kind: "resource", resource_id: resource.inventoryKey },
+          categories: pvc ? ["volume_usage"] : ["cpu", "memory"],
+          range,
+        }, { signal });
+        return {
+          series: toScopedSeries(resource.inventoryKey, run),
+          completeness: run.completeness,
+          partialReasonCodes: run.reasonCodes,
+          refreshPolicyKey: run.endpoint.refresh_policy_key,
+        };
+      });
+    },
+  };
+}
+
+function toScopedSeries(
+  resourceId: string,
+  run: ScopedMetricEndpointRun,
+) {
+  const resource = run.endpoint.resource;
+  if (resource === null || run.observations.length === 0) return null;
+  const points = new Map<number, ResourceMetricHistoryPoint>();
+  for (const observation of run.observations) {
+    for (const series of observation.result.series) {
+      for (const point of series.values) {
+        if (point.timestamp === null || point.value === null) continue;
+        const existing = points.get(point.timestamp) ?? {
+          observedAt: new Date(point.timestamp * 1_000).toISOString(),
+          cpuMillicores: null,
+          memoryMebibytes: null,
+          volumeUsagePercent: null,
+        };
+        if (observation.category === "cpu") existing.cpuMillicores = point.value * 1_000;
+        if (observation.category === "memory") {
+          existing.memoryMebibytes = point.value / (1024 * 1024);
+        }
+        if (observation.category === "volume_usage") {
+          existing.volumeUsagePercent = point.value * 100;
+        }
+        points.set(point.timestamp, existing);
+      }
+    }
+  }
+  const ordered = [...points.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, point]) => point);
+  if (ordered.length === 0) return null;
+  return {
+    resourceId,
+    clusterId: run.endpoint.scope.cluster_id,
+    resourceType: resource.kind === "PersistentVolumeClaim"
+      ? "pvc" as const
+      : resource.kind === "Node"
+        ? "node" as const
+        : "pod" as const,
+    namespace: resource.namespace,
+    name: resource.name,
+    points: ordered,
+    hasSparklinePoints: ordered.length > 1,
+    completeness: run.completeness,
+    partialReasonCodes: run.reasonCodes,
   };
 }
 

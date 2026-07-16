@@ -47,4 +47,50 @@ export interface ResourceMetricsHistoryEndpointDependencies {
     query: ResourceMetricsHistoryEndpointQuery,
     signal?: AbortSignal,
   ): Promise<ResourceMetricsHistoryEndpointResponse>;
+  runScopedMetricQuery?(
+    request: ScopedMetricEndpointRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<ScopedMetricEndpointRun>;
+}
+
+type ScopedMetricCategory =
+  | "cpu"
+  | "memory"
+  | "network_rx"
+  | "network_tx"
+  | "filesystem"
+  | "restarts"
+  | "volume_usage";
+
+export interface ScopedMetricEndpointRequest {
+  cluster_id: string;
+  subject:
+    | { kind: "resource"; resource_id: string }
+    | { kind: "pvc"; resource_id: string }
+    | { kind: "namespace"; namespace: string }
+    | { kind: "cluster" };
+  categories: ScopedMetricCategory[];
+  range: "15m" | "1h" | "6h" | "24h";
+}
+
+export interface ScopedMetricEndpointRun {
+  endpoint: {
+    refresh_policy_key: "metrics_prometheus" | "metrics_pvc";
+    scope: { cluster_id: string };
+    resource: {
+      kind: string;
+      namespace: string | null;
+      name: string;
+    } | null;
+  };
+  completeness: "exact" | "partial" | "unavailable";
+  reasonCodes: string[];
+  observations: Array<{
+    category: ScopedMetricCategory;
+    result: {
+      series: Array<{
+        values: Array<{ timestamp: number | null; value: number | null }>;
+      }>;
+    };
+  }>;
 }

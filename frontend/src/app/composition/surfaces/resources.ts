@@ -18,6 +18,7 @@ import {
   openPodTerminal,
   previewResourceManifestEdit,
   resolveServiceAccess,
+  runScopedMetricQuery,
   startServiceRequest,
 } from "../../../api";
 import type { HomePort } from "../../../features/home/homeContract";
@@ -61,7 +62,10 @@ export function loadResourcesSurface(
     topologyPorts.relation,
     createChangeTimelineAdapter({ getChangeTimeline, refreshPolicies }),
     timelinePort,
-    createResourceMetricsHistoryAdapter({ getResourceMetricsHistory }),
+    createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory,
+      runScopedMetricQuery,
+    }),
     refreshPolicies,
     createResourceCapabilitiesAdapter({ getResourceCapabilities }),
     createResourceActionsAdapter({

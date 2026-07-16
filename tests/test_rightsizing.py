@@ -180,6 +180,7 @@ def test_rightsizing_scan_is_rbac_bound_bounded_and_preserves_partial_failures()
     assert body["scope"]["freshness"] == "live"
     assert body["namespace_scope"] == ["shop", "staging"]
     assert body["result"]["availability"] == "partial"
+    assert body["refresh_after_seconds"] == 600
     assert body["result"]["coverage"]["workloads_with_data"] == 1
     assert body["result"]["failures"] == [
         {"resource": None, "reason_code": "one_workload_metrics_unavailable"}

@@ -6,7 +6,10 @@ import type {
   ResourceMetricsHistoryBatch,
   ResourceMetricsHistoryPort,
   ResourcesRefreshPolicyKey,
+  ScopedResourceMetricsObservation,
 } from "../../features/resources/resourceMetricsHistoryContract";
+import type { ResourcesFilterSnapshot } from "../../features/resources/resourcesFilterContract";
+import type { ResourceSummary } from "../../features/resources/resourcesContract";
 import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import {
@@ -42,6 +45,18 @@ export interface ResourceMetricsUnavailableRetry {
   nextAfterSeconds: number;
 }
 
+type ScopedMetricsFrame =
+  | { phase: "idle"; data: null; failure: null; refreshFailure: null; refreshing: false }
+  | { phase: "loading"; data: null; failure: null; refreshFailure: null; refreshing: false }
+  | {
+      phase: "ready";
+      data: ScopedResourceMetricsObservation;
+      failure: null;
+      refreshFailure: ResourcesPortFailureType | null;
+      refreshing: boolean;
+    }
+  | { phase: "failed"; data: null; failure: ResourcesPortFailureType; refreshFailure: null; refreshing: false };
+
 export function useResourceMetricsHistoryDataFrame(input: {
   active: boolean;
   authorityKey: string;
@@ -53,6 +68,8 @@ export function useResourceMetricsHistoryDataFrame(input: {
   resourceIds: string[];
   snapshotRevision: number | null;
   liveSeries?: readonly ResourceMetricLiveSeries[];
+  observedResource?: ResourceSummary | null;
+  scopeSnapshot?: ResourcesFilterSnapshot | null;
 }): ResourceMetricsHistoryFrame {
   const {
     active,
@@ -66,11 +83,18 @@ export function useResourceMetricsHistoryDataFrame(input: {
     snapshotRevision,
   } = input;
   const liveSeries = input.liveSeries ?? [];
+  const observedResource = input.observedResource ?? null;
+  const scopeSnapshot = input.scopeSnapshot ?? null;
   const requestSequence = useRef(0);
+  const scopedRequestSequence = useRef(0);
   const unavailableAttempts = useRef({ scope: null as string | null, count: 0 });
   const [refreshRevision, setRefreshRevision] = useState(0);
+  const [scopedRefreshRevision, setScopedRefreshRevision] = useState(0);
   const refreshController = useServerRefreshScheduler(
     () => setRefreshRevision((current) => current + 1),
+  );
+  const scopedRefreshController = useServerRefreshScheduler(
+    () => setScopedRefreshRevision((current) => current + 1),
   );
   const filterKey = useMemo(
     () => serializeProductFilterUrl(filterState),
@@ -85,13 +109,21 @@ export function useResourceMetricsHistoryDataFrame(input: {
     () => idsKey === "" ? [] : idsKey.split("\u001f"),
     [idsKey],
   );
-  const scope = active && resourceIds.length > 0 && snapshotRevision !== null
+  const canLoadScoped = observedResource !== null && port.loadScopedResourceMetrics !== undefined;
+  const scope = active && (resourceIds.length > 0 || canLoadScoped) && snapshotRevision !== null
     ? `${authorityKey}:${filterKey}:${snapshotRevision}:${range}:${idsKey}`
+    : null;
+  const scopedScope = scope !== null && canLoadScoped && observedResource !== null
+    ? `${scope}:${observedResource.inventoryKey}`
     : null;
   const [record, setRecord] = useState<{
     scope: string | null;
     frame: ResourceMetricsHistoryFrame;
   }>({ scope: null, frame: idleFrame() });
+  const [scopedRecord, setScopedRecord] = useState<{
+    scope: string | null;
+    frame: ScopedMetricsFrame;
+  }>({ scope: null, frame: idleScopedFrame() });
 
   useEffect(() => {
     unavailableAttempts.current = { scope, count: 0 };
@@ -99,8 +131,12 @@ export function useResourceMetricsHistoryDataFrame(input: {
   }, [refreshController, scope]);
 
   useEffect(() => {
+    scopedRefreshController.backgroundFailure();
+  }, [scopedRefreshController, scopedScope]);
+
+  useEffect(() => {
     const requestId = ++requestSequence.current;
-    if (scope === null || snapshotRevision === null) return undefined;
+    if (scope === null || snapshotRevision === null || resourceIds.length === 0) return undefined;
     const controller = new AbortController();
     queueMicrotask(() => {
       if (controller.signal.aborted || requestSequence.current !== requestId) return;
@@ -128,18 +164,12 @@ export function useResourceMetricsHistoryDataFrame(input: {
       } catch {
         if (controller.signal.aborted || requestSequence.current !== requestId) return;
         refreshController.backgroundFailure();
-        setRecord({
-          scope,
-          frame: readyFrame(data, null, null),
-        });
+        setRecord({ scope, frame: readyFrame(data, null, null) });
         return;
       }
       if (controller.signal.aborted || requestSequence.current !== requestId) return;
       const retry = unavailableRetry(scope, data, policy, unavailableAttempts);
-      setRecord({
-        scope,
-        frame: readyFrame(data, retry, null),
-      });
+      setRecord({ scope, frame: readyFrame(data, retry, null) });
       refreshController.acceptSuccess({
         refreshAfterSeconds: retry !== null && !retry.exhausted
           ? retry.nextAfterSeconds
@@ -147,9 +177,7 @@ export function useResourceMetricsHistoryDataFrame(input: {
       });
     }).catch((error: unknown) => {
       if (controller.signal.aborted || requestSequence.current !== requestId) return;
-      const failure = error instanceof ResourcesPortFailure
-        ? error
-        : new ResourcesPortFailure("error");
+      const failure = resourceMetricsFailure(error);
       if (failure.code === "unauthorized") reportUnauthorized();
       refreshController.backgroundFailure();
       setRecord((current) => current.scope === scope && current.frame.phase === "ready"
@@ -166,24 +194,164 @@ export function useResourceMetricsHistoryDataFrame(input: {
     return () => controller.abort();
   }, [
     port,
-    reportUnauthorized,
     range,
     refreshController,
     refreshPolicies,
     refreshRevision,
+    reportUnauthorized,
     requestState,
     resourceIds,
     scope,
     snapshotRevision,
   ]);
 
+  useEffect(() => {
+    const requestId = ++scopedRequestSequence.current;
+    const load = port.loadScopedResourceMetrics;
+    if (scopedScope === null || observedResource === null || load === undefined) return undefined;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (controller.signal.aborted || scopedRequestSequence.current !== requestId) return;
+      setScopedRecord((current) => current.scope === scopedScope && current.frame.phase === "ready"
+        ? {
+            scope: scopedScope,
+            frame: {
+              ...current.frame,
+              refreshFailure: null,
+              refreshing: true,
+            },
+          }
+        : { scope: scopedScope, frame: loadingScopedFrame() });
+    });
+    void load(observedResource, range, controller.signal).then(async (data) => {
+      if (controller.signal.aborted || scopedRequestSequence.current !== requestId) return;
+      let policy;
+      try {
+        policy = await refreshPolicies.getPolicy(data.refreshPolicyKey, controller.signal);
+      } catch {
+        if (controller.signal.aborted || scopedRequestSequence.current !== requestId) return;
+        scopedRefreshController.backgroundFailure();
+        setScopedRecord({ scope: scopedScope, frame: readyScopedFrame(data, null) });
+        return;
+      }
+      if (controller.signal.aborted || scopedRequestSequence.current !== requestId) return;
+      setScopedRecord({ scope: scopedScope, frame: readyScopedFrame(data, null) });
+      scopedRefreshController.acceptSuccess(policy, { coldEmpty: data.series === null });
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted || scopedRequestSequence.current !== requestId) return;
+      const failure = resourceMetricsFailure(error);
+      if (failure.code === "unauthorized") reportUnauthorized();
+      scopedRefreshController.backgroundFailure();
+      setScopedRecord((current) => current.scope === scopedScope && current.frame.phase === "ready"
+        ? {
+            scope: scopedScope,
+            frame: {
+              ...current.frame,
+              refreshFailure: failure,
+              refreshing: false,
+            },
+          }
+        : { scope: scopedScope, frame: failedScopedFrame(failure) });
+    });
+    return () => controller.abort();
+  }, [
+    observedResource,
+    port,
+    range,
+    refreshPolicies,
+    reportUnauthorized,
+    scopedRefreshController,
+    scopedRefreshRevision,
+    scopedScope,
+  ]);
+
   if (scope === null) return idleFrame();
-  const frame: ResourceMetricsHistoryFrame = record.scope === scope
-    ? record.frame
-    : loadingFrame();
+  const storedFrame = resourceIds.length === 0
+    ? idleFrame()
+    : record.scope === scope
+      ? record.frame
+      : loadingFrame();
+  const scopedFrame = scopedScope === null
+    ? idleScopedFrame()
+    : scopedRecord.scope === scopedScope
+      ? scopedRecord.frame
+      : loadingScopedFrame();
+  const frame = mergeScopedFrame(storedFrame, scopedFrame, scopeSnapshot);
   return frame.phase === "ready" && liveSeries.length > 0
     ? { ...frame, data: mergeLiveResourceMetricSeries(frame.data, liveSeries) }
     : frame;
+}
+
+function mergeScopedFrame(
+  stored: ResourceMetricsHistoryFrame,
+  scoped: ScopedMetricsFrame,
+  snapshot: ResourcesFilterSnapshot | null,
+): ResourceMetricsHistoryFrame {
+  if (scoped.phase === "idle") return stored;
+  if (scoped.phase === "loading") {
+    return stored.phase === "ready"
+      ? { ...stored, refreshing: true }
+      : loadingFrame();
+  }
+  if (scoped.phase === "failed") {
+    return stored.phase === "ready"
+      ? { ...stored, refreshFailure: scoped.failure, refreshing: false }
+      : failedFrame(scoped.failure);
+  }
+  if (stored.phase === "ready") {
+    const scopedSeries = scoped.data.series;
+    const series = scopedSeries === null
+      ? stored.data.series
+      : [
+          ...stored.data.series.filter((item) => item.resourceId !== scopedSeries.resourceId),
+          scopedSeries,
+        ];
+    const partialReasonCodes = uniqueReasons(
+      stored.data.partialReasonCodes,
+      scoped.data.partialReasonCodes,
+    );
+    return {
+      ...stored,
+      data: {
+        ...stored.data,
+        series,
+        completeness: series.length === 0
+          ? "unavailable"
+          : stored.data.completeness === "exact" && scoped.data.completeness === "exact"
+            ? "exact"
+            : "partial",
+        partialReasonCodes,
+      },
+      refreshFailure: scoped.refreshFailure ?? stored.refreshFailure,
+      refreshing: stored.refreshing || scoped.refreshing,
+    };
+  }
+  if (snapshot === null) return loadingFrame();
+  const fallbackFailure = scoped.refreshFailure ?? (stored.phase === "failed" ? stored.failure : null);
+  return {
+    phase: "ready",
+    data: {
+      refreshPolicyKey: scoped.data.refreshPolicyKey,
+      series: scoped.data.series === null ? [] : [scoped.data.series],
+      completeness: scoped.data.completeness,
+      partialReasonCodes: scoped.data.partialReasonCodes,
+      snapshot,
+    },
+    failure: null,
+    refreshFailure: fallbackFailure,
+    refreshing: scoped.refreshing || stored.phase === "loading",
+    unavailableRetry: null,
+  };
+}
+
+function uniqueReasons(...groups: string[][]): string[] {
+  return Array.from(new Set(groups.flat()));
+}
+
+function resourceMetricsFailure(error: unknown): ResourcesPortFailureType {
+  return error instanceof ResourcesPortFailure
+    ? error
+    : new ResourcesPortFailure("error");
 }
 
 function unavailableRetry(
@@ -254,5 +422,48 @@ function failedFrame(failure: ResourcesPortFailureType): ResourceMetricsHistoryF
     refreshFailure: null,
     refreshing: false,
     unavailableRetry: null,
+  };
+}
+
+function idleScopedFrame(): ScopedMetricsFrame {
+  return {
+    phase: "idle",
+    data: null,
+    failure: null,
+    refreshFailure: null,
+    refreshing: false,
+  };
+}
+
+function loadingScopedFrame(): ScopedMetricsFrame {
+  return {
+    phase: "loading",
+    data: null,
+    failure: null,
+    refreshFailure: null,
+    refreshing: false,
+  };
+}
+
+function readyScopedFrame(
+  data: ScopedResourceMetricsObservation,
+  refreshFailure: ResourcesPortFailureType | null,
+): ScopedMetricsFrame {
+  return {
+    phase: "ready",
+    data,
+    failure: null,
+    refreshFailure,
+    refreshing: false,
+  };
+}
+
+function failedScopedFrame(failure: ResourcesPortFailureType): ScopedMetricsFrame {
+  return {
+    phase: "failed",
+    data: null,
+    failure,
+    refreshFailure: null,
+    refreshing: false,
   };
 }

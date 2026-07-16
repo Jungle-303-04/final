@@ -77,4 +77,96 @@ describe("Resource metrics history adapter", () => {
       { snapshotRevision: 42 },
     )).rejects.toMatchObject({ code: "invalid-response" });
   });
+
+  it("maps the server-owned Prometheus batch and exposes its refresh policy key", async () => {
+    const runScopedMetricQuery = vi.fn().mockResolvedValue({
+      endpoint: {
+        availability: "queued",
+        source: "prometheus",
+        refresh_policy_key: "metrics_prometheus",
+        scope: {
+          workspace_id: "workspace-a",
+          cluster_id: "cluster-1",
+          namespaces: ["shop"],
+          freshness: "live",
+        },
+        resource: {
+          api_group: "",
+          version: "v1",
+          kind: "Pod",
+          namespace: "shop",
+          name: "checkout-api-0",
+          uid: "pod-uid-1",
+        },
+        queries: [],
+        coverage: { requested: 2, queued: 2, unsupported: 0 },
+        reason_codes: [],
+      },
+      completeness: "exact",
+      reasonCodes: [],
+      observations: [
+        {
+          category: "cpu",
+          unit: "cores",
+          queryName: "cpu_query",
+          command: {},
+          result: {
+            query: "sum(cpu)",
+            query_mode: "range",
+            range_seconds: 3600,
+            step_seconds: 120,
+            result_type: "matrix",
+            series: [{ metric: {}, values: [{ timestamp: 10, value: 0.25 }] }],
+            point_count: 1,
+          },
+        },
+        {
+          category: "memory",
+          unit: "bytes",
+          queryName: "memory_query",
+          command: {},
+          result: {
+            query: "sum(memory)",
+            query_mode: "range",
+            range_seconds: 3600,
+            step_seconds: 120,
+            result_type: "matrix",
+            series: [{ metric: {}, values: [{ timestamp: 10, value: 2 * 1024 * 1024 }] }],
+            point_count: 1,
+          },
+        },
+      ],
+    });
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery,
+    });
+
+    const result = await port.loadScopedResourceMetrics!({
+      id: "pod-1",
+      identityStability: "uid",
+      inventoryKey: "pod:shop/checkout-api-0",
+      uid: "pod-uid-1",
+      clusterId: "cluster-1",
+      resourceType: "generic",
+      apiVersion: "v1",
+      kind: "Pod",
+      namespace: "shop",
+      name: "checkout-api-0",
+      status: "Running",
+      health: "healthy",
+      healthStatus: "healthy",
+      facts: { type: "generic" },
+      observedAt: null,
+      firstSeenAt: null,
+      lastSeenAt: null,
+      deletedAt: null,
+    }, "1h");
+
+    expect(result.series?.points[0]).toMatchObject({
+      cpuMillicores: 250,
+      memoryMebibytes: 2,
+    });
+    expect(result.refreshPolicyKey).toBe("metrics_prometheus");
+  });
 });

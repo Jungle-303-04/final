@@ -109,6 +109,8 @@ export function useRightsizingScans(
     if (refreshIntervals.size === 1) {
       refreshController.acceptSuccess({
         refreshAfterSeconds: refreshIntervals.values().next().value!,
+      }, {
+        coldEmpty: scans.every((scan) => scan.result.availability === "unavailable"),
       });
     } else {
       refreshController.backgroundFailure();

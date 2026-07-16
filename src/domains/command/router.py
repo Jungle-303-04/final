@@ -36,6 +36,10 @@ from domains.command.repository import (
     stage_command_operation_event_in_transaction,
     stage_logical_command_acceptance_in_transaction,
 )
+from domains.command.scoped_metrics import (
+    build_scoped_metric_plans,
+    resolve_scoped_metric_identity,
+)
 from domains.gitops.events import Diff
 from domains.identity.dependencies import (
     RESOURCE_ACCESS_DENIED_MESSAGE,
@@ -80,6 +84,12 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.contracts.parity import CommandControlReceipt, CommandReceipt, OperationEvent
+from packages.contracts.scoped_metrics import (
+    ScopedMetricCoverage,
+    ScopedMetricQueryReceipt,
+    ScopedMetricQueryRequest,
+    ScopedMetricQueryResponse,
+)
 from packages.runtime.command_wakeup import WAKEUP
 from packages.runtime.dependencies import get_db, get_events, get_operation_events
 from packages.storage.retry import async_retry_db_conflict
@@ -973,6 +983,92 @@ async def agent_debug_query(
         accepted=True,
         command_id=queued.command_id,
         correlation_id=queued.correlation_id,
+    )
+
+
+@router.post(
+    gateway_routes.SCOPED_RESOURCE_METRICS_QUERY_PATH,
+    response_model=ScopedMetricQueryResponse,
+)
+async def scoped_resource_metrics_query(
+    payload: ScopedMetricQueryRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ScopedMetricQueryResponse:
+    """Queue bounded server-owned PromQL for a typed resource/namespace/cluster scope."""
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    require_cluster_read_access(db, current, workspace_id, payload.cluster_id)
+    resource_row: dict[str, Any] | None = None
+    if payload.subject.kind in {"resource", "pvc"}:
+        resource_row = await asyncio.to_thread(
+            db.get_inventory_resource_by_key,
+            workspace_id=workspace_id,
+            inventory_key=payload.subject.resource_id,
+        )
+    try:
+        identity = resolve_scoped_metric_identity(
+            payload,
+            workspace_id=workspace_id,
+            inventory_resource=resource_row,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=NOT_FOUND_CODE, detail="metric subject not found") from exc
+
+    if not identity.supported:
+        return ScopedMetricQueryResponse(
+            availability="unavailable",
+            refresh_policy_key=identity.refresh_policy_key,
+            scope=identity.scope,
+            resource=identity.resource,
+            coverage=ScopedMetricCoverage(
+                requested=len(payload.categories),
+                queued=0,
+                unsupported=len(payload.categories),
+            ),
+            reason_codes=(identity.unavailable_reason or "metric_source_unavailable",),
+        )
+
+    plans, unsupported = build_scoped_metric_plans(payload, identity)
+    receipts: list[ScopedMetricQueryReceipt] = []
+    for plan in plans:
+        queued = await asyncio.to_thread(
+            queue_debug_query,
+            db,
+            plan.payload,
+            workspace_id=workspace_id,
+            requested_by=current.user_id,
+        )
+        receipts.append(
+            ScopedMetricQueryReceipt(
+                category=plan.category,
+                unit=plan.unit,
+                query_name=str(plan.payload.query["name"]),
+                command_id=queued.command_id,
+                correlation_id=queued.correlation_id,
+            )
+        )
+    coverage = ScopedMetricCoverage(
+        requested=len(payload.categories),
+        queued=len(receipts),
+        unsupported=len(unsupported),
+    )
+    if not receipts:
+        availability = "unavailable"
+        reasons = ("metric_category_unsupported",)
+    elif unsupported:
+        availability = "partial"
+        reasons = ("metric_category_partial",)
+    else:
+        availability = "queued"
+        reasons = ()
+    return ScopedMetricQueryResponse(
+        availability=availability,
+        refresh_policy_key=identity.refresh_policy_key,
+        scope=identity.scope,
+        resource=identity.resource,
+        queries=tuple(receipts),
+        coverage=coverage,
+        reason_codes=reasons,
     )
 
 

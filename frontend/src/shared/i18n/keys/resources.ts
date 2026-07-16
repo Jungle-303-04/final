@@ -255,6 +255,7 @@ export type ResourcesMessageKey =
   | "resources.detail.metrics"
   | "resources.detail.metricsCpu"
   | "resources.detail.metricsMemory"
+  | "resources.detail.metricsVolume"
   | "resources.detail.metricsCurrent"
   | "resources.detail.metricsPeak"
   | "resources.detail.metricsPartial"
