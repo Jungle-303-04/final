@@ -148,6 +148,42 @@ def test_namespace_and_cluster_queries_are_scoped_without_client_promql() -> Non
     assert "namespace=" not in cluster_query["query"]
 
 
+def test_hpa_replica_history_uses_exact_inventory_identity_and_server_owned_queries() -> None:
+    db = ScopedMetricDb(
+        _resource(
+            kind="HorizontalPodAutoscaler",
+            api_version="autoscaling/v2",
+            uid="hpa-uid-a",
+        )
+    )
+
+    response = _client(db).post(
+        "/metrics/query",
+        json={
+            "cluster_id": "cluster-a",
+            "subject": {"kind": "resource", "resource_id": "pod:shop/checkout-0"},
+            "categories": ["hpa_current_replicas", "hpa_desired_replicas"],
+            "range": "1h",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["availability"] == "queued"
+    assert body["resource"]["kind"] == "HorizontalPodAutoscaler"
+    assert body["resource"]["uid"] == "hpa-uid-a"
+    assert [item["category"] for item in body["queries"]] == [
+        "hpa_current_replicas",
+        "hpa_desired_replicas",
+    ]
+    assert [item["unit"] for item in body["queries"]] == ["count", "count"]
+    queries = [command[1]["payload"]["query"]["query"] for command in db.commands]
+    assert queries == [
+        'kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler="checkout-0",namespace="shop"}',
+        'kube_horizontalpodautoscaler_status_desired_replicas{horizontalpodautoscaler="checkout-0",namespace="shop"}',
+    ]
+
+
 def test_pvc_query_uses_exact_inventory_identity_and_pvc_freshness_policy() -> None:
     db = ScopedMetricDb(
         _resource(

@@ -206,6 +206,54 @@ describe("resource detail metrics", () => {
     expect(screen.getAllByText("74.0%").length).toBeGreaterThan(0);
   });
 
+  it("renders server-owned HPA current and desired replica history", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceMetricsCharts
+          frame={{
+            phase: "ready",
+            failure: null,
+            refreshFailure: null,
+            refreshing: false,
+            unavailableRetry: null,
+            data: {
+              completeness: "exact",
+              partialReasonCodes: [],
+              refreshPolicyKey: "metrics_prometheus",
+              series: [{
+                clusterId: "cluster-1",
+                completeness: "exact",
+                hasSparklinePoints: true,
+                name: "checkout-api",
+                namespace: "shop",
+                partialReasonCodes: [],
+                points: [{
+                  cpuMillicores: null,
+                  memoryMebibytes: null,
+                  observedAt: "2026-07-17T00:00:00Z",
+                  hpaCurrentReplicas: 2,
+                  hpaDesiredReplicas: 4,
+                }],
+                resourceId: "hpa:shop/checkout-api",
+                resourceType: "hpa",
+              }],
+              snapshot: resourcesFilterPage().snapshot,
+            },
+          }}
+          onRangeChange={vi.fn()}
+          range="1h"
+          resourceId="hpa:shop/checkout-api"
+          wide={false}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Current replicas")).toBeTruthy();
+    expect(screen.getByText("Desired replicas")).toBeTruthy();
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("4").length).toBeGreaterThan(0);
+  });
+
   it("renders the exact current Node observation time and measurement window", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>

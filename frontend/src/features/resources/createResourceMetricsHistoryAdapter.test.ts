@@ -236,7 +236,69 @@ describe("Resource metrics history adapter", () => {
       cpuMillicores: 250,
       memoryMebibytes: 2,
     });
+    expect(runScopedMetricQuery).toHaveBeenCalledWith({
+      cluster_id: "cluster-1",
+      subject: { kind: "resource", resource_id: "pod:shop/checkout-api-0" },
+      categories: ["cpu", "memory", "network_rx", "network_tx", "filesystem", "restarts"],
+      range: "1h",
+    }, { signal: undefined });
     expect(result.refreshPolicyKey).toBe("metrics_prometheus");
+  });
+
+  it("maps network, filesystem, restart, and HPA observations without browser PromQL", async () => {
+    const runScopedMetricQuery = vi.fn().mockResolvedValue({
+      endpoint: {
+        refresh_policy_key: "metrics_prometheus",
+        scope: { cluster_id: "cluster-1", freshness: "live" },
+        resource: {
+          kind: "HorizontalPodAutoscaler",
+          namespace: "shop",
+          name: "checkout-api",
+        },
+      },
+      completeness: "exact",
+      reasonCodes: [],
+      observations: [
+        { category: "hpa_current_replicas", result: { series: [{ values: [{ timestamp: 10, value: 2 }] }] } },
+        { category: "hpa_desired_replicas", result: { series: [{ values: [{ timestamp: 10, value: 4 }] }] } },
+      ],
+    });
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery,
+    });
+
+    const result = await port.loadScopedResourceMetrics!({
+      id: "hpa-1",
+      identityStability: "uid",
+      inventoryKey: "hpa:shop/checkout-api",
+      uid: "hpa-uid-1",
+      clusterId: "cluster-1",
+      resourceType: "horizontalpodautoscaler",
+      apiVersion: "autoscaling/v2",
+      kind: "HorizontalPodAutoscaler",
+      namespace: "shop",
+      name: "checkout-api",
+      status: "Active",
+      health: "healthy",
+      healthStatus: "healthy",
+      facts: { type: "generic" },
+      observedAt: null,
+      firstSeenAt: null,
+      lastSeenAt: null,
+      deletedAt: null,
+    }, "1h");
+
+    expect(runScopedMetricQuery).toHaveBeenCalledWith({
+      cluster_id: "cluster-1",
+      subject: { kind: "resource", resource_id: "hpa:shop/checkout-api" },
+      categories: ["hpa_current_replicas", "hpa_desired_replicas"],
+      range: "1h",
+    }, { signal: undefined });
+    expect(result.series?.points).toEqual([expect.objectContaining({
+      hpaCurrentReplicas: 2,
+      hpaDesiredReplicas: 4,
+    })]);
   });
 
   it("maps exact PVC ratio evidence without deriving usage from capacity", async () => {
