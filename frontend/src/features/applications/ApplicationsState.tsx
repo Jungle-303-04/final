@@ -1,7 +1,6 @@
-import { RefreshCw } from "lucide-react";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { Button } from "../../shared/ui/primitives/button";
+import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationsFailure } from "./applicationsContract";
 import type { ApplicationsResource } from "./useApplicationsData";
@@ -23,19 +22,14 @@ export function ApplicationsRefreshControl<T>({
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <Button
-        aria-label={copy.refresh}
-        disabled={resource.refreshing}
-        onClick={onRefresh}
+      <RefreshAction
+        hasFailed={resource.refreshFailure !== null}
+        iconOnly
+        isRefreshing={resource.refreshing}
+        label={copy.refresh}
+        onRefresh={onRefresh}
         size="icon"
-        type="button"
-        variant="outline"
-      >
-        <RefreshCw
-          aria-hidden="true"
-          className={resource.refreshing ? "motion-safe:animate-spin" : undefined}
-        />
-      </Button>
+      />
       {feedback ? (
         <span
           aria-atomic="true"

@@ -1,4 +1,4 @@
-import { CircleAlert, RefreshCw } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
@@ -14,6 +14,7 @@ import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -79,9 +80,12 @@ function ChecksOverviewContent({
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="sr-only" id="checks-overview-title">{CHECKS_COPY.title}</h2>
         <p className="min-w-0 break-words text-sm text-muted-foreground">{overview.scopeCoverage.observedAt ?? CHECKS_COPY.notObserved}</p>
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" />{CHECKS_COPY.refresh}
-        </Button>
+        <RefreshAction
+          hasFailed={frame.refreshFailure !== null}
+          isRefreshing={frame.refreshing}
+          label={CHECKS_COPY.refresh}
+          onRefresh={onRefresh}
+        />
       </div>
       <UnavailableCard
         icon={<CircleAlert aria-hidden="true" />}

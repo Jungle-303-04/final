@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FreshnessControl, type FreshnessCopy } from "./FreshnessControl";
 import { freshnessBucket } from "./freshnessTime";
 import { TooltipProvider } from "./primitives/tooltip";
+import { REFRESH_OBSERVATION_TIMEOUT_MS } from "./useRefreshAnimation";
 
 const now = Date.UTC(2026, 6, 15, 1, 0, 0);
 
@@ -149,6 +150,45 @@ describe("FreshnessControl", () => {
     await act(async () => resolve?.());
 
     expect(await screen.findByText("새로 고쳤습니다.")).toBeTruthy();
+  });
+
+  it("waits for a void refresh data frame to fetch and settle before showing success", async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    const view = renderFreshness({ mode: "snapshot", onRefresh });
+
+    await user.click(screen.getByRole("button", { name: "지금 갱신" }));
+
+    expect(view.container.querySelector('[data-refresh-phase="pending"]')).toBeTruthy();
+    expect(screen.queryByText("새로 고쳤습니다.")).toBeNull();
+
+    view.rerender(
+      <TooltipProvider delay={0}>
+        <FreshnessControl copy={copy} isFetching mode="snapshot" onRefresh={onRefresh} />
+      </TooltipProvider>,
+    );
+    expect(view.container.querySelector('[data-refresh-phase="pending"]')).toBeTruthy();
+
+    view.rerender(
+      <TooltipProvider delay={0}>
+        <FreshnessControl copy={copy} isFetching={false} mode="snapshot" onRefresh={onRefresh} />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("새로 고쳤습니다.")).toBeTruthy();
+  });
+
+  it("cancels a void refresh when its owner never publishes an observation", async () => {
+    vi.useFakeTimers();
+    renderFreshness({ mode: "snapshot", onRefresh: vi.fn() });
+
+    fireEvent.click(screen.getByRole("button", { name: "지금 갱신" }));
+    expect(document.querySelector('[data-refresh-phase="pending"]')).toBeTruthy();
+
+    act(() => vi.advanceTimersByTime(REFRESH_OBSERVATION_TIMEOUT_MS));
+
+    expect(screen.getByRole("status").textContent).toContain("새로 고침이 취소되었습니다.");
+    expect(document.querySelector('[data-refresh-phase="succeeded"]')).toBeNull();
   });
 });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const SUCCESS_DISPLAY_DURATION_MS = 1_200;
+export const REFRESH_OBSERVATION_TIMEOUT_MS = 10_000;
 
 /**
  * A manual refresh may either return its request promise or merely start a
@@ -24,6 +25,7 @@ interface RefreshAttempt {
   callbackSucceeded: boolean;
   freshnessBaseline: number | null;
   id: number;
+  sawFetching: boolean;
 }
 
 export function useRefreshAnimation(
@@ -35,6 +37,7 @@ export function useRefreshAnimation(
   const observationRef = useRef(observation);
   const attemptRef = useRef<RefreshAttempt | null>(null);
   const nextAttemptIdRef = useRef(0);
+  const observationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -50,9 +53,15 @@ export function useRefreshAnimation(
     successTimerRef.current = null;
   }, []);
 
+  const clearObservationTimer = useCallback(() => {
+    if (observationTimerRef.current !== null) clearTimeout(observationTimerRef.current);
+    observationTimerRef.current = null;
+  }, []);
+
   const settle = useCallback((attemptId: number, nextPhase: RefreshPhase) => {
     if (attemptRef.current?.id !== attemptId) return;
     clearSuccessTimer();
+    clearObservationTimer();
     attemptRef.current = null;
     setPhase(nextPhase);
     if (nextPhase === "succeeded") {
@@ -61,16 +70,33 @@ export function useRefreshAnimation(
         setPhase("idle");
       }, SUCCESS_DISPLAY_DURATION_MS);
     }
-  }, [clearSuccessTimer]);
+  }, [clearObservationTimer, clearSuccessTimer]);
 
   useEffect(() => {
-    return () => clearSuccessTimer();
-  }, [clearSuccessTimer]);
+    return () => {
+      clearSuccessTimer();
+      clearObservationTimer();
+    };
+  }, [clearObservationTimer, clearSuccessTimer]);
+
+  const awaitVoidObservation = useCallback((attemptId: number) => {
+    clearObservationTimer();
+    observationTimerRef.current = setTimeout(() => {
+      // A callback which only starts a frame must never be presented as a
+      // success until that frame confirms completion. Time out as cancellation
+      // so the control remains usable if its owner is unmounted or stalled.
+      settle(attemptId, "cancelled");
+    }, REFRESH_OBSERVATION_TIMEOUT_MS);
+  }, [clearObservationTimer, settle]);
 
   const reconcile = useCallback((attempt: RefreshAttempt) => {
     const latest = observationRef.current;
     if (latest.hasFailed) {
       settle(attempt.id, "failed");
+      return;
+    }
+    if (latest.isFetching) {
+      attempt.sawFetching = true;
       return;
     }
     const observedAt = validFreshness(latest.dataUpdatedAt);
@@ -86,9 +112,16 @@ export function useRefreshAnimation(
       return;
     }
     if (!attempt.callbackSucceeded) return;
+    // Data frames without a freshness timestamp still provide completion
+    // evidence when this manual attempt was observed fetching and then settled.
+    if (attempt.sawFetching) {
+      settle(attempt.id, "succeeded");
+      return;
+    }
     // A returned promise is direct completion evidence. A void callback has
-    // only requested a refresh and is deliberately not presented as success.
-    settle(attempt.id, attempt.callbackKind === "promise" ? "succeeded" : "idle");
+    // only requested a refresh, so it remains pending until its data frame
+    // reports a fetch/settle cycle or its explicit freshness evidence changes.
+    if (attempt.callbackKind === "promise") settle(attempt.id, "succeeded");
   }, [settle]);
 
   useEffect(() => {
@@ -99,11 +132,13 @@ export function useRefreshAnimation(
 
   const refresh = useCallback(() => {
     clearSuccessTimer();
+    clearObservationTimer();
     const attempt: RefreshAttempt = {
       callbackKind: "void",
       callbackSucceeded: false,
       freshnessBaseline: validFreshness(observation.dataUpdatedAt),
       id: nextAttemptIdRef.current + 1,
+      sawFetching: Boolean(observation.isFetching),
     };
     nextAttemptIdRef.current = attempt.id;
     attemptRef.current = attempt;
@@ -112,6 +147,7 @@ export function useRefreshAnimation(
       const result = refreshFnRef.current();
       if (!isPromiseLike(result)) {
         attempt.callbackSucceeded = true;
+        awaitVoidObservation(attempt.id);
         reconcile(attempt);
         return;
       }
@@ -127,7 +163,7 @@ export function useRefreshAnimation(
     } catch (error) {
       settle(attempt.id, isAbortError(error) ? "cancelled" : "failed");
     }
-  }, [clearSuccessTimer, observation.dataUpdatedAt, reconcile, settle]);
+  }, [awaitVoidObservation, clearObservationTimer, clearSuccessTimer, observation.dataUpdatedAt, reconcile, settle]);
 
   return { active: phase === "pending", phase, refresh };
 }

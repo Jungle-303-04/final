@@ -1,4 +1,4 @@
-import { ArrowLeft, PackageSearch, RefreshCw } from "lucide-react";
+import { ArrowLeft, PackageSearch } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 
@@ -13,6 +13,7 @@ import type {
 import { HELM_COPY } from "../../features/helm/helmCopy";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
@@ -127,9 +128,11 @@ function HelmListBoundary({
             value={query}
           />
         </label>
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" />Refresh
-        </Button>
+        <HelmRefreshAction
+          hasFailed={frame.refreshFailure !== null}
+          isRefreshing={frame.refreshing}
+          onRefresh={onRefresh}
+        />
       </div>
       <h2 className="sr-only" id="helm-release-list-title">{HELM_COPY.title}</h2>
       <HelmReleaseTable releases={releases} onOpen={onOpen} query={query} />
@@ -288,7 +291,11 @@ function HelmDetailBoundary({
           <h1 className="truncate text-2xl font-semibold tracking-tight" id="helm-release-detail-title">{detail.release.name}</h1>
           <p className="mt-1 break-words text-sm text-muted-foreground">{scopeText(detail.release)}</p>
         </div>
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline"><RefreshCw aria-hidden="true" />Refresh</Button>
+        <HelmRefreshAction
+          hasFailed={frame.refreshFailure !== null}
+          isRefreshing={frame.refreshing}
+          onRefresh={onRefresh}
+        />
       </header>
       <dl className="grid min-w-0 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4">
         <Fact label={HELM_COPY.status} value={<StatusBadge status={detail.release.status} />} />
@@ -353,6 +360,25 @@ function HelmFailureScreen({ failure, onRefresh }: { failure: HelmPortFailure; o
     return <ProductStateScreen kind="offline" issue={{ code: "network", safeDetail }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
   }
   return <ProductStateScreen kind="error" issue={{ code: "server", safeDetail }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
+}
+
+function HelmRefreshAction({
+  hasFailed,
+  isRefreshing,
+  onRefresh,
+}: {
+  hasFailed: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <RefreshAction
+      hasFailed={hasFailed}
+      isRefreshing={isRefreshing}
+      label={HELM_COPY.refresh}
+      onRefresh={onRefresh}
+    />
+  );
 }
 
 function helmFailureDetail(code: HelmFailureCode | string): string {
