@@ -39,7 +39,6 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
     ]
     assert implemented
     assert all(feature.source_key for feature in implemented)
-    assert len({feature.source_key for feature in implemented}) == len(implemented)
     assert all(feature.coverage.backend is not None for feature in implemented)
     assert all(feature.coverage.frontend is not None for feature in implemented)
     assert all(

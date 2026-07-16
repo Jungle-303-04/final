@@ -6396,7 +6396,10 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:shell:context-switcher:server-scope:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.099",
+            "reference.feature.101"
+          ],
           "symbol": "ContextSwitcher",
           "interaction": "cluster context changes select an authorized workspace cluster scope, preserve browser history semantics, and never modify a server or desktop kubeconfig",
           "transport": "none",
@@ -6404,6 +6407,9 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
+              "src/domains/target/router.py",
+              "frontend/src/api/clusters.ts",
+              "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
               "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
               "frontend/src/features/filters/UnifiedFilterProvider.tsx"

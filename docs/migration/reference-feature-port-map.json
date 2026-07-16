@@ -1,6 +1,110 @@
 {
   "schemaVersion": 1,
   "features": {
+    "reference.feature.099": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterListResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_target_registration.py",
+        "frontend/src/api/clusters.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/features/cluster-scope/ClusterScopePicker.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#list_clusters",
+          "consumer": "src/domains/identity/repository.py#accessible_resource_ids",
+          "test": "tests/test_target_registration.py#test_cluster_list_uses_access_filter_and_agent_status"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider",
+          "consumer": "frontend/src/api/clusters.ts#listClusters",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        }
+      }
+    },
+    "reference.feature.101": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterListResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_target_registration.py",
+        "frontend/src/api/clusters.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+        "frontend/src/features/cluster-scope/ClusterScopePicker.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#list_clusters",
+          "consumer": "src/domains/identity/repository.py#accessible_resource_ids",
+          "test": "tests/test_target_registration.py#test_cluster_list_uses_access_filter_and_agent_status"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#selectCluster",
+          "consumer": "frontend/src/features/filters/UnifiedFilterProvider.tsx#UnifiedFilterProvider",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        }
+      }
+    },
+    "reference.feature.107": {
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "scripts/verify-product-brand-boundary.mjs",
+      "desktopContract": null,
+      "verification": [
+        "references/upstream/web/src/App.tsx",
+        "scripts/verify-product-brand-boundary.mjs",
+        "scripts/verify-product-brand-boundary.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "scripts/verify-product-brand-boundary.mjs",
+          "reason": "The frozen repository-promotion status has no product backend meaning and must not create an Opsia API contract.",
+          "test": "scripts/verify-product-brand-boundary.test.mjs"
+        },
+        "frontend": {
+          "state": "not_required",
+          "destination": "scripts/verify-product-brand-boundary.mjs",
+          "reason": "The frozen upstream repository prompt is intentionally excluded from product UI by the enforced product-name boundary.",
+          "test": "scripts/verify-product-brand-boundary.test.mjs"
+        }
+      }
+    },
+    "reference.feature.108": {
+      "deliveryStatus": "not_applicable",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "scripts/verify-product-brand-boundary.mjs",
+      "desktopContract": null,
+      "verification": [
+        "references/upstream/web/src/App.tsx",
+        "scripts/verify-product-brand-boundary.mjs",
+        "scripts/verify-product-brand-boundary.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "scripts/verify-product-brand-boundary.mjs",
+          "reason": "Star and dismiss mutations belong only to the frozen upstream repository promotion prompt and must not be exposed by the Python gateway.",
+          "test": "scripts/verify-product-brand-boundary.test.mjs"
+        },
+        "frontend": {
+          "state": "not_required",
+          "destination": "scripts/verify-product-brand-boundary.mjs",
+          "reason": "The product deliberately omits upstream repository promotion actions while retaining legal provenance only in the isolated reference and root notice.",
+          "test": "scripts/verify-product-brand-boundary.test.mjs"
+        }
+      }
+    },
     "reference.feature.109": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",

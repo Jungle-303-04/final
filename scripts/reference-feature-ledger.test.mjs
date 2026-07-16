@@ -594,3 +594,46 @@ test("strict release는 sourceKey alias manifest가 target revision과 다르면
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("웹 클러스터 범위는 권한 계약과 원본 identity를 연결하고 저장소 홍보 동작은 제외한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const sourceKey = "upstream-ui:shell:context-switcher:server-scope:v1";
+  const contextInteraction = classifications
+    .classifications["web/src/components/ContextSwitcher.tsx"]
+    .interactions.find((interaction) => interaction.sourceKey === sourceKey);
+
+  for (const contractId of ["reference.feature.099", "reference.feature.101"]) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(port.deliveryStatus, "implemented");
+    assert.equal(port.desktopContract, null);
+    assert.equal(port.coverage.backend.state, "implemented");
+    assert.equal(port.coverage.frontend.state, "implemented");
+    assert.equal(aliases.aliases[contractId], sourceKey);
+    assert.equal(feature.deliveryStatus, "implemented");
+    assert.equal(feature.sourceKey, sourceKey);
+  }
+  assert.deepEqual(contextInteraction.legacyContractIds, [
+    "reference.feature.099",
+    "reference.feature.101",
+  ]);
+
+  for (const contractId of ["reference.feature.107", "reference.feature.108"]) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(port.deliveryStatus, "not_applicable");
+    assert.equal(port.desktopContract, null);
+    assert.equal(port.coverage.backend.state, "not_required");
+    assert.equal(port.coverage.frontend.state, "not_required");
+    assert.equal(feature.deliveryStatus, "not_applicable");
+  }
+});
+
+async function readRepositoryJson(relativePath) {
+  return JSON.parse(await readFile(new URL(relativePath, import.meta.url), "utf8"));
+}
