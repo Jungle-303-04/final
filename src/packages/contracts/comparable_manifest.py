@@ -97,7 +97,10 @@ class ComparableManifest(StrictModel):
 
     @model_validator(mode="after")
     def metadata_matches_exact_resource(self) -> ComparableManifest:
-        if self.metadata.name != self.resource.name or self.metadata.namespace != self.resource.namespace:
+        if (
+            self.metadata.name != self.resource.name
+            or self.metadata.namespace != self.resource.namespace
+        ):
             raise ValueError("comparison metadata must match the exact resource identity")
         return self
 
