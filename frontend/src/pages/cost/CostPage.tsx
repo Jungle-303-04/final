@@ -1,4 +1,4 @@
-import { Activity, RefreshCw } from "lucide-react";
+import { Activity } from "lucide-react";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import {
@@ -10,6 +10,7 @@ import {
 import { COST_COPY } from "../../features/cost/costCopy";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -57,9 +58,12 @@ function CostContent({
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="sr-only" id="cost-overview-title">{COST_COPY.title}</h2>
         <p className="min-w-0 break-words text-sm text-muted-foreground">{scopeDescription(overview)}</p>
-        <Button onClick={onRefresh} size="sm" type="button" variant="outline">
-          <RefreshCw aria-hidden="true" />{COST_COPY.refresh}
-        </Button>
+        <RefreshAction
+          hasFailed={frame.refreshFailure !== null}
+          isRefreshing={frame.refreshing}
+          label={COST_COPY.refresh}
+          onRefresh={onRefresh}
+        />
       </div>
       <ObservationNotice overview={overview} />
       <section className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={COST_COPY.summary}>

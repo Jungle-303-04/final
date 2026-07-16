@@ -84,7 +84,8 @@ describe("S10 Applications surface", () => {
       .toBe("true");
     expect(view.container.querySelector('[data-slot="applications-refresh-feedback"]')?.textContent)
       .toBe("Refreshing applications.");
-    expect(refresh.querySelector("svg")?.classList.contains("motion-safe:animate-spin")).toBe(true);
+    expect(refresh.querySelector('[data-slot="refresh-feedback"]')?.getAttribute("data-refresh-feedback-state"))
+      .toBe("pending");
     expect(screen.getByText("checkout-api")).toBeTruthy();
 
     await user.click(refresh);

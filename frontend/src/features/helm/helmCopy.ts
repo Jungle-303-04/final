@@ -1,6 +1,7 @@
 /** Product-owned UI copy. Runtime values always arrive through HelmPort. */
 export const HELM_COPY = {
   title: "Helm releases",
+  refresh: "Refresh",
   description: "Inventory-observed Helm release metadata for the current authorized scope.",
   searchLabel: "Filter releases",
   searchPlaceholder: "Name, namespace, or status",

@@ -15,6 +15,7 @@ if (!entryUrl) throw new Error("Initial bundle gate could not find the module en
 const forbiddenInitialChunks = [
   "DesktopLocalTerminalSheet",
   "flow-",
+  "motion-",
   "overlays-",
   "xterm",
   "elk",

@@ -1,9 +1,9 @@
-import { Check, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { msToNextFreshnessBucket } from "./freshnessTime";
+import { RefreshFeedback, useRefreshFeedback } from "./RefreshFeedback";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./primitives/tooltip";
-import { useRefreshAnimation } from "./useRefreshAnimation";
+import type { RefreshPhase } from "./useRefreshAnimation";
 
 export type FreshnessMode = "polling" | "snapshot";
 export type FreshnessConnection = "connected" | "disconnected" | "connecting";
@@ -65,10 +65,12 @@ export function FreshnessControl({
     return () => window.clearTimeout(timer);
   }, [dataUpdatedAt, showAge]);
 
-  const { phase, refresh } = useRefreshAnimation(() => onRefresh?.(), {
+  const { phase, refresh, state } = useRefreshFeedback({
     dataUpdatedAt: showAge ? dataUpdatedAt : undefined,
     hasFailed: connectionState === "disconnected",
-    isFetching,
+    isReconnecting: connectionState === "connecting",
+    isRefreshing: isFetching,
+    onRefresh: () => onRefresh?.(),
   });
   const presentation = freshnessPresentation({
     connectionState,
@@ -130,17 +132,7 @@ export function FreshnessControl({
               />
             }
           >
-            {phase === "succeeded" ? (
-              <Check aria-hidden="true" className="size-3.5 text-success" />
-            ) : (
-              <RefreshCw
-                aria-hidden="true"
-                className={cn(
-                  "size-3.5",
-                  spinning && "motion-safe:animate-spin",
-                )}
-              />
-            )}
+            <RefreshFeedback iconClassName="size-3.5" state={state} />
           </TooltipTrigger>
           <TooltipContent side="bottom">{copy.refreshNow}</TooltipContent>
         </Tooltip>
@@ -163,7 +155,7 @@ export function FreshnessControl({
 }
 
 function refreshFeedback(
-  phase: ReturnType<typeof useRefreshAnimation>["phase"],
+  phase: RefreshPhase,
   copy: FreshnessCopy,
 ): string | null {
   if (phase === "pending") return copy.refreshPending;
