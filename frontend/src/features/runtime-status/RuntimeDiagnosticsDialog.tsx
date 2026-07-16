@@ -1,5 +1,11 @@
 import { Activity, CircleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useState,
+} from "react";
 
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -24,17 +30,32 @@ interface RuntimeDiagnosticsDialogProps {
   port?: RuntimeStatusPort;
 }
 
+export interface RuntimeDiagnosticsDialogHandle {
+  open: () => void;
+}
+
 type DiagnosticsState =
   | { phase: "idle" | "loading" | "error" }
   | { phase: "ready"; value: RuntimeDiagnostics };
 
-export function RuntimeDiagnosticsDialog({
+export const RuntimeDiagnosticsDialog = forwardRef<
+  RuntimeDiagnosticsDialogHandle,
+  RuntimeDiagnosticsDialogProps
+>(function RuntimeDiagnosticsDialog({
   port = EMPTY_RUNTIME_STATUS_PORT,
-}: RuntimeDiagnosticsDialogProps) {
+}, ref) {
   const { formatDate, formatNumber, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<DiagnosticsState>({ phase: "idle" });
+  const changeOpen = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) setState({ phase: "loading" });
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    open: () => changeOpen(true),
+  }), [changeOpen]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -52,10 +73,7 @@ export function RuntimeDiagnosticsDialog({
 
   return (
     <Dialog
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (nextOpen) setState({ phase: "loading" });
-      }}
+      onOpenChange={changeOpen}
       open={open}
     >
       <DialogTrigger
@@ -107,7 +125,7 @@ export function RuntimeDiagnosticsDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
 
 function DiagnosticsContent({
   diagnostics,

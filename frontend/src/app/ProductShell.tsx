@@ -1,5 +1,5 @@
 import { Activity, Settings } from "lucide-react";
-import { lazy, Suspense, useCallback, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../shared/i18n";
 import { LocaleToggle } from "../shared/ui/LocaleToggle";
@@ -72,7 +72,10 @@ import {
   EMPTY_RUNTIME_STATUS_PORT,
   type RuntimeStatusPort,
 } from "../features/runtime-status/runtimeStatusContract";
-import { RuntimeDiagnosticsDialog } from "../features/runtime-status/RuntimeDiagnosticsDialog";
+import {
+  RuntimeDiagnosticsDialog,
+  type RuntimeDiagnosticsDialogHandle,
+} from "../features/runtime-status/RuntimeDiagnosticsDialog";
 import { VersionUpdateNotice } from "../features/runtime-status/VersionUpdateNotice";
 
 const ProductCommandPalette = lazy(async () => ({
@@ -135,6 +138,7 @@ function ProductShellFrame({
   const [isShortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
+  const diagnosticsDialogRef = useRef<RuntimeDiagnosticsDialogHandle>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
@@ -190,6 +194,7 @@ function ProductShellFrame({
     isCommandPaletteOpen,
     isHelpOpen: isShortcutHelpOpen,
     onCommandPaletteOpen: () => setCommandPaletteOpen(true),
+    onDiagnosticsOpen: () => diagnosticsDialogRef.current?.open(),
     onHelpToggle: toggleShortcutHelp,
     onRouteSelect: selectProductRoute,
     onThemeToggle: themeController.toggle,
@@ -321,7 +326,7 @@ function ProductShellFrame({
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
             <VersionUpdateNotice port={runtimeStatusPort} />
-            <RuntimeDiagnosticsDialog port={runtimeStatusPort} />
+            <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}

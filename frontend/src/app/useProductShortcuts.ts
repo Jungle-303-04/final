@@ -13,6 +13,7 @@ interface ProductShortcutOptions {
   isCommandPaletteOpen: boolean;
   isHelpOpen: boolean;
   onCommandPaletteOpen: () => void;
+  onDiagnosticsOpen: () => void;
   onHelpToggle: () => void;
   onRouteSelect: (routeDefinition: ProductRouteDefinition) => void;
   onThemeToggle: () => void;
@@ -62,6 +63,10 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
 
       if (definition.id === "command") {
         current.onCommandPaletteOpen();
+        return;
+      }
+      if (definition.id === "diagnostics") {
+        current.onDiagnosticsOpen();
         return;
       }
       if (definition.id === "theme") {

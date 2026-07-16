@@ -117,6 +117,22 @@ describe("ProductShell keyboard and help interaction", () => {
     expect((input as HTMLInputElement).value).toBe("gi?");
   });
 
+  it("opens authenticated runtime diagnostics from Ctrl+Shift+D while an input owns focus", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const input = screen.getByRole("textbox", { name: "화면 입력" });
+
+    await user.click(input);
+    await user.keyboard("{Control>}{Shift>}d{/Shift}{/Control}");
+
+    expect(await screen.findByRole("dialog", { name: "런타임 진단" })).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe("");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(
+      screen.queryByRole("dialog", { name: "런타임 진단" }),
+    ).toBeNull());
+  });
+
   it("opens the descriptor-backed command palette and excludes the removed Topology route", async () => {
     vi.stubGlobal("ResizeObserver", class {
       disconnect() {}

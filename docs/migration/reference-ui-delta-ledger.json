@@ -10516,12 +10516,13 @@
             "reference.feature.047",
             "reference.feature.048",
             "reference.feature.049",
+            "reference.feature.050",
             "reference.feature.053",
             "reference.feature.054",
             "reference.feature.057"
           ],
-          "symbol": "global route chords, command palette, theme, help, and Resources row grammar",
-          "interaction": "one collision-checked shortcut registry owns route chords, command palette, theme, help, Resources row movement and detail opening, editable-control suppression, chord timeout, overlay Escape, and focus return",
+          "symbol": "global route chords, command palette, diagnostics, theme, help, and Resources row grammar",
+          "interaction": "one collision-checked shortcut registry owns route chords, command palette, authenticated diagnostics, theme, help, Resources row movement and detail opening, editable-control suppression, chord timeout, overlay Escape, and focus return",
           "transport": "none",
           "realtime": null,
           "motion": null,
@@ -10529,20 +10530,23 @@
             "destinations": [
               "frontend/src/app/shortcutRegistry.ts",
               "frontend/src/app/useProductShortcuts.ts",
+              "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx",
               "frontend/src/app/resourcesShortcutDefinitions.ts",
               "frontend/src/app/ProductShell.interaction.test.tsx",
               "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.parity"
+              "packages.contracts.parity",
+              "packages.contracts.bootstrap"
             ],
             "plannedTestIds": [
               "shell.command-palette.keyboard",
+              "shell.diagnostics.keyboard",
               "shell.resource-navigation.contract"
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product registry validates duplicate identifiers and sequences, keeps global and context scopes separate, suppresses unsafe editable-field activation, and dispatches Resources actions through one typed event boundary."
+            "rationale": "The product registry validates duplicate identifiers and sequences, keeps global and context scopes separate, permits only the explicitly safe authenticated diagnostics chord inside editable controls, suppresses other unsafe activation, and dispatches Resources actions through one typed event boundary."
           }
         },
         {

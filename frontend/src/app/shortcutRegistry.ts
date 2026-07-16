@@ -101,6 +101,14 @@ export function shellShortcutDefinitions(
       allowInInputs: true,
     },
     {
+      id: "diagnostics",
+      labelKey: "shell.diagnostics.open",
+      group: "global",
+      sequence: ["shift+d"],
+      modifier: "meta-or-control",
+      allowInInputs: true,
+    },
+    {
       id: "theme",
       labelKey: "shell.shortcut.theme",
       group: "global",

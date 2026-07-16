@@ -2018,11 +2018,11 @@
     {
       "id": "reference-feature-050",
       "contractId": "reference.feature.050",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.050"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 263,
       "cells": [
@@ -2034,17 +2034,29 @@
       "streaming": false,
       "area": "keyboard-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "src/domains/diagnostics/runtime.py#collect_runtime_diagnostics",
+          "test": "tests/test_bootstrap_diagnostics.py#test_runtime_diagnostics_is_session_scoped_batched_and_bounded"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx#RuntimeDiagnosticsDialog",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

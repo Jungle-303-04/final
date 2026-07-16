@@ -232,6 +232,32 @@
         "frontend": {"state": "implemented", "destination": "frontend/src/app/ProductCommandPalette.tsx#ProductCommandPalette", "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
       }
     },
+    "reference.feature.050": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.bootstrap.RuntimeDiagnosticsResponse",
+      "frontendContract": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_bootstrap_diagnostics.py",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/features/runtime-status/RuntimeStatusControls.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/diagnostics/router.py#runtime_diagnostics",
+          "consumer": "src/domains/diagnostics/runtime.py#collect_runtime_diagnostics",
+          "test": "tests/test_bootstrap_diagnostics.py#test_runtime_diagnostics_is_session_scoped_batched_and_bounded"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx#RuntimeDiagnosticsDialog",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        }
+      }
+    },
     "reference.feature.052": {
       "deliveryStatus": "not_applicable",
       "desktopContract": null,
