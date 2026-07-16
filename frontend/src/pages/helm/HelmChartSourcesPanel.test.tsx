@@ -19,7 +19,7 @@ describe("HelmChartSourcesPanel", () => {
     render(<HelmChartSourcesPanel port={port} />);
 
     expect(await screen.findByRole("heading", { name: "Chart sources" })).toBeTruthy();
-    expect(screen.getByText("Stable")).toBeTruthy();
+    expect(await screen.findByText("Stable")).toBeTruthy();
     expect(screen.getByText("Private OCI")).toBeTruthy();
     expect(screen.getByText("Repository")).toBeTruthy();
     expect(screen.getByText("OCI")).toBeTruthy();
