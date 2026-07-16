@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,6 +16,7 @@ DEPLOYMENT_RESOURCE = re.compile(r"^deployment/[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$
 IMAGE_DIGEST = re.compile(r"^[A-Za-z0-9._:/-]+@sha256:[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 TIMEOUT = re.compile(r"^[1-9][0-9]*[smh]$")
+MAX_ROLLBACK_STATUS_WORKERS = 8
 
 
 @dataclass(frozen=True)
@@ -94,14 +98,152 @@ def kubectl_commands(
     if not TIMEOUT.fullmatch(timeout):
         raise ValueError("timeout must be a positive Kubernetes duration such as 300s")
 
-    commands: list[tuple[str, ...]] = [("kubectl", "config", "get-contexts", context, "-o", "name")]
-    for target in plan.targets:
-        prefix = ("kubectl", "--context", context, "-n", target.namespace)
-        commands.append(
-            (*prefix, "set", "image", target.resource, f"{target.container}={target.image}")
+    context_command = ("kubectl", "config", "get-contexts", context, "-o", "name")
+    set_image_commands: list[tuple[str, ...]] = []
+    rollout_status_commands: list[tuple[str, ...]] = []
+    for (namespace, resource), targets in grouped_targets(plan).items():
+        prefix = ("kubectl", "--context", context, "-n", namespace)
+        set_image_commands.append(
+            (
+                *prefix,
+                "set",
+                "image",
+                resource,
+                *(f"{target.container}={target.image}" for target in targets),
+            )
         )
-        commands.append((*prefix, "rollout", "status", target.resource, f"--timeout={timeout}"))
-    return tuple(commands)
+        rollout_status_commands.append(
+            (*prefix, "rollout", "status", resource, f"--timeout={timeout}")
+        )
+    return (context_command, *set_image_commands, *rollout_status_commands)
+
+
+def grouped_targets(
+    plan: RollbackPlan,
+) -> dict[tuple[str, str], tuple[RollbackTarget, ...]]:
+    grouped: dict[tuple[str, str], list[RollbackTarget]] = {}
+    for target in plan.targets:
+        grouped.setdefault((target.namespace, target.resource), []).append(target)
+    return {identity: tuple(targets) for identity, targets in grouped.items()}
+
+
+def timeout_seconds(timeout: str) -> float:
+    if not TIMEOUT.fullmatch(timeout):
+        raise ValueError("timeout must be a positive Kubernetes duration such as 300s")
+    multipliers = {"s": 1, "m": 60, "h": 3600}
+    return float(int(timeout[:-1]) * multipliers[timeout[-1]])
+
+
+def _run_rollout_status(command: tuple[str, ...], *, deadline: float) -> None:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"shared rollout deadline expired before {command[-2]}")
+    bounded_command = (*command[:-1], f"--timeout={max(1, math.ceil(remaining))}s")
+    subprocess.run(bounded_command, check=True, timeout=remaining)
+
+
+def wait_for_rollout_statuses(
+    commands: tuple[tuple[str, ...], ...],
+    *,
+    timeout: str,
+    max_workers: int = MAX_ROLLBACK_STATUS_WORKERS,
+) -> None:
+    if not commands:
+        return
+    worker_count = min(max_workers, len(commands))
+    if worker_count < 1:
+        raise ValueError("max_workers must be positive")
+
+    deadline = time.monotonic() + timeout_seconds(timeout)
+    failures: list[tuple[tuple[str, ...], Exception]] = []
+    with ThreadPoolExecutor(
+        max_workers=worker_count,
+        thread_name_prefix="rollback-status",
+    ) as executor:
+        futures = {
+            executor.submit(_run_rollout_status, command, deadline=deadline): command
+            for command in commands
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as error:  # noqa: BLE001 - aggregate every kubectl failure
+                failures.append((futures[future], error))
+
+    if failures:
+        failures.sort(key=lambda failure: failure[0])
+        resources = [command[-2] for command, _error in failures]
+        raise RuntimeError(f"rollback rollout status failed for {resources!r}") from failures[0][1]
+
+
+def live_deployment_images(*, context: str, namespace: str) -> dict[tuple[str, str], str]:
+    result = subprocess.run(
+        (
+            "kubectl",
+            "--context",
+            context,
+            "-n",
+            namespace,
+            "get",
+            "deployments",
+            "-o",
+            "json",
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    document = require_mapping(json.loads(result.stdout), "live deployments")
+    items = document.get("items")
+    if not isinstance(items, list):
+        raise ValueError("live deployments.items must be a list")
+
+    images: dict[tuple[str, str], str] = {}
+    for index, raw_item in enumerate(items):
+        item = require_mapping(raw_item, f"live deployments.items[{index}]")
+        metadata = require_mapping(
+            item.get("metadata"), f"live deployments.items[{index}].metadata"
+        )
+        name = metadata.get("name")
+        if not isinstance(name, str) or not KUBERNETES_NAME.fullmatch(name):
+            raise ValueError(f"live deployments.items[{index}] has an invalid name")
+        spec = require_mapping(item.get("spec"), f"deployment/{name}.spec")
+        template = require_mapping(spec.get("template"), f"deployment/{name}.template")
+        pod_spec = require_mapping(template.get("spec"), f"deployment/{name}.podSpec")
+        containers = pod_spec.get("containers")
+        if not isinstance(containers, list):
+            raise ValueError(f"deployment/{name}.containers must be a list")
+        for container_index, raw_container in enumerate(containers):
+            container = require_mapping(
+                raw_container,
+                f"deployment/{name}.containers[{container_index}]",
+            )
+            container_name = container.get("name")
+            image = container.get("image")
+            if not isinstance(container_name, str) or not isinstance(image, str):
+                raise ValueError(f"deployment/{name} container name and image must be strings")
+            identity = (f"deployment/{name}", container_name)
+            if identity in images:
+                raise ValueError(f"live deployments contain duplicate container {identity}")
+            images[identity] = image
+    return images
+
+
+def verify_exact_live_digests(plan: RollbackPlan, *, context: str) -> int:
+    observed_by_namespace = {
+        namespace: live_deployment_images(context=context, namespace=namespace)
+        for namespace in dict.fromkeys(target.namespace for target in plan.targets)
+    }
+    mismatches = sorted(
+        (target.namespace, target.resource, target.container)
+        for target in plan.targets
+        if observed_by_namespace[target.namespace].get((target.resource, target.container))
+        != target.image
+    )
+    if mismatches:
+        raise RuntimeError(f"rollback digest mismatch: {mismatches!r}")
+    return len(plan.targets)
 
 
 def apply_plan(plan: RollbackPlan, *, context: str, timeout: str) -> None:
@@ -109,8 +251,26 @@ def apply_plan(plan: RollbackPlan, *, context: str, timeout: str) -> None:
     context_result = subprocess.run(commands[0], check=True, capture_output=True, text=True)
     if context_result.stdout.strip() != context:
         raise RuntimeError(f"kubectl context was not found: {context}")
-    for command in commands[1:]:
-        subprocess.run(command, check=True)
+    deployment_count = len(grouped_targets(plan))
+    set_image_commands = commands[1 : 1 + deployment_count]
+    rollout_status_commands = commands[1 + deployment_count :]
+    failures: list[tuple[str, Exception]] = []
+    for command in set_image_commands:
+        try:
+            subprocess.run(command, check=True)
+        except Exception as error:  # noqa: BLE001 - continue restoring every captured target
+            failures.append((f"set image {command[7]}", error))
+    try:
+        wait_for_rollout_statuses(rollout_status_commands, timeout=timeout)
+    except Exception as error:  # noqa: BLE001 - exact digest verification must still run
+        failures.append(("rollout status", error))
+    try:
+        verify_exact_live_digests(plan, context=context)
+    except Exception as error:  # noqa: BLE001 - aggregate the fail-closed rollback evidence
+        failures.append(("exact digest verification", error))
+    if failures:
+        details = "; ".join(f"{label}: {error}" for label, error in failures)
+        raise RuntimeError(f"rollback failed closed: {details}") from failures[0][1]
 
 
 def parse_args() -> argparse.Namespace:
