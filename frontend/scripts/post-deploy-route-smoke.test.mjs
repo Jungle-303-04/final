@@ -100,19 +100,22 @@ describe("post-deploy route smoke helpers", () => {
     expect(isFailureProductState("empty")).toBe(false);
   });
 
-  it("accepts one secure HttpOnly session handoff without exposing its value", () => {
+  it("accepts one HttpOnly root handoff and leaves transport security to the public browser origin", () => {
     const cookie = parseNetscapeSessionCookie([
       "# Netscape HTTP Cookie File",
-      "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\topsia_session\tsecret-token",
+      "#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\topsia_session\tsecret-token",
     ].join("\n"));
 
     expect(cookie).toEqual({ name: "opsia_session", value: "secret-token" });
     expect(() => parseNetscapeSessionCookie("# empty")).toThrow(
-      "exactly one secure HttpOnly root cookie",
+      "exactly one HttpOnly root cookie",
     );
+    expect(() => parseNetscapeSessionCookie(
+      "127.0.0.1\tFALSE\t/\tFALSE\t0\topsia_session\tsecret-token",
+    )).toThrow("exactly one HttpOnly root cookie");
     expect(() => parseNetscapeSessionCookie([
       "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\tone\ttoken-one",
       "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\ttwo\ttoken-two",
-    ].join("\n"))).toThrow("exactly one secure HttpOnly root cookie");
+    ].join("\n"))).toThrow("exactly one HttpOnly root cookie");
   });
 });

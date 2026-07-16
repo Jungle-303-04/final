@@ -74,11 +74,10 @@ export function parseNetscapeSessionCookie(rawCookieJar) {
     const line = httpOnly ? rawLine.slice("#HttpOnly_".length) : rawLine;
     const fields = line.split("\t");
     if (fields.length < 7) continue;
-    const [, , path, secure, , name, value] = fields;
+    const [, , path, , , name, value] = fields;
     if (
       httpOnly
       && path === "/"
-      && secure?.toUpperCase() === "TRUE"
       && name
       && value
     ) {
@@ -88,7 +87,7 @@ export function parseNetscapeSessionCookie(rawCookieJar) {
   assert.equal(
     candidates.length,
     1,
-    "authentication handoff must contain exactly one secure HttpOnly root cookie",
+    "authentication handoff must contain exactly one HttpOnly root cookie",
   );
   return candidates[0];
 }
