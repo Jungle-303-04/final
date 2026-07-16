@@ -30,14 +30,58 @@ describe("resources infra map topology model", () => {
     const groups = topology.clusters[0]?.nodes[0]?.groups ?? [];
 
     expect(groups).toHaveLength(2);
+    expect(groups[0]?.evidence).toBe("replicaGroup");
     expect(groups[0]?.label).toBe("Deployment · api-gateway");
     expect(groups[0]?.pods.map((item) => item.id).sort()).toEqual([
       "pod:api-a",
       "pod:api-b",
     ]);
     expect(groups[1]).toMatchObject({
+      evidence: "singleton",
       key: "singleton:pod:api-c",
       label: "api-gateway-looks-related",
+    });
+  });
+
+  it("falls back through workload and owner evidence without parsing pod names", () => {
+    const model = infraMapModel([
+      pod({
+        id: "pod:workload-a",
+        name: "worker-anything-a",
+        ownerKind: "ReplicaSet",
+        ownerName: "worker-abc",
+        workloadKey: "default/ReplicaSet/worker-abc",
+      }),
+      pod({
+        id: "pod:workload-b",
+        name: "worker-anything-b",
+        ownerKind: "ReplicaSet",
+        ownerName: "worker-abc",
+        workloadKey: "default/ReplicaSet/worker-abc",
+      }),
+      pod({
+        id: "pod:owner-a",
+        name: "owner-a",
+        ownerKind: "Job",
+        ownerName: "batch",
+        ownerUid: "job-uid",
+      }),
+    ]);
+
+    const topology = buildInfraMapTopologyModel(model, "cpu");
+    const groups = topology.clusters[0]?.nodes[0]?.groups ?? [];
+    const byKey = new Map(groups.map((group) => [group.key, group]));
+
+    expect(byKey.get("default/ReplicaSet/worker-abc")).toMatchObject({
+      evidence: "workload",
+      pods: [
+        expect.objectContaining({ id: "pod:workload-a" }),
+        expect.objectContaining({ id: "pod:workload-b" }),
+      ],
+    });
+    expect(byKey.get("owner:job-uid")).toMatchObject({
+      evidence: "owner",
+      pods: [expect.objectContaining({ id: "pod:owner-a" })],
     });
   });
 

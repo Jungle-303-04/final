@@ -33,6 +33,9 @@ describe("ResourcesInfraMapTopologyView", () => {
     expect(screen.getByText("Production")).toBeTruthy();
     const group = screen.getByText("Deployment · api").closest("section");
     expect(group).not.toBeNull();
+    expect(group?.getAttribute("data-group-evidence")).toBe("replicaGroup");
+    expect(group?.getAttribute("data-pod-group-key")).toBe("default/Deployment/api");
+    expect(group?.querySelector('[data-slot="infra-map-topology-honeycomb"]')).not.toBeNull();
     expect(within(group as HTMLElement).getAllByRole("button")).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: /api-a/u }));

@@ -9,7 +9,7 @@ import {
   type InfraMapTopologyNode,
   type InfraMapTopologyPodGroup,
 } from "./resourcesInfraMapTopologyModel";
-import { TopologyPodHex } from "./ResourcesInfraMapTopologyPodHex";
+import { TopologyPodHoneycomb } from "./ResourcesInfraMapTopologyHoneycomb";
 
 export function TopologyClusterDetail({
   cluster,
@@ -149,6 +149,9 @@ function TopologyPodGroup({
   return (
     <section
       className="grid gap-2 rounded-md border bg-background/55 p-2"
+      data-group-evidence={group.evidence}
+      data-group-kind={group.kind ?? undefined}
+      data-pod-group-key={group.key}
       data-slot="infra-map-topology-pod-group"
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
@@ -161,16 +164,12 @@ function TopologyPodGroup({
           })}
         </span>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        {group.pods.map((pod) => (
-          <TopologyPodHex
-            key={pod.id}
-            metricMode={metricMode}
-            onOpenPod={onOpenPod}
-            pod={pod}
-          />
-        ))}
-      </div>
+      <TopologyPodHoneycomb
+        ariaLabel={group.label}
+        metricMode={metricMode}
+        onOpenPod={onOpenPod}
+        pods={group.pods}
+      />
     </section>
   );
 }

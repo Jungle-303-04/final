@@ -21,10 +21,12 @@ import {
 } from "./podVisualState";
 
 export function TopologyPodHex({
+  className,
   metricMode,
   onOpenPod,
   pod,
 }: {
+  className?: string;
   metricMode: InfraMapMetricMode;
   onOpenPod: (pod: InfraMapPod) => void;
   pod: InfraMapPod;
@@ -49,6 +51,7 @@ export function TopologyPodHex({
             className={cn(
               "relative grid size-8 shrink-0 place-items-center outline-none transition-[transform,filter] hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transform-none motion-reduce:transition-none motion-reduce:hover:translate-y-0",
               pressureTone === "unknown" && "opacity-70",
+              className,
             )}
             data-health-tone={healthTone}
             data-metric={metricMode}

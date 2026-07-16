@@ -30,11 +30,18 @@ export interface InfraMapTopologyNode {
 }
 
 export interface InfraMapTopologyPodGroup {
+  evidence: InfraMapTopologyPodGroupEvidence;
   key: string;
   kind: string | null;
   label: string;
   pods: InfraMapPod[];
 }
+
+export type InfraMapTopologyPodGroupEvidence =
+  | "owner"
+  | "replicaGroup"
+  | "singleton"
+  | "workload";
 
 export function buildInfraMapTopologyModel(
   model: InfraMapModel,
@@ -81,6 +88,7 @@ function podGroups(pods: readonly InfraMapPod[]): InfraMapTopologyPodGroup[] {
       continue;
     }
     groups.set(group.key, {
+      evidence: group.evidence,
       key: group.key,
       kind: group.kind,
       label: group.label,
@@ -91,12 +99,14 @@ function podGroups(pods: readonly InfraMapPod[]): InfraMapTopologyPodGroup[] {
 }
 
 function podReplicaGroup(pod: InfraMapPod): {
+  evidence: InfraMapTopologyPodGroupEvidence;
   key: string;
   kind: string | null;
   label: string;
 } {
   if (pod.replicaGroupKey) {
     return {
+      evidence: "replicaGroup",
       key: pod.replicaGroupKey,
       kind: pod.replicaGroupKind,
       label: groupLabel(pod.replicaGroupKind, pod.replicaGroupName, pod.replicaGroupKey),
@@ -104,6 +114,7 @@ function podReplicaGroup(pod: InfraMapPod): {
   }
   if (pod.workloadKey) {
     return {
+      evidence: "workload",
       key: pod.workloadKey,
       kind: pod.ownerKind,
       label: groupLabel(pod.ownerKind, pod.ownerName, pod.workloadKey),
@@ -111,12 +122,14 @@ function podReplicaGroup(pod: InfraMapPod): {
   }
   if (pod.ownerUid) {
     return {
+      evidence: "owner",
       key: `owner:${pod.ownerUid}`,
       kind: pod.ownerKind,
       label: groupLabel(pod.ownerKind, pod.ownerName, pod.ownerUid),
     };
   }
   return {
+    evidence: "singleton",
     key: `singleton:${pod.id}`,
     kind: null,
     label: pod.name,
