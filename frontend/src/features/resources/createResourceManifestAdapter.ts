@@ -5,13 +5,14 @@ import type {
 import {
   ResourceManifestPortFailure,
   type ResourceManifestPort,
+  type ResourceManifestCreatePort,
   type ResourceManifestSourceChoice,
 } from "./resourceManifestContract";
 import { toResourceActionReceipt } from "./resourceCapabilitiesCanonical";
 
 export function createResourceManifestAdapter(
   dependencies: ResourceManifestEndpointDependencies,
-): ResourceManifestPort {
+): ResourceManifestPort & ResourceManifestCreatePort {
   return {
     async loadSource(resourceId, applicationId, signal) {
       return withFailure(async () => {
@@ -82,6 +83,43 @@ export function createResourceManifestAdapter(
           },
           signal,
         ),
+      ));
+    },
+    async loadCreateCapability(clusterId, namespace, signal) {
+      return withFailure(async () => {
+        const value = await dependencies.getResourceManifestCreateCapability(
+          clusterId,
+          namespace,
+          signal,
+        );
+        return {
+          clusterId: value.cluster_id,
+          namespace: value.namespace,
+          snapshotId: value.snapshot_id,
+          available: value.available,
+          reasonCodes: value.reason_codes,
+          maxDocuments: value.max_documents,
+          maxBytes: value.max_bytes,
+          resources: value.resources.map((item) => ({
+            apiVersion: item.api_version,
+            kind: item.kind,
+            resource: item.resource,
+            forceSupported: item.force_supported,
+          })),
+        };
+      });
+    },
+    async dryRunCreate(input, signal) {
+      return withFailure(async () => toResourceActionReceipt(
+        await dependencies.dryRunResourceManifestCreate(input, signal),
+      ));
+    },
+    async createResources(input, signal) {
+      return withFailure(async () => toResourceActionReceipt(
+        await dependencies.createResourceManifest({
+          ...input,
+          confirmation: true,
+        }, signal),
       ));
     },
   };

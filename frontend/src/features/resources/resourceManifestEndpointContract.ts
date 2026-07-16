@@ -50,6 +50,22 @@ export interface ResourceManifestApplyEndpoint {
   status: ResourceActionStatus;
 }
 
+export interface ResourceManifestCreateCapabilityEndpoint {
+  cluster_id: string;
+  namespace: string;
+  snapshot_id: string | null;
+  available: boolean;
+  reason_codes: string[];
+  max_documents: number;
+  max_bytes: number;
+  resources: Array<{
+    api_version: string;
+    kind: string;
+    resource: string;
+    force_supported: boolean;
+  }>;
+}
+
 export interface ResourceManifestApproveEndpoint {
   accepted: boolean;
   event_id: string;
@@ -80,6 +96,37 @@ export interface ResourceManifestEndpointDependencies {
     input: ResourceManifestEditInput & {
       expectedDesiredSha256: string;
       confirmation: true;
+      reason: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestApplyEndpoint>;
+  getResourceManifestCreateCapability(
+    clusterId: string,
+    namespace: string,
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestCreateCapabilityEndpoint>;
+  dryRunResourceManifestCreate(
+    input: {
+      clusterId: string;
+      namespace: string;
+      snapshotId: string;
+      editedYaml: string;
+      force: boolean;
+      reason: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestApplyEndpoint>;
+  createResourceManifest(
+    input: {
+      clusterId: string;
+      namespace: string;
+      snapshotId: string;
+      editedYaml: string;
+      desiredSha256: string;
+      dryRunCommandId: string;
+      confirmation: true;
+      force: boolean;
+      forceConfirmation: boolean;
       reason: string;
     },
     signal?: AbortSignal,

@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyResourceManifestNow,
+  createResourceManifest,
+  dryRunResourceManifestCreate,
   approveResourceManifestEdit,
   getResourceManifestSource,
+  getResourceManifestCreateCapability,
   previewResourceManifestEdit,
 } from "./resource-manifests";
 
@@ -133,6 +136,75 @@ describe("resource manifest API", () => {
       expected_desired_sha256: `sha256:${"c".repeat(64)}`,
       confirmation: true,
       reason: "apply reviewed manifest",
+    });
+  });
+
+  it("discovers create capability and binds dry-run evidence to create", async () => {
+    const capability = {
+      cluster_id: "cluster-1",
+      namespace: "shop",
+      snapshot_id: "snapshot-1",
+      available: true,
+      reason_codes: [],
+      max_documents: 100,
+      max_bytes: 1_048_576,
+      resources: [{
+        api_version: "apps/v1",
+        kind: "Deployment",
+        resource: "deployments",
+        force_supported: true,
+      }],
+    };
+    const dryReceipt = {
+      accepted: true,
+      event_id: "event-dry-1",
+      audit_event_id: "event-dry-1",
+      correlation_id: "correlation-dry-1",
+      command_id: "command-dry-1",
+      status: "queued",
+    } as const;
+    const createReceipt = {
+      ...dryReceipt,
+      event_id: "event-create-1",
+      audit_event_id: "event-create-1",
+      correlation_id: "correlation-create-1",
+      command_id: "command-create-1",
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(capability), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(dryReceipt), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(createReceipt), { status: 202 }));
+    const createInput = {
+      clusterId: "cluster-1",
+      namespace: "shop",
+      snapshotId: "snapshot-1",
+      editedYaml: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: checkout\n",
+      force: true,
+      reason: "create checkout",
+    };
+
+    await expect(getResourceManifestCreateCapability("cluster-1", "shop"))
+      .resolves.toEqual(capability);
+    await expect(dryRunResourceManifestCreate(createInput)).resolves.toEqual(dryReceipt);
+    await expect(createResourceManifest({
+      ...createInput,
+      desiredSha256: `sha256:${"d".repeat(64)}`,
+      dryRunCommandId: "command-dry-1",
+      confirmation: true,
+      forceConfirmation: true,
+    })).resolves.toEqual(createReceipt);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/resource-manifests/create/capability?cluster_id=cluster-1&namespace=shop",
+    );
+    const dryHeaders = new Headers((fetchMock.mock.calls[1][1] as RequestInit).headers);
+    expect(dryHeaders.get("Idempotency-Key")).toMatch(/^manifest-create:dry-run:/u);
+    const createBody = JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body));
+    expect(createBody).toMatchObject({
+      dry_run_command_id: "command-dry-1",
+      confirmation: true,
+      force: true,
+      force_confirmation: true,
     });
   });
 });

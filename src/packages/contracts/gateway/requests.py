@@ -134,6 +134,30 @@ class ResourceManifestDirectApplyRequest(ResourceManifestPreviewRequest):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ResourceManifestCreateDryRunRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=200)
+    namespace: str = Field(min_length=1, max_length=253)
+    snapshot_id: str = Field(min_length=1, max_length=200)
+    edited_yaml: str = Field(min_length=1, max_length=MAX_RESOURCE_MANIFEST_BYTES)
+    force: bool = False
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceManifestCreateRequest(ResourceManifestCreateDryRunRequest):
+    desired_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    dry_run_command_id: str = Field(min_length=8, max_length=200)
+    confirmation: Literal[True]
+    force_confirmation: bool = False
+
+    @model_validator(mode="after")
+    def validate_force_confirmation(self) -> ResourceManifestCreateRequest:
+        if self.force and not self.force_confirmation:
+            raise ValueError("force create requires explicit risk confirmation")
+        if not self.force and self.force_confirmation:
+            raise ValueError("force confirmation is valid only when force is enabled")
+        return self
+
+
 class AgentConnectRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     agent_id: str

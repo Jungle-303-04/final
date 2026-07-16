@@ -896,6 +896,24 @@ class ResourceManifestPreviewResponse(StrictModel):
     impact: list[ResourceManifestImpact] = Field(default_factory=list)
 
 
+class ResourceManifestCreateCapabilityResource(StrictModel):
+    api_version: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    resource: str = Field(min_length=1)
+    force_supported: bool
+
+
+class ResourceManifestCreateCapabilityResponse(StrictModel):
+    cluster_id: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    snapshot_id: str | None = None
+    available: bool
+    reason_codes: list[str] = Field(default_factory=list)
+    max_documents: int = Field(ge=1)
+    max_bytes: int = Field(ge=1)
+    resources: list[ResourceManifestCreateCapabilityResource] = Field(default_factory=list)
+
+
 class ResourceManifestApproveResponse(StrictModel):
     accepted: bool
     event_id: str

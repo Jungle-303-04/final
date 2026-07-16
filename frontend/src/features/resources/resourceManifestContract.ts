@@ -52,6 +52,37 @@ export interface ResourceManifestDirectApplyInput extends ResourceManifestEditIn
   reason: string;
 }
 
+export interface ResourceManifestCreateCapability {
+  clusterId: string;
+  namespace: string;
+  snapshotId: string | null;
+  available: boolean;
+  reasonCodes: string[];
+  maxDocuments: number;
+  maxBytes: number;
+  resources: Array<{
+    apiVersion: string;
+    kind: string;
+    resource: string;
+    forceSupported: boolean;
+  }>;
+}
+
+export interface ResourceManifestCreateDryRunInput {
+  clusterId: string;
+  namespace: string;
+  snapshotId: string;
+  editedYaml: string;
+  force: boolean;
+  reason: string;
+}
+
+export interface ResourceManifestCreateInput extends ResourceManifestCreateDryRunInput {
+  desiredSha256: string;
+  dryRunCommandId: string;
+  forceConfirmation: boolean;
+}
+
 export interface ResourceManifestApprovalReceipt {
   correlationId: string;
   workflowRunId: string;
@@ -77,7 +108,23 @@ export class ResourceManifestPortFailure extends Error {
   }
 }
 
-export interface ResourceManifestPort {
+export interface ResourceManifestCreatePort {
+  loadCreateCapability(
+    clusterId: string,
+    namespace: string,
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestCreateCapability>;
+  dryRunCreate(
+    input: ResourceManifestCreateDryRunInput,
+    signal?: AbortSignal,
+  ): Promise<CommandReceipt>;
+  createResources(
+    input: ResourceManifestCreateInput,
+    signal?: AbortSignal,
+  ): Promise<CommandReceipt>;
+}
+
+export interface ResourceManifestPort extends Partial<ResourceManifestCreatePort> {
   loadSource(
     resourceId: string,
     applicationId?: string | null,

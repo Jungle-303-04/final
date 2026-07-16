@@ -9,7 +9,10 @@ import {
   type OperationStatusSnapshot,
   type OperationStatusStore,
 } from "../../features/operations/OperationStatusStore";
-import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
+import type {
+  ResourceManifestCreatePort,
+  ResourceManifestPort,
+} from "../../features/resources/resourceManifestContract";
 import { I18nProvider } from "../../shared/i18n";
 import { ResourceManifestCreateDialog } from "./ResourceManifestCreateDialog";
 
@@ -55,7 +58,7 @@ describe("ResourceManifestCreateDialog", () => {
   });
 });
 
-function createPort(): ResourceManifestPort {
+function createPort(): ResourceManifestPort & ResourceManifestCreatePort {
   return {
     loadSource: vi.fn(),
     preview: vi.fn(),

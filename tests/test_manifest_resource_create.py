@@ -53,6 +53,7 @@ data:
 class CreateDb:
     def __init__(self) -> None:
         self.command: dict[str, object] | None = None
+        self.command_id: str | None = None
 
     def can_access(self, *_args: object) -> bool:
         return True
@@ -84,9 +85,9 @@ class CreateDb:
         return [{"status": "connected", "capabilities": ["command_receiver"]}]
 
     async def get_agent_command(
-        self, _command_id: str, _workspace_id: str
+        self, command_id: str, _workspace_id: str
     ) -> dict[str, object] | None:
-        return self.command
+        return self.command if self.command_id == command_id else None
 
 
 class CreateEvents:
@@ -252,6 +253,7 @@ def test_create_requires_matching_successful_server_dry_run(
         "payload": {"payload": {"create_mode": True, "dry_run": True}},
         "result": {"dry_run": True, "completeness": "partial"},
     }
+    db.command_id = "cmd-create-dry-run-1"
 
     with pytest.raises(HTTPException) as error:
         asyncio.run(
@@ -276,3 +278,70 @@ def test_create_requires_matching_successful_server_dry_run(
         )
 
     assert error.value.status_code == 409
+
+
+def test_create_reuses_matching_dry_run_and_dispatches_audited_live_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "shop")
+    db = CreateDb()
+    dry_events = CreateEvents()
+    dry_receipt = asyncio.run(
+        dry_run_resource_manifest_create(
+            ResourceManifestCreateDryRunRequest(
+                cluster_id="cluster-1",
+                namespace="shop",
+                snapshot_id="snapshot-1",
+                edited_yaml=CREATE_YAML,
+                force=False,
+                reason="validate resources",
+            ),
+            "create-dry-run-key-003",
+            session(),
+            db,
+            dry_events,
+            OperationEvents(),
+        )
+    )
+    dry_command = dry_events.bodies[0]
+    desired_sha256 = dry_command.payload["desired_sha256"]
+    db.command = {
+        "action": "apply_manifest",
+        "status": "completed",
+        "payload": {"payload": dry_command.payload},
+        "result": {
+            "dry_run": True,
+            "completeness": "exact",
+            "desired_sha256": desired_sha256,
+        },
+    }
+    db.command_id = dry_receipt.command_id
+    live_events = CreateEvents()
+
+    receipt = asyncio.run(
+        apply_resource_manifest_create(
+            ResourceManifestCreateRequest(
+                cluster_id="cluster-1",
+                namespace="shop",
+                snapshot_id="snapshot-1",
+                edited_yaml=CREATE_YAML,
+                desired_sha256=desired_sha256,
+                dry_run_command_id=dry_receipt.command_id,
+                confirmation=True,
+                force=False,
+                force_confirmation=False,
+                reason="validate resources",
+            ),
+            "create-apply-key-002",
+            session(),
+            db,
+            live_events,
+            OperationEvents(),
+        )
+    )
+
+    assert receipt.status == "queued"
+    live_command = live_events.bodies[0]
+    assert live_command.direct_execution_confirmed is True
+    assert live_command.payload["dry_run"] is False
+    assert live_command.payload["desired_sha256"] == desired_sha256

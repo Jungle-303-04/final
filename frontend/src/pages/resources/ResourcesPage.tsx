@@ -23,7 +23,10 @@ import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
-import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
+import type {
+  ResourceManifestCreatePort,
+  ResourceManifestPort,
+} from "../../features/resources/resourceManifestContract";
 import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
@@ -55,6 +58,7 @@ import { useResourceTopologyViewController } from "./useResourceTopologyViewCont
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
 import { usePhysicalTopologyRealtime } from "./usePhysicalTopologyRealtime";
 import { ResourcesLiveStatus } from "./ResourcesLiveStatus";
+import { ResourceManifestCreateDialog } from "./ResourceManifestCreateDialog";
 import { selectResourceMetricIds } from "./resourceMetricSelection";
 import {
   EMPTY_POD_TERMINAL_PORT,
@@ -270,6 +274,10 @@ export function ResourcesPage({
     [state.choices, state.catalog, state.list, state.detail].some(
       (resource) => resource.phase === "ready" && resource.refreshing,
     ) || filtered.list.refreshing;
+  const createNamespace = filter.state.common.namespaces.length === 1
+    && filter.state.common.namespaces[0].clusterId === state.selectedClusterId
+    ? filter.state.common.namespaces[0].namespace
+    : null;
   return (
     <div
       className="flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden"
@@ -286,6 +294,18 @@ export function ResourcesPage({
         <ProductPageFrame>
           <header className="flex min-w-0 justify-end">
             <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 xl:w-auto">
+              {isResourceManifestCreatePort(resourceManifestPort)
+                && state.selectedClusterExists
+                && state.selectedClusterId !== null
+                && createNamespace !== null ? (
+                  <ResourceManifestCreateDialog
+                    clusterId={state.selectedClusterId}
+                    namespace={createNamespace}
+                    onInvalidate={state.refresh}
+                    onUnauthorized={reportUnauthorized}
+                    port={resourceManifestPort}
+                  />
+                ) : null}
               {state.automaticRefreshPaused ? (
                 <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
               ) : null}
@@ -404,3 +424,11 @@ export function ResourcesPage({
 const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
   loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
 };
+
+function isResourceManifestCreatePort(
+  port: ResourceManifestPort | undefined,
+): port is ResourceManifestPort & ResourceManifestCreatePort {
+  return typeof port?.loadCreateCapability === "function"
+    && typeof port.dryRunCreate === "function"
+    && typeof port.createResources === "function";
+}

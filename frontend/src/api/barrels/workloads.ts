@@ -1,20 +1,27 @@
 export {
   approveResourceManifestEdit,
   applyResourceManifestNow,
+  createResourceManifest,
+  dryRunResourceManifestCreate,
   getResourceManifestSource,
+  getResourceManifestCreateCapability,
   previewResourceManifestEdit,
   type ResourceManifestApprovalInput,
   type ResourceManifestDirectApplyInput,
+  type ResourceManifestCreateDryRunInput,
+  type ResourceManifestCreateInput,
   type ResourceManifestEditInput,
 } from "../resource-manifests";
 export {
   resourceManifestApproveSchema,
   resourceManifestApplySchema,
+  resourceManifestCreateCapabilitySchema,
   resourceManifestPreviewSchema,
   resourceManifestSourceChoiceSchema,
   resourceManifestSourceSchema,
   type ResourceManifestApproveEndpoint,
   type ResourceManifestApplyEndpoint,
+  type ResourceManifestCreateCapabilityEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
 } from "../resource-manifests-schemas";

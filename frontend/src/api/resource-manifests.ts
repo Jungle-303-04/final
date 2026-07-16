@@ -2,10 +2,12 @@ import { apiRequest, type ApiPath } from "./client";
 import {
   resourceManifestApproveSchema,
   resourceManifestApplySchema,
+  resourceManifestCreateCapabilitySchema,
   resourceManifestPreviewSchema,
   resourceManifestSourceSchema,
   type ResourceManifestApproveEndpoint,
   type ResourceManifestApplyEndpoint,
+  type ResourceManifestCreateCapabilityEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
 } from "./resource-manifests-schemas";
@@ -27,6 +29,22 @@ export interface ResourceManifestDirectApplyInput extends ResourceManifestEditIn
   expectedDesiredSha256: string;
   confirmation: true;
   reason: string;
+}
+
+export interface ResourceManifestCreateDryRunInput {
+  clusterId: string;
+  namespace: string;
+  snapshotId: string;
+  editedYaml: string;
+  force: boolean;
+  reason: string;
+}
+
+export interface ResourceManifestCreateInput extends ResourceManifestCreateDryRunInput {
+  desiredSha256: string;
+  dryRunCommandId: string;
+  confirmation: true;
+  forceConfirmation: boolean;
 }
 
 export function getResourceManifestSource(
@@ -90,6 +108,48 @@ export function applyResourceManifestNow(
   });
 }
 
+export function getResourceManifestCreateCapability(
+  clusterId: string,
+  namespace: string,
+  signal?: AbortSignal,
+): Promise<ResourceManifestCreateCapabilityEndpoint> {
+  const path = withQuery("/api/resource-manifests/create/capability" as ApiPath, [
+    ["cluster_id", clusterId],
+    ["namespace", namespace],
+  ]);
+  return apiRequest(path, resourceManifestCreateCapabilitySchema, { signal });
+}
+
+export function dryRunResourceManifestCreate(
+  input: ResourceManifestCreateDryRunInput,
+  signal?: AbortSignal,
+): Promise<ResourceManifestApplyEndpoint> {
+  return apiRequest("/api/resource-manifests/create/dry-run" as ApiPath, resourceManifestApplySchema, {
+    method: "POST",
+    headers: createHeaders("dry-run", input),
+    body: JSON.stringify(createRequestBody(input)),
+    signal,
+  });
+}
+
+export function createResourceManifest(
+  input: ResourceManifestCreateInput,
+  signal?: AbortSignal,
+): Promise<ResourceManifestApplyEndpoint> {
+  return apiRequest("/api/resource-manifests/create" as ApiPath, resourceManifestApplySchema, {
+    method: "POST",
+    headers: createHeaders("apply", input),
+    body: JSON.stringify({
+      ...createRequestBody(input),
+      desired_sha256: input.desiredSha256,
+      dry_run_command_id: input.dryRunCommandId,
+      confirmation: input.confirmation,
+      force_confirmation: input.forceConfirmation,
+    }),
+    signal,
+  });
+}
+
 function resourceManifestPath(resourceId: string, action: "preview" | "approve" | "apply"): ApiPath {
   return `/api/resource-manifests/${encodePathSegment(resourceId)}/${action}` as ApiPath;
 }
@@ -111,6 +171,36 @@ function simpleHash(value: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function createHeaders(
+  mode: "dry-run" | "apply",
+  input: ResourceManifestCreateDryRunInput,
+): Record<string, string> {
+  const fingerprint = [
+    mode,
+    input.clusterId,
+    input.namespace,
+    input.snapshotId,
+    String(input.force),
+    input.reason,
+    input.editedYaml,
+  ].join("\u0000");
+  return {
+    "content-type": "application/json",
+    "Idempotency-Key": `manifest-create:${mode}:${simpleHash(fingerprint)}`,
+  };
+}
+
+function createRequestBody(input: ResourceManifestCreateDryRunInput) {
+  return {
+    cluster_id: input.clusterId,
+    namespace: input.namespace,
+    snapshot_id: input.snapshotId,
+    edited_yaml: input.editedYaml,
+    force: input.force,
+    reason: input.reason,
+  };
 }
 
 function requestBody(input: ResourceManifestEditInput) {

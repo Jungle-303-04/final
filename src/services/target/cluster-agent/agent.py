@@ -265,6 +265,7 @@ class AgentConfig:
     COMMAND_COMPLETED_STATUS = CommandStatus.COMPLETED
     COMMAND_FAILED_STATUS = CommandStatus.FAILED
     APPLY_MANIFEST_ACTION = Command.APPLY_MANIFEST_ACTION
+    MANIFEST_CREATE_FIELD_MANAGER = "opsia-resource-create"
     ROLLOUT_RESTART_ACTION = Command.DEFAULT_ACTION
     COMMAND_RESULT_MESSAGE = "Kubernetes action processed in sandbox namespace"
     MANIFEST_CREATED_MESSAGE = "Kubernetes manifest created in sandbox namespace"
@@ -1802,11 +1803,26 @@ class TargetClusterAgent:
         nested = ctx.raw_payload.get("payload") if isinstance(ctx.raw_payload, dict) else None
         desired_documents = nested.get("desired_documents") if isinstance(nested, dict) else None
         resource_ref = nested.get("resource_ref") if isinstance(nested, dict) else None
+        create_mode = nested.get("create_mode") is True if isinstance(nested, dict) else False
+        dry_run = nested.get("dry_run") is True if isinstance(nested, dict) else False
+        force = nested.get("force") is True if isinstance(nested, dict) else False
+        force_confirmation = (
+            nested.get("force_confirmation") is True if isinstance(nested, dict) else False
+        )
+        field_manager = str(nested.get("field_manager") or "") if isinstance(nested, dict) else ""
+        desired_sha256 = str(nested.get("desired_sha256") or "") if isinstance(nested, dict) else ""
         if isinstance(desired_documents, list):
             return await self.apply_manifest_documents(
                 desired_documents,
                 resource_ref if isinstance(resource_ref, dict) else {},
                 namespace,
+                create_mode=create_mode,
+                dry_run=dry_run,
+                force=force,
+                force_confirmation=force_confirmation,
+                field_manager=field_manager,
+                desired_sha256=desired_sha256,
+                cancel_requested=ctx.metadata.get("cooperative_cancel_requested"),
             )
         desired_manifest = diff.get("desired_manifest")
         if isinstance(desired_manifest, dict) and desired_manifest:
@@ -1849,6 +1865,14 @@ class TargetClusterAgent:
         desired_documents: list[object],
         resource_ref: JsonObject,
         fallback_namespace: str,
+        *,
+        create_mode: bool = False,
+        dry_run: bool = False,
+        force: bool = False,
+        force_confirmation: bool = False,
+        field_manager: str = "",
+        desired_sha256: str = "",
+        cancel_requested: object = None,
     ) -> JsonObject:
         if not desired_documents or len(desired_documents) > 100:
             return self.command_result(False, "apply_manifest desired_documents is invalid")
@@ -1856,7 +1880,13 @@ class TargetClusterAgent:
         expected_kind = str(resource_ref.get("kind") or "")
         expected_name = str(resource_ref.get("name") or "")
         expected_namespace = str(resource_ref.get("namespace") or fallback_namespace)
-        if not expected_uid or not expected_kind or not expected_name:
+        if create_mode and force and not force_confirmation:
+            return self.command_result(False, "force create requires explicit confirmation")
+        if create_mode and field_manager != AgentConfig.MANIFEST_CREATE_FIELD_MANAGER:
+            return self.command_result(False, "create field manager is invalid")
+        if create_mode and not desired_sha256.startswith("sha256:"):
+            return self.command_result(False, "create desired manifest hash is invalid")
+        if not create_mode and (not expected_uid or not expected_kind or not expected_name):
             return self.command_result(False, "apply_manifest resource identity is incomplete")
 
         prepared: list[tuple[JsonObject, KubernetesManifestResource, str | None]] = []
@@ -1879,7 +1909,7 @@ class TargetClusterAgent:
                 if identity in identities:
                     raise ValueError("desired_documents contains duplicate resource identities")
                 identities.add(identity)
-                selected = (
+                selected = not create_mode and (
                     resource.kind.casefold() == expected_kind.casefold()
                     and resource.namespace == expected_namespace
                     and resource.name == expected_name
@@ -1888,7 +1918,7 @@ class TargetClusterAgent:
                 prepared.append((resource.manifest, resource, expected_uid if selected else None))
         except ValueError as exc:
             return self.command_result(False, str(exc))
-        if selected_count != 1:
+        if not create_mode and selected_count != 1:
             return self.command_result(
                 False,
                 "desired_documents must contain the exact selected resource once",
@@ -1897,26 +1927,51 @@ class TargetClusterAgent:
         resources: list[JsonObject] = []
         successes = 0
         for manifest, resource, document_uid in prepared:
-            applied, message, rollout = await self.apply_kubernetes_manifest(
-                manifest,
-                resource.namespace,
-                expected_uid=document_uid,
-            )
-            successes += int(applied)
+            if isinstance(cancel_requested, asyncio.Event) and cancel_requested.is_set():
+                return {
+                    Gateway.STATUS: CommandStatus.CANCELLED,
+                    Gateway.CLUSTER_ID: self.cluster_id,
+                    Gateway.APPLIED: successes > 0 and not dry_run,
+                    Gateway.MESSAGE: "manifest create cancelled at a safe document boundary",
+                    Gateway.RETRYABLE: False,
+                    Gateway.RESOURCES: resources,
+                    Gateway.STDOUT: "",
+                    Gateway.STDERR: "",
+                    "completeness": "partial" if successes else "unavailable",
+                    "dry_run": dry_run,
+                    "force": force,
+                    "desired_sha256": desired_sha256,
+                }
+            if create_mode:
+                succeeded, message, rollout = await self.create_kubernetes_manifest(
+                    manifest,
+                    resource.namespace,
+                    dry_run=dry_run,
+                    force=force,
+                    field_manager=field_manager,
+                )
+            else:
+                succeeded, message, rollout = await self.apply_kubernetes_manifest(
+                    manifest,
+                    resource.namespace,
+                    expected_uid=document_uid,
+                )
+            successes += int(succeeded)
+            applied = succeeded and not dry_run
             resources.append(
                 {
                     "resource": f"{resource.kind}/{resource.name}",
                     "namespace": resource.namespace,
                     "status": (
                         AgentConfig.COMMAND_COMPLETED_STATUS
-                        if applied
+                        if succeeded
                         else AgentConfig.COMMAND_FAILED_STATUS
                     ),
                     "applied": applied,
-                    "retryable": not applied,
+                    "retryable": not succeeded,
                     "message": message,
-                    "stdout": sanitize_command_output(message if applied else ""),
-                    "stderr": sanitize_command_output("" if applied else message),
+                    "stdout": sanitize_command_output(message if succeeded else ""),
+                    "stderr": sanitize_command_output("" if succeeded else message),
                     "rollout": rollout,
                 }
             )
@@ -1930,7 +1985,7 @@ class TargetClusterAgent:
         return {
             Gateway.STATUS: status,
             Gateway.CLUSTER_ID: self.cluster_id,
-            Gateway.APPLIED: successes > 0,
+            Gateway.APPLIED: successes > 0 and not dry_run,
             Gateway.MESSAGE: (
                 "all manifest documents applied"
                 if failures == 0
@@ -1941,7 +1996,51 @@ class TargetClusterAgent:
             Gateway.STDOUT: "",
             Gateway.STDERR: "" if failures == 0 else "one or more manifest documents failed",
             "completeness": completeness,
+            "dry_run": dry_run,
+            "force": force,
+            "desired_sha256": desired_sha256,
         }
+
+    async def create_kubernetes_manifest(
+        self,
+        manifest: JsonObject,
+        fallback_namespace: str,
+        *,
+        dry_run: bool,
+        force: bool,
+        field_manager: str,
+    ) -> tuple[bool, str, JsonObject]:
+        base_url = kubernetes_api_base_url()
+        token = service_account_token()
+        if not base_url or not token:
+            return False, "kubernetes api not configured", {}
+        try:
+            resource = kubernetes_manifest_resource(manifest, fallback_namespace)
+        except ValueError as exc:
+            return False, str(exc), {}
+        if not control_namespace_allowed(resource.namespace):
+            return False, AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE, {}
+        query = "fieldValidation=Strict"
+        if dry_run:
+            query = f"{query}&dryRun=All"
+        async with kubernetes_client(self.kubernetes_transport) as client:
+            if force:
+                response = await client.patch(
+                    f"{resource.resource_url(base_url)}?fieldManager={field_manager}&force=true&{query}",
+                    json=resource.manifest,
+                    headers=kubernetes_headers(token, "application/apply-patch+yaml"),
+                )
+                operation = "server dry-run apply" if dry_run else "server-side apply"
+            else:
+                response = await client.post(
+                    f"{resource.collection_url(base_url)}?{query}",
+                    json=resource.manifest,
+                    headers=kubernetes_headers(token, "application/json"),
+                )
+                operation = "server dry-run create" if dry_run else "create"
+        if response.is_error:
+            return False, kubernetes_failure_message(operation, response), {}
+        return True, f"Kubernetes {operation} accepted", {}
 
     @command.handler(Command.RCA_TEST_SCENARIO_INJECT_ACTION)
     async def rca_test_scenario_inject_command(

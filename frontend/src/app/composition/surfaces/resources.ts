@@ -2,6 +2,9 @@ import type { ComponentType } from "react";
 import {
   approveResourceManifestEdit,
   applyResourceManifestNow,
+  createResourceManifest,
+  dryRunResourceManifestCreate,
+  getResourceManifestCreateCapability,
   cancelCommand,
   executeResourceCapability,
   getChangeTimeline,
@@ -80,7 +83,10 @@ export function loadResourcesSurface(
     createResourceManifestAdapter({
       approveResourceManifestEdit,
       applyResourceManifestNow,
+      createResourceManifest,
+      dryRunResourceManifestCreate,
       getResourceManifestSource,
+      getResourceManifestCreateCapability,
       previewResourceManifestEdit,
     }),
     createResourceIssuesAdapter({ getResourceIssues }),

@@ -645,6 +645,77 @@ def test_apply_manifest_reports_each_document_and_partial_failure() -> None:
     ]
 
 
+def test_create_manifest_dry_run_reports_per_document_partial_without_applied_state() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    calls: list[tuple[str, bool, bool]] = []
+
+    async def stub_create(
+        manifest: dict[str, object],
+        namespace: str,
+        *,
+        dry_run: bool,
+        force: bool,
+        field_manager: str,
+    ) -> tuple[bool, str, dict[str, object]]:
+        metadata = manifest["metadata"]
+        assert isinstance(metadata, dict)
+        name = str(metadata["name"])
+        assert namespace == "sandbox"
+        assert field_manager == "opsia-resource-create"
+        calls.append((name, dry_run, force))
+        return (name == "checkout-api", f"validated {name}", {})
+
+    agent.create_kubernetes_manifest = stub_create
+    register_agent_commands(module, agent)
+    desired_sha256 = "sha256:" + "d" * 64
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.APPLY_MANIFEST_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "diff": {"namespace": "sandbox"},
+                    "payload": {
+                        "create_mode": True,
+                        "dry_run": True,
+                        "force": False,
+                        "force_confirmation": False,
+                        "field_manager": "opsia-resource-create",
+                        "desired_sha256": desired_sha256,
+                        "desired_documents": [
+                            {
+                                "apiVersion": "apps/v1",
+                                "kind": "Deployment",
+                                "metadata": {
+                                    "name": "checkout-api",
+                                    "namespace": "sandbox",
+                                },
+                            },
+                            {
+                                "apiVersion": "v1",
+                                "kind": "ConfigMap",
+                                "metadata": {"name": "shared", "namespace": "sandbox"},
+                            },
+                        ],
+                    },
+                },
+            }
+        )
+    )
+
+    assert calls == [("checkout-api", True, False), ("shared", True, False)]
+    assert result["status"] == "failed"
+    assert result["applied"] is False
+    assert result["dry_run"] is True
+    assert result["desired_sha256"] == desired_sha256
+    assert result["completeness"] == "partial"
+
+
 def test_rollout_restart_keeps_plan_diff_payload() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)
