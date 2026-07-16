@@ -641,6 +641,352 @@
         }
       }
     },
+    "reference.feature.038": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway.responses.ClusterSummaryDetailResponse",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_fleet_router.py",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/pages/home/HomeClusterHealth.test.tsx",
+        "frontend/src/pages/home/HomePage.semantics.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
+          "consumer": "src/domains/dashboard/fleet_router.py#build_cluster_summary_detail",
+          "reason": "Health, Pod, Node, workload, CPU, memory, restart, warning, incident, and freshness evidence are server-projected, but Kubernetes version is not retained in the summary contract.",
+          "test": "tests/test_fleet_router.py#test_cluster_summary_groups_workloads_and_lists_incidents"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/home/HomeClusterHealth.tsx#HomeClusterHealth",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The health card and manual refresh are implemented with partial and access states, but version disclosure and all source count drilldowns are not complete.",
+          "test": "frontend/src/pages/home/HomeClusterHealth.test.tsx"
+        }
+      }
+    },
+    "reference.feature.039": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway.responses",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "frontend/src/pages/home/HomePage.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
+        "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
+          "reason": "Topology and Timeline have separate authorized contracts, but no bounded Home preview composition returns both summaries with one scope and completeness model.",
+          "test": "scripts/reference-home-insights-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/HomeLiveBand.tsx#HomeLiveBand",
+          "reason": "The current live band is an exact Node and Pod drilldown and does not render topology or recent Timeline previews.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.040": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_traffic_router.py",
+        "tests/test_helm_release_router.py",
+        "tests/test_cost_router.py",
+        "frontend/src/pages/home/HomePage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/helm/release_router.py#get_helm_releases",
+          "reason": "Traffic and Helm expose separate typed reads and Cost exposes explicit provider absence, but no Home exploration summary composes their availability without duplicate adapters.",
+          "test": "scripts/reference-home-insights-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
+          "reason": "No Traffic, Helm, or capability-gated Cost card is mounted; the existing regression test intentionally rejects source-only provider claims.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.041": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.checks.observations",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_checks_router.py",
+        "tests/test_gitops_filter_router.py",
+        "frontend/src/pages/home/HomePage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/checks/router.py#get_checks_overview",
+          "reason": "Audit and GitOps have partial standalone projections, but certificate expiry, NetworkPolicy coverage, and one unified Home posture response are unavailable.",
+          "test": "scripts/reference-home-insights-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
+          "reason": "Home has no server-evidence posture band and must not infer certificate, policy, controller, or audit health from generic inventory.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.042": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterSummaryDetailResponse",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_fleet_router.py",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/pages/home/HomePage.semantics.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
+          "consumer": "src/domains/dashboard/fleet_router.py#build_cluster_summary_detail",
+          "test": "tests/test_fleet_router.py#test_cluster_summary_groups_workloads_and_lists_incidents"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeIssuesRail.tsx#HomeIssuesRail",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "test": "frontend/src/pages/home/HomePage.semantics.test.tsx"
+        }
+      }
+    },
+    "reference.feature.065": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/clusters/clustersContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_target_registration.py",
+        "frontend/src/api/cluster-connection.test.ts",
+        "frontend/src/features/clusters/createClustersAdapter.test.ts",
+        "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#get_cluster_connection_status",
+          "consumer": "src/domains/target/router.py#connection_refresh_after_seconds",
+          "test": "tests/test_target_registration.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/clusters/ClusterConnectDialog.tsx#ClusterConnectDialog",
+          "consumer": "frontend/src/features/clusters/createClustersAdapter.ts#createClustersAdapter",
+          "test": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx"
+        }
+      }
+    },
+    "reference.feature.113": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway.responses.ClusterSummaryDetailResponse",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_fleet_router.py",
+        "frontend/src/api/cluster-summary.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/pages/home/useHomePageState.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_summary_detail",
+          "consumer": "src/domains/dashboard/fleet_router.py#build_cluster_summary_detail",
+          "reason": "The normalized Python endpoints provide authorized health, workload, warning, incident, usage, Node, and Pod sections, but not the complete monolithic topology, traffic, posture, and deferred-loading response.",
+          "test": "tests/test_fleet_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/home/useHomeClusterFrame.ts#useHomeClusterFrame",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "Home preserves last-success, partial failure, forbidden access, and scope generation per section, while provider-specific dashboard sections remain unavailable.",
+          "test": "frontend/src/pages/home/useHomePageState.test.tsx"
+        }
+      }
+    },
+    "reference.feature.114": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway.responses",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/pages/home/HomePage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory_filter/router.py#list_filtered_resources",
+          "reason": "Dynamic resource discovery exists, but no bounded top-CRD count contract with discovery completeness is exposed.",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
+          "reason": "No lazy CRD count card or adapter exists.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.115": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_helm_release_router.py",
+        "tests/test_helm_release_projection.py",
+        "frontend/src/pages/helm/HelmPage.test.tsx",
+        "frontend/src/pages/home/HomePage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#get_helm_releases",
+          "consumer": "src/domains/helm/release_projection.py#helm_release_list",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
+          "reason": "The shared Helm adapter is not composed into a lazy Home summary card with restricted and unavailable feedback.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.116": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway.responses.RcaIssueListResponse",
+      "frontendContract": "frontend/src/features/issues/issuesContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_dashboard_router.py",
+        "frontend/src/api/rca-issues.test.ts",
+        "frontend/src/features/issues/createIssuesAdapter.test.ts",
+        "frontend/src/features/issues/IssuesSurface.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/dashboard/router.py#rca_issues",
+          "consumer": "src/domains/dashboard/repository.py#DashboardRepository.list_rca_issues",
+          "reason": "The authorized bounded queue and server severity projection are implemented, but namespace, category, matched totals, recent changes, and visibility summary are not part of this response.",
+          "test": "tests/test_dashboard_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/features/issues/IssuesSurface.tsx#IssuesSurface",
+          "consumer": "frontend/src/features/issues/createIssuesAdapter.ts#createIssuesAdapter",
+          "reason": "The queue polls visibly, keeps the last successful list, and renders permission failures, but does not expose the complete source filter and visibility contract.",
+          "test": "frontend/src/features/issues/IssuesSurface.test.tsx"
+        }
+      }
+    },
+    "reference.feature.121": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.checks.observations",
+      "frontendContract": "frontend/src/features/checks/checksContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_checks_router.py",
+        "frontend/src/pages/checks/ChecksPage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/checks/router.py#get_checks_overview",
+          "reason": "No revisioned hidden check, category, or namespace settings repository and authenticated read endpoint exists.",
+          "test": "scripts/reference-home-insights-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
+          "reason": "No server-backed audit settings editor can be mounted.",
+          "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.122": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.checks.observations",
+      "frontendContract": "frontend/src/features/checks/checksContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_checks_router.py",
+        "frontend/src/pages/checks/ChecksPage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/checks/router.py",
+          "reason": "No owner-authorized PUT contract, expected revision, audit event, or targeted finding invalidation exists.",
+          "test": "scripts/reference-home-insights-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
+          "reason": "No persistence receipt or conflict-safe save flow exists.",
+          "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
+        }
+      }
+    },
+    "reference.feature.123": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.gateway.responses",
+      "frontendContract": "frontend/src/features/home/homeContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "frontend/src/pages/home/HomePage.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
+          "reason": "Observed per-resource certificate fields may be returned, but no authorized expiry summary, completeness model, or bounded Secret collection exists.",
+          "test": "scripts/reference-home-insights-parity.test.mjs"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
+          "reason": "No certificate health card consumes a server summary; the browser does not parse Secret data to derive expiry.",
+          "test": "frontend/src/pages/home/HomePage.test.tsx"
+        }
+      }
+    },
     "reference.feature.124": {
       "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
@@ -2645,7 +2991,8 @@
         "tests/test_timeline_sse_router.py",
         "frontend/src/api/timeline.test.ts",
         "frontend/src/features/timeline/createTimelineAdapter.test.ts",
-        "frontend/src/pages/timeline/timelineFrameReducer.test.ts"
+        "frontend/src/pages/timeline/timelineFrameReducer.test.ts",
+        "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
@@ -2659,6 +3006,13 @@
           "destination": "frontend/src/features/timeline/createTimelineAdapter.ts#createTimelineAdapter",
           "consumer": "frontend/src/api/timeline.ts#subscribeTimelineEvents",
           "test": "frontend/src/features/timeline/createTimelineAdapter.test.ts"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/timeline/router.py#stream_timeline_events",
+          "consumer": "frontend/src/pages/timeline/useTimelineDataFrame.ts#useTimelineDataFrame",
+          "reason": "Signed opaque cursor replay, Last-Event-ID resume, explicit retention resync, bounded server batches, negotiated reconnect, and animation-frame coalescing are implemented end to end.",
+          "test": "tests/test_timeline_sse_router.py"
         }
       }
     },

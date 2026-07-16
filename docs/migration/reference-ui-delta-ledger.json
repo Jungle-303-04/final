@@ -1816,7 +1816,9 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:issues:queue:verified-severity-order:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.116"
+          ],
           "symbol": "IssuesView / IssueRow severity meta chips",
           "interaction": "the issue queue presents verified critical rows before warning rows and retains the server order for equal or unavailable tiers without deriving timestamps or detector state in the browser",
           "transport": "none",
@@ -9566,6 +9568,169 @@
           }
         },
         {
+          "sourceKey": "upstream-ui:home:dashboard-api:sectioned-projection:v1",
+          "legacyContractIds": [
+            "reference.feature.113"
+          ],
+          "symbol": "useDashboard main response and section refresh",
+          "interaction": "Home reads authorized cluster health, workloads, warnings, incidents, and usage through independent typed sections that preserve successful data when another source is partial, unavailable, or access-restricted",
+          "transport": "poll",
+          "realtime": {
+            "resume": "visibility and manual refresh reacquire only the active workspace and cluster scope",
+            "backpressure": "deduplicate each exact section read and abort superseded cluster or node generations",
+            "merge": "apply a section only when its cluster, namespace scope, and refresh generation remain current"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/cluster-summary.ts",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "frontend/src/pages/home/useHomeClusterFrame.ts",
+              "src/domains/dashboard/fleet_router.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.fleet_router"
+            ],
+            "plannedTestIds": [
+              "home.load-state.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses smaller authorized Python projections and one Home adapter rather than duplicating the source monolithic dashboard response."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:dashboard-crds:bounded-counts:v1",
+          "legacyContractIds": [
+            "reference.feature.114"
+          ],
+          "symbol": "useDashboardCRDs lazy count query",
+          "interaction": "a lazy Home card may list top dynamic Kubernetes resource kinds only from an authorized server count projection with explicit boundedness and discovery completeness",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact scope after visibility recovery or a discovery revision change",
+            "backpressure": "cap returned kinds and avoid scanning arbitrary CRDs in the browser",
+            "merge": "replace counts only for the current cluster, namespace set, and inventory snapshot revision"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomePage.tsx",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.inventory_filter.router"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The dynamic inventory catalog can discover resource identities, but no bounded top-CRD count response or Home consumer exists.",
+            "rationale": "The browser does not aggregate arbitrary inventory pages into a fake CRD leaderboard."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:dashboard-helm:authorized-summary:v1",
+          "legacyContractIds": [
+            "reference.feature.115"
+          ],
+          "symbol": "useDashboardHelm lazy release summary",
+          "interaction": "Home may summarize authorized Helm releases only through the shared release projection, preserving provider availability, scope restrictions, and errors without running a second browser-side release model",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the same cluster and namespace scope after visibility recovery",
+            "backpressure": "reuse the bounded Helm release query and one active request per scope",
+            "merge": "replace the summary only when release scope and provider availability still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/features/helm/createHelmAdapter.ts",
+              "src/domains/helm/release_router.py",
+              "src/domains/helm/release_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The authorized Helm release projection exists, but no Home summary port consumes it and exposes its restricted or unavailable state.",
+            "rationale": "The existing Helm adapter remains the single release authority; Home will compose it only after a reusable summary contract exists."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:audit:workspace:observed-findings:v1",
+          "legacyContractIds": [
+            "reference.feature.120"
+          ],
+          "symbol": "useAudit workspace finding collection",
+          "interaction": "Checks and Home posture read only collector-backed findings with explicit availability, visibility, scope, and observed revision and never reinterpret workspace action history as Kubernetes audit findings",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the same authorized finding scope after visibility recovery",
+            "backpressure": "bound finding and facet collections and share one request per normalized scope",
+            "merge": "replace findings only when scope, provider observation, and visibility revision still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/checks/ChecksPage.tsx",
+              "frontend/src/features/checks/createChecksAdapter.ts",
+              "src/domains/checks/router.py",
+              "src/domains/checks/observation_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.checks.observations",
+              "domains.checks.router"
+            ],
+            "plannedTestIds": [
+              "checks.severity.evidence"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product preserves explicit provider absence and does not substitute generic audit-log rows for security findings."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:certificate-expiry:provider-summary:v1",
+          "legacyContractIds": [
+            "reference.feature.123"
+          ],
+          "symbol": "useCertificateExpiry and Home certificate health",
+          "interaction": "Home and Secret detail may expose certificate expiry only from an authorized server observation that includes exact Secret identity, expiry instant, health bucket, and collection completeness",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh the exact cluster and namespace scope after visibility recovery or inventory revision change",
+            "backpressure": "bound certificate rows and keep one provider query per normalized scope",
+            "merge": "replace expiry evidence only for matching Secret identity, observation revision, and active scope"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.inventory.router"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "Per-resource provider detail can render observed certificate fields, but no authorized certificate-expiry summary endpoint, completeness model, or Home card exists.",
+            "rationale": "The product does not scan Secret manifests or derive expiry buckets in the browser."
+          }
+        },
+        {
           "sourceKey": "upstream-ui:timeline:client-query:bounded-live-resume:v1",
           "legacyContractIds": [],
           "symbol": "UseChangesOptions, useChanges, ChangesDeltaMeta, and delta helpers",
@@ -10633,6 +10798,68 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The latest source delta only replaces the raw namespace field with the common Input. Opsia already applies the same identifier mutation policy once in its shared primitive rather than copying it into an audit-specific form."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:audit:settings:read-boundary:v1",
+          "legacyContractIds": [
+            "reference.feature.121"
+          ],
+          "symbol": "AuditSettingsDialog initial hidden-policy read",
+          "interaction": "an owner reads revisioned hidden check, category, and namespace policy from the Python service before opening an audit settings editor",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the current settings revision when the editor opens or a write conflict occurs",
+            "backpressure": "deduplicate one settings read per authenticated workspace and cancel a closed editor request",
+            "merge": "replace the draft only before local edits and only for the same workspace and server revision"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/checks/ChecksPage.tsx",
+              "src/domains/checks/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.checks.observations",
+              "packages.contracts.identity"
+            ],
+            "plannedTestIds": [
+              "checks.shared-input.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "No revisioned Python audit-settings repository or authenticated read contract exists.",
+            "rationale": "The product does not store hidden finding policy in browser state or reuse unrelated user presentation preferences."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:audit:settings:write-invalidation:v1",
+          "legacyContractIds": [
+            "reference.feature.122"
+          ],
+          "symbol": "AuditSettingsDialog save and audit invalidation",
+          "interaction": "an owner validates and saves one revisioned audit policy, receives the committed revision, and invalidates only affected audit and Home posture projections",
+          "transport": "poll",
+          "realtime": {
+            "resume": "after a conflict, reload server authority before allowing a retry",
+            "backpressure": "serialize one workspace mutation and bound hidden identifiers before persistence",
+            "merge": "apply a receipt only to the matching workspace, expected revision, and active draft"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/checks/ChecksPage.tsx",
+              "src/domains/checks/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.checks.observations",
+              "packages.contracts.identity"
+            ],
+            "plannedTestIds": [
+              "checks.shared-input.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "No owner-authorized PUT contract, expected-revision guard, audit event, or targeted finding-cache invalidation exists.",
+            "rationale": "The shared Input is reusable, but it is not evidence of a persistence contract; the save flow stays unavailable."
           }
         }
       ]
@@ -13282,7 +13509,9 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:home:load-state:section-authority:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.038"
+          ],
           "symbol": "HomeView fallbackClusterLoadState and PaneLoader",
           "interaction": "Home renders cluster catalog, overview, node, pod, and refresh progress from independent authorized section states so slow or partial evidence does not blank successful sections or claim completion",
           "transport": "poll",
@@ -13323,7 +13552,9 @@
         },
         {
           "sourceKey": "upstream-ui:home:issues:authorized-rail:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.042"
+          ],
           "symbol": "ProblemsPanel bounded issue rail",
           "interaction": "the Home shell renders a bounded selected-cluster issue rail with incident and warning counts, exact resource identity when available, explicit empty and partial states, and one shared refresh authority",
           "transport": "poll",
@@ -13351,6 +13582,116 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The existing Home projection and rail already preserve authorization, bounded collections, last-success refresh semantics, and unavailable identity instead of synthesizing browser issue rows."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:live-band:topology-timeline-preview:v1",
+          "legacyContractIds": [
+            "reference.feature.039"
+          ],
+          "symbol": "TopologyPreview and recent activity band",
+          "interaction": "Home previews authorized topology counts and recent timeline activity, then preserves the same cluster and namespace scope when the operator opens the full Topology or Timeline surface",
+          "transport": "poll",
+          "realtime": {
+            "resume": "resume the exact Home scope after visibility recovery and let the full Timeline surface continue from its durable cursor",
+            "backpressure": "bound preview rows and keep topology and activity reads independent so one unavailable provider cannot blank the other",
+            "merge": "replace a preview only when workspace, cluster, namespace set, and source revision still match the active Home scope"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomeLiveBand.tsx",
+              "frontend/src/pages/resources/ResourcesPhysicalTopologyScene.tsx",
+              "frontend/src/pages/timeline/TimelineSurface.tsx",
+              "src/domains/inventory_filter/router.py",
+              "src/domains/timeline/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "packages.contracts.timeline",
+              "domains.inventory_filter.router",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "topology.graph.surface",
+              "timeline.view.integration"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Home live band is an exact Node and Pod drilldown. No bounded Home topology-plus-activity preview contract composes the separate topology and Timeline authorities yet.",
+            "rationale": "The full Topology and Timeline surfaces are reused instead of copying their reducers, but Home does not claim preview parity until one server-owned bounded composition exists."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:explore:capability-gated-cards:v1",
+          "legacyContractIds": [
+            "reference.feature.040"
+          ],
+          "symbol": "Traffic, Helm, and optional Cost exploration cards",
+          "interaction": "Home exposes Traffic, Helm, and Cost exploration only when the authenticated backend reports real provider availability, preserving the active scope and omitting an unavailable optional card instead of rendering fabricated zero values",
+          "transport": "poll",
+          "realtime": {
+            "resume": "re-read the exact authorized provider summaries after visibility recovery or explicit Home refresh",
+            "backpressure": "load provider summaries independently and bound every release, flow, and cost list",
+            "merge": "replace a card only when its cluster, namespace set, provider observation, and availability revision match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/pages/home/HomePage.test.tsx",
+              "frontend/src/pages/traffic/TrafficPage.tsx",
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/cost/CostPage.tsx",
+              "src/domains/traffic/router.py",
+              "src/domains/helm/release_router.py",
+              "src/domains/cost/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.traffic",
+              "packages.contracts.helm.releases",
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "Traffic and Helm have separate typed surfaces, while Cost remains provider-unavailable; no Home summary contract composes these capabilities without duplicating adapters.",
+            "rationale": "Home intentionally hides source-only Cost and provider cards until reusable server summaries exist, as enforced by its optional-capability regression test."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:home:posture:server-evidence-cards:v1",
+          "legacyContractIds": [
+            "reference.feature.041"
+          ],
+          "symbol": "certificate, NetworkPolicy, GitOps controller, and audit posture cards",
+          "interaction": "Home posture cards render only server-observed certificate expiry, NetworkPolicy coverage, GitOps controller health, and audit findings and preserve exact filtered navigation to their owning product surfaces",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh each posture provider for the same authorized scope without clearing successful sibling evidence",
+            "backpressure": "bound provider collections and keep independent partial or unavailable reasons",
+            "merge": "replace posture evidence only for the current cluster, namespace set, observation revision, and provider identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/pages/checks/ChecksPage.tsx",
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "src/domains/checks/router.py",
+              "src/domains/gitops_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.checks.observations",
+              "packages.contracts.gitops",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "home.optional-capabilities.contract-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "Audit and GitOps have partial standalone projections, but no certificate-expiry or NetworkPolicy coverage provider and no unified Home posture response exists.",
+            "rationale": "The product does not infer posture from generic inventory or duplicate standalone Checks and GitOps adapters inside Home."
           }
         },
         {
@@ -15391,7 +15732,8 @@
         {
           "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
           "legacyContractIds": [
-            "reference.feature.064"
+            "reference.feature.064",
+            "reference.feature.065"
           ],
           "symbol": "ConnectionProvider status, reconnect, and cache refresh",
           "interaction": "the authenticated shell observes selected-cluster connection stage and freshness, preserves the last safe projection during a transient refresh, and exposes one bounded refresh action without letting browser state switch kubeconfig or impersonate an agent reconnect",
