@@ -56,10 +56,39 @@ describe("resource manifest adapter", () => {
       correlation_id: "correlation-command-1",
       status: "queued",
     });
+    const getResourceManifestCreateCapability = vi.fn().mockResolvedValue({
+      cluster_id: "cluster-1",
+      namespace: "shop",
+      snapshot_id: "snapshot-1",
+      available: true,
+      reason_codes: [],
+      max_documents: 100,
+      max_bytes: 1_048_576,
+      resources: [{ api_version: "apps/v1", kind: "Deployment", resource: "deployments", force_supported: true }],
+    });
+    const dryRunResourceManifestCreate = vi.fn().mockResolvedValue({
+      accepted: true,
+      command_id: "cmd-dry-run-1",
+      event_id: "event-dry-run-1",
+      audit_event_id: "event-dry-run-1",
+      correlation_id: "correlation-dry-run-1",
+      status: "queued",
+    });
+    const createResourceManifest = vi.fn().mockResolvedValue({
+      accepted: true,
+      command_id: "cmd-create-1",
+      event_id: "event-create-1",
+      audit_event_id: "event-create-1",
+      correlation_id: "correlation-create-1",
+      status: "queued",
+    });
     const port = createResourceManifestAdapter({
       approveResourceManifestEdit,
       applyResourceManifestNow,
+      createResourceManifest,
+      dryRunResourceManifestCreate,
       getResourceManifestSource,
+      getResourceManifestCreateCapability,
       previewResourceManifestEdit,
     });
     const input = {
@@ -102,5 +131,28 @@ describe("resource manifest adapter", () => {
       }),
       undefined,
     );
+    await expect(port.loadCreateCapability("cluster-1", "shop")).resolves.toMatchObject({
+      available: true,
+      resources: [{ apiVersion: "apps/v1", kind: "Deployment", forceSupported: true }],
+    });
+    await expect(port.dryRunCreate({
+      clusterId: "cluster-1",
+      namespace: "shop",
+      snapshotId: "snapshot-1",
+      editedYaml: "kind: Deployment",
+      force: false,
+      reason: "validate",
+    })).resolves.toMatchObject({ commandId: "cmd-dry-run-1" });
+    await expect(port.createResources({
+      clusterId: "cluster-1",
+      namespace: "shop",
+      snapshotId: "snapshot-1",
+      editedYaml: "kind: Deployment",
+      desiredSha256: `sha256:${"d".repeat(64)}`,
+      dryRunCommandId: "cmd-dry-run-1",
+      force: true,
+      forceConfirmation: true,
+      reason: "create",
+    })).resolves.toMatchObject({ commandId: "cmd-create-1" });
   });
 });
