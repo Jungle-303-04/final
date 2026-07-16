@@ -13,6 +13,7 @@ from sqlalchemy import Select, Text, and_, case, cast, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.dashboard.models import MetricQueryPreset, MetricWidget, RcaTimeline
+from domains.dashboard.ready_stream import DashboardReadySnapshot
 from domains.inventory.models import (
     ClusterInventoryResourceRecord,
     ClusterInventorySnapshotRecord,
@@ -175,6 +176,71 @@ def _rca_timeline_response_columns(*, include_issue_severity: bool = False) -> t
 
 class DashboardRepository(DatabaseConnection):
     table = RcaTimeline.__table__
+
+    def latest_dashboard_ready_snapshot(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> DashboardReadySnapshot | None:
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(table.c.snapshot_id, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
+            )
+            .order_by(table.c.created_at.desc(), table.c.snapshot_id.desc())
+            .limit(1)
+        )
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return (
+            DashboardReadySnapshot(
+                snapshot_id=str(row["snapshot_id"]),
+                created_at=row["created_at"],
+            )
+            if row is not None
+            else None
+        )
+
+    def list_dashboard_ready_snapshots(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        after: DashboardReadySnapshot,
+        limit: int,
+    ) -> tuple[DashboardReadySnapshot, ...]:
+        effective_limit = max(1, min(int(limit), 100))
+        table = ClusterInventorySnapshotRecord.__table__
+        statement = (
+            select(table.c.snapshot_id, table.c.created_at)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.status != "ignored_stale",
+                or_(
+                    table.c.created_at > after.created_at,
+                    and_(
+                        table.c.created_at == after.created_at,
+                        table.c.snapshot_id > after.snapshot_id,
+                    ),
+                ),
+            )
+            .order_by(table.c.created_at.asc(), table.c.snapshot_id.asc())
+            .limit(effective_limit)
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return tuple(
+            DashboardReadySnapshot(
+                snapshot_id=str(row["snapshot_id"]),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        )
 
     def list_metric_query_presets(self, workspace_id: str, cluster_id: str) -> list[JsonObject]:
         table = MetricQueryPreset.__table__

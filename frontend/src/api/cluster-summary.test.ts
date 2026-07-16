@@ -123,6 +123,11 @@ describe("cluster summary API", () => {
       getHomeInsights,
       getClusterNodesSummary,
       getNodePodsSummary,
+      subscribeHomeDashboardEvents: () => ({
+        async *[Symbol.asyncIterator]() {
+          yield* [];
+        },
+      }),
     });
 
     await expect(adapter.loadClusterOverview("cluster-1")).resolves.toMatchObject({

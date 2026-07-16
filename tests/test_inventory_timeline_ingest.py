@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 import domains.inventory.repository as inventory_repository
+from domains.dashboard.ready_stream import InMemoryDashboardReadyFanout
 from domains.identity.dependencies import ClusterAgentIdentity
 from domains.inventory.change_correlation import correlate_inventory_timeline_events
 from domains.inventory.ingest import append_inventory_timeline_events, ingest_inventory_snapshot
@@ -525,6 +526,61 @@ def test_ingest_announces_only_after_the_unit_of_work_commits() -> None:
     asyncio.run(run())
 
 
+def test_ingest_announces_dashboard_ready_after_commit_even_without_timeline_changes() -> None:
+    async def run() -> None:
+        mutation = InventorySnapshotMutation(
+            result={
+                "accepted": True,
+                "snapshot_id": "snapshot-same-state",
+                "cluster_id": "cluster-1",
+                "resource_count": 1,
+                "marked_deleted": 0,
+                "resource_types": ["pod"],
+            }
+        )
+        db = _TransactionDb(mutation)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
+
+        await ingest_inventory_snapshot(
+            db=db,
+            workspace_id="workspace-1",
+            cluster_id="cluster-1",
+            agent_id="agent-1",
+            payload={},
+            ready_fanout=ready_fanout,
+        )
+
+        event = await asyncio.wait_for(subscription.next(), timeout=0.1)
+        assert event.workspace_id == "workspace-1"
+        assert event.cluster_id == "cluster-1"
+        assert event.snapshot_id == "snapshot-same-state"
+        assert db.steps == ["begin", "mutation", "commit"]
+
+    asyncio.run(run())
+
+
+def test_ingest_never_announces_dashboard_ready_for_a_stale_snapshot() -> None:
+    async def run() -> None:
+        db = _TransactionDb(_stale_mutation())
+        ready_fanout = InMemoryDashboardReadyFanout()
+        subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
+
+        await ingest_inventory_snapshot(
+            db=db,
+            workspace_id="workspace-1",
+            cluster_id="cluster-1",
+            agent_id="agent-1",
+            payload={},
+            ready_fanout=ready_fanout,
+        )
+
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(subscription.next(), timeout=0.01)
+
+    asyncio.run(run())
+
+
 def test_ingest_rollback_never_announces_a_timeline_append() -> None:
     async def fail_after_persist(_result: dict[str, object]) -> None:
         raise RuntimeError("outbox staging failed")
@@ -565,6 +621,8 @@ def test_agent_snapshot_route_keeps_outbox_staging_inside_the_timeline_transacti
         db = _TransactionDb(_mutation_with_add())
         events = _InventoryEvents(db.steps)
         fanout = _Fanout(db.steps)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        ready_subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
 
         response = await record_inventory_snapshot(
             InventorySnapshotRequest(
@@ -583,11 +641,13 @@ def test_agent_snapshot_route_keeps_outbox_staging_inside_the_timeline_transacti
             db=db,
             events=events,
             timeline_fanout=fanout,
+            dashboard_ready_fanout=ready_fanout,
         )
 
         assert response.snapshot_id == "snapshot-1"
         assert len(events.recorded) == 1
         assert db.steps == ["begin", "mutation", "append", "outbox", "commit", "fanout"]
+        assert (await ready_subscription.next()).snapshot_id == "snapshot-1"
 
     asyncio.run(run())
 
@@ -597,6 +657,8 @@ def test_agent_stale_snapshot_does_not_stage_a_recorded_outbox_event() -> None:
         db = _TransactionDb(_stale_mutation())
         events = _InventoryEvents(db.steps)
         fanout = _Fanout(db.steps)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        ready_subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
 
         response = await record_inventory_snapshot(
             InventorySnapshotRequest(cluster_id="cluster-1", agent_id="agent-1"),
@@ -604,11 +666,14 @@ def test_agent_stale_snapshot_does_not_stage_a_recorded_outbox_event() -> None:
             db=db,
             events=events,
             timeline_fanout=fanout,
+            dashboard_ready_fanout=ready_fanout,
         )
 
         assert response.accepted is False
         assert events.recorded == []
         assert db.steps == ["begin", "mutation", "commit"]
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(ready_subscription.next(), timeout=0.01)
 
     asyncio.run(run())
 
@@ -653,6 +718,8 @@ def test_target_evidence_uses_the_common_ingest_boundary_without_partial_timelin
         )
         db = _TargetEvidenceInventoryDb(mutation)
         fanout = _Fanout(db.steps)
+        ready_fanout = InMemoryDashboardReadyFanout()
+        ready_subscription = await ready_fanout.subscribe("workspace-1", "cluster-1")
 
         response = await evidence_job_result(
             "job-kubernetes",
@@ -671,11 +738,13 @@ def test_target_evidence_uses_the_common_ingest_boundary_without_partial_timelin
             db,
             object(),
             fanout,
+            ready_fanout,
         )
 
         assert response.accepted is True
         assert db.inventory_payloads[0]["replace"] is False
         assert db.steps == ["begin", "mutation", "commit"]
         assert fanout.published == []
+        assert (await ready_subscription.next()).snapshot_id == "snapshot-partial"
 
     asyncio.run(run())

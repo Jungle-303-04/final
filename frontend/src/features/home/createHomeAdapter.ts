@@ -70,7 +70,55 @@ export function createHomeAdapter(
         )
       );
     },
+
+    async *subscribeDashboardInvalidations(clusterId, subscription) {
+      let cursor: string | undefined;
+      let reconnectAfterMs: number | null = null;
+      const signal = subscription?.signal;
+      while (!signal?.aborted) {
+        try {
+          for await (const frame of endpoints.subscribeHomeDashboardEvents(clusterId, {
+            after: cursor,
+            signal,
+          })) {
+            if (frame.scope.cluster_id !== clusterId) {
+              throw new HomePortFailure("invalid-response");
+            }
+            cursor = frame.cursor;
+            reconnectAfterMs = frame.reconnect_after_ms;
+            if (frame.kind === "deferred_ready") {
+              if (!frame.snapshot_id) throw new HomePortFailure("invalid-response");
+              yield { snapshotId: frame.snapshot_id };
+            }
+          }
+          if (signal?.aborted || reconnectAfterMs === null) return;
+        } catch (error) {
+          if (isAbortError(error) || signal?.aborted) return;
+          const failure = error instanceof HomePortFailure ? error : toPortFailure(error);
+          if (!isRetryableStreamFailure(failure) || reconnectAfterMs === null) throw failure;
+        }
+        await waitForServerReconnect(reconnectAfterMs, signal);
+      }
+    },
   };
+}
+
+function isRetryableStreamFailure(failure: HomePortFailure): boolean {
+  return failure.code === "offline" || failure.code === "rate-limited" || failure.code === "error";
+}
+
+function waitForServerReconnect(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, delayMs);
+    const abort = () => done();
+    signal?.addEventListener("abort", abort, { once: true });
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }
+  });
 }
 
 async function withCanonicalFailure<T>(operation: () => Promise<T>): Promise<T> {

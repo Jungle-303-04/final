@@ -112,7 +112,12 @@ from packages.contracts.identity import (
 )
 from packages.contracts.target import TARGET_NAMESPACE, TargetComponent
 from packages.events.envelope import event
-from packages.runtime.dependencies import get_db, get_events, get_timeline_fanout
+from packages.runtime.dependencies import (
+    get_dashboard_ready_fanout,
+    get_db,
+    get_events,
+    get_timeline_fanout,
+)
 from packages.storage.engine import unit_of_work_or_null
 from packages.storage.retry import to_thread_db_retry
 
@@ -1934,6 +1939,7 @@ async def evidence_job_result(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     timeline_fanout: Any = Depends(get_timeline_fanout),
+    dashboard_ready_fanout: Any = Depends(get_dashboard_ready_fanout),
 ) -> EvidenceJobResultResponse:
     result = await db_call(
         db.complete_evidence_job,
@@ -1982,6 +1988,7 @@ async def evidence_job_result(
                 agent_id=payload.agent_id,
             ),
             fanout=timeline_fanout,
+            ready_fanout=dashboard_ready_fanout,
         )
 
     evidence_key = str(result["evidence_key"])

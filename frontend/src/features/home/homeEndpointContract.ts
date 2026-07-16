@@ -194,4 +194,27 @@ export interface HomeEndpointDependencies {
     nodeName: string,
     signal?: AbortSignal,
   ): Promise<HomeEndpointPodCollection>;
+  subscribeHomeDashboardEvents(
+    clusterId: string,
+    options?: HomeEndpointDashboardEventSubscription,
+  ): AsyncIterable<HomeEndpointDashboardEvent>;
+}
+
+export interface HomeEndpointDashboardEventSubscription {
+  after?: string;
+  signal?: AbortSignal;
+}
+
+export interface HomeEndpointDashboardEvent {
+  kind: "connected" | "deferred_ready" | "heartbeat";
+  cursor: string;
+  scope: {
+    workspace_id: string;
+    cluster_id: string;
+    namespaces: readonly string[];
+    freshness: "live" | "stale" | "partial" | "disconnected";
+  };
+  reconnect_after_ms: number;
+  snapshot_id?: string;
+  occurred_at?: string;
 }

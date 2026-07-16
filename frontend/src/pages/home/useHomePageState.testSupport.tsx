@@ -7,6 +7,7 @@ import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvi
 import type {
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeDashboardInvalidation,
   HomeInsights,
   HomeNodeCollection,
   HomePodCollection,
@@ -31,6 +32,7 @@ export function renderHomeState(port: HomePort, entry: string) {
 }
 
 export function homeApi(refreshAfterSeconds = 30) {
+  const dashboardStreams: DashboardInvalidationStream[] = [];
   const list = vi.fn<(...args: [AbortSignal?]) => Promise<HomeClusterChoices>>()
     .mockResolvedValue(clusterChoices());
   const overviewMock = vi.fn<(...args: [string, AbortSignal?]) => Promise<HomeClusterOverview>>()
@@ -47,6 +49,7 @@ export function homeApi(refreshAfterSeconds = 30) {
     overview: overviewMock,
     nodes: nodesMock,
     pods: podsMock,
+    dashboardStreams,
     port: {
       loadDashboardRefreshPolicy: vi.fn().mockResolvedValue({
         staleAfterSeconds: 15,
@@ -63,7 +66,65 @@ export function homeApi(refreshAfterSeconds = 30) {
       loadInsights: insightsMock,
       loadNodes: nodesMock,
       loadNodePods: podsMock,
+      subscribeDashboardInvalidations: vi.fn((clusterId, options) => {
+        const stream = dashboardInvalidationStream(clusterId, options?.signal);
+        dashboardStreams.push(stream);
+        return stream.events;
+      }),
     } satisfies HomePort,
+  };
+}
+
+export interface DashboardInvalidationStream {
+  readonly clusterId: string;
+  readonly events: AsyncIterable<HomeDashboardInvalidation>;
+  readonly signal: AbortSignal | undefined;
+  close(): void;
+  emit(snapshotId?: string): void;
+}
+
+function dashboardInvalidationStream(
+  clusterId: string,
+  signal: AbortSignal | undefined,
+): DashboardInvalidationStream {
+  const pending: HomeDashboardInvalidation[] = [];
+  const readers: Array<(value: IteratorResult<HomeDashboardInvalidation>) => void> = [];
+  let closed = false;
+  const finish = () => {
+    if (closed) return;
+    closed = true;
+    readers.splice(0).forEach((resolve) => resolve({ done: true, value: undefined }));
+  };
+  signal?.addEventListener("abort", finish, { once: true });
+  return {
+    clusterId,
+    signal,
+    close: finish,
+    emit(snapshotId = `snapshot-${pending.length + 1}`) {
+      if (closed) return;
+      const event: HomeDashboardInvalidation = { snapshotId };
+      const reader = readers.shift();
+      if (reader) reader({ done: false, value: event });
+      else pending.push(event);
+    },
+    events: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<HomeDashboardInvalidation>> {
+            const event = pending.shift();
+            if (event) return Promise.resolve({ done: false, value: event });
+            if (closed || signal?.aborted) {
+              return Promise.resolve({ done: true, value: undefined });
+            }
+            return new Promise((resolve) => readers.push(resolve));
+          },
+          return(): Promise<IteratorResult<HomeDashboardInvalidation>> {
+            finish();
+            return Promise.resolve({ done: true, value: undefined });
+          },
+        };
+      },
+    },
   };
 }
 

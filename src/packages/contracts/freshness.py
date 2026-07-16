@@ -8,11 +8,13 @@ policies that are not already carried by a domain response.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field, model_validator
 
 from packages.contracts.modeling import StrictModel
+from packages.contracts.parity import ClusterScope
 
 RefreshPolicyKey = Literal[
     "dashboard",
@@ -68,4 +70,27 @@ class BrowserRefreshPoliciesResponse(StrictModel):
         missing = expected - actual
         if missing:
             raise ValueError(f"refresh policies are missing keys: {sorted(missing)}")
+        return self
+
+
+HomeDashboardEventKind = Literal["connected", "deferred_ready", "heartbeat"]
+
+
+class HomeDashboardEventFrame(StrictModel):
+    """One scope-bound Home invalidation frame carried over authenticated SSE."""
+
+    kind: HomeDashboardEventKind
+    cursor: str = Field(min_length=1, max_length=8192)
+    scope: ClusterScope
+    reconnect_after_ms: int = Field(ge=100, le=30_000)
+    snapshot_id: str | None = Field(default=None, min_length=1)
+    occurred_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def snapshot_only_belongs_to_ready_frame(self) -> HomeDashboardEventFrame:
+        snapshot_fields = self.snapshot_id is not None, self.occurred_at is not None
+        if self.kind == "deferred_ready" and not all(snapshot_fields):
+            raise ValueError("deferred_ready requires exactly one durable snapshot position")
+        if self.kind != "deferred_ready" and any(snapshot_fields):
+            raise ValueError("deferred_ready requires exactly one durable snapshot position")
         return self

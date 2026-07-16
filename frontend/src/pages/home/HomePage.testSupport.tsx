@@ -253,6 +253,11 @@ export function homePort(overrides: Partial<HomePort> = {}): HomePort {
     loadInsights: vi.fn().mockResolvedValue(INSIGHTS),
     loadNodes: vi.fn().mockResolvedValue(NODES),
     loadNodePods: vi.fn().mockResolvedValue(PODS),
+    subscribeDashboardInvalidations: () => ({
+      async *[Symbol.asyncIterator]() {
+        yield* [];
+      },
+    }),
     ...overrides,
   };
 }

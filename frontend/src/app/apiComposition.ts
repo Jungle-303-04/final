@@ -26,6 +26,7 @@ import {
   listClusters,
   listGlobalFilterFacets,
   searchResourceIdentities,
+  subscribeHomeDashboardEvents,
   listDiagnoseRuns,
   openPodLogStream,
   openScheduledWorkloadRunLogStream,
@@ -73,6 +74,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getHomeInsights,
     getNodePodsSummary,
     listClusters,
+    subscribeHomeDashboardEvents,
   }, refreshPolicies);
   const operationStatusStore = createOperationStatusStore(
     createOperationEventsAdapter({ subscribeCommandOperationEvents }),

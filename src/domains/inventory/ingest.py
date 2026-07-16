@@ -25,6 +25,7 @@ async def ingest_inventory_snapshot(
     agent_id: str,
     payload: JsonObject,
     fanout: TimelineEventFanout | object | None = None,
+    ready_fanout: object | None = None,
     after_persist: InventorySnapshotAfterPersist | None = None,
 ) -> JsonObject:
     """Persist, ledger-append, and only then announce one inventory snapshot.
@@ -66,6 +67,13 @@ async def ingest_inventory_snapshot(
     publisher = fanout if callable(getattr(fanout, "publish_committed", None)) else None
     for append in appends:
         await fanout_committed_timeline_append(append, publisher)
+    ready_publisher = getattr(ready_fanout, "publish_committed", None)
+    if result.get("accepted") is True and callable(ready_publisher):
+        await ready_publisher(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            snapshot_id=str(result["snapshot_id"]),
+        )
     return result
 
 

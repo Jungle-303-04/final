@@ -235,6 +235,14 @@ export interface HomeInsights {
   refreshAfterSeconds: number;
 }
 
+export interface HomeDashboardInvalidation {
+  snapshotId: string;
+}
+
+export interface HomeDashboardInvalidationSubscription {
+  signal?: AbortSignal;
+}
+
 export type HomeFailureCode =
   | "unauthorized"
   | "forbidden"
@@ -267,5 +275,9 @@ export interface HomePort {
     nodeName: string,
     signal?: AbortSignal,
   ): Promise<HomePodCollection>;
+  subscribeDashboardInvalidations(
+    clusterId: string,
+    subscription?: HomeDashboardInvalidationSubscription,
+  ): AsyncIterable<HomeDashboardInvalidation>;
 }
 import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";

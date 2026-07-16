@@ -21,6 +21,11 @@ const homePort: HomePort = {
   loadInsights: async () => { throw new Error("not used"); },
   loadNodes: async () => { throw new Error("not used"); },
   loadNodePods: async () => { throw new Error("not used"); },
+  subscribeDashboardInvalidations: () => ({
+    async *[Symbol.asyncIterator]() {
+      yield* [];
+    },
+  }),
 };
 
 describe("authenticated port registry", () => {

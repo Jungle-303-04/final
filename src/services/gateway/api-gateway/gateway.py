@@ -28,6 +28,7 @@ from domains.command.router import router as command_router
 from domains.compare.router import router as compare_router
 from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import router as fleet_router
+from domains.dashboard.ready_stream import InMemoryDashboardReadyFanout
 from domains.dashboard.router import router as dashboard_router
 from domains.diagnose.router import router as diagnose_router
 from domains.diagnose.stream import InMemoryDiagnoseEventStream
@@ -152,6 +153,7 @@ class ApiGateway:
             self.db,
         )
         self.timeline_fanout = InMemoryTimelineEventFanout()
+        self.dashboard_ready_fanout = InMemoryDashboardReadyFanout()
         self.diagnose_events = InMemoryDiagnoseEventStream()
         self.auth = SessionAuthService(self.sessions)
         self.password_auth = PasswordAuthService(self.db, self.sessions)
@@ -169,6 +171,7 @@ class ApiGateway:
         self.app.state.events = self.events
         self.app.state.operation_events = self.operation_events
         self.app.state.timeline_fanout = self.timeline_fanout
+        self.app.state.dashboard_ready_fanout = self.dashboard_ready_fanout
         self.app.state.diagnose_events = self.diagnose_events
         self.app.state.auth = self.auth
         self.app.state.password_auth = self.password_auth
@@ -310,6 +313,7 @@ class ApiGateway:
         try:
             yield
         finally:
+            await self.dashboard_ready_fanout.close()
             await self.timeline_fanout.close()
             await self.operation_events.close()
             await WAKEUP.stop()

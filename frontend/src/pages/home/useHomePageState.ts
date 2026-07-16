@@ -19,6 +19,7 @@ import {
 } from "./homePageStateModel";
 import { useHomeClusterFrame } from "./useHomeClusterFrame";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type { HomeResourceState } from "./homePageStateModel";
 
@@ -63,6 +64,7 @@ export function useHomePageState(port: HomePort): HomePageState {
   const resumedFromBackground = useRef(false);
   const [dataUpdatedAt, setDataUpdatedAt] = useState(0);
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState<number | null>(null);
+  const [dashboardPolicy, setDashboardPolicy] = useState<BrowserRefreshPolicy | null>(null);
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const scopeKey = clusterScope.scopeKey;
   const clusterFrame = useHomeClusterFrame({
@@ -128,6 +130,7 @@ export function useHomePageState(port: HomePort): HomePageState {
     void port.loadDashboardRefreshPolicy(controller.signal).then((policy) => {
       if (controller.signal.aborted) return;
       setRefreshIntervalSeconds(policy.refreshAfterSeconds);
+      setDashboardPolicy(policy);
       dashboardRefresh.acceptSuccess(policy);
     }).catch((error: unknown) => {
       if (controller.signal.aborted || isAbortError(error)) return;
@@ -143,6 +146,63 @@ export function useHomePageState(port: HomePort): HomePageState {
     scopeKey,
     selectedClusterExists,
     selectedNodeName,
+  ]);
+
+  useEffect(() => {
+    if (
+      dashboardPolicy?.eventInvalidation !== true ||
+      !selectedClusterExists ||
+      selectedClusterId === null ||
+      scopeKey === null
+    ) return;
+    let active = true;
+    let controller: AbortController | null = null;
+
+    const stop = () => {
+      controller?.abort();
+      controller = null;
+    };
+    const start = () => {
+      stop();
+      if (!active || document.visibilityState === "hidden") return;
+      controller = new AbortController();
+      const signal = controller.signal;
+      void (async () => {
+        try {
+          for await (const _event of port.subscribeDashboardInvalidations(selectedClusterId, {
+            signal,
+          })) {
+            if (!active || signal.aborted) return;
+            dashboardRefresh.requestEventInvalidation();
+          }
+        } catch (error) {
+          if (!active || signal.aborted || isAbortError(error)) return;
+          if (error instanceof Error && "code" in error && error.code === "unauthorized") {
+            reportUnauthorized();
+          }
+          // The server cadence remains the fail-safe after a stream failure.
+        }
+      })();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") stop();
+      else start();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    start();
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stop();
+    };
+  }, [
+    dashboardPolicy?.eventInvalidation,
+    dashboardRefresh,
+    port,
+    reportUnauthorized,
+    scopeKey,
+    selectedClusterExists,
+    selectedClusterId,
   ]);
 
   useEffect(() => {

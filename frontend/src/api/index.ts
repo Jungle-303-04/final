@@ -434,6 +434,14 @@ export {
   getNodePodsSummary,
 } from "./cluster-summary";
 export {
+  subscribeHomeDashboardEvents,
+  type HomeDashboardEventSubscriptionEndpoint,
+} from "./home-dashboard-events";
+export {
+  homeDashboardEventFrameSchema,
+  type HomeDashboardEventFrameEndpoint,
+} from "./home-dashboard-events-schemas";
+export {
   connectRealtime,
   createRealtimeClient,
   type RealtimeClient,

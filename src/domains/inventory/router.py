@@ -31,7 +31,12 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
-from packages.runtime.dependencies import get_db, get_events, get_timeline_fanout
+from packages.runtime.dependencies import (
+    get_dashboard_ready_fanout,
+    get_db,
+    get_events,
+    get_timeline_fanout,
+)
 
 router = APIRouter()
 
@@ -46,6 +51,7 @@ async def record_inventory_snapshot(
     db: Any = Depends(get_db),
     events: Any = Depends(get_events),
     timeline_fanout: Any = Depends(get_timeline_fanout),
+    dashboard_ready_fanout: Any = Depends(get_dashboard_ready_fanout),
 ) -> InventorySnapshotResponse:
     if payload.cluster_id != identity.cluster_id:
         raise HTTPException(status_code=403, detail="cluster_id does not match agent identity")
@@ -73,6 +79,7 @@ async def record_inventory_snapshot(
         agent_id=payload.agent_id,
         payload=payload.model_dump(),
         fanout=timeline_fanout,
+        ready_fanout=dashboard_ready_fanout,
         after_persist=record_snapshot_event,
     )
     return InventorySnapshotResponse(**result)

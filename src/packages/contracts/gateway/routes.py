@@ -168,6 +168,7 @@ CLUSTER_CONNECT_COMMAND_PATH = "/clusters/{cluster_id}/connect-command"
 FLEET_SUMMARY_PATH = "/fleet/summary"
 # 클러스터 타일 클릭 드릴다운 — 워크로드 health 그룹/경고 이벤트/열린 인시던트/usage 스냅샷.
 CLUSTER_SUMMARY_PATH = "/clusters/{cluster_id}/summary"
+CLUSTER_HOME_EVENTS_PATH = "/clusters/{cluster_id}/home/events"
 CLUSTER_CONNECTION_STATUS_PATH = "/clusters/{cluster_id}/connection-status"
 CLUSTER_CONNECTION_PATH = "/clusters/{cluster_id}/connection"
 CLUSTER_NODES_SUMMARY_PATH = "/clusters/{cluster_id}/nodes/summary"

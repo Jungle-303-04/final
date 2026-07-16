@@ -239,5 +239,12 @@ export function endpoints(overrides: Partial<HomeEndpointDependencies> = {}) {
     getNodePodsSummary: vi.fn(
       overrides.getNodePodsSummary ?? (() => Promise.resolve(POD_COLLECTION)),
     ),
+    subscribeHomeDashboardEvents: vi.fn(
+      overrides.subscribeHomeDashboardEvents ?? (() => ({
+        async *[Symbol.asyncIterator]() {
+          yield* [];
+        },
+      })),
+    ),
   };
 }
