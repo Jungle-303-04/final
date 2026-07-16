@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 217,
+  "pendingCount": 214,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -28,8 +28,57 @@
         "blobId": "af0bb581e4f8532a79a23b9bcefadf22fac9441b",
         "sha256": "c056f0e91c29ae6e4f386c7c6ff6fb29a47b22f856e934bffb70c4c5668ddad1"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:toolchain:shared-ui:dependency-baseline:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json dependencies and devDependencies",
+          "interaction": "noninteractive build configuration: shared UI dependency upgrades are represented by the product-owned standalone package baseline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The standalone package already pins the updated UI dependency baseline in one product-owned manifest. This is build compatibility evidence only and does not claim that every dependent source surface is ported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:shared-ui:typescript-transition:v1",
+          "legacyContractIds": [],
+          "symbol": "scripts.tsc and scripts.tsc:ts6",
+          "interaction": "noninteractive build configuration: a transitional external TypeScript compiler launcher is exposed for the reusable source package",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product is one standalone Vite application and pins its supported TypeScript build through `tsc -b`; adding the isolated package's cross-package future-compiler shim would create a second unsupported build authority.",
+            "rationale": "The product test records the one supported compiler entrypoint so this source-only transition cannot be mistaken for a completed runtime port."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -4160,8 +4209,33 @@
         "blobId": "90bd4c820137cac1ad7e28fdd1ee45e03525031a",
         "sha256": "40dac3863581c33a120164852a10804b20eb1f4b7f510e4a0313763491893cd4"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:document:standalone:mount-boundary:v1",
+          "legacyContractIds": [],
+          "symbol": "index.html mount element",
+          "interaction": "noninteractive document configuration: a reusable host stylesheet isolates its mount selector from the host application root",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/index.html",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product is a standalone web and desktop application, not an embeddable host stylesheet. Its single `#root` mount is intentional and the source mount identifier is a prohibited legacy product term.",
+            "rationale": "The document test proves that the product has exactly one explicit root and local bootstrap script without copying the isolated host-library mount convention."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -4175,8 +4249,81 @@
         "blobId": "4bf8b696330023b43c92b7092fc3b20698475d5f",
         "sha256": "cd667350ad242fff93e5e225c40770d7756cc073b0c8cf3731d3378917f4c1f5"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:dependency-baseline:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json dependency and lint baseline",
+          "interaction": "noninteractive build configuration: web dependency and lint upgrades are represented by the current standalone product manifest",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product manifest already pins the matching browser dependency and lint/test baseline under its own package boundary. This proves only build compatibility, not a claim that source library consumers are supported."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:library-publishing:v1",
+          "legacyContractIds": [],
+          "symbol": "package.json main, types, exports, files, and sideEffects",
+          "interaction": "noninteractive build configuration: the source app publishes a reusable browser library with host-facing entrypoints",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product ships one authenticated web application and a Tauri shell, not a reusable browser library; publishing source entrypoints would expose the isolated runtime and violate the product boundary.",
+            "rationale": "The product manifest test proves that no library main or export surface is silently introduced."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:toolchain:web-app:typescript-transition:v1",
+          "legacyContractIds": [],
+          "symbol": "scripts.build, scripts.tsc, scripts.tsc:ts6, and scripts.test",
+          "interaction": "noninteractive build configuration: source library scripts delegate to a transitional compiler launcher and package-local test command",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product owns one TypeScript project-reference build and whole-console test command. The source transitional compiler launcher and source-local test scope cannot be adopted without adding a parallel package build contract.",
+            "rationale": "The product test keeps the supported build and test commands explicit while preserving the source delta as blocked rather than ported."
+          }
+        }
+      ]
     },
     {
       "status": "M",
