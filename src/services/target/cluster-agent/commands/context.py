@@ -15,7 +15,13 @@ COMMAND_FAILED_STATUS = "failed"
 PayloadT = TypeVar("PayloadT")
 PayloadModel = type[BaseModel]
 KubernetesVerb = Literal["get", "create", "patch", "apply", "delete"]
-KubernetesScope = Literal["target-agent", "system", "user-workload", "service-access"]
+KubernetesScope = Literal[
+    "target-agent",
+    "system",
+    "user-workload",
+    "cluster-workload",
+    "service-access",
+]
 
 
 class KubernetesClient(Protocol):
@@ -40,6 +46,16 @@ class KubernetesClient(Protocol):
         name: str,
         body: JsonObject,
         subresource: str | None = None,
+    ) -> JsonObject: ...
+
+    async def patch_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+        body: JsonObject,
     ) -> JsonObject: ...
 
     async def create_namespaced_resource(

@@ -25,9 +25,15 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import Permission
 
-NamespacePolicy = Literal["control", "terminal"]
+NamespacePolicy = Literal["control", "terminal", "cluster"]
 ExecutionTransport = Literal["command", "terminal"]
-ResourceState = Literal["always", "cronjob-running", "cronjob-suspended"]
+ResourceState = Literal[
+    "always",
+    "cronjob-running",
+    "cronjob-suspended",
+    "node-cordoned",
+    "node-schedulable",
+]
 
 
 @dataclass(frozen=True)
@@ -54,9 +60,13 @@ class ResourceActionDefinition:
     ) -> bool:
         if subject.resource_type.casefold() != self.resource_type:
             return False
-        if subject.kind.casefold() != self.kind or subject.namespace is None:
+        if subject.kind.casefold() != self.kind:
             return False
-        if self.namespace_policy == "control":
+        if self.namespace_policy == "cluster":
+            allowed_namespace = subject.namespace is None
+        elif subject.namespace is None:
+            return False
+        elif self.namespace_policy == "control":
             allowed_namespace = control_namespace_allowed(subject.namespace)
         else:
             allowed_namespace = pod_exec_namespace_allowed(subject.namespace)
@@ -76,6 +86,7 @@ class ResourceActionDefinition:
             "cronjob": quote(subject.name, safe=""),
             "kind": quote(subject.kind.casefold(), safe=""),
             "workload": quote(subject.name, safe=""),
+            "node": quote(subject.name, safe=""),
         }
         return ResourceActionCapability(
             capability_id=self.capability_id,
@@ -90,9 +101,9 @@ class ResourceActionDefinition:
         )
 
 
-def _command_action_allows(action: str, namespace: str) -> bool:
+def _command_action_allows(action: str, namespace: str | None) -> bool:
     spec = command_action_spec(action)
-    return spec is not None and spec.allows_namespace(namespace)
+    return spec is not None and spec.allows_namespace(namespace or "")
 
 
 RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
@@ -189,6 +200,36 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         command_action=Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
     ),
     ResourceActionDefinition(
+        capability_id="node.cordon",
+        label="Cordon",
+        description="Mark this node unschedulable and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_CORDON_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_CORDON_ACTION,
+        resource_state="node-schedulable",
+    ),
+    ResourceActionDefinition(
+        capability_id="node.uncordon",
+        label="Uncordon",
+        description="Mark this node schedulable and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_NODE_UNCORDON_PATH,
+        resource_type="node",
+        kind="node",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+        namespace_policy="cluster",
+        command_action=Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        resource_state="node-cordoned",
+    ),
+    ResourceActionDefinition(
         capability_id="pod.exec",
         label="Terminal",
         description="Open an audited terminal session and stream its output.",
@@ -265,6 +306,10 @@ def _resource_state_matches(state: ResourceState, resource: Mapping[str, Any]) -
     raw_object = raw if isinstance(raw, Mapping) else {}
     spec = raw_object.get("spec")
     spec_object = spec if isinstance(spec, Mapping) else {}
+    if state in {"node-cordoned", "node-schedulable"}:
+        unschedulable = spec_object.get("unschedulable")
+        cordoned = unschedulable if isinstance(unschedulable, bool) else False
+        return cordoned if state == "node-cordoned" else not cordoned
     suspended = spec_object.get("suspend")
     if not isinstance(suspended, bool):
         return False

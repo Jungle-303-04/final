@@ -104,6 +104,18 @@ PRE_ACK_NAMESPACED_CLEANUP = (
 )
 PRE_ACK_CLUSTER_CLEANUP = (
     ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterrolebindings",
+        "cluster-agent-node-control",
+    ),
+    ClusterCleanupResource(
+        "rbac.authorization.k8s.io",
+        "v1",
+        "clusterroles",
+        "cluster-agent-node-control",
+    ),
+    ClusterCleanupResource(
         "rbac.authorization.k8s.io", "v1", "clusterrolebindings", "cluster-agent-read"
     ),
     ClusterCleanupResource("rbac.authorization.k8s.io", "v1", "clusterroles", "cluster-agent-read"),
@@ -133,8 +145,10 @@ SANDBOX_RBAC_RESOURCES = (
     "rolebinding/cluster-agent-catalog-install",
 )
 CLUSTER_SCOPED_RESOURCES = (
+    "clusterrolebinding/cluster-agent-node-control",
     "clusterrolebinding/cluster-agent-read",
     "clusterrolebinding/cluster-agent-uninstall",
+    "clusterrole/cluster-agent-node-control",
     "clusterrole/cluster-agent-read",
     "clusterrole/cluster-agent-uninstall",
     "priorityclass/gitops-control-critical",

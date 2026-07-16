@@ -29,6 +29,8 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
         Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
         Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
@@ -42,6 +44,8 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
         Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
         Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
@@ -66,6 +70,14 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         assert cronjob.allowed_namespaces == ()
         assert cronjob.enforce_control_namespace is True
         assert cronjob.required_agent_capability == Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY
+    for action in (
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
+    ):
+        node = command_action_spec(action)
+        assert node is not None
+        assert node.enforce_control_namespace is False
+        assert node.required_agent_capability == Command.KUBERNETES_NODE_CONTROL_CAPABILITY
 
 
 def test_spec_lookup_and_namespace_policy() -> None:

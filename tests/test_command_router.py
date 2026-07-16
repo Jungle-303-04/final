@@ -20,6 +20,7 @@ from domains.command.router import (
     command_start,
     command_status,
     commands,
+    cordon_node,
     lease_next_command,
     restart_deployment,
     restart_workload,
@@ -29,6 +30,7 @@ from domains.command.router import (
     scale_workload,
     suspend_cronjob,
     trigger_cronjob,
+    uncordon_node,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from packages.config.constants import Command
@@ -917,6 +919,45 @@ def test_workload_command_rejects_kind_without_registered_executor() -> None:
 
         assert raised.value.status_code == 422
         assert raised.value.detail == "unsupported workload kind: job"
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("route", "action", "unschedulable"),
+    [
+        (cordon_node, Command.KUBERNETES_NODE_CORDON_ACTION, True),
+        (uncordon_node, Command.KUBERNETES_NODE_UNCORDON_ACTION, False),
+    ],
+)
+def test_node_scheduling_control_uses_cluster_scoped_audited_receipt(
+    route: Any,
+    action: str,
+    unschedulable: bool,
+) -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await route(
+            "cluster-1",
+            "worker-a",
+            ConfirmedResourceActionRequest(confirmation=True),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+            SpyOperationEvents(),
+        )
+
+        assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == action
+        assert events.body.namespace == ""
+        assert events.body.diff.resource == "node/worker-a"
+        assert events.body.diff.namespace == ""
+        assert events.body.payload == {
+            "name": "worker-a",
+            "unschedulable": unschedulable,
+        }
+        assert events.body.direct_execution is True
 
     asyncio.run(run())
 

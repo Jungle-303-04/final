@@ -15,6 +15,7 @@ from commands import (
     KubernetesApiClient,
     KubernetesCronJobPayload,
     KubernetesGetPayload,
+    KubernetesNodeSchedulingPayload,
     KubernetesPatchPayload,
     KubernetesScalePayload,
     command,
@@ -76,6 +77,7 @@ from config import (
     DEFAULT_EVIDENCE_FAILURE_POLICY,
     DEFAULT_EVIDENCE_PROVIDER_MAX_WORKERS,
     DEFAULT_EVIDENCE_PROVIDER_WORKERS,
+    DEFAULT_NODE_CONTROL_ENABLED,
     DEFAULT_OTEL_SERVICE_NAME,
     DEFAULT_OTEL_TRACES_ENDPOINT,
     DEFAULT_POLICY_SYNC_INTERVAL_SECONDS,
@@ -87,6 +89,7 @@ from config import (
     KUBERNETES_CONFIGMAP_PATCH_ACTION,
     KUBERNETES_DEPLOYMENT_PATCH_ACTION,
     KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+    NODE_CONTROL_ENABLED_ENV,
     OTEL_SERVICE_NAME_ENV,
     OTEL_TRACES_ENDPOINT_ENV,
     POLICY_SYNC_INTERVAL_ENV,
@@ -542,6 +545,10 @@ class TargetClusterAgent:
             AGENT_DIRECT_COMMANDS_ENABLED_ENV,
             DEFAULT_AGENT_DIRECT_COMMANDS_ENABLED,
         ).strip().lower() in {"1", "true", "yes", "on"}
+        self.node_control_enabled = env(
+            NODE_CONTROL_ENABLED_ENV,
+            DEFAULT_NODE_CONTROL_ENABLED,
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self.client = client
         self.telemetry_transport = telemetry_transport
         self.kubernetes_transport = kubernetes_transport
@@ -809,8 +816,11 @@ class TargetClusterAgent:
         """Advertise executable features only for the current runtime policy."""
 
         capabilities = list(AgentConfig.AGENT_CAPABILITIES)
-        if not getattr(self, "direct_commands_enabled", True):
+        direct_commands_enabled = getattr(self, "direct_commands_enabled", True)
+        if not direct_commands_enabled:
             capabilities.remove(Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY)
+        if direct_commands_enabled and getattr(self, "node_control_enabled", False):
+            capabilities.append(Command.KUBERNETES_NODE_CONTROL_CAPABILITY)
         return capabilities
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
@@ -1096,6 +1106,11 @@ class TargetClusterAgent:
             Command.CLUSTER_AGENT_UNINSTALL_ACTION,
         }:
             return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
+        if action in {
+            Command.KUBERNETES_NODE_CORDON_ACTION,
+            Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        } and not getattr(self, "node_control_enabled", False):
+            return self.command_result(False, "node control is disabled by agent profile")
         direct_execution = self.direct_execution_requested(command)
         if self.management_write_blocked(action, direct_execution=direct_execution):
             LOGGER.warning(
@@ -1157,6 +1172,8 @@ class TargetClusterAgent:
             AgentConfig.APPLY_MANIFEST_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
             Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+            Command.KUBERNETES_NODE_CORDON_ACTION,
+            Command.KUBERNETES_NODE_UNCORDON_ACTION,
         }
 
     def direct_execution_requested(self, command: CommandRecord) -> bool:
@@ -1177,6 +1194,8 @@ class TargetClusterAgent:
             Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
             Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
             Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
+            Command.KUBERNETES_NODE_CORDON_ACTION,
+            Command.KUBERNETES_NODE_UNCORDON_ACTION,
             Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
             Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
             Command.KUBERNETES_CRONJOB_RESUME_ACTION,
@@ -1474,6 +1493,60 @@ class TargetClusterAgent:
         return ctx.ok(
             f"kubernetes {label} restarted",
             applied=True,
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_CORDON_ACTION,
+        api_group="core",
+        version="v1",
+        resource="nodes",
+        verb="patch",
+        scope="cluster-workload",
+        payload_model=KubernetesNodeSchedulingPayload,
+    )
+    async def cordon_node_command(
+        self,
+        ctx: CommandContext[KubernetesNodeSchedulingPayload],
+    ) -> JsonObject:
+        return await self.set_node_unschedulable(ctx, expected=True)
+
+    @command.k8s(
+        Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        api_group="core",
+        version="v1",
+        resource="nodes",
+        verb="patch",
+        scope="cluster-workload",
+        payload_model=KubernetesNodeSchedulingPayload,
+    )
+    async def uncordon_node_command(
+        self,
+        ctx: CommandContext[KubernetesNodeSchedulingPayload],
+    ) -> JsonObject:
+        return await self.set_node_unschedulable(ctx, expected=False)
+
+    async def set_node_unschedulable(
+        self,
+        ctx: CommandContext[KubernetesNodeSchedulingPayload],
+        *,
+        expected: bool,
+    ) -> JsonObject:
+        if ctx.payload.unschedulable is not expected:
+            return ctx.fail("node scheduling action does not match requested state")
+        spec = ctx.kubernetes_spec
+        result = await ctx.kubernetes.patch_cluster_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            resource=spec.resource,
+            name=ctx.payload.name,
+            body={"spec": {"unschedulable": expected}},
+        )
+        state = "cordoned" if expected else "uncordoned"
+        return ctx.ok(
+            f"kubernetes node {state}",
+            applied=True,
+            unschedulable=expected,
             result=result,
         )
 

@@ -94,6 +94,7 @@ def load_agent_module():
 class StubKubernetesClient:
     def __init__(self) -> None:
         self.patches: list[dict[str, object]] = []
+        self.cluster_patches: list[dict[str, object]] = []
         self.creates: list[dict[str, object]] = []
         self.namespaced_deletes: list[dict[str, object]] = []
         self.cluster_deletes: list[dict[str, object]] = []
@@ -103,6 +104,10 @@ class StubKubernetesClient:
 
     async def patch_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.patches.append(kwargs)
+        return {"patched": True}
+
+    async def patch_cluster_resource(self, **kwargs: object) -> dict[str, object]:
+        self.cluster_patches.append(kwargs)
         return {"patched": True}
 
     async def create_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
@@ -1819,6 +1824,90 @@ def test_workload_commands_use_exact_registered_kubernetes_resource(
     else:
         assert patch["body"] == {"spec": {"replicas": replicas}}
         assert patch["subresource"] == "scale"
+
+
+@pytest.mark.parametrize(
+    ("action", "unschedulable"),
+    [
+        (Command.KUBERNETES_NODE_CORDON_ACTION, True),
+        (Command.KUBERNETES_NODE_UNCORDON_ACTION, False),
+    ],
+)
+def test_node_scheduling_command_uses_exact_cluster_resource_patch(
+    action: str,
+    unschedulable: bool,
+) -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = True
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": action,
+                "direct_execution": True,
+                "payload": {
+                    "name": "worker-a",
+                    "unschedulable": unschedulable,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["unschedulable"] is unschedulable
+    assert agent.kubernetes.cluster_patches == [
+        {
+            "api_group": "core",
+            "version": "v1",
+            "resource": "nodes",
+            "name": "worker-a",
+            "body": {"spec": {"unschedulable": unschedulable}},
+        }
+    ]
+
+
+def test_node_scheduling_command_fails_closed_when_profile_is_disabled() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": Command.KUBERNETES_NODE_CORDON_ACTION,
+                "direct_execution": True,
+                "payload": {"name": "worker-a", "unschedulable": True},
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "node control is disabled by agent profile"
+    assert agent.kubernetes.cluster_patches == []
+
+
+def test_node_control_capability_is_advertised_only_when_enabled() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.direct_commands_enabled = True
+    agent.node_control_enabled = False
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
+
+    agent.node_control_enabled = True
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY in agent.advertised_capabilities()
+    agent.direct_commands_enabled = False
+    assert module.Command.KUBERNETES_NODE_CONTROL_CAPABILITY not in agent.advertised_capabilities()
 
 
 def test_cronjob_trigger_uses_observed_template_and_advertised_capability(

@@ -61,6 +61,15 @@ class KubernetesScalePayload(KubernetesGetPayload):
         return {"spec": {"replicas": self.replicas}}
 
 
+class KubernetesNodeSchedulingPayload(StrictModel):
+    name: str = Field(
+        min_length=1,
+        max_length=253,
+        pattern=r"^[a-z0-9](?:[-.a-z0-9]*[a-z0-9])?$",
+    )
+    unschedulable: bool
+
+
 class KubernetesCronJobPayload(KubernetesGetPayload):
     name: str = Field(
         min_length=1,
@@ -137,6 +146,13 @@ class KubernetesCommandPolicy:
         if spec.scope == "user-workload":
             self.ensure_user_workload_allowed(spec, payload, direct_execution=direct_execution)
             return
+        if spec.scope == "cluster-workload":
+            self.ensure_cluster_workload_allowed(
+                spec,
+                payload,
+                direct_execution=direct_execution,
+            )
+            return
         if spec.scope == "service-access":
             self.ensure_service_access_allowed(spec, payload)
             return
@@ -203,6 +219,24 @@ class KubernetesCommandPolicy:
         uid = getattr(resource, "uid", None)
         if not all(isinstance(value, str) and value for value in (namespace, name, uid)):
             raise PermissionError("service access requires an exact namespaced Service")
+
+    def ensure_cluster_workload_allowed(
+        self,
+        spec: KubernetesCommandSpec,
+        payload: object,
+        *,
+        direct_execution: bool = False,
+    ) -> None:
+        if self.cluster_role != TARGET_CLUSTER_ROLE and not direct_execution:
+            raise PermissionError("cluster workload control is only enabled on target clusters")
+        if (
+            spec.api_group not in {"", CORE_API_GROUP}
+            or spec.version != "v1"
+            or spec.resource != "nodes"
+            or spec.verb != "patch"
+        ):
+            raise PermissionError("cluster workload control permits only core/v1 Node patches")
+        self.field(payload, "name")
 
     def target_agent_namespace(self) -> str:
         if self.cluster_role == MANAGEMENT_CLUSTER_ROLE:
@@ -273,6 +307,28 @@ class KubernetesApiClient:
                 resource=resource,
                 name=name,
                 subresource=subresource,
+            ),
+            body=body,
+            content_type=MERGE_PATCH_CONTENT_TYPE,
+        )
+        return self.response_body(response)
+
+    async def patch_cluster_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        resource: str,
+        name: str,
+        body: JsonObject,
+    ) -> JsonObject:
+        response = await self.request(
+            "PATCH",
+            self.cluster_resource_path(
+                api_group=api_group,
+                version=version,
+                resource=resource,
+                name=name,
             ),
             body=body,
             content_type=MERGE_PATCH_CONTENT_TYPE,

@@ -389,7 +389,7 @@ def resource_control_diff(
 async def accept_resource_control(
     *,
     cluster_id: str,
-    namespace: str,
+    namespace: str | None,
     resource_kind: str,
     resource_name: str,
     action: str,
@@ -403,7 +403,8 @@ async def accept_resource_control(
     db: Any,
     events: Any,
 ) -> CommandReceipt:
-    validate_control_namespace(namespace)
+    if namespace is not None:
+        validate_control_namespace(namespace)
     require_direct_execution_confirmation(execution_request)
     direct_execution = direct_execution_from_confirmation(execution_request)
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
@@ -412,7 +413,7 @@ async def accept_resource_control(
     diff = resource_control_diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
-        namespace=namespace,
+        namespace=namespace or "",
         resource_kind=resource_kind,
         resource_name=resource_name,
         action=action,
@@ -421,7 +422,7 @@ async def accept_resource_control(
     command = CommandRequestedBody(
         cluster_id=cluster_id,
         action=action,
-        namespace=namespace,
+        namespace=namespace or "",
         reason=reason,
         diff=diff,
         command_id=new_command_id(),
@@ -445,6 +446,42 @@ async def accept_resource_control(
     ):
         await publish_accepted_operation(operation_events, command, response)
     return response
+
+
+async def accept_node_control(
+    *,
+    cluster_id: str,
+    node: str,
+    action: str,
+    reason: str,
+    unschedulable: bool,
+    payload: ConfirmedResourceActionRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    if payload.confirmation is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=None,
+        resource_kind="node",
+        resource_name=node,
+        action=action,
+        reason=payload.reason or reason,
+        payload={"name": node, "unschedulable": unschedulable},
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
 
 
 def require_cluster_read_access(db: Any, current: Any, workspace_id: str, cluster_id: str) -> None:
@@ -726,6 +763,62 @@ async def restart_workload(
         namespace=namespace,
         kind=kind,
         workload=workload,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_CORDON_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def cordon_node(
+    cluster_id: str,
+    node: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_node_control(
+        cluster_id=cluster_id,
+        node=node,
+        action=Command.KUBERNETES_NODE_CORDON_ACTION,
+        reason=f"cordon node/{node}",
+        unschedulable=True,
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_NODE_UNCORDON_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def uncordon_node(
+    cluster_id: str,
+    node: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_node_control(
+        cluster_id=cluster_id,
+        node=node,
+        action=Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        reason=f"uncordon node/{node}",
+        unschedulable=False,
         payload=payload,
         current=current,
         db=db,

@@ -55,6 +55,18 @@ def workload_resource(kind: str, name: str) -> dict[str, object]:
     }
 
 
+def node_resource(*, cordoned: bool) -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": "resource-node-worker-a",
+        "resource_type": "node",
+        "kind": "Node",
+        "namespace": None,
+        "name": "worker-a",
+        "raw": {"spec": {"unschedulable": cordoned}},
+    }
+
+
 class ResourceCapabilitiesDb:
     def __init__(
         self,
@@ -65,6 +77,7 @@ class ResourceCapabilitiesDb:
         command_supported: bool = True,
         cronjob_supported: bool = True,
         pod_exec_supported: bool = True,
+        node_control_supported: bool = True,
         management: bool = False,
         resource: dict[str, object] | None = None,
     ) -> None:
@@ -74,6 +87,7 @@ class ResourceCapabilitiesDb:
         self.command_supported = command_supported
         self.cronjob_supported = cronjob_supported
         self.pod_exec_supported = pod_exec_supported
+        self.node_control_supported = node_control_supported
         self.management = management
         self.resource = deployment_resource() if resource is None else resource
         self.lookups: list[tuple[str, str]] = []
@@ -122,6 +136,8 @@ class ResourceCapabilitiesDb:
             capabilities.append("cronjob_control.v1")
         if self.pod_exec_supported:
             capabilities.append("pod_exec_stream")
+        if self.node_control_supported:
+            capabilities.append("node_control.v1")
         return [{"status": "connected", "capabilities": capabilities}]
 
     def get_cluster_registration(
@@ -268,6 +284,44 @@ def test_workload_capabilities_reuse_server_owned_command_handoff(
         )
         for item in capabilities
     )
+
+
+@pytest.mark.parametrize(
+    ("cordoned", "capability_id", "path_suffix"),
+    [
+        (False, "node.cordon", "/cordon"),
+        (True, "node.uncordon", "/uncordon"),
+    ],
+)
+def test_node_capability_is_derived_from_observed_scheduling_state(
+    cordoned: bool,
+    capability_id: str,
+    path_suffix: str,
+) -> None:
+    resource = node_resource(cordoned=cordoned)
+    response = client(ResourceCapabilitiesDb(resource=resource)).get(
+        "/capabilities",
+        params={"resource": resource["inventory_key"]},
+    )
+
+    assert response.status_code == 200
+    capabilities = response.json()["capabilities"]
+    assert [item["capability_id"] for item in capabilities] == [capability_id]
+    assert capabilities[0]["path"] == (f"/clusters/cluster-a/nodes/worker-a{path_suffix}")
+    assert capabilities[0]["realtime"] is True
+
+
+def test_node_capability_is_hidden_without_agent_node_control_capability() -> None:
+    resource = node_resource(cordoned=False)
+    response = client(
+        ResourceCapabilitiesDb(
+            resource=resource,
+            node_control_supported=False,
+        )
+    ).get("/capabilities", params={"resource": resource["inventory_key"]})
+
+    assert response.status_code == 200
+    assert response.json()["capabilities"] == []
 
 
 def test_capabilities_expose_exact_cronjob_actions_only_with_permission_and_agent_support() -> None:

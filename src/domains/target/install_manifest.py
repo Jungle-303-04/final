@@ -40,6 +40,7 @@ def target_install_manifest(payload: TargetRegisterRequest, agent_token: str) ->
             priority_class_manifest(),
             service_account_manifest(namespace),
             cluster_read_rbac_manifest(namespace),
+            node_control_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             cluster_uninstall_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             target_write_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
             sandbox_rbac_manifest(namespace) if role != MANAGEMENT_CLUSTER_ROLE else "",
@@ -193,11 +194,11 @@ rules:
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
-    resourceNames: ["cluster-agent-read"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control"]
     verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterrolebindings"]
-    resourceNames: ["cluster-agent-read"]
+    resourceNames: ["cluster-agent-read", "cluster-agent-node-control"]
     verbs: ["delete"]
   - apiGroups: ["scheduling.k8s.io"]
     resources: ["priorityclasses"]
@@ -212,6 +213,34 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-agent-uninstall
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: {namespace}
+"""
+
+
+def node_control_rbac_manifest(namespace: str) -> str:
+    """Cluster-scoped scheduling permission isolated from the read role."""
+
+    return f"""
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-node-control
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-node-control
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-node-control
 subjects:
   - kind: ServiceAccount
     name: cluster-agent
@@ -396,6 +425,7 @@ data:
   LOKI_BASE_URL: {yaml_string(payload.loki_base_url)}
   TEMPO_BASE_URL: {yaml_string(payload.tempo_base_url)}
   NODE_COLLECTOR_ENABLED: {yaml_string(str(node_collector_enabled).lower())}{control_namespaces_line(payload)}{pod_exec_namespaces_line(payload)}
+  NODE_CONTROL_ENABLED: {yaml_string(str(payload.cluster_role != MANAGEMENT_CLUSTER_ROLE).lower())}
   NODE_COLLECTOR_IMAGE: {yaml_string(payload.image)}
   NODE_COLLECTOR_NAMESPACE: {yaml_string(namespace)}
   AGENT_CONTROL_DB_PATH: "/var/lib/target-agent/agent-control.db"

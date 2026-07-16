@@ -9,6 +9,8 @@ def test_uninstall_command_is_exact_name_allowlist_without_namespace_or_workload
     assert "deployment/cluster-agent" in command
     assert "daemonset/optional-node-collector" in command
     assert "clusterrole/cluster-agent-uninstall" in command
+    assert "clusterrole/cluster-agent-node-control" in command
+    assert "clusterrolebinding/cluster-agent-node-control" in command
     assert "namespace/target" not in command
     assert "namespace/sandbox" not in command
     assert "deployment/color-turf-server" not in command

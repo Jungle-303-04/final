@@ -89,6 +89,30 @@ subjects:
     name: cluster-agent
     namespace: target
 ---
+# Node scheduling writes are isolated from the read role. Runtime capability
+# advertisement is enabled only in this target profile.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-agent-node-control
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-agent-node-control
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-agent-node-control
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent
+    namespace: target
+---
 # target-agent가 소유한 리소스에만 쓰기 권한을 둔다.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -260,6 +284,8 @@ spec:
             - name: REALTIME_GATEWAY_URL
               value: "__REALTIME_GATEWAY_URL__"
             - name: NODE_COLLECTOR_ENABLED
+              value: "true"
+            - name: NODE_CONTROL_ENABLED
               value: "true"
             - name: NODE_COLLECTOR_IMAGE
               value: kubeheal-service:latest

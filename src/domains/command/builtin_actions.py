@@ -89,6 +89,32 @@ class RestartDaemonSetCommand:
 
 
 @command.action(
+    Command.KUBERNETES_NODE_CORDON_ACTION,
+    requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class CordonNodeCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_NODE_UNCORDON_ACTION,
+    requires_approval=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    enforce_control_namespace=False,
+    required_agent_capability=Command.KUBERNETES_NODE_CONTROL_CAPABILITY,
+)
+class UncordonNodeCommand:
+    pass
+
+
+@command.action(
     Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
     requires_approval=False,
     supports_manual_retry=True,

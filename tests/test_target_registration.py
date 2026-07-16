@@ -471,6 +471,9 @@ def test_target_install_manifest_sets_agent_and_telemetry_config() -> None:
         '"http://opentelemetry-collector.target.svc:4318/v1/traces"'
     ) in manifest
     assert 'NODE_COLLECTOR_ENABLED: "true"' in manifest
+    assert 'NODE_CONTROL_ENABLED: "true"' in manifest
+    assert "name: cluster-agent-node-control" in manifest
+    assert 'resources: ["nodes"]\n    verbs: ["get", "patch"]' in manifest
     assert 'REALTIME_GATEWAY_URL: "ws://management.local:30080"' in manifest
     assert (
         'name: REALTIME_GATEWAY_URL\n              value: "ws://management.local:30080"' in manifest
@@ -638,6 +641,8 @@ def test_management_install_manifest_is_read_only() -> None:
     assert "cluster-agent-catalog-install" not in manifest
     assert "cluster-agent-target-manage" not in manifest
     assert "cluster-agent-uninstall" not in manifest
+    assert "cluster-agent-node-control" not in manifest
+    assert 'NODE_CONTROL_ENABLED: "false"' in manifest
     assert 'verbs: ["get", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "create", "update", "patch"]' not in manifest
     assert 'verbs: ["get", "list", "watch"]' in manifest
