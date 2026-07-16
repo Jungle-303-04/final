@@ -297,9 +297,11 @@ export function ResourcesPage({
                 ) : null}
                 metricHistory={metricHistory}
                 nodePodsPort={nodePodsPort}
+                onInfraMapUnauthorized={reportUnauthorized}
                 onNodePodsUnauthorized={reportUnauthorized}
                 onLoadMore={filtered.loadMoreList}
                 onTopologyViewChange={topology.pin}
+                port={port}
                 physicalTopology={physicalTopology}
                 relationTopology={relationTopology}
                 replay={physicalRealtime.replay}

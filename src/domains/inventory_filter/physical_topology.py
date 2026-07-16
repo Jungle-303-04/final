@@ -26,19 +26,39 @@ def build_physical_topology(
     servers: list[JsonObject] = []
     server_id_by_name: dict[str, str] = {}
     metric_values: list[float | None] = []
+    measured_values: list[float | None] = []
     for row in _rows(result.get("servers")):
         server_id = _text(row.get("inventory_key"))
         name = _text(row.get("name"))
         if not server_id or not name:
             continue
+        summary = _mapping(row.get("summary"))
         measured = _mapping(node_usage.get(name))
         cpu_pct = _usage_pct(measured, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
+        if cpu_pct is None:
+            cpu_pct = _usage_pct(summary, ("cpu_pct", "cpu_percent"), ("cpu_ratio",))
         mem_pct = _usage_pct(
             measured,
             ("mem_pct", "memory_pct"),
             ("mem_ratio", "memory_ratio"),
         )
-        metric_values.extend((cpu_pct, mem_pct))
+        if mem_pct is None:
+            mem_pct = _usage_pct(
+                summary,
+                ("mem_pct", "memory_pct"),
+                ("mem_ratio", "memory_ratio"),
+            )
+        cpu_mcores = _number(measured.get("cpu_mcores"))
+        if cpu_mcores is None:
+            cpu_mcores = _number(summary.get("cpu_mcores"))
+        mem_mib = _number(_first(measured, "mem_mib", "memory_mib"))
+        if mem_mib is None:
+            mem_mib = _number(_first(summary, "mem_mib", "memory_mib"))
+        allocatable_cpu = _number(summary.get("allocatable_cpu_mcores"))
+        allocatable_mem = _number(_first(summary, "allocatable_mem_mib", "allocatable_memory_mib"))
+        pod_capacity = _optional_non_negative_int(summary.get("pod_capacity"))
+        metric_values.extend((cpu_pct, mem_pct, cpu_mcores, mem_mib))
+        measured_values.extend((cpu_pct, mem_pct, cpu_mcores, mem_mib))
         counts = _mapping(pod_counts.get(name))
         server_id_by_name[name] = server_id
         servers.append(
@@ -47,6 +67,11 @@ def build_physical_topology(
                 "name": name,
                 "cpu_pct": cpu_pct,
                 "mem_pct": mem_pct,
+                "cpu_mcores": cpu_mcores,
+                "mem_mib": mem_mib,
+                "allocatable_cpu_mcores": allocatable_cpu,
+                "allocatable_mem_mib": allocatable_mem,
+                "pod_capacity": pod_capacity,
                 "status": _text(row.get("status")),
                 "matched_pod_count": (
                     None
@@ -88,6 +113,7 @@ def build_physical_topology(
             mem_request_mib=mem_request_mib,
         )
         metric_values.extend((cpu_mcores, cpu_request_mcores, mem_mib, mem_request_mib, usage_pct))
+        measured_values.extend((cpu_mcores, mem_mib, usage_pct))
         pods.append(
             {
                 "id": pod_id,
@@ -122,7 +148,7 @@ def build_physical_topology(
     metrics_completeness: Completeness
     if not entities_exist:
         metrics_completeness = "exact"
-    elif not usage_sample:
+    elif not any(value is not None for value in measured_values):
         metrics_completeness = "unavailable"
     elif any(value is None for value in metric_values):
         metrics_completeness = "partial"
@@ -229,6 +255,15 @@ def _non_negative_int(value: object) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _optional_non_negative_int(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def _text(value: object, default: str = "") -> str:

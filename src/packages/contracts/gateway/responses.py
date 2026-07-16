@@ -1180,6 +1180,11 @@ class PhysicalTopologyServer(StrictModel):
     name: str = Field(min_length=1)
     cpu_pct: float | None = Field(default=None, ge=0)
     mem_pct: float | None = Field(default=None, ge=0)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+    allocatable_cpu_mcores: float | None = Field(default=None, ge=0)
+    allocatable_mem_mib: float | None = Field(default=None, ge=0)
+    pod_capacity: int | None = Field(default=None, ge=0)
     status: str
     matched_pod_count: int | None = Field(default=None, ge=0)
     total_pod_count: int | None = Field(default=None, ge=0)

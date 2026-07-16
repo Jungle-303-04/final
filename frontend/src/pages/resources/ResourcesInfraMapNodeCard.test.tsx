@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../shared/i18n";
 import { InfraMapNodeCard } from "./ResourcesInfraMapNodeCard";
@@ -16,6 +16,7 @@ describe("InfraMapNodeCard", () => {
         <InfraMapNodeCard
           metricMode="cpu"
           node={nodeFixture()}
+          onShowMorePods={vi.fn()}
           selectionActive={false}
         />
       </I18nProvider>,
@@ -29,18 +30,21 @@ describe("InfraMapNodeCard", () => {
     expect(container.textContent).not.toContain("18%");
   });
 
-  it("expands hidden pods inside the node pod area", () => {
+  it("drills into the lower Pod list instead of expanding hidden pods inside the node", () => {
+    const onShowMorePods = vi.fn();
+    const node = nodeFixture({
+      hiddenPodCount: 2,
+      hiddenPods: [
+        podFixture({ id: "pod:hidden-one", name: "hidden-one" }),
+        podFixture({ id: "pod:hidden-two", name: "hidden-two" }),
+      ],
+    });
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <InfraMapNodeCard
           metricMode="cpu"
-          node={nodeFixture({
-            hiddenPodCount: 2,
-            hiddenPods: [
-              podFixture({ id: "pod:hidden-one", name: "hidden-one" }),
-              podFixture({ id: "pod:hidden-two", name: "hidden-two" }),
-            ],
-          })}
+          node={node}
+          onShowMorePods={onShowMorePods}
           selectionActive={false}
         />
       </I18nProvider>,
@@ -48,12 +52,72 @@ describe("InfraMapNodeCard", () => {
 
     expect(screen.queryByText("hidden-one")).toBeNull();
 
-    const expandButton = screen.getByRole("button", { name: "+ 2 more" });
-    fireEvent.click(expandButton);
+    fireEvent.click(screen.getByRole("button", { name: "View 2 more Pods" }));
 
-    expect(expandButton.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByText("hidden-one")).toBeTruthy();
-    expect(screen.getByText("hidden-two")).toBeTruthy();
+    expect(onShowMorePods).toHaveBeenCalledWith(node);
+    expect(screen.queryByText("hidden-one")).toBeNull();
+    expect(screen.queryByText("hidden-two")).toBeNull();
+  });
+
+  it("colors Pod cards from the selected metric risk without inventing missing values", () => {
+    const node = nodeFixture({
+      visiblePods: [
+        podFixture({
+          cpu: { ratio: 0.2, value: 20 },
+          id: "pod:stable",
+          memory: { ratio: 0.92, value: 92 },
+          name: "stable-api",
+        }),
+        podFixture({
+          cpu: { ratio: 0.97, value: 97 },
+          id: "pod:hot",
+          memory: { ratio: 0.1, value: 10 },
+          name: "hot-worker",
+        }),
+        podFixture({
+          cpu: { ratio: null, value: null },
+          id: "pod:unknown",
+          memory: { ratio: null, value: null },
+          name: "unknown-worker",
+        }),
+      ],
+    });
+    const rendered = render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <InfraMapNodeCard
+          metricMode="cpu"
+          node={node}
+          onShowMorePods={vi.fn()}
+          selectionActive={false}
+        />
+      </I18nProvider>,
+    );
+
+    const cpuPods = rendered.container.querySelectorAll<HTMLElement>(
+      "[data-slot='infra-map-pod']",
+    );
+    expect(cpuPods[0]?.dataset.usageTone).toBe("healthy");
+    expect(cpuPods[1]?.dataset.usageTone).toBe("critical");
+    expect(cpuPods[2]?.dataset.usageTone).toBe("unknown");
+    expect(cpuPods[2]?.dataset.metricAvailable).toBe("false");
+    expect(cpuPods[2]?.textContent).toContain("—");
+
+    rendered.rerender(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <InfraMapNodeCard
+          metricMode="memory"
+          node={node}
+          onShowMorePods={vi.fn()}
+          selectionActive={false}
+        />
+      </I18nProvider>,
+    );
+
+    const memoryPods = rendered.container.querySelectorAll<HTMLElement>(
+      "[data-slot='infra-map-pod']",
+    );
+    expect(memoryPods[0]?.dataset.usageTone).toBe("danger");
+    expect(memoryPods[1]?.dataset.usageTone).toBe("healthy");
   });
 });
 

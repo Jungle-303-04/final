@@ -1,4 +1,10 @@
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { HomePort } from "../../features/home/homeContract";
@@ -27,6 +33,8 @@ import {
   UnknownCompletenessEmpty,
 } from "./ResourcesPageFeedback";
 import type { ResourcesFilterPageState } from "./resourcesFilterPageStateModel";
+import { ResourcesInfraMapView } from "./ResourcesInfraMapView";
+import { buildInfraMapModel, type InfraMapNode } from "./resourcesInfraMapModel";
 import { ResourcesTable } from "./ResourcesTable";
 import { usePhysicalTopologyDataFrame } from "./usePhysicalTopologyDataFrame";
 import type { RelationTopologyFrame } from "./useRelationTopologyDataFrame";
@@ -34,14 +42,23 @@ import type { ChangeTimelineFrame } from "./useChangeTimelineDataFrame";
 import { useResourcesPageState } from "./useResourcesPageState";
 import type { PhysicalTopologyReplayState } from "./usePhysicalTopologyRealtime";
 import type { PhysicalPodOpenTarget } from "./physicalTopologyGraphTypes";
+import {
+  infraMapFocusItemFromResource,
+  selectedPodIdsFromFocusDetails,
+  useInfraMapFocusDetails,
+  type InfraMapFocusItem,
+} from "./useInfraMapFocusDetails";
+import type { ResourcesPort } from "../../features/resources/resourcesContract";
 
 export function ResourcesListSurface({
   filterList,
   listFallback,
   metricHistory,
   nodePodsPort,
+  onInfraMapUnauthorized,
   onNodePodsUnauthorized,
   onLoadMore,
+  port,
   physicalTopology,
   relationTopology,
   replay,
@@ -56,8 +73,10 @@ export function ResourcesListSurface({
   listFallback: ReactNode;
   metricHistory: ResourceMetricsHistoryFrame;
   nodePodsPort: Pick<HomePort, "loadNodePods">;
+  onInfraMapUnauthorized: () => void;
   onNodePodsUnauthorized: () => void;
   onLoadMore: () => void;
+  port: ResourcesPort;
   physicalTopology: ReturnType<typeof usePhysicalTopologyDataFrame>;
   relationTopology: RelationTopologyFrame;
   replay: PhysicalTopologyReplayState;
@@ -71,6 +90,9 @@ export function ResourcesListSurface({
   const { t } = useI18n();
   const filter = useUnifiedFilter();
   const scrollIntoView = useMotionAwareScrollIntoView();
+  const [infraMapFocusItems, setInfraMapFocusItems] = useState<InfraMapFocusItem[]>([]);
+  const [infraMapListDrilldown, setInfraMapListDrilldown] =
+    useState<InfraMapListDrilldown | null>(null);
   const cluster = state.choices.phase === "ready"
     ? state.choices.data.clusters.find((candidate) => candidate.id === state.selectedClusterId)
     : undefined;
@@ -147,6 +169,73 @@ export function ResourcesListSurface({
       ),
     })),
   ];
+  useEffect(() => {
+    setInfraMapFocusItems([]);
+  }, [state.selectedClusterId, state.selectedResourceType]);
+  useEffect(() => {
+    setInfraMapListDrilldown(null);
+  }, [state.selectedClusterId]);
+  useEffect(() => {
+    if (state.selectedResourceType !== "pod") setInfraMapListDrilldown(null);
+  }, [state.selectedResourceType]);
+  const infraMapFocusOptions = useMemo(
+    () => filterList.phase === "ready" && filterList.data !== null
+      ? filterList.data.items.map((item) => infraMapFocusItemFromResource(item.resource))
+      : [],
+    [filterList],
+  );
+  const selectInfraMapFocusItem = useCallback((item: InfraMapFocusItem) => {
+    setInfraMapFocusItems((current) => current.some((candidate) => candidate.key === item.key)
+      ? current
+      : [...current, item]);
+  }, []);
+  const removeInfraMapFocusItem = useCallback((key: string) => {
+    setInfraMapFocusItems((current) => current.filter((item) => item.key !== key));
+  }, []);
+  const focusDetails = useInfraMapFocusDetails({
+    clusterId: state.selectedClusterId,
+    items: infraMapFocusItems,
+    port,
+    reportUnauthorized: onInfraMapUnauthorized,
+    revision: state.revision,
+  });
+  const infraMapSelectedPodIds = useMemo(() => {
+    if (infraMapFocusItems.length === 0) return undefined;
+    if (focusDetails.phase !== "ready") {
+      return new Set(infraMapFocusItems
+        .filter((item) => item.identity.resourceType === "pod")
+        .map((item) => item.resourceId));
+    }
+    return selectedPodIdsFromFocusDetails(focusDetails.data, infraMapFocusItems);
+  }, [focusDetails, infraMapFocusItems]);
+  const infraMapModel = useMemo(
+    () => physicalTopology.phase === "ready"
+      ? buildInfraMapModel({
+          selectedPodIds: infraMapSelectedPodIds,
+          selectionActive: infraMapFocusItems.length > 0,
+          topology: physicalTopology.data,
+        })
+      : null,
+    [infraMapFocusItems.length, infraMapSelectedPodIds, physicalTopology],
+  );
+  const showInfraMapNodePods = useCallback((node: InfraMapNode) => {
+    const knownPods = [...node.visiblePods, ...node.hiddenPods];
+    setInfraMapListDrilldown({
+      nodeId: node.id,
+      nodeName: node.name,
+      selectedPodKeys: infraMapFocusItems.length > 0 && knownPods.length > 0
+        ? new Set(knownPods.map((pod) => pod.id))
+        : null,
+    });
+    if (state.selectedResourceType !== "pod") state.selectResourceType("pod");
+    filter.updateDetail(
+      (current) => ({ ...current, node: node.name }),
+      "drill-in",
+    );
+    requestAnimationFrame(() => {
+      scrollIntoView(document.getElementById("resources-list-surface"), { block: "start" });
+    });
+  }, [filter, infraMapFocusItems.length, scrollIntoView, state]);
   const timelineRange = filter.detail.timeRange ?? "1h";
   const changeTimelineRange = (range: TimelineRange) => filter.updateDetail(
     (current) => ({
@@ -196,6 +285,18 @@ export function ResourcesListSurface({
             onSelect={state.selectResourceType}
             selectedResourceType={state.selectedResourceType}
           />
+          <Surface aria-labelledby="resources-infra-map-title" className="min-w-0 overflow-hidden">
+            <ResourcesInfraMapView
+              focusOptions={infraMapFocusOptions}
+              model={infraMapModel}
+              onFocusRemove={removeInfraMapFocusItem}
+              onFocusSelect={selectInfraMapFocusItem}
+              onRetry={state.refresh}
+              onShowMorePods={showInfraMapNodePods}
+              phase={physicalTopology.phase}
+              selectedFocus={infraMapFocusItems}
+            />
+          </Surface>
           <Surface aria-labelledby="resources-graph-title" className="min-w-0 overflow-hidden">
             <ResourcesGraphShell
               breadcrumbs={breadcrumbs}
@@ -242,9 +343,15 @@ export function ResourcesListSurface({
                     ? t("resources.list.allTitle")
                     : filter.state.resources.types.map(humanizeFilterValue).join(", ")}
                 </h3>
+                {infraMapListDrilldown ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("resources.infraMap.nodeLabel", { name: infraMapListDrilldown.nodeName })}
+                  </p>
+                ) : null}
               </div>
               <ResourcesListBody
                 filterList={filterList}
+                infraMapListDrilldown={infraMapListDrilldown}
                 metricHistory={metricHistory}
                 onLoadMore={onLoadMore}
                 selectTableRows={selectTableRows}
@@ -258,14 +365,22 @@ export function ResourcesListSurface({
   );
 }
 
+interface InfraMapListDrilldown {
+  nodeId: string;
+  nodeName: string;
+  selectedPodKeys: ReadonlySet<string> | null;
+}
+
 function ResourcesListBody({
   filterList,
+  infraMapListDrilldown,
   metricHistory,
   onLoadMore,
   selectTableRows,
   state,
 }: {
   filterList: ResourcesFilterPageState<ResourcesFilterResourcePage>;
+  infraMapListDrilldown: InfraMapListDrilldown | null;
   metricHistory: ResourceMetricsHistoryFrame;
   onLoadMore: () => void;
   selectTableRows: (rows: readonly ResourceSummary[]) => ResourceSummary[];
@@ -297,7 +412,10 @@ function ResourcesListBody({
   ) {
     return <UnknownCompletenessEmpty variant="list" />;
   }
-  const items = selectTableRows(filterList.data.items.map((item) => item.resource));
+  const items = selectInfraMapDrilldownRows(
+    selectTableRows(filterList.data.items.map((item) => item.resource)),
+    infraMapListDrilldown,
+  );
   return (
     <div className="min-w-0">
       <ResourcesListScopeStatus page={filterList.data} />
@@ -328,4 +446,29 @@ function ResourcesListBody({
       ) : null}
     </div>
   );
+}
+
+function selectInfraMapDrilldownRows(
+  rows: readonly ResourceSummary[],
+  drilldown: InfraMapListDrilldown | null,
+): ResourceSummary[] {
+  if (drilldown === null) return [...rows];
+  return rows.filter((row) => {
+    if (row.resourceType !== "pod") return false;
+    if (
+      drilldown.selectedPodKeys !== null &&
+      !drilldown.selectedPodKeys.has(podRowKey(row))
+    ) {
+      return false;
+    }
+    if (row.facts.type !== "pod" || row.facts.nodeName === null) return true;
+    return row.facts.nodeName === drilldown.nodeName ||
+      `node:${row.facts.nodeName}` === drilldown.nodeId;
+  });
+}
+
+function podRowKey(row: ResourceSummary): string {
+  return row.namespace === null
+    ? `pod:${row.name}`
+    : `pod:${row.namespace}/${row.name}`;
 }

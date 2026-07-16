@@ -1,7 +1,8 @@
-import { useState } from "react";
 import { Server } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import { useI18n } from "../../shared/i18n";
+import { cn } from "../../shared/lib/cn";
 import {
   CountMetric,
   type InfraMapMetricMode,
@@ -13,14 +14,15 @@ import type { InfraMapNode, InfraMapPod } from "./resourcesInfraMapModel";
 export function InfraMapNodeCard({
   metricMode,
   node,
+  onShowMorePods,
   selectionActive,
 }: {
   metricMode: InfraMapMetricMode;
   node: InfraMapNode;
+  onShowMorePods: (node: InfraMapNode) => void;
   selectionActive: boolean;
 }) {
   const { t } = useI18n();
-  const [podsExpanded, setPodsExpanded] = useState(false);
   return (
     <section
       className="grid h-72 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border bg-linear-to-b from-muted/35 via-background/90 to-muted/25 shadow-sm"
@@ -51,10 +53,9 @@ export function InfraMapNodeCard({
 
       <div className="min-h-0 p-3">
         <InfraMapPodArea
-          expanded={podsExpanded}
           metricMode={metricMode}
           node={node}
-          onExpandedChange={setPodsExpanded}
+          onShowMorePods={onShowMorePods}
           selectionActive={selectionActive}
         />
       </div>
@@ -79,22 +80,17 @@ export function InfraMapNodeCard({
 }
 
 function InfraMapPodArea({
-  expanded,
   metricMode,
   node,
-  onExpandedChange,
+  onShowMorePods,
   selectionActive,
 }: {
-  expanded: boolean;
   metricMode: InfraMapMetricMode;
   node: InfraMapNode;
-  onExpandedChange: (expanded: boolean) => void;
+  onShowMorePods: (node: InfraMapNode) => void;
   selectionActive: boolean;
 }) {
   const { formatNumber, t } = useI18n();
-  const pods = expanded
-    ? [...node.visiblePods, ...node.hiddenPods]
-    : node.visiblePods;
   if (node.visiblePods.length === 0) {
     return (
       <div className="grid h-full min-h-24 place-items-center rounded-md border border-dashed bg-muted/10 px-3 text-center text-xs text-muted-foreground">
@@ -109,21 +105,18 @@ function InfraMapPodArea({
       <div
         className={[
           "grid min-h-0 grid-cols-2 content-start gap-1.5 pr-1",
-          expanded ? "overflow-y-auto" : "overflow-hidden",
+          "overflow-hidden",
         ].join(" ")}
-        data-expanded={expanded || undefined}
         data-slot="infra-map-pod-scroll"
       >
-        {pods.map((pod) => (
+        {node.visiblePods.map((pod) => (
           <InfraMapPodSlot key={pod.id} metricMode={metricMode} pod={pod} />
         ))}
       </div>
       {node.hiddenPodCount > 0 ? (
         <button
-          aria-expanded={expanded}
-          className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/75 px-2 text-[0.6875rem] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[expanded=true]:bg-muted data-[expanded=true]:text-foreground"
-          data-expanded={expanded || undefined}
-          onClick={() => onExpandedChange(!expanded)}
+          className="mt-1.5 flex min-h-6 items-center justify-center rounded-sm border bg-background/80 px-2 text-[0.6875rem] font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => onShowMorePods(node)}
           type="button"
         >
           {t("resources.infraMap.morePods", {
@@ -147,25 +140,42 @@ function InfraMapPodSlot({
   const fillPercent = selectedMetric.ratio === null
     ? null
     : clampPercent(selectedMetric.ratio * 100);
+  const healthVisualTone = healthTone(pod.health);
+  const usageTone = podVisualTone(pod.health, selectedMetric.ratio);
+  const style = {
+    "--infra-map-pod-fill-width": fillPercent === null ? "0%" : `${fillPercent}%`,
+    "--infra-map-pod-usage-color": podUsageColor(selectedMetric.ratio, usageTone),
+  } as CSSProperties;
   return (
     <article
       aria-label={`${pod.name} ${pod.phase} ${selectedMetric.label} ${selectedMetric.displayText}`}
-      className="relative flex h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-sm border bg-background/80 px-2 shadow-xs data-[selected=true]:border-primary data-[selected=true]:bg-primary/10"
+      className={cn(
+        "relative flex h-10 min-w-0 items-center gap-1.5 overflow-hidden rounded-sm border px-2 shadow-xs transition-colors",
+        POD_TONE_CLASS[usageTone],
+        pod.selected && "ring-2 ring-primary/45",
+      )}
       data-metric={metricMode}
       data-metric-available={fillPercent === null ? "false" : "true"}
       data-selected={pod.selected || undefined}
       data-slot="infra-map-pod"
+      data-usage-tone={usageTone}
+      style={style}
     >
       {fillPercent === null ? null : (
-        <progress
+        <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full appearance-none bg-transparent [&::-moz-progress-bar]:bg-primary/15 [&::-webkit-progress-bar]:bg-transparent [&::-webkit-progress-value]:bg-primary/15"
+          className="pointer-events-none absolute inset-y-0 left-0 w-[var(--infra-map-pod-fill-width)] bg-[var(--infra-map-pod-usage-color)] opacity-20 transition-[width,background-color]"
           data-slot="infra-map-pod-fill"
-          max={100}
-          value={fillPercent}
         />
       )}
-      <HealthDot tone={pod.health} />
+      {fillPercent === null ? null : (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-[var(--infra-map-pod-fill-width)] bg-[var(--infra-map-pod-usage-color)] transition-[width,background-color]"
+          data-slot="infra-map-pod-risk-bar"
+        />
+      )}
+      <HealthDot tone={healthVisualTone} />
       <div className="relative z-10 min-w-0 flex-1" title={pod.name}>
         <h4 className="truncate text-[0.6875rem] font-semibold leading-none">
           {shortPodName(pod.name)}
@@ -181,13 +191,32 @@ function InfraMapPodSlot({
   );
 }
 
+type PodVisualTone = "critical" | "danger" | "healthy" | "unknown" | "warning";
+
+const POD_TONE_CLASS: Record<PodVisualTone, string> = {
+  critical: "border-destructive/60 bg-destructive/10 text-foreground",
+  danger: "border-orange-500/55 bg-orange-500/10 text-foreground",
+  healthy: "border-emerald-500/35 bg-emerald-500/5 text-foreground",
+  unknown: "border-dashed border-border bg-background/80 text-muted-foreground",
+  warning: "border-status-warning/55 bg-status-warning/10 text-foreground",
+};
+
+const TONE_WEIGHT: Record<PodVisualTone, number> = {
+  critical: 4,
+  danger: 3,
+  warning: 2,
+  healthy: 1,
+  unknown: 0,
+};
+
 function HealthDot({ tone }: { tone: string }) {
   const className = {
     critical: "bg-destructive",
+    danger: "bg-orange-500",
     healthy: "bg-emerald-500",
     stale: "bg-muted-foreground",
     unknown: "bg-muted-foreground",
-    warning: "bg-amber-500",
+    warning: "bg-status-warning",
   }[tone] ?? "bg-muted-foreground";
   return <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${className}`} />;
 }
@@ -236,6 +265,74 @@ function ratioDisplay(
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
+}
+
+function podVisualTone(health: string, ratio: number | null): PodVisualTone {
+  const statusTone = healthTone(health);
+  if (ratio === null) {
+    return statusTone === "healthy" ? "unknown" : statusTone;
+  }
+  return strongerTone(statusTone, usageTone(ratio));
+}
+
+function healthTone(health: string): PodVisualTone {
+  const normalized = health.toLowerCase();
+  if (
+    normalized.includes("critical") ||
+    normalized.includes("crash") ||
+    normalized.includes("error") ||
+    normalized.includes("fail") ||
+    normalized.includes("oom") ||
+    normalized === "notready"
+  ) return "critical";
+  if (
+    normalized.includes("degraded") ||
+    normalized.includes("pending") ||
+    normalized.includes("stale") ||
+    normalized.includes("warn")
+  ) return "warning";
+  if (
+    normalized === "healthy" ||
+    normalized === "ok" ||
+    normalized === "ready" ||
+    normalized === "running"
+  ) return "healthy";
+  return "unknown";
+}
+
+function usageTone(ratio: number | null): PodVisualTone {
+  if (ratio === null) return "unknown";
+  if (ratio >= 0.95) return "critical";
+  if (ratio >= 0.8) return "danger";
+  if (ratio >= 0.6) return "warning";
+  return "healthy";
+}
+
+function strongerTone(left: PodVisualTone, right: PodVisualTone): PodVisualTone {
+  return TONE_WEIGHT[left] >= TONE_WEIGHT[right] ? left : right;
+}
+
+function podUsageColor(ratio: number | null, fallbackTone: PodVisualTone): string {
+  if (ratio === null) return fallbackColor(fallbackTone);
+  const percent = clampPercent(ratio * 100);
+  if (percent <= 60) return "var(--color-emerald-500)";
+  if (percent <= 80) {
+    const warningWeight = (percent - 60) * 5;
+    return `color-mix(in oklch, var(--color-emerald-500) ${100 - warningWeight}%, var(--status-warning) ${warningWeight}%)`;
+  }
+  if (percent <= 95) {
+    const dangerWeight = (percent - 80) * (100 / 15);
+    return `color-mix(in oklch, var(--status-warning) ${100 - dangerWeight}%, var(--destructive) ${dangerWeight}%)`;
+  }
+  return "var(--destructive)";
+}
+
+function fallbackColor(tone: PodVisualTone): string {
+  if (tone === "critical") return "var(--destructive)";
+  if (tone === "danger") return "var(--color-orange-500)";
+  if (tone === "healthy") return "var(--color-emerald-500)";
+  if (tone === "warning") return "var(--status-warning)";
+  return "var(--muted-foreground)";
 }
 
 function shortPodName(name: string): string {

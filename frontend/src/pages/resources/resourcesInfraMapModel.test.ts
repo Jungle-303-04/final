@@ -86,19 +86,17 @@ describe("resources infra map model", () => {
     expect(model.nodes[0]?.hiddenPodCount).toBe(1);
   });
 
-  it("uses pod limits before requests when calculating pod capacity ratios", () => {
+  it("uses pod requests when calculating pod capacity ratios", () => {
     const model = buildInfraMapModel({
       selectionActive: false,
       topology: snapshot({
         pods: [
           pod({
-            cpuLimitMillicores: 1000,
             cpuMillicores: 50,
             cpuRequestMillicores: 100,
             id: "pod:api",
-            memoryLimitMebibytes: 512,
             memoryMebibytes: 128,
-            memoryRequestMebibytes: 64,
+            memoryRequestMebibytes: 256,
             name: "api-gateway",
           }),
         ],
@@ -107,8 +105,8 @@ describe("resources infra map model", () => {
 
     const [apiPod] = model.nodes[0]?.visiblePods ?? [];
 
-    expect(apiPod?.cpu.ratio).toBeCloseTo(0.05);
-    expect(apiPod?.memory.ratio).toBeCloseTo(0.25);
+    expect(apiPod?.cpu.ratio).toBeCloseTo(0.5);
+    expect(apiPod?.memory.ratio).toBeCloseTo(0.5);
   });
 
   it("prefers pods with calculable capacity ratios for the compact overview", () => {
@@ -124,11 +122,11 @@ describe("resources infra map model", () => {
             name: "usage-only",
           }),
           pod({
-            cpuLimitMillicores: 1000,
             cpuMillicores: 10,
+            cpuRequestMillicores: 1000,
             id: "pod:bounded",
-            memoryLimitMebibytes: 512,
             memoryMebibytes: 64,
+            memoryRequestMebibytes: 512,
             name: "bounded",
           }),
         ],
@@ -192,13 +190,11 @@ function pod(
   overrides: Partial<PhysicalTopologySnapshot["pods"][number]>,
 ): PhysicalTopologySnapshot["pods"][number] {
   return {
-    cpuLimitMillicores: null,
     cpuMillicores: null,
     cpuRequestMillicores: null,
     health: "healthy",
     id: "pod:default",
     matchesFilter: true,
-    memoryLimitMebibytes: null,
     memoryMebibytes: null,
     memoryRequestMebibytes: null,
     name: "pod",

@@ -145,6 +145,11 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
         "name": "node-a",
         "cpu_pct": 42.0,
         "mem_pct": 73.4,
+        "cpu_mcores": None,
+        "mem_mib": None,
+        "allocatable_cpu_mcores": None,
+        "allocatable_mem_mib": None,
+        "pod_capacity": None,
         "status": "Ready",
         "matched_pod_count": 17,
         "total_pod_count": 20,
@@ -159,6 +164,48 @@ def test_physical_topology_builder_uses_measured_values_and_never_invents_reques
     assert built["pods"][0]["restarts"] == 2
     assert built["truncated"] == {"node-key-a": 8}
     assert "topology_pod_budget_exceeded" in built["partial_reason_codes"]
+
+
+def test_physical_topology_builder_falls_back_to_node_summary_usage() -> None:
+    result = {
+        "servers": [
+            {
+                "inventory_key": "node-key-a",
+                "name": "node-a",
+                "status": "Ready",
+                "summary": {
+                    "allocatable_cpu_mcores": 2000,
+                    "allocatable_mem_mib": 4096,
+                    "cpu_mcores": 500,
+                    "mem_mib": 1024,
+                    "cpu_ratio": 0.25,
+                    "mem_ratio": 0.25,
+                    "pod_capacity": 110,
+                },
+            }
+        ],
+        "pods": [],
+        "pod_counts_by_node_name": {"node-a": {"matched": 0, "total": 0}},
+        "truncated_by_node_name": {},
+        "unassigned_truncated_count": 0,
+    }
+    built = build_physical_topology(
+        result,
+        latest_usage_sample={
+            "sampled_at": "2026-07-14T05:00:00Z",
+            "usage": {"pods": {}},
+        },
+        matched_count_completeness="exact",
+        total_count_completeness="exact",
+    )
+
+    assert built["servers"][0]["cpu_pct"] == 25.0
+    assert built["servers"][0]["mem_pct"] == 25.0
+    assert built["servers"][0]["cpu_mcores"] == 500.0
+    assert built["servers"][0]["mem_mib"] == 1024.0
+    assert built["servers"][0]["allocatable_cpu_mcores"] == 2000.0
+    assert built["servers"][0]["allocatable_mem_mib"] == 4096.0
+    assert built["metrics_completeness"] == "exact"
 
 
 def test_physical_topology_builder_preserves_actual_usage_and_request_denominators() -> None:

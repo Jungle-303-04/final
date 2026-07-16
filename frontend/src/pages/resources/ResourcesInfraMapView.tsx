@@ -25,6 +25,7 @@ export function ResourcesInfraMapView({
   onFocusRemove,
   onFocusSelect,
   onRetry,
+  onShowMorePods,
   phase,
   selectedFocus,
 }: {
@@ -33,6 +34,7 @@ export function ResourcesInfraMapView({
   onFocusRemove: (key: string) => void;
   onFocusSelect: (item: InfraMapFocusItem) => void;
   onRetry: () => void;
+  onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
   phase: PhysicalTopologyFrame["phase"];
   selectedFocus: readonly InfraMapFocusItem[];
 }) {
@@ -77,7 +79,11 @@ export function ResourcesInfraMapView({
       ) : phase === "failed" ? (
         <InfraMapFailure onRetry={onRetry} />
       ) : model && model.nodes.length > 0 ? (
-        <InfraMapNodeGrid metricMode={metricMode} model={model} />
+        <InfraMapNodeGrid
+          metricMode={metricMode}
+          model={model}
+          onShowMorePods={onShowMorePods}
+        />
       ) : (
         <InfraMapEmpty />
       )}
@@ -223,9 +229,11 @@ function focusTitle(item: InfraMapFocusItem): string {
 function InfraMapNodeGrid({
   metricMode,
   model,
+  onShowMorePods,
 }: {
   metricMode: InfraMapMetricMode;
   model: InfraMapModel;
+  onShowMorePods: (node: InfraMapModel["nodes"][number]) => void;
 }) {
   const layout = infraMapNodeGridLayout(model.nodes.length);
   return (
@@ -239,6 +247,7 @@ function InfraMapNodeGrid({
           key={node.id}
           metricMode={metricMode}
           node={node}
+          onShowMorePods={onShowMorePods}
           selectionActive={model.selection.active}
         />
       ))}

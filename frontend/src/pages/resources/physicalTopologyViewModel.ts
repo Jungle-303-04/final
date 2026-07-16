@@ -17,6 +17,7 @@ export type PodUsageEvidence =
 export interface PhysicalServerPlacement {
   unassigned: boolean;
   server: PhysicalTopologyServer;
+  hiddenPods: PhysicalTopologyPod[];
   pods: PhysicalTopologyPod[];
   omittedCount: number;
   visibleMatchedCount: number;
@@ -26,18 +27,39 @@ export interface PhysicalServerPlacement {
   countCompleteness: "exact" | "partial" | "unavailable";
 }
 
+export interface PhysicalServerPlacementOptions {
+  includeRemoteOmissions?: boolean;
+  maxVisiblePodsPerServer?: number;
+  podComparator?: (left: PhysicalTopologyPod, right: PhysicalTopologyPod) => number;
+  podFilter?: (pod: PhysicalTopologyPod) => boolean;
+}
+
 export function physicalServerPlacements(
   topology: PhysicalTopologySnapshot,
+  options: PhysicalServerPlacementOptions = {},
 ): PhysicalServerPlacement[] {
+  const {
+    includeRemoteOmissions = true,
+    maxVisiblePodsPerServer = MAX_VISIBLE_PODS_PER_SERVER,
+    podComparator = comparePhysicalPods,
+    podFilter = () => true,
+  } = options;
   const placements: PhysicalServerPlacement[] = topology.servers.map((server) => {
-    const allPods = topology.pods.filter((pod) => pod.serverId === server.id);
-    const pods = visiblePhysicalPods(allPods);
-    const locallyOmitted = allPods.length - pods.length;
+    const allPods = topology.pods.filter((pod) =>
+      pod.serverId === server.id && podFilter(pod)
+    );
+    const orderedPods = orderedPhysicalPods(allPods, podComparator);
+    const pods = orderedPods.slice(0, maxVisiblePodsPerServer);
+    const hiddenPods = orderedPods.slice(maxVisiblePodsPerServer);
+    const remoteOmitted = includeRemoteOmissions
+      ? topology.truncatedByServer[server.id] ?? 0
+      : 0;
     return {
       unassigned: false,
       server,
+      hiddenPods,
       pods,
-      omittedCount: (topology.truncatedByServer[server.id] ?? 0) + locallyOmitted,
+      omittedCount: remoteOmitted + hiddenPods.length,
       visibleMatchedCount: pods.filter((pod) => pod.matchesFilter).length,
       visibleTotalCount: pods.length,
       matchedCount: server.matchedPodCount,
@@ -52,11 +74,17 @@ export function physicalServerPlacements(
             : "exact",
     };
   });
-  const allUnassignedPods = topology.pods.filter((pod) => pod.serverId === null);
-  if (allUnassignedPods.length > 0 || topology.unassignedTruncatedCount > 0) {
-    const pods = visiblePhysicalPods(allUnassignedPods);
-    const serverOmittedCount = topology.unassignedTruncatedCount;
-    const omittedCount = serverOmittedCount + allUnassignedPods.length - pods.length;
+  const allUnassignedPods = topology.pods.filter((pod) =>
+    pod.serverId === null && podFilter(pod)
+  );
+  const serverOmittedCount = includeRemoteOmissions
+    ? topology.unassignedTruncatedCount
+    : 0;
+  if (allUnassignedPods.length > 0 || serverOmittedCount > 0) {
+    const orderedPods = orderedPhysicalPods(allUnassignedPods, podComparator);
+    const pods = orderedPods.slice(0, maxVisiblePodsPerServer);
+    const hiddenPods = orderedPods.slice(maxVisiblePodsPerServer);
+    const omittedCount = serverOmittedCount + hiddenPods.length;
     placements.push({
       unassigned: true,
       server: {
@@ -64,6 +92,11 @@ export function physicalServerPlacements(
         name: "Unassigned",
         cpuPercent: null,
         memoryPercent: null,
+        cpuMillicores: null,
+        memoryMebibytes: null,
+        allocatableCpuMillicores: null,
+        allocatableMemoryMebibytes: null,
+        podCapacity: null,
         status: "Pending",
         matchedPodCount: serverOmittedCount === 0
           ? allUnassignedPods.filter((pod) => pod.matchesFilter).length
@@ -72,6 +105,7 @@ export function physicalServerPlacements(
         matchedPodCountCompleteness: serverOmittedCount === 0 ? "exact" : "unavailable",
         totalPodCountCompleteness: serverOmittedCount === 0 ? "exact" : "partial",
       },
+      hiddenPods,
       pods,
       omittedCount,
       visibleMatchedCount: pods.filter((pod) => pod.matchesFilter).length,
@@ -87,11 +121,21 @@ export function physicalServerPlacements(
 }
 
 export function visiblePhysicalPods(pods: PhysicalTopologyPod[]): PhysicalTopologyPod[] {
+  return orderedPhysicalPods(pods, comparePhysicalPods).slice(0, MAX_VISIBLE_PODS_PER_SERVER);
+}
+
+function orderedPhysicalPods(
+  pods: PhysicalTopologyPod[],
+  podComparator: (left: PhysicalTopologyPod, right: PhysicalTopologyPod) => number,
+): PhysicalTopologyPod[] {
   return pods
-    .map((pod, index) => ({ index, pod, priority: podProblemPriority(pod) }))
-    .sort((left, right) => left.priority - right.priority || left.index - right.index)
-    .slice(0, MAX_VISIBLE_PODS_PER_SERVER)
+    .map((pod, index) => ({ index, pod }))
+    .sort((left, right) => podComparator(left.pod, right.pod) || left.index - right.index)
     .map(({ pod }) => pod);
+}
+
+function comparePhysicalPods(left: PhysicalTopologyPod, right: PhysicalTopologyPod): number {
+  return podProblemPriority(left) - podProblemPriority(right);
 }
 
 function podProblemPriority(pod: PhysicalTopologyPod): number {

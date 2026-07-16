@@ -1,11 +1,10 @@
 import type {
   PhysicalTopologyPod,
-  PhysicalTopologyServer,
   PhysicalTopologySnapshot,
 } from "../../features/resources/physicalTopologyContract";
+import { physicalServerPlacements } from "./physicalTopologyViewModel";
 
 const DEFAULT_MAX_PODS_PER_NODE = 4;
-const UNASSIGNED_NODE_ID = "__infra-map-unassigned__";
 
 export interface InfraMapPodMetric {
   ratio: number | null;
@@ -62,29 +61,21 @@ export function buildInfraMapModel({
   topology,
 }: BuildInfraMapModelInput): InfraMapModel {
   const usesExplicitSelection = selectionActive && selectedPodIds !== undefined;
-  const podsByServer = new Map<string, PhysicalTopologyPod[]>();
-  for (const pod of topology.pods) {
-    if (usesExplicitSelection && !selectedPodIds.has(pod.id)) continue;
-    if (selectionActive && !usesExplicitSelection && !pod.matchesFilter) continue;
-    const serverId = pod.serverId ?? UNASSIGNED_NODE_ID;
-    const group = podsByServer.get(serverId) ?? [];
-    group.push(pod);
-    podsByServer.set(serverId, group);
-  }
-
-  const servers = [...topology.servers];
-  if (podsByServer.has(UNASSIGNED_NODE_ID)) {
-    servers.push(unassignedServer());
-  }
-
-  const nodes = servers.map((server) => {
-    const allPods = podsByServer.get(server.id) ?? [];
-    const sortedPods = [...allPods].sort((left, right) =>
-      comparePodsByWeight(left, right)
-    );
+  const podFilter = (pod: PhysicalTopologyPod): boolean => {
+    if (usesExplicitSelection && !selectedPodIds.has(pod.id)) return false;
+    return !(selectionActive && !usesExplicitSelection && !pod.matchesFilter);
+  };
+  const placements = physicalServerPlacements(topology, {
+    includeRemoteOmissions: !selectionActive,
+    maxVisiblePodsPerServer: maxPodsPerNode,
+    podComparator: comparePodsByInfraMapWeight,
+    podFilter,
+  });
+  const nodes = placements.map((placement) => {
+    const { server } = placement;
     const toPod = (pod: PhysicalTopologyPod) => toInfraMapPod(pod, selectionActive);
     return {
-      assignedPodCount: server.totalPodCount ?? allPods.length,
+      assignedPodCount: server.totalPodCount ?? placement.visibleTotalCount + placement.omittedCount,
       cpuMillicores: server.cpuMillicores,
       cpuRatio: ratioFromPercentOrValues(
         server.cpuPercent,
@@ -92,8 +83,8 @@ export function buildInfraMapModel({
         server.allocatableCpuMillicores,
       ),
       health: serverStatusToHealth(server.status),
-      hiddenPodCount: Math.max(0, sortedPods.length - maxPodsPerNode),
-      hiddenPods: sortedPods.slice(maxPodsPerNode).map(toPod),
+      hiddenPodCount: placement.omittedCount,
+      hiddenPods: placement.hiddenPods.map(toPod),
       id: server.id,
       memoryMebibytes: server.memoryMebibytes,
       memoryRatio: ratioFromPercentOrValues(
@@ -106,10 +97,10 @@ export function buildInfraMapModel({
       ready: server.status.toLowerCase() === "ready"
         ? true
         : server.status.toLowerCase() === "notready"
-          ? false
-          : null,
-      unassigned: server.id === UNASSIGNED_NODE_ID,
-      visiblePods: sortedPods.slice(0, maxPodsPerNode).map(toPod),
+        ? false
+        : null,
+      unassigned: placement.unassigned,
+      visiblePods: placement.pods.map(toPod),
     } satisfies InfraMapNode;
   });
 
@@ -129,7 +120,7 @@ function toInfraMapPod(pod: PhysicalTopologyPod, selected: boolean): InfraMapPod
     cpu: {
       ratio: ratioFromValues(
         pod.cpuMillicores,
-        pod.cpuLimitMillicores ?? pod.cpuRequestMillicores,
+        pod.cpuRequestMillicores,
       ),
       value: pod.cpuMillicores,
     },
@@ -138,7 +129,7 @@ function toInfraMapPod(pod: PhysicalTopologyPod, selected: boolean): InfraMapPod
     memory: {
       ratio: ratioFromValues(
         pod.memoryMebibytes,
-        pod.memoryLimitMebibytes ?? pod.memoryRequestMebibytes,
+        pod.memoryRequestMebibytes,
       ),
       value: pod.memoryMebibytes,
     },
@@ -154,7 +145,7 @@ function compareNodes(left: InfraMapNode, right: InfraMapNode): number {
   return left.name.localeCompare(right.name);
 }
 
-function comparePodsByWeight(
+function comparePodsByInfraMapWeight(
   left: PhysicalTopologyPod,
   right: PhysicalTopologyPod,
 ): number {
@@ -173,10 +164,10 @@ function podWeight(pod: PhysicalTopologyPod): number {
 
 function podMetricAvailability(pod: PhysicalTopologyPod): number {
   return (
-    (ratioFromValues(pod.cpuMillicores, pod.cpuLimitMillicores ?? pod.cpuRequestMillicores) === null
+    (ratioFromValues(pod.cpuMillicores, pod.cpuRequestMillicores) === null
       ? 0
       : 1) +
-    (ratioFromValues(pod.memoryMebibytes, pod.memoryLimitMebibytes ?? pod.memoryRequestMebibytes) ===
+    (ratioFromValues(pod.memoryMebibytes, pod.memoryRequestMebibytes) ===
       null
       ? 0
       : 1)
@@ -208,23 +199,4 @@ function serverStatusToHealth(status: string): string {
   if (normalized === "notready") return "critical";
   if (normalized === "unknown") return "unknown";
   return "warning";
-}
-
-function unassignedServer(): PhysicalTopologyServer {
-  return {
-    allocatableCpuMillicores: null,
-    allocatableMemoryMebibytes: null,
-    cpuMillicores: null,
-    cpuPercent: null,
-    id: UNASSIGNED_NODE_ID,
-    matchedPodCount: null,
-    matchedPodCountCompleteness: "unavailable",
-    memoryMebibytes: null,
-    memoryPercent: null,
-    name: "unassigned",
-    podCapacity: null,
-    status: "unknown",
-    totalPodCount: null,
-    totalPodCountCompleteness: "unavailable",
-  };
 }
