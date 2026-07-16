@@ -1,9 +1,8 @@
+from domains.helm.source_provider import resolve_helm_release_versions
 from domains.helm.upgrade_projection import (
     helm_release_upgrade_info,
     helm_release_version_list,
 )
-
-from domains.helm.source_provider import resolve_helm_release_versions
 from packages.contracts.helm.sources import (
     HelmChartSource,
     HelmChartVersion,

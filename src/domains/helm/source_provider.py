@@ -549,6 +549,96 @@ def resolve_helm_chart_versions(
     )
 
 
+def resolve_helm_release_versions(
+    current_version: str,
+    observations: Sequence[HelmChartVersionObservation],
+) -> HelmChartVersionResolution:
+    """Resolve one release source without unioning same-named chart catalogs."""
+
+    normalized_current = current_version.strip().replace("_", "+")
+    if _semver(normalized_current) is None:
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=("helm_release_chart_version_invalid",),
+        )
+    if not observations:
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=("helm_chart_source_unavailable",),
+        )
+    identities = tuple(
+        (item.source.source_id, item.source.provider, item.source.reference)
+        for item in observations
+    )
+    if len(set(identities)) != len(identities):
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=("helm_chart_source_duplicate_observation",),
+        )
+    candidates = tuple(item for item in observations if item.versions)
+    current_matches = tuple(
+        item
+        for item in candidates
+        if any(
+            compare_helm_chart_versions(version.version, normalized_current) == 0
+            for version in item.versions
+        )
+    )
+    selected: HelmChartVersionObservation | None = None
+    if len(current_matches) == 1:
+        selected = current_matches[0]
+    elif len(current_matches) > 1 or len(candidates) > 1:
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=("helm_chart_source_ambiguous",),
+        )
+    elif len(candidates) == 1:
+        selected = candidates[0]
+    if selected is None:
+        reasons = tuple(
+            sorted(
+                {reason for observation in observations for reason in observation.reason_codes}
+                or {"helm_chart_source_unavailable"}
+            )
+        )
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=reasons,
+        )
+    incomplete_others = tuple(
+        item for item in observations if item is not selected and item.availability != "available"
+    )
+    if incomplete_others:
+        return HelmChartVersionResolution(
+            availability="unavailable",
+            reason_codes=tuple(
+                sorted(
+                    {
+                        "helm_chart_source_observation_incomplete",
+                        *(reason for item in incomplete_others for reason in item.reason_codes),
+                    }
+                )
+            ),
+        )
+    return HelmChartVersionResolution(
+        availability=selected.availability,
+        source=selected.source,
+        versions=selected.versions,
+        observed_at=selected.observed_at,
+        truncated=selected.truncated,
+        reason_codes=selected.reason_codes,
+    )
+
+
+def compare_helm_chart_versions(left: str, right: str) -> int:
+    """Compare public chart-version strings using the provider's SemVer rules."""
+
+    return _compare_chart_versions(
+        HelmChartVersion(version=left.replace("_", "+")),
+        HelmChartVersion(version=right.replace("_", "+")),
+    )
+
+
 def _normalized_netloc(parsed: Any, hostname: str) -> str:
     return f"{hostname}:{parsed.port}" if parsed.port not in {None, 443} else hostname
 

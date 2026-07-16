@@ -35,6 +35,7 @@ HELM_MANAGED_BY_LABEL = "app.kubernetes.io/managed-by"
 HELM_MANAGED_BY_VALUE = "Helm"
 HELM_RELEASE_NAME_ANNOTATION = "meta.helm.sh/release-name"
 HELM_RELEASE_NAMESPACE_ANNOTATION = "meta.helm.sh/release-namespace"
+HELM_CHART_LABEL = "helm.sh/chart"
 
 
 class HelmChartSourceConflict(RuntimeError):
@@ -333,6 +334,7 @@ class HelmReleaseRepository(DatabaseConnection):
         release_name = table.c.annotations[HELM_RELEASE_NAME_ANNOTATION].as_string()
         release_namespace = table.c.annotations[HELM_RELEASE_NAMESPACE_ANNOTATION].as_string()
         managed_by = table.c.labels[HELM_MANAGED_BY_LABEL].as_string()
+        chart_label = table.c.labels[HELM_CHART_LABEL].as_string()
         statement = (
             select(
                 table.c.workspace_id,
@@ -348,6 +350,7 @@ class HelmReleaseRepository(DatabaseConnection):
                 table.c.observed_at,
                 release_name.label("release_name"),
                 release_namespace.label("release_namespace"),
+                chart_label.label("chart_label"),
             )
             .where(
                 table.c.workspace_id == workspace_id,
@@ -466,4 +469,5 @@ def _serialize_owned_resource_row(row: dict[str, Any]) -> dict[str, Any]:
         "observed_at": iso_or_none(row.get("observed_at")),
         "release_name": str(row.get("release_name") or ""),
         "release_namespace": str(row.get("release_namespace") or ""),
+        "chart_label": str(row.get("chart_label") or "") or None,
     }

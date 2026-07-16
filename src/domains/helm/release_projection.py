@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -45,6 +46,13 @@ _RESOURCE_TRUNCATED = "helm_owned_resources_truncated"
 _MANIFEST_UNAVAILABLE = "helm_manifest_provider_not_integrated"
 _VALUES_UNAVAILABLE = "helm_values_provider_not_integrated"
 _COMMANDS_UNAVAILABLE = "agent_helm_executor_not_integrated"
+_CHART_IDENTITY_UNAVAILABLE = "helm_chart_identity_unavailable"
+_CHART_IDENTITY_AMBIGUOUS = "helm_chart_identity_ambiguous"
+_CHART_IDENTITY_INVALID = "helm_chart_identity_invalid"
+_SEMVER_SUFFIX = re.compile(
+    r"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    r"(?:_[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 
 
 @dataclass(frozen=True)
@@ -81,6 +89,7 @@ def helm_release_list(
     coverage = helm_observation_coverage(contexts, selected_cluster_ids=selected)
     observed = _observed_rows(storage_rows, contexts, agent_statuses)
     owned_by_release = _owned_resource_index(owned_resource_rows)
+    chart_labels_by_release = _chart_label_index(owned_resource_rows)
     latest_by_release: dict[tuple[str, str, str], ObservedHelmStorage] = {}
     for item in observed:
         key = (item.scope.cluster_id, item.storage_namespace, item.release_name)
@@ -98,6 +107,12 @@ def helm_release_list(
             else None,
             context=contexts.get(item.scope.cluster_id),
             owned_resources_truncated=owned_resources_truncated,
+            chart_labels=chart_labels_by_release.get(
+                (item.scope.cluster_id, item.storage_namespace, item.release_name),
+                (),
+            )
+            if owned_resource_rows is not None
+            else None,
         )
         for _key, item in sorted(
             latest_by_release.items(),
@@ -146,6 +161,14 @@ def helm_release_detail(
         if owned_resource_rows is not None
         else None
     )
+    chart_labels = (
+        _chart_label_index(owned_resource_rows).get(
+            (cluster, selected_namespace, selected_name),
+            (),
+        )
+        if owned_resource_rows is not None
+        else None
+    )
     context = contexts.get(cluster)
     history = tuple(
         HelmReleaseHistoryEntry(
@@ -163,6 +186,7 @@ def helm_release_detail(
                 owned_resources=owned_resources,
                 context=context,
                 owned_resources_truncated=owned_resources_truncated,
+                chart_labels=chart_labels,
             ),
             history=history,
             manifest=HelmFeatureAvailability(reason_code=_MANIFEST_UNAVAILABLE),
@@ -285,12 +309,21 @@ def _release(
     owned_resources: Sequence[HelmOwnedResource] | None,
     context: Mapping[str, Any] | None,
     owned_resources_truncated: bool,
+    chart_labels: Sequence[str] | None,
 ) -> HelmRelease:
+    chart, chart_version, chart_reasons = _chart_identity(
+        chart_labels,
+        context=context,
+        truncated=owned_resources_truncated,
+    )
     return HelmRelease(
         scope=item.scope,
         name=item.release_name,
         storage_namespace=item.storage_namespace,
         storage=item.storage,
+        chart=chart,
+        chart_version=chart_version,
+        chart_reason_codes=chart_reasons,
         status=item.status,
         revision=item.revision,
         observed_at=item.observed_at,
@@ -300,6 +333,62 @@ def _release(
             truncated=owned_resources_truncated,
         ),
     )
+
+
+def _chart_label_index(
+    rows: Sequence[Mapping[str, Any]] | None,
+) -> dict[tuple[str, str, str], tuple[str, ...]]:
+    if rows is None:
+        return {}
+    grouped: dict[tuple[str, str, str], list[str]] = {}
+    for row in rows:
+        observed = _observed_owned_resource(row)
+        if observed is None:
+            continue
+        label = _optional_text(row.get("chart_label"))
+        if label:
+            grouped.setdefault(
+                (
+                    observed.cluster_id,
+                    observed.release_namespace,
+                    observed.release_name,
+                ),
+                [],
+            ).append(label)
+    return {key: tuple(values) for key, values in grouped.items()}
+
+
+def _chart_identity(
+    labels: Sequence[str] | None,
+    *,
+    context: Mapping[str, Any] | None,
+    truncated: bool,
+) -> tuple[str | None, str | None, tuple[str, ...]]:
+    if labels is None or not _context_observed(context):
+        return None, None, (_CHART_IDENTITY_UNAVAILABLE,)
+    incomplete = _owned_resource_reason_codes(context, truncated=truncated)
+    if incomplete:
+        return None, None, tuple(sorted({_CHART_IDENTITY_UNAVAILABLE, *incomplete}))
+    if not labels:
+        return None, None, (_CHART_IDENTITY_UNAVAILABLE,)
+    parsed = tuple(_parse_chart_label(label) for label in labels)
+    if any(item is None for item in parsed):
+        return None, None, (_CHART_IDENTITY_INVALID,)
+    identities = {item for item in parsed if item is not None}
+    if len(identities) != 1:
+        return None, None, (_CHART_IDENTITY_AMBIGUOUS,)
+    chart, version = next(iter(identities))
+    return chart, version, ()
+
+
+def _parse_chart_label(value: str) -> tuple[str, str] | None:
+    parts = value.strip().split("-")
+    for index in range(1, len(parts)):
+        chart = "-".join(parts[:index]).strip()
+        version = "-".join(parts[index:]).strip()
+        if chart and _SEMVER_SUFFIX.fullmatch(version):
+            return chart, version.replace("_", "+")
+    return None
 
 
 def _owned_resource_index(

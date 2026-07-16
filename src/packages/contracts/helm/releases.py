@@ -13,6 +13,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.helm.sources import HelmChartSource, HelmChartVersion
 from packages.contracts.parity import ClusterScope, ResourceRef
 
 HelmAvailability = Literal["available", "partial", "unavailable"]
@@ -184,12 +185,93 @@ class HelmRelease(StrictModel):
     name: str = Field(min_length=1)
     storage_namespace: str = Field(min_length=1)
     storage: ResourceRef
-    chart: None = None
+    chart: str | None = Field(default=None, min_length=1, max_length=512)
+    chart_version: str | None = Field(default=None, min_length=1, max_length=256)
+    chart_reason_codes: tuple[str, ...] = ()
     app_version: None = None
     status: str | None = None
     revision: int | None = Field(default=None, ge=1)
     observed_at: str | None = None
     resource_health: HelmResourceHealthObservation | HelmResourceHealthAvailability
+
+    @model_validator(mode="after")
+    def chart_identity_is_explicit(self) -> HelmRelease:
+        if (self.chart is None) != (self.chart_version is None):
+            raise ValueError("Helm chart name and version must be observed together")
+        if self.chart is None and not self.chart_reason_codes:
+            raise ValueError("unavailable Helm chart identity requires a reason")
+        if self.chart is not None and self.chart_reason_codes:
+            raise ValueError("observed Helm chart identity cannot contain unavailable reasons")
+        return self
+
+
+class HelmReleaseUpgradeInfo(StrictModel):
+    """Current-versus-latest comparison from one exact authorized source."""
+
+    availability: HelmAvailability
+    chart_name: str | None = Field(default=None, min_length=1, max_length=512)
+    current_version: str | None = Field(default=None, min_length=1, max_length=256)
+    latest_version: str | None = Field(default=None, min_length=1, max_length=256)
+    update_available: bool | None = None
+    source: HelmChartSource | None = None
+    observed_at: str | None = None
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def availability_is_consistent(self) -> HelmReleaseUpgradeInfo:
+        complete = all(
+            value is not None
+            for value in (
+                self.chart_name,
+                self.current_version,
+                self.latest_version,
+                self.update_available,
+                self.source,
+            )
+        )
+        if self.availability == "unavailable":
+            if complete or not self.reason_codes:
+                raise ValueError("unavailable Helm upgrade info requires only explicit reasons")
+        elif not complete:
+            raise ValueError("available Helm upgrade info requires exact source and versions")
+        elif self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial Helm upgrade info requires reasons")
+        elif self.availability == "available" and self.reason_codes:
+            raise ValueError("available Helm upgrade info cannot contain reasons")
+        return self
+
+
+class HelmReleaseVersionList(StrictModel):
+    """Newest-first bounded versions from the same source used for upgrade info."""
+
+    availability: HelmAvailability
+    chart_name: str | None = Field(default=None, min_length=1, max_length=512)
+    current_version: str | None = Field(default=None, min_length=1, max_length=256)
+    source: HelmChartSource | None = None
+    versions: tuple[HelmChartVersion, ...] = Field(default=(), max_length=200)
+    observed_at: str | None = None
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def availability_is_consistent(self) -> HelmReleaseVersionList:
+        if self.availability == "unavailable":
+            if self.versions or self.source is not None or not self.reason_codes:
+                raise ValueError("unavailable Helm versions require only explicit reasons")
+        elif (
+            self.chart_name is None
+            or self.current_version is None
+            or self.source is None
+            or not self.versions
+        ):
+            raise ValueError("available Helm versions require exact source evidence")
+        elif self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial Helm versions require reasons")
+        elif self.availability == "available" and self.reason_codes:
+            raise ValueError("available Helm versions cannot contain reasons")
+        if self.truncated and "helm_chart_versions_truncated" not in self.reason_codes:
+            raise ValueError("truncated Helm versions require the truncation reason")
+        return self
 
 
 class HelmReleaseHistoryEntry(StrictModel):

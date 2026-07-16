@@ -143,6 +143,7 @@ def test_helm_owned_resource_query_reads_only_exact_ownership_and_safe_metadata(
         "observed_at",
         "release_name",
         "release_namespace",
+        "chart_label",
     }
     sql = str(
         connection.statement.compile(  # type: ignore[union-attr]
