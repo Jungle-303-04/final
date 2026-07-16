@@ -250,8 +250,8 @@ describe("resource detail metrics", () => {
 
     expect(screen.getByText("Current replicas")).toBeTruthy();
     expect(screen.getByText("Desired replicas")).toBeTruthy();
-    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("4.00").length).toBeGreaterThan(0);
   });
 
   it("renders the exact current Node observation time and measurement window", () => {

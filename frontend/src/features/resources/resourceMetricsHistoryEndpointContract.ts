@@ -85,7 +85,9 @@ type ScopedMetricCategory =
   | "network_tx"
   | "filesystem"
   | "restarts"
-  | "volume_usage";
+  | "volume_usage"
+  | "hpa_current_replicas"
+  | "hpa_desired_replicas";
 
 export interface ScopedMetricEndpointRequest {
   cluster_id: string;

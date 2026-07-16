@@ -146,6 +146,8 @@ export const scopedMetricCategorySchema = z.enum([
   "filesystem",
   "restarts",
   "volume_usage",
+  "hpa_current_replicas",
+  "hpa_desired_replicas",
 ]);
 
 export const scopedMetricTimeRangeSchema = z.enum(["15m", "1h", "6h", "24h"]);
@@ -172,7 +174,7 @@ export const scopedMetricQueryRequestSchema = z.strictObject({
     scopedNamespaceSubjectSchema,
     scopedClusterSubjectSchema,
   ]),
-  categories: z.array(scopedMetricCategorySchema).min(1).max(7),
+  categories: z.array(scopedMetricCategorySchema).min(1).max(9),
   range: scopedMetricTimeRangeSchema,
 }).superRefine((value, context) => {
   if (new Set(value.categories).size !== value.categories.length) {
@@ -216,9 +218,9 @@ export const scopedMetricQueryResponseSchema = z.strictObject({
   resource: scopedMetricResourceSchema.nullable(),
   queries: z.array(scopedMetricQueryReceiptSchema),
   coverage: z.strictObject({
-    requested: z.number().int().min(1).max(7),
-    queued: z.number().int().min(0).max(7),
-    unsupported: z.number().int().min(0).max(7),
+    requested: z.number().int().min(1).max(9),
+    queued: z.number().int().min(0).max(9),
+    unsupported: z.number().int().min(0).max(9),
   }),
   reason_codes: z.array(z.string().min(1)),
 }).superRefine((value, context) => {

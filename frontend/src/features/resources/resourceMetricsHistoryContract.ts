@@ -24,6 +24,12 @@ export interface ResourceMetricHistoryPoint {
   cpuMillicores: number | null;
   memoryMebibytes: number | null;
   volumeUsagePercent?: number | null;
+  networkReceiveBytesPerSecond?: number | null;
+  networkTransmitBytesPerSecond?: number | null;
+  filesystemBytes?: number | null;
+  restartCount?: number | null;
+  hpaCurrentReplicas?: number | null;
+  hpaDesiredReplicas?: number | null;
 }
 
 export interface ResourceMetricCurrentObservation {
@@ -51,7 +57,7 @@ export interface ResourceMetricContainerHistorySeries {
 export interface ResourceMetricHistorySeries {
   resourceId: string;
   clusterId: string;
-  resourceType: "pod" | "node" | "pvc";
+  resourceType: "pod" | "node" | "pvc" | "hpa";
   namespace: string | null;
   name: string;
   points: ResourceMetricHistoryPoint[];

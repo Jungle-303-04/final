@@ -1,4 +1,12 @@
-import { Activity, HardDrive, MemoryStick, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Gauge,
+  HardDrive,
+  MemoryStick,
+  Network,
+  RotateCcw,
+  type LucideIcon,
+} from "lucide-react";
 import { useId, useMemo } from "react";
 import {
   Area,
@@ -32,6 +40,12 @@ interface MetricPoint {
   cpu: number | null;
   memory: number | null;
   volume: number | null;
+  networkRx: number | null;
+  networkTx: number | null;
+  filesystem: number | null;
+  restarts: number | null;
+  hpaCurrent: number | null;
+  hpaDesired: number | null;
   time: number;
 }
 
@@ -45,6 +59,30 @@ const MEMORY_CONFIG = {
 
 const VOLUME_CONFIG = {
   value: { color: "var(--chart-3)", label: "Storage" },
+} satisfies ChartConfig;
+
+const NETWORK_RX_CONFIG = {
+  value: { color: "var(--chart-4)", label: "Network receive" },
+} satisfies ChartConfig;
+
+const NETWORK_TX_CONFIG = {
+  value: { color: "var(--chart-5)", label: "Network transmit" },
+} satisfies ChartConfig;
+
+const FILESYSTEM_CONFIG = {
+  value: { color: "var(--chart-3)", label: "Filesystem" },
+} satisfies ChartConfig;
+
+const RESTART_CONFIG = {
+  value: { color: "var(--warning)", label: "Restarts" },
+} satisfies ChartConfig;
+
+const HPA_CURRENT_CONFIG = {
+  value: { color: "var(--primary)", label: "Current replicas" },
+} satisfies ChartConfig;
+
+const HPA_DESIRED_CONFIG = {
+  value: { color: "var(--chart-2)", label: "Desired replicas" },
 } satisfies ChartConfig;
 
 export function ResourceMetricsCharts({
@@ -75,6 +113,12 @@ export function ResourceMetricsCharts({
     cpu: point.cpuMillicores,
     memory: point.memoryMebibytes,
     volume: point.volumeUsagePercent ?? null,
+    networkRx: point.networkReceiveBytesPerSecond ?? null,
+    networkTx: point.networkTransmitBytesPerSecond ?? null,
+    filesystem: point.filesystemBytes ?? null,
+    restarts: point.restartCount ?? null,
+    hpaCurrent: point.hpaCurrentReplicas ?? null,
+    hpaDesired: point.hpaDesiredReplicas ?? null,
     time: Date.parse(point.observedAt),
   })).filter((point) => Number.isFinite(point.time));
   if (points.length === 0) {
@@ -83,7 +127,16 @@ export function ResourceMetricsCharts({
   const hasCpu = points.some((point) => point.cpu !== null);
   const hasMemory = points.some((point) => point.memory !== null);
   const hasVolume = points.some((point) => point.volume !== null);
-  if (!hasCpu && !hasMemory && !hasVolume) {
+  const hasNetworkRx = points.some((point) => point.networkRx !== null);
+  const hasNetworkTx = points.some((point) => point.networkTx !== null);
+  const hasFilesystem = points.some((point) => point.filesystem !== null);
+  const hasRestarts = points.some((point) => point.restarts !== null);
+  const hasHpaCurrent = points.some((point) => point.hpaCurrent !== null);
+  const hasHpaDesired = points.some((point) => point.hpaDesired !== null);
+  if (
+    !hasCpu && !hasMemory && !hasVolume && !hasNetworkRx && !hasNetworkTx &&
+    !hasFilesystem && !hasRestarts && !hasHpaCurrent && !hasHpaDesired
+  ) {
     return <ResourceMetricsUnavailable retry={frame.unavailableRetry} />;
   }
 
@@ -137,6 +190,66 @@ export function ResourceMetricsCharts({
             icon={HardDrive}
             title={t("resources.detail.metricsVolume")}
             unit="%"
+          />
+        ) : null}
+        {hasNetworkRx ? (
+          <ResourceMetricChart
+            config={NETWORK_RX_CONFIG}
+            data={points}
+            dataKey="networkRx"
+            icon={Network}
+            title={t("resources.detail.metricsNetworkReceive")}
+            unit="B/s"
+          />
+        ) : null}
+        {hasNetworkTx ? (
+          <ResourceMetricChart
+            config={NETWORK_TX_CONFIG}
+            data={points}
+            dataKey="networkTx"
+            icon={Network}
+            title={t("resources.detail.metricsNetworkTransmit")}
+            unit="B/s"
+          />
+        ) : null}
+        {hasFilesystem ? (
+          <ResourceMetricChart
+            config={FILESYSTEM_CONFIG}
+            data={points}
+            dataKey="filesystem"
+            icon={HardDrive}
+            title={t("resources.detail.metricsFilesystem")}
+            unit="B"
+          />
+        ) : null}
+        {hasRestarts ? (
+          <ResourceMetricChart
+            config={RESTART_CONFIG}
+            data={points}
+            dataKey="restarts"
+            icon={RotateCcw}
+            title={t("resources.detail.metricsRestarts")}
+            unit=""
+          />
+        ) : null}
+        {hasHpaCurrent ? (
+          <ResourceMetricChart
+            config={HPA_CURRENT_CONFIG}
+            data={points}
+            dataKey="hpaCurrent"
+            icon={Gauge}
+            title={t("resources.detail.metricsHpaCurrent")}
+            unit=""
+          />
+        ) : null}
+        {hasHpaDesired ? (
+          <ResourceMetricChart
+            config={HPA_DESIRED_CONFIG}
+            data={points}
+            dataKey="hpaDesired"
+            icon={Gauge}
+            title={t("resources.detail.metricsHpaDesired")}
+            unit=""
           />
         ) : null}
       </div>
@@ -359,7 +472,7 @@ function ResourceMetricChart({
   config: ChartConfig;
   currentValue?: number | null;
   data: MetricPoint[];
-  dataKey: "cpu" | "memory" | "volume";
+  dataKey: MetricDataKey;
   icon: LucideIcon;
   title: string;
   unit: string;
@@ -496,7 +609,7 @@ function ResourceMetricsUnavailable({ retry }: { retry: ResourceMetricsUnavailab
 
 function metricStats(
   data: MetricPoint[],
-  key: "cpu" | "memory" | "volume",
+  key: MetricDataKey,
   currentValue?: number | null,
 ) {
   const values = data.map((point) => point[key]).filter((value): value is number => value !== null);
@@ -505,6 +618,8 @@ function metricStats(
     peak: values.length === 0 ? null : Math.max(...values),
   };
 }
+
+type MetricDataKey = Exclude<keyof MetricPoint, "time">;
 
 function formatNumber(value: number): string {
   if (value >= 100) return value.toFixed(0);

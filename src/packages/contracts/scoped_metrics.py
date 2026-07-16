@@ -17,6 +17,8 @@ MetricCategory = Literal[
     "filesystem",
     "restarts",
     "volume_usage",
+    "hpa_current_replicas",
+    "hpa_desired_replicas",
 ]
 MetricTimeRange = Literal["15m", "1h", "6h", "24h"]
 MetricRefreshPolicyKey = Literal["metrics_prometheus", "metrics_pvc"]
@@ -54,7 +56,7 @@ ScopedMetricSubject = Annotated[
 class ScopedMetricQueryRequest(StrictModel):
     cluster_id: str = Field(min_length=1, max_length=255)
     subject: ScopedMetricSubject
-    categories: tuple[MetricCategory, ...] = Field(min_length=1, max_length=7)
+    categories: tuple[MetricCategory, ...] = Field(min_length=1, max_length=9)
     range: MetricTimeRange = "1h"
 
     @field_validator("categories")
@@ -88,9 +90,9 @@ class ScopedMetricQueryReceipt(StrictModel):
 
 
 class ScopedMetricCoverage(StrictModel):
-    requested: int = Field(ge=1, le=7)
-    queued: int = Field(ge=0, le=7)
-    unsupported: int = Field(ge=0, le=7)
+    requested: int = Field(ge=1, le=9)
+    queued: int = Field(ge=0, le=9)
+    unsupported: int = Field(ge=0, le=9)
 
     @model_validator(mode="after")
     def counts_match(self) -> ScopedMetricCoverage:

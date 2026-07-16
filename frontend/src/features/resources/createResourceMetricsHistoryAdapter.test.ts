@@ -204,6 +204,22 @@ describe("Resource metrics history adapter", () => {
             point_count: 1,
           },
         },
+        {
+          category: "network_rx",
+          result: { series: [{ values: [{ timestamp: 10, value: 1_024 }] }] },
+        },
+        {
+          category: "network_tx",
+          result: { series: [{ values: [{ timestamp: 10, value: 2_048 }] }] },
+        },
+        {
+          category: "filesystem",
+          result: { series: [{ values: [{ timestamp: 10, value: 4_096 }] }] },
+        },
+        {
+          category: "restarts",
+          result: { series: [{ values: [{ timestamp: 10, value: 3 }] }] },
+        },
       ],
     });
     const port = createResourceMetricsHistoryAdapter({
@@ -235,6 +251,10 @@ describe("Resource metrics history adapter", () => {
     expect(result.series?.points[0]).toMatchObject({
       cpuMillicores: 250,
       memoryMebibytes: 2,
+      networkReceiveBytesPerSecond: 1_024,
+      networkTransmitBytesPerSecond: 2_048,
+      filesystemBytes: 4_096,
+      restartCount: 3,
     });
     expect(runScopedMetricQuery).toHaveBeenCalledWith({
       cluster_id: "cluster-1",

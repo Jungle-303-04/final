@@ -38,12 +38,17 @@ export function createResourceMetricsHistoryAdapter(
     async loadScopedResourceMetrics(resource, range, signal) {
       return withMetricsFailure(async () => {
         const pvc = resource.kind === "PersistentVolumeClaim";
+        const hpa = resource.kind === "HorizontalPodAutoscaler";
         const run = await endpoints.runScopedMetricQuery!({
           cluster_id: resource.clusterId,
           subject: pvc
             ? { kind: "pvc", resource_id: resource.inventoryKey }
             : { kind: "resource", resource_id: resource.inventoryKey },
-          categories: pvc ? ["volume_usage"] : ["cpu", "memory"],
+          categories: pvc
+            ? ["volume_usage"]
+            : hpa
+              ? ["hpa_current_replicas", "hpa_desired_replicas"]
+              : ["cpu", "memory", "network_rx", "network_tx", "filesystem", "restarts"],
           range,
         }, { signal });
         return {
@@ -75,6 +80,12 @@ function toScopedSeries(
           cpuMillicores: null,
           memoryMebibytes: null,
           volumeUsagePercent: null,
+          networkReceiveBytesPerSecond: null,
+          networkTransmitBytesPerSecond: null,
+          filesystemBytes: null,
+          restartCount: null,
+          hpaCurrentReplicas: null,
+          hpaDesiredReplicas: null,
         };
         if (observation.category === "cpu") existing.cpuMillicores = point.value * 1_000;
         if (observation.category === "memory") {
@@ -82,6 +93,20 @@ function toScopedSeries(
         }
         if (observation.category === "volume_usage") {
           existing.volumeUsagePercent = point.value * 100;
+        }
+        if (observation.category === "network_rx") {
+          existing.networkReceiveBytesPerSecond = point.value;
+        }
+        if (observation.category === "network_tx") {
+          existing.networkTransmitBytesPerSecond = point.value;
+        }
+        if (observation.category === "filesystem") existing.filesystemBytes = point.value;
+        if (observation.category === "restarts") existing.restartCount = point.value;
+        if (observation.category === "hpa_current_replicas") {
+          existing.hpaCurrentReplicas = point.value;
+        }
+        if (observation.category === "hpa_desired_replicas") {
+          existing.hpaDesiredReplicas = point.value;
         }
         points.set(point.timestamp, existing);
       }
@@ -96,6 +121,8 @@ function toScopedSeries(
     clusterId: run.endpoint.scope.cluster_id,
     resourceType: resource.kind === "PersistentVolumeClaim"
       ? "pvc" as const
+      : resource.kind === "HorizontalPodAutoscaler"
+        ? "hpa" as const
       : resource.kind === "Node"
         ? "node" as const
         : "pod" as const,

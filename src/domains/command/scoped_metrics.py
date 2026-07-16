@@ -18,7 +18,7 @@ from packages.contracts.scoped_metrics import (
 )
 
 RANGE_SECONDS = {"15m": 900, "1h": 3_600, "6h": 21_600, "24h": 86_400}
-RESOURCE_KINDS = {"Pod", "Node"}
+RESOURCE_KINDS = {"Pod", "Node", "HorizontalPodAutoscaler"}
 PROMETHEUS_CATEGORIES = {
     "cpu",
     "memory",
@@ -26,6 +26,8 @@ PROMETHEUS_CATEGORIES = {
     "network_tx",
     "filesystem",
     "restarts",
+    "hpa_current_replicas",
+    "hpa_desired_replicas",
 }
 UNITS: dict[MetricCategory, str] = {
     "cpu": "cores",
@@ -35,6 +37,8 @@ UNITS: dict[MetricCategory, str] = {
     "filesystem": "bytes",
     "restarts": "count",
     "volume_usage": "ratio",
+    "hpa_current_replicas": "count",
+    "hpa_desired_replicas": "count",
 }
 
 
@@ -212,6 +216,10 @@ def _promql(category: MetricCategory, selectors: tuple[tuple[str, str], ...]) ->
         used = f"kubelet_volume_stats_used_bytes{selector}"
         capacity = f"kubelet_volume_stats_capacity_bytes{selector}"
         return f"({used} / clamp_min({capacity}, 1))"
+    if category == "hpa_current_replicas":
+        return f"kube_horizontalpodautoscaler_status_current_replicas{selector}"
+    if category == "hpa_desired_replicas":
+        return f"kube_horizontalpodautoscaler_status_desired_replicas{selector}"
     raise ValueError(f"unsupported metric category: {category}")
 
 
@@ -233,7 +241,18 @@ def _resource_selectors(resource: ResourceRef) -> tuple[tuple[str, str], ...]:
             for key, value in (("namespace", resource.namespace), ("pod", resource.name))
             if value is not None
         )
-    return (("node", resource.name),)
+    if resource.kind == "Node":
+        return (("node", resource.name),)
+    if resource.kind == "HorizontalPodAutoscaler":
+        return tuple(
+            (key, value)
+            for key, value in (
+                ("horizontalpodautoscaler", resource.name),
+                ("namespace", resource.namespace),
+            )
+            if value is not None
+        )
+    raise ValueError(f"unsupported metric resource kind: {resource.kind}")
 
 
 def _resource_ref(
