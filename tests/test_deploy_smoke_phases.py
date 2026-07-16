@@ -12,6 +12,27 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def test_cluster_curl_normalizes_attach_fallback_duplicate_response() -> None:
+    source = ROOT / "scripts/lib/cluster-curl.sh"
+    marker = "__OPSIA_HTTP_STATUS__="
+    duplicated = f'{{"status":"ok"}}\n{marker}200\n{{"status":"ok"}}\n{marker}200\n'
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{source}"; _normalize_cluster_curl_response',
+        ],
+        input=duplicated,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == '{"status":"ok"}\n200\n'
+
+
 def test_pre_deploy_smoke_uses_only_legacy_safe_health_frontend_and_database_checks() -> None:
     source = read("scripts/pre-deploy-smoke.sh")
 
