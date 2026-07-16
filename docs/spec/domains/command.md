@@ -40,15 +40,21 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
     recovery_aliases: tuple[str, ...] = ()
     allowed_namespaces: tuple[str, ...] = ()   # 빈 튜플 = 제한 없음
     requires_approval: bool = False
+    requires_approval_outside_sandbox: bool = False
+    supports_cancel: bool = True
+    supports_manual_retry: bool = False
+    max_attempts: int = 1
+    retry_delay_seconds: int = 0
     def matches_recovery_action(self, value: str) -> bool   # value == action or value in recovery_aliases
     def allows_namespace(self, namespace: str) -> bool      # not allowed_namespaces or namespace in allowed_namespaces
+    def requires_approval_for(self, namespace: str) -> bool # requires_approval or outside sandbox rule
 ```
 
 `class CommandCatalog` — `src/domains/command/actions.py :: CommandCatalog`
 
 | 메서드 | 시그니처 | 의미 |
 |---|---|---|
-| `action` | `(self, action: str, *, recovery_aliases=(), allowed_namespaces=(), requires_approval=False) -> Callable[[type], type]` | 클래스 데코레이터. 동일 action 다른 spec 재등록 → `ValueError(f"duplicate command action: {action}")`, 동일 spec 재선언은 멱등. marker 클래스에 `__command_spec__` 부착 |
+| `action` | `(self, action: str, *, recovery_aliases=(), allowed_namespaces=(), requires_approval=False, requires_approval_outside_sandbox=False, supports_cancel=True, supports_manual_retry=False, max_attempts=1, retry_delay_seconds=0) -> Callable[[type], type]` | 클래스 데코레이터. `max_attempts < 1`, `retry_delay_seconds < 0`, 또는 retry 가능 action인데 `max_attempts < 2`면 `ValueError`. 동일 action 다른 spec 재등록 → `ValueError(f"duplicate command action: {action}")`, 동일 spec 재선언은 멱등. marker 클래스에 `__command_spec__` 부착 |
 | `actions` | `(self) -> tuple[CommandActionSpec, ...]` | 호출 시 `import domains.command.builtin_actions`로 내장 액션 등록 유발 후 전체 spec 반환 |
 | `allowed_actions` | `(self) -> tuple[str, ...]` | action 문자열 튜플 |
 | `spec_for` | `(self, action: str) -> CommandActionSpec \| None` | action 정확 일치 |
@@ -58,13 +64,16 @@ class CommandActionSpec:            # src/domains/command/actions.py :: CommandA
 
 ### 내장 액션 — `src/domains/command/builtin_actions.py`
 
-빈 marker 클래스 3개에 `@command.action` 부착. 모두 `allowed_namespaces=(Sandbox.NAMESPACE,)`(= `("sandbox",)`). `requires_approval` 은 `rollout_restart`=False(비파괴 자동 실행 허용), `apply_manifest`/`deployment_scale`=True. 단 `deployment_scale` 은 sandbox 환경 한정 승인 면제 rule(`COMMAND_AUTO_APPROVE_*` env, handler 의 `approval_exempt_for_environment`)이 기본 적용된다.
+빈 marker 클래스 6개에 `@command.action` 부착. `rollout_restart`는 `allowed_namespaces=(Sandbox.NAMESPACE, "color-turf")`, `requires_approval=False`, `requires_approval_outside_sandbox=True`, 수동 retry 가능이다. `apply_manifest`와 `deployment_scale`은 `allowed_namespaces=(Sandbox.NAMESPACE,)`, `requires_approval=True`, 수동 retry 가능이다. 단 `deployment_scale`은 sandbox 환경 한정 승인 면제 rule(`COMMAND_AUTO_APPROVE_*` env, handler 의 `approval_exempt_for_environment`)이 기본 적용된다. RCA test action 2개는 sandbox 전용 test-only command이고, `cluster.agent.uninstall`은 target namespace 전용 자가 정리 command다.
 
 | marker 클래스(앵커) | action | recovery_aliases |
 |---|---|---|
 | `src/domains/command/builtin_actions.py :: RolloutRestartCommand` | `Command.DEFAULT_ACTION` = `"rollout_restart"` | `("rollout_restart",)` |
 | `src/domains/command/builtin_actions.py :: ApplyManifestCommand` | `Command.APPLY_MANIFEST_ACTION` = `"apply_manifest"` | `("apply_manifest",)` |
 | `src/domains/command/builtin_actions.py :: ScaleDeploymentCommand` | `Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION` = `"k8s.apps.v1.deployments.scale"` | `("deployment_scale",)` |
+| `src/domains/command/builtin_actions.py :: RcaTestScenarioInjectCommand` | `Command.RCA_TEST_SCENARIO_INJECT_ACTION` = `"rca.test.inject"` | `()` |
+| `src/domains/command/builtin_actions.py :: RcaTestScenarioCleanupCommand` | `Command.RCA_TEST_SCENARIO_CLEANUP_ACTION` = `"rca.test.cleanup"` | `()` |
+| `src/domains/command/builtin_actions.py :: ClusterAgentUninstallCommand` | `Command.CLUSTER_AGENT_UNINSTALL_ACTION` = `"cluster.agent.uninstall"` | `()` |
 
 ### 정책 엔진 — `src/domains/command/policy.py`
 
@@ -323,7 +332,7 @@ leased/running + 만료 후 grace 300s 경과 ──janitor──▶ failed
 - 리스 프로토콜: start/heartbeat/result는 `lease_id + agent_id + 상태 + leased_until >= now()`가 모두 일치해야 성공 — 불일치는 404 `"command not found"`.
 - 리스 획득은 `FOR UPDATE SKIP LOCKED`로 에이전트 간 경합 안전.
 - 결과 기록과 `command.completed` 이벤트 스테이징(events+outbox)은 단일 트랜잭션(원자성).
-- 쓰기 명령(내장 3종)은 제어 허용 네임스페이스(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox만) 한정. `management` 네임스페이스는 보호 네임스페이스라 allowlist에 있어도 gateway/command-worker/target-agent 모두에서 거부된다. 승인 레코드는 `apply_manifest`는 필수, `deployment_scale`은 sandbox 환경 면제(기본), `rollout_restart`는 비파괴라 불요.
+- 쓰기 명령은 제어 허용 네임스페이스(`CONTROL_ALLOWED_NAMESPACES`, 기본 sandbox만)와 action catalog namespace 정책을 모두 통과해야 한다. `management` 네임스페이스는 보호 네임스페이스라 allowlist에 있어도 gateway/command-worker/target-agent 모두에서 거부된다. 승인 레코드는 `apply_manifest`는 필수, `deployment_scale`은 sandbox 환경 면제(기본), `rollout_restart`는 sandbox에서는 불요이고 sandbox 밖에서는 `requires_approval_outside_sandbox=True`로 필요하다.
 - management 클러스터 쓰기 명령은 gateway와 command-worker에서 각각 차단된다. target-agent도 management role이면 write action(`apply_manifest`, rollout restart, k8s patch/scale)을 Kubernetes API 호출 전 실패 결과(`message="management_readonly"`)로 무시한다.
 - 수동 명령은 diff 필수(422), 서버가 임의 리소스를 합성하지 않음. deployment 제어는 허용목록 외 네임스페이스 422(`"namespace is not allowed by control policy"`).
 - 정책 reject에는 반드시 reason이 있다(`Result.require_reason`).

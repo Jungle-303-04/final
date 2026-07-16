@@ -231,8 +231,8 @@ Target Cluster Agent
 -> recovery-worker: recovery.planned
 -> select-worker: recovery.action_selected 또는 recovery.selection_requested
 -> dispatch-worker: command.requested 또는 safe_pr.requested
--> scm-worker: safe_pr.patch_prepared
--> ai-diff-worker: diff.explained
+-> safe-pr-worker: safe_pr.patch_prepared
+-> ai-diff-worker: diff.explained / safe_pr.ready_for_creation
 -> scm-worker: safe_pr.created 또는 safe_pr.failed
 
 Target 등록 / desired-state

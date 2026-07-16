@@ -440,15 +440,13 @@ async def scale_deployment_command(
 
 현재 Kubernetes command policy는 매우 좁다.
 
-- `scope`는 `target-agent`만 허용한다.
-- verb는 `get`, `patch`, `apply`만 허용한다.
-- resource는 `deployments`, `configmaps`만 허용한다.
-- target cluster role이면 namespace는 `target`이어야 한다.
-- management cluster role이면 namespace는 `management`여야 한다.
-- deployment는 `cluster-agent` 이름만 허용한다.
-- configmap은 `target-agent-policy` 이름만 허용한다.
+- `scope="target-agent"`는 agent 자신과 agent policy 제어만 허용한다.
+- `target-agent` scope의 verb는 `get`, `patch`, `apply`만 허용하고 resource는 `deployments`, `configmaps`만 허용한다.
+- target cluster role이면 namespace는 `target`, management cluster role이면 namespace는 `management`여야 한다.
+- `target-agent` scope의 deployment는 `cluster-agent`, configmap은 `target-agent-policy` 이름만 허용한다.
+- `scope="user-workload"`는 target cluster에서 deployment `patch`만 허용하고 `control_namespace_allowed()`를 통과한 namespace만 다룬다. `direct_execution=True`이면 management agent도 이 경로를 쓸 수 있지만 namespace policy는 그대로 적용된다.
 
-즉 이 `@command.k8s()` 경로는 일반 user workload 배포 조작용이 아니라 agent 자기 자신과 agent policy control을 위한 좁은 control path다. Sandbox workload 변경은 현재 `apply_manifest`와 `rollout_restart` handler가 `diff`를 읽어 처리한다.
+즉 `@command.k8s()`는 agent control path와 좁은 user workload patch path를 모두 갖지만, 둘 다 scope/resource/namespace/name 정책을 먼저 통과해야 한다. Manifest 적용과 rollout restart는 여전히 `apply_manifest`, `rollout_restart` handler가 `diff`를 읽어 처리한다.
 
 ## 새 command action 추가 절차
 
@@ -479,7 +477,7 @@ async def scale_deployment_command(
 
 4. write action이면 Agent의 `write_action_requires_approval()` 범위도 확인한다.
 
-   현재는 `apply_manifest`, `rollout_restart`만 hard-coded로 검사한다. 새로운 write action을 추가하면 이 목록 또는 더 일반적인 action metadata 기반 검사로 확장해야 한다.
+   현재는 `rollout_restart`(sandbox 밖만), `apply_manifest`, `k8s.apps.v1.deployments.scale`을 검사한다. 새로운 write action을 추가하면 이 목록 또는 action metadata 기반 검사로 확장해야 한다.
 
 5. 결과 payload는 `status`, `applied`, `message`, `retryable`, `resources`, `stdout`, `stderr`를 포함한다.
 
