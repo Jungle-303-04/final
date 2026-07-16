@@ -1241,11 +1241,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     owner_kind, owner_name = owner_ref(item)
     measured = dict(metrics or {})
     cpu_request_mcores, mem_request_mib = pod_request_totals(pod_spec)
-    containers = [
-        container_summary(container)
-        for container in pod_status.get("containerStatuses", [])
-        if isinstance(container, dict)
-    ]
+    containers, container_ports_complete = pod_container_summaries(pod_spec, pod_status)
     return {
         "uid": meta.get("uid"),
         "resource_version": meta.get("resourceVersion"),
@@ -1266,6 +1262,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "host_ip": pod_status.get("hostIP"),
         "conditions": pod_status.get("conditions", []),
         "containers": containers,
+        "container_ports_complete": container_ports_complete,
         "cpu_mcores": measured.get("cpu_mcores"),
         "mem_mib": measured.get("mem_mib"),
         "cpu_request_mcores": cpu_request_mcores,
@@ -1292,6 +1289,98 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
             ),
         ],
     }
+
+
+def pod_container_summaries(
+    pod_spec: JsonObject,
+    pod_status: JsonObject,
+) -> tuple[list[JsonObject], bool]:
+    """Join regular-container status with exact declared ports without inference."""
+    spec_containers = pod_spec.get("containers")
+    status_containers = pod_status.get("containerStatuses")
+    if not isinstance(spec_containers, list):
+        spec_containers = []
+        complete = False
+    else:
+        complete = True
+    if not isinstance(status_containers, list):
+        status_containers = []
+
+    statuses: dict[str, JsonObject] = {}
+    for value in status_containers:
+        if not isinstance(value, dict):
+            complete = False
+            continue
+        name = as_text(value.get("name"))
+        if not name or name in statuses:
+            complete = False
+            continue
+        statuses[name] = value
+
+    result: list[JsonObject] = []
+    observed_names: set[str] = set()
+    for value in spec_containers:
+        if not isinstance(value, dict):
+            complete = False
+            continue
+        name = as_text(value.get("name"))
+        if not name or name in observed_names:
+            complete = False
+            continue
+        observed_names.add(name)
+        ports, ports_complete = container_port_observations(value)
+        complete = complete and ports_complete
+        status_summary = container_summary(statuses.get(name, {"name": name}))
+        result.append({**status_summary, "name": name, "ports": ports})
+
+    for name, value in statuses.items():
+        if name in observed_names:
+            continue
+        complete = False
+        result.append({**container_summary(value), "name": name, "ports": []})
+    return result, complete
+
+
+def container_port_observations(container: JsonObject) -> tuple[list[JsonObject], bool]:
+    """Return validated declared ports and whether every declaration survived."""
+    raw_ports = container.get("ports")
+    if raw_ports is None:
+        return [], True
+    if not isinstance(raw_ports, list):
+        return [], False
+    result: list[JsonObject] = []
+    identities: set[tuple[int, str | None, str]] = set()
+    complete = True
+    for value in raw_ports:
+        if not isinstance(value, dict):
+            complete = False
+            continue
+        port = value.get("containerPort")
+        protocol = str(value.get("protocol") or "TCP").upper()
+        name = as_text(value.get("name"))
+        name = name.strip() if name else None
+        if (
+            isinstance(port, bool)
+            or not isinstance(port, int)
+            or not 1 <= port <= 65_535
+            or protocol not in {"TCP", "UDP", "SCTP"}
+            or (name is not None and (not name or len(name) > 63))
+        ):
+            complete = False
+            continue
+        identity = (port, name, protocol)
+        if identity in identities:
+            complete = False
+            continue
+        identities.add(identity)
+        result.append(
+            {
+                "container_port": port,
+                "name": name,
+                "protocol": protocol,
+            }
+        )
+    return result, complete
 
 
 def pod_request_totals(pod_spec: JsonObject) -> tuple[float | None, float | None]:

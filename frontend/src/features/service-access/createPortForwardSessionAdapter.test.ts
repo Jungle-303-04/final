@@ -138,6 +138,42 @@ describe("createPortForwardSessionAdapter", () => {
     await expect(adapter.start(request)).resolves.toMatchObject({ localPort: 18_080 });
     expect(startPortForward).toHaveBeenCalledWith(request);
   });
+
+  it("rejects native start in browser mode without invoking the desktop boundary", async () => {
+    const startPortForward = vi.fn();
+    const adapter = createPortForwardSessionAdapter({
+      isDesktop: false,
+      capabilities: vi.fn().mockResolvedValue({
+        portForwardSessions: { state: "unsupported", reason: "browser" },
+      }),
+      listPortForwardSessions: vi.fn(),
+      startPortForward,
+      stopPortForwardSession: vi.fn(),
+      recreatePortForward: vi.fn(),
+    });
+
+    await expect(adapter.start({
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: ["shop"],
+        freshness: "live",
+      },
+      resource: {
+        apiGroup: "",
+        version: "v1",
+        kind: "Pod",
+        namespace: "shop",
+        name: "checkout-api-7d9f",
+        uid: "uid-pod-1",
+      },
+      remotePort: 8080,
+      localPort: 18_080,
+      listenAddress: "127.0.0.1",
+      confirmation: true,
+    })).rejects.toThrow("unavailable");
+    expect(startPortForward).not.toHaveBeenCalled();
+  });
 });
 
 function session(id: string, startedAt: string): DesktopPortForwardSession {

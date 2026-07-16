@@ -73,7 +73,7 @@ def inventory_pod(**overrides: object) -> dict[str, object]:
                 {
                     "name": "metrics",
                     "ports": [
-                        {"container_port": 9090, "name": "metrics", "protocol": "TCP"},
+                        {"container_port": 8443, "name": "metrics", "protocol": "TCP"},
                     ],
                 },
             ],
@@ -262,7 +262,7 @@ def test_pod_capabilities_project_exact_scope_uid_and_only_observed_tcp_containe
         (item.container_name, item.name, item.port, item.protocol) for item in response.ports
     ] == [
         ("app", "https", 8443, "TCP"),
-        ("metrics", "metrics", 9090, "TCP"),
+        ("metrics", "metrics", 8443, "TCP"),
     ]
     assert response.port_discovery == "complete"
     assert response.port_discovery_reason is None

@@ -8,6 +8,7 @@ from packages.config.settings import env
 from packages.contracts.gateway import requests as gateway_requests
 from packages.contracts.helm import HELM_RELEASE_ARTIFACT_READ_CAPABILITY
 from packages.contracts.service_access import SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
+from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
@@ -133,7 +134,7 @@ AGENT_CAPABILITIES = [
     "collector",
     "command_receiver",
     "command_control.cancel.v1",
-    "pod_exec_stream",
+    POD_EXEC_AGENT_CAPABILITY,
     Command.CATALOG_HELM_INSTALL_CAPABILITY,
     Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,

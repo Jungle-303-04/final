@@ -111,9 +111,14 @@ function toCapabilities(
     revision: value.revision,
     serviceRequest: value.service_request,
     serviceRequestReason: value.service_request_reason,
-    localPortForward: "desktop-required",
-    localPortForwardReason: "desktop-port-forward-bridge-required",
+    localPortForward: value.local_port_forward === "desktop_required"
+      ? "desktop-required"
+      : "unavailable",
+    localPortForwardReason: value.local_port_forward_reason.replace(/_/gu, "-"),
+    portDiscovery: value.port_discovery,
+    portDiscoveryReason: value.port_discovery_reason?.replace(/_/gu, "-") ?? null,
     ports: value.ports.map((port) => ({
+      containerName: port.container_name,
       port: port.port,
       name: port.name,
       protocol: port.protocol,

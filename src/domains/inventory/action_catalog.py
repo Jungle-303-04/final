@@ -24,6 +24,7 @@ from packages.contracts.gateway.responses import (
     ResourceCapabilitySubject,
 )
 from packages.contracts.identity import Permission
+from packages.contracts.terminal import POD_EXEC_AGENT_CAPABILITY
 
 NamespacePolicy = Literal["control", "terminal", "cluster"]
 ExecutionTransport = Literal["command", "terminal"]
@@ -239,7 +240,7 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         resource_type="pod",
         kind="pod",
         permission=Permission.POD_EXEC.value,
-        agent_capability="pod_exec_stream",
+        agent_capability=POD_EXEC_AGENT_CAPABILITY,
         namespace_policy="terminal",
     ),
     ResourceActionDefinition(

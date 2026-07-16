@@ -21,13 +21,14 @@ export const serviceAccessScopeSchema = z.strictObject({
 export const serviceResourceRefSchema = z.strictObject({
   api_group: z.union([z.literal(""), z.literal("core")]),
   version: z.literal("v1"),
-  kind: z.string().refine((value) => value.toLocaleLowerCase() === "service"),
+  kind: z.enum(["Pod", "Service"]),
   namespace: z.string().regex(/^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/u).max(63),
   name: z.string().regex(/^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$/u).max(63),
   uid: z.string().min(1),
 });
 
 export const serviceAccessPortSchema = z.strictObject({
+  container_name: z.string().min(1).max(253).nullable(),
   port: z.number().int().min(1).max(65_535),
   name: z.string().min(1).max(63).nullable(),
   protocol: z.literal("TCP"),
@@ -41,8 +42,10 @@ export const serviceAccessCapabilitiesSchema = z.strictObject({
   revision: z.string().regex(/^[0-9a-f]{64}$/u),
   service_request: z.enum(["available", "forbidden", "unavailable"]),
   service_request_reason: z.string().min(1).max(240).nullable(),
-  local_port_forward: z.literal("desktop_required"),
-  local_port_forward_reason: z.literal("desktop_port_forward_bridge_required"),
+  local_port_forward: z.enum(["desktop_required", "unavailable"]),
+  local_port_forward_reason: z.string().min(1).max(240),
+  port_discovery: z.enum(["complete", "partial", "unavailable"]),
+  port_discovery_reason: z.string().min(1).max(240).nullable(),
   ports: z.array(serviceAccessPortSchema),
 }).superRefine((capabilities, context) => {
   if (
@@ -55,15 +58,72 @@ export const serviceAccessCapabilitiesSchema = z.strictObject({
       path: ["service_request_reason"],
     });
   }
-  const values = capabilities.ports.map(({ port }) => port);
+  if (
+    (capabilities.port_discovery === "complete")
+    !== (capabilities.port_discovery_reason === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "port discovery reason is inconsistent",
+      path: ["port_discovery_reason"],
+    });
+  }
+  if (
+    capabilities.local_port_forward === "desktop_required"
+    && (
+      capabilities.local_port_forward_reason !== "desktop_port_forward_bridge_required"
+      || capabilities.ports.length === 0
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "desktop port forward availability is inconsistent",
+      path: ["local_port_forward"],
+    });
+  }
+  if (
+    capabilities.local_port_forward === "unavailable"
+    && capabilities.local_port_forward_reason === "desktop_port_forward_bridge_required"
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "unavailable port forward requires an unavailable reason",
+      path: ["local_port_forward_reason"],
+    });
+  }
+  const values = capabilities.ports.map(({ container_name, port, name }) => (
+    `${container_name ?? ""}\u0000${String(port).padStart(5, "0")}\u0000${name ?? ""}`
+  ));
   if (
     new Set(values).size !== values.length
-    || values.some((port, index) => index > 0 && port <= values[index - 1]!)
+    || values.some((value, index) => index > 0 && value <= values[index - 1]!)
   ) {
     context.addIssue({
       code: "custom",
       message: "service ports must be sorted and unique",
       path: ["ports"],
+    });
+  }
+  if (
+    capabilities.resource.kind === "Pod"
+    && capabilities.ports.some(({ container_name }) => container_name === null)
+  ) {
+    context.addIssue({ code: "custom", message: "Pod ports require container identity" });
+  }
+  if (
+    capabilities.resource.kind === "Service"
+    && capabilities.ports.some(({ container_name }) => container_name !== null)
+  ) {
+    context.addIssue({ code: "custom", message: "Service ports cannot carry container identity" });
+  }
+  if (
+    capabilities.scope.namespaces.length > 0
+    && !capabilities.scope.namespaces.includes(capabilities.resource.namespace)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "service access target is outside namespace scope",
+      path: ["scope", "namespaces"],
     });
   }
 });

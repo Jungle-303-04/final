@@ -13,13 +13,14 @@ export interface ServiceAccessScope {
 export interface ServiceResourceRef {
   apiGroup: string;
   version: string;
-  kind: string;
+  kind: "Pod" | "Service";
   namespace: string;
   name: string;
   uid: string;
 }
 
 export interface ServiceAccessPortDescriptor {
+  containerName: string | null;
   port: number;
   name: string | null;
   protocol: "TCP";
@@ -33,8 +34,10 @@ export interface ServiceAccessCapabilities {
   revision: string;
   serviceRequest: ServiceAccessAvailability;
   serviceRequestReason: string | null;
-  localPortForward: "desktop-required";
-  localPortForwardReason: "desktop-port-forward-bridge-required";
+  localPortForward: "desktop-required" | "unavailable";
+  localPortForwardReason: string;
+  portDiscovery: "complete" | "partial" | "unavailable";
+  portDiscoveryReason: string | null;
   ports: ServiceAccessPortDescriptor[];
 }
 

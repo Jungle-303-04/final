@@ -29,6 +29,11 @@ LOCAL_PORT_FORWARD_DESKTOP_REASON = "desktop_port_forward_bridge_required"
 SERVICE_REQUEST_AGENT_UNAVAILABLE_REASON = "service_request_agent_unavailable"
 SERVICE_REQUEST_RESOURCE_UNAVAILABLE_REASON = "service_request_resource_unavailable"
 SERVICE_REQUEST_NO_TCP_PORTS_REASON = "service_request_no_tcp_ports"
+POD_SERVICE_REQUEST_UNSUPPORTED_REASON = "pod_service_request_unsupported"
+POD_EXEC_CAPABILITY_UNAVAILABLE_REASON = "pod_exec_capability_unavailable"
+PORT_DISCOVERY_PARTIAL_REASON = "port_discovery_partial"
+PORT_FORWARD_NO_TCP_PORTS_REASON = "port_forward_no_tcp_ports"
+PORT_FORWARD_RESOURCE_UNAVAILABLE_REASON = "port_forward_resource_unavailable"
 SERVICE_REQUEST_SAFE_RESPONSE_HEADERS = frozenset(
     {
         "cache-control",
@@ -48,12 +53,14 @@ SERVICE_REQUEST_SAFE_RESPONSE_HEADERS = frozenset(
 
 ServiceRequestScheme = Literal["http", "https"]
 ServiceAccessAvailability = Literal["available", "forbidden", "unavailable"]
-LocalPortForwardAvailability = Literal["desktop_required"]
+LocalPortForwardAvailability = Literal["desktop_required", "unavailable"]
+PortDiscoveryAvailability = Literal["complete", "partial", "unavailable"]
 ListenAddress = Literal["127.0.0.1", "0.0.0.0"]
 _DNS_LABEL = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 
 
 class ServicePort(StrictModel):
+    container_name: str | None = Field(default=None, min_length=1, max_length=253)
     port: int = Field(ge=1, le=65_535)
     name: str | None = Field(default=None, max_length=63)
     protocol: Literal["TCP"] = "TCP"
@@ -78,9 +85,13 @@ class ServiceAccessCapabilities(StrictModel):
     service_request: ServiceAccessAvailability
     service_request_reason: str | None = Field(default=None, max_length=240)
     local_port_forward: LocalPortForwardAvailability = "desktop_required"
-    local_port_forward_reason: Literal["desktop_port_forward_bridge_required"] = (
-        LOCAL_PORT_FORWARD_DESKTOP_REASON
+    local_port_forward_reason: str = Field(
+        default=LOCAL_PORT_FORWARD_DESKTOP_REASON,
+        min_length=1,
+        max_length=240,
     )
+    port_discovery: PortDiscoveryAvailability = "complete"
+    port_discovery_reason: str | None = Field(default=None, min_length=1, max_length=240)
     ports: tuple[ServicePort, ...] = ()
 
     @model_validator(mode="after")
@@ -89,9 +100,34 @@ class ServiceAccessCapabilities(StrictModel):
             raise ValueError("available service request capability cannot have a reason")
         if self.service_request != "available" and not self.service_request_reason:
             raise ValueError("unavailable service request capability requires a reason")
-        values = [item.port for item in self.ports]
+        if self.local_port_forward == "desktop_required":
+            if self.local_port_forward_reason != LOCAL_PORT_FORWARD_DESKTOP_REASON:
+                raise ValueError("desktop port forward requires the desktop boundary reason")
+            if not self.ports:
+                raise ValueError("desktop port forward requires an observed TCP port")
+        elif self.local_port_forward_reason == LOCAL_PORT_FORWARD_DESKTOP_REASON:
+            raise ValueError("unavailable port forward requires an unavailable reason")
+        if (self.port_discovery == "complete") != (self.port_discovery_reason is None):
+            raise ValueError("port discovery reason is inconsistent")
+        values = [(item.container_name or "", item.port, item.name or "") for item in self.ports]
         if values != sorted(values) or len(values) != len(set(values)):
-            raise ValueError("service ports must be unique and sorted")
+            raise ValueError("service access ports must be unique and sorted")
+        if self.resource.kind.casefold() == "service" and any(
+            item.container_name is not None for item in self.ports
+        ):
+            raise ValueError("Service ports cannot carry a container identity")
+        if self.resource.kind.casefold() == "pod" and any(
+            item.container_name is None for item in self.ports
+        ):
+            raise ValueError("Pod ports require a container identity")
+        if self.resource.kind.casefold() not in {"pod", "service"}:
+            raise ValueError("service access requires a Pod or Service resource")
+        if self.resource.api_group not in {"", "core"} or self.resource.version != "v1":
+            raise ValueError("service access requires a core/v1 resource")
+        if self.resource.namespace is None:
+            raise ValueError("service access requires a namespaced resource")
+        if self.scope.namespaces and self.resource.namespace not in self.scope.namespaces:
+            raise ValueError("service access target is outside the selected namespace scope")
         return self
 
 
