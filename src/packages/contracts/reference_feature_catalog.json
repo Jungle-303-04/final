@@ -501,28 +501,39 @@
     },
     {
       "contractId": "reference.feature.018",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1",
       "legacyContractIds": [
         "reference.feature.018"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-018",
       "section": "2.1 레이아웃",
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/ProductShell.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/ProductShell.tsx#ProductShell",
+          "reason": "Route composition and scroll ownership are browser layout contracts and do not require a Python endpoint.",
+          "test": "frontend/src/app/ProductShell.test.tsx"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductShell.tsx#ProductShell",
+          "consumer": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+          "reason": "One shell-owned main element renders the active route and owns vertical scrolling; when resource detail expands to full width, the preserved list becomes aria-hidden and inert until the same URL-backed workspace returns to peek mode.",
+          "test": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

@@ -284,12 +284,14 @@ export function ResourcesPage({
       data-detail-layout={state.detailRequested ? (state.detailFull ? "full" : "peek") : "closed"}
     >
       <div
+        aria-hidden={state.detailFull}
         className={state.detailRequested
           ? state.detailFull
             ? "hidden min-w-0 overflow-y-auto lg:block lg:basis-0 lg:flex-none lg:overflow-hidden lg:opacity-0 lg:pointer-events-none lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
             : "hidden min-w-0 flex-1 overflow-y-auto lg:block lg:opacity-100 lg:transition-[flex-basis,opacity] lg:duration-300 lg:ease-out motion-reduce:transition-none"
           : "min-w-0 flex-1 overflow-y-auto"}
         data-slot="resources-list-column"
+        inert={state.detailFull}
       >
         <ProductPageFrame>
           <header className="flex min-w-0 justify-end">

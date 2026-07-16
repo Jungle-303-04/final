@@ -13234,7 +13234,8 @@
         {
           "sourceKey": "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1",
           "legacyContractIds": [
-            "reference.feature.014"
+            "reference.feature.014",
+            "reference.feature.018"
           ],
           "symbol": "primary rail, application frame, and shell-owned overlays",
           "interaction": "one declarative shell renders the released primary navigation rail, account and settings entries, responsive collapse state, canonical main-content ownership, and focus-managed command, help, settings, resource, and diagnostic overlays",
