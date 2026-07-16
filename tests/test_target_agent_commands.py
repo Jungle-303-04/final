@@ -2680,3 +2680,141 @@ def test_management_agent_default_policy_enables_only_kubernetes_provider() -> N
     }
 
     assert enabled == {"kubernetes"}
+
+
+class ExactResourceDeleteClient(StubKubernetesClient):
+    def __init__(self, *, fail_name: str | None = None) -> None:
+        super().__init__()
+        self.fail_name = fail_name
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        name = str(kwargs["name"])
+        return {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": name,
+                "namespace": str(kwargs["namespace"]),
+                "uid": f"uid-{name}",
+                "resourceVersion": f"rv-{name}",
+            },
+        }
+
+    async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.namespaced_deletes.append(kwargs)
+        if kwargs["name"] == self.fail_name:
+            raise RuntimeError("delete denied")
+        return {"deleted": True, "status_code": 200}
+
+
+def test_exact_resource_delete_checks_cas_and_reports_each_root() -> None:
+    module = load_agent_module()
+    kubernetes = ExactResourceDeleteClient()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "resources": [
+                        {
+                            "api_group": "apps",
+                            "version": "v1",
+                            "kind": "Deployment",
+                            "namespace": "shop",
+                            "name": "checkout",
+                            "uid": "uid-checkout",
+                            "resource_version": "rv-checkout",
+                            "plural": "deployments",
+                        },
+                        {
+                            "api_group": "apps",
+                            "version": "v1",
+                            "kind": "Deployment",
+                            "namespace": "shop",
+                            "name": "payments",
+                            "uid": "uid-payments",
+                            "resource_version": "rv-payments",
+                            "plural": "deployments",
+                        },
+                    ],
+                    "propagation_policy": "Foreground",
+                    "request_fingerprint": "a" * 64,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["completeness"] == "exact"
+    assert [item["status"] for item in result["resources"]] == ["deleted", "deleted"]
+    assert kubernetes.namespaced_deletes[0]["preconditions"] == {
+        "uid": "uid-checkout",
+        "resourceVersion": "rv-checkout",
+    }
+    assert kubernetes.namespaced_deletes[0]["propagation_policy"] == "Foreground"
+
+
+def test_exact_resource_delete_preserves_partial_failure_without_retargeting() -> None:
+    module = load_agent_module()
+    kubernetes = ExactResourceDeleteClient(fail_name="payments")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "resources": [
+                        {
+                            "api_group": "apps",
+                            "version": "v1",
+                            "kind": "Deployment",
+                            "namespace": "shop",
+                            "name": name,
+                            "uid": f"uid-{name}",
+                            "resource_version": f"rv-{name}",
+                            "plural": "deployments",
+                        }
+                        for name in ("checkout", "payments")
+                    ],
+                    "propagation_policy": "Foreground",
+                    "request_fingerprint": "b" * 64,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["completeness"] == "partial"
+    assert result["applied"] is True
+    assert result["resources"] == [
+        {
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "checkout",
+            "uid": "uid-checkout",
+            "status": "deleted",
+        },
+        {
+            "kind": "Deployment",
+            "namespace": "shop",
+            "name": "payments",
+            "uid": "uid-payments",
+            "status": "failed",
+            "error": "delete denied",
+        },
+    ]

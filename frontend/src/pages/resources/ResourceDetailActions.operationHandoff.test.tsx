@@ -28,6 +28,7 @@ describe("ResourceDetailActions operation handoff", () => {
       execute: vi.fn()
         .mockResolvedValueOnce({ accepted: true, correlationId: "correlation-a", commandId: "command-a", eventId: "event-a" })
         .mockResolvedValueOnce({ accepted: true, correlationId: "correlation-b", commandId: "command-b", eventId: "event-b" }),
+      previewDeletion: vi.fn(),
     };
     const store = createOperationStatusStore(completedOperations());
     const view = renderSurface(store, actionsPort, true);
@@ -62,7 +63,7 @@ describe("ResourceDetailActions operation handoff", () => {
         }}>
           <DiagnoseSessionProvider port={diagnose}>
             <ResourceDetailActions
-              actionsPort={{ execute: vi.fn() }}
+              actionsPort={{ execute: vi.fn(), previewDeletion: vi.fn() }}
               capabilities={{ ...capabilities, data: { ...capabilities.data!, capabilities: [] } }}
               detail={detail}
             />
@@ -146,7 +147,7 @@ describe("ResourceDetailActions operation handoff", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ResourceDetailActions
-          actionsPort={{ execute }}
+          actionsPort={{ execute, previewDeletion: vi.fn() }}
           capabilities={cronjobCapabilities}
           detail={cronjobDetail}
           onInvalidate={onInvalidate}
@@ -181,6 +182,68 @@ describe("ResourceDetailActions operation handoff", () => {
     expect(secondContext.idempotencyKey).toBe(firstContext.idempotencyKey);
     expect(onInvalidate).toHaveBeenCalledOnce();
     expect(onInvalidate).toHaveBeenCalledWith(firstContext);
+  });
+
+  it("loads the server-owned cascade before exposing one destructive confirmation", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn().mockResolvedValue({
+      accepted: true,
+      auditEventId: "event-delete",
+      commandId: "command-delete",
+      correlationId: "correlation-delete",
+      eventId: "event-delete",
+      status: "queued",
+    });
+    const previewDeletion = vi.fn().mockResolvedValue({
+      dependents: [{
+        apiGroup: "apps",
+        kind: "ReplicaSet",
+        name: "checkout-77f",
+        namespace: "shop",
+        resourceVersion: "17",
+        uid: "replicaset-uid-1",
+        version: "v1",
+      }],
+      maxDependents: 200,
+      revision: `sha256:${"a".repeat(64)}`,
+      root: {
+        apiGroup: "apps",
+        kind: "Deployment",
+        name: "checkout",
+        namespace: "shop",
+        resourceVersion: "42",
+        uid: "uid-1",
+        version: "v1",
+      },
+      truncated: false,
+    });
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceDetailActions
+          actionsPort={{ execute, previewDeletion }}
+          capabilities={{
+            ...capabilities,
+            data: { ...capabilities.data!, capabilities: [deleteCapability] },
+          }}
+          detail={detail}
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(previewDeletion).toHaveBeenCalledWith(deleteCapability);
+    expect(within(dialog).getByText(/ReplicaSet\/checkout-77f/u)).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledWith(
+      deleteCapability,
+      expect.objectContaining({
+        preview_revision: `sha256:${"a".repeat(64)}`,
+        idempotency_key: expect.stringMatching(/^resource-delete-/u),
+      }),
+    ));
   });
 });
 
@@ -228,6 +291,18 @@ const capability: ResourceActionCapability = {
   label: "Restart",
   method: "POST",
   path: "/api/resource-actions/restart",
+  realtime: true,
+};
+
+const deleteCapability: ResourceActionCapability = {
+  capabilityId: "resource.delete",
+  confirmationRequired: true,
+  description: "Delete this exact resource after reviewing its cascade.",
+  execution: "command",
+  inputSchema: [],
+  label: "Delete",
+  method: "POST",
+  path: "/resource-deletions/inventory-1",
   realtime: true,
 };
 
