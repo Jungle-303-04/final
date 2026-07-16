@@ -46,6 +46,7 @@ from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
 from domains.log_stream.router import router as log_stream_router
+from domains.workload_detail.router import router as workload_detail_router
 from domains.manifest_editor.router import router as manifest_editor_router
 from domains.parity.router import router as parity_router
 from domains.providers.router import router as providers_router
@@ -360,6 +361,7 @@ class ApiGateway:
         app.include_router(timeline_router)  # retained Timeline snapshot (source-specific RBAC)
         app.include_router(issue_filter_router)  # workspace Issues 필터·facet 서버 집계
         app.include_router(log_stream_router)  # bounded, redacted pod/workload log SSE
+        app.include_router(workload_detail_router)  # exact, read-only workload detail projection
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(
             rca_query_router

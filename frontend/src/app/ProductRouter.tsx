@@ -10,6 +10,7 @@ import { ProductShell } from "./ProductShell";
 import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
 import type { ProductComposition } from "./productComposition";
 import { RouteSurface } from "./RouteSurface";
+import { WorkloadDetailRoute } from "../pages/workload-detail/WorkloadDetailRoute";
 import {
   landingProductRouteForReleasedSurfaces,
   PRODUCT_ROUTE_CATALOG,
@@ -86,6 +87,10 @@ export function ProductRouter({
                   path={routePathForDefinition(routeDefinition, routePath)}
                 />
               )))}
+            <Route
+              element={<WorkloadDetailRoute port={composition.workloadDetail} />}
+              path="/workload/:kind/:namespace/:name"
+            />
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
           </Routes>
