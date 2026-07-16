@@ -9,6 +9,7 @@ import type { PortForwardSessionPort } from "../../features/service-access/portF
 import { PortForwardSessionsProvider } from "../../features/service-access/PortForwardSessionsProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { RESOURCE_DETAIL } from "../../features/resources/createResourcesAdapter.testSupport";
+import { endpointResource } from "../../features/resources/createResourcesAdapter.testSupport";
 import { toResourceDetail } from "../../features/resources/resourcesCanonical";
 import { ServiceAccessActions } from "./ServiceAccessActions";
 
@@ -19,13 +20,38 @@ const DETAIL = toResourceDetail("cluster-1", {
   name: "checkout",
 }, RESOURCE_DETAIL);
 
+const POD_DETAIL = toResourceDetail("cluster-1", {
+  resourceType: "pod",
+  kind: "Pod",
+  namespace: "shop",
+  name: "checkout-api-7d9f",
+}, {
+  ...RESOURCE_DETAIL,
+  identity: {
+    resource_type: "pod",
+    kind: "Pod",
+    namespace: "shop",
+    name: "checkout-api-7d9f",
+  },
+  resource: endpointResource({
+    inventory_key: "inventory-pod-1",
+    kind: "Pod",
+    name: "checkout-api-7d9f",
+    uid: "uid-pod-1",
+  }),
+});
+
 afterEach(cleanup);
 
-function renderActions(port: ServiceAccessPort, portForwardSessions?: PortForwardSessionPort) {
+function renderActions(
+  port: ServiceAccessPort,
+  portForwardSessions?: PortForwardSessionPort,
+  detail = DETAIL,
+) {
   const actions = (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <ServiceAccessActions
-        detail={DETAIL}
+        detail={detail}
         port={port}
         portForwardSessions={portForwardSessions}
       />
@@ -58,7 +84,10 @@ function servicePort(): ServiceAccessPort {
       serviceRequestReason: null,
       localPortForward: "desktop-required",
       localPortForwardReason: "desktop-port-forward-bridge-required",
+      portDiscovery: "complete",
+      portDiscoveryReason: null,
       ports: [{
+        containerName: null,
         port: 80,
         name: "http",
         protocol: "TCP",
@@ -74,6 +103,56 @@ function servicePort(): ServiceAccessPort {
       commandId: "cmd-service-1",
       status: "queued",
     }),
+    cancel: vi.fn(),
+  };
+}
+
+function podPort(overrides: Record<string, unknown> = {}): ServiceAccessPort {
+  const descriptor = {
+    scope: {
+      workspaceId: "workspace-1",
+      clusterId: "cluster-1",
+      namespaces: ["shop"],
+      freshness: "live" as const,
+    },
+    resource: {
+      apiGroup: "",
+      version: "v1",
+      kind: "Pod",
+      namespace: "shop",
+      name: "checkout-api-7d9f",
+      uid: "uid-pod-1",
+    },
+    revision: "b".repeat(64),
+    serviceRequest: "unavailable" as const,
+    serviceRequestReason: "pod_service_request_unsupported",
+    localPortForward: "desktop-required" as const,
+    localPortForwardReason: "desktop-port-forward-bridge-required",
+    portDiscovery: "complete" as const,
+    portDiscoveryReason: null,
+    ports: [
+      {
+        containerName: "app",
+        port: 8080,
+        name: "http",
+        protocol: "TCP" as const,
+        appProtocol: null,
+        defaultScheme: "http" as const,
+      },
+      {
+        containerName: "metrics",
+        port: 9090,
+        name: "metrics",
+        protocol: "TCP" as const,
+        appProtocol: null,
+        defaultScheme: "http" as const,
+      },
+    ],
+    ...overrides,
+  };
+  return {
+    resolve: vi.fn().mockResolvedValue(descriptor),
+    start: vi.fn(),
     cancel: vi.fn(),
   };
 }
@@ -184,6 +263,60 @@ describe("ServiceAccessActions", () => {
       confirmation: true,
     }, expect.any(AbortSignal)));
     expect(await screen.findByText(/18080/u)).toBeTruthy();
+  });
+
+  it("builds Pod container and port choices only from the server descriptor in browser mode", async () => {
+    const port = podPort();
+    const user = userEvent.setup();
+    renderActions(port, undefined, POD_DETAIL);
+
+    await user.click(await screen.findByRole("button", { name: "Port forwarding" }));
+    expect(screen.queryByRole("button", { name: "HTTP request" })).toBeNull();
+    await user.click(screen.getByRole("combobox", { name: "Remote port" }));
+    expect(await screen.findByText("app · http · 8080/TCP")).toBeTruthy();
+    await user.click(screen.getByText("metrics · metrics · 9090/TCP"));
+    expect(screen.getByText(
+      "kubectl -n shop port-forward pod/checkout-api-7d9f 9090:9090 --address 127.0.0.1",
+    )).toBeTruthy();
+    expect(port.resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-resolves an exact Pod before one native confirmation and blocks a stale UID", async () => {
+    const initial = podPort();
+    const initialResolve = initial.resolve as ReturnType<typeof vi.fn>;
+    initialResolve
+      .mockResolvedValueOnce(await podPort().resolve("inventory-pod-1"))
+      .mockResolvedValueOnce({
+        ...await podPort().resolve("inventory-pod-1"),
+        resource: {
+          ...(await podPort().resolve("inventory-pod-1")).resource,
+          uid: "uid-pod-recreated",
+        },
+      });
+    const sessions = sessionPort();
+    const user = userEvent.setup();
+    renderActions(initial, sessions, POD_DETAIL);
+
+    await user.click(await screen.findByRole("button", { name: "Port forwarding" }));
+    await user.click(screen.getByRole("button", { name: "Start port forwarding" }));
+
+    await waitFor(() => expect(initial.resolve).toHaveBeenCalledTimes(2));
+    expect(sessions.start).not.toHaveBeenCalled();
+    expect(await screen.findByText(/changed since it was observed/u)).toBeTruthy();
+  });
+
+  it("shows an explicit unavailable Pod action when no observed TCP port exists", async () => {
+    renderActions(podPort({
+      localPortForward: "unavailable",
+      localPortForwardReason: "port_forward_no_tcp_ports",
+      portDiscovery: "unavailable",
+      portDiscoveryReason: "port_forward_no_tcp_ports",
+      ports: [],
+    }), undefined, POD_DETAIL);
+
+    const action = await screen.findByRole("button", { name: "Port forwarding" });
+    expect(action).toBeDisabled();
+    expect(screen.getByText(/No observed TCP ports/u)).toBeTruthy();
   });
 
   it("renders the native session list without clipping long identities", async () => {

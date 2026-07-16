@@ -25,8 +25,11 @@ const CAPABILITIES = {
   service_request_reason: null,
   local_port_forward: "desktop_required",
   local_port_forward_reason: "desktop_port_forward_bridge_required",
+  port_discovery: "complete",
+  port_discovery_reason: null,
   ports: [
     {
+      container_name: null,
       port: 80,
       name: "http",
       protocol: "TCP",
@@ -34,6 +37,7 @@ const CAPABILITIES = {
       default_scheme: "http",
     },
     {
+      container_name: null,
       port: 443,
       name: "https",
       protocol: "TCP",
@@ -60,6 +64,36 @@ describe("service access strict schemas", () => {
     expect(() => serviceAccessCapabilitiesSchema.parse({
       ...CAPABILITIES,
       ports: [CAPABILITIES.ports[0], CAPABILITIES.ports[0]],
+    })).toThrow();
+  });
+
+  it("accepts only exact Pod container TCP descriptors and explicit partial discovery", () => {
+    const pod = serviceAccessCapabilitiesSchema.parse({
+      ...CAPABILITIES,
+      resource: {
+        ...CAPABILITIES.resource,
+        kind: "Pod",
+        name: "checkout-api-7d9f",
+        uid: "uid-pod-1",
+      },
+      service_request: "unavailable",
+      service_request_reason: "pod_service_request_unsupported",
+      port_discovery: "partial",
+      port_discovery_reason: "port_discovery_partial",
+      ports: [{
+        container_name: "app",
+        port: 8080,
+        name: "http",
+        protocol: "TCP",
+        app_protocol: null,
+        default_scheme: "http",
+      }],
+    });
+
+    expect(pod.ports[0]?.container_name).toBe("app");
+    expect(() => serviceAccessCapabilitiesSchema.parse({
+      ...pod,
+      ports: [{ ...pod.ports[0], protocol: "UDP" }],
     })).toThrow();
   });
 

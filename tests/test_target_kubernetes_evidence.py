@@ -136,6 +136,79 @@ def test_pod_requests_survive_provider_inventory_and_physical_usage_projection()
     assert topology["pods"][0]["usage_pct"] == 50.0
 
 
+def test_pod_summary_preserves_spec_container_ports_and_honest_completeness() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"uid": "pod-1", "name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "app",
+                        "ports": [
+                            {"containerPort": 8080, "name": "http"},
+                            {"containerPort": 5353, "name": "dns", "protocol": "UDP"},
+                        ],
+                    },
+                    {
+                        "name": "sidecar",
+                        "ports": [{"containerPort": 9090, "name": "metrics", "protocol": "TCP"}],
+                    },
+                ]
+            },
+            "status": {
+                "phase": "Running",
+                "containerStatuses": [
+                    {"name": "app", "ready": True, "restartCount": 0},
+                ],
+            },
+        }
+    )
+
+    assert summary["container_ports_complete"] is True
+    assert [(container["name"], container["ports"]) for container in summary["containers"]] == [
+        (
+            "app",
+            [
+                {"container_port": 8080, "name": "http", "protocol": "TCP"},
+                {"container_port": 5353, "name": "dns", "protocol": "UDP"},
+            ],
+        ),
+        (
+            "sidecar",
+            [{"container_port": 9090, "name": "metrics", "protocol": "TCP"}],
+        ),
+    ]
+    assert summary["containers"][0]["ready"] is True
+    assert summary["containers"][1]["ready"] is None
+
+
+def test_pod_summary_marks_malformed_port_observation_partial_without_inventing_ports() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "app",
+                        "ports": [
+                            {"containerPort": 8080, "name": "http"},
+                            {"containerPort": "not-observed", "name": "invalid"},
+                        ],
+                    }
+                ]
+            },
+            "status": {"containerStatuses": []},
+        }
+    )
+
+    assert summary["container_ports_complete"] is False
+    assert summary["containers"][0]["ports"] == [
+        {"container_port": 8080, "name": "http", "protocol": "TCP"}
+    ]
+
+
 @pytest.mark.parametrize(
     ("requests", "expected_cpu", "expected_memory"),
     [

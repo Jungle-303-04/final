@@ -110,6 +110,46 @@ def test_service_access_capabilities_are_sorted_unique_and_keep_desktop_boundary
         )
 
 
+def test_pod_port_capabilities_preserve_container_identity_and_fail_closed_without_tcp_ports() -> (
+    None
+):
+    pod = service_ref(kind="Pod", name="checkout-api-7d9f", uid="uid-pod-1")
+    capabilities = ServiceAccessCapabilities(
+        scope=scope(),
+        resource=pod,
+        revision="b" * 64,
+        service_request="unavailable",
+        service_request_reason="pod_service_request_unsupported",
+        local_port_forward="desktop_required",
+        port_discovery="complete",
+        ports=(
+            ServicePort(
+                container_name="app",
+                port=8080,
+                name="http",
+                protocol="TCP",
+                default_scheme="http",
+            ),
+        ),
+    )
+
+    assert capabilities.ports[0].container_name == "app"
+
+    unavailable = ServiceAccessCapabilities(
+        scope=scope(),
+        resource=pod,
+        revision="c" * 64,
+        service_request="unavailable",
+        service_request_reason="pod_service_request_unsupported",
+        local_port_forward="unavailable",
+        local_port_forward_reason="port_forward_no_tcp_ports",
+        port_discovery="unavailable",
+        port_discovery_reason="port_forward_no_tcp_ports",
+        ports=(),
+    )
+    assert unavailable.local_port_forward == "unavailable"
+
+
 def test_service_http_command_payload_does_not_accept_browser_scope_or_confirmation_fields() -> (
     None
 ):

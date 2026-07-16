@@ -22,7 +22,10 @@ const CAPABILITIES = {
   service_request_reason: null,
   local_port_forward: "desktop_required",
   local_port_forward_reason: "desktop_port_forward_bridge_required",
+  port_discovery: "complete",
+  port_discovery_reason: null,
   ports: [{
+    container_name: null,
     port: 8080,
     name: "http",
     protocol: "TCP",

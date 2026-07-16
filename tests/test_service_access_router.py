@@ -45,6 +45,43 @@ def inventory_service(**overrides: object) -> dict[str, object]:
     }
 
 
+def inventory_pod(**overrides: object) -> dict[str, object]:
+    return {
+        "inventory_key": "inventory-pod-1",
+        "snapshot_id": "snapshot-pod-1",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "resource_type": "pod",
+        "api_version": "v1",
+        "kind": "Pod",
+        "namespace": "shop",
+        "name": "checkout-api-7d9f",
+        "uid": "uid-pod-1",
+        "resource_version": "42",
+        "deleted_at": None,
+        "summary": {
+            "phase": "Running",
+            "container_ports_complete": True,
+            "containers": [
+                {
+                    "name": "app",
+                    "ports": [
+                        {"container_port": 8443, "name": "https", "protocol": "TCP"},
+                        {"container_port": 5353, "name": "dns", "protocol": "UDP"},
+                    ],
+                },
+                {
+                    "name": "metrics",
+                    "ports": [
+                        {"container_port": 9090, "name": "metrics", "protocol": "TCP"},
+                    ],
+                },
+            ],
+        },
+        **overrides,
+    }
+
+
 class ServiceAccessDb:
     def __init__(
         self,
@@ -52,11 +89,13 @@ class ServiceAccessDb:
         allowed: bool = True,
         active: int = 0,
         connected: bool = True,
+        pod_exec_supported: bool = True,
         resource: dict[str, object] | None = None,
     ) -> None:
         self.allowed = allowed
         self.active = active
         self.connected = connected
+        self.pod_exec_supported = pod_exec_supported
         self.resource = resource or inventory_service()
         self.access_calls: list[tuple[str, str, str, str, str]] = []
 
@@ -114,13 +153,13 @@ class ServiceAccessDb:
     ) -> list[dict[str, object]]:
         if not self.connected:
             return []
+        capabilities = ["command_receiver", SERVICE_HTTP_REQUEST_AGENT_CAPABILITY]
+        if self.pod_exec_supported:
+            capabilities.append("pod_exec_stream")
         return [
             {
                 "status": "connected",
-                "capabilities": [
-                    "command_receiver",
-                    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
-                ],
+                "capabilities": capabilities,
             }
         ]
 
@@ -197,6 +236,109 @@ def test_capabilities_report_agent_unavailability_without_inventing_a_browser_se
     assert response.service_request == "unavailable"
     assert response.service_request_reason == "service_request_agent_unavailable"
     assert response.local_port_forward == "desktop_required"
+
+
+def test_pod_capabilities_project_exact_scope_uid_and_only_observed_tcp_container_ports() -> None:
+    db = ServiceAccessDb(resource=inventory_pod())
+
+    response = asyncio.run(
+        get_service_access_capabilities(
+            resource="inventory-pod-1",
+            current=current(),
+            db=db,
+        )
+    )
+
+    assert response.scope.namespaces == ("shop",)
+    assert response.resource == ResourceRef(
+        api_group="",
+        version="v1",
+        kind="Pod",
+        namespace="shop",
+        name="checkout-api-7d9f",
+        uid="uid-pod-1",
+    )
+    assert [
+        (item.container_name, item.name, item.port, item.protocol) for item in response.ports
+    ] == [
+        ("app", "https", 8443, "TCP"),
+        ("metrics", "metrics", 9090, "TCP"),
+    ]
+    assert response.port_discovery == "complete"
+    assert response.port_discovery_reason is None
+    assert response.service_request == "unavailable"
+    assert response.local_port_forward == "desktop_required"
+
+
+@pytest.mark.parametrize(
+    ("summary", "supported", "discovery", "forward", "reason"),
+    [
+        (
+            {"phase": "Running", "container_ports_complete": True, "containers": []},
+            True,
+            "unavailable",
+            "unavailable",
+            "port_forward_no_tcp_ports",
+        ),
+        (
+            {
+                "phase": "Running",
+                "container_ports_complete": False,
+                "containers": [
+                    {
+                        "name": "app",
+                        "ports": [{"container_port": 8080, "name": "http", "protocol": "TCP"}],
+                    }
+                ],
+            },
+            True,
+            "partial",
+            "desktop_required",
+            "desktop_port_forward_bridge_required",
+        ),
+        (
+            inventory_pod()["summary"],
+            False,
+            "complete",
+            "unavailable",
+            "pod_exec_capability_unavailable",
+        ),
+    ],
+)
+def test_pod_capabilities_fail_closed_for_empty_partial_or_unsupported_observations(
+    summary: object,
+    supported: bool,
+    discovery: str,
+    forward: str,
+    reason: str,
+) -> None:
+    response = asyncio.run(
+        get_service_access_capabilities(
+            resource="inventory-pod-1",
+            current=current(),
+            db=ServiceAccessDb(
+                resource=inventory_pod(summary=summary),
+                pod_exec_supported=supported,
+            ),
+        )
+    )
+
+    assert response.port_discovery == discovery
+    assert response.local_port_forward == forward
+    assert response.local_port_forward_reason == reason
+
+
+def test_pod_capabilities_reject_a_stale_inventory_identity() -> None:
+    with pytest.raises(HTTPException) as failure:
+        asyncio.run(
+            get_service_access_capabilities(
+                resource="stale-inventory-pod-1",
+                current=current(),
+                db=ServiceAccessDb(resource=inventory_pod()),
+            )
+        )
+
+    assert failure.value.status_code == 404
 
 
 def test_capabilities_fail_closed_on_rbac() -> None:

@@ -23,7 +23,10 @@ const CAPABILITIES: ServiceAccessCapabilities = {
   serviceRequestReason: null,
   localPortForward: "desktop-required",
   localPortForwardReason: "desktop-port-forward-bridge-required",
+  portDiscovery: "complete",
+  portDiscoveryReason: null,
   ports: [{
+    containerName: null,
     port: 80,
     name: "http",
     protocol: "TCP",
@@ -54,7 +57,10 @@ describe("service access adapter", () => {
       service_request_reason: null,
       local_port_forward: "desktop_required",
       local_port_forward_reason: "desktop_port_forward_bridge_required",
+      port_discovery: "complete",
+      port_discovery_reason: null,
       ports: [{
+        container_name: null,
         port: 80,
         name: "http",
         protocol: "TCP",
