@@ -940,6 +940,14 @@ def _serialize_issue(
 
 def _serialize_queue_issue(row: Mapping[str, Any]) -> JsonObject:
     item = serialize_timeline_row(row)
+    item.update(
+        incident_id=row.get("detail_id"),
+        incident_namespace=row.get("namespace"),
+        incident_resource_kind=row.get("resource_kind"),
+        incident_resource_name=row.get("resource_name"),
+        incident_symptom=row.get("symptom"),
+        status=row.get("pipeline_status"),
+    )
     item.update(issue_severity_projection(row))
     category = str(row.get("category") or "").strip()
     category_complete = row.get("category_complete") is True
