@@ -43,6 +43,14 @@ export {
   updateUiPreferences,
 } from "./shell-state";
 export {
+  getSettingsAccessProfile,
+  SETTINGS_ACCESS_PATH,
+} from "./settings-access";
+export {
+  settingsAccessProfileSchema,
+  type SettingsAccessProfileEndpoint,
+} from "./settings-access-schemas";
+export {
   getTimelineCapabilities,
   getTimelineOverview,
   getTimelinePins,

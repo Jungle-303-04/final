@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from domains.shell_state.router import router
+from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db, get_events
 
 
@@ -26,6 +27,25 @@ class ShellStateDb:
 
     def can_access(self, *_args: Any) -> bool:
         return True
+
+    def effective_permissions_for_resource(
+        self,
+        user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> set[str]:
+        assert (user_id, workspace_id, resource_type, resource_id) == (
+            "user-a",
+            "workspace-a",
+            "cluster",
+            "cluster-a",
+        )
+        return {
+            Permission.CLUSTER_READ.value,
+            Permission.INVENTORY_READ.value,
+            Permission.DEPLOY_RUN.value,
+        }
 
     def filter_snapshot_context(
         self,
@@ -182,6 +202,34 @@ def test_ui_preferences_round_trip_with_revision_and_audit_event() -> None:
     assert updated.json()["revision"] == 1
     assert updated.json()["audit_event_id"] == "evt-1"
     assert events.subjects == ["ui.preferences.updated"]
+
+
+def test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability() -> None:
+    db = ShellStateDb()
+    response = _client(db, ShellStateEvents()).get(
+        "/settings/access",
+        params={"cluster_id": "cluster-a"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["authority"] == "opsia_rbac"
+    assert body["roles"] == ["user"]
+    assert body["cluster_id"] == "cluster-a"
+    decisions = {item["permission"]: item["allowed"] for item in body["permissions"]}
+    assert decisions[Permission.CLUSTER_READ.value] is True
+    assert decisions[Permission.DEPLOY_RUN.value] is True
+    assert decisions[Permission.POD_EXEC.value] is False
+    assert body["kubernetes_rules"] == {
+        "status": "unavailable",
+        "reason_code": "subject_identity_not_delegated",
+        "detail": (
+            "The cluster agent authenticates as its own service account and cannot evaluate "
+            "Kubernetes rules for the signed-in product user."
+        ),
+    }
+    assert body["restricted_resource_types"]["reason_code"] == "visibility_cause_not_observed"
+    assert len(body["revision"]) == 64
 
 
 def _client(db: ShellStateDb, events: ShellStateEvents) -> TestClient:

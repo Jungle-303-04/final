@@ -30,6 +30,10 @@ function toNamespaceScope(value: NamespaceScopeEndpoint): NamespaceScopeRecord {
   return {
     clusterId: value.cluster_id,
     activeNamespaces: [...value.actives],
+    accessibleNamespaces: [...value.accessible_namespaces],
+    accessibleNamespaceCount: value.accessible_namespace_count,
+    completeness: value.freshness.completeness,
+    reasonCodes: [...value.freshness.reason_codes],
     revision: value.revision,
   };
 }

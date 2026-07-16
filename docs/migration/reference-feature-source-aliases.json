@@ -13,7 +13,9 @@
     "reference.feature.109": "upstream-ui:desktop:external-link:native-bridge:v1",
     "reference.feature.117": "upstream-ui:applications:projection:catalog-detail-refresh:v1",
     "reference.feature.119": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
+    "reference.feature.124": "upstream-ui:settings:permissions:restricted-resource-visibility:v1",
     "reference.feature.126": "upstream-ui:resources:renderers:public-contract-boundary:v1",
+    "reference.feature.134": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
     "reference.feature.159": "upstream-ui:observability:local-terminal:native-pty:v1",
     "reference.feature.160": "upstream-ui:service-access:port-session:list-and-layout:v1",
     "reference.feature.161": "upstream-ui:service-access:service-port:capability-input:v1",
@@ -46,6 +48,9 @@
     "reference.feature.218": "upstream-ui:cost:workload-client:allocation-use:v1",
     "reference.feature.219": "upstream-ui:cost:trend-client:bounded-range:v1",
     "reference.feature.220": "upstream-ui:cost:nodes-client:provider-identity:v1",
+    "reference.feature.221": "upstream-ui:settings:host-config:startup-replacement:v1",
+    "reference.feature.222": "upstream-ui:settings:host-config:startup-replacement:v1",
+    "reference.feature.223": "upstream-ui:settings:prometheus:live-apply:v1",
     "reference.feature.154": "upstream-ui:rightsizing:workload-guidance:server-evidence:v1",
     "reference.feature.237": "upstream-ui:diagnose:resource-investigation:durable-stream:v1"
   }

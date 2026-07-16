@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, StringConstraints, field_validator
 
 from packages.contracts.modeling import StrictModel
 
@@ -80,3 +80,34 @@ class UiPreferencesUpdateRequest(StrictModel):
 class UiPreferencesUpdateResponse(UiPreferencesResponse):
     event_id: str = Field(min_length=1)
     audit_event_id: str = Field(min_length=1)
+
+
+PermissionKey = Annotated[
+    str,
+    StringConstraints(pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"),
+]
+RevisionHash = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
+class SettingsAccessDecision(StrictModel):
+    permission: PermissionKey
+    category: str = Field(min_length=1)
+    allowed: bool
+
+
+class SettingsUnavailableEvidence(StrictModel):
+    status: Literal["unavailable"] = "unavailable"
+    reason_code: str = Field(min_length=1)
+    detail: str = Field(min_length=1)
+
+
+class SettingsAccessProfileResponse(StrictModel):
+    workspace_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    cluster_id: str = Field(min_length=1)
+    roles: tuple[str, ...]
+    authority: Literal["opsia_rbac"] = "opsia_rbac"
+    permissions: tuple[SettingsAccessDecision, ...]
+    kubernetes_rules: SettingsUnavailableEvidence
+    restricted_resource_types: SettingsUnavailableEvidence
+    revision: RevisionHash

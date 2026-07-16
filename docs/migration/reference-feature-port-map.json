@@ -820,6 +820,32 @@
         }
       }
     },
+    "reference.feature.134": {
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/features/settings/settingsContract.ts",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/settings-access.test.ts",
+        "frontend/src/features/settings/createSettingsAdapter.test.ts",
+        "frontend/src/pages/settings/SettingsPage.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "consumer": "src/domains/identity/repository.py#effective_permissions_for_resource",
+          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
+          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        }
+      }
+    },
     "reference.feature.217": {
       "deliveryStatus": "in_progress",
       "backendContract": "packages.contracts.cost.observations",

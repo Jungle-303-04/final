@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 15,
+  "pendingCount": 13,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -13630,8 +13630,116 @@
         "blobId": "67a9dd57ae77ae6711b3e81fbfb1853574bbeac1",
         "sha256": "0eec73a6f3e1a93557ed7a894f98175bd0c8b1dd5eedd02a6f169a2f9e0b857c"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:settings:permissions:inline-authorized-scope:v1",
+          "legacyContractIds": [],
+          "symbol": "MyPermissionsContent active namespace selection",
+          "interaction": "the permissions surface mounts inside Settings, issues no access request until selected, identifies the authenticated user, and automatically selects the first accessible namespace without overwriting a pointer or keyboard choice",
+          "transport": "poll",
+          "realtime": {
+            "resume": "entering the access section reads the exact selected cluster and its latest authorized namespace catalog",
+            "backpressure": "one AbortController cancels both access and namespace reads when the cluster, route, or component lifetime changes",
+            "merge": "access and namespace frames update independently, and the namespace fallback applies only before the user makes an explicit selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/features/settings/settingsContract.ts",
+              "frontend/src/features/settings/createSettingsAdapter.ts",
+              "frontend/src/features/shell-state/shellStateContract.ts",
+              "frontend/src/features/shell-state/createShellStateAdapter.ts",
+              "src/packages/contracts/shell_state.py",
+              "src/domains/shell_state/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "domains.shell_state.router"
+            ],
+            "plannedTestIds": [
+              "settings.access.surface",
+              "settings.access.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia reuses its authenticated cluster scope and namespace catalog, adds one batched effective-access profile, and keeps both behind feature ports instead of importing gateway APIs from the page."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
+          "legacyContractIds": [
+            "reference.feature.134"
+          ],
+          "symbol": "PermissionsTable and SelfSubjectRulesReview states",
+          "interaction": "the selected namespace requests the signed-in Kubernetes subject's resource and non-resource rules, renders incomplete evaluation warnings, and distinguishes loading, failure, empty, and populated rule sets",
+          "transport": "poll",
+          "realtime": {
+            "resume": "a namespace change would require a fresh subject-rules review for that exact namespace and delegated Kubernetes identity",
+            "backpressure": "superseded namespace reviews must be cancelled and one bounded response must replace the prior rule frame",
+            "merge": "a new result may replace only rules for the same cluster, namespace, and delegated subject while preserving the last verified product RBAC frame"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/features/settings/settingsContract.ts",
+              "frontend/src/api/settings-access-schemas.ts",
+              "src/packages/contracts/shell_state.py",
+              "src/domains/shell_state/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "domains.shell_state.router",
+              "domains.identity.repository"
+            ],
+            "plannedTestIds": [
+              "settings.access.surface",
+              "settings.access.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The cluster agent authenticates as its own service account and no delegated or impersonated Kubernetes subject identity exists for the signed-in product user, so a SelfSubjectRulesReview would report the wrong principal.",
+            "rationale": "The product renders real batched Opsia RBAC decisions and a typed unavailable reason; it does not label agent service-account rules as user permissions."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:permissions:restricted-resource-visibility:v1",
+          "legacyContractIds": [
+            "reference.feature.124"
+          ],
+          "symbol": "RestrictedResources resource-count visibility",
+          "interaction": "the access section lists resource kinds omitted from the current view while preserving the distinction between RBAC denial, absent installation, and unwatched inventory",
+          "transport": "poll",
+          "realtime": {
+            "resume": "the visibility frame must be recomputed for the selected cluster and namespace scope after inventory or authorization revision changes",
+            "backpressure": "the server must return one bounded kind catalog rather than issuing a browser request per resource type",
+            "merge": "only a frame with a matching inventory and authorization revision may replace the prior visibility evidence"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/features/settings/settingsContract.ts",
+              "src/packages/contracts/shell_state.py",
+              "src/domains/shell_state/router.py",
+              "src/domains/inventory_filter/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "domains.shell_state.router",
+              "domains.inventory_filter.repository"
+            ],
+            "plannedTestIds": [
+              "settings.access.surface",
+              "settings.access.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The retained inventory currently does not preserve whether an omitted kind was denied, not installed, or not watched, so a restricted-kind list would collapse distinct causes.",
+            "rationale": "Settings displays the server-issued unavailable evidence instead of turning missing observation into an RBAC denial or an empty cluster."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -13645,8 +13753,256 @@
         "blobId": "6b83ee9a226d85e261527386a6c6f508b239e8db",
         "sha256": "d217ca3bc775516c65604e9bbd117b7e05f9f907b1a890a3d0a407679d8b2797"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:settings:shell:section-navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "SettingsDialog navigation, OverviewPanel, and NavItem",
+          "interaction": "overview rows and responsive tabs expose personal access, connection, integrations, AI, and advanced settings with keyboard activation, owner gating, stable content geometry, and status-at-a-glance navigation",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "section selection, active state, and unavailable meaning remain visible through text, selection, and badges without transition dependence.",
+            "evidence": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/shared/ui/primitives/tabs.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/pages/settings/createSettingsSurface.ts",
+              "frontend/src/shared/ui/primitives/tabs.tsx",
+              "frontend/src/app/composition/surfaces/settings.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "packages.contracts.identity"
+            ],
+            "plannedTestIds": [
+              "settings.shell.navigation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product keeps Settings as a first-class route and reuses the accessible shared Tabs primitive; source modal-only chrome is not duplicated into a second settings surface."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:preferences:user-controls:v1",
+          "legacyContractIds": [],
+          "symbol": "AI and presentation preference controls",
+          "interaction": "personal settings remain usable without administrator rights, expose explicit selected state, and save independently from host-level configuration",
+          "transport": "poll",
+          "realtime": {
+            "resume": "authenticated startup reads the latest preference revision and a conflict reloads server authority before retry",
+            "backpressure": "one shared preference synchronizer debounces writes and rejects stale expected revisions",
+            "merge": "the complete validated theme and locale record replaces only the signed-in user's presentation preferences"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/shared/ui/ThemeToggle.tsx",
+              "frontend/src/features/preferences/UiPreferencesSync.tsx",
+              "frontend/src/features/shell-state/createShellStateAdapter.ts",
+              "src/packages/contracts/shell_state.py",
+              "src/domains/shell_state/router.py",
+              "src/domains/shell_state/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "domains.shell_state.router",
+              "domains.shell_state.repository"
+            ],
+            "plannedTestIds": [
+              "settings.preferences.controls"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Theme and locale controls reuse the existing global controllers and one user-scoped optimistic persistence path; no second settings store or browser-only preference adapter is introduced."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:host-config:startup-replacement:v1",
+          "legacyContractIds": [
+            "reference.feature.221",
+            "reference.feature.222"
+          ],
+          "symbol": "Connection and Advanced startup configuration",
+          "interaction": "owners edit kubeconfig paths, default namespace, server port, browser launch, MCP, and timeline retention as one normalized full-replacement draft that applies on the next launch",
+          "transport": "poll",
+          "realtime": {
+            "resume": "opening settings would load the last committed host configuration and its effective runtime values",
+            "backpressure": "one owner-authorized full replacement would serialize the normalized draft and reject concurrent revision drift",
+            "merge": "startup configuration may replace only its complete committed bucket and must preserve independently live-applied integration values"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/pages/settings/SettingsPage.test.tsx",
+              "src/packages/contracts/shell_state.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "packages.contracts.identity"
+            ],
+            "plannedTestIds": [
+              "settings.host-config.gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python service intentionally has no owner-authorized host kubeconfig, listener, browser, MCP, or timeline configuration repository and cannot mutate deployment process arguments from a browser request.",
+            "rationale": "The administration section names the unavailable host contract and exposes no fake form, save button, restart promise, or browser-owned configuration file."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:prometheus:live-apply:v1",
+          "legacyContractIds": [
+            "reference.feature.223"
+          ],
+          "symbol": "PrometheusConfigField live URL and write-only headers",
+          "interaction": "an owner edits a Prometheus-compatible URL and optional secret headers, applies them immediately, preserves omitted stored secrets, and receives connected, unreachable, or failed probe feedback without a restart",
+          "transport": "poll",
+          "realtime": {
+            "resume": "settings would load only configured header keys and the last committed URL while never returning secret values",
+            "backpressure": "one apply request replaces the current probe and the server bounds connection timeout and response disclosure",
+            "merge": "a successful live apply updates only the integration bucket and its status while leaving any startup draft unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/pages/settings/SettingsPage.test.tsx",
+              "src/packages/contracts/shell_state.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state",
+              "packages.contracts.identity"
+            ],
+            "plannedTestIds": [
+              "settings.integrations.gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "No Python integration repository owns Prometheus endpoint secrets, write-only header preservation, owner authorization, live client replacement, bounded probe, or audit evidence.",
+            "rationale": "The product keeps this control unavailable instead of storing credentials in browser state or claiming that the workload metrics reader can mutate its provider."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:argocd:live-credentials:v1",
+          "legacyContractIds": [],
+          "symbol": "ArgoCDConfigField credential, CLI session, and TLS controls",
+          "interaction": "an owner connects or clears an Argo CD endpoint with a write-only token, optional CLI-session adoption, explicit insecure-TLS confirmation, environment-managed read-only state, and live reachability feedback",
+          "transport": "poll",
+          "realtime": {
+            "resume": "settings would load only non-secret endpoint metadata, credential presence, environment ownership, and the latest observed connection status",
+            "backpressure": "one bounded connect or clear operation would supersede an older probe and reject concurrent credential mutation",
+            "merge": "only an accepted live result may replace Argo connection metadata while tokens remain server-only and startup settings remain unchanged"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/pages/settings/SettingsPage.test.tsx",
+              "src/domains/gitops/detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail",
+              "packages.contracts.identity",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "settings.integrations.gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current GitOps projection observes authorized application state but has no workspace credential vault, CLI-session bridge, environment-managed mutation policy, TLS acknowledgement, or live connection mutation contract.",
+            "rationale": "Read-only GitOps observations are not repurposed as an integration credential API, and the settings administration surface stays explicit about that boundary."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:diagnose:local-agent-preferences:v1",
+          "legacyContractIds": [],
+          "symbol": "AISettingsSection staged agent, model, effort, and history controls",
+          "interaction": "personal AI diagnosis settings discover a supported local agent, stage agent, isolation, model, and effort choices, save them independently, and clear investigation history",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/diagnose/DiagnoseSessionContext.tsx",
+              "frontend/src/features/diagnose/createDiagnoseAdapter.ts",
+              "frontend/src/features/diagnose/DiagnoseSurface.tsx",
+              "src/domains/diagnose/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.diagnose",
+              "domains.diagnose.router"
+            ],
+            "plannedTestIds": [
+              "settings.diagnose.gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "Opsia Diagnose is a server-described durable investigation contract and does not expose the source runtime's workstation CLI discovery, local model list, isolation toggle, effort setting, or browser-local history ownership.",
+            "rationale": "The product preserves the existing durable Diagnose port and does not copy a second incompatible local-agent preference model into Settings."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:mcp:local-endpoint-control:v1",
+          "legacyContractIds": [],
+          "symbol": "MCPSection endpoint copy, enable toggle, and desktop port pin",
+          "interaction": "the advanced section enables a local MCP server, copies its loopback endpoint, warns about random desktop ports, and pins the active port for stable restart behavior",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/desktop/desktopBridge.ts",
+              "desktop/src-tauri/src/lib.rs"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "settings.desktop-mcp.gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no typed desktop MCP listener registry, local endpoint capability, clipboard receipt, or persisted port-pin bridge; cross-OS desktop work is intentionally deferred to the final OS stage.",
+            "rationale": "The web settings route does not fabricate a loopback endpoint or claim that the Python service controls a user's workstation listener."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:settings:draft:guarded-close:v1",
+          "legacyContractIds": [],
+          "symbol": "startup dirty buckets, Save, Discard, guarded close, Escape, backdrop, and focus",
+          "interaction": "normalized startup edits mark only their owning sections dirty, save and discard preserve independently committed live integrations, and Escape, backdrop, or close prompts Keep editing, Discard, or Save before focus leaves the modal",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "dirty, saving, confirmation, error, and completion semantics remain in labels, disabled state, and focus order when panel and backdrop transitions are removed.",
+            "evidence": [
+              "frontend/src/shared/ui/primitives/confirmation-dialog.tsx",
+              "frontend/src/shared/ui/primitives/dialog.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/shared/ui/primitives/confirmation-dialog.tsx",
+              "frontend/src/shared/ui/primitives/dialog.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.shell_state"
+            ],
+            "plannedTestIds": [
+              "settings.draft-close.gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "Settings is currently a route and exposes no editable host draft; adding modal close guards before a revisioned Python host-configuration contract would create dead confirmation UI.",
+            "rationale": "The shared confirmation and dialog primitives remain the single focus, Escape, pending, and reduced-motion boundary for the future editable host configuration."
+          }
+        }
+      ]
     },
     {
       "status": "M",

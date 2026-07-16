@@ -781,6 +781,39 @@ class IdentityAccessRepository(DatabaseConnection):
             organization_id,
         )
 
+    def effective_permissions_for_resource(
+        self,
+        user_id: str,
+        organization_id: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> set[str]:
+        """Resolve one resource's effective product permissions without N permission queries."""
+        if self.is_service_admin(user_id):
+            return {permission.value for permission in Permission}
+        if self.get_organization_member(organization_id, user_id) is None:
+            return set()
+        assignment = self.get_resource_assignment_for_org(
+            organization_id,
+            resource_type,
+            resource_id,
+        )
+        if assignment is None:
+            return set()
+        if self.get_group_member(str(assignment["group_id"]), user_id) is None:
+            return set()
+        member_role = self.get_member_resource_role(
+            str(assignment["resource_assignment_id"]),
+            user_id,
+        )
+        if member_role is None:
+            return set()
+        return self.get_role_permissions(
+            resource_type,
+            str(member_role["role"]),
+            organization_id,
+        )
+
     def user_has_resource_access(
         self,
         user_id: str,

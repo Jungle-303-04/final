@@ -8,6 +8,9 @@ describe("createShellStateAdapter", () => {
       getNamespaceScope: vi.fn().mockResolvedValue({
         cluster_id: "cluster-a",
         actives: ["shop"],
+        accessible_namespaces: ["default", "shop"],
+        accessible_namespace_count: 2,
+        freshness: { completeness: "exact", reason_codes: [] },
         revision: 2,
       }),
       updateNamespaceScope: vi.fn(),
@@ -21,6 +24,10 @@ describe("createShellStateAdapter", () => {
     await expect(adapter.getNamespaceScope("cluster-a")).resolves.toEqual({
       clusterId: "cluster-a",
       activeNamespaces: ["shop"],
+      accessibleNamespaces: ["default", "shop"],
+      accessibleNamespaceCount: 2,
+      completeness: "exact",
+      reasonCodes: [],
       revision: 2,
     });
     await expect(adapter.getUiPreferences()).resolves.toEqual({

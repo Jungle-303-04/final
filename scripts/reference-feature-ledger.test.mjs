@@ -664,6 +664,74 @@ test("Applications 경로와 투영은 URL·Python 계약·갱신 증거를 연�
   }
 });
 
+test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차단 사유를 연결한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const permissions = classifications
+    .classifications["web/src/components/settings/MyPermissionsDialog.tsx"];
+  const settings = classifications
+    .classifications["web/src/components/settings/SettingsDialog.tsx"];
+
+  assert.equal(permissions.classification, "classified");
+  assert.equal(settings.classification, "classified");
+  assert.equal(
+    aliases.aliases["reference.feature.134"],
+    "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
+  );
+  assert.equal(
+    aliases.aliases["reference.feature.124"],
+    "upstream-ui:settings:permissions:restricted-resource-visibility:v1",
+  );
+  assert.equal(
+    aliases.aliases["reference.feature.221"],
+    "upstream-ui:settings:host-config:startup-replacement:v1",
+  );
+  assert.equal(
+    aliases.aliases["reference.feature.222"],
+    "upstream-ui:settings:host-config:startup-replacement:v1",
+  );
+  assert.equal(
+    aliases.aliases["reference.feature.223"],
+    "upstream-ui:settings:prometheus:live-apply:v1",
+  );
+  assert.equal(portMap.features["reference.feature.134"].deliveryStatus, "in_progress");
+  assert.equal(
+    portMap.features["reference.feature.134"].coverage.backend.destination,
+    "src/domains/shell_state/router.py#get_settings_access",
+  );
+  assert.equal(
+    portMap.features["reference.feature.134"].coverage.frontend.destination,
+    "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
+  );
+  for (const contractId of [
+    "reference.feature.124",
+    "reference.feature.134",
+    "reference.feature.221",
+    "reference.feature.222",
+    "reference.feature.223",
+  ]) {
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(feature.sourceKey, aliases.aliases[contractId]);
+    assert.notEqual(feature.deliveryStatus, "implemented");
+  }
+  assert.equal(
+    permissions.interactions.find((interaction) =>
+      interaction.sourceKey === "upstream-ui:settings:permissions:kubernetes-subject-rules:v1"
+    ).opsiaPort.state,
+    "blocked",
+  );
+  assert.equal(
+    settings.interactions.find((interaction) =>
+      interaction.sourceKey === "upstream-ui:settings:host-config:startup-replacement:v1"
+    ).opsiaPort.state,
+    "blocked",
+  );
+});
+
 async function readRepositoryJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, import.meta.url), "utf8"));
 }

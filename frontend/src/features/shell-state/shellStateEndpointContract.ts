@@ -1,6 +1,12 @@
 export interface NamespaceScopeEndpoint {
   cluster_id: string;
   actives: string[];
+  accessible_namespaces: string[];
+  accessible_namespace_count: number;
+  freshness: {
+    completeness: "exact" | "partial" | "unavailable";
+    reason_codes: string[];
+  };
   revision: number;
 }
 

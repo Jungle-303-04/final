@@ -14,6 +14,7 @@ import {
   getDiagnoseCapabilities,
   grantDiagnoseConsent,
   getScheduledWorkloadRuns,
+  getSettingsAccessProfile,
   getNodePodsSummary,
   getNamespaceScope,
   getUiPreferences,
@@ -48,6 +49,7 @@ import { createCompareAdapter } from "../features/compare/createCompareAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
 import { createShellStateAdapter } from "../features/shell-state/createShellStateAdapter";
+import { createSettingsAdapter } from "../features/settings/createSettingsAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
 
@@ -103,6 +105,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     updateNamespaceScope,
     updateUiPreferences,
   });
+  const settingsPort = createSettingsAdapter({ getSettingsAccessProfile });
   const diagnosePort = createDiagnoseAdapter({
     addDiagnoseTurn,
     clearDiagnoseHistory,
@@ -196,7 +199,10 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "settings",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(),
+        default: (await import("./composition/surfaces/settings")).loadSettingsSurface(
+          settingsPort,
+          shellStatePort,
+        ),
       })),
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {

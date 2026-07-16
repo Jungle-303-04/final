@@ -3615,11 +3615,11 @@
     },
     {
       "contractId": "reference.feature.124",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:permissions:restricted-resource-visibility:v1",
       "legacyContractIds": [
         "reference.feature.124"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-124",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3918,11 +3918,11 @@
     },
     {
       "contractId": "reference.feature.134",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:permissions:kubernetes-subject-rules:v1",
       "legacyContractIds": [
         "reference.feature.134"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-134",
       "section": "7.4 Resource browser·detail·RBAC·compare",
       "endpoints": [
@@ -3931,16 +3931,28 @@
       "streaming": false,
       "area": "resource-inventory",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.inventory",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
+      "frontendContract": "frontend/src/features/settings/settingsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_resource_capabilities_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/settings-access.test.ts",
+        "frontend/src/features/settings/createSettingsAdapter.test.ts",
+        "frontend/src/pages/settings/SettingsPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/shell_state/router.py#get_settings_access",
+          "consumer": "src/domains/identity/repository.py#effective_permissions_for_resource",
+          "test": "tests/test_shell_state_router.py#test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/settings/SettingsPage.tsx#AccessPanel",
+          "consumer": "frontend/src/features/settings/createSettingsAdapter.ts#createSettingsAdapter",
+          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -6693,11 +6705,11 @@
     },
     {
       "contractId": "reference.feature.221",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:host-config:startup-replacement:v1",
       "legacyContractIds": [
         "reference.feature.221"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-221",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -6722,11 +6734,11 @@
     },
     {
       "contractId": "reference.feature.222",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:host-config:startup-replacement:v1",
       "legacyContractIds": [
         "reference.feature.222"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-222",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [
@@ -6751,11 +6763,11 @@
     },
     {
       "contractId": "reference.feature.223",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:settings:prometheus:live-apply:v1",
       "legacyContractIds": [
         "reference.feature.223"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-223",
       "section": "7.10 Cost·Settings·기타 overlay",
       "endpoints": [

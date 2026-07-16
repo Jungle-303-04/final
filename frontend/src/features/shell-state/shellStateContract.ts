@@ -4,6 +4,10 @@ export type UiLocalePreference = "en" | "ko";
 export interface NamespaceScopeRecord {
   clusterId: string;
   activeNamespaces: readonly string[];
+  accessibleNamespaces: readonly string[];
+  accessibleNamespaceCount: number;
+  completeness: "exact" | "partial" | "unavailable";
+  reasonCodes: readonly string[];
   revision: number;
 }
 
