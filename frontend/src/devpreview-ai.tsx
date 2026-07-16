@@ -6,7 +6,6 @@ import {
   FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { animate } from "motion/react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
@@ -232,7 +231,22 @@ function deriveSummary(turn: AiTurn): { text: string; tone: AiTone } {
   return { text: turn.summary ?? "대화", tone: "neutral" };
 }
 
-/** 단일 애플풍 표면. 다 표시되면 2.8초 뒤 자동으로 한 줄 요약으로 접힘(재클릭 시 펼침). */
+// rAF 트윈 (motion 스프링 느낌의 이징을 직접 적용 — .finished 미해결 이슈 회피)
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+const easeSpring = (t: number) => { const a = t - 1; return 1 + 2.3 * a * a * a + 1.3 * a * a; }; // easeOutBack (살짝 오버슈트)
+function tween(ms: number, ease: (t: number) => number, onUpdate: (p: number) => void): Promise<void> {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      onUpdate(ease(t));
+      if (t < 1) requestAnimationFrame(frame); else resolve();
+    };
+    requestAnimationFrame(frame);
+  });
+}
+
+/** 순차 전환: 내용이 완전히 사라진 뒤 요약이 나타남(겹침 없음). 다 표시되면 2.8초 뒤 자동 접힘. */
 function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => void }) {
   const parts = turn.parts ?? [];
   const evidenceCount = (parts.find((p) => p.kind === "evidence") as { items?: unknown[] } | undefined)?.items?.length ?? 0;
@@ -249,84 +263,79 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   });
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
 
-  const headerRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const fromRef = useRef<{ h: number; b: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const fullRef = useRef<HTMLDivElement>(null);
+  const capRef = useRef<HTMLDivElement>(null);
   const didAuto = useRef(false);
+  const firstRun = useRef(true);
 
   const instant = phase === "review";
   const canCollapse = instant && !hasRunning && !actionIdle;
   const clickable = collapsed || canCollapse;
 
-  const setCollapse = (val: boolean) => {
-    const h = headerRef.current, b = bodyRef.current;
-    if (h && b) fromRef.current = { h: h.getBoundingClientRect().height, b: b.getBoundingClientRect().height };
-    setCollapsed(val);
-  };
   const onSurfaceClick = (e: ReactMouseEvent) => {
     if ((e.target as HTMLElement).closest("a,button,input,textarea,select,label")) return;
-    if (collapsed) setCollapse(false);
-    else if (canCollapse) setCollapse(true);
+    if (collapsed) setCollapsed(false);
+    else if (canCollapse) setCollapsed(true);
   };
 
   // 자동 접힘: 완료 후 1회
   useEffect(() => {
     if (didAuto.current || !canCollapse || collapsed) return;
-    const id = window.setTimeout(() => { didAuto.current = true; setCollapse(true); }, AUTO_COLLAPSE_MS);
+    const id = window.setTimeout(() => { didAuto.current = true; setCollapsed(true); }, AUTO_COLLAPSE_MS);
     return () => window.clearTimeout(id);
   }, [canCollapse, collapsed]);
 
-  // 초기 높이: 헤더는 접혔을 때만, 본문은 펼쳤을 때만 (펼치면 헤더 높이 0 → 띠 없음)
+  // 초기 표시: 펼침=본문만, 접힘=요약만
   useLayoutEffect(() => {
-    if (headerRef.current) headerRef.current.style.height = collapsed ? "auto" : "0px";
-    if (bodyRef.current) bodyRef.current.style.height = collapsed ? "0px" : "auto";
+    const full = fullRef.current, cap = capRef.current;
+    if (full) { full.style.display = collapsed ? "none" : "block"; full.style.opacity = collapsed ? "0" : "1"; }
+    if (cap) { cap.style.display = collapsed ? "flex" : "none"; cap.style.opacity = collapsed ? "1" : "0"; }
   }, []);
 
-  // 헤더/본문 높이를 하나의 스프링으로 반대로 슬라이드 (크로스페이드 없음)
-  useLayoutEffect(() => {
-    const h = headerRef.current, b = bodyRef.current;
-    if (!h || !b || fromRef.current == null) return;
-    const { h: fromH, b: fromB } = fromRef.current; fromRef.current = null;
-    h.style.height = "auto"; const natH = h.getBoundingClientRect().height;
-    b.style.height = "auto"; const natB = b.getBoundingClientRect().height;
-    const toH = collapsed ? natH : 0;
-    const toB = collapsed ? 0 : natB;
-    h.style.height = `${fromH}px`; b.style.height = `${fromB}px`;
-    void h.offsetHeight;
-    const controls = animate(0, 1, {
-      type: "spring", visualDuration: 0.28, bounce: 0.1,
-      onUpdate: (p) => {
-        if (headerRef.current) headerRef.current.style.height = `${fromH + (toH - fromH) * p}px`;
-        if (bodyRef.current) bodyRef.current.style.height = `${fromB + (toB - fromB) * p}px`;
-      },
-      onComplete: () => {
-        if (headerRef.current) headerRef.current.style.height = collapsed ? "auto" : "0px";
-        if (bodyRef.current) bodyRef.current.style.height = collapsed ? "0px" : "auto";
-      },
-    });
-    return () => controls.stop();
+  // 순차 전환(motion 스프링): 사라질 것 페이드아웃 → 높이 스프링 → 나타날 것 페이드인 (겹침 없음)
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const wrap = wrapRef.current, full = fullRef.current, cap = capRef.current;
+    if (!wrap || !full || !cap) return;
+    let cancelled = false;
+    const outEl = collapsed ? full : cap;
+    const inEl = collapsed ? cap : full;
+    (async () => {
+      const fromH = wrap.getBoundingClientRect().height;
+      await tween(80, easeOut, (p) => { if (!cancelled) outEl.style.opacity = String(1 - p); });
+      if (cancelled) return;
+      outEl.style.display = "none";
+      inEl.style.display = collapsed ? "flex" : "block";
+      inEl.style.opacity = "0";
+      const toH = wrap.getBoundingClientRect().height;
+      wrap.style.height = `${fromH}px`; void wrap.offsetHeight;
+      await tween(230, easeSpring, (p) => { if (!cancelled && wrapRef.current) wrapRef.current.style.height = `${fromH + (toH - fromH) * p}px`; });
+      if (cancelled) return;
+      if (wrapRef.current) wrapRef.current.style.height = "auto";
+      await tween(110, easeOut, (p) => { if (!cancelled) inEl.style.opacity = String(p); });
+    })();
+    return () => { cancelled = true; };
   }, [collapsed]);
 
   return (
-    <div onClick={onSurfaceClick}
+    <div ref={wrapRef} onClick={onSurfaceClick}
       className={`group/msg mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
       style={{ borderRadius: 20 }}>
-      {/* 요약 헤더 — 펼치면 높이 0으로 사라짐 */}
-      <div ref={headerRef} style={{ overflow: "hidden" }}>
-        <div className="flex items-center gap-2.5 px-4 py-3">
-          <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
-          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
-          <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/40" />
-        </div>
-      </div>
-      {/* 본문 — 접으면 높이 0 */}
-      <div ref={bodyRef} style={{ overflow: "hidden" }}>
+      {/* 펼친 내용 */}
+      <div ref={fullRef}>
         <div className="grid gap-3.5 px-4 py-4">
           {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
             <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
               onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
           ))}
         </div>
+      </div>
+      {/* 접힌 요약 — display/opacity는 전부 ref로만 제어(React가 되돌리지 못하게) */}
+      <div className="items-center gap-2.5 px-4 py-3" ref={capRef}>
+        <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+        <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/40" />
       </div>
     </div>
   );
