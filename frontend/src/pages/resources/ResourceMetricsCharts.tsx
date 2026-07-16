@@ -87,6 +87,14 @@ export function ResourceMetricsCharts({
   return (
     <div className="grid gap-4" data-slot="resource-metrics-charts">
       <header className="flex justify-end">
+        {series.currentObservation ? (
+          <p className="mr-auto min-w-0 truncate text-xs text-muted-foreground">
+            {t("resources.detail.metricsCurrentObservation", {
+              time: formatDateTime(Date.parse(series.currentObservation.observedAt)),
+              window: series.currentObservation.measurementWindow,
+            })}
+          </p>
+        ) : null}
         <TimelineRangeSelect onChange={onRangeChange} value={range} />
       </header>
       {partial ? (
@@ -98,6 +106,7 @@ export function ResourceMetricsCharts({
         {hasCpu ? (
           <ResourceMetricChart
             config={CPU_CONFIG}
+            currentValue={series.currentObservation?.cpuMillicores}
             data={points}
             dataKey="cpu"
             icon={Activity}
@@ -108,6 +117,7 @@ export function ResourceMetricsCharts({
         {hasMemory ? (
           <ResourceMetricChart
             config={MEMORY_CONFIG}
+            currentValue={series.currentObservation?.memoryMebibytes}
             data={points}
             dataKey="memory"
             icon={MemoryStick}
@@ -132,6 +142,7 @@ export function ResourceMetricsCharts({
 
 function ResourceMetricChart({
   config,
+  currentValue,
   data,
   dataKey,
   icon: Icon,
@@ -139,6 +150,7 @@ function ResourceMetricChart({
   unit,
 }: {
   config: ChartConfig;
+  currentValue?: number | null;
   data: MetricPoint[];
   dataKey: "cpu" | "memory" | "volume";
   icon: LucideIcon;
@@ -147,7 +159,10 @@ function ResourceMetricChart({
 }) {
   const { t } = useI18n();
   const gradientId = useId().replace(/:/g, "");
-  const stats = useMemo(() => metricStats(data, dataKey), [data, dataKey]);
+  const stats = useMemo(
+    () => metricStats(data, dataKey, currentValue),
+    [currentValue, data, dataKey],
+  );
   const formatValue = (value: number) => `${formatNumber(value)}${unit}`;
 
   return (
@@ -272,10 +287,14 @@ function ResourceMetricsUnavailable({ retry }: { retry: ResourceMetricsUnavailab
   );
 }
 
-function metricStats(data: MetricPoint[], key: "cpu" | "memory" | "volume") {
+function metricStats(
+  data: MetricPoint[],
+  key: "cpu" | "memory" | "volume",
+  currentValue?: number | null,
+) {
   const values = data.map((point) => point[key]).filter((value): value is number => value !== null);
   return {
-    current: values[values.length - 1] ?? null,
+    current: currentValue === undefined ? values[values.length - 1] ?? null : currentValue,
     peak: values.length === 0 ? null : Math.max(...values),
   };
 }

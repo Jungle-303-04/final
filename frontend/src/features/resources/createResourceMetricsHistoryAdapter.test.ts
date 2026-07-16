@@ -61,6 +61,48 @@ describe("Resource metrics history adapter", () => {
     ]);
   });
 
+  it("preserves the server-observed current Node timestamp and measurement window", async () => {
+    const getResourceMetricsHistory = vi.fn().mockResolvedValue(endpointResponse({
+      completeness: "exact",
+      partial_reason_codes: [],
+      series: [{
+        resource_id: "node-a",
+        cluster_id: "cluster-a",
+        resource_type: "node",
+        namespace: null,
+        name: "worker-a",
+        points: [{
+          observed_at: "2026-07-15T05:00:00Z",
+          cpu_mcores: 640.5,
+          mem_mib: 4096,
+        }],
+        current_observation: {
+          observed_at: "2026-07-15T04:59:58Z",
+          measurement_window: "30s",
+          cpu_mcores: 640.5,
+          mem_mib: 4096,
+        },
+        has_sparkline_points: true,
+        completeness: "exact",
+        partial_reason_codes: [],
+      }],
+    }));
+    const port = createResourceMetricsHistoryAdapter({ getResourceMetricsHistory });
+
+    const result = await port.loadResourceMetricsHistory(
+      createEmptyUnifiedFilterState(),
+      ["node-a"],
+      { snapshotRevision: 42 },
+    );
+
+    expect(result.series[0]?.currentObservation).toEqual({
+      observedAt: "2026-07-15T04:59:58Z",
+      measurementWindow: "30s",
+      cpuMillicores: 640.5,
+      memoryMebibytes: 4096,
+    });
+  });
+
   it.each([
     ["identity set", endpointResponse({ series: [] })],
     ["snapshot", endpointResponse({ snapshot: {

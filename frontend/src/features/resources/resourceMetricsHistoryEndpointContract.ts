@@ -27,6 +27,12 @@ export interface ResourceMetricsHistoryEndpointResponse {
       cpu_mcores: number | null;
       mem_mib: number | null;
     }>;
+    current_observation?: {
+      observed_at: string;
+      measurement_window: string;
+      cpu_mcores: number | null;
+      mem_mib: number | null;
+    } | null;
     has_sparkline_points: boolean;
     completeness: Completeness;
     partial_reason_codes: string[];

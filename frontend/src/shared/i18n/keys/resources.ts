@@ -257,6 +257,7 @@ export type ResourcesMessageKey =
   | "resources.detail.metricsMemory"
   | "resources.detail.metricsVolume"
   | "resources.detail.metricsCurrent"
+  | "resources.detail.metricsCurrentObservation"
   | "resources.detail.metricsPeak"
   | "resources.detail.metricsPartial"
   | "resources.detail.metricsRetryExhausted"

@@ -259,6 +259,7 @@ export const resourcesKo = {
   "resources.detail.metricsMemory": "메모리 사용량",
   "resources.detail.metricsVolume": "볼륨 사용량",
   "resources.detail.metricsCurrent": "현재",
+  "resources.detail.metricsCurrentObservation": "현재 관측 {time} · 측정 창 {window}",
   "resources.detail.metricsPeak": "최고",
   "resources.detail.metricsPartial": "일부 구간의 측정값만 표시 중",
   "resources.detail.metricsRetryExhausted": "메트릭 소스를 계속 사용할 수 없어 일반 갱신 주기로 전환했습니다.",

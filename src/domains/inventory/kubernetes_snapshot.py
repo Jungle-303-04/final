@@ -117,6 +117,10 @@ def _node_usage(nodes: list[JsonObject]) -> JsonObject:
             value = _float_or_none(node.get(source_key))
             if value is not None:
                 payload[target_key] = value
+        for key in ("metrics_observed_at", "metrics_window"):
+            value = node.get(key)
+            if isinstance(value, str) and value.strip():
+                payload[key] = value
         if payload:
             if "cpu_ratio" in payload:
                 payload["cpu_pct"] = round(float(payload["cpu_ratio"]) * 100, 1)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from packages.contracts.event_bus.interfaces import JsonObject
@@ -31,6 +32,7 @@ def build_resource_metric_history(
         usage_key = f"{namespace}/{name}" if resource_type == "pod" else name
         usage_collection = "pods" if resource_type == "pod" else "nodes"
         points: list[JsonObject] = []
+        current_observations: list[JsonObject] = []
         for sample in samples_by_cluster.get(cluster_id, ()):
             observed_at = sample.get("sampled_at")
             if not observed_at:
@@ -42,16 +44,36 @@ def build_resource_metric_history(
             measured = (
                 measurements.get(usage_key) if isinstance(measurements.get(usage_key), dict) else {}
             )
+            cpu_mcores = _non_negative_number(measured.get("cpu_mcores"))
+            mem_mib = _non_negative_number(measured.get("mem_mib", measured.get("memory_mib")))
             points.append(
                 {
                     "observed_at": str(observed_at),
-                    "cpu_mcores": _non_negative_number(measured.get("cpu_mcores")),
-                    "mem_mib": _non_negative_number(
-                        measured.get("mem_mib", measured.get("memory_mib"))
-                    ),
+                    "cpu_mcores": cpu_mcores,
+                    "mem_mib": mem_mib,
                 }
             )
+            metrics_observed_at = _non_empty_text(measured.get("metrics_observed_at"))
+            metrics_window = _non_empty_text(measured.get("metrics_window"))
+            if (
+                metrics_observed_at is not None
+                and metrics_window is not None
+                and (cpu_mcores is not None or mem_mib is not None)
+            ):
+                current_observations.append(
+                    {
+                        "observed_at": metrics_observed_at,
+                        "measurement_window": metrics_window,
+                        "cpu_mcores": cpu_mcores,
+                        "mem_mib": mem_mib,
+                    }
+                )
         points.sort(key=lambda point: point["observed_at"])
+        current_observation = max(
+            current_observations,
+            key=lambda item: _timestamp_sort_key(str(item["observed_at"])),
+            default=None,
+        )
         cpu_count = sum(point["cpu_mcores"] is not None for point in points)
         completeness, reasons = _series_completeness(
             point_count=len(points),
@@ -67,6 +89,7 @@ def build_resource_metric_history(
                 "namespace": namespace,
                 "name": name,
                 "points": points,
+                "current_observation": current_observation,
                 "has_sparkline_points": cpu_count > 0,
                 "completeness": completeness,
                 "partial_reason_codes": reasons,
@@ -114,3 +137,20 @@ def _non_negative_number(value: Any) -> float | None:
         return None
     number = float(value)
     return number if math.isfinite(number) and number >= 0 else None
+
+
+def _non_empty_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _timestamp_sort_key(value: str) -> float:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return float("-inf")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()

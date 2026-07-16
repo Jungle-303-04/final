@@ -25,6 +25,15 @@ export function toResourceMetricsHistory(
         cpuMillicores: point.cpu_mcores,
         memoryMebibytes: point.mem_mib,
       })),
+      currentObservation: series.current_observation === undefined ||
+          series.current_observation === null
+        ? null
+        : {
+          observedAt: series.current_observation.observed_at,
+          measurementWindow: series.current_observation.measurement_window,
+          cpuMillicores: series.current_observation.cpu_mcores,
+          memoryMebibytes: series.current_observation.mem_mib,
+        },
       hasSparklinePoints: series.has_sparkline_points,
       completeness: series.completeness,
       partialReasonCodes: series.partial_reason_codes,

@@ -14,6 +14,16 @@ export const resourceMetricHistoryPointSchema = z.strictObject({
   mem_mib: nullableMetric,
 });
 
+export const resourceMetricCurrentObservationSchema = z.strictObject({
+  observed_at: rfc3339TimestampSchema,
+  measurement_window: z.string().trim().min(1).max(64),
+  cpu_mcores: nullableMetric,
+  mem_mib: nullableMetric,
+}).refine(
+  (observation) => observation.cpu_mcores !== null || observation.mem_mib !== null,
+  { message: "current metric observation requires CPU or memory" },
+);
+
 export const resourceMetricHistorySeriesSchema = z.strictObject({
   resource_id: z.string().min(1),
   cluster_id: z.string().min(1),
@@ -21,6 +31,7 @@ export const resourceMetricHistorySeriesSchema = z.strictObject({
   namespace: z.string().min(1).nullable(),
   name: z.string().min(1),
   points: z.array(resourceMetricHistoryPointSchema),
+  current_observation: resourceMetricCurrentObservationSchema.nullable().optional(),
   has_sparkline_points: z.boolean(),
   completeness: filterCountCompletenessSchema,
   partial_reason_codes: z.array(z.string()),

@@ -259,6 +259,7 @@ export const resourcesEn = {
   "resources.detail.metricsMemory": "Memory usage",
   "resources.detail.metricsVolume": "Volume usage",
   "resources.detail.metricsCurrent": "Current",
+  "resources.detail.metricsCurrentObservation": "Current observation {time} · window {window}",
   "resources.detail.metricsPeak": "Peak",
   "resources.detail.metricsPartial": "Showing measurements for part of this range",
   "resources.detail.metricsRetryExhausted": "The metric source is still unavailable. Normal refresh cadence has resumed.",

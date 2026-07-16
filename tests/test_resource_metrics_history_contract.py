@@ -100,6 +100,8 @@ def test_metric_history_preserves_real_node_samples_without_a_namespace() -> Non
                             "worker-a.internal": {
                                 "cpu_mcores": 640.5,
                                 "mem_mib": 4096,
+                                "metrics_observed_at": "2026-07-15T04:59:58Z",
+                                "metrics_window": "30s",
                             }
                         }
                     },
@@ -118,6 +120,11 @@ def test_metric_history_preserves_real_node_samples_without_a_namespace() -> Non
     assert response.series[0].namespace is None
     assert response.series[0].points[0].cpu_mcores == 640.5
     assert response.series[0].points[0].mem_mib == 4096
+    assert response.series[0].current_observation is not None
+    assert response.series[0].current_observation.observed_at == "2026-07-15T04:59:58Z"
+    assert response.series[0].current_observation.measurement_window == "30s"
+    assert response.series[0].current_observation.cpu_mcores == 640.5
+    assert response.series[0].current_observation.mem_mib == 4096
 
 
 def test_metric_history_contract_rejects_synthetic_availability() -> None:

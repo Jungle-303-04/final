@@ -1616,6 +1616,8 @@ def node_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObj
         "allocatable": allocatable,
         "cpu_mcores": cpu_mcores,
         "mem_mib": mem_mib,
+        "metrics_observed_at": measured.get("metrics_observed_at"),
+        "metrics_window": measured.get("metrics_window"),
         "cpu_ratio": safe_ratio(cpu_mcores, allocatable_cpu),
         "mem_ratio": safe_ratio(mem_mib, allocatable_mem),
         "node_info": node_status.get("nodeInfo", {}),
@@ -1667,6 +1669,8 @@ def metric_usage_summary(item: JsonObject) -> JsonObject:
     return {
         "cpu_mcores": parse_cpu_mcores(usage.get("cpu")),
         "mem_mib": parse_memory_mib(usage.get("memory")),
+        "metrics_observed_at": as_text(item.get("timestamp")),
+        "metrics_window": as_text(item.get("window")),
     }
 
 

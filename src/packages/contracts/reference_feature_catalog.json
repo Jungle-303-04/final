@@ -5353,28 +5353,32 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
       "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_target_kubernetes_evidence.py",
+        "tests/test_resource_metrics_history_contract.py",
         "tests/test_inventory_filter_router.py",
+        "frontend/src/api/resource-metrics-history.test.ts",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
         "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
           "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
-          "reason": "Node history accepts persisted usage samples, but no dedicated current-node timestamp and window response is exposed.",
-          "test": "tests/test_inventory_filter_router.py"
+          "reason": "The existing bounded history contract now retains the metrics-server Node timestamp and measurement window with the exact current CPU and memory observation, avoiding a duplicate current-metrics endpoint.",
+          "test": "tests/test_resource_metrics_history_contract.py#test_metric_history_preserves_real_node_samples_without_a_namespace"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
           "consumer": "frontend/src/features/resources/resourceMetricsHistoryContract.ts#ResourceMetricsHistoryPort",
-          "reason": "The shared chart renders an observed latest point but not the source current-node summary shape.",
+          "reason": "The shared chart renders server-observed current CPU and memory values with their exact observation time and measurement window while retaining the existing range chart.",
           "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
         },
         "desktop": null,

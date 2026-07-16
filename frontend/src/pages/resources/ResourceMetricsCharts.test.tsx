@@ -143,4 +143,55 @@ describe("resource detail metrics", () => {
     expect(screen.queryByText("Memory usage")).toBeNull();
     expect(screen.getAllByText("74.0%").length).toBeGreaterThan(0);
   });
+
+  it("renders the exact current Node observation time and measurement window", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceMetricsCharts
+          frame={{
+            phase: "ready",
+            failure: null,
+            refreshFailure: null,
+            refreshing: false,
+            unavailableRetry: null,
+            data: {
+              completeness: "exact",
+              partialReasonCodes: [],
+              refreshPolicyKey: "metrics_kubernetes",
+              series: [{
+                clusterId: "cluster-1",
+                completeness: "exact",
+                currentObservation: {
+                  observedAt: "2026-07-17T00:00:30Z",
+                  measurementWindow: "30s",
+                  cpuMillicores: 640.5,
+                  memoryMebibytes: 4096,
+                },
+                hasSparklinePoints: true,
+                name: "worker-a",
+                namespace: null,
+                partialReasonCodes: [],
+                points: [{
+                  cpuMillicores: 600,
+                  memoryMebibytes: 4000,
+                  observedAt: "2026-07-17T00:00:00Z",
+                }],
+                resourceId: "node-a",
+                resourceType: "node",
+              }],
+              snapshot: resourcesFilterPage().snapshot,
+            },
+          }}
+          onRangeChange={vi.fn()}
+          range="1h"
+          resourceId="node-a"
+          wide={false}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getAllByText("641m").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("4096MiB").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Current observation .* · window 30s/u).length).toBeGreaterThan(0);
+  });
 });

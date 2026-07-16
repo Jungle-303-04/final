@@ -83,6 +83,12 @@ describe("resource metrics history API", () => {
           cpu_mcores: 640.5,
           mem_mib: 4096,
         }],
+        current_observation: {
+          observed_at: "2026-07-15T04:59:58Z",
+          measurement_window: "30s",
+          cpu_mcores: 640.5,
+          mem_mib: 4096,
+        },
         has_sparkline_points: true,
         completeness: "exact",
         partial_reason_codes: [],

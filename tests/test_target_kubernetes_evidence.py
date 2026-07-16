@@ -480,6 +480,8 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
                 "items": [
                     {
                         "metadata": {"name": "checkout-api-7f5c", "namespace": "target"},
+                        "timestamp": "2026-07-16T02:00:00Z",
+                        "window": "30s",
                         "containers": [
                             {"name": "checkout-api", "usage": {"cpu": "125m", "memory": "64Mi"}}
                         ],
@@ -488,7 +490,12 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
             },
             "/apis/metrics.k8s.io/v1beta1/nodes": {
                 "items": [
-                    {"metadata": {"name": "node-a"}, "usage": {"cpu": "390m", "memory": "1Gi"}}
+                    {
+                        "metadata": {"name": "node-a"},
+                        "timestamp": "2026-07-16T02:00:00Z",
+                        "window": "30s",
+                        "usage": {"cpu": "390m", "memory": "1Gi"},
+                    }
                 ]
             },
             "/apis/apps/v1/namespaces/target/deployments": {
@@ -627,6 +634,8 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
     assert validated.kubernetes["nodes"][0]["ready"] is True
     assert validated.kubernetes["nodes"][0]["provider_id"] == "aws:///ap-northeast-2a/i-123"
     assert validated.kubernetes["nodes"][0]["cpu_mcores"] == 390.0
+    assert validated.kubernetes["nodes"][0]["metrics_observed_at"] == "2026-07-16T02:00:00Z"
+    assert validated.kubernetes["nodes"][0]["metrics_window"] == "30s"
     assert validated.kubernetes["nodes"][0]["cpu_ratio"] == 0.1
     assert validated.kubernetes["nodes"][0]["mem_ratio"] == 0.125
     assert validated.kubernetes["workloads"][0]["kind"] == "Deployment"

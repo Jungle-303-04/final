@@ -26,6 +26,13 @@ export interface ResourceMetricHistoryPoint {
   volumeUsagePercent?: number | null;
 }
 
+export interface ResourceMetricCurrentObservation {
+  observedAt: string;
+  measurementWindow: string;
+  cpuMillicores: number | null;
+  memoryMebibytes: number | null;
+}
+
 export interface ResourceMetricHistorySeries {
   resourceId: string;
   clusterId: string;
@@ -33,6 +40,7 @@ export interface ResourceMetricHistorySeries {
   namespace: string | null;
   name: string;
   points: ResourceMetricHistoryPoint[];
+  currentObservation?: ResourceMetricCurrentObservation | null;
   hasSparklinePoints: boolean;
   completeness: ResourcesFilterCompleteness;
   partialReasonCodes: string[];

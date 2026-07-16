@@ -1074,6 +1074,19 @@ class ResourceMetricHistoryPoint(StrictModel):
     mem_mib: float | None = Field(default=None, ge=0)
 
 
+class ResourceMetricCurrentObservation(StrictModel):
+    observed_at: str = Field(min_length=1)
+    measurement_window: str = Field(min_length=1, max_length=64)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    mem_mib: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def require_observed_metric(self) -> Self:
+        if self.cpu_mcores is None and self.mem_mib is None:
+            raise ValueError("current metric observation requires CPU or memory")
+        return self
+
+
 class ResourceMetricHistorySeries(StrictModel):
     resource_id: str = Field(min_length=1)
     cluster_id: str = Field(min_length=1)
@@ -1081,6 +1094,7 @@ class ResourceMetricHistorySeries(StrictModel):
     namespace: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1)
     points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
+    current_observation: ResourceMetricCurrentObservation | None = None
     has_sparkline_points: bool
     completeness: FilterCountCompleteness
     partial_reason_codes: list[str] = Field(default_factory=list)
