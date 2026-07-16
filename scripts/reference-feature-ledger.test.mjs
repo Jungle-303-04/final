@@ -755,7 +755,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     ["reference.feature.074", ["upstream-ui:gitops:fleet:authorized-catalog:v1", "implemented"]],
     ["reference.feature.075", ["upstream-ui:helm:release-list:scope-rbac:v1", "implemented"]],
     ["reference.feature.076", ["upstream-ui:cost:overview:availability-scope:v1", "in_progress"]],
-    ["reference.feature.077", ["upstream-ui:service-access:port-session:list-and-layout:v1", "in_progress"]],
+    ["reference.feature.077", ["upstream-ui:service-access:port-session:list-and-layout:v1", "implemented"]],
   ]);
   const interactions = Object.values(classifications.classifications)
     .flatMap((classification) => classification.interactions ?? []);
@@ -803,7 +803,66 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
 
   assert.equal(portMap.features["reference.feature.075"].coverage.frontend.state, "implemented");
   assert.equal(portMap.features["reference.feature.076"].coverage.frontend.state, "in_progress");
-  assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "blocked");
+  assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "implemented");
+});
+
+test("포트 전달 registry와 전역 표시는 단일 native 세션 수명주기를 공유한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const expected = new Map([
+    ["reference.feature.160", "upstream-ui:service-access:port-session:list-and-layout:v1"],
+    ["reference.feature.163", "upstream-ui:service-access:port-session:native-control:v1"],
+  ]);
+  const interactions = classifications
+    .classifications["web/src/components/portforward/PortForwardManager.tsx"]
+    .interactions;
+
+  for (const [contractId, sourceKey] of expected) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
+    assert.equal(port.deliveryStatus, "implemented");
+    assert.equal(port.coverage.frontend.state, "implemented");
+    assert.equal(port.coverage.desktop.state, "implemented");
+    assert.equal(aliases.aliases[contractId], sourceKey);
+    assert.equal(feature.deliveryStatus, "implemented");
+    assert.equal(feature.sourceKey, sourceKey);
+    assert.equal(interaction.opsiaPort.state, "in_progress");
+    assert.equal(interaction.opsiaPort.blockedReason, null);
+  }
+
+  assert.equal(portMap.features["reference.feature.162"].deliveryStatus, "in_progress");
+  assert.equal(portMap.features["reference.feature.162"].coverage.desktop.state, "implemented");
+});
+
+test("리소스 YAML 편집은 Safe PR와 직접 operation 적용을 함께 보존한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.165";
+  const sourceKey = "upstream-ui:api:resource-manifest:direct-apply:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  const interaction = classifications.classifications["web/src/api/client.ts"].interactions
+    .find((candidate) => candidate.sourceKey === sourceKey);
+
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+  assert.ok(interaction.legacyContractIds.includes("reference.feature.164"));
+  assert.ok(interaction.legacyContractIds.includes(contractId));
+  assert.equal(interaction.opsiaPort.state, "in_progress");
+  assert.equal(interaction.opsiaPort.blockedReason, null);
 });
 
 test("Helm 업그레이드는 서버 값 검증과 공용 operation stream 증거로 완결한다", async () => {

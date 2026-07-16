@@ -10304,6 +10304,55 @@
             "blockedReason": null,
             "rationale": "The product exposes a capability-gated Upgrade dialog only for an observed release revision, validates server-owned typed values against a digest-pinned recipe, returns the common CommandReceipt, and reuses the durable OperationEvent stream."
           }
+        },
+        {
+          "sourceKey": "upstream-ui:api:resource-manifest:direct-apply:v1",
+          "legacyContractIds": [
+            "reference.feature.164",
+            "reference.feature.165"
+          ],
+          "symbol": "useUpdateResource and useApplyResources",
+          "interaction": "an exact ResourceRef edit or bounded multi-document apply validates source identity and namespace policy, presents the server-owned diff and impact once, dispatches immediately after confirmation, and invalidates only matching resource projections",
+          "transport": "fetch_sse",
+          "realtime": {
+            "resume": "resume the issued command from its durable OperationEvent sequence without replaying the manifest mutation",
+            "backpressure": "bound YAML bytes and document count, validate every document before dispatch, and coalesce visible operation frames through the shared status store",
+            "merge": "accept progress and per-document terminal results only for the exact CommandReceipt and never promote partial, stale, cancelled, or rejected outcomes to success"
+          },
+          "motion": {
+            "reducedMotion": "diff review, confirmation, running, partial, success, and failure remain explicit in text and focus order when decorative transitions are disabled.",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/features/operations/OperationStatusFeedback.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/resource-manifests.ts",
+              "frontend/src/api/resource-manifests.test.ts",
+              "frontend/src/features/resources/createResourceManifestAdapter.ts",
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
+              "src/domains/manifest_editor/router.py",
+              "src/packages/contracts/gateway/requests.py",
+              "src/packages/contracts/gateway/responses.py",
+              "src/services/target/cluster-agent/agent.py",
+              "tests/test_manifest_editor.py",
+              "tests/test_target_agent_commands.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.requests",
+              "packages.contracts.gateway.responses",
+              "packages.contracts.parity",
+              "domains.manifest_editor.router"
+            ],
+            "plannedTestIds": [
+              "resources.manifest.direct-apply"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product preserves Safe PR and adds a separate exact source-bound direct apply contract with UID, source SHA, base SHA, RBAC, capability, namespace, diff, audit, receipt, durable operation, and per-document partial-result validation. Arbitrary create, dry-run, and force remain tracked separately by the in-progress create row."
+          }
         }
       ]
     },
@@ -14123,7 +14172,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "Exact Service TCP ports and shared input behavior are implemented. Pod port discovery and an Opsia-owned local forward remain unclaimed until the native Tauri boundary exists."
+            "rationale": "Exact Service TCP ports, shared input behavior, and the Opsia-owned native local-forward handoff are implemented. Pod container-port discovery remains explicitly unavailable and is tracked by this in-progress capability interaction."
           }
         }
       ]
@@ -14159,13 +14208,22 @@
           "motion": {
             "reducedMotion": "session status, truncation, and controls remain visible without auto-minimize or transition dependence",
             "evidence": [
-              "frontend/src/pages/resources/ServiceAccessActions.tsx"
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx"
             ]
           },
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx"
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx",
+              "frontend/src/app/ProductShell.portForward.test.tsx",
+              "frontend/src/features/service-access/PortForwardSessionsProvider.tsx",
+              "frontend/src/features/service-access/usePortForwardSessions.ts",
+              "frontend/src/features/service-access/usePortForwardSessions.test.tsx",
+              "desktop/src-tauri/src/port_forward.rs",
+              "desktop/src-tauri/src/port_forward/tests.rs",
+              "desktop/src-tauri/tests/reference_parity.rs"
             ],
             "requiredBackendContracts": [
               "packages.contracts.service_access"
@@ -14173,9 +14231,9 @@
             "plannedTestIds": [
               "service-access.desktop.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "No typed Tauri local-port registry owns listeners, window-scoped sessions, process exits, or reconnect state; a browser list would falsely claim native ownership.",
-            "rationale": "The current UI limits the visible command/session width and states the boundary, but does not synthesize active local forwards from browser state."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "One authenticated composition-scoped Provider owns the single native list and server-negotiated refresh schedule for both the global header indicator and exact resource management panel. The Tauri registry owns bounded window-scoped processes, exits, errors, loopback endpoints, and cleanup; a non-native browser performs no list call and renders no fake session."
           }
         },
         {
@@ -14196,6 +14254,9 @@
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
               "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/features/service-access/createPortForwardSessionAdapter.ts",
+              "desktop/src-tauri/src/port_forward.rs",
+              "desktop/src-tauri/src/port_forward/tests.rs",
               "src/packages/contracts/service_access.py"
             ],
             "requiredBackendContracts": [
@@ -14204,9 +14265,9 @@
             "plannedTestIds": [
               "service-access.desktop.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "Starting a listener requires a new Tauri command and native process/socket registry; the Python gateway and browser are intentionally forbidden from owning the workstation port.",
-            "rationale": "Port and listen-address validation exists as a shared contract, and the browser offers only a manual loopback kubectl command without creating a fake session."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The typed Tauri command now launches a fixed kubectl executable with structured exact Service or Pod arguments, loopback-only binding, one-time confirmation, duplicate-port and capacity reservation, a native ownership receipt, exit/error retention, and window cleanup. Pod discovery in the browser remains tracked by the separate capability interaction."
           }
         },
         {
@@ -14226,7 +14287,12 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/pages/resources/ServiceAccessActions.tsx"
+              "frontend/src/pages/resources/ServiceAccessActions.tsx",
+              "frontend/src/app/PortForwardSessionIndicator.tsx",
+              "frontend/src/features/service-access/usePortForwardSessions.ts",
+              "frontend/src/features/service-access/usePortForwardSessions.test.tsx",
+              "desktop/src-tauri/src/port_forward.rs",
+              "desktop/src-tauri/src/port_forward/tests.rs"
             ],
             "requiredBackendContracts": [
               "packages.contracts.service_access"
@@ -14234,9 +14300,9 @@
             "plannedTestIds": [
               "service-access.desktop.boundary"
             ],
-            "state": "blocked",
-            "blockedReason": "There is no native forward session ID or stop/recreate Tauri command, so browser controls cannot safely terminate a workstation listener.",
-            "rationale": "The product does not render stop or reconnect controls until native ownership and lifecycle receipts can be proven."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Native session IDs, stop, generation-safe recreate, unexpected-exit retention, mutation refresh, per-window teardown, and exact resource navigation are implemented through the same shared Provider and Tauri registry without orphaning or duplicating listeners."
           }
         }
       ]
