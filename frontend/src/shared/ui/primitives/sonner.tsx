@@ -3,7 +3,6 @@ import { Toaster as Sonner, toast } from "sonner";
 function Toaster() {
   return (
     <Sonner
-      closeButton
       duration={5_000}
       expand={false}
       gap={8}
@@ -22,7 +21,6 @@ function Toaster() {
           toast: "bg-popover text-popover-foreground border-border",
           description: "text-muted-foreground",
           actionButton: "bg-primary text-primary-foreground",
-          closeButton: "border-border bg-popover text-popover-foreground",
         },
       }}
     />
