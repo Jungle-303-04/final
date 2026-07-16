@@ -195,6 +195,7 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert 'requiredEnvironment("AUTH_PASSWORD", { trim: false })' in script
     assert 'new URL("/api/auth/login", baseUrl).href' in script
     assert "page.request.post" in script
+    assert 'headers: { "x-service-csrf": "same-origin" }' in script
     assert "AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000" in script
     assert 'page.goto(directUrl.href, { waitUntil: "domcontentloaded" })' in script
     assert "data-product-state" in script

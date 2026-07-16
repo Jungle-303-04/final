@@ -171,6 +171,7 @@ async function authenticate(page, baseUrl, email, password) {
     {
       data: { email, password },
       failOnStatusCode: false,
+      headers: { "x-service-csrf": "same-origin" },
     },
   );
   assert.ok(
