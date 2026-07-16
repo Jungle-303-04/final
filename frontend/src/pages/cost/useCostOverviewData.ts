@@ -52,15 +52,19 @@ export function useCostOverview(
     const sharedRequest = acquireSharedRequest(
       port,
       `cost-overview:${scopeKey}:${request.timeRange}:${refreshChannel}:r${revision}`,
-      (signal) => port.getOverview(canonicalRequest, signal),
+      async (signal) => {
+        const [data, refreshPolicy] = await Promise.all([
+          port.getOverview(canonicalRequest, signal),
+          port.loadRefreshPolicy(refreshChannel, signal),
+        ]);
+        return { data, refreshPolicy };
+      },
     );
     void sharedRequest.promise.then(
-      (data) => {
+      ({ data, refreshPolicy }) => {
         if (!active) return;
         setFrame(asyncResourceSuccess(data));
-        refreshController.acceptSuccess({
-          refreshAfterSeconds: refreshAfterSeconds(data, refreshChannel),
-        });
+        refreshController.acceptSuccess(refreshPolicy);
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
@@ -83,15 +87,6 @@ export function useCostOverview(
   ]);
 
   return { frame, refresh: refreshController.requestRefresh };
-}
-
-function refreshAfterSeconds(
-  overview: CostOverview,
-  channel: CostRefreshChannel,
-): number {
-  if (channel === "trend") return overview.trendRefreshAfterSeconds;
-  if (channel === "nodes") return overview.nodesRefreshAfterSeconds;
-  return overview.refreshAfterSeconds;
 }
 
 function toPortFailure(error: unknown): CostPortFailure {

@@ -1,3 +1,5 @@
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
+
 export type CostAvailability = "available" | "partial" | "unavailable";
 export type CostFreshness = "live" | "stale" | "partial" | "disconnected";
 export type CostTimeRange = "6h" | "24h" | "7d";
@@ -100,12 +102,10 @@ export interface CostOverview {
   observation: CostUnavailableObservation;
   summary: CostUnavailableSummary;
   trend: CostTrend;
-  refreshAfterSeconds: number;
-  trendRefreshAfterSeconds: number;
-  nodesRefreshAfterSeconds: number;
 }
 
 export type CostRefreshChannel = "summary" | "trend" | "nodes";
+export type CostRefreshPolicyKey = "cost_summary" | "cost_trend" | "cost_nodes";
 
 export interface CostOverviewRequest {
   clusterIds: readonly string[];
@@ -135,5 +135,9 @@ export class CostPortFailure extends Error {
 }
 
 export interface CostPort {
+  loadRefreshPolicy(
+    channel: CostRefreshChannel,
+    signal?: AbortSignal,
+  ): Promise<BrowserRefreshPolicy>;
   getOverview(request: CostOverviewRequest, signal?: AbortSignal): Promise<CostOverview>;
 }

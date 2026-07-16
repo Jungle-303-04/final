@@ -3,11 +3,23 @@ import {
   type CostFailureCode,
   type CostOverview,
   type CostPort,
+  type CostRefreshChannel,
+  type CostRefreshPolicyKey,
 } from "./costContract";
 import type { CostEndpointDependencies } from "./costEndpointContract";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
-export function createCostAdapter(endpoints: CostEndpointDependencies): CostPort {
+export function createCostAdapter(
+  endpoints: CostEndpointDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<CostRefreshPolicyKey>,
+): CostPort {
   return {
+    loadRefreshPolicy(channel, signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, refreshPolicyKey(channel), signal);
+    },
     async getOverview(request, signal) {
       return withPortFailure(async () => toOverview(await endpoints.getCostOverview({
         clusterIds: request.clusterIds,
@@ -67,10 +79,13 @@ function toOverview(value: Awaited<ReturnType<CostEndpointDependencies["getCostO
       })),
       reasonCodes: value.trend.reason_codes,
     },
-    refreshAfterSeconds: value.refresh_after_seconds,
-    trendRefreshAfterSeconds: value.trend_refresh_after_seconds,
-    nodesRefreshAfterSeconds: value.nodes_refresh_after_seconds,
   };
+}
+
+function refreshPolicyKey(channel: CostRefreshChannel): CostRefreshPolicyKey {
+  if (channel === "trend") return "cost_trend";
+  if (channel === "nodes") return "cost_nodes";
+  return "cost_summary";
 }
 
 async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {

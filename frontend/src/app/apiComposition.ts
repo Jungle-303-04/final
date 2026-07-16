@@ -200,7 +200,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "cost",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/cost")).loadCostSurface(),
+        default: (await import("./composition/surfaces/cost")).loadCostSurface(refreshPolicies),
       })),
     },
     {

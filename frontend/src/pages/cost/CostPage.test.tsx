@@ -76,6 +76,16 @@ describe("CostPage", () => {
 
 function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType<typeof vi.fn> } {
   return {
+    loadRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 60,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     getOverview: vi.fn().mockImplementation(() => error ? Promise.reject(error) : Promise.resolve({
       scopeCoverage: {
         availability: "available",
@@ -101,9 +111,6 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
         series: [] as const,
         reasonCodes: ["cost_observation_not_integrated"],
       },
-      refreshAfterSeconds: 60,
-      trendRefreshAfterSeconds: 120,
-      nodesRefreshAfterSeconds: 120,
     })),
   };
 }
