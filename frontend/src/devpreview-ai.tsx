@@ -253,23 +253,81 @@ function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void })
   );
 }
 
+const now = () => new Date().toISOString();
+/** 더미: 질문 키워드로 그럴듯한 어시스턴트 응답 파트를 만든다(실제 배선 시 삭제). */
+function scriptedReply(id: string, q: string): AiTurn {
+  const base = { id, role: "assistant" as const, collapsed: false, createdAt: now() };
+  if (/알람|알림|alert|걸어/.test(q)) {
+    return { ...base, parts: [
+      { kind: "text", markdown: "현재 화면 범위(클러스터 `cluster-2`)로 알림 규칙 초안을 제안합니다. 내용을 확인해 주세요." },
+      { kind: "action", proposal: { type: "create_alert_rule", rationale: "현재 화면 필터에서 CPU가 70%를 20초 이상 넘으면 알리도록 제안했습니다.", payload: { name: "파드 CPU 70% 알림", metric: "cpu_pct", comparator: ">", threshold: 70, forSeconds: 20, severity: "high", scope: { clusters: ["cluster-2"], namespaces: [], applications: [], labels: [] }, channels: [], enabled: true } } },
+    ] };
+  }
+  if (/위험|상태|어때|health|문제|이상/.test(q)) {
+    return { ...base, parts: [
+      { kind: "steps", running: false, steps: [
+        { id: id + "a", label: "리소스 조회", detail: "42건 · 파드 37", state: "done" },
+        { id: id + "b", label: "상태 평가", detail: "위험 1 · 경고 2", state: "done" },
+      ] },
+      { kind: "text", markdown: "지금 이 클러스터에서 **위험 1건**(checkout-api OOMKilled)과 경고 2건이 관측됩니다. 나머지 파드는 정상입니다." },
+      { kind: "result", title: "위험 1 · 경고 2", tone: "warning", summary: "checkout-api 메모리 초과가 가장 시급합니다.", metrics: [
+        { label: "위험", value: "1", tone: "critical" }, { label: "경고", value: "2", tone: "warning" }, { label: "정상", value: "34", tone: "healthy" },
+      ] },
+      { kind: "links", items: [{ label: "위험 리소스 열기", href: "/resources?health=critical", icon: "resources" }] },
+    ] };
+  }
+  return { ...base, parts: [
+    { kind: "steps", running: false, steps: [
+      { id: id + "a", label: "리소스 조회", detail: "6건 확인", state: "done" },
+      { id: id + "b", label: "로그 확인", detail: "관련 이벤트 3건", state: "done" },
+    ] },
+    { kind: "text", markdown: "관측된 근거를 바탕으로 요약했습니다. 자세한 내용은 아래 근거에서 확인하세요." },
+    { kind: "evidence", items: [
+      { type: "event", id: id + "e", label: "Event · 최근 변경 3건", link: "/resources" },
+      { type: "log", id: id + "l", label: "로그 · 관련 라인", link: "/resources" },
+    ] },
+  ] };
+}
+
 function Panel() {
-  const turns = DUMMY_CONVERSATION.turns;
+  const [turns, setTurns] = useState<AiTurn[]>(DUMMY_CONVERSATION.turns);
   const [count, setCount] = useState(1);
   const [thinking, setThinking] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [input, setInput] = useState("");
   const [runId, setRunId] = useState(0);
+  const turnsRef = useRef<AiTurn[]>(DUMMY_CONVERSATION.turns);
+  const idSeq = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { turnsRef.current = turns; }, [turns]);
   useLayoutEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); });
 
   const reveal = () => setCount((c) => {
-    const next = c + 1; if (next > turns.length) return c;
-    if (turns[next - 1].role === "user") window.setTimeout(reveal, 550);
+    const t = turnsRef.current;
+    const next = c + 1; if (next > t.length) return c;
+    if (t[next - 1].role === "user") window.setTimeout(reveal, 550);
     return next;
   });
-  const afterAssistant = () => { if (count < turns.length) { setThinking(true); window.setTimeout(() => { setThinking(false); reveal(); }, 750); } };
+  const afterAssistant = () => { if (count < turnsRef.current.length) { setThinking(true); window.setTimeout(() => { setThinking(false); reveal(); }, 750); } };
+
+  const send = (text: string) => {
+    const t = text.trim(); if (!t) return;
+    setInput("");
+    idSeq.current += 1;
+    const userTurn: AiTurn = { id: `u${idSeq.current}`, role: "user", question: t, collapsed: false, createdAt: now() };
+    const withUser = [...turnsRef.current, userTurn];
+    turnsRef.current = withUser; setTurns(withUser); setCount(withUser.length);
+    setThinking(true);
+    window.setTimeout(() => {
+      setThinking(false);
+      idSeq.current += 1;
+      const withA = [...turnsRef.current, scriptedReply(`a${idSeq.current}`, t)];
+      turnsRef.current = withA; setTurns(withA); setCount(withA.length);
+    }, 850);
+  };
 
   useEffect(() => {
+    setTurns(DUMMY_CONVERSATION.turns); turnsRef.current = DUMMY_CONVERSATION.turns;
     setCount(1);
     const a = window.setTimeout(() => setCount(2), 500);
     const b = window.setTimeout(() => setCount(3), 1050);
@@ -311,10 +369,16 @@ function Panel() {
       </div>
 
       <div className="border-t bg-card/40 p-3">
-        <div className="mb-2 flex flex-wrap gap-1.5">{DUMMY_SUGGESTIONS.map((s) => <button className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-muted-foreground shadow-xs transition hover:border-foreground/20 hover:text-foreground" key={s} type="button">{s}</button>)}</div>
+        <div className="mb-2 flex flex-wrap gap-1.5">{DUMMY_SUGGESTIONS.map((s) => <button className="rounded-full border bg-background px-2.5 py-1 text-[11px] text-muted-foreground shadow-xs transition hover:border-foreground/20 hover:text-foreground" key={s} onClick={() => send(s)} type="button">{s}</button>)}</div>
         <div className="relative rounded-xl border bg-background shadow-xs transition focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-          <textarea className="min-h-16 w-full resize-none rounded-xl bg-transparent px-3 py-2.5 pr-11 text-sm outline-none" placeholder="지금 보고 있는 것에 대해 질문하세요…" />
-          <button className="absolute bottom-2 right-2 grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm transition active:scale-90" title="보내기" type="button"><Send className="size-4" /></button>
+          <textarea
+            className="min-h-16 w-full resize-none rounded-xl bg-transparent px-3 py-2.5 pr-11 text-sm outline-none"
+            onChange={(e) => setInput(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); } }}
+            placeholder="지금 보고 있는 것에 대해 질문하세요…"
+            value={input}
+          />
+          <button className="absolute bottom-2 right-2 grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm transition active:scale-90 disabled:opacity-50" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>
         </div>
         <p className="mt-1.5 flex items-center gap-1 px-0.5 text-[11px] text-muted-foreground"><Clock3 className="size-3" /> 완료된 대화는 시간이 지나면 자동으로 요약되어 접힙니다.</p>
       </div>
