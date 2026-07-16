@@ -909,6 +909,40 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_resource(dict(row)) if row else None
 
+    def list_inventory_resources_by_api_version(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        api_version: str,
+        kind: str,
+        limit: int = 200,
+    ) -> list[JsonObject]:
+        """List only one complete API identity for safe contextual consumers.
+
+        This is deliberately separate from the generic resource list: callers
+        that carry a Kubernetes group/version must never broaden a candidate
+        set by kind alone.
+        """
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == resource_type.strip().lower(),
+                table.c.api_version == api_version.strip(),
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.namespace.nullsfirst(), table.c.name)
+            .limit(max(1, min(limit, 1000)))
+        )
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        return [self.serialize_inventory_resource(dict(row)) for row in rows]
+
     def get_inventory_resource_by_key(
         self,
         *,

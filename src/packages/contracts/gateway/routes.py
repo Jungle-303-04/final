@@ -48,6 +48,11 @@ WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
 # Contextual Workload Detail.  API group/version and exact cluster identity are
 # query-owned because the upstream path is intentionally cluster agnostic.
 WORKLOAD_DETAIL_PATH = "/workloads/{kind}/{namespace}/{name}"
+# Safe contextual Compare.  Source-compatible kind/apiGroup/a/b are query
+# owned; the product adds cluster_id and an exact apiVersion when resolved.
+COMPARE_DESCRIPTORS_PATH = "/compare/descriptors"
+COMPARE_CANDIDATES_PATH = "/compare/candidates"
+COMPARE_RESOURCES_PATH = "/compare/resources"
 # 관리 콘솔 — 조직/그룹/멤버/권한 (프론트 콘솔 전용, admin 세션)
 ORGS_PATH = "/orgs"
 ORG_PATH = "/orgs/{org_id}"

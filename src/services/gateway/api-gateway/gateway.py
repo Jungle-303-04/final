@@ -25,6 +25,7 @@ from domains.catalog.router import router as catalog_router
 from domains.changes.router import router as changes_router
 from domains.checks.router import router as checks_router
 from domains.command.router import router as command_router
+from domains.compare.router import router as compare_router
 from domains.cost.router import router as cost_router
 from domains.dashboard.fleet_router import router as fleet_router
 from domains.dashboard.router import router as dashboard_router
@@ -362,6 +363,7 @@ class ApiGateway:
         app.include_router(issue_filter_router)  # workspace Issues 필터·facet 서버 집계
         app.include_router(log_stream_router)  # bounded, redacted pod/workload log SSE
         app.include_router(workload_detail_router)  # exact, read-only workload detail projection
+        app.include_router(compare_router)  # typed safe resource comparison (no raw manifest)
         app.include_router(rca_router)  # rca 도메인 라우터(agent evidence)
         app.include_router(
             rca_query_router
