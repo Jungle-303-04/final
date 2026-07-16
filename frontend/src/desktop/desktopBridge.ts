@@ -14,8 +14,10 @@ export const DESKTOP_COMMAND = {
   localTerminalResize: "desktop_local_terminal_resize",
   localTerminalClose: "desktop_local_terminal_close",
   localTerminalAckOutput: "desktop_local_terminal_ack_output",
+  portForwardStart: "desktop_port_forward_start",
   portForwardSessions: "desktop_port_forward_sessions",
   portForwardStop: "desktop_port_forward_stop",
+  portForwardRecreate: "desktop_port_forward_recreate",
 } as const;
 
 export type DesktopPlatform = "macos" | "windows" | "linux" | "browser";
@@ -96,9 +98,14 @@ export type DesktopLocalTerminalEvent =
 
 export interface DesktopPortForwardSession {
   id: string;
+  workspaceId: string;
   clusterId: string;
+  freshness: "live" | "stale" | "partial" | "disconnected";
   namespace: string;
-  podName: string;
+  resourceKind: "Pod" | "Service";
+  resourceName: string;
+  resourceUid: string;
+  podName: string | null;
   podPort: number;
   localPort: number;
   listenAddress: "127.0.0.1" | "0.0.0.0";
@@ -106,8 +113,37 @@ export interface DesktopPortForwardSession {
   servicePort: number | null;
   scheme: "http" | "https" | null;
   startedAt: string;
-  status: "running" | "stopped" | "error";
+  status: "starting" | "running" | "stopped" | "error";
   error: string | null;
+  exitCode: number | null;
+}
+
+export interface DesktopLocalPortForwardRequest {
+  scope: {
+    workspaceId: string;
+    clusterId: string;
+    namespaces: string[];
+    freshness: "live" | "stale" | "partial" | "disconnected";
+  };
+  resource: {
+    apiGroup: "" | "core";
+    version: "v1";
+    kind: "Pod" | "Service";
+    namespace: string;
+    name: string;
+    uid: string;
+  };
+  remotePort: number;
+  localPort: number | null;
+  listenAddress: "127.0.0.1";
+  confirmation: true;
+}
+
+export interface DesktopPortForwardStartReceipt {
+  sessionId: string;
+  generation: number;
+  localPort: number;
+  startedAt: string;
 }
 
 interface DesktopRuntime {
@@ -133,8 +169,12 @@ export interface DesktopBridge {
   resizeLocalTerminal: (request: LocalTerminalResizeRequest) => Promise<void>;
   closeLocalTerminal: (sessionId: string) => Promise<void>;
   acknowledgeLocalTerminalOutput: (request: LocalTerminalOutputAckRequest) => Promise<void>;
+  startPortForward: (
+    request: DesktopLocalPortForwardRequest,
+  ) => Promise<DesktopPortForwardStartReceipt>;
   listPortForwardSessions: () => Promise<readonly DesktopPortForwardSession[]>;
   stopPortForwardSession: (sessionId: string) => Promise<void>;
+  recreatePortForward: (sessionId: string) => Promise<DesktopPortForwardStartReceipt>;
   /**
    * Resolves only after the native event listener is installed.  A terminal
    * must wait for this before starting its PTY so the initial shell prompt is
@@ -207,12 +247,20 @@ export function createDesktopBridge(runtime: DesktopRuntime | undefined = create
       DESKTOP_COMMAND.localTerminalAckOutput,
       { request },
     ),
+    startPortForward: (request) => runtime.core.invoke<DesktopPortForwardStartReceipt>(
+      DESKTOP_COMMAND.portForwardStart,
+      { request },
+    ),
     listPortForwardSessions: () => runtime.core.invoke<readonly DesktopPortForwardSession[]>(
       DESKTOP_COMMAND.portForwardSessions,
     ),
     stopPortForwardSession: (sessionId) => runtime.core.invoke<void>(
       DESKTOP_COMMAND.portForwardStop,
       { request: { sessionId } },
+    ),
+    recreatePortForward: (sessionId) => runtime.core.invoke<DesktopPortForwardStartReceipt>(
+      DESKTOP_COMMAND.portForwardRecreate,
+      { request: { sessionId, confirmation: true } },
     ),
     onLocalTerminalEvent: (listener) => subscribeLocalTerminal(runtime, listener),
     onMenuAction: (listener) => subscribeDesktopMenu(runtime, listener),
@@ -255,10 +303,16 @@ function browserDesktopBridge(): DesktopBridge {
     acknowledgeLocalTerminalOutput: async () => {
       throw new Error(BROWSER_CAPABILITIES.localTerminal.reason);
     },
+    startPortForward: async () => {
+      throw new Error(BROWSER_CAPABILITIES.portForwardSessions.reason);
+    },
     listPortForwardSessions: async () => {
       throw new Error(BROWSER_CAPABILITIES.portForwardSessions.reason);
     },
     stopPortForwardSession: async () => {
+      throw new Error(BROWSER_CAPABILITIES.portForwardSessions.reason);
+    },
+    recreatePortForward: async () => {
       throw new Error(BROWSER_CAPABILITIES.portForwardSessions.reason);
     },
     onLocalTerminalEvent: async () => () => undefined,

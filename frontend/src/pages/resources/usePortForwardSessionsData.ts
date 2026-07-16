@@ -16,20 +16,29 @@ import {
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 
-export function usePortForwardSessions(port: PortForwardSessionPort): {
+export function usePortForwardSessions(
+  port: PortForwardSessionPort,
+  externalMutationRevision = 0,
+): {
   frame: AsyncResourceState<PortForwardSessionSnapshot, Error>;
   refresh: () => void;
   stop: (sessionId: string) => Promise<void>;
+  recreate: (sessionId: string) => Promise<void>;
   stoppingId: string | null;
+  recreatingId: string | null;
   stopFailure: Error | null;
+  mutationFailureKind: "stop" | "recreate" | null;
 } {
   const [revision, setRevision] = useState(0);
   const [frame, setFrame] = useState<AsyncResourceState<PortForwardSessionSnapshot, Error>>(
     port.available ? ASYNC_LOADING : ASYNC_IDLE,
   );
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [recreatingId, setRecreatingId] = useState<string | null>(null);
   const [stopFailure, setStopFailure] = useState<Error | null>(null);
+  const [mutationFailureKind, setMutationFailureKind] = useState<"stop" | "recreate" | null>(null);
   const stopController = useRef<AbortController | null>(null);
+  const observedExternalMutation = useRef(externalMutationRevision);
   const refreshController = useServerRefreshScheduler(
     () => setRevision((current) => current + 1),
   );
@@ -72,33 +81,74 @@ export function usePortForwardSessions(port: PortForwardSessionPort): {
     controller?.abort();
   }, []);
 
+  useEffect(() => {
+    if (externalMutationRevision === observedExternalMutation.current) return;
+    observedExternalMutation.current = externalMutationRevision;
+    if (frame.phase !== "ready") return;
+    refreshController.requestMutationRefresh(
+      requiredMutationDelay(frame.data.refreshPolicy.postMutationRefreshAfterSeconds),
+    );
+  }, [externalMutationRevision, frame, refreshController]);
+
   const stop = useCallback(async (sessionId: string) => {
-    if (frame.phase !== "ready" || stoppingId !== null) return;
+    if (frame.phase !== "ready" || stoppingId !== null || recreatingId !== null) return;
     const controller = new AbortController();
     stopController.current = controller;
     setStoppingId(sessionId);
     setStopFailure(null);
+    setMutationFailureKind(null);
     try {
       await port.stop(sessionId, controller.signal);
       refreshController.requestMutationRefresh(
         requiredMutationDelay(frame.data.refreshPolicy.postMutationRefreshAfterSeconds),
       );
     } catch (error) {
-      if (!isAbortError(error)) setStopFailure(toError(error));
+      if (!isAbortError(error)) {
+        setStopFailure(toError(error));
+        setMutationFailureKind("stop");
+      }
     } finally {
       if (stopController.current === controller) {
         stopController.current = null;
         setStoppingId(null);
       }
     }
-  }, [frame, port, refreshController, stoppingId]);
+  }, [frame, port, recreatingId, refreshController, stoppingId]);
+
+  const recreate = useCallback(async (sessionId: string) => {
+    if (frame.phase !== "ready" || stoppingId !== null || recreatingId !== null) return;
+    const controller = new AbortController();
+    stopController.current = controller;
+    setRecreatingId(sessionId);
+    setStopFailure(null);
+    setMutationFailureKind(null);
+    try {
+      await port.recreate(sessionId, controller.signal);
+      refreshController.requestMutationRefresh(
+        requiredMutationDelay(frame.data.refreshPolicy.postMutationRefreshAfterSeconds),
+      );
+    } catch (error) {
+      if (!isAbortError(error)) {
+        setStopFailure(toError(error));
+        setMutationFailureKind("recreate");
+      }
+    } finally {
+      if (stopController.current === controller) {
+        stopController.current = null;
+        setRecreatingId(null);
+      }
+    }
+  }, [frame, port, recreatingId, refreshController, stoppingId]);
 
   return {
     frame,
     refresh: refreshController.requestRefresh,
     stop,
+    recreate,
     stoppingId,
+    recreatingId,
     stopFailure,
+    mutationFailureKind,
   };
 }
 

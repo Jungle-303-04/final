@@ -8,9 +8,15 @@ import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { usePortForwardSessions } from "./usePortForwardSessionsData";
 
-export function PortForwardSessionsPanel({ port }: { port: PortForwardSessionPort }) {
+export function PortForwardSessionsPanel({
+  mutationRevision = 0,
+  port,
+}: {
+  mutationRevision?: number;
+  port: PortForwardSessionPort;
+}) {
   const { t } = useI18n();
-  const state = usePortForwardSessions(port);
+  const state = usePortForwardSessions(port, mutationRevision);
   if (!port.available || state.frame.phase === "idle" || state.frame.phase === "loading") return null;
   if (state.frame.phase === "failed") {
     return (
@@ -65,9 +71,9 @@ export function PortForwardSessionsPanel({ port }: { port: PortForwardSessionPor
             <div className="min-w-0">
               <p
                 className="truncate text-sm font-medium"
-                title={`${session.namespace}/${session.podName}`}
+                title={`${session.namespace}/${session.resourceName}`}
               >
-                {session.namespace}/{session.podName}
+                {session.namespace}/{session.resourceName}
               </p>
               <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 <span>{t("resources.serviceAccess.sessions.localEndpoint", {
@@ -84,10 +90,30 @@ export function PortForwardSessionsPanel({ port }: { port: PortForwardSessionPor
               {session.error ? (
                 <p className="mt-1 break-words text-xs text-destructive">{session.error}</p>
               ) : null}
+              {session.exitCode !== null ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("resources.serviceAccess.sessions.exitCode", {
+                    code: session.exitCode,
+                  })}
+                </p>
+              ) : null}
             </div>
-            {session.status === "stopped" ? null : (
+            {session.status === "error" || session.status === "stopped" ? (
               <Button
-                disabled={state.stoppingId !== null}
+                disabled={state.stoppingId !== null || state.recreatingId !== null}
+                onClick={() => void state.recreate(session.id)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RefreshCw aria-hidden="true" />
+                {state.recreatingId === session.id
+                  ? t("resources.serviceAccess.sessions.recreating")
+                  : t("resources.serviceAccess.sessions.recreate")}
+              </Button>
+            ) : (
+              <Button
+                disabled={state.stoppingId !== null || state.recreatingId !== null}
                 onClick={() => void state.stop(session.id)}
                 size="sm"
                 type="button"
@@ -104,7 +130,9 @@ export function PortForwardSessionsPanel({ port }: { port: PortForwardSessionPor
       </ul>
       {state.stopFailure ? (
         <p className="text-xs text-destructive" role="alert">
-          {t("resources.serviceAccess.sessions.stopFailed")}
+          {state.mutationFailureKind === "recreate"
+            ? t("resources.serviceAccess.sessions.recreateFailed")
+            : t("resources.serviceAccess.sessions.stopFailed")}
         </p>
       ) : null}
     </section>

@@ -21,7 +21,12 @@ fn native_local_pty_and_unavailable_updater_are_honest_capabilities() {
 fn main_window_grants_only_the_port_forward_session_registry_commands() {
     let build_manifest = include_str!("../build.rs");
     let capability = include_str!("../capabilities/default.json");
-    for command in ["desktop_port_forward_sessions", "desktop_port_forward_stop"] {
+    for command in [
+        "desktop_port_forward_start",
+        "desktop_port_forward_sessions",
+        "desktop_port_forward_stop",
+        "desktop_port_forward_recreate",
+    ] {
         assert!(build_manifest.contains(command), "{command} must be registered");
         assert!(
             capability.contains(&format!("allow-{}", command.replace('_', "-"))),

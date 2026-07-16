@@ -23,8 +23,13 @@ describe("createPortForwardSessionAdapter", () => {
     ]);
     const adapter = createPortForwardSessionAdapter({
       isDesktop: true,
+      capabilities: vi.fn().mockResolvedValue({
+        portForwardSessions: { state: "available" },
+      }),
       listPortForwardSessions,
+      startPortForward: vi.fn(),
       stopPortForwardSession: vi.fn(),
+      recreatePortForward: vi.fn(),
     }, {
       getPolicy: vi.fn().mockResolvedValue(POLICY),
     });
@@ -42,8 +47,13 @@ describe("createPortForwardSessionAdapter", () => {
     const duplicate = session("00000000-0000-4000-8000-000000000001", "2026-07-17T03:00:00Z");
     const adapter = createPortForwardSessionAdapter({
       isDesktop: true,
+      capabilities: vi.fn().mockResolvedValue({
+        portForwardSessions: { state: "available" },
+      }),
       listPortForwardSessions: vi.fn().mockResolvedValue([duplicate, duplicate]),
+      startPortForward: vi.fn(),
       stopPortForwardSession: vi.fn(),
+      recreatePortForward: vi.fn(),
     }, {
       getPolicy: vi.fn().mockResolvedValue(POLICY),
     });
@@ -51,8 +61,13 @@ describe("createPortForwardSessionAdapter", () => {
 
     const missingFollowUp = createPortForwardSessionAdapter({
       isDesktop: true,
+      capabilities: vi.fn().mockResolvedValue({
+        portForwardSessions: { state: "available" },
+      }),
       listPortForwardSessions: vi.fn().mockResolvedValue([]),
+      startPortForward: vi.fn(),
       stopPortForwardSession: vi.fn(),
+      recreatePortForward: vi.fn(),
     }, {
       getPolicy: vi.fn().mockResolvedValue({
         ...POLICY,
@@ -66,8 +81,13 @@ describe("createPortForwardSessionAdapter", () => {
     const stopPortForwardSession = vi.fn().mockResolvedValue(undefined);
     const adapter = createPortForwardSessionAdapter({
       isDesktop: true,
+      capabilities: vi.fn().mockResolvedValue({
+        portForwardSessions: { state: "available" },
+      }),
       listPortForwardSessions: vi.fn(),
+      startPortForward: vi.fn(),
       stopPortForwardSession,
+      recreatePortForward: vi.fn(),
     });
 
     await adapter.stop(" 00000000-0000-4000-8000-000000000001 ");
@@ -76,14 +96,61 @@ describe("createPortForwardSessionAdapter", () => {
       "00000000-0000-4000-8000-000000000001",
     );
   });
+
+  it("starts only a confirmed exact Service or Pod request after the native capability gate", async () => {
+    const startPortForward = vi.fn().mockResolvedValue({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      generation: 1,
+      localPort: 18_080,
+      startedAt: "2026-07-17T03:00:00Z",
+    });
+    const adapter = createPortForwardSessionAdapter({
+      isDesktop: true,
+      capabilities: vi.fn().mockResolvedValue({
+        portForwardSessions: { state: "available" },
+      }),
+      listPortForwardSessions: vi.fn(),
+      startPortForward,
+      stopPortForwardSession: vi.fn(),
+      recreatePortForward: vi.fn(),
+    });
+    const request = {
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: ["shop"],
+        freshness: "live" as const,
+      },
+      resource: {
+        apiGroup: "" as const,
+        version: "v1" as const,
+        kind: "Service" as const,
+        namespace: "shop",
+        name: "checkout",
+        uid: "uid-service-1",
+      },
+      remotePort: 80,
+      localPort: 18_080,
+      listenAddress: "127.0.0.1" as const,
+      confirmation: true as const,
+    };
+
+    await expect(adapter.start(request)).resolves.toMatchObject({ localPort: 18_080 });
+    expect(startPortForward).toHaveBeenCalledWith(request);
+  });
 });
 
 function session(id: string, startedAt: string): DesktopPortForwardSession {
   return {
     id,
+    workspaceId: "workspace-a",
     clusterId: "cluster-a",
+    freshness: "live",
     namespace: "shop",
-    podName: "checkout-abc",
+    resourceKind: "Service",
+    resourceName: "checkout",
+    resourceUid: "uid-service-1",
+    podName: null,
     podPort: 8080,
     localPort: 18_080,
     listenAddress: "127.0.0.1",
@@ -93,5 +160,6 @@ function session(id: string, startedAt: string): DesktopPortForwardSession {
     startedAt,
     status: "running",
     error: null,
+    exitCode: null,
   };
 }

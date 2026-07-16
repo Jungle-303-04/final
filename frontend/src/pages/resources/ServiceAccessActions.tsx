@@ -2,6 +2,7 @@ import { Copy, Globe2, PlugZap, Square } from "lucide-react";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -11,7 +12,10 @@ import type {
   ServiceAccessPort,
   ServiceRequestScheme,
 } from "../../features/service-access/serviceAccessContract";
-import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
+import type {
+  PortForwardSessionPort,
+  PortForwardStartReceipt,
+} from "../../features/service-access/portForwardSessionContract";
 import { toServiceRequestOperationResult } from "../../features/service-access/createServiceAccessAdapter";
 import {
   OperationStatusFeedback,
@@ -76,6 +80,11 @@ export function ServiceAccessActions({
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const [receipt, setReceipt] = useState<ResourceActionReceipt | null>(null);
+  const [forwardPending, setForwardPending] = useState(false);
+  const [forwardFailed, setForwardFailed] = useState(false);
+  const [forwardReceipt, setForwardReceipt] = useState<PortForwardStartReceipt | null>(null);
+  const [forwardMutationRevision, setForwardMutationRevision] = useState(0);
+  const forwardController = useRef<AbortController | null>(null);
   const isService = (
     detail.resource.resourceType === "service"
     && detail.resource.kind.toLocaleLowerCase() === "service"
@@ -108,6 +117,12 @@ export function ServiceAccessActions({
     });
     return () => controller.abort();
   }, [detail.resource.inventoryKey, isService, port]);
+
+  useEffect(() => () => {
+    const controller = forwardController.current;
+    forwardController.current = null;
+    controller?.abort();
+  }, []);
 
   if (
     !isService
@@ -145,6 +160,47 @@ export function ServiceAccessActions({
       setFailed(true);
     } finally {
       setPending(false);
+    }
+  };
+
+  const startNativeForward = async () => {
+    if (!portForwardSessions?.available || localPortNumber === null || forwardPending) return;
+    const controller = new AbortController();
+    forwardController.current = controller;
+    setForwardPending(true);
+    setForwardFailed(false);
+    try {
+      const next = await portForwardSessions.start({
+        scope: {
+          workspaceId: data.scope.workspaceId,
+          clusterId: data.scope.clusterId,
+          namespaces: [...data.scope.namespaces],
+          freshness: data.scope.freshness,
+        },
+        resource: {
+          apiGroup: data.resource.apiGroup === "core" ? "core" : "",
+          version: "v1",
+          kind: "Service",
+          namespace: data.resource.namespace,
+          name: data.resource.name,
+          uid: data.resource.uid,
+        },
+        remotePort: currentPort.port,
+        localPort: localPortNumber,
+        listenAddress: "127.0.0.1",
+        confirmation: true,
+      }, controller.signal);
+      if (forwardController.current !== controller) return;
+      setForwardReceipt(next);
+      setForwardMutationRevision((current) => current + 1);
+      setForwardOpen(false);
+    } catch {
+      if (!controller.signal.aborted) setForwardFailed(true);
+    } finally {
+      if (forwardController.current === controller) {
+        forwardController.current = null;
+        setForwardPending(false);
+      }
     }
   };
 
@@ -198,7 +254,21 @@ export function ServiceAccessActions({
           )}
         </div>
       ) : null}
-      {portForwardSessions ? <PortForwardSessionsPanel port={portForwardSessions} /> : null}
+      {forwardReceipt ? (
+        <Alert className="w-full max-w-[32rem]">
+          <AlertDescription>
+            {t("resources.serviceAccess.forward.started", {
+              port: forwardReceipt.localPort,
+            })}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {portForwardSessions ? (
+        <PortForwardSessionsPanel
+          mutationRevision={forwardMutationRevision}
+          port={portForwardSessions}
+        />
+      ) : null}
 
       <Dialog
         onOpenChange={(open) => !pending && setRequestOpen(open)}
@@ -289,14 +359,23 @@ export function ServiceAccessActions({
         </DialogContent>
       </Dialog>
 
-      <Dialog onOpenChange={setForwardOpen} open={forwardOpen}>
+      <Dialog
+        onOpenChange={(open) => !forwardPending && setForwardOpen(open)}
+        open={forwardOpen}
+      >
         <DialogContent className="sm:max-w-[32rem]">
           <DialogHeader>
             <DialogTitle>{t("resources.serviceAccess.forward.title")}</DialogTitle>
             <DialogDescription>
-              {t("resources.serviceAccess.forward.browserBoundary")}
-              {" "}
-              {t("resources.serviceAccess.forward.desktopBoundary")}
+              {portForwardSessions?.available
+                ? t("resources.serviceAccess.forward.nativeBoundary")
+                : (
+                    <>
+                      {t("resources.serviceAccess.forward.browserBoundary")}
+                      {" "}
+                      {t("resources.serviceAccess.forward.desktopBoundary")}
+                    </>
+                  )}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -334,7 +413,12 @@ export function ServiceAccessActions({
                 value={localPort}
               />
             </div>
-            {forwardCommand ? (
+            {forwardFailed ? (
+              <Alert variant="destructive">
+                <AlertDescription>{t("resources.serviceAccess.forward.failed")}</AlertDescription>
+              </Alert>
+            ) : null}
+            {forwardCommand && !portForwardSessions?.available ? (
               <div className="grid gap-2">
                 <code className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
                   {forwardCommand}
@@ -350,11 +434,32 @@ export function ServiceAccessActions({
                   {t("resources.serviceAccess.forward.copy")}
                 </Button>
               </div>
-            ) : (
+            ) : localPortNumber === null ? (
               <Alert variant="destructive">
                 <AlertDescription>{t("resources.serviceAccess.forward.invalidPort")}</AlertDescription>
               </Alert>
-            )}
+            ) : null}
+            {portForwardSessions?.available ? (
+              <DialogFooter>
+                <Button
+                  disabled={forwardPending}
+                  onClick={() => setForwardOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  {t("common.action.cancel")}
+                </Button>
+                <Button
+                  disabled={forwardPending || localPortNumber === null}
+                  onClick={() => void startNativeForward()}
+                  type="button"
+                >
+                  {forwardPending
+                    ? t("resources.serviceAccess.forward.starting")
+                    : t("resources.serviceAccess.forward.start")}
+                </Button>
+              </DialogFooter>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

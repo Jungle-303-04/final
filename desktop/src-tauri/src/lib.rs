@@ -18,6 +18,7 @@ use local_terminal::{
     desktop_local_terminal_resize, desktop_local_terminal_start,
 };
 use port_forward::{desktop_port_forward_sessions, desktop_port_forward_stop};
+use port_forward::{desktop_port_forward_recreate, desktop_port_forward_start};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -47,12 +48,24 @@ pub fn run() {
             desktop_local_terminal_resize,
             desktop_local_terminal_close,
             desktop_local_terminal_ack_output,
+            desktop_port_forward_start,
             desktop_port_forward_sessions,
             desktop_port_forward_stop,
+            desktop_port_forward_recreate,
         ])
         .build(tauri::generate_context!())
         .expect("Opsia desktop shell failed to build");
     app.run(|app_handle, event| {
+        if let tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Destroyed,
+            ..
+        } = &event
+        {
+            app_handle
+                .state::<PortForwardSessionRegistry>()
+                .close_owner(label);
+        }
         if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
             app_handle.state::<LocalTerminalRegistry>().close_all();
             app_handle.state::<PortForwardSessionRegistry>().close_all();

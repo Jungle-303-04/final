@@ -40,9 +40,14 @@ describe("desktopBridge", () => {
       calls.push({ command, args });
       return (command === DESKTOP_COMMAND.portForwardSessions ? [{
           id: "0d47b74f-4218-4f5a-a149-53bfb0610217",
+          workspaceId: "workspace-a",
           clusterId: "cluster-a",
+          freshness: "live",
           namespace: "shop",
-          podName: "checkout-abc",
+          resourceKind: "Service",
+          resourceName: "checkout",
+          resourceUid: "uid-service-1",
+          podName: null,
           podPort: 8080,
           localPort: 18080,
           listenAddress: "127.0.0.1",
@@ -52,6 +57,7 @@ describe("desktopBridge", () => {
           startedAt: "2026-07-17T03:00:00Z",
           status: "running",
           error: null,
+          exitCode: null,
         }] : undefined) as T;
     };
     const bridge = createDesktopBridge({ core: { invoke } });
@@ -64,6 +70,55 @@ describe("desktopBridge", () => {
       {
         command: DESKTOP_COMMAND.portForwardStop,
         args: { request: { sessionId: "0d47b74f-4218-4f5a-a149-53bfb0610217" } },
+      },
+    ]);
+  });
+
+  it("starts and recreates an exact confirmed native port-forward request", async () => {
+    const calls: Array<{ command: string; args: Record<string, unknown> | undefined }> = [];
+    const receipt = {
+      sessionId: "0d47b74f-4218-4f5a-a149-53bfb0610217",
+      generation: 4,
+      localPort: 18_080,
+      startedAt: "2026-07-17T03:00:00Z",
+    };
+    const invoke = async <T,>(
+      command: string,
+      args?: Record<string, unknown>,
+    ): Promise<T> => {
+      calls.push({ command, args });
+      return receipt as T;
+    };
+    const bridge = createDesktopBridge({ core: { invoke } });
+    const request = {
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: ["shop"],
+        freshness: "live" as const,
+      },
+      resource: {
+        apiGroup: "" as const,
+        version: "v1" as const,
+        kind: "Service" as const,
+        namespace: "shop",
+        name: "checkout",
+        uid: "uid-service-1",
+      },
+      remotePort: 80,
+      localPort: 18_080,
+      listenAddress: "127.0.0.1" as const,
+      confirmation: true as const,
+    };
+
+    await expect(bridge.startPortForward(request)).resolves.toEqual(receipt);
+    await expect(bridge.recreatePortForward(receipt.sessionId)).resolves.toEqual(receipt);
+
+    expect(calls).toEqual([
+      { command: DESKTOP_COMMAND.portForwardStart, args: { request } },
+      {
+        command: DESKTOP_COMMAND.portForwardRecreate,
+        args: { request: { sessionId: receipt.sessionId, confirmation: true } },
       },
     ]);
   });

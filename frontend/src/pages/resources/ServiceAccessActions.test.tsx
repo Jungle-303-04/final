@@ -74,6 +74,35 @@ function servicePort(): ServiceAccessPort {
   };
 }
 
+function sessionPort(): PortForwardSessionPort & {
+  start: ReturnType<typeof vi.fn>;
+} {
+  return {
+    available: true,
+    list: vi.fn().mockResolvedValue({
+      sessions: [],
+      refreshPolicy: {
+        staleAfterSeconds: null,
+        refreshAfterSeconds: 10,
+        keepLastSuccess: true,
+        pauseWhenHidden: true,
+        eventInvalidation: false,
+        retryAfterSeconds: null,
+        retryLimit: null,
+        postMutationRefreshAfterSeconds: 0.5,
+      },
+    }),
+    start: vi.fn().mockResolvedValue({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      generation: 1,
+      localPort: 18_080,
+      startedAt: "2026-07-17T03:00:00Z",
+    }),
+    stop: vi.fn(),
+    recreate: vi.fn(),
+  };
+}
+
 describe("ServiceAccessActions", () => {
   it("uses shared inputs for the bounded in-cluster HTTP request and hands off its command session", async () => {
     const port = servicePort();
@@ -117,15 +146,56 @@ describe("ServiceAccessActions", () => {
     expect(port.start).not.toHaveBeenCalled();
   });
 
+  it("starts the exact Service forward only after one native confirmation", async () => {
+    const sessions = sessionPort();
+    const user = userEvent.setup();
+    renderActions(servicePort(), sessions);
+
+    await user.click(await screen.findByRole("button", { name: "Port forwarding" }));
+    const localPort = screen.getByLabelText("Local port");
+    await user.clear(localPort);
+    await user.type(localPort, "18080");
+    expect(sessions.start).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Start port forwarding" }));
+
+    await waitFor(() => expect(sessions.start).toHaveBeenCalledWith({
+      scope: {
+        workspaceId: "workspace-1",
+        clusterId: "cluster-1",
+        namespaces: ["shop"],
+        freshness: "live",
+      },
+      resource: {
+        apiGroup: "",
+        version: "v1",
+        kind: "Service",
+        namespace: "shop",
+        name: "checkout",
+        uid: "uid-service-1",
+      },
+      remotePort: 80,
+      localPort: 18_080,
+      listenAddress: "127.0.0.1",
+      confirmation: true,
+    }, expect.any(AbortSignal)));
+    expect(await screen.findByText(/18080/u)).toBeTruthy();
+  });
+
   it("renders the native session list without clipping long identities", async () => {
     const sessions: PortForwardSessionPort = {
       available: true,
       list: vi.fn().mockResolvedValue({
         sessions: [{
           id: "session-native-a",
+          workspaceId: "workspace-1",
           clusterId: "cluster-1",
+          freshness: "live",
           namespace: "shop",
-          podName: "checkout-deployment-with-a-very-long-identity-abcdef",
+          resourceKind: "Service",
+          resourceName: "checkout-deployment-with-a-very-long-identity-abcdef",
+          resourceUid: "uid-service-1",
+          podName: null,
           podPort: 8080,
           localPort: 18080,
           listenAddress: "127.0.0.1",
@@ -135,6 +205,7 @@ describe("ServiceAccessActions", () => {
           startedAt: "2026-07-17T03:00:00Z",
           status: "running",
           error: null,
+          exitCode: null,
         }],
         refreshPolicy: {
           staleAfterSeconds: null,
@@ -147,7 +218,9 @@ describe("ServiceAccessActions", () => {
           postMutationRefreshAfterSeconds: 0.5,
         },
       }),
+      start: vi.fn(),
       stop: vi.fn(),
+      recreate: vi.fn(),
     };
     renderActions(servicePort(), sessions);
 

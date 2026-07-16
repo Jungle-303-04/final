@@ -57,6 +57,24 @@ describe("usePortForwardSessions", () => {
     expect(port.list).toHaveBeenCalledTimes(3);
     rendered.unmount();
   });
+
+  it("reuses the mutation refresh policy after an external native start receipt", async () => {
+    vi.useFakeTimers();
+    const port = sessionPort();
+    const rendered = renderHook(
+      ({ revision }) => usePortForwardSessions(port, revision),
+      { initialProps: { revision: 0 } },
+    );
+    await flush();
+
+    rendered.rerender({ revision: 1 });
+    await flush();
+    expect(port.list).toHaveBeenCalledTimes(2);
+
+    await act(async () => vi.advanceTimersByTime(500));
+    expect(port.list).toHaveBeenCalledTimes(3);
+    rendered.unmount();
+  });
 });
 
 function sessionPort(): PortForwardSessionPort & {
@@ -66,7 +84,19 @@ function sessionPort(): PortForwardSessionPort & {
   return {
     available: true,
     list: vi.fn().mockResolvedValue(snapshot()),
+    start: vi.fn().mockResolvedValue({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      generation: 1,
+      localPort: 18_080,
+      startedAt: "2026-07-17T03:00:00Z",
+    }),
     stop: vi.fn().mockResolvedValue(undefined),
+    recreate: vi.fn().mockResolvedValue({
+      sessionId: "00000000-0000-4000-8000-000000000002",
+      generation: 2,
+      localPort: 18_080,
+      startedAt: "2026-07-17T03:01:00Z",
+    }),
   };
 }
 
@@ -74,9 +104,14 @@ function snapshot(): PortForwardSessionSnapshot {
   return {
     sessions: [{
       id: "session-a",
+      workspaceId: "workspace-a",
       clusterId: "cluster-a",
+      freshness: "live",
       namespace: "shop",
-      podName: "checkout-abc",
+      resourceKind: "Service",
+      resourceName: "checkout",
+      resourceUid: "uid-service-1",
+      podName: null,
       podPort: 8080,
       localPort: 18080,
       listenAddress: "127.0.0.1",
@@ -86,6 +121,7 @@ function snapshot(): PortForwardSessionSnapshot {
       startedAt: "2026-07-17T03:00:00Z",
       status: "running",
       error: null,
+      exitCode: null,
     }],
     refreshPolicy: {
       staleAfterSeconds: null,
