@@ -27,7 +27,8 @@ describe("CompareRoute", () => {
     await user.click(screen.getByRole("button", { name: "Differences only" }));
     expect(screen.getByText("spec.replicas")).toBeTruthy();
 
-    await user.click(screen.getAllByRole("button", { name: "Change" })[0]!);
+    const changeButtons = await screen.findAllByRole("button", { name: "Change" });
+    await user.click(changeButtons[0]!);
     expect(await screen.findByRole("dialog", { name: "Choose side A resource" })).toBeTruthy();
     await user.click(screen.getByRole("option", { name: "shop/api-c" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("a=shop%2Fapi-c"));
@@ -75,9 +76,9 @@ describe("CompareRoute", () => {
     };
     renderRoute(port);
 
-    await screen.findAllByRole("button", { name: "Change" });
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("apiVersion=v1"));
-    await user.click(screen.getAllByRole("button", { name: "Change" })[1]!);
+    const changeButtons = await screen.findAllByRole("button", { name: "Change" });
+    await user.click(changeButtons[1]!);
     const filter = await screen.findByRole("combobox", { name: "Filter comparison candidates" });
     fireEvent.keyDown(filter, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choose side B resource" })).toBeNull());
