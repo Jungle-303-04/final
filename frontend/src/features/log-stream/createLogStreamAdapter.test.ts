@@ -17,6 +17,7 @@ describe("log stream adapter", () => {
         line: "ready",
         line_truncated: false,
       });
+      handlers.onEvent({ type: "end", reason: "window_complete" });
       return close;
     });
     const port = createLogStreamAdapter({
@@ -45,6 +46,10 @@ describe("log stream adapter", () => {
       observedAt: "2026-07-14T08:00:00+00:00",
       line: "ready",
     }));
+    expect(onEvent).toHaveBeenNthCalledWith(3, {
+      type: "end",
+      reason: "window_complete",
+    });
     dispose();
     expect(close).toHaveBeenCalledTimes(1);
   });

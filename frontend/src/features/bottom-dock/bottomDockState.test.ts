@@ -176,6 +176,12 @@ describe("bottom dock reducer", () => {
       id: "two",
       event: { type: "end", reason: "complete" },
     });
+    expect(state.tabs[1]).toMatchObject({
+      status: "ended",
+      endReason: "complete",
+      pods: ["two-a"],
+      retryable: false,
+    });
     state = bottomDockReducer(state, { type: "resize", height: 293 });
     state = bottomDockReducer(state, { type: "close", id: "two" });
 

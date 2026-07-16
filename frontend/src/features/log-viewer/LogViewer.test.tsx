@@ -67,6 +67,7 @@ describe("LogViewer", () => {
       line("three", "checkout ready"),
     ]);
     const search = screen.getByRole("textbox", { name: "로그 검색" });
+    expect(search.getAttribute("data-slot")).toBe("input");
     await user.type(search, "payment");
     expect(screen.getByText("2개 중 1")).toBeTruthy();
 
