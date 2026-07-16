@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.dialects import postgresql
 
+from domains.dashboard.router import queue_issue_item
 from domains.issue_filter.query import parse_issue_filters, without_facet_axis
 from domains.issue_filter.repository import (
     IssueFilterRepository,
@@ -15,6 +16,7 @@ from domains.issue_filter.repository import (
     _queue_visibility,
     _selected_label_match_counts,
     _serialize_issue,
+    _serialize_queue_issue,
 )
 
 
@@ -290,3 +292,36 @@ def test_application_redaction_downgrades_row_completeness() -> None:
     assert item["application_ids"] == ["app-a"]
     assert item["application_binding_completeness"] == "partial"
     assert "app-secret" not in str(item)
+
+
+def test_queue_projection_restores_dashboard_contract_field_names() -> None:
+    projected = _serialize_queue_issue(
+        {
+            "workspace_id": "workspace-a",
+            "correlation_id": "correlation-a",
+            "cluster_id": "cluster-a",
+            "detail_id": "incident-a",
+            "namespace": "shop",
+            "resource_kind": "Deployment",
+            "resource_name": "checkout",
+            "symptom": "ImagePullBackOff",
+            "severity": "critical",
+            "severity_complete": True,
+            "category": "container_restart",
+            "category_complete": True,
+            "current_subject": "incident.detected",
+            "pipeline_status": "incident_detected",
+            "supporting_evidence": [],
+            "missing_evidence": [],
+            "updated_at": "2026-07-17T00:00:00Z",
+        }
+    )
+
+    item = queue_issue_item(projected)
+
+    assert item.incident_id == "incident-a"
+    assert item.incident_namespace == "shop"
+    assert item.incident_resource_kind == "Deployment"
+    assert item.incident_resource_name == "checkout"
+    assert item.incident_symptom == "ImagePullBackOff"
+    assert item.status == "incident_detected"
