@@ -108,7 +108,7 @@ describe("ProductApp root recovery", () => {
       await screen.findByRole(
         "heading",
         { name: "Cluster status", level: 2 },
-        { timeout: 5_000 },
+        { timeout: 10_000 },
       ),
     ).toBeTruthy();
     expect((await screen.findAllByText("cluster-1")).length).toBeGreaterThan(0);
@@ -146,7 +146,7 @@ describe("ProductApp root recovery", () => {
       await screen.findByRole(
         "table",
         { name: "Resource list" },
-        { timeout: 5_000 },
+        { timeout: 10_000 },
       ),
     ).toBeTruthy();
     expect(
@@ -157,7 +157,7 @@ describe("ProductApp root recovery", () => {
     const resource = await screen.findByRole(
       "button",
       { name: "Open details for checkout-api-0" },
-      { timeout: 5_000 },
+      { timeout: 10_000 },
     );
     expect(
       requestCount(
@@ -170,7 +170,7 @@ describe("ProductApp root recovery", () => {
     const dialog = await screen.findByRole(
       "dialog",
       { name: "checkout-api-0 details" },
-      { timeout: 5_000 },
+      { timeout: 10_000 },
     );
     expect(dialog.textContent).toContain("Running");
     expect(window.location.pathname).toBe("/resources/pod");

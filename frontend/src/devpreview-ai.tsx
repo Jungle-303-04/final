@@ -3,9 +3,10 @@
 import ReactDOM from "react-dom/client";
 import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
-  Clock3, FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
+  FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
@@ -17,14 +18,17 @@ import type {
 } from "./features/ai-assistant/aiConversationContract";
 
 const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)";
-const MORPH = "cubic-bezier(0.32, 0.72, 0, 1)"; // 애플 시트 이징 — 아주 부드러운 감속
-const BACK = "cubic-bezier(0.34, 1.4, 0.64, 1)"; // 살짝 오버슈트
 const AUTO_COLLAPSE_MS = 2800;
-const dot: Record<AiTone, string> = { healthy: "bg-status-healthy", warning: "bg-status-warning", critical: "bg-destructive", neutral: "bg-muted-foreground/50" };
-const tt: Record<AiTone, string> = { healthy: "text-status-healthy", warning: "text-status-warning", critical: "text-destructive", neutral: "text-muted-foreground" };
+// 애플 물리 스프링 (motion)
+const SPRING_LAYOUT = { type: "spring", visualDuration: 0.42, bounce: 0.16 } as const;
+const SPRING_FADE = { duration: 0.2, ease: [0.32, 0.72, 0, 1] } as const;
+// 애플 시스템 컬러
+const APPLE = { blue: "#0A84FF", red: "#FF3B30", orange: "#FF9500", green: "#30D158", gray: "#8E8E93" };
+const toneHex: Record<AiTone, string> = { healthy: APPLE.green, warning: APPLE.orange, critical: APPLE.red, neutral: APPLE.gray };
+const ICON = 1.75; // SF Symbols 느낌의 일관된 스트로크
 const linkIcon = (i?: AiPageLink["icon"]) => i === "resources" ? Boxes : i === "incident" ? CircleAlert : i === "gitops" ? GitBranch : i === "cluster" ? Server : i === "alert" ? BellPlus : ArrowUpRight;
 const evIcon = (t: string) => t === "event" ? CircleAlert : t === "metric" ? Activity : FileText;
-const LINK = "font-medium text-primary decoration-primary/25 underline-offset-[3px] transition-colors hover:decoration-primary hover:text-primary/80 underline";
+const LINK = "font-medium underline underline-offset-[3px] decoration-[#0A84FF]/30 text-[#0A84FF] transition-colors hover:decoration-[#0A84FF]";
 const md = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
   .replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" class="${LINK}">$1</a>`).replace(/\n/g, "<br/>");
@@ -70,7 +74,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
       <button onClick={() => setCollapsed(false)} type="button"
         className="group/s flex w-fit items-center gap-1.5 rounded-full text-[11.5px] font-medium text-muted-foreground/80 transition-colors hover:text-foreground"
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
-        <span className="grid size-4 place-items-center rounded-full bg-status-healthy/12"><Check className="size-2.5 text-status-healthy" /></span>
+        <span className="grid size-4 place-items-center rounded-full bg-[#30D158]/15"><Check className="size-2.5 text-[#30D158]" /></span>
         <span>근거 {total}단계 확인{evidenceCount ? ` · ${evidenceCount}건` : ""}</span>
         <ChevronDown className="size-3 opacity-0 transition-opacity group-hover/s:opacity-50" />
       </button>
@@ -79,7 +83,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground">
-        {complete ? <Check className="size-3.5 text-status-healthy" /> : <Spinner className="size-3.5 text-primary" decorative />}
+        {complete ? <Check className="size-3.5 text-[#30D158]" /> : <Spinner className="size-3.5 text-[#0A84FF]" decorative />}
         <span className="tracking-[-0.01em]">{complete ? "근거 확인 완료" : "확인하는 중"}</span>
         <span className="tabular-nums opacity-60">{Math.min(done + (part.running ? 1 : 0), total)}/{total}</span>
       </div>
@@ -91,7 +95,7 @@ function StepsPart({ part, active, onReady, evidenceCount }: { part: AiStepsPart
           return (
             <li key={s.id} className="relative flex items-center gap-2 text-[12.5px]" style={{ animation: `stepIn 0.42s ${SPRING}` }}>
               <span className="absolute -left-[21px] grid size-4 place-items-center rounded-full bg-card ring-4 ring-card">
-                {isDone ? <span className="grid size-4 place-items-center rounded-full bg-status-healthy/12"><Check className="size-2.5 text-status-healthy" /></span> : <Spinner className="size-3 text-primary" decorative />}
+                {isDone ? <span className="grid size-4 place-items-center rounded-full bg-[#30D158]/15"><Check className="size-2.5 text-[#30D158]" /></span> : <Spinner className="size-3 text-[#0A84FF]" decorative />}
               </span>
               <span className="font-medium text-foreground/90">{s.label}</span>
               {isDone && s.detail ? <span className="truncate text-muted-foreground/80">· {s.detail}</span> : isRunning ? <span className="text-muted-foreground/70">…</span> : null}
@@ -108,7 +112,7 @@ function ResultPart({ part, first }: { part: AiResultPart; first?: boolean }) {
   return (
     <div className={`grid gap-2.5 ${first ? "" : "border-t border-black/[0.05] pt-3"}`} style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       <div className="flex items-center gap-2">
-        <span className={`size-1.5 rounded-full ${dot[part.tone]}`} />
+        <span className="size-1.5 rounded-full" style={{ background: toneHex[part.tone] }} />
         <span className="text-[13px] font-semibold tracking-[-0.01em]">{part.title}</span>
         <span className="text-[12px] text-muted-foreground">· {part.summary}</span>
       </div>
@@ -116,7 +120,7 @@ function ResultPart({ part, first }: { part: AiResultPart; first?: boolean }) {
         <div className="flex flex-wrap gap-x-8 gap-y-2">
           {part.metrics.map((m) => (
             <div className="grid gap-0.5" key={m.label}>
-              <span className={`text-[19px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${tt[m.tone]}`}>{m.value}</span>
+              <span className="text-[19px] font-semibold leading-none tracking-[-0.02em] tabular-nums" style={{ color: toneHex[m.tone] }}>{m.value}</span>
               <span className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground/70">{m.label}</span>
             </div>
           ))}
@@ -161,7 +165,7 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
       <button onClick={() => setCollapsed(false)} type="button"
         className="flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
         style={{ animation: `fadeUp 0.4s ${SPRING}` }}>
-        <span className="grid size-4 place-items-center rounded-full bg-status-healthy/12"><Check className="size-2.5 text-status-healthy" /></span>
+        <span className="grid size-4 place-items-center rounded-full bg-[#30D158]/15"><Check className="size-2.5 text-[#30D158]" /></span>
         <span className="font-medium text-foreground/90">{p.name}</span><span>생성됨</span>
         <span className="mx-0.5 text-muted-foreground/40">·</span>
         <a href="#" className={LINK} onClick={(e) => e.stopPropagation()}>규칙 보기</a>
@@ -171,8 +175,8 @@ function ActionPart({ part, onIdleChange, first }: { part: Extract<AiMessagePart
   return (
     <div className={`grid gap-2.5 ${first ? "" : "border-t border-black/[0.05] pt-3"}`} style={{ animation: `fadeUp 0.5s ${SPRING}` }}>
       <div className="flex items-center gap-2 text-[13px] font-semibold tracking-[-0.01em]">
-        <span className={`grid size-5 place-items-center rounded-md ${created ? "bg-status-healthy/12 text-status-healthy" : "bg-status-warning/12 text-status-warning"}`}>
-          {created ? <Check className="size-3" /> : <BellPlus className="size-3" />}
+        <span className={`grid size-5 place-items-center rounded-md ${created ? "bg-[#30D158]/15 text-[#30D158]" : "bg-black/[0.05] text-foreground/70"}`}>
+          {created ? <Check className="size-3" strokeWidth={ICON} /> : <BellPlus className="size-3" strokeWidth={ICON} />}
         </span>
         {created ? "알림 규칙 생성됨" : "알림 규칙 만들기"}
       </div>
@@ -212,7 +216,7 @@ function PartView({ part, active, onReady, evidenceCount, onIdleChange, first }:
   if (part.kind === "links") return <LinksPart part={part} />;
   if (part.kind === "action") return <ActionPart first={first} onIdleChange={onIdleChange} part={part} />;
   if (part.kind === "status" && part.state === "pending")
-    return <span className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground"><Spinner className="size-3.5 text-primary" decorative /> 확인하고 있습니다…</span>;
+    return <span className="inline-flex w-fit items-center gap-1.5 text-[12.5px] text-muted-foreground"><Spinner className="size-3.5 text-[#0A84FF]" decorative /> 확인하고 있습니다…</span>;
   return null;
 }
 
@@ -244,74 +248,48 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   });
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
 
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const pendingFrom = useRef<number | null>(null);
-
-  // 접기/펼치기 순간에만 실측 높이 FLIP → 타이핑/줄바꿈 중엔 height:auto라 튐이 없음
-  const setCollapse = (val: boolean) => {
-    const wrap = wrapRef.current, inner = innerRef.current;
-    if (wrap && inner) {
-      pendingFrom.current = inner.offsetHeight;
-      wrap.style.transition = "none";
-      wrap.style.height = pendingFrom.current + "px";
-    }
-    setCollapsed(val);
-  };
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current, inner = innerRef.current;
-    if (!wrap || !inner || pendingFrom.current == null) return;
-    const target = inner.offsetHeight;
-    void wrap.offsetHeight; // reflow
-    wrap.style.transition = `height 560ms ${MORPH}`;
-    wrap.style.height = target + "px";
-    pendingFrom.current = null;
-    const id = window.setTimeout(() => { if (wrapRef.current) { wrapRef.current.style.transition = "none"; wrapRef.current.style.height = "auto"; } }, 620);
-    return () => window.clearTimeout(id);
-  }, [collapsed]);
-
   useEffect(() => {
     if (phase !== "review" || hasRunning || actionIdle || collapsed) return;
-    const id = window.setTimeout(() => setCollapse(true), AUTO_COLLAPSE_MS);
+    const id = window.setTimeout(() => setCollapsed(true), AUTO_COLLAPSE_MS);
     return () => window.clearTimeout(id);
   }, [phase, actionIdle, hasRunning, collapsed]);
 
   const instant = phase === "review";
   const canCollapse = instant && !hasRunning && !actionIdle;
-  const overlay = (on: boolean): CSSProperties => on
-    ? { position: "relative" }
-    : { position: "absolute", top: 0, left: 0, right: 0, pointerEvents: "none" };
+  const clickable = collapsed || canCollapse;
   const onSurfaceClick = (e: ReactMouseEvent) => {
-    if (!canCollapse) return;
     if ((e.target as HTMLElement).closest("a,button,input,textarea,select,label")) return;
-    setCollapse(true);
+    if (collapsed) { setCollapsed(false); return; }
+    if (canCollapse) setCollapsed(true);
   };
+  // 단일 표면이 borderRadius·패딩·크기를 물리 스프링으로 morph → 카드가 그대로 캡슐이 됨(크기 불일치 없음)
   return (
-    <div className="mr-auto w-full max-w-[97%] overflow-hidden" ref={wrapRef} style={{ height: "auto" }}>
-      <div className="relative" ref={innerRef}>
-        {/* 펼친 카드 — 빈 공간 클릭 시 접힘 */}
-        <div style={{ ...overlay(!collapsed), opacity: collapsed ? 0 : 1, transform: collapsed ? "scale(0.97)" : "none", transformOrigin: "top center", transition: `opacity 300ms ${MORPH} ${collapsed ? "0ms" : "160ms"}, transform 460ms ${MORPH}`, filter: collapsed ? "blur(2px)" : "none" }}>
-          <div onClick={onSurfaceClick} className={`group/msg relative rounded-[22px] border border-black/[0.035] bg-card/70 px-4 py-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_20px_48px_-24px_rgba(0,0,0,0.2)] backdrop-blur-2xl ${canCollapse ? "cursor-pointer" : ""}`}
-            style={{ animation: `surfaceIn 0.5s ${SPRING}` }}>
-            <div className="grid gap-3.5">
-              {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
-                <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
-                  onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
-              ))}
-            </div>
-          </div>
-        </div>
-        {/* 접힌 캡슐 — 클릭하면 펼침 */}
-        <div style={{ ...overlay(collapsed), opacity: collapsed ? 1 : 0, transition: `opacity 260ms ${MORPH} ${collapsed ? "140ms" : "0ms"}` }}>
-          <button onClick={() => setCollapse(false)} type="button"
-            className="group flex w-full items-center gap-2.5 rounded-full bg-card/75 px-4 py-2.5 text-left shadow-[0_2px_8px_-3px_rgba(0,0,0,0.08),0_12px_28px_-18px_rgba(0,0,0,0.3)] backdrop-blur-2xl transition-shadow hover:shadow-[0_3px_10px_-3px_rgba(0,0,0,0.1),0_16px_32px_-18px_rgba(0,0,0,0.35)]"
-            style={{ transform: collapsed ? "scale(1)" : "scale(0.92)", transition: `transform 520ms ${BACK} ${collapsed ? "120ms" : "0ms"}, box-shadow 300ms ease` }}>
-            <span className={`size-2 shrink-0 rounded-full ${dot[summary.tone]} ${summary.tone === "critical" ? "island-pulse" : ""}`} />
-            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover:text-foreground/80">{summary.text}</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <motion.div
+      layout layoutDependency={`${shown}-${collapsed}-${phase}`}
+      onClick={onSurfaceClick}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1, borderRadius: collapsed ? 999 : 22, paddingTop: collapsed ? 10 : 16, paddingBottom: collapsed ? 10 : 16 }}
+      transition={{ layout: SPRING_LAYOUT, borderRadius: SPRING_LAYOUT, paddingTop: SPRING_LAYOUT, paddingBottom: SPRING_LAYOUT, opacity: SPRING_FADE }}
+      className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.035] bg-card/75 px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] backdrop-blur-2xl ${clickable ? "cursor-pointer" : ""}`}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        {collapsed ? (
+          <motion.div key="sum" layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
+            className="flex items-center gap-2.5">
+            <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+          </motion.div>
+        ) : (
+          <motion.div key="full" layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
+            className="grid gap-3.5">
+            {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
+              <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
+                onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -332,7 +310,7 @@ function CollapsedTurn({ turn, onShown }: { turn: AiTurn; onShown: () => void })
   useEffect(() => { const id = window.setTimeout(onShown, 260); return () => window.clearTimeout(id); }, []);
   return (
     <div className="group mr-auto flex w-full items-center gap-2.5 rounded-full border border-black/[0.06] bg-card/85 px-3.5 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl transition-[transform,box-shadow] duration-300 hover:-translate-y-px" style={{ animation: `islandIn 0.5s ${SPRING}` }}>
-      <span className="size-2 shrink-0 rounded-full bg-destructive island-pulse" />
+      <span className="size-2 shrink-0 rounded-full island-pulse" style={{ background: toneHex.critical }} />
       <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground">{turn.summary}</span>
       <ChevronDown className="size-3.5 shrink-0 -rotate-90 text-muted-foreground/40" />
     </div>
@@ -457,7 +435,6 @@ function Panel() {
           />
           <button className="absolute bottom-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_2px_6px_-1px_color-mix(in_oklch,var(--primary)_50%,transparent)] transition-all hover:brightness-105 active:scale-90 disabled:scale-90 disabled:opacity-40" disabled={!input.trim()} onClick={() => send(input)} title="보내기" type="button"><Send className="size-4" /></button>
         </div>
-        <p className="mt-2 flex items-center gap-1 px-1 text-[11px] text-muted-foreground/70"><Clock3 className="size-3" /> 답변은 다 표시되면 잠시 뒤 한 줄로 접힙니다 · 클릭하면 다시 펼쳐집니다</p>
       </div>
 
       <style>{`
