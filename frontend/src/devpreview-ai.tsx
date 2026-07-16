@@ -287,7 +287,7 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     wrap.style.height = `${from}px`;
     void wrap.offsetHeight;
     const controls = animate(from, to, {
-      type: "spring", visualDuration: 0.26, bounce: 0.3,
+      duration: 0.24, ease: [0.32, 0.72, 0, 1],
       onUpdate: (v) => { const el = wrapRef.current; if (el) el.style.height = `${v}px`; },
       onComplete: () => { const el = wrapRef.current; if (el) el.style.height = "auto"; },
     });
@@ -304,7 +304,7 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
       style={{ height: "auto", borderRadius: 20 }}>
       <div className="relative">
         {/* 펼친 내용 */}
-        <div style={{ ...overlay(!collapsed), opacity: collapsed ? 0 : 1, transition: "opacity 0.16s ease", paddingTop: 14, paddingBottom: 14 }}>
+        <div style={{ ...overlay(!collapsed), opacity: collapsed ? 0 : 1, transition: "opacity 0.2s cubic-bezier(0.32,0.72,0,1)", paddingTop: 14, paddingBottom: 14 }}>
           <div className="grid gap-3.5">
             {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
               <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
@@ -313,7 +313,7 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
           </div>
         </div>
         {/* 접힌 캡슐 */}
-        <div style={{ ...overlay(collapsed), opacity: collapsed ? 1 : 0, transition: "opacity 0.16s ease", paddingTop: 14, paddingBottom: 14 }}>
+        <div style={{ ...overlay(collapsed), opacity: collapsed ? 1 : 0, transition: "opacity 0.2s cubic-bezier(0.32,0.72,0,1)", paddingTop: 14, paddingBottom: 14 }}>
           <div className="flex items-center gap-2.5">
             <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
             <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
