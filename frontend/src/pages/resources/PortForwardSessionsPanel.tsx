@@ -1,23 +1,21 @@
 import { RefreshCw, Square } from "lucide-react";
 
-import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
+import { useOptionalPortForwardSessionsController } from "../../features/service-access/PortForwardSessionsProvider";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { useI18n } from "../../shared/i18n";
 import { Alert, AlertDescription } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
-import { usePortForwardSessions } from "./usePortForwardSessionsData";
 
-export function PortForwardSessionsPanel({
-  mutationRevision = 0,
-  port,
-}: {
-  mutationRevision?: number;
-  port: PortForwardSessionPort;
-}) {
+export function PortForwardSessionsPanel() {
   const { t } = useI18n();
-  const state = usePortForwardSessions(port, mutationRevision);
-  if (!port.available || state.frame.phase === "idle" || state.frame.phase === "loading") return null;
+  const state = useOptionalPortForwardSessionsController();
+  if (
+    state === null
+    || !state.available
+    || state.frame.phase === "idle"
+    || state.frame.phase === "loading"
+  ) return null;
   if (state.frame.phase === "failed") {
     return (
       <Alert className="w-full max-w-[32rem]" variant="destructive">

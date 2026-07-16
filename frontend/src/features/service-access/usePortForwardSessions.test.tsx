@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   PortForwardSessionPort,
   PortForwardSessionSnapshot,
-} from "../../features/service-access/portForwardSessionContract";
-import { usePortForwardSessions } from "./usePortForwardSessionsData";
+} from "./portForwardSessionContract";
+import { usePortForwardSessions } from "./usePortForwardSessions";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -61,13 +61,10 @@ describe("usePortForwardSessions", () => {
   it("reuses the mutation refresh policy after an external native start receipt", async () => {
     vi.useFakeTimers();
     const port = sessionPort();
-    const rendered = renderHook(
-      ({ revision }) => usePortForwardSessions(port, revision),
-      { initialProps: { revision: 0 } },
-    );
+    const rendered = renderHook(() => usePortForwardSessions(port));
     await flush();
 
-    rendered.rerender({ revision: 1 });
+    act(() => rendered.result.current.refreshAfterMutation());
     await flush();
     expect(port.list).toHaveBeenCalledTimes(2);
 

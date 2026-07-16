@@ -159,6 +159,8 @@ export const shellKo = {
   "shell.diagnostics.noAgents": "사용 가능한 에이전트 관측값이 없습니다.",
   "shell.diagnostics.resources": "리소스 {count}개",
   "shell.version.updateAvailable": "업데이트 {version} 사용 가능",
+  "shell.portForward.summary": "포트 전달: 활성 {active}개, 실패 {failed}개, 종료 {stopped}개",
+  "shell.portForward.manage": "{kind} {namespace}/{name} 포트 전달 관리",
   "shell.profile.label": "프로필",
   "shell.profile.open": "{name} 프로필 메뉴 열기",
   "shell.profile.account": "프로필",

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PortForwardSessionPort,
   PortForwardSessionSnapshot,
-} from "../../features/service-access/portForwardSessionContract";
+} from "./portForwardSessionContract";
 import {
   ASYNC_IDLE,
   ASYNC_LOADING,
@@ -16,19 +16,22 @@ import {
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 
-export function usePortForwardSessions(
-  port: PortForwardSessionPort,
-  externalMutationRevision = 0,
-): {
+export interface PortForwardSessionsController {
+  available: boolean;
   frame: AsyncResourceState<PortForwardSessionSnapshot, Error>;
   refresh: () => void;
+  refreshAfterMutation: () => void;
   stop: (sessionId: string) => Promise<void>;
   recreate: (sessionId: string) => Promise<void>;
   stoppingId: string | null;
   recreatingId: string | null;
   stopFailure: Error | null;
   mutationFailureKind: "stop" | "recreate" | null;
-} {
+}
+
+export function usePortForwardSessions(
+  port: PortForwardSessionPort,
+): PortForwardSessionsController {
   const [revision, setRevision] = useState(0);
   const [frame, setFrame] = useState<AsyncResourceState<PortForwardSessionSnapshot, Error>>(
     port.available ? ASYNC_LOADING : ASYNC_IDLE,
@@ -38,7 +41,6 @@ export function usePortForwardSessions(
   const [stopFailure, setStopFailure] = useState<Error | null>(null);
   const [mutationFailureKind, setMutationFailureKind] = useState<"stop" | "recreate" | null>(null);
   const stopController = useRef<AbortController | null>(null);
-  const observedExternalMutation = useRef(externalMutationRevision);
   const refreshController = useServerRefreshScheduler(
     () => setRevision((current) => current + 1),
   );
@@ -81,14 +83,15 @@ export function usePortForwardSessions(
     controller?.abort();
   }, []);
 
-  useEffect(() => {
-    if (externalMutationRevision === observedExternalMutation.current) return;
-    observedExternalMutation.current = externalMutationRevision;
-    if (frame.phase !== "ready") return;
+  const refreshAfterMutation = useCallback(() => {
+    if (frame.phase !== "ready") {
+      refreshController.requestRefresh();
+      return;
+    }
     refreshController.requestMutationRefresh(
       requiredMutationDelay(frame.data.refreshPolicy.postMutationRefreshAfterSeconds),
     );
-  }, [externalMutationRevision, frame, refreshController]);
+  }, [frame, refreshController]);
 
   const stop = useCallback(async (sessionId: string) => {
     if (frame.phase !== "ready" || stoppingId !== null || recreatingId !== null) return;
@@ -99,9 +102,7 @@ export function usePortForwardSessions(
     setMutationFailureKind(null);
     try {
       await port.stop(sessionId, controller.signal);
-      refreshController.requestMutationRefresh(
-        requiredMutationDelay(frame.data.refreshPolicy.postMutationRefreshAfterSeconds),
-      );
+      refreshAfterMutation();
     } catch (error) {
       if (!isAbortError(error)) {
         setStopFailure(toError(error));
@@ -113,7 +114,7 @@ export function usePortForwardSessions(
         setStoppingId(null);
       }
     }
-  }, [frame, port, recreatingId, refreshController, stoppingId]);
+  }, [frame, port, recreatingId, refreshAfterMutation, stoppingId]);
 
   const recreate = useCallback(async (sessionId: string) => {
     if (frame.phase !== "ready" || stoppingId !== null || recreatingId !== null) return;
@@ -124,9 +125,7 @@ export function usePortForwardSessions(
     setMutationFailureKind(null);
     try {
       await port.recreate(sessionId, controller.signal);
-      refreshController.requestMutationRefresh(
-        requiredMutationDelay(frame.data.refreshPolicy.postMutationRefreshAfterSeconds),
-      );
+      refreshAfterMutation();
     } catch (error) {
       if (!isAbortError(error)) {
         setStopFailure(toError(error));
@@ -138,11 +137,13 @@ export function usePortForwardSessions(
         setRecreatingId(null);
       }
     }
-  }, [frame, port, recreatingId, refreshController, stoppingId]);
+  }, [frame, port, recreatingId, refreshAfterMutation, stoppingId]);
 
   return {
+    available: port.available,
     frame,
     refresh: refreshController.requestRefresh,
+    refreshAfterMutation,
     stop,
     recreate,
     stoppingId,

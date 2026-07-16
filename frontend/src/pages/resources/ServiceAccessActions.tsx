@@ -16,6 +16,7 @@ import type {
   PortForwardSessionPort,
   PortForwardStartReceipt,
 } from "../../features/service-access/portForwardSessionContract";
+import { useOptionalPortForwardSessionsController } from "../../features/service-access/PortForwardSessionsProvider";
 import { toServiceRequestOperationResult } from "../../features/service-access/createServiceAccessAdapter";
 import {
   OperationStatusFeedback,
@@ -83,8 +84,8 @@ export function ServiceAccessActions({
   const [forwardPending, setForwardPending] = useState(false);
   const [forwardFailed, setForwardFailed] = useState(false);
   const [forwardReceipt, setForwardReceipt] = useState<PortForwardStartReceipt | null>(null);
-  const [forwardMutationRevision, setForwardMutationRevision] = useState(0);
   const forwardController = useRef<AbortController | null>(null);
+  const portForwardSessionState = useOptionalPortForwardSessionsController();
   const isService = (
     detail.resource.resourceType === "service"
     && detail.resource.kind.toLocaleLowerCase() === "service"
@@ -192,7 +193,7 @@ export function ServiceAccessActions({
       }, controller.signal);
       if (forwardController.current !== controller) return;
       setForwardReceipt(next);
-      setForwardMutationRevision((current) => current + 1);
+      portForwardSessionState?.refreshAfterMutation();
       setForwardOpen(false);
     } catch {
       if (!controller.signal.aborted) setForwardFailed(true);
@@ -264,10 +265,7 @@ export function ServiceAccessActions({
         </Alert>
       ) : null}
       {portForwardSessions ? (
-        <PortForwardSessionsPanel
-          mutationRevision={forwardMutationRevision}
-          port={portForwardSessions}
-        />
+        <PortForwardSessionsPanel />
       ) : null}
 
       <Dialog

@@ -59,16 +59,14 @@ describe("ProductShell port-forward session indicator", () => {
     await waitFor(() => expect(port.list).toHaveBeenCalledTimes(1));
 
     await user.click(trigger);
-    expect(await screen.findByRole("link", {
+    expect((await screen.findByRole("link", {
       name: "Service shop/checkout 포트 전달 관리",
-    })).toHaveAttribute(
-      "href",
+    })).getAttribute("href")).toBe(
       "/resources?clusters=cluster-1&resources.types=service&detail=Service%2Fshop%2Fcheckout",
     );
     expect(screen.getByRole("link", {
       name: "Pod shop/checkout-abc 포트 전달 관리",
-    })).toHaveAttribute(
-      "href",
+    }).getAttribute("href")).toBe(
       "/resources?clusters=cluster-1&resources.types=pod&detail=Pod%2Fshop%2Fcheckout-abc",
     );
     expect(screen.getByText("실행 중")).toBeTruthy();
@@ -94,16 +92,17 @@ describe("ProductShell port-forward session indicator", () => {
 
   it("exposes an accessible registry failure only when the native boundary exists", async () => {
     const port = sessionPort([]);
-    port.list.mockRejectedValueOnce(new Error("native registry unavailable"));
+    port.list.mockRejectedValue(new Error("native registry unavailable"));
 
     renderShell({
       portForwardSessions: port,
       releasedSurfaceIds: new Set(["home", "resources"]),
     });
 
-    expect(await screen.findByRole("button", {
-      name: "포트 전달 세션을 불러오지 못했습니다",
-    })).toBeTruthy();
+    await waitFor(() => expect(port.list).toHaveBeenCalled());
+    expect(port.list).toHaveBeenCalledTimes(1);
+    const failure = await screen.findByRole("button", { name: /포트 전달/u });
+    expect(failure.getAttribute("aria-label")).toBe("네이티브 포트 전달 세션을 불러오지 못했습니다.");
   });
 });
 

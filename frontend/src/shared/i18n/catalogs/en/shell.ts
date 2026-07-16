@@ -159,6 +159,8 @@ export const shellEn = {
   "shell.diagnostics.noAgents": "No agent observations are available.",
   "shell.diagnostics.resources": "{count} resources",
   "shell.version.updateAvailable": "Update {version} available",
+  "shell.portForward.summary": "Port forwarding: {active} active, {failed} failed, {stopped} stopped",
+  "shell.portForward.manage": "Manage port forwarding for {kind} {namespace}/{name}",
   "shell.profile.label": "Profile",
   "shell.profile.open": "Open profile menu for {name}",
   "shell.profile.account": "Profile",

@@ -157,6 +157,8 @@ export type ShellMessageKey =
   | "shell.diagnostics.noAgents"
   | "shell.diagnostics.resources"
   | "shell.version.updateAvailable"
+  | "shell.portForward.summary"
+  | "shell.portForward.manage"
   | "shell.profile.label"
   | "shell.profile.open"
   | "shell.profile.account"

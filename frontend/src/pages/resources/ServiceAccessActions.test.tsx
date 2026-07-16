@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
 import type { PortForwardSessionPort } from "../../features/service-access/portForwardSessionContract";
+import { PortForwardSessionsProvider } from "../../features/service-access/PortForwardSessionsProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { RESOURCE_DETAIL } from "../../features/resources/createResourcesAdapter.testSupport";
 import { toResourceDetail } from "../../features/resources/resourcesCanonical";
@@ -21,15 +22,18 @@ const DETAIL = toResourceDetail("cluster-1", {
 afterEach(cleanup);
 
 function renderActions(port: ServiceAccessPort, portForwardSessions?: PortForwardSessionPort) {
-  return render(
+  const actions = (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <ServiceAccessActions
         detail={DETAIL}
         port={port}
         portForwardSessions={portForwardSessions}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
+  return render(portForwardSessions === undefined
+    ? actions
+    : <PortForwardSessionsProvider port={portForwardSessions}>{actions}</PortForwardSessionsProvider>);
 }
 
 function servicePort(): ServiceAccessPort {

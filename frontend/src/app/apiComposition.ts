@@ -59,6 +59,8 @@ import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
 import { createApiBrowserRefreshPolicyRegistry } from "./composition/browserRefreshPolicyRegistry";
 import { createApiTimelinePort } from "./composition/timelinePort";
+import { createPortForwardSessionAdapter } from "../features/service-access/createPortForwardSessionAdapter";
+import { desktopBridge } from "../desktop/desktopBridge";
 
 /**
  * The authenticated composition is intentionally small: global providers and
@@ -68,6 +70,7 @@ import { createApiTimelinePort } from "./composition/timelinePort";
 export function createApiComposition(auth: AuthPort): ProductComposition {
   const refreshPolicies = createApiBrowserRefreshPolicyRegistry();
   const timelinePort = createApiTimelinePort();
+  const portForwardSessions = createPortForwardSessionAdapter(desktopBridge, refreshPolicies);
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
@@ -152,6 +155,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
           registry.homePort,
           refreshPolicies,
           timelinePort,
+          portForwardSessions,
         ),
       })),
     },
@@ -220,5 +224,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort);
+  }, workloadDetailPort, comparePort, diagnosePort, shellStatePort, runtimeStatusPort, portForwardSessions);
 }

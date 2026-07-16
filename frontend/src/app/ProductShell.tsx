@@ -80,6 +80,12 @@ import {
   type RuntimeDiagnosticsDialogHandle,
 } from "../features/runtime-status/RuntimeDiagnosticsDialog";
 import { VersionUpdateNotice } from "../features/runtime-status/VersionUpdateNotice";
+import {
+  EMPTY_PORT_FORWARD_SESSION_PORT,
+  type PortForwardSessionPort,
+} from "../features/service-access/portForwardSessionContract";
+import { PortForwardSessionsProvider } from "../features/service-access/PortForwardSessionsProvider";
+import { PortForwardSessionIndicator } from "./PortForwardSessionIndicator";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -95,6 +101,7 @@ interface ProductShellProps {
   alertEventsPort?: AlertEventsPort;
   shellStatePort?: ShellStatePort;
   runtimeStatusPort?: RuntimeStatusPort;
+  portForwardSessions?: PortForwardSessionPort;
 }
 
 export function ProductShell({
@@ -107,23 +114,26 @@ export function ProductShell({
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
   shellStatePort = EMPTY_SHELL_STATE_PORT,
   runtimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
+  portForwardSessions = EMPTY_PORT_FORWARD_SESSION_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
-          <BottomDockProvider port={logStreamPort}>
-            <AlertEventsProvider port={alertEventsPort}>
-              <ProductShellFrame
-                auth={auth}
-                aiAssistantPort={aiAssistantPort}
-                globalFilterPort={globalFilterPort}
-                releasedSurfaceIds={releasedSurfaceIds}
-                shellStatePort={shellStatePort}
-                runtimeStatusPort={runtimeStatusPort}
-              />
-            </AlertEventsProvider>
-          </BottomDockProvider>
+          <PortForwardSessionsProvider port={portForwardSessions}>
+            <BottomDockProvider port={logStreamPort}>
+              <AlertEventsProvider port={alertEventsPort}>
+                <ProductShellFrame
+                  auth={auth}
+                  aiAssistantPort={aiAssistantPort}
+                  globalFilterPort={globalFilterPort}
+                  releasedSurfaceIds={releasedSurfaceIds}
+                  shellStatePort={shellStatePort}
+                  runtimeStatusPort={runtimeStatusPort}
+                />
+              </AlertEventsProvider>
+            </BottomDockProvider>
+          </PortForwardSessionsProvider>
         </SidebarProvider>
       </TooltipProvider>
     </ProductSessionProvider>
@@ -331,6 +341,9 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
+            <PortForwardSessionIndicator
+              resourcesAvailable={releasedSurfaceIds.has("resources")}
+            />
             <VersionUpdateNotice port={runtimeStatusPort} />
             <RuntimeDiagnosticsDialog port={runtimeStatusPort} ref={diagnosticsDialogRef} />
             <ShortcutHelpDialog

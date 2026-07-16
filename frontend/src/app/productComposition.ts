@@ -46,6 +46,10 @@ import {
   EMPTY_RUNTIME_STATUS_PORT,
   type RuntimeStatusPort,
 } from "../features/runtime-status/runtimeStatusContract";
+import {
+  EMPTY_PORT_FORWARD_SESSION_PORT,
+  type PortForwardSessionPort,
+} from "../features/service-access/portForwardSessionContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -64,6 +68,7 @@ export interface ProductComposition {
   diagnose: DiagnosePort;
   shellState: ShellStatePort;
   runtimeStatus: RuntimeStatusPort;
+  portForwardSessions: PortForwardSessionPort;
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -85,6 +90,7 @@ export function createProductComposition(
   diagnose: DiagnosePort = EMPTY_DIAGNOSE_PORT,
   shellState: ShellStatePort = EMPTY_SHELL_STATE_PORT,
   runtimeStatus: RuntimeStatusPort = EMPTY_RUNTIME_STATUS_PORT,
+  portForwardSessions: PortForwardSessionPort = EMPTY_PORT_FORWARD_SESSION_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -118,6 +124,7 @@ export function createProductComposition(
     diagnose,
     shellState,
     runtimeStatus,
+    portForwardSessions,
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),
