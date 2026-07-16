@@ -5,6 +5,7 @@ import { chromium } from "playwright";
 
 const SIDEBAR_SELECTOR = 'aside[data-slot="sidebar"]';
 const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
 const NETWORK_OBSERVATION_MS = 3_000;
 
@@ -125,7 +126,7 @@ async function authenticate(page, baseUrl, email, password) {
 
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   const sidebar = page.locator(SIDEBAR_SELECTOR);
-  await sidebar.waitFor({ state: "visible", timeout: ROUTE_SETTLE_TIMEOUT_MS });
+  await sidebar.waitFor({ state: "visible", timeout: AUTH_BOOTSTRAP_TIMEOUT_MS });
 }
 
 async function collectReleasedRoutes(page) {
