@@ -706,6 +706,10 @@
     "diagnose.frontend.surface": {
       "destination": "frontend/src/features/diagnose/DiagnoseSurface.test.tsx",
       "rationale": "Recent history, investigation selection, evidence rendering, and follow-up availability must be driven by the durable Diagnose port."
+    },
+    "design.severity-token.contract": {
+      "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
+      "rationale": "Severity presentation must use shared semantic product tokens with light, dark, reduced-motion, and forced-color coverage instead of copying literal provider palette classes."
     }
   },
   "classifications": {
@@ -8799,6 +8803,37 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product uses strict event payloads and shared UI primitives for the implemented verdict, evidence, status, consent, stop, and follow-up flows. Tool viewers, confidence meters, markdown choreography, and apply controls remain unclaimed until their backend evidence exists."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/severity-tone.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:severity-tone:semantic-tokens:v1",
+          "legacyContractIds": [],
+          "symbol": "severity tone class maps",
+          "interaction": "issue and check severities resolve through one accessible semantic tone vocabulary without duplicating literal color utilities across cards, badges, dots, and expanded headers",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/StatusMark.tsx",
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx",
+              "frontend/src/shared/ui/productDisplayPrimitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.severity-token.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The source file hardcodes red, orange, amber, yellow, and slate Tailwind classes; copying it would create a second palette outside the product semantic design tokens and forced-color contract.",
+            "rationale": "The product preserves the severity semantics through shared status and badge primitives backed by canonical CSS variables, while deliberately rejecting a duplicate literal-class palette."
           }
         }
       ]

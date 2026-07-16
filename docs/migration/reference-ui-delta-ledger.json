@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 82,
+  "pendingCount": 81,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -6212,8 +6212,35 @@
         "blobId": "cbfcd4659b2d6c1439f5f9343394d7810dcd422e",
         "sha256": "9ccfdf55e04f9b8f6442c9202573f162e70a1d53c2bca21e6c182d901f0743b3"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:severity-tone:semantic-tokens:v1",
+          "legacyContractIds": [],
+          "symbol": "severity tone class maps",
+          "interaction": "issue and check severities resolve through one accessible semantic tone vocabulary without duplicating literal color utilities across cards, badges, dots, and expanded headers",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/StatusMark.tsx",
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx",
+              "frontend/src/shared/ui/productDisplayPrimitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.severity-token.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The source file hardcodes red, orange, amber, yellow, and slate Tailwind classes; copying it would create a second palette outside the product semantic design tokens and forced-color contract.",
+            "rationale": "The product preserves the severity semantics through shared status and badge primitives backed by canonical CSS variables, while deliberately rejecting a duplicate literal-class palette."
+          }
+        }
+      ]
     },
     {
       "status": "M",
