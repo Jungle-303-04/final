@@ -90,6 +90,7 @@ describe("log stream API", () => {
         scope: { workspace_id: "ws-1", cluster_id: "cluster-1", namespaces: ["shop"], freshness: "live" },
         owner: { api_group: "batch", version: "v1", kind: "CronJob", namespace: "shop", name: "nightly", uid: "owner-1" },
         runs: [],
+        lifecycle: [],
         default_run_key: null,
         complete: true,
         reason_codes: [],

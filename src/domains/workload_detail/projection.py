@@ -183,7 +183,7 @@ def workload_detail_projection(
             revision=observation_snapshot_id,
             actions=(),
         ),
-        features=feature_availability(coverage_availability, log_stream),
+        features=feature_availability(coverage_availability, log_stream, resource),
     )
 
 
@@ -320,6 +320,7 @@ def log_stream_capability(
 def feature_availability(
     coverage: str,
     log_stream: WorkloadLogStreamCapability,
+    resource: Mapping[str, Any],
 ) -> tuple[WorkloadFeatureAvailability, ...]:
     covered = "available" if coverage == "available" else "partial"
     covered_reasons = () if covered == "available" else ("inventory_coverage_partial",)
@@ -333,6 +334,10 @@ def feature_availability(
         ("operations", "workload_operations_not_integrated"),
         ("yaml", "safe_manifest_projection_not_integrated"),
         ("compare", "safe_comparable_manifest_not_integrated"),
+    )
+    run_kinds = mapping(resource.get("summary")).get("scheduled_run_kinds")
+    execution_available = isinstance(run_kinds, list) and any(
+        isinstance(kind, str) and bool(kind) for kind in run_kinds
     )
     return (
         WorkloadFeatureAvailability(
@@ -352,6 +357,15 @@ def feature_availability(
             name="logs",
             availability=log_stream.availability,
             reason_codes=log_stream.reason_codes,
+        ),
+        WorkloadFeatureAvailability(
+            name="execution",
+            availability=covered if execution_available else "unavailable",
+            reason_codes=(
+                covered_reasons
+                if execution_available
+                else ("scheduled_run_projection_not_available",)
+            ),
         ),
         *(
             WorkloadFeatureAvailability(

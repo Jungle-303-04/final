@@ -99,6 +99,18 @@ class LogStreamSseMessage(RootModel[LogStreamEnvelope]):
 
 
 ScheduledRunPhase = Literal["pending", "running", "succeeded", "failed", "unknown"]
+ScheduledRunNextStep = Literal["logs", "timeline"]
+ScheduledRunLifecycleStage = Literal["scheduled", "started", "finished"]
+
+
+class ScheduledRunLifecycleEvent(StrictModel):
+    event_id: str = Field(min_length=1, max_length=512)
+    run_key: str = Field(min_length=1, max_length=255)
+    resource: ResourceRef
+    stage: ScheduledRunLifecycleStage
+    occurred_at: datetime
+    event_type: Literal["normal", "warning"]
+    reason: str = Field(min_length=1, max_length=160)
 
 
 class ScheduledWorkloadRun(StrictModel):
@@ -115,13 +127,27 @@ class ScheduledWorkloadRun(StrictModel):
     pod_total: int = Field(ge=0)
     pod_succeeded: int = Field(ge=0)
     pod_failed: int = Field(ge=0)
+    pod_running: int = Field(ge=0)
+    next_step: ScheduledRunNextStep | None = None
     observed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def next_step_matches_observed_outcome(self) -> Self:
+        if self.next_step is not None and self.phase != "failed":
+            raise ValueError("scheduled run next step requires a failed run")
+        if (
+            self.next_step == "logs"
+            and self.pod_succeeded + self.pod_failed + self.pod_running == 0
+        ):
+            raise ValueError("scheduled run log guidance requires container outcome evidence")
+        return self
 
 
 class ScheduledWorkloadRunCatalog(StrictModel):
     scope: ClusterScope
     owner: ResourceRef
     runs: tuple[ScheduledWorkloadRun, ...]
+    lifecycle: tuple[ScheduledRunLifecycleEvent, ...] = ()
     default_run_key: str | None = None
     complete: bool
     reason_codes: tuple[str, ...] = ()
@@ -135,6 +161,20 @@ class ScheduledWorkloadRunCatalog(StrictModel):
             raise ValueError("default scheduled run must belong to the catalog")
         if not self.complete and not self.reason_codes:
             raise ValueError("partial scheduled run catalog requires a reason")
+        runs = {run.run_key: run for run in self.runs}
+        event_ids: set[str] = set()
+        previous: tuple[datetime, str] | None = None
+        for event in self.lifecycle:
+            run = runs.get(event.run_key)
+            if run is None or event.resource != run.resource:
+                raise ValueError("scheduled lifecycle event must match a catalog run")
+            if event.event_id in event_ids:
+                raise ValueError("scheduled lifecycle event IDs must be unique")
+            event_ids.add(event.event_id)
+            order = (event.occurred_at, event.event_id)
+            if previous is not None and order < previous:
+                raise ValueError("scheduled lifecycle events must be chronologically ordered")
+            previous = order
         return self
 
 

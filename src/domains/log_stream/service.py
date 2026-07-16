@@ -36,6 +36,7 @@ from packages.contracts.log_stream import (
     LogStreamPodAdded,
     LogStreamPodRemoved,
     LogStreamRecoveryCommand,
+    ScheduledRunLifecycleEvent,
     ScheduledWorkloadRun,
     ScheduledWorkloadRunCatalog,
 )
@@ -249,6 +250,7 @@ def scheduled_workload_run_catalog(
         owner_kind=owner_kind,
         namespace=namespace,
         owner_name=owner_name,
+        require_evidence=False,
     )
     return catalog
 
@@ -272,6 +274,7 @@ def resolve_scheduled_run_target(
         owner_kind=owner_kind,
         namespace=namespace,
         owner_name=owner_name,
+        require_evidence=True,
     )
     target = targets.get(run_key)
     if target is None:
@@ -288,8 +291,12 @@ def _scheduled_run_projection(
     owner_kind: str,
     namespace: str,
     owner_name: str,
+    require_evidence: bool,
 ) -> tuple[ScheduledWorkloadRunCatalog, dict[str, LogStreamTarget]]:
-    _require_log_access(db, current, workspace_id, cluster_id)
+    _require_inventory_access(db, current, workspace_id, cluster_id)
+    can_view_logs = _has_evidence_access(db, current, workspace_id, cluster_id)
+    if require_evidence and not can_view_logs:
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
     owner = _inventory_resource(
         db,
         workspace_id=workspace_id,
@@ -337,6 +344,7 @@ def _scheduled_run_projection(
         reasons.add("pod_limit_reached")
 
     runs: list[ScheduledWorkloadRun] = []
+    lifecycle: list[ScheduledRunLifecycleEvent] = []
     targets: dict[str, LogStreamTarget] = {}
     for row in rows:
         if not isinstance(row, dict) or not _scheduled_run_belongs_to_owner(
@@ -375,24 +383,33 @@ def _scheduled_run_projection(
             failed=failed_count,
             desired=desired,
         )
-        runs.append(
-            ScheduledWorkloadRun(
-                run_key=run_uid,
-                resource=_resource_ref(row),
+        pod_succeeded = sum(_pod_phase(pod) == "succeeded" for pod in matching_pods)
+        pod_failed = sum(_pod_phase(pod) == "failed" for pod in matching_pods)
+        pod_running = sum(_pod_phase(pod) == "running" for pod in matching_pods)
+        run = ScheduledWorkloadRun(
+            run_key=run_uid,
+            resource=_resource_ref(row),
+            phase=phase,
+            active=active_count > 0,
+            scheduled_at=_optional_iso(summary.get("creation_timestamp")),
+            started_at=_optional_iso(summary.get("start_time")),
+            finished_at=_optional_iso(summary.get("completion_time")),
+            desired=desired,
+            succeeded=succeeded_count,
+            failed=failed_count,
+            pod_total=len(matching_pods),
+            pod_succeeded=pod_succeeded,
+            pod_failed=pod_failed,
+            pod_running=pod_running,
+            next_step=_scheduled_run_next_step(
                 phase=phase,
-                active=active_count > 0,
-                scheduled_at=_optional_iso(summary.get("creation_timestamp")),
-                started_at=_optional_iso(summary.get("start_time")),
-                finished_at=_optional_iso(summary.get("completion_time")),
-                desired=desired,
-                succeeded=succeeded_count,
-                failed=failed_count,
-                pod_total=len(matching_pods),
-                pod_succeeded=sum(_pod_phase(pod) == "succeeded" for pod in matching_pods),
-                pod_failed=sum(_pod_phase(pod) == "failed" for pod in matching_pods),
-                observed_at=_optional_iso(row.get("observed_at")),
-            )
+                can_view_logs=can_view_logs,
+                has_container_outcome=(pod_succeeded + pod_failed + pod_running) > 0,
+            ),
+            observed_at=_optional_iso(row.get("observed_at")),
         )
+        runs.append(run)
+        lifecycle.extend(_scheduled_run_lifecycle(run))
         targets[run_uid] = LogStreamTarget(
             target_type="scheduled_run",
             cluster_id=cluster_id,
@@ -420,6 +437,9 @@ def _scheduled_run_projection(
             ),
             owner=_resource_ref(owner),
             runs=tuple(runs),
+            lifecycle=tuple(
+                sorted(lifecycle, key=lambda event: (event.occurred_at, event.event_id))
+            ),
             default_run_key=default_run,
             complete=not reasons,
             reason_codes=tuple(sorted(reasons)),
@@ -1126,6 +1146,58 @@ def _pod_phase(row: dict[str, Any]) -> str:
     return str(summary.get("phase") or "").lower()
 
 
+def _scheduled_run_next_step(
+    *, phase: str, can_view_logs: bool, has_container_outcome: bool
+) -> Literal["logs", "timeline"] | None:
+    if phase != "failed":
+        return None
+    if can_view_logs and has_container_outcome:
+        return "logs"
+    return "timeline"
+
+
+def _scheduled_run_lifecycle(run: ScheduledWorkloadRun) -> list[ScheduledRunLifecycleEvent]:
+    events: list[ScheduledRunLifecycleEvent] = []
+    kind = run.resource.kind
+    if run.scheduled_at is not None:
+        events.append(
+            ScheduledRunLifecycleEvent(
+                event_id=f"{run.run_key}:scheduled",
+                run_key=run.run_key,
+                resource=run.resource,
+                stage="scheduled",
+                occurred_at=run.scheduled_at,
+                event_type="normal",
+                reason=f"{kind} scheduled",
+            )
+        )
+    if run.started_at is not None:
+        events.append(
+            ScheduledRunLifecycleEvent(
+                event_id=f"{run.run_key}:started",
+                run_key=run.run_key,
+                resource=run.resource,
+                stage="started",
+                occurred_at=run.started_at,
+                event_type="normal",
+                reason=f"{kind} started",
+            )
+        )
+    if run.finished_at is not None:
+        events.append(
+            ScheduledRunLifecycleEvent(
+                event_id=f"{run.run_key}:finished",
+                run_key=run.run_key,
+                resource=run.resource,
+                stage="finished",
+                occurred_at=run.finished_at,
+                event_type="warning" if run.phase == "failed" else "normal",
+                reason=f"{kind} {run.phase}",
+            )
+        )
+    return events
+
+
 def _optional_iso(value: Any) -> str | None:
     if isinstance(value, datetime):
         return value.isoformat()
@@ -1140,13 +1212,42 @@ def _require_log_access(
     workspace_id: str,
     cluster_id: str,
 ) -> None:
+    _require_inventory_access(db, current, workspace_id, cluster_id)
+    if not _has_evidence_access(db, current, workspace_id, cluster_id):
+        raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND)
+
+
+def _require_inventory_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> None:
     try:
-        for permission in (Permission.INVENTORY_READ.value, Permission.EVIDENCE_READ.value):
-            require_cluster_access(db, current, workspace_id, cluster_id, permission)
+        require_cluster_access(
+            db, current, workspace_id, cluster_id, Permission.INVENTORY_READ.value
+        )
     except HTTPException as exc:
         if exc.status_code == 403:
             raise HTTPException(status_code=404, detail=TARGET_NOT_FOUND) from exc
         raise
+
+
+def _has_evidence_access(
+    db: Any,
+    current: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> bool:
+    try:
+        require_cluster_access(
+            db, current, workspace_id, cluster_id, Permission.EVIDENCE_READ.value
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
+    return True
 
 
 def _container_exists(resource: dict[str, Any], container: str | None) -> bool:

@@ -17,6 +17,7 @@ const featureNameSchema = z.enum([
   "operations",
   "yaml",
   "compare",
+  "execution",
 ]);
 
 export const workloadDetailResourceRefSchema = z.strictObject({

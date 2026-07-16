@@ -554,6 +554,22 @@
     "timeline.hierarchy.pins": {
       "destination": "frontend/src/features/timeline/timelinePinTargets.test.ts",
       "rationale": "Pinned resource and application identities must be canonical, persistent, authorization-filtered, and stable across namespace order and history navigation."
+    },
+    "execution.catalog.contract": {
+      "destination": "tests/test_log_stream.py",
+      "rationale": "The Python catalog must authorize inventory separately from log evidence, keep immutable owner and run identity, and project lifecycle and next-step guidance server-side."
+    },
+    "execution.catalog.adapter": {
+      "destination": "frontend/src/features/workload-detail/createWorkloadDetailAdapter.test.ts",
+      "rationale": "The adapter must reject mismatched owner or lifecycle identity and consume server-owned outcomes without parsing Kubernetes names or status in the browser."
+    },
+    "execution.catalog.presentation": {
+      "destination": "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx",
+      "rationale": "The run rail, selected lifecycle, and bounded log handoff must use only server-issued immutable identities and guidance."
+    },
+    "execution.definition.safe-contract": {
+      "destination": "tests/test_workload_detail.py",
+      "rationale": "A future definition projection must explicitly allowlist executable shape, references, defaults, and drift evidence without exposing raw manifests or secret values."
     }
   },
   "classifications": {
@@ -6258,6 +6274,478 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "Persistent pin subjects are materialized from current server rows, hidden when access is revoked, and updated under revision conflict checks."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/batch-run-actions.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:next-step:contract-test:v1",
+          "legacyContractIds": [],
+          "symbol": "batchRunNextStep tests",
+          "interaction": "failed retained runs choose logs only when authorized container outcome evidence exists and otherwise choose the resource timeline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_log_stream.py",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.contract",
+              "execution.catalog.adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Python now owns next-step selection after inventory and evidence RBAC. The browser maps the issued value and cannot promote a timeline-only run to a log action."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/batch-run-actions.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:next-step:server-guidance:v1",
+          "legacyContractIds": [],
+          "symbol": "batchRunNextStep",
+          "interaction": "the selected failed run exposes one authorized diagnostic continuation without creating an execution command in the browser",
+          "transport": "poll",
+          "realtime": {
+            "resume": "an active catalog refresh resumes from a newly authorized immutable snapshot and never reuses a removed run key",
+            "backpressure": "only one five-second active-run refresh is in flight and a superseded request is aborted",
+            "merge": "a refreshed next step replaces guidance only for the exact owner and run UID"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/service.py",
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.contract",
+              "execution.catalog.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "This source interaction is read-only navigation, not a mutation. Existing CommandRequest, CommandReceipt, and OperationEvent remain the only path for actual resource actions."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/batch-timeline.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:lifecycle:contract-test:v1",
+          "legacyContractIds": [],
+          "symbol": "workloadRunTimelineEvents tests",
+          "interaction": "scheduled, started, and terminal lifecycle evidence preserves chronological order, resource identity, and warning outcome",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_log_stream.py",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.contract",
+              "execution.catalog.adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Contract tests now prove server ordering and browser identity validation rather than testing a second client-side event synthesizer."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/batch-timeline.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:lifecycle:server-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "workloadRunTimelineEvents",
+          "interaction": "retained run timestamps become a stable lifecycle projection owned and ordered by Python",
+          "transport": "poll",
+          "realtime": {
+            "resume": "active history refreshes the bounded catalog and retains selection only while its immutable run UID remains present",
+            "backpressure": "the active-run poll owns one abortable request and never queues overlapping catalog reads",
+            "merge": "lifecycle rows replace by event ID inside the exact owner catalog rather than appending browser-inferred duplicates"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/service.py",
+              "frontend/src/api/log-stream-schemas.ts",
+              "frontend/src/features/workload-detail/createWorkloadDetailAdapter.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.contract",
+              "execution.catalog.adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Python emits bounded allowlisted lifecycle rows with owner and run UIDs; the browser no longer invents event type, reason, or ordering."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/BatchExecutionView.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:retained-view:interaction-test:v1",
+          "legacyContractIds": [],
+          "symbol": "BatchExecutionView interaction tests",
+          "interaction": "default run selection, chronological lifecycle disclosure, partial coverage, and immutable log handoff are exercised through the product view",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product test covers the shipped retained-run slice. Workflow graph, parameter drift, and definition fidelity remain separately blocked rather than faked."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:retention:behavior-test:v1",
+          "legacyContractIds": [],
+          "symbol": "retentionHistoryCopy tests",
+          "interaction": "configured or controller-default success and failure retention limits are presented beside observed retained outcomes without claiming all-time history",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_log_stream.py",
+              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.contract",
+              "execution.catalog.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "ScheduledWorkloadRunCatalog does not yet carry revision-proven retention limits or controller-default provenance for CronJob, CronWorkflow, and ScaledJob owners.",
+            "rationale": "The product labels the catalog as retained and partial but does not invent defaults or limit-reached claims from browser constants."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:definition:parameter-test:v1",
+          "legacyContractIds": [],
+          "symbol": "workflow parameters and referenced definition tests",
+          "interaction": "referenced workflow definitions merge input defaults with run overrides while preserving value-source and description provenance",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_workload_detail.py",
+              "src/packages/contracts/workload_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.definition.safe-contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The safe workload definition contract has no typed parameter defaults, runtime overrides, value-source provenance, or namespaced versus cluster template reference yet.",
+            "rationale": "Raw spec merging stays out of the browser until Python can produce a bounded secret-safe parameter projection."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:workflow:activity-preview-test:v1",
+          "legacyContractIds": [],
+          "symbol": "activityPreviewItems tests",
+          "interaction": "large workflow activity histories expose a stable chronological prefix and append-only disclosure behavior",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_workload_detail.py",
+              "frontend/src/pages/workload-detail/WorkloadExecution.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.definition.safe-contract",
+              "execution.catalog.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "No bounded Python workflow activity collection with stable event identities is available to exercise preview expansion.",
+            "rationale": "The product lifecycle list is bounded run-level evidence and does not claim node-level workflow activity parity."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/BatchExecutionView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:retained-view:run-selection:v1",
+          "legacyContractIds": [],
+          "symbol": "BatchExecutionView retained run rail",
+          "interaction": "an authorized scheduled workload opens its retained run catalog, selects the server default, preserves a still-valid selection across refresh, and discloses partial coverage",
+          "transport": "poll",
+          "realtime": {
+            "resume": "only active catalogs continue the five-second refresh and a returning catalog must revalidate owner and run identity",
+            "backpressure": "refresh is single-flight and unmount or identity change aborts the pending request",
+            "merge": "selection is retained only by immutable run UID and falls back to the latest server default when removed"
+          },
+          "motion": {
+            "reducedMotion": "refresh status and selected-row feedback remain visible without depending on spin animation",
+            "evidence": [
+              "references/upstream/web/src/components/execution/BatchExecutionView.tsx",
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx",
+              "frontend/src/features/workload-detail/workloadDetailContract.ts",
+              "src/domains/workload_detail/projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.presentation",
+              "execution.catalog.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product route reveals the execution tab only from collected scheduled-run capability evidence and renders the bounded server catalog without kind-name heuristics."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:retained-view:diagnostic-handoff:v1",
+          "legacyContractIds": [],
+          "symbol": "RunNextStep and RunMessageDetails",
+          "interaction": "a failed retained run opens its exact bounded log stream only from server guidance or keeps the user on projected lifecycle evidence",
+          "transport": "sse",
+          "realtime": {
+            "resume": "the selected immutable run UID starts a fresh authenticated log stream and never silently changes target",
+            "backpressure": "the shared dock retains its bounded ordered log buffer, drop counter, and one active stream generation",
+            "merge": "log events apply only to the selected run target and current stream generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "src/domains/log_stream/router.py",
+              "src/domains/log_stream/service.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.presentation",
+              "execution.catalog.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Log access is checked independently from inventory history and the server re-resolves owner, run, and Pod ownership before each persisted stream batch."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:workflow-detail:graph-and-drift:v1",
+          "legacyContractIds": [],
+          "symbol": "RunExecutionPanel and CapturedConfigurationPanel",
+          "interaction": "workflow nodes, activity, arguments, referenced resources, and captured-definition drift render from an allowlisted run-detail projection",
+          "transport": "poll",
+          "realtime": {
+            "resume": "an active workflow detail refresh resumes only for the same immutable workflow UID",
+            "backpressure": "large node collections require a server cap and one abortable detail request",
+            "merge": "node and drift evidence replace by server-issued node and definition identities"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/workload_detail.py",
+              "src/domains/workload_detail/projection.py",
+              "tests/test_workload_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.definition.safe-contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python workload detail contract does not yet expose allowlisted Argo execution nodes, arguments, stored template snapshots, or revision-bound drift evidence.",
+            "rationale": "Copying the upstream raw Workflow status parser would expose an unbounded provider payload and duplicate run logic in the browser, so this panel stays explicitly unavailable."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:retained-view:filter-and-retention:v1",
+          "legacyContractIds": [],
+          "symbol": "run filter, search, phase counts, and retention disclosure",
+          "interaction": "the bounded run rail filters all, active, or failed runs, searches names, reports phase counts, and explains observed retention limits without changing server authorization",
+          "transport": "poll",
+          "realtime": {
+            "resume": "filter and search state survives an active catalog refresh while selection is revalidated by run UID",
+            "backpressure": "local view controls never trigger an unbounded server query and the catalog remains capped at one hundred runs",
+            "merge": "counts and filtered rows recompute only from the newest complete catalog generation"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx",
+              "src/packages/contracts/log_stream.py",
+              "tests/test_log_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream"
+            ],
+            "plannedTestIds": [
+              "execution.catalog.contract",
+              "execution.catalog.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The shipped run rail lacks accessible phase filters and name search, and the Python catalog lacks retention-limit provenance required for truthful retention copy.",
+            "rationale": "The current catalog is bounded and ordered, but the remaining controls are explicitly tracked instead of being reported as complete."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:execution:retained-view:source-and-run-facts:v1",
+          "legacyContractIds": [],
+          "symbol": "SourceFacts, RunDetailList, RunContext, and RunActivityPanel",
+          "interaction": "source schedule and policy, trigger context, duration and delay, retry and parallelism, pod breakdown, referenced resources, messages, and activity render from a safe observed projection",
+          "transport": "poll",
+          "realtime": {
+            "resume": "active run facts resume only for the same immutable run and owner revisions",
+            "backpressure": "fact, context, and activity collections are server-capped and refreshed by one abortable request",
+            "merge": "facts replace by owner revision and activity rows replace by stable event identity"
+          },
+          "motion": {
+            "reducedMotion": "message and activity disclosures preserve expanded state and focus without animated height being required",
+            "evidence": [
+              "references/upstream/web/src/components/execution/BatchExecutionView.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/workload_detail.py",
+              "src/domains/workload_detail/projection.py",
+              "frontend/src/pages/workload-detail/WorkloadExecution.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail",
+              "packages.contracts.log_stream"
+            ],
+            "plannedTestIds": [
+              "execution.definition.safe-contract",
+              "execution.catalog.presentation"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current safe contracts expose run counts and lifecycle only; schedule policy, trigger provenance, messages, retry, resource references, and node activity remain absent.",
+            "rationale": "The product does not read raw spec or status maps to fill these facts and therefore avoids duplicated browser logic and accidental secret exposure."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/execution-definition.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:definition:fidelity-test:v1",
+          "legacyContractIds": [],
+          "symbol": "executionDefinitionSummary and fingerprint tests",
+          "interaction": "Job and workflow definition shape, effective defaults, dependencies, resources, stored snapshots, and semantic drift have explicit contract coverage",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "tests/test_workload_detail.py",
+              "src/packages/contracts/workload_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.definition.safe-contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "No safe typed Python definition projection currently supplies executable units, normalized quantities, referenced objects, controller defaults, or semantic fingerprints.",
+            "rationale": "The existing test is recorded as required proof, but it cannot be claimed by the generic observation contract or replaced with browser fixtures."
+          }
+        }
+      ]
+    },
+    "web/src/components/execution/execution-definition.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:execution:definition:safe-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "executionDefinitionSummary and executionDefinitionFingerprint",
+          "interaction": "a server projection describes executable shape, units, images, commands, resource quantities, references, retry policy, deadlines, parallelism, and semantic drift without releasing raw manifests or secret values",
+          "transport": "poll",
+          "realtime": {
+            "resume": "definition evidence is revision-bound and refreshes only when the owner observation revision changes",
+            "backpressure": "referenced definitions and unit collections require explicit server caps and one abortable request",
+            "merge": "a definition replaces only when owner UID and observation revision match; semantic fingerprints are computed by Python"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/packages/contracts/workload_detail.py",
+              "src/domains/workload_detail/projection.py",
+              "frontend/src/features/workload-detail/workloadDetailContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.workload_detail"
+            ],
+            "plannedTestIds": [
+              "execution.definition.safe-contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The inventory collector and Python workload detail projection do not yet persist or expose the required allowlisted Job, CronJob, KEDA, and Argo definition fields with secret-safe provenance.",
+            "rationale": "The upstream any-typed parser and hardcoded controller defaults are not copied. A future port must be Python-owned, provider-version aware, bounded, and revision-proven."
           }
         }
       ]

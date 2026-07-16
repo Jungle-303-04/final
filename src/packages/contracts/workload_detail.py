@@ -31,6 +31,7 @@ WorkloadFeatureName = Literal[
     "operations",
     "yaml",
     "compare",
+    "execution",
 ]
 WorkloadLogStreamKind = Literal["deployments", "statefulsets", "daemonsets"]
 

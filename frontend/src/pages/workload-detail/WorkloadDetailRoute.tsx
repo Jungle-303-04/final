@@ -16,6 +16,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { cn } from "../../shared/lib/cn";
 import { parseWorkloadDetailRoute, workloadDetailHref } from "./workloadDetailNavigation";
 import { useWorkloadDetail } from "./useWorkloadDetail";
+import { WorkloadExecution } from "./WorkloadExecution";
 
 export function WorkloadDetailRoute({ port }: { port: WorkloadDetailPort }) {
   const params = useParams();
@@ -41,6 +42,8 @@ export function WorkloadDetailRoute({ port }: { port: WorkloadDetailPort }) {
       onTabChange={setTab}
       refreshing={frame.refreshing}
       tab={identity.tab}
+      port={port}
+      request={identity}
     />
   );
 }
@@ -52,6 +55,8 @@ function WorkloadDetailPage({
   onTabChange,
   refreshing,
   tab,
+  port,
+  request,
 }: {
   detail: WorkloadDetail;
   onBack: () => void;
@@ -59,6 +64,8 @@ function WorkloadDetailPage({
   onTabChange: (tab: WorkloadDetailTab) => void;
   refreshing: boolean;
   tab: WorkloadDetailTab;
+  port: WorkloadDetailPort;
+  request: import("../../features/workload-detail/workloadDetailContract").WorkloadDetailRequest;
 }) {
   const dock = useBottomDock();
   const resource = detail.observation.resource;
@@ -72,9 +79,14 @@ function WorkloadDetailPage({
       name: resource.name,
     });
   };
-  const tabs: readonly WorkloadDetailTab[] = detail.logStream.availability === "available"
-    ? ["overview", "pods", "events", "logs"]
-    : ["overview", "pods", "events"];
+  const executionAvailable = detail.features.some((feature) => feature.name === "execution" && feature.availability !== "unavailable");
+  const tabs: readonly WorkloadDetailTab[] = [
+    "overview",
+    "pods",
+    "events",
+    ...(detail.logStream.availability === "available" ? ["logs" as const] : []),
+    ...(executionAvailable ? ["execution" as const] : []),
+  ];
 
   return (
     <ProductPageFrame className="gap-4">
@@ -122,6 +134,7 @@ function WorkloadDetailPage({
       {tab === "pods" ? <Pods detail={detail} /> : null}
       {tab === "events" ? <Events detail={detail} /> : null}
       {tab === "logs" ? <Logs detail={detail} onOpen={openLogs} /> : null}
+      {tab === "execution" && executionAvailable ? <WorkloadExecution port={port} request={request} /> : null}
     </ProductPageFrame>
   );
 }

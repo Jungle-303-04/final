@@ -8,6 +8,7 @@ import {
   getCompareCandidates,
   getCompareResourcePair,
   getWorkloadDetail,
+  getScheduledWorkloadRuns,
   getNodePodsSummary,
   listAlertEvents,
   listAlertRules,
@@ -73,7 +74,10 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     listAlertRules,
     updateAlertRule,
   });
-  const workloadDetailPort = createWorkloadDetailAdapter({ getWorkloadDetail });
+  const workloadDetailPort = createWorkloadDetailAdapter({
+    getScheduledWorkloadRuns,
+    getWorkloadDetail,
+  });
   const comparePort = createCompareAdapter({ getCompareCandidates, getCompareResourcePair });
 
   return createProductComposition([

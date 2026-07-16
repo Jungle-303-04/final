@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createWorkloadDetailAdapter } from "./createWorkloadDetailAdapter";
-import type { WorkloadDetailEndpoint } from "./workloadDetailWireContract";
+import type { ScheduledRunCatalogEndpoint, WorkloadDetailEndpoint } from "./workloadDetailWireContract";
 
 const request = {
   clusterId: "cluster-a",
@@ -15,7 +15,7 @@ const request = {
 describe("Workload Detail adapter", () => {
   it("maps only the typed safe projection and validates the exact route identity", async () => {
     const getWorkloadDetail = vi.fn(async () => fixture());
-    const port = createWorkloadDetailAdapter({ getWorkloadDetail });
+    const port = createWorkloadDetailAdapter({ getWorkloadDetail, getScheduledWorkloadRuns: vi.fn() });
 
     const detail = await port.getDetail(request);
 
@@ -31,13 +31,45 @@ describe("Workload Detail adapter", () => {
   it("rejects a response whose API group differs from the URL identity", async () => {
     const wire = fixture();
     wire.detail.observation.resource.api_group = "other.example.io";
-    const port = createWorkloadDetailAdapter({ getWorkloadDetail: async () => wire });
+    const port = createWorkloadDetailAdapter({ getWorkloadDetail: async () => wire, getScheduledWorkloadRuns: vi.fn() });
 
     await expect(port.getDetail(request)).rejects.toMatchObject({
       code: "invalid-response",
     });
   });
+
+  it("maps server-owned run guidance and rejects lifecycle rows outside the catalog", async () => {
+    const getScheduledWorkloadRuns = vi.fn(async () => scheduledFixture());
+    const port = createWorkloadDetailAdapter({ getWorkloadDetail: async () => fixture(), getScheduledWorkloadRuns });
+
+    const catalog = await port.getScheduledRuns({ ...request, kind: "CronJob", apiGroup: "batch", name: "nightly" });
+
+    expect(catalog.runs[0]).toMatchObject({ runKey: "run-1", nextStep: "logs", podFailed: 1 });
+    expect(catalog.lifecycle[0]).toMatchObject({ eventId: "run-1:finished", eventType: "warning" });
+    const invalid = scheduledFixture();
+    invalid.lifecycle[0]!.run_key = "outside-catalog";
+    const invalidPort = createWorkloadDetailAdapter({ getWorkloadDetail: async () => fixture(), getScheduledWorkloadRuns: async () => invalid });
+    await expect(invalidPort.getScheduledRuns({ ...request, kind: "CronJob", apiGroup: "batch", name: "nightly" }))
+      .rejects.toMatchObject({ code: "invalid-response" });
+  });
 });
+
+function scheduledFixture(): ScheduledRunCatalogEndpoint {
+  const owner = { api_group: "batch", version: "v1", kind: "CronJob", namespace: "shop", name: "nightly", uid: "owner-1" };
+  const resource = { api_group: "batch", version: "v1", kind: "Job", namespace: "shop", name: "nightly-1", uid: "run-1" };
+  return {
+    scope: { workspace_id: "workspace-a", cluster_id: "cluster-a", namespaces: ["shop"], freshness: "live" },
+    owner,
+    runs: [{
+      run_key: "run-1", resource, phase: "failed", active: false,
+      scheduled_at: null, started_at: "2026-07-16T09:00:00Z", finished_at: "2026-07-16T09:01:00Z",
+      desired: 1, succeeded: 0, failed: 1, pod_total: 1, pod_succeeded: 0, pod_failed: 1, pod_running: 0,
+      next_step: "logs", observed_at: "2026-07-16T09:01:00Z",
+    }],
+    lifecycle: [{ event_id: "run-1:finished", run_key: "run-1", resource, stage: "finished", occurred_at: "2026-07-16T09:01:00Z", event_type: "warning", reason: "Job failed" }],
+    default_run_key: "run-1", complete: true, reason_codes: [],
+  };
+}
 
 function fixture(): WorkloadDetailEndpoint {
   const resource = {

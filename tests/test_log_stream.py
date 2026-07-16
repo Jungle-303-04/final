@@ -445,8 +445,30 @@ def test_scheduled_catalog_and_stream_use_server_run_uid_and_exact_owned_pods(
             "pod_total": 1,
             "pod_succeeded": 0,
             "pod_failed": 0,
+            "pod_running": 1,
+            "next_step": None,
             "observed_at": "2026-07-16T04:00:00Z",
         }
+    ]
+    assert catalog.json()["lifecycle"] == [
+        {
+            "event_id": "uid-nightly-101:scheduled",
+            "run_key": "uid-nightly-101",
+            "resource": catalog.json()["runs"][0]["resource"],
+            "stage": "scheduled",
+            "occurred_at": "2026-07-16T03:59:00Z",
+            "event_type": "normal",
+            "reason": "Job scheduled",
+        },
+        {
+            "event_id": "uid-nightly-101:started",
+            "run_key": "uid-nightly-101",
+            "resource": catalog.json()["runs"][0]["resource"],
+            "stage": "started",
+            "occurred_at": "2026-07-16T04:00:00Z",
+            "event_type": "normal",
+            "reason": "Job started",
+        },
     ]
     assert stream.status_code == 200
     target = next(iter(db.queued.values()))["payload"]["query"]["log_stream"]
@@ -454,6 +476,48 @@ def test_scheduled_catalog_and_stream_use_server_run_uid_and_exact_owned_pods(
     assert target["uid"] == "uid-nightly-101"
     assert target["owner_uid"] == "uid-nightly"
     assert target["pods"] == ["nightly-101-x7k2"]
+
+
+def test_scheduled_catalog_keeps_inventory_history_without_log_permission() -> None:
+    class InventoryOnlyDb(StubLogDb):
+        def user_has_resource_access(
+            self,
+            user_id: str,
+            workspace_id: str,
+            resource_type: str,
+            resource_id: str,
+            action: str,
+        ) -> bool:
+            del user_id, resource_type
+            self.access_calls.append((resource_id, action))
+            return (
+                workspace_id == WORKSPACE_ID
+                and resource_id == CLUSTER_ID
+                and action == "inventory.read"
+            )
+
+        def list_scheduled_run_inventory(self, **identity: Any) -> dict[str, Any]:
+            raw = super().list_scheduled_run_inventory(**identity)
+            raw["runs"][0]["summary"].update({"active": 0, "failed": 1})
+            raw["pods"][0]["summary"]["phase"] = "Failed"
+            return raw
+
+    db = InventoryOnlyDb()
+    client = TestClient(app_for(db))
+
+    catalog = client.get(
+        f"/workloads/scheduled/CronJob/{NAMESPACE}/nightly/runs",
+        params={"cluster_id": CLUSTER_ID},
+    )
+    stream = client.get(
+        f"/workloads/scheduled/CronJob/{NAMESPACE}/nightly/runs/uid-nightly-101/logs/stream",
+        params={"cluster_id": CLUSTER_ID},
+    )
+
+    assert catalog.status_code == 200
+    assert catalog.json()["runs"][0]["next_step"] == "timeline"
+    assert catalog.json()["lifecycle"][0]["run_key"] == "uid-nightly-101"
+    assert stream.status_code == 404
 
 
 def test_empty_stream_end_exposes_copy_only_read_only_diagnostic(

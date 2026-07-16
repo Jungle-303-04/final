@@ -17,6 +17,7 @@ describe("WorkloadDetailRoute", () => {
     const open = vi.fn(() => () => undefined);
     renderRoute({
       getDetail: async () => detail(),
+      getScheduledRuns: vi.fn(),
     }, { open });
 
     expect(await screen.findByText("Live logs")).toBeTruthy();
