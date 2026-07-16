@@ -6561,7 +6561,7 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
@@ -6570,16 +6570,17 @@
         "tests/test_command_router.py",
         "tests/test_resource_capabilities_router.py",
         "tests/test_target_agent_commands.py",
+        "tests/test_target_registration.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
         "frontend/src/features/operations/OperationStatusStore.test.ts",
         "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/command/router.py#trigger_cronjob",
           "consumer": "src/services/target/cluster-agent/agent.py#trigger_cronjob_command",
-          "reason": "The typed action, dynamic namespace policy, exact CronJob template validation, Job creation, audit receipt, and operation stream are implemented; deployment RBAC packaging still needs an end-to-end cluster proof.",
+          "reason": "The typed action revalidates the exact UID and snapshot, validates the CronJob template, creates one Job through an idempotent audited command, streams OperationEvent progress, and ships namespace-scoped trigger RBAC in every generated agent manifest.",
           "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
@@ -6609,7 +6610,7 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
@@ -6618,16 +6619,17 @@
         "tests/test_command_router.py",
         "tests/test_resource_capabilities_router.py",
         "tests/test_target_agent_commands.py",
+        "tests/test_target_registration.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
         "frontend/src/features/operations/OperationStatusStore.test.ts",
         "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/command/router.py#suspend_cronjob",
           "consumer": "src/services/target/cluster-agent/agent.py#set_cronjob_suspended",
-          "reason": "State-derived suspend or resume descriptors, typed patch commands, dynamic namespace policy, audit receipts, and operation streams are implemented; deployment RBAC packaging still needs an end-to-end cluster proof.",
+          "reason": "State-derived suspend and resume commands revalidate the exact UID and snapshot, patch only the observed CronJob, preserve idempotent receipts and OperationEvent progress, and ship namespace-scoped patch RBAC in every generated agent manifest.",
           "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
