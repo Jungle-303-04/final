@@ -87,5 +87,8 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --frozen
 
+      - name: Verify commit message gate rules
+        run: uv run pytest -q tests/test_commit_msg_gate.py
+
       - name: Run canonical gate
         run: make gate

@@ -45,7 +45,10 @@ refactor/<git-id>/<topic>
 
 ## 커밋
 
-커밋 메시지는 한국어 키워드를 포함한다.
+커밋 제목은 허용 타입, 한글, 명사형 키워드 둘 이상을 모두 갖춘다. 키워드는
+공백 포함 ` / `로 나누며, 스코프·종결 문장부호·`한다`·`했다`·`수정한다`·`추가한다`
+같은 서술형 종결을 쓰지 않는다. `Tauri`, `GitOps`, `API` 같은 기술 고유명사는
+한국어 키워드와 함께 쓸 수 있다.
 
 ```text
 type: 키워드 / 키워드 / 키워드
@@ -54,9 +57,9 @@ type: 키워드 / 키워드 / 키워드
 예시:
 
 ```text
-feat: evidence job / Prometheus range / agent debug
-fix: 권한 필터 / dashboard query / session
-docs: 온보딩 / Bruno API / AWS 테스트
+feat: evidence 작업 / Prometheus 범위 / agent debug
+fix: 권한 필터 / dashboard 쿼리 / 세션
+docs: 온보딩 지도 / Bruno API / AWS 테스트
 ```
 
 ## 구현 규칙
