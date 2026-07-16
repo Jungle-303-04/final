@@ -1,5 +1,5 @@
 ---
-source_commit: ee837d0c
+source_commit: 0cfaf575
 status: synced
 ---
 
@@ -11,9 +11,17 @@ status: synced
 
 - AI 클라이언트가 Opsia 관리 평면을 읽고, 제한된 쓰기 요청을 제안·승인 흐름으로 보낼 수 있게 MCP stdio 서버를 제공한다.
 - 읽기 도구는 인증된 사용자 권한으로 기존 [api-gateway](gateway-api-gateway.md) GET 라우트만 호출한다.
-- 쓰기 도구는 기본 `dry_run=true` 제안만 반환한다. 실제 POST 는 `dry_run=false`, `approval_confirmed=true`, `OPSIA_MCP_ENABLE_WRITES=true`가 모두 맞을 때만 기존 Gateway API로 전달한다.
+- 쓰기 도구는 기본 `dry_run=true` 제안만 반환한다. 실제 POST/PATCH 는 `dry_run=false`, `approval_confirmed=true`, `OPSIA_MCP_ENABLE_WRITES=true`가 모두 맞을 때만 기존 Gateway API로 전달한다.
 - 하지 않는 것: DB 직접 접근, Kubernetes/Docker/subprocess 실행, service-admin trusted proxy secret 사용, Gateway RBAC·감사·workflow 상태 검사를 우회하는 mutation.
 - 서버 이름은 `opsia-internal-control`, MCP protocol version 은 `2025-11-25`, 전송은 newline-delimited JSON-RPC over stdio 다.
+
+## 빠른 요약
+
+- 이 MCP는 AI에게 새 관리자 권한을 주는 장치가 아니다. AI가 이미 있는 Opsia Gateway API를 같은 인증 경계 안에서 호출하도록 연결하는 어댑터다.
+- 읽기 작업은 기존 Gateway GET 응답을 그대로 가져온다. 없는 값을 새로 만들어 설명하지 않고, Gateway가 보여준 값만 `data`에 담는다.
+- 쓰기 작업은 기본적으로 실행하지 않고 `proposal`만 만든다. 실제 제출은 사용자가 제안을 승인했고, MCP 프로세스도 `OPSIA_MCP_ENABLE_WRITES=true`로 열려 있고, Gateway 권한 검사까지 통과해야 한다.
+- `proposal`은 "무엇을 보낼 예정인지"를 보여주는 승인 자료다. secret, token, manifest diff 같은 민감한 값은 응답에서 가린다.
+- `RUNTIME_DISCOVERY_IGNORE = True`는 MCP stdio 실행 파일을 Kubernetes 배포 서비스 목록에서 빼기 위한 표시다. 이 MCP는 `src/services/.../app.py` 위치에 있지만, 일반 worker나 gateway처럼 배포되는 서비스는 아니다.
 
 ## 먼저 이해할 것
 
@@ -41,10 +49,10 @@ AI client
 
 | 작업자 | 읽을 부분 | 판단 기준 |
 |---|---|---|
-| Frontend / AI 패널 | `tool`, `data`, `safety`, `proposal`, `operation_id` 구조 | 화면은 `safety.approval_required=true`이면 사용자 승인 UI를 먼저 보여주고, `operation_id`는 실제 POST 후 Gateway 응답에 있을 때만 표시한다. |
+| Frontend / AI 패널 | `tool`, `data`, `safety`, `proposal`, `operation_id` 구조 | 화면은 `safety.approval_required=true`이면 사용자 승인 UI를 먼저 보여주고, `operation_id`는 실제 POST/PATCH 후 Gateway 응답에 있을 때만 표시한다. |
 | Backend / Gateway | Gateway route mapping, `ManagementApiClient`, `_post_or_propose` 흐름 | MCP가 새 domain 로직을 만들지 않고 기존 route 상수와 기존 router 권한 검사를 재사용하는지 본다. |
 | Security / Ops | 인증 env, trusted proxy 금지, HTTP opt-in, redaction, byte limit | user-scoped token/cookie만 허용되고, service-admin secret·원문 credential·무제한 payload가 새지 않는지 본다. |
-| QA / 테스트 | `tests/test_internal_mcp.py`, 기존 Gateway 회귀 테스트 | dry-run은 네트워크 POST가 없어야 하고, 실제 쓰기는 승인·env·Gateway 권한을 모두 통과해야 한다. |
+| QA / 테스트 | `tests/test_internal_mcp.py`, 기존 Gateway 회귀 테스트 | dry-run은 mutation 제출이 없어야 하고, 실제 쓰기는 승인·env·Gateway 권한을 모두 통과해야 한다. 단 `propose_manifest_change` dry-run은 비적용 preview API만 호출한다. |
 
 ## 용어
 
@@ -53,21 +61,21 @@ AI client
 | MCP | AI client가 tool을 발견하고 호출하게 하는 Model Context Protocol 서버. 여기서는 stdio JSON-RPC 서버다. |
 | Gateway | Opsia의 기존 HTTP 진입점. 인증, RBAC, 감사, workflow 상태 검사의 권위가 여기에 있다. |
 | read tool | 기존 Gateway GET만 호출하는 tool. `mutating=false`, `approval_required=false`다. |
-| write tool | 기존 Gateway POST를 보낼 수 있는 tool. 기본은 dry-run proposal이며 곧장 실행하지 않는다. |
-| `dry_run` | 네트워크 write 없이 "이런 POST를 보내려 한다"는 proposal만 반환하는 모드. 기본값은 `true`다. |
+| write tool | 기존 Gateway POST/PATCH를 보낼 수 있는 tool. 기본은 dry-run proposal이며 곧장 실행하지 않는다. |
+| `dry_run` | mutation 제출 없이 "이런 POST/PATCH를 보내려 한다"는 proposal만 반환하는 모드. 기본값은 `true`다. |
 | `proposal` | 실제 보낼 method/path/body를 redaction 해서 보여주는 제안서. 사용자 승인 UI나 감사 설명에 쓴다. |
 | `approval_confirmed` | 사용자가 proposal을 보고 승인했다는 MCP 입력. Gateway의 실제 승인/RBAC 검사를 대체하지 않는다. |
 | `approval_required` | caller가 사용자 승인 단계를 거쳐야 함을 알려주는 safety 출력 필드. |
-| `operation_id` | 실제 POST 뒤 Gateway 응답에서만 추출하는 추적 ID. MCP가 새로 만들지 않는다. |
+| `operation_id` | 실제 POST/PATCH 뒤 Gateway 응답에서만 추출하는 추적 ID. MCP가 새로 만들지 않는다. |
 
 ## 의존성 (Dependencies)
 
 | 방향 | 대상 | 스펙 링크 | 용도 |
 |---|---|---|---|
-| import | `packages.contracts.gateway.routes` | [../../packages/contracts.md](../packages/contracts.md) | 기존 Gateway route 상수만 사용해 GET/POST 경로 구성 |
+| import | `packages.contracts.gateway.routes` | [../../packages/contracts.md](../packages/contracts.md) | 기존 Gateway route 상수만 사용해 GET/POST/PATCH 경로 구성 |
 | import | `packages.config` | [../../packages/config.md](../packages/config.md) | `env`, `Auth.SESSION_COOKIE_NAME` |
 | import | `packages.security.log_lines` | [../../packages/security.md](../packages/security.md) | error/proposal 문자열 redaction |
-| 외부 | Opsia api-gateway HTTP | [gateway-api-gateway.md](gateway-api-gateway.md) | 인증 헤더를 포함한 GET/POST 호출 |
+| 외부 | Opsia api-gateway HTTP | [gateway-api-gateway.md](gateway-api-gateway.md) | 인증 헤더를 포함한 GET/POST/PATCH 호출 |
 | 외부 | MCP host stdio | — | JSON-RPC request/response 라인 송수신 |
 | 테스트 | `httpx.MockTransport` | — | Gateway 호출을 실제 네트워크 없이 검증 |
 
@@ -77,7 +85,7 @@ AI client
 
 | 심볼 | 앵커 | 설명 |
 |---|---|---|
-| `main` | `src/services/mcp/internal_control/app.py :: main` | `src/services/mcp/internal_control/server.py :: main`을 import해 `SystemExit(main())`로 실행하는 모듈 진입점. `python -m services.mcp.internal_control.app` 형태의 stdio 실행을 담당한다. |
+| `main` | `src/services/mcp/internal_control/app.py :: main` | `src/services/mcp/internal_control/server.py :: main`을 import해 `SystemExit(main())`로 실행하는 모듈 진입점. `python -m services.mcp.internal_control.app` 형태의 stdio 실행을 담당한다. 이 파일은 Kubernetes workload 서비스가 아니라 MCP stdio 진입점이므로 `RUNTIME_DISCOVERY_IGNORE = True`를 선언해 `src/packages/runtime/discovery.py :: discover_services`의 서비스 자동 발견 대상에서 제외된다. |
 
 ### config.py
 
@@ -100,7 +108,7 @@ AI client
 | `OPSIA_MCP_BEARER_TOKEN_ENV` / `OPSIA_MCP_COOKIE_ENV` / `OPSIA_MCP_SESSION_COOKIE_ENV` | user-scoped 인증 입력. 셋 중 정확히 하나만 허용 |
 | `OPSIA_MCP_SESSION_COOKIE_NAME_ENV` | session cookie 이름. 기본 `Auth.SESSION_COOKIE_NAME` |
 | `OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV` | 입력돼도 금지. MCP는 service-admin trusted proxy 인증을 쓰지 않는다 |
-| `OPSIA_MCP_ENABLE_WRITES_ENV` | `"true"`일 때만 승인된 쓰기 POST 제출 허용 |
+| `OPSIA_MCP_ENABLE_WRITES_ENV` | `"true"`일 때만 승인된 쓰기 POST/PATCH 제출 허용 |
 | `OPSIA_MCP_ALLOW_INSECURE_HTTP_ENV` | loopback 외 `http://` base URL을 명시 허용할 때만 `"true"` |
 | `OPSIA_MCP_TIMEOUT_SECONDS_ENV` | Gateway request timeout. 기본 `10.0`, 상한 `60.0` |
 | `OPSIA_MCP_MAX_RESPONSE_BYTES_ENV` | Gateway response body 상한. 기본 `2 MiB`, 상한 `8 MiB` |
@@ -116,7 +124,8 @@ AI client
 | `ManagementApiError` | `src/services/mcp/internal_control/api_client.py :: ManagementApiError` | Gateway 호출 실패를 `status_code`, redacted `detail`로 나타내는 예외. |
 | `ManagementApiClient` | `src/services/mcp/internal_control/api_client.py :: ManagementApiClient` | 검증된 `McpSettings`와 `httpx.AsyncClient`로 Gateway JSON API를 호출하는 클라이언트. |
 | `ManagementApiClient.get_json(path, params=None)` | `src/services/mcp/internal_control/api_client.py :: ManagementApiClient.get_json` | 안전한 상대 path와 query만 허용해 GET JSON을 수행한다. |
-| `ManagementApiClient.post_json(path, body, params=None)` | `src/services/mcp/internal_control/api_client.py :: ManagementApiClient.post_json` | 안전한 상대 path와 query만 허용해 POST JSON을 수행한다. 쓰기 정책은 tools 레이어가 먼저 판정한다. |
+| `ManagementApiClient.post_json(path, body, params=None, headers=None)` | `src/services/mcp/internal_control/api_client.py :: ManagementApiClient.post_json` | 안전한 상대 path와 query만 허용해 POST JSON을 수행한다. 쓰기 정책은 tools 레이어가 먼저 판정한다. extra header는 allowlist된 `Idempotency-Key`만 허용한다. |
+| `ManagementApiClient.patch_json(path, body, params=None, headers=None)` | `src/services/mcp/internal_control/api_client.py :: ManagementApiClient.patch_json` | 안전한 상대 path와 query만 허용해 PATCH JSON을 수행한다. alert rule 수정/비활성화처럼 Gateway가 PATCH로 제공하는 기존 API만 통과한다. |
 | `ManagementApiClient.aclose()` | `src/services/mcp/internal_control/api_client.py :: ManagementApiClient.aclose` | 자체 생성한 httpx client만 닫는다. |
 
 api client 상수:
@@ -124,7 +133,9 @@ api client 상수:
 | 상수 | 값/의미 |
 |---|---|
 | `MAX_ERROR_DETAIL_LENGTH` | `500` — Gateway error detail redaction 후 최대 길이 |
-| `SUPPORTED_MANAGEMENT_API_METHODS` | `{"GET", "POST"}` — MCP client가 허용하는 HTTP method |
+| `SUPPORTED_MANAGEMENT_API_METHODS` | `{"GET", "POST", "PATCH"}` — MCP client가 허용하는 HTTP method |
+| `BODY_MANAGEMENT_API_METHODS` | `{"POST", "PATCH"}` — request body를 허용하는 method |
+| `ALLOWED_MANAGEMENT_API_EXTRA_HEADERS` | `{"idempotency-key"}` — command cancel/retry 멱등성에 필요한 extra header만 허용 |
 
 ### tools.py
 
@@ -136,7 +147,7 @@ api client 상수:
 | `ToolRegistry` | `src/services/mcp/internal_control/tools.py :: ToolRegistry` | tool 이름 중복을 금지하고 `list_tools()`/`call()`을 제공한다. |
 | `ToolRegistry.list_tools()` | `src/services/mcp/internal_control/tools.py :: ToolRegistry.list_tools` | tool 이름 정렬 순서로 protocol tool 목록을 반환한다. |
 | `ToolRegistry.call(name, arguments, client)` | `src/services/mcp/internal_control/tools.py :: ToolRegistry.call` | 등록된 handler를 찾아 실행한다. 알 수 없는 이름은 `ToolInputError`로 닫는다. |
-| `default_tool_registry()` | `src/services/mcp/internal_control/tools.py :: default_tool_registry` | 현재 노출하는 11개 tool을 생성한다. |
+| `default_tool_registry()` | `src/services/mcp/internal_control/tools.py :: default_tool_registry` | 현재 노출하는 32개 tool을 생성한다. 읽기 18개, dry-run/승인형 14개이며 모든 쓰기성 도구는 `WRITE_TOOL_ANNOTATIONS`를 갖는다. |
 | `dumps_tool_result(result)` | `src/services/mcp/internal_control/tools.py :: dumps_tool_result` | `structuredContent`와 같은 내용을 text fallback으로 직렬화한다. |
 
 tool 상수:
@@ -153,7 +164,7 @@ tool 상수:
 | `LOG_EVIDENCE_SOURCE` | `"logs"` |
 | `READ_ONLY_TOOL_ANNOTATIONS` | `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true` |
 | `WRITE_TOOL_ANNOTATIONS` | `readOnlyHint=false`, `destructiveHint=false`, `idempotentHint=false` |
-| `WRITE_HTTP_METHOD` | `"POST"` |
+| `WRITE_METHODS` | `{"POST", "PATCH"}` |
 | `SENSITIVE_PROPOSAL_KEY_PARTS` / `SENSITIVE_PROPOSAL_EXACT_KEYS` | proposal redaction 대상 key 조각과 exact key(`data`, `stringdata`) |
 | `SENSITIVE_PROPOSAL_MARKER_KEYS` / `SENSITIVE_PROPOSAL_MARKER_VALUE_KEYS` | `{name|key: sensitive-name, value|default|literal: secret}` 형태 redaction marker |
 | `DIRECT_EXECUTION_KEYS` | `confirmation`, `direct_execution`, `direct_execution_confirmed` |
@@ -169,6 +180,17 @@ tool 상수:
 | `list_recent_incidents` | `src/services/mcp/internal_control/tools.py :: list_recent_incidents` | `RCA_REPORTS_PATH` | RCA report 목록. correlation/time/cursor pagination만 허용 |
 | `list_evidence_windows` | `src/services/mcp/internal_control/tools.py :: list_evidence_windows` | `EVIDENCE_WINDOWS_PATH` | 기존 evidence window key 목록 |
 | `get_log_evidence` | `src/services/mcp/internal_control/tools.py :: get_log_evidence` | `EVIDENCE_WINDOW_PATH` + `source=logs` | logs source만 조회. logs source 404이고 window 자체가 있으면 invented payload 없이 unavailable 구조 반환 |
+| `get_command_status` | `src/services/mcp/internal_control/tools.py :: get_command_status` | `COMMAND_STATUS_PATH` | command 생성 이후 상태, agent 수신/실행 결과를 기존 command status API로 조회 |
+| `list_alert_rules` | `src/services/mcp/internal_control/tools.py :: list_alert_rules` | `ALERT_RULES_PATH` | alert rule 생성/수정 전 기존 rule 목록 조회 |
+| `get_alert_rule` | `src/services/mcp/internal_control/tools.py :: get_alert_rule` | `ALERT_RULES_PATH` | 기존 alert-rule list 응답에서 `rule_id`가 일치하는 rule만 필터링. DB 직접 조회 없음 |
+| `get_recovery_plan` | `src/services/mcp/internal_control/tools.py :: get_recovery_plan` | `RCA_RECOVERY_PLAN_BY_CORRELATION_PATH` | recovery action 요청 전 실제 plan/action 후보와 risk 조회 |
+| `list_applications` | `src/services/mcp/internal_control/tools.py :: list_applications` | `APPLICATIONS_PATH` | 서비스/앱 관점의 product application 목록 조회. Gateway 필터 query만 전달 |
+| `get_application_detail` | `src/services/mcp/internal_control/tools.py :: get_application_detail` | `APPLICATION_PATH` | 특정 application detail projection 조회 |
+| `list_audit_timeline` | `src/services/mcp/internal_control/tools.py :: list_audit_timeline` | `AUDIT_TIMELINE_PATH` | correlation id 기준 audit timeline 조회 |
+| `list_workflow_runs` | `src/services/mcp/internal_control/tools.py :: list_workflow_runs` | `APPLICATION_RUNS_PATH` 또는 `RELEASE_RUNS_PATH` | application workflow run 또는 release run 목록 조회 |
+| `get_workflow_run` | `src/services/mcp/internal_control/tools.py :: get_workflow_run` | `APPLICATION_RUNS_PATH` 또는 `RELEASE_RUN_PATH` | release run 단건 조회, 또는 application run 목록에서 run id 필터링 |
+| `list_pending_approvals` | `src/services/mcp/internal_control/tools.py :: list_pending_approvals` | `GITOPS_FILTER_RESULTS_PATH`, `APPLICATION_RUNS_PATH`, `RELEASE_RUNS_PATH` | 승인 대기 workflow를 기존 GitOps filter/application run/release run API만으로 수집 |
+| `get_resource_capabilities` | `src/services/mcp/internal_control/tools.py :: get_resource_capabilities` | `RESOURCE_CAPABILITIES_PATH` | 특정 resource에 대해 현재 허용된 action 후보만 조회 |
 
 쓰기 tool handler:
 
@@ -178,6 +200,16 @@ tool 상수:
 | `request_recovery_action` | `src/services/mcp/internal_control/tools.py :: request_recovery_action` | `RCA_RECOVERY_ACTION_SELECT_PATH` 또는 `RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH` | 기존 recovery plan/action 선택만 전달. `plan_id`와 `correlation_id`는 정확히 하나만 허용 |
 | `create_command_request` | `src/services/mcp/internal_control/tools.py :: create_command_request` | `COMMANDS_PATH` = `/commands` | command request POST. `confirmation`, `direct_execution`, `direct_execution_confirmed` payload key는 항상 거부 |
 | `approve_or_reject_workflow` | `src/services/mcp/internal_control/tools.py :: approve_or_reject_workflow` | `APPROVAL_GRANT_PATH` 또는 `APPROVAL_REJECT_PATH` | 기존 approval grant/reject POST. decision은 `grant`/`reject`만 허용 |
+| `run_metric_query_preset` | `src/services/mcp/internal_control/tools.py :: run_metric_query_preset` | `CLUSTER_METRIC_QUERY_PRESET_RUN_PATH` | 읽기성 metric query지만 Gateway가 agent debug command를 queue하므로 dry-run/승인/write-enable gate를 적용 |
+| `update_alert_rule` | `src/services/mcp/internal_control/tools.py :: update_alert_rule` | `ALERT_RULE_PATH` | 기존 alert-rule PATCH API로만 수정. Gateway admin-session/model validation이 권위 |
+| `disable_alert_rule` | `src/services/mcp/internal_control/tools.py :: disable_alert_rule` | `ALERT_RULE_PATH` | 삭제가 아니라 기존 alert-rule PATCH에 `enabled=false`만 제출 |
+| `cancel_command_request` | `src/services/mcp/internal_control/tools.py :: cancel_command_request` | `COMMAND_CANCEL_PATH` | 기존 command cancel API 호출. caller-supplied `Idempotency-Key` header 필수 |
+| `retry_command_request` | `src/services/mcp/internal_control/tools.py :: retry_command_request` | `COMMAND_RETRY_PATH` | 기존 command retry API 호출. caller-supplied `Idempotency-Key` header 필수 |
+| `ack_alert_event` | `src/services/mcp/internal_control/tools.py :: ack_alert_event` | `ALERT_EVENT_ACK_PATH` | 기존 alert event ack API 호출. Gateway가 event 존재와 actor 기록을 처리 |
+| `promote_alert_incident` | `src/services/mcp/internal_control/tools.py :: promote_alert_incident` | `ALERT_EVENT_PROMOTE_INCIDENT_PATH` | 기존 alert event incident 승격 API 호출 |
+| `propose_manifest_change` | `src/services/mcp/internal_control/tools.py :: propose_manifest_change` | `RESOURCE_MANIFEST_PREVIEW_PATH` / `RESOURCE_MANIFEST_APPROVE_PATH` | dry-run은 preview API만 호출하고 diff/edited YAML을 redaction. 실제 제출도 직접 apply가 아니라 Safe PR approve API만 사용 |
+| `create_release_plan` | `src/services/mcp/internal_control/tools.py :: create_release_plan` | `RELEASE_PLANS_PATH` | 기존 release plan POST로 plan 생성/갱신. Gateway application permission과 model validation이 권위 |
+| `start_release_run` | `src/services/mcp/internal_control/tools.py :: start_release_run` | `RELEASE_PLAN_START_PATH` | 기존 release plan start API 호출. Gateway blocker와 approval-evidence check가 권위 |
 
 ### server.py
 
@@ -244,19 +276,21 @@ JSON-RPC 상수:
 | `dry_run=true` 또는 생략 | 없음 | `mutating=false`, `approval_required=true`, redacted `proposal` 반환 |
 | `dry_run=false`, `approval_confirmed` 누락/false | 없음 | `ToolInputError` |
 | `dry_run=false`, `approval_confirmed=true`, `OPSIA_MCP_ENABLE_WRITES` false | 없음 | `ToolInputError` |
-| 세 조건 모두 충족 | 기존 Gateway POST | `mutating=true`, `approval_required=false`, Gateway 응답에서만 `operation_id` 추출 |
+| 세 조건 모두 충족 | 기존 Gateway POST/PATCH | `mutating=true`, `approval_required=false`, Gateway 응답에서만 `operation_id` 추출 |
 
 `proposal` 구조:
 
 ```json
 {
-  "method": "POST",
+  "method": "POST 또는 PATCH",
   "api_path": "/gateway/path",
   "body": "<redacted payload>",
   "body_redacted": true,
   "uses_existing_gateway_api": true
 }
 ```
+
+`propose_manifest_change`는 일반 `_post_or_propose` dry-run과 다르게 dry-run에서도 기존 manifest preview API를 호출한다. 이 preview는 Gateway validation과 diff 확인을 위한 비적용 경로이며, 반환 diff와 `edited_yaml`은 MCP 응답에서 redaction한다. `dry_run=false`일 때도 cluster apply가 아니라 기존 Safe PR approve API만 호출한다.
 
 ## 프로토콜 (JSON-RPC / MCP)
 
@@ -306,9 +340,9 @@ tool call 오류는 JSON-RPC error가 아니라 MCP tool result로 닫는다:
 
 1. 모든 쓰기는 `_post_or_propose`를 통과한다.
 2. payload는 `json.dumps(..., allow_nan=False)`로 finite JSON인지 확인하고 UTF-8 인코딩 기준 `64 KiB`를 넘으면 거부한다.
-3. dry-run proposal은 payload를 deep-copy/redaction한 뒤 반환한다. 원본 payload는 실제 POST 전까지 변형하지 않는다.
+3. dry-run proposal은 payload를 deep-copy/redaction한 뒤 반환한다. 원본 payload는 실제 POST/PATCH 전까지 변형하지 않는다.
 4. redaction은 `authorization`, `cookie`, `credential`, `password`, `secret`, `token`, `private_key`, `ssh_key`, `api_key` 류 key와 `data`/`stringData` exact key를 가린다. 또한 `{name|key: "...PASSWORD|TOKEN|SECRET...", value|default|literal: ...}` 형태의 marker value를 가린다.
-5. 실제 POST는 사용자가 dry-run proposal을 본 뒤 `approval_confirmed=true`를 준 경우에만 가능하며, MCP 프로세스 설정도 `OPSIA_MCP_ENABLE_WRITES=true`여야 한다.
+5. 실제 POST/PATCH는 사용자가 dry-run proposal을 본 뒤 `approval_confirmed=true`를 준 경우에만 가능하며, MCP 프로세스 설정도 `OPSIA_MCP_ENABLE_WRITES=true`여야 한다.
 6. `operation_id`는 Gateway 응답의 `rule_id`, `command_id`, `event_id`, `correlation_id`, `audit_event_id` 등 각 tool별 허용 key에서만 추출한다. MCP가 임의 operation id를 만들지 않는다.
 
 ## 불변식·오류 (Invariants & Errors)
@@ -334,7 +368,7 @@ tool call 오류는 JSON-RPC error가 아니라 MCP tool result로 닫는다:
 | `OPSIA_MCP_SESSION_COOKIE` | str | — | session token 값. `OPSIA_MCP_SESSION_COOKIE_NAME`과 조합해 Cookie header 생성 |
 | `OPSIA_MCP_SESSION_COOKIE_NAME` | str | `Auth.SESSION_COOKIE_NAME` | session cookie 이름. RFC cookie token 문자만 허용 |
 | `OPSIA_MCP_TRUSTED_PROXY_SECRET` | str | — | 금지. 설정되면 MCP 시작 실패 |
-| `OPSIA_MCP_ENABLE_WRITES` | bool | `false` | `true`일 때만 승인된 쓰기 tool이 Gateway POST를 제출 |
+| `OPSIA_MCP_ENABLE_WRITES` | bool | `false` | `true`일 때만 승인된 쓰기 tool이 Gateway POST/PATCH를 제출 |
 | `OPSIA_MCP_ALLOW_INSECURE_HTTP` | bool | `false` | loopback 외 `http://` base URL 허용 opt-in. 신뢰된 private network에서만 사용 |
 | `OPSIA_MCP_REQUEST_TIMEOUT_SECONDS` | float | `10.0` | Gateway HTTP timeout. `0 < value <= 60` |
 | `OPSIA_MCP_MAX_RESPONSE_BYTES` | int | `2097152` | Gateway response body read 상한. `0 < value <= 8388608` |
@@ -342,4 +376,5 @@ tool call 오류는 JSON-RPC error가 아니라 MCP tool result로 닫는다:
 ## 검증 (Tests)
 
 - `tests/test_internal_mcp.py`가 설정 fail-closed, trusted proxy 금지, tool registry/schema, read-only GET route, write dry-run/approval/write-enable gate, proposal redaction, direct execution flag 차단, response size bound, JSON-RPC error handling을 검증한다.
+- `tests/test_service_discovery.py`와 `tests/test_service_entrypoints.py`가 MCP stdio `app.py`의 `RUNTIME_DISCOVERY_IGNORE = True` 선언을 통해 기존 Kubernetes workload 서비스 discovery/manifest 검증이 깨지지 않는지 확인한다.
 - 기존 Gateway 계약 회귀는 `tests/test_alert_rules.py`, `tests/test_command_router.py`, `tests/test_gitops_approval_router.py`, `tests/test_rca_recovery_router.py`로 같이 확인한다.
