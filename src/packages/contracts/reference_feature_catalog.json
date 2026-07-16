@@ -6259,31 +6259,29 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity.CommandRequest",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.ResourceManifestCreateRequest",
       "frontendContract": "frontend/src/features/resources/resourceManifestContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
+        "tests/test_manifest_resource_create.py",
         "tests/test_target_agent_commands.py",
-        "tests/test_manifest_editor.py",
-        "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
-        "frontend/src/api/resource-manifests.test.ts"
+        "frontend/src/api/resource-manifests.test.ts",
+        "frontend/src/features/resources/createResourceManifestAdapter.test.ts",
+        "frontend/src/pages/resources/ResourceManifestCreateDialog.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/manifest_editor/router.py#apply_resource_manifest_now",
+          "state": "implemented",
+          "destination": "src/domains/manifest_editor/router.py#apply_resource_manifest_create",
           "consumer": "src/services/target/cluster-agent/agent.py#apply_manifest_command",
-          "reason": "Exact source-bound single and multi-document apply is implemented, but arbitrary resource creation plus dry-run and force modes remain unavailable.",
-          "test": "tests/test_manifest_editor.py"
+          "test": "tests/test_manifest_resource_create.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/resources/ResourceManifestEditor.tsx#ResourceManifestEditor",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceManifestCreateDialog.tsx#ResourceManifestCreateDialog",
           "consumer": "frontend/src/features/resources/createResourceManifestAdapter.ts#createResourceManifestAdapter",
-          "reason": "The editor can directly apply exact source-bound edits with a receipt and operation stream while preserving Safe PR, but it does not advertise unsupported arbitrary create, dry-run, or force modes.",
-          "test": "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
+          "test": "frontend/src/pages/resources/ResourceManifestCreateDialog.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
