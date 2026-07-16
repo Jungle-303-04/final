@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 109,
+  "pendingCount": 106,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -6949,8 +6949,33 @@
         "blobId": "3084c27f6d8fc77672a4bc3989fc0cec78e288e6",
         "sha256": "1235bcb028dfd481d561f5bb3e9343911842cb120d37a1a07204f027d187649e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:web-library:readme:package-contract:v1",
+          "legacyContractIds": [],
+          "symbol": "web README install, embedding, Tailwind, runtime config, and compatibility guidance",
+          "interaction": "noninteractive documentation boundary: the source web application documents installation and embedding as a reusable source-only browser package",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product distributes an authenticated web console and Tauri desktop application, not a source-only embeddable browser package; publishing the frozen package installation and host-runtime contract would create an unsupported second product surface.",
+            "rationale": "The root product documentation and standalone package manifest are canonical. Source package provenance remains available only inside the frozen reference and legal notice boundary."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -9998,8 +10023,35 @@
         "blobId": "4b793b6019cacb7186d0ba0fa0bdf3710003a2ee",
         "sha256": "c0c2293810d334df41717b3dea366f6fc76ddda1b2993f66ae308acf8874842a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:web-library:public-api:exports:v1",
+          "legacyContractIds": [],
+          "symbol": "web/src/index.ts reusable application and runtime-config exports",
+          "interaction": "noninteractive module boundary: the source app publishes its router, runtime configuration, navigation builders, search primitives, and host customization as a browser library API",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/package.json",
+              "frontend/src/app/buildBaseline.test.ts",
+              "frontend/src/app/ProductRouter.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline",
+              "shell.resource-navigation.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The standalone product intentionally exposes no JavaScript library main or export map. Public host setters would bypass authenticated workspace, cluster scope, and product composition ownership.",
+            "rationale": "Deep links and shared UI behavior remain available through product-owned routes and components, while the frozen library export surface is excluded from runtime builds."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10013,8 +10065,82 @@
         "blobId": "26e962dfe156daf400a510d43ddfa8da85c00f99",
         "sha256": "55e75972b45a355cf3b32e62ad5caa345e983dd0a2dbf54cbbf9c7e5b03bccdf"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:bootstrap:standalone:react-root:v1",
+          "legacyContractIds": [],
+          "symbol": "standalone React root and provider bootstrap",
+          "interaction": "the standalone browser and desktop console mounts one strict React root and enters the authenticated product runtime",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/main.tsx",
+              "frontend/src/ProductApp.tsx",
+              "frontend/src/app/AuthenticatedProductRuntime.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product bootstrap owns one #root mount, theme, i18n, authentication, router, suspense, and error boundaries without importing the frozen runtime."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:desktop:external-link:native-bridge:v1",
+          "legacyContractIds": [],
+          "symbol": "external anchor interception",
+          "interaction": "desktop external HTTP and HTTPS links open through a validated native bridge instead of remaining trapped in the webview",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/desktop/desktopBridge.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shell.external-link.policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Tauri bridge accepts only credential-free HTTP(S) URLs and the browser fallback uses a new isolated tab; the server never receives local desktop authority."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:desktop:webview:clipboard-and-history:v1",
+          "legacyContractIds": [],
+          "symbol": "desktop clipboard interception and mouse back/forward handling",
+          "interaction": "copy, cut, paste, and auxiliary mouse navigation remain usable inside the desktop editor and webview",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+              "frontend/src/features/log-viewer/LogViewer.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shell.external-link.policy"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Tauri desktop bridge does not yet expose a tested cross-platform editor clipboard command or explicit auxiliary mouse back/forward policy equivalent to the source Wails-specific handlers.",
+            "rationale": "Ordinary browser clipboard flows remain product-owned, but desktop-specific parity stays explicit until native menu and webview tests cover all three operating systems."
+          }
+        }
+      ]
     },
     {
       "status": "M",
