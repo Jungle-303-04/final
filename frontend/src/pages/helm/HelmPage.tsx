@@ -334,7 +334,7 @@ function CoverageNotice({
 
 function HelmFailureScreen({ failure, onRefresh }: { failure: HelmPortFailure; onRefresh: () => void }) {
   if (failure.code === "forbidden") {
-    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: failure.code }} placement="content" />;
+    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: HELM_COPY.permissionDenied }} placement="content" />;
   }
   if (failure.code === "offline") {
     return <ProductStateScreen kind="offline" issue={{ code: "network", safeDetail: failure.code }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
