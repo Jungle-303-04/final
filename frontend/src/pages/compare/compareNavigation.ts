@@ -1,4 +1,5 @@
 import type { CompareRequest, CompareTarget } from "../../features/compare/compareContract";
+import { serializeRouteSearch } from "../../features/filters/routeSearchAdapter";
 import { compareTargetParam, parseCompareTarget } from "../../features/compare/compareTarget";
 
 export type CompareRouteIdentity = CompareRequest;
@@ -21,18 +22,19 @@ export function parseCompareRoute(search: URLSearchParams): CompareRouteIdentity
 }
 
 export function compareHref(identity: CompareRouteIdentity): string {
-  const params = new URLSearchParams({
-    cluster: requiredForHref(identity.clusterId, "cluster"),
-    kind: requiredForHref(identity.kind, "kind"),
-    apiGroup: validApiPart(identity.apiGroup) ? identity.apiGroup : invalidHref("apiGroup"),
-    a: compareTargetParam(identity.a),
-    b: compareTargetParam(identity.b),
-  });
-  if (identity.apiVersion !== null) {
-    if (!validApiPart(identity.apiVersion) || !identity.apiVersion) invalidHref("apiVersion");
-    params.set("apiVersion", identity.apiVersion);
-  }
-  return `/compare?${params.toString()}`;
+  const apiVersion = identity.apiVersion === null
+    ? null
+    : validApiPart(identity.apiVersion) && identity.apiVersion
+      ? identity.apiVersion
+      : invalidHref("apiVersion");
+  return `/compare${serializeRouteSearch([
+    ["cluster", requiredForHref(identity.clusterId, "cluster")],
+    ["kind", requiredForHref(identity.kind, "kind")],
+    ["apiGroup", validApiPart(identity.apiGroup) ? identity.apiGroup : invalidHref("apiGroup")],
+    ["a", compareTargetParam(identity.a)],
+    ["b", compareTargetParam(identity.b)],
+    ["apiVersion", apiVersion],
+  ])}`;
 }
 
 export function replaceCompareSide(

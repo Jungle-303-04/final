@@ -1,8 +1,9 @@
 import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
 import { useMemo } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
+import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type {
   WorkloadDetail,
   WorkloadDetailPort,
@@ -18,7 +19,7 @@ import { useWorkloadDetail } from "./useWorkloadDetail";
 
 export function WorkloadDetailRoute({ port }: { port: WorkloadDetailPort }) {
   const params = useParams();
-  const [search, setSearch] = useSearchParams();
+  const search = useFilterSearchParams();
   const navigate = useNavigate();
   const identity = useMemo(() => parseWorkloadDetailRoute(params, search), [params, search]);
   const { frame, refresh } = useWorkloadDetail(port, identity);
@@ -91,7 +92,7 @@ function WorkloadDetailPage({
           <Badge variant="outline">{detail.scope.freshness}</Badge>
           <Badge variant="outline">{detail.coverage.availability}</Badge>
           <Button disabled={refreshing} onClick={onRefresh} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" className={cn(refreshing && "animate-spin")} />Refresh
+            <RefreshCw aria-hidden="true" className={cn(refreshing && "motion-safe:animate-spin motion-reduce:animate-none")} />Refresh
           </Button>
         </div>
       </header>

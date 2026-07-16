@@ -1,4 +1,5 @@
 import type { WorkloadDetailRequest, WorkloadDetailTab } from "../../features/workload-detail/workloadDetailContract";
+import { serializeRouteSearch } from "../../features/filters/routeSearchAdapter";
 
 const VALID_TABS = new Set<WorkloadDetailTab>(["overview", "pods", "events", "logs"]);
 
@@ -34,13 +35,12 @@ export function workloadDetailHref(
   tab: WorkloadDetailTab = "overview",
 ): string {
   const namespace = identity.namespace === null ? "_" : identity.namespace;
-  const params = new URLSearchParams({
-    cluster: identity.clusterId,
-    apiGroup: identity.apiGroup,
-    apiVersion: identity.apiVersion,
-  });
-  if (tab !== "overview") params.set("tab", tab);
-  return `/workload/${encode(identity.kind)}/${encode(namespace)}/${encode(identity.name)}?${params.toString()}`;
+  return `/workload/${encode(identity.kind)}/${encode(namespace)}/${encode(identity.name)}${serializeRouteSearch([
+    ["cluster", identity.clusterId],
+    ["apiGroup", identity.apiGroup],
+    ["apiVersion", identity.apiVersion],
+    ["tab", tab === "overview" ? null : tab],
+  ])}`;
 }
 
 export function normalizeWorkloadDetailTab(value: string | null): WorkloadDetailTab {
