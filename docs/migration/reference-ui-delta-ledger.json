@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 214,
+  "pendingCount": 211,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3651,8 +3651,57 @@
         "blobId": "2d71ac4e7162ebd0542ba415f9f2e93769e3da51",
         "sha256": "28a06851a5097542b7ce4b460d3941a993ca5137cae7a9570e0ae6d071f4135a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:badge:warning:foreground-variant:v1",
+          "legacyContractIds": [],
+          "symbol": "SEVERITY.warning",
+          "interaction": "noninteractive warning badge presentation resolves its foreground through a shared semantic token rather than a theme-specific hue class",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.badge"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Badge now exposes one warning variant that consumes shared status surface, border, and semantic foreground tokens. No feature page owns a copied warning color."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:badge:resource-kind:palette:v1",
+          "legacyContractIds": [],
+          "symbol": "KIND.Workflow, KIND.CronWorkflow, KIND.WorkflowTemplate, KIND.ClusterWorkflowTemplate, KIND.ScaledJob",
+          "interaction": "noninteractive resource-kind palette extends upstream color choices for workflow and scaled-job resource labels",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.resource-kind.palette"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no server-described resource presentation palette or typed resource-kind Badge API. Copying upstream kind-to-hue strings into a generic primitive would make browser-owned Kubernetes taxonomy and duplicate feature styling.",
+            "rationale": "The shared Badge test keeps the current semantic-only API explicit; workflow and scaled-job colors remain unported until the resource contract owns their presentation metadata."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3921,8 +3970,33 @@
         "blobId": "8925555a8edeae0a55e8818498f3015de6892e1e",
         "sha256": "4c878d6e79d39ffa89f67df7f9a037db7c706fe77c7c06b9ac99b1603975e14f"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:warning:utility-alias:v1",
+          "legacyContractIds": [],
+          "symbol": "@theme inline --color-warning-text",
+          "interaction": "noninteractive Tailwind theme alias exposes the semantic warning foreground to shared component utilities",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/styles/tokens.css",
+              "frontend/src/styles/tokens.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.token"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product @theme alias maps `text-warning-foreground` to one shared CSS variable, keeping the upstream warning-text behavior available without feature-local aliases."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3936,8 +4010,57 @@
         "blobId": "7e90faef2fad2736040ac08633a161031a8eadb7",
         "sha256": "f159b1733fb60b804901fba5e9c0df7e045c86e6c90fbfe838feb2686daf9c65"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:warning:foreground-token:v1",
+          "legacyContractIds": [],
+          "symbol": ":root --warning-text",
+          "interaction": "noninteractive warning text foreground supplies distinct accessible light and dark values",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/styles/tokens.css",
+              "frontend/src/styles/tokens.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.token"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product token layer owns the exact upstream light `#92400E` and dark `#FBBF24` foreground values, exposed only through the reusable warning-foreground semantic name."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:design:sheet:drawer-shadow:v1",
+          "legacyContractIds": [],
+          "symbol": ".dark --shadow-drawer",
+          "interaction": "noninteractive dark drawer elevation retunes a one-direction horizontal shadow and adds a light outline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/sheet.tsx",
+              "frontend/src/shared/ui/primitives/sheet.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.sheet.drawer-shadow.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product Sheet is a tested four-direction overlay primitive, while this upstream token defines only one horizontal drawer shadow. Applying that left-facing shadow to top, bottom, and opposite-side panels would create a directionally incorrect elevation treatment.",
+            "rationale": "The product keeps its canonical Sheet elevation, focus, overlay, and reduced-motion boundary visible in the primitive test. A directional shadow port is deferred until a side-aware token contract covers all four product panel directions."
+          }
+        }
+      ]
     },
     {
       "status": "M",

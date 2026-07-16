@@ -43,6 +43,17 @@ describe("product theme token contract", () => {
     },
   );
 
+  it("maps the warning foreground through one semantic theme alias", () => {
+    const themeTokens = declarations(block("@theme inline"));
+    const lightTokens = declarations(block(":root"));
+    const darkTokens = declarations(block(".dark"));
+
+    expect(themeTokens.get("--color-warning-foreground")).toBe("var(--warning-foreground)");
+    expect(lightTokens.get("--warning-foreground")).toMatch(/^#[\dA-F]{6}$/);
+    expect(darkTokens.get("--warning-foreground")).toMatch(/^#[\dA-F]{6}$/);
+    expect(lightTokens.get("--warning-foreground")).not.toBe(darkTokens.get("--warning-foreground"));
+  });
+
   it("derives product frame clearance from the shared floating-action geometry", () => {
     const lightTokens = declarations(block(":root"));
 

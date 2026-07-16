@@ -250,6 +250,22 @@
     "topology.search.scope": {
       "destination": "frontend/src/pages/resources/ResourcesPage.relationTopology.test.tsx",
       "rationale": "Topology search must prove selected-resource navigation and keyboard dismissal against the current authorized graph scope."
+    },
+    "design.warning-foreground.token": {
+      "destination": "frontend/src/styles/tokens.test.ts",
+      "rationale": "Warning text must resolve through one semantic light/dark token and one Tailwind theme alias, not page-local hue classes."
+    },
+    "design.warning-foreground.badge": {
+      "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
+      "rationale": "The shared warning badge must consume semantic foreground, surface, and border tokens so every future feature reuses the same state treatment."
+    },
+    "design.sheet.drawer-shadow.boundary": {
+      "destination": "frontend/src/shared/ui/primitives/sheet.test.tsx",
+      "rationale": "The four-direction product Sheet owns its tested overlay, focus, motion, and elevation boundary; a one-direction upstream drawer shadow cannot be substituted silently."
+    },
+    "design.resource-kind.palette": {
+      "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
+      "rationale": "The product Badge deliberately exposes typed semantic variants only; resource-kind palette support needs a server-described resource presentation contract before it can be added."
     }
   },
   "classifications": {
@@ -302,6 +318,141 @@
             "state": "blocked",
             "blockedReason": "The product is one standalone Vite application and pins its supported TypeScript build through `tsc -b`; adding the isolated package's cross-package future-compiler shim would create a second unsupported build authority.",
             "rationale": "The product test records the one supported compiler entrypoint so this source-only transition cannot be mistaken for a completed runtime port."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/Badge.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:badge:warning:foreground-variant:v1",
+          "legacyContractIds": [],
+          "symbol": "SEVERITY.warning",
+          "interaction": "noninteractive warning badge presentation resolves its foreground through a shared semantic token rather than a theme-specific hue class",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.badge"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Badge now exposes one warning variant that consumes shared status surface, border, and semantic foreground tokens. No feature page owns a copied warning color."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:badge:resource-kind:palette:v1",
+          "legacyContractIds": [],
+          "symbol": "KIND.Workflow, KIND.CronWorkflow, KIND.WorkflowTemplate, KIND.ClusterWorkflowTemplate, KIND.ScaledJob",
+          "interaction": "noninteractive resource-kind palette extends upstream color choices for workflow and scaled-job resource labels",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/badge.tsx",
+              "frontend/src/shared/ui/primitives/badge.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.resource-kind.palette"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no server-described resource presentation palette or typed resource-kind Badge API. Copying upstream kind-to-hue strings into a generic primitive would make browser-owned Kubernetes taxonomy and duplicate feature styling.",
+            "rationale": "The shared Badge test keeps the current semantic-only API explicit; workflow and scaled-job colors remain unported until the resource contract owns their presentation metadata."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/theme/tailwind-theme.css": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:warning:utility-alias:v1",
+          "legacyContractIds": [],
+          "symbol": "@theme inline --color-warning-text",
+          "interaction": "noninteractive Tailwind theme alias exposes the semantic warning foreground to shared component utilities",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/styles/tokens.css",
+              "frontend/src/styles/tokens.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.token"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product @theme alias maps `text-warning-foreground` to one shared CSS variable, keeping the upstream warning-text behavior available without feature-local aliases."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/theme/variables.css": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:design:warning:foreground-token:v1",
+          "legacyContractIds": [],
+          "symbol": ":root --warning-text",
+          "interaction": "noninteractive warning text foreground supplies distinct accessible light and dark values",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/styles/tokens.css",
+              "frontend/src/styles/tokens.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.warning-foreground.token"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product token layer owns the exact upstream light `#92400E` and dark `#FBBF24` foreground values, exposed only through the reusable warning-foreground semantic name."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:design:sheet:drawer-shadow:v1",
+          "legacyContractIds": [],
+          "symbol": ".dark --shadow-drawer",
+          "interaction": "noninteractive dark drawer elevation retunes a one-direction horizontal shadow and adds a light outline",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/sheet.tsx",
+              "frontend/src/shared/ui/primitives/sheet.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "design.sheet.drawer-shadow.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product Sheet is a tested four-direction overlay primitive, while this upstream token defines only one horizontal drawer shadow. Applying that left-facing shadow to top, bottom, and opposite-side panels would create a directionally incorrect elevation treatment.",
+            "rationale": "The product keeps its canonical Sheet elevation, focus, overlay, and reduced-motion boundary visible in the primitive test. A directional shadow port is deferred until a side-aware token contract covers all four product panel directions."
           }
         }
       ]

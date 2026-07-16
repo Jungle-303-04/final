@@ -117,6 +117,7 @@ describe("product-owned Sheet", () => {
     expect(content.getAttribute("data-slot")).toBe("sheet-content");
     expect(content.getAttribute("data-side")).toBe("left");
     expect(content.className).toContain("bg-popover");
+    expect(content.className).toContain("shadow-lg");
     expect(content.className).toContain("motion-reduce:transition-none");
     expect(content.className).toContain("forced-colors:border-[CanvasText]");
     expect(overlay?.className).toContain("bg-foreground/10");
