@@ -2240,6 +2240,8 @@
         "tests/test_refresh_policies.py",
         "tests/test_shell_state_router.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/shared/data/serverRefreshScheduler.test.ts",
         "frontend/src/pages/home/useHomePageState.test.tsx"
       ],
       "coverage": {
@@ -2250,10 +2252,10 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/useHomeRefreshClock.ts#useHomeRefreshClock",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "Dashboard sections still use browser-owned 10-second and 5-second clocks and do not consume the server dashboard policy or an SSE deferred-ready invalidation.",
+          "state": "in_progress",
+          "destination": "frontend/src/pages/home/useHomePageState.ts#useHomePageState",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "Dashboard sections consume the server-owned cadence, pause while hidden, and retain last success without browser timing constants; the exact authorized deferred-ready invalidation signal remains to be connected.",
           "test": "frontend/src/pages/home/useHomePageState.test.tsx"
         },
         "desktop": null,
@@ -2273,7 +2275,7 @@
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
       "desktopContract": null,
@@ -2281,6 +2283,8 @@
         "tests/test_refresh_policies.py",
         "tests/test_shell_state_router.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/features/issues/createIssuesAdapter.test.ts",
+        "frontend/src/shared/data/serverRefreshScheduler.test.ts",
         "frontend/src/features/issues/IssuesSurface.test.tsx"
       ],
       "coverage": {
@@ -2291,10 +2295,10 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/features/issues/IssuesSurface.tsx#IssuesSurface",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "The queue preserves its last successful list, but its browser-owned 10-second interval does not consume the server issues and audit policy.",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "Issues and audit consume the server-owned cadence, pause while hidden, coalesce visible refreshes, and preserve the last successful queue after background failure.",
           "test": "frontend/src/features/issues/IssuesSurface.test.tsx"
         },
         "desktop": null,
@@ -2314,13 +2318,15 @@
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+        "frontend/src/shared/data/serverRefreshScheduler.test.ts",
         "frontend/src/features/applications/ApplicationsSurface.test.tsx"
       ],
       "coverage": {
@@ -2331,10 +2337,10 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/features/applications/useApplicationsData.ts#useApplicationsResource",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "Application catalog and detail retain last-success and refresh visibly at sixty seconds, but the cadence remains a browser constant instead of a response-owned policy.",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "Application catalog and URL-owned detail share the same resource, consume the server-owned cadence, pause while hidden, and retain last success.",
           "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
         },
         "desktop": null,
@@ -7467,30 +7473,31 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.helm.sources.HelmChartSourceRegisterRequest",
-      "frontendContract": "frontend/src/features/helm/helmEndpointContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.sources.HelmChartSourceDeleteRequest",
+      "frontendContract": "frontend/src/features/helm/helmChartSourcesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_chart_source_provider.py",
         "tests/test_helm_chart_source_router.py",
         "frontend/src/api/helm-chart-sources.test.ts",
         "frontend/src/features/helm/createHelmChartSourcesAdapter.test.ts",
+        "frontend/src/pages/helm/HelmChartSourceDeleteDialog.tsx",
         "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/helm/source_router.py#register_helm_chart_source",
-          "consumer": "src/domains/helm/repository.py#HelmReleaseRepository.register_helm_chart_source",
-          "reason": "Workspace-scoped write-only encrypted credential registration is implemented; deletion, command receipt, and mutation audit contracts remain.",
-          "test": "tests/test_helm_chart_source_router.py#test_admin_source_registration_reuses_encrypted_workspace_credential"
+          "state": "implemented",
+          "destination": "src/domains/helm/source_router.py#delete_helm_chart_source",
+          "consumer": "src/domains/helm/repository.py#HelmReleaseRepository.delete_helm_chart_source",
+          "reason": "Deletion verifies service and resource capability, locks the exact workspace source identity, deletes its credential, and records the accepted audit/outbox receipt in one unit of work.",
+          "test": "tests/test_helm_chart_source_router.py#test_source_delete_stages_workspace_audit_event_in_the_mutation_unit_of_work"
         },
         "frontend": {
           "state": "implemented",
-          "destination": "frontend/src/pages/helm/HelmChartSourceRegistrationDialog.tsx#HelmChartSourceRegistrationDialog",
-          "consumer": "frontend/src/api/helm-chart-sources.ts#registerHelmChartSource",
-          "reason": "Registration and post-mutation refetch are implemented; deletion, command receipt, and mutation audit remain backend gaps.",
+          "destination": "frontend/src/pages/helm/HelmChartSourceDeleteDialog.tsx#HelmChartSourceDeleteDialog",
+          "consumer": "frontend/src/api/helm-chart-sources.ts#deleteHelmChartSource",
+          "reason": "The server-projected delete capability controls the confirmation action, strict receipt parsing, conflict handling, and post-delete list refresh.",
           "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
