@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 204,
+  "pendingCount": 199,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3715,8 +3715,33 @@
         "blobId": "799251a9898f9ccc6f68f24d4fa26d9c7e77979b",
         "sha256": "934ba9966349431b419d114c06328539f13cf08afbe372aaa0808d99bad2cd71"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:code-viewer:find-input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "CodeViewer find Input",
+          "interaction": "the code-viewer find control uses the shared identifier-safe input rather than a raw browser input",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.resource_manifests"
+            ],
+            "plannedTestIds": [
+              "shared-ui.code-viewer.search"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has an authorized YAML editor but no server-backed code-viewer/find projection. Adding an isolated client-side find box would not preserve source search, selection, or source-freshness semantics.",
+            "rationale": "The shared Input is ready, but no code-viewer surface claims this behavior until its read contract exists."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -3886,8 +3911,33 @@
         "blobId": "2da8d0871d6c7f77900870852ee7a98c9faa46e7",
         "sha256": "66a41b084b56e983c75b20805ceb1535aef780f6ae4dcd53ec72039e4a44c3f2"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "Input",
+          "interaction": "a reusable text input defaults browser autocorrection and automatic capitalization off for Kubernetes identifiers while allowing an explicit caller override and typed native focus ownership",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.input.identifier-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Input now exposes a typed forwarded HTMLInputElement ref and applies identifier-safe defaults without taking style, value, validation, or copy ownership away from its caller."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -4022,8 +4072,39 @@
         "blobId": "d4234e65a568acaa041ee3ccd9811d7a3a86587f",
         "sha256": "c82e7500f2f11d4ac5ad7980ea1d5f27dd7b6b68f51edaff6e9c7bd504902240"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resource-bar:capacity:quiet-inline-marker:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceBar quiet layout and marker",
+          "interaction": "a resource-capacity bar supports a non-alarmist utilization palette, inline label layout, and a separate scheduler-capacity marker",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "Any future capacity fill must retain its percentage and threshold meaning while width transitions are disabled for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/ResourceBar.tsx",
+              "frontend/src/shared/ui/primitives/progress.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/progress.tsx",
+              "frontend/src/features/home/homeContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.home.overview"
+            ],
+            "plannedTestIds": [
+              "shared-ui.resource-bar.capacity"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Home projection supplies percentages only; it does not supply typed used, allocatable, request-marker, or scheduling-pressure evidence. Mapping a percentage to the source capacity bar would fabricate a denominator and threshold state in the browser.",
+            "rationale": "The existing generic Progress remains correct for determinate operation state. A capacity-specific primitive waits for a server-owned capacity contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -4037,8 +4118,81 @@
         "blobId": "742e884b19223f785d87baf519fb42e70bae391c",
         "sha256": "f9ce4a1beb1792b6af99173834c770c32f00029b86643f948b1e013c1ca7f0ad"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:search-box:focus:external-ref-handoff:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchBox inputRef",
+          "interaction": "a route-owned list shortcut focuses the exact externally owned shared search input instead of a detached local ref",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases"
+            ],
+            "plannedTestIds": [
+              "helm.release-list.search-shortcut"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Helm list retains one route-owned shortcut listener and passes its typed ref directly to the shared Input, preventing the prior detached-ref focus failure without DOM queries or selectors."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:search-box:shortcut:registration-ownership:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchBox shortcutEnabled",
+          "interaction": "a reusable search wrapper can suppress its own slash registration when a parent already owns the same shortcut",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/shortcutRegistry.ts",
+              "frontend/src/pages/helm/HelmPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.search-box.lifecycle"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product shortcut registry intentionally has no extensible route-scoped single-key registration API or help-overlay descriptor for this generic control. Helm has one route-owned listener, so duplicating the source wrapper registration would create a second shortcut authority.",
+            "rationale": "The completed Helm focus path has one owner; reusable registration metadata remains deferred until it can join the product shortcut authority rather than bypass it."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:search-box:lifecycle:blur-callback:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchBox onBlur",
+          "interaction": "a collapsible search owner can react to input blur without forcing the shared input to own expansion state",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/helm/HelmPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases"
+            ],
+            "plannedTestIds": [
+              "shared-ui.search-box.lifecycle"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Helm release search is permanently visible and has no typed collapsed/expanded presentation state. Adding a no-op blur callback would not preserve the source lifecycle.",
+            "rationale": "This stays explicit until a product route exposes a real owner-controlled collapsible search contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -4052,8 +4206,34 @@
         "blobId": "590788019e41be3a0f50b928eafad143bf669a91",
         "sha256": "d3b59f54735444ad3765d5d8a6db59646aba8a3226c4b7492cfc7e4a08ad145a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:structured-search:input:identifier-mutation-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "SearchPillInput Input",
+          "interaction": "the editable segment of a structured filter delegates browser text-mutation policy to the one shared typed input primitive",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/SearchPillInput.tsx",
+              "frontend/src/shared/ui/SearchPillInput.test.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.search-pill.input-policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing structured filter already consumes the shared Input; its regression test now proves the source policy is inherited rather than copied as raw input attributes."
+          }
+        }
+      ]
     },
     {
       "status": "A",

@@ -1,5 +1,5 @@
 import { ArrowLeft, PackageSearch } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
@@ -75,6 +75,7 @@ function HelmReleaseListPage({
   port: HelmPort;
 }) {
   const scope = useClusterScope();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const scopeResolution = helmScopeClusterIds(scope);
   const data = useHelmReleaseList(port, scopeResolution.clusterIds);
@@ -91,7 +92,14 @@ function HelmReleaseListPage({
         <h1 className="text-2xl font-semibold tracking-tight">{HELM_COPY.title}</h1>
         <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{HELM_COPY.description}</p>
       </header>
-      <HelmListBoundary frame={data.frame} onOpen={onOpen} onRefresh={data.refresh} query={query} setQuery={setQuery} />
+      <HelmListBoundary
+        frame={data.frame}
+        onOpen={onOpen}
+        onRefresh={data.refresh}
+        query={query}
+        searchInputRef={searchInputRef}
+        setQuery={setQuery}
+      />
     </ProductPageFrame>
   );
 }
@@ -101,12 +109,14 @@ function HelmListBoundary({
   onOpen,
   onRefresh,
   query,
+  searchInputRef,
   setQuery,
 }: {
   frame: ReturnType<typeof useHelmReleaseList>["frame"];
   onOpen: (release: HelmRelease) => void;
   onRefresh: () => void;
   query: string;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   setQuery: (value: string) => void;
 }) {
   if (frame.phase === "idle" || frame.phase === "loading") {
@@ -125,6 +135,7 @@ function HelmListBoundary({
             id="helm-release-filter"
             onChange={(event) => setQuery(event.target.value)}
             placeholder={HELM_COPY.searchPlaceholder}
+            ref={searchInputRef}
             value={query}
           />
         </label>
@@ -135,7 +146,12 @@ function HelmListBoundary({
         />
       </div>
       <h2 className="sr-only" id="helm-release-list-title">{HELM_COPY.title}</h2>
-      <HelmReleaseTable releases={releases} onOpen={onOpen} query={query} />
+      <HelmReleaseTable
+        onOpen={onOpen}
+        query={query}
+        releases={releases}
+        searchInputRef={searchInputRef}
+      />
     </section>
   );
 }
@@ -144,22 +160,23 @@ function HelmReleaseTable({
   onOpen,
   query,
   releases,
+  searchInputRef,
 }: {
   onOpen: (release: HelmRelease) => void;
   query: string;
   releases: readonly HelmRelease[];
+  searchInputRef: RefObject<HTMLInputElement | null>;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const filtered = useMemo(() => releases.filter((release) => matchesRelease(release, query)), [query, releases]);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const activeIndex = Math.min(highlightedIndex, Math.max(filtered.length - 1, 0));
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
+      if (isSearchShortcutExcluded(event)) return;
       if (event.key === "/") {
         event.preventDefault();
-        inputRef.current?.focus();
+        searchInputRef.current?.focus();
         return;
       }
       if (filtered.length === 0) return;
@@ -179,7 +196,7 @@ function HelmReleaseTable({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeIndex, filtered, onOpen]);
+  }, [activeIndex, filtered, onOpen, searchInputRef]);
 
   if (filtered.length === 0) {
     return <EmptyReleaseList query={query} />;
@@ -449,8 +466,30 @@ function scopeText(release: HelmRelease): string {
   return `${HELM_COPY.scope}: ${release.scope.clusterId} / ${release.storageNamespace} (${release.scope.freshness})`;
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+function isSearchShortcutExcluded(event: globalThis.KeyboardEvent): boolean {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.keyCode === 229 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.getModifierState("AltGraph")
+  ) return true;
+
+  return event.composedPath().some(isSearchShortcutExcludedTarget);
+}
+
+function isSearchShortcutExcludedTarget(target: EventTarget): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (
+    target.isContentEditable ||
+    target.getAttribute("contenteditable") === "true" ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+  ) return true;
+
+  const role = target.getAttribute("role");
+  return role === "combobox" || role === "dialog" || role === "textbox" || target.getAttribute("aria-modal") === "true";
 }
 
 function helmScopeClusterIds(scope: ReturnType<typeof useClusterScope>):

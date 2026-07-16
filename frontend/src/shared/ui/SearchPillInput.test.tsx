@@ -27,6 +27,14 @@ describe("SearchPillInput", () => {
     expect(screen.getByText("team=platform")).toBeTruthy();
   });
 
+  it("uses the shared identifier-safe input policy for structured filters", () => {
+    render(<Harness initialPills={[]} />);
+
+    const input = screen.getByRole("textbox", { name: "필터 추가" });
+    expect(input.getAttribute("autocapitalize")).toBe("off");
+    expect(input.getAttribute("autocorrect")).toBe("off");
+  });
+
   it("returns the last filter to the input when backspace is pressed", async () => {
     const user = userEvent.setup();
     render(<Harness initialPills={[{ key: "kind", value: "Pod" }]} />);

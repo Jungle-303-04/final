@@ -52,6 +52,41 @@ describe("HelmPage", () => {
     );
   });
 
+  it("moves focus to the release search when the list shortcut is used", async () => {
+    const port = helmPort();
+    renderRoute("/helm", port);
+
+    const search = await screen.findByRole("textbox", { name: "Filter releases" });
+    fireEvent.keyDown(window, { key: "/" });
+
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("does not steal the list search shortcut from editable, modal, or already-handled owners", async () => {
+    const port = helmPort();
+    renderRoute("/helm", port);
+
+    const search = await screen.findByRole("textbox", { name: "Filter releases" });
+    const editor = document.createElement("div");
+    editor.setAttribute("contenteditable", "true");
+    document.body.append(editor);
+    fireEvent.keyDown(editor, { key: "/" });
+
+    const modal = document.createElement("div");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("role", "dialog");
+    document.body.append(modal);
+    fireEvent.keyDown(modal, { key: "/" });
+
+    const handled = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "/" });
+    handled.preventDefault();
+    window.dispatchEvent(handled);
+
+    expect(document.activeElement).not.toBe(search);
+    editor.remove();
+    modal.remove();
+  });
+
   it("renders safe availability copy without exposing internal provider or executor codes", async () => {
     const port = helmPort();
     renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
