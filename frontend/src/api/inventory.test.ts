@@ -94,6 +94,16 @@ describe("inventory resource API", () => {
       identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
       resource: RESOURCE,
       provider_detail: null,
+      access: {
+        type: "subject",
+        observed_at: "2026-07-17T00:00:00Z",
+        subject: { kind: "ServiceAccount", namespace: "default", name: "api" },
+        direct: [],
+        inherited_from_groups: [],
+        flat: [],
+        truncated: false,
+        used_by_pods: [{ namespace: "default", name: "api-abc" }],
+      },
       related: { owner: [] },
       events: [],
     };

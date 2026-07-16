@@ -15,12 +15,7 @@ const FEATURE_IDS = Array.from(
 
 const PROVIDER_BLOCKED = new Set([
   "reference.feature.129",
-  "reference.feature.130",
-  "reference.feature.131",
-  "reference.feature.132",
-  "reference.feature.133",
   "reference.feature.134",
-  "reference.feature.135",
   "reference.feature.136",
   "reference.feature.137",
   "reference.feature.138",

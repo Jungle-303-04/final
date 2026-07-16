@@ -1,6 +1,15 @@
 import type { ResourcesMessageKey } from "../../keys/resources";
 
 export const resourcesEn = {
+  "resources.access.title": "Kubernetes access",
+  "resources.access.unavailable": "Kubernetes access evidence is unavailable for this observation.",
+  "resources.access.direct": "Direct bindings",
+  "resources.access.inherited": "Inherited groups",
+  "resources.access.pods": "Used by Pods",
+  "resources.access.empty": "No observed entries",
+  "resources.access.bindings": "Bindings and subjects",
+  "resources.access.serviceAccounts": "{count} ServiceAccounts observed",
+  "resources.access.truncated": "The effective rule list reached its safe display limit.",
   "resources.detail.events": "Events",
   "resources.detail.related": "Related resources",
   "resources.empty": "No matching resources",
@@ -472,6 +481,8 @@ export const resourcesEn = {
   "resources.detail.fact.reason": "Reason",
   "resources.detail.fact.count": "Count",
   "resources.detail.fact.reporter": "Reporter",
+  "resources.detail.fact.quotaHard": "Hard · {name}",
+  "resources.detail.fact.quotaUsed": "Used · {name}",
   "resources.empty.catalogTitle": "No observed resource types",
   "resources.empty.listTitle": "No resources were observed in this response",
   "resources.empty.observedZero": "The response contains 0 observed items.",

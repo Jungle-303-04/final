@@ -104,6 +104,7 @@ const COLUMNS: Record<ResourceFacts["type"], ResourceTableColumn[]> = {
     column("lastSeen", "resources.table.lastSeen"),
     TREND,
   ],
+  "resource-quota": [NAME, NAMESPACE, STATUS, HEALTH, OBSERVED],
   generic: [
     NAME,
     NAMESPACE,

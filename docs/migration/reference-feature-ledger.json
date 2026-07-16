@@ -5706,27 +5706,31 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_access.KubernetesSubjectAccessResponse",
+      "frontendContract": "frontend/src/features/resources/resourceAccessContract.ts#ResourceAccessDetail",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
-        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "tests/test_resource_access_router.py",
+        "tests/test_resource_access_projection.py",
+        "frontend/src/api/inventory.test.ts",
+        "frontend/src/pages/resources/ResourceAccessPanel.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "reason": "No cluster-agent subject index persists ServiceAccount bindings, inherited groups, effective rules, and used-by Pod identities.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/resource_access/router.py#get_namespaced_subject_access",
+          "consumer": "src/domains/resource_access/projection.py#subject_access_projection",
+          "reason": "One fail-closed cluster-agent snapshot retains complete Role, binding, ServiceAccount, and Pod-subject evidence for a shared reverse index.",
+          "test": "tests/test_resource_access_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "The resource drawer cannot render ServiceAccount effective access without an exact server projection.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceAccessPanel.tsx#ResourceAccessPanel",
+          "consumer": "frontend/src/features/resources/resourceAccessContract.ts#toResourceAccessDetail",
+          "reason": "The shared resource drawer renders direct bindings, inherited groups, effective rules, and exact Pod usage from the typed detail contract.",
+          "test": "frontend/src/pages/resources/ResourceAccessPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5755,27 +5759,31 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_access.KubernetesSubjectAccessResponse",
+      "frontendContract": "frontend/src/features/resources/resourceAccessContract.ts#ResourceAccessDetail",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
-        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "tests/test_resource_access_router.py",
+        "tests/test_resource_access_projection.py",
+        "frontend/src/api/inventory.test.ts",
+        "frontend/src/pages/resources/ResourceAccessPanel.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "reason": "Signed-in product identity is not delegated as a Kubernetes User or Group and no reverse binding index is collected.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/resource_access/router.py#get_global_subject_access",
+          "consumer": "src/domains/resource_access/projection.py#subject_access_projection",
+          "reason": "Explicit Kubernetes User and Group identities are resolved against the retained binding index without translating product roles into Kubernetes permissions.",
+          "test": "tests/test_resource_access_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "User and Group rule summaries stay absent rather than deriving Kubernetes access from product roles.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceAccessPanel.tsx#ResourceAccessPanel",
+          "consumer": "frontend/src/features/resources/resourceAccessContract.ts#toResourceAccessDetail",
+          "reason": "The same typed subject presentation is reused for explicit User and Group detail responses.",
+          "test": "frontend/src/pages/resources/ResourceAccessPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5804,27 +5812,31 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_access.KubernetesRoleAccessResponse",
+      "frontendContract": "frontend/src/features/resources/resourceAccessContract.ts#ResourceAccessDetail",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
-        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "tests/test_resource_access_router.py",
+        "tests/test_resource_access_projection.py",
+        "frontend/src/api/inventory.test.ts",
+        "frontend/src/pages/resources/ResourceAccessPanel.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "reason": "No authorized Role or ClusterRole rule, binding, and subject read model is retained by the Python backend.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/resource_access/router.py#get_role_access",
+          "consumer": "src/domains/resource_access/projection.py#role_access_projection",
+          "reason": "Role and ClusterRole inverse bindings and subjects are projected from the same complete retained index.",
+          "test": "tests/test_resource_access_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "Role detail cannot expose inverse bindings until the cluster agent supplies complete RBAC evidence.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceAccessPanel.tsx#ResourceAccessPanel",
+          "consumer": "frontend/src/features/resources/resourceAccessContract.ts#toResourceAccessDetail",
+          "reason": "Role detail renders inverse bindings and their exact subjects through the shared access panel.",
+          "test": "frontend/src/pages/resources/ResourceAccessPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5853,27 +5865,31 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.shell_state.SettingsAccessProfileResponse",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.resource_access.KubernetesNamespaceAccessResponse",
+      "frontendContract": "frontend/src/features/resources/resourceAccessContract.ts#ResourceAccessDetail",
       "desktopContract": null,
       "verification": [
-        "tests/test_shell_state_router.py",
-        "frontend/src/pages/settings/SettingsPage.test.tsx",
+        "tests/test_resource_access_router.py",
+        "tests/test_resource_access_projection.py",
+        "frontend/src/api/inventory.test.ts",
+        "frontend/src/pages/resources/ResourceAccessPanel.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/shell_state/router.py#get_settings_access",
-          "reason": "The namespace catalog is authorization-safe, but it does not include RoleBinding, ClusterRoleBinding, or ServiceAccount permission summaries.",
-          "test": "tests/test_shell_state_router.py"
+          "state": "implemented",
+          "destination": "src/domains/resource_access/router.py#get_namespace_access",
+          "consumer": "src/domains/resource_access/projection.py#namespace_access_projection",
+          "reason": "The namespace projection includes RoleBindings, ClusterRoleBindings with local ServiceAccount subjects, and the observed ServiceAccount count.",
+          "test": "tests/test_resource_access_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "Namespace detail cannot show an incomplete permission summary as if it were authoritative.",
-          "test": "frontend/src/pages/settings/SettingsPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceAccessPanel.tsx#ResourceAccessPanel",
+          "consumer": "frontend/src/features/resources/resourceAccessContract.ts#toResourceAccessDetail",
+          "reason": "Namespace detail reuses the shared binding/subject renderer and exposes the exact observed ServiceAccount count.",
+          "test": "frontend/src/pages/resources/ResourceAccessPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -5954,28 +5970,31 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
-      "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.InventoryResourceResponse",
+      "frontendContract": "frontend/src/features/resources/resourcesContract.ts#ResourceFacts",
       "desktopContract": null,
       "verification": [
-        "tests/test_target_metadata_evidence.py",
+        "tests/test_target_kubernetes_evidence.py",
         "tests/test_inventory_filter_router.py",
-        "frontend/src/pages/resources/ResourcesPage.test.tsx",
+        "frontend/src/features/resources/resourceFacts.resourceQuota.test.ts",
+        "frontend/src/pages/resources/ResourceFactsPanel.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/services/target/cluster-agent/providers/metadata_resource_quotas.py",
-          "reason": "ResourceQuota summaries are collected only as bounded RCA metadata and are not persisted as exact inventory resources with UID and freshness.",
-          "test": "tests/test_target_metadata_evidence.py"
+          "state": "implemented",
+          "destination": "src/services/target/cluster-agent/providers/kubernetes_providers.py#resource_quota_summary",
+          "consumer": "src/domains/inventory/kubernetes_snapshot.py#_resource_quota_resource",
+          "reason": "The namespace snapshot persists ResourceQuota UID, resourceVersion, hard, used, labels, and freshness as an exact inventory resource.",
+          "test": "tests/test_target_kubernetes_evidence.py#test_resource_quota_preserves_exact_identity_and_quantities_in_inventory"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailSheet.tsx",
-          "reason": "No typed Namespace quota renderer consumes an exact ResourceQuota inventory contract.",
-          "test": "frontend/src/pages/resources/ResourcesPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceFactsPanel.tsx#ResourceFactsPanel",
+          "consumer": "frontend/src/features/resources/resourceFacts.ts#toResourceFacts",
+          "reason": "The canonical ResourceQuota fact variant renders every observed hard and used quantity without inventing units or defaults.",
+          "test": "frontend/src/features/resources/resourceFacts.resourceQuota.test.ts"
         },
         "desktop": null,
         "realtime": "not_required"

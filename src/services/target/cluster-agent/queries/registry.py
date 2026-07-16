@@ -7,6 +7,7 @@ from telemetry_registry import ensure_sources_loaded, telemetry
 
 from packages.contracts.target import (
     KUBERNETES_ALL_NAMESPACES_QUERY,
+    KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
     KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
     KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
     KUBERNETES_QUERY_SCOPE_NAMESPACE,
@@ -215,11 +216,13 @@ class KubernetesSnapshotQuery:
             KUBERNETES_QUERY_SCOPE_NAMESPACE,
             KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
             KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
         }:
             raise ValueError(f"unsupported Kubernetes collection scope: {self.collection_scope}")
         if self.collection_scope in {
             KUBERNETES_QUERY_SCOPE_CLUSTER_EVENTS,
             KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY,
+            KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS,
         }:
             if self.namespace != KUBERNETES_ALL_NAMESPACES_QUERY:
                 raise ValueError(
@@ -237,6 +240,10 @@ class KubernetesSnapshotQuery:
     @property
     def is_cluster_api_discovery(self) -> bool:
         return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_DISCOVERY
+
+    @property
+    def is_cluster_access_snapshot(self) -> bool:
+        return self.collection_scope == KUBERNETES_QUERY_SCOPE_CLUSTER_ACCESS
 
 
 @dataclass(frozen=True)

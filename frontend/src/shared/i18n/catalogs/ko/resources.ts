@@ -1,6 +1,15 @@
 import type { ResourcesMessageKey } from "../../keys/resources";
 
 export const resourcesKo = {
+  "resources.access.title": "Kubernetes 접근 권한",
+  "resources.access.unavailable": "현재 관측에서는 Kubernetes 접근 권한 근거를 사용할 수 없습니다.",
+  "resources.access.direct": "직접 바인딩",
+  "resources.access.inherited": "상속 그룹",
+  "resources.access.pods": "사용 중인 파드",
+  "resources.access.empty": "관측된 항목 없음",
+  "resources.access.bindings": "바인딩 및 주체",
+  "resources.access.serviceAccounts": "ServiceAccount {count}개 관측",
+  "resources.access.truncated": "유효 규칙 목록이 안전한 표시 한도에 도달했습니다.",
   "resources.detail.events": "이벤트",
   "resources.detail.related": "관련 리소스",
   "resources.empty": "조건에 맞는 리소스 없음",
@@ -472,6 +481,8 @@ export const resourcesKo = {
   "resources.detail.fact.reason": "Reason",
   "resources.detail.fact.count": "Count",
   "resources.detail.fact.reporter": "Reporter",
+  "resources.detail.fact.quotaHard": "한도 · {name}",
+  "resources.detail.fact.quotaUsed": "사용량 · {name}",
   "resources.empty.catalogTitle": "관측된 리소스 종류가 없습니다",
   "resources.empty.listTitle": "현재 응답에서 관측된 리소스가 없습니다",
   "resources.empty.observedZero": "조회 응답에서 관측된 항목은 0입니다.",

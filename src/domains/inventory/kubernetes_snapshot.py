@@ -23,6 +23,7 @@ def kubernetes_evidence_to_inventory_snapshot(
         *(_pod_resource(item) for item in _items(kubernetes, "pods")),
         *(_node_resource(item, _items(kubernetes, "pods")) for item in _items(kubernetes, "nodes")),
         *(_service_resource(item) for item in _items(kubernetes, "services")),
+        *(_resource_quota_resource(item) for item in _items(kubernetes, "resourcequotas")),
         *(
             _event_resource(item, collected_at=collected_at)
             for item in _items(kubernetes, "events")
@@ -322,6 +323,26 @@ def _service_resource(item: JsonObject) -> JsonObject:
     }
 
 
+def _resource_quota_resource(item: JsonObject) -> JsonObject:
+    return {
+        "resource_type": "resourcequota",
+        "api_version": "v1",
+        "kind": "ResourceQuota",
+        "namespace": _text(item.get("namespace")),
+        "name": _text(item.get("name")),
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
+        "status": "Observed",
+        "health": "healthy",
+        "labels": _labels(item),
+        "summary": {
+            "hard": _mapping(item.get("hard")),
+            "used": _mapping(item.get("used")),
+        },
+        "raw": item,
+    }
+
+
 def _event_resource(item: JsonObject, *, collected_at: object = None) -> JsonObject:
     name = _text(item.get("uid")) or ":".join(
         [
@@ -380,14 +401,29 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     namespaces = sorted(
         {
             _text(item.get("namespace"))
-            for key in ("pods", "workloads", "services", "events", "endpoints")
+            for key in (
+                "pods",
+                "workloads",
+                "services",
+                "events",
+                "endpoints",
+                "resourcequotas",
+            )
             for item in _items(kubernetes, key)
             if item.get("namespace")
         }
     )
     label_sources = [
         item
-        for key in ("pods", "workloads", "nodes", "services", "events", "endpoints")
+        for key in (
+            "pods",
+            "workloads",
+            "nodes",
+            "services",
+            "events",
+            "endpoints",
+            "resourcequotas",
+        )
         for item in _items(kubernetes, key)
     ]
     collection_scopes = _items(kubernetes, "collection_scopes")
@@ -427,6 +463,9 @@ def _summary(kubernetes: JsonObject, *, resources_complete: bool) -> JsonObject:
     api_resource_discovery = _mapping(kubernetes.get("api_resource_discovery"))
     if api_resource_discovery:
         summary["api_resource_discovery"] = api_resource_discovery
+    resource_access = _mapping(kubernetes.get("resource_access"))
+    if resource_access:
+        summary["resource_access"] = resource_access
     return summary
 
 

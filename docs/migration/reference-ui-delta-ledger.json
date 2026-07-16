@@ -5329,13 +5329,18 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
+              "frontend/src/features/resources/resourceFacts.ts",
+              "frontend/src/pages/resources/ResourceFactsPanel.tsx",
               "frontend/src/features/resources/resourcesFilterContract.ts",
               "frontend/src/features/filters/filterContract.ts",
-              "src/domains/inventory_filter/router.py"
+              "src/domains/inventory_filter/router.py",
+              "src/domains/inventory/kubernetes_snapshot.py",
+              "src/services/target/cluster-agent/providers/kubernetes_providers.py"
             ],
             "requiredBackendContracts": [
               "domains.inventory_filter.router",
-              "packages.contracts.inventory_filter"
+              "packages.contracts.inventory_filter",
+              "packages.contracts.gateway.responses"
             ],
             "plannedTestIds": [
               "resources.catalog.count-availability"
@@ -14839,7 +14844,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The Python filter page exposes explicit count completeness and bounded pagination. Full API discovery count availability remains blocked in the separate catalog interaction."
+            "rationale": "The Python filter page exposes explicit count completeness and bounded pagination, while ResourceQuota now retains UID, resourceVersion, hard, and used quantities as typed inventory detail. Full API discovery count availability remains tracked in the separate catalog interaction."
           }
         }
       ]
@@ -15169,12 +15174,18 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/settings/SettingsPage.tsx",
+              "frontend/src/pages/resources/ResourceDetailSheet.tsx",
+              "frontend/src/features/resources/resourcesCanonical.ts",
               "frontend/src/features/settings/settingsContract.ts",
               "frontend/src/api/settings-access-schemas.ts",
+              "src/domains/inventory/router.py",
+              "src/services/target/cluster-agent/providers/kubernetes_providers.py",
               "src/packages/contracts/shell_state.py",
               "src/domains/shell_state/router.py"
             ],
             "requiredBackendContracts": [
+              "packages.contracts.resource_access",
+              "domains.resource_access.router",
               "packages.contracts.shell_state",
               "domains.shell_state.router",
               "domains.identity.repository"
@@ -15185,7 +15196,7 @@
             ],
             "state": "blocked",
             "blockedReason": "The cluster agent authenticates as its own service account and no delegated or impersonated Kubernetes subject identity exists for the signed-in product user, so a SelfSubjectRulesReview would report the wrong principal.",
-            "rationale": "The product renders real batched Opsia RBAC decisions and a typed unavailable reason; it does not label agent service-account rules as user permissions."
+            "rationale": "Explicit ServiceAccount, User, Group, Role, and Namespace reverse lookups use one complete retained RBAC index in resource detail. The signed-in user's SelfSubjectRulesReview remains unavailable because the product identity is not delegated, and agent service-account rules never impersonate user permissions."
           }
         },
         {

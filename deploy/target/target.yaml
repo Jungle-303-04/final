@@ -50,7 +50,7 @@ metadata:
 rules:
   # evidence와 command context에 필요한 클러스터 객체 읽기 권한만 둔다.
   - apiGroups: [""]
-    resources: ["pods", "events", "nodes", "services", "endpoints"]
+    resources: ["pods", "events", "nodes", "services", "endpoints", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   # create on pods/exec cannot be resourceNames-scoped. Gateway + agent both
   # enforce exact inventory identity, pod.exec, and POD_EXEC_ALLOWED_NAMESPACES.
@@ -70,6 +70,9 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]
     verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
   # drilldown 실측 CPU·메모리는 Metrics API가 있을 때만 읽고, 없으면 null을 유지한다.
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]

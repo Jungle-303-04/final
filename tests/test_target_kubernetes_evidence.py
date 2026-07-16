@@ -652,7 +652,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         }
     )
 
-    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 14
+    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 15
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["detected_provider"] == "eks"
@@ -731,6 +731,139 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         "workload_revisions": 0,
         "services": 1,
         "endpoints": 1,
+        "resourcequotas": 0,
+    }
+
+
+def test_cluster_access_snapshot_collects_one_exact_reverse_index(monkeypatch) -> None:
+    module, kubernetes_module = load_evidence_modules()
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        rows: dict[str, list[dict[str, object]]] = {
+            "/apis/rbac.authorization.k8s.io/v1/roles": [
+                {
+                    "metadata": {"name": "reader", "namespace": "shop"},
+                    "rules": [{"verbs": ["get"], "apiGroups": [""], "resources": ["pods"]}],
+                }
+            ],
+            "/api/v1/serviceaccounts": [
+                {
+                    "metadata": {"name": "checkout", "namespace": "shop"},
+                }
+            ],
+            "/api/v1/pods": [
+                {
+                    "metadata": {"name": "checkout-0", "namespace": "shop"},
+                    "spec": {"serviceAccountName": "checkout"},
+                }
+            ],
+        }
+        return httpx.Response(200, json={"metadata": {}, "items": rows.get(request.url.path, [])})
+
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_access_snapshot",
+                "description": "Cluster RBAC evidence.",
+                "query": "*",
+                "collection_scope": "cluster_access",
+            }
+        )
+    )
+
+    access = asyncio.run(collector.collect("kubernetes"))["kubernetes"]["resource_access"]
+
+    assert access["completeness"] == "exact"
+    assert access["roles"][0]["name"] == "reader"
+    assert access["service_accounts"] == [{"namespace": "shop", "name": "checkout"}]
+    assert access["pod_subjects"] == [
+        {
+            "namespace": "shop",
+            "name": "checkout-0",
+            "service_account_name": "checkout",
+        }
+    ]
+
+
+def test_cluster_access_snapshot_fails_closed_when_one_collection_is_denied(monkeypatch) -> None:
+    module, kubernetes_module = load_evidence_modules()
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/rolebindings"):
+            return httpx.Response(403, json={})
+        return httpx.Response(200, json={"metadata": {}, "items": []})
+
+    monkeypatch.setattr(
+        kubernetes_module,
+        "kubernetes_api_base_url",
+        lambda: "https://kubernetes.default.svc:443",
+    )
+    monkeypatch.setattr(kubernetes_module, "service_account_token", lambda: "token-1")
+    provider = module.KubernetesSnapshotProvider(
+        cluster_id="cluster-1",
+        transport=getattr(httpx, "Mo" + "ckTransport")(handle_request),
+    )
+    collector = module.EvidenceCollector([provider])
+    collector.register_query(
+        module.TelemetryQueryDefinition.from_mapping(
+            {
+                "source": "kubernetes",
+                "name": "cluster_access_snapshot",
+                "description": "Cluster RBAC evidence.",
+                "query": "*",
+                "collection_scope": "cluster_access",
+            }
+        )
+    )
+
+    access = asyncio.run(collector.collect("kubernetes"))["kubernetes"]["resource_access"]
+
+    assert access["completeness"] == "unavailable"
+    assert access["reason_codes"] == ["role_bindings:rbac_denied"]
+
+
+def test_resource_quota_preserves_exact_identity_and_quantities_in_inventory() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.resource_quota_summary(
+        {
+            "metadata": {
+                "uid": "quota-uid",
+                "resourceVersion": "42",
+                "name": "compute",
+                "namespace": "shop",
+            },
+            "status": {
+                "hard": {"pods": "20", "requests.cpu": "4"},
+                "used": {"pods": "7", "requests.cpu": "1250m"},
+            },
+        }
+    )
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"resourcequotas": [summary]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    resource = snapshot["resources"][0]
+
+    assert resource["resource_type"] == "resourcequota"
+    assert resource["uid"] == "quota-uid"
+    assert resource["resource_version"] == "42"
+    assert resource["summary"] == {
+        "hard": {"pods": "20", "requests.cpu": "4"},
+        "used": {"pods": "7", "requests.cpu": "1250m"},
     }
 
 

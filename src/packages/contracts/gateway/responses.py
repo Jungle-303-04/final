@@ -17,6 +17,7 @@ from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
 from packages.contracts.parity import ClusterScope, ResourceRef
+from packages.contracts.resource_access import ResourceAccessDetail
 
 JsonMap = dict[str, Any]
 AuditJourneyStage = Literal[
@@ -845,6 +846,7 @@ class InventoryResourceDetailResponse(StrictModel):
     identity: JsonMap
     resource: InventoryResourceResponse
     provider_detail: ResourceProviderDetail | None = None
+    access: ResourceAccessDetail | None = None
     related: dict[str, list[InventoryResourceResponse]] = Field(default_factory=dict)
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 

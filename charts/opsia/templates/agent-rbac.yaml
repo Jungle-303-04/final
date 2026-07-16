@@ -13,7 +13,7 @@ metadata:
     {{- include "opsia.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes", "events", "services", "endpoints", "configmaps", "resourcequotas"]
+    resources: ["pods", "nodes", "events", "services", "endpoints", "configmaps", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   # create on pods/exec cannot be resourceNames-scoped. Runtime authorization
   # remains namespace-allowlisted and exact Pod/container scoped.
@@ -26,6 +26,9 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]
     verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]

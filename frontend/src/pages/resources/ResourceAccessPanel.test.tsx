@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -7,7 +9,7 @@ import { ResourceAccessPanel } from "./ResourceAccessPanel";
 describe("ResourceAccessPanel", () => {
   it("renders exact ServiceAccount grants, inherited groups, and Pod usage", () => {
     render(
-      <I18nProvider initialLocale="en">
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ResourceAccessPanel
           access={{
             type: "subject",

@@ -10,7 +10,7 @@ metadata:
   name: management-cluster-agent-read
 rules:
   - apiGroups: [""]
-    resources: ["pods", "events", "nodes", "services", "endpoints"]
+    resources: ["pods", "events", "nodes", "services", "endpoints", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "controllerrevisions", "daemonsets", "statefulsets"]
@@ -18,6 +18,9 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]
     verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]

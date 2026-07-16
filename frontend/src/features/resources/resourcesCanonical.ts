@@ -39,6 +39,7 @@ import {
   safeAdd,
 } from "./resourcesValidation";
 import { toProviderResourceDetail } from "./providerResourceCanonical";
+import { toResourceAccessDetail } from "./resourceAccessContract";
 
 export function toResourceCatalog(
   requestedClusterId: string,
@@ -204,6 +205,7 @@ export function toResourceDetail(
     identity: requestedIdentity,
     resource,
     providerDetail: toProviderResourceDetail(wire.provider_detail),
+    access: toResourceAccessDetail(wire.access),
     relatedCompleteness: "unknown",
     related,
     relatedExcludedCount,

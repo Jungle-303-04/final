@@ -873,6 +873,12 @@ def test_management_registration_defaults_to_kubernetes_evidence_only() -> None:
             "query": "*",
             "collection_scope": "cluster_discovery",
         },
+        {
+            "name": "cluster_access_snapshot",
+            "description": "Collect complete bounded Kubernetes RBAC reverse-lookup evidence.",
+            "query": "*",
+            "collection_scope": "cluster_access",
+        },
     ]
     assert all(
         provider_key == "kubernetes" or provider["enabled"] is False
@@ -2505,6 +2511,18 @@ def test_target_manifest_packages_exact_cronjob_read_and_control_rbac(manifest: 
     assert batch_read == {
         "apiGroups": ["batch"],
         "resources": ["jobs", "cronjobs"],
+        "verbs": ["get", "list", "watch"],
+    }
+    core_read = next(rule for rule in read_role["rules"] if rule.get("apiGroups") == [""])
+    assert {"serviceaccounts", "resourcequotas"}.issubset(core_read["resources"])
+    rbac_read = next(
+        rule
+        for rule in read_role["rules"]
+        if rule.get("apiGroups") == ["rbac.authorization.k8s.io"]
+    )
+    assert rbac_read == {
+        "apiGroups": ["rbac.authorization.k8s.io"],
+        "resources": ["roles", "clusterroles", "rolebindings", "clusterrolebindings"],
         "verbs": ["get", "list", "watch"],
     }
 

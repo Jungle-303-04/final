@@ -61,6 +61,7 @@ from domains.rca.test_scenario_contract import validate_test_scenario_catalog
 from domains.rca_bundle.router import router as rca_bundle_router
 from domains.rca_changes.router import router as rca_changes_router
 from domains.release_flow.router import router as release_flow_router
+from domains.resource_access.router import router as resource_access_router
 from domains.service_access.router import router as service_access_router
 from domains.shell_state.router import router as shell_state_router
 from domains.target.events import AgentConnectedBody
@@ -370,6 +371,7 @@ class ApiGateway:
         app.include_router(
             inventory_router
         )  # agent inventory snapshot -> multi-cluster read model 투영
+        app.include_router(resource_access_router)  # retained RBAC reverse index (session + RBAC)
         app.include_router(resource_deletion_router)  # exact cascade preview + audited delete
         app.include_router(inventory_filter_router)  # workspace Resources 필터·facet 서버 집계
         app.include_router(shell_state_router)  # user namespace scope + durable UI preferences

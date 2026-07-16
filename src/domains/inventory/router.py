@@ -17,6 +17,12 @@ from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.provider_detail import provider_detail_projection
 from domains.inventory.workload_revisions import workload_revision_history_response
+from domains.resource_access.projection import (
+    ResourceAccessUnavailable,
+    access_snapshot_from_inventory,
+    resource_access_projection,
+    resource_supports_access_projection,
+)
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
@@ -33,6 +39,7 @@ from packages.contracts.gateway.responses import (
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
+from packages.contracts.resource_access import KubernetesAccessUnavailableResponse
 from packages.runtime.dependencies import (
     get_dashboard_ready_fanout,
     get_db,
@@ -204,6 +211,31 @@ async def get_inventory_resource_detail(
             limit=event_limit,
         )
     ]
+    access = None
+    if resource_supports_access_projection(public_resource):
+        snapshot = db.latest_inventory_snapshot(workspace_id, cluster_id)
+        try:
+            access = resource_access_projection(
+                access_snapshot_from_inventory(snapshot),
+                public_resource,
+            )
+        except ResourceAccessUnavailable:
+            access_source = None
+            snapshot_summary = snapshot.get("summary") if isinstance(snapshot, dict) else None
+            source_summary = (
+                snapshot_summary.get("summary") if isinstance(snapshot_summary, dict) else None
+            )
+            if isinstance(source_summary, dict):
+                access_source = source_summary.get("resource_access")
+            raw_reasons = (
+                access_source.get("reason_codes") if isinstance(access_source, dict) else None
+            )
+            reasons = tuple(
+                reason for reason in raw_reasons or () if isinstance(reason, str) and reason
+            )
+            access = KubernetesAccessUnavailableResponse(
+                reason_codes=reasons or ("resource_access_unavailable",),
+            )
     return InventoryResourceDetailResponse(
         cluster_id=cluster_id,
         identity={
@@ -214,6 +246,7 @@ async def get_inventory_resource_detail(
         },
         resource=InventoryResourceResponse(**public_resource),
         provider_detail=provider_detail_projection(resource),
+        access=access,
         related=related,
         events=events,
     )

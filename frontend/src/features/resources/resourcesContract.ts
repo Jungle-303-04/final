@@ -1,4 +1,5 @@
 import type { ProviderResourceDetail } from "./providerResourceContract";
+import type { ResourceAccessDetail } from "./resourceAccessContract";
 
 export type ResourcesCollectionCompleteness = "unknown";
 
@@ -185,6 +186,11 @@ export type ResourceFacts =
       reportingComponent: string | null;
       involvedResource: ResourceInvolvedFact | null;
     }
+  | {
+      type: "resource-quota";
+      hard: ResourceMetadataEntry[];
+      used: ResourceMetadataEntry[];
+    }
   | { type: "generic" };
 
 export interface ResourceSummary {
@@ -251,6 +257,7 @@ export interface ResourceDetail {
   resource: ResourceSummary;
   /** Canonical gateway adapters populate the redacted provider projection when available. */
   providerDetail?: ProviderResourceDetail | null;
+  access?: ResourceAccessDetail | null;
   relatedCompleteness: ResourcesCollectionCompleteness;
   related: ResourceRelatedGroup[];
   relatedExcludedCount?: number;

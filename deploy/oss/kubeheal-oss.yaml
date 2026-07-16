@@ -148,7 +148,7 @@ metadata:
   name: kubeheal-agent-read-only
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes", "events", "services", "configmaps", "resourcequotas"]
+    resources: ["pods", "nodes", "events", "services", "configmaps", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "controllerrevisions", "statefulsets", "daemonsets"]
@@ -156,6 +156,9 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]
     verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]

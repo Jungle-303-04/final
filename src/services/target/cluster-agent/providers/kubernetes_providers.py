@@ -46,10 +46,13 @@ from providers.kubernetes_utils import (
     K8S_RESOURCE_ENDPOINT_SLICES,
     K8S_RESOURCE_PODS,
     K8S_RESOURCE_REPLICASETS,
+    K8S_RESOURCE_RESOURCE_QUOTAS,
     K8S_RESOURCE_SERVICES,
     compact_dict,
     items,
     metadata,
+    object_or_empty,
+    resource_sort_key,
     spec,
     status,
 )
@@ -66,6 +69,7 @@ K8S_DAEMONSETS_KEY = "daemonsets"
 K8S_JOBS_KEY = "jobs"
 K8S_CRONJOBS_KEY = "cronjobs"
 K8S_API_RESOURCE_DISCOVERY_KEY = "api_resource_discovery"
+K8S_RESOURCE_ACCESS_KEY = "resource_access"
 K8S_CRD_DISCOVERY_PATH = "/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
 
 MAX_KUBERNETES_PODS = 500
@@ -74,6 +78,10 @@ MAX_KUBERNETES_NODES = 100
 MAX_KUBERNETES_WORKLOADS = 500
 MAX_KUBERNETES_SERVICES = 300
 MAX_KUBERNETES_ENDPOINTS = 300
+MAX_KUBERNETES_RESOURCE_QUOTAS = 200
+KUBERNETES_ACCESS_PAGE_SIZE = 500
+KUBERNETES_ACCESS_MAX_PAGES = 20
+KUBERNETES_ACCESS_MAX_ITEMS = 5000
 KUBERNETES_LIST_LIMITS = {
     K8S_RESOURCE_PODS: MAX_KUBERNETES_PODS,
     K8S_SNAPSHOT_EVENTS_KEY: MAX_KUBERNETES_EVENTS,
@@ -82,6 +90,7 @@ KUBERNETES_LIST_LIMITS = {
     K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: MAX_KUBERNETES_WORKLOADS,
     K8S_RESOURCE_SERVICES: MAX_KUBERNETES_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY: MAX_KUBERNETES_ENDPOINTS,
+    K8S_RESOURCE_RESOURCE_QUOTAS: MAX_KUBERNETES_RESOURCE_QUOTAS,
 }
 KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_RESOURCE_PODS,
@@ -90,6 +99,16 @@ KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY,
     K8S_RESOURCE_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY,
+    K8S_RESOURCE_RESOURCE_QUOTAS,
+}
+
+KUBERNETES_ACCESS_COLLECTIONS = {
+    "roles": "/apis/rbac.authorization.k8s.io/v1/roles",
+    "cluster_roles": "/apis/rbac.authorization.k8s.io/v1/clusterroles",
+    "role_bindings": "/apis/rbac.authorization.k8s.io/v1/rolebindings",
+    "cluster_role_bindings": "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+    "service_accounts": "/api/v1/serviceaccounts",
+    "pod_subjects": "/api/v1/pods",
 }
 
 EVENT_CAPTURE_REASON_COMPLETE = "complete"
@@ -189,6 +208,13 @@ class KubernetesSnapshotProvider:
         if telemetry_query.is_cluster_api_discovery:
             async with kubernetes_client(self.transport) as client:
                 return await self.query_cluster_api_discovery(
+                    base_url=base_url,
+                    token=token,
+                    client=client,
+                )
+        if telemetry_query.is_cluster_access_snapshot:
+            async with kubernetes_client(self.transport) as client:
+                return await self.query_cluster_access_snapshot(
                     base_url=base_url,
                     token=token,
                     client=client,
@@ -311,7 +337,101 @@ class KubernetesSnapshotProvider:
                     f"/apis/discovery.k8s.io/v1/namespaces/{namespace}/{K8S_RESOURCE_ENDPOINT_SLICES}",
                     allow_not_found=True,
                 ),
+                K8S_RESOURCE_RESOURCE_QUOTAS: await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    f"/api/v1/namespaces/{namespace}/{K8S_RESOURCE_RESOURCE_QUOTAS}",
+                    allow_not_found=True,
+                ),
             }
+
+    async def query_cluster_access_snapshot(
+        self,
+        *,
+        base_url: str | None,
+        token: str | None,
+        client: httpx.AsyncClient,
+    ) -> JsonObject:
+        """Collect one all-or-nothing RBAC cut used by every reverse lookup."""
+        observed_at = datetime.now(UTC).isoformat()
+        if not base_url or not token:
+            return unavailable_resource_access(
+                self.cluster_id,
+                observed_at,
+                "kubernetes_api_not_configured",
+            )
+        headers = kubernetes_headers(token)
+        collections: JsonObject = {}
+        for key, path in KUBERNETES_ACCESS_COLLECTIONS.items():
+            rows, reason = await self._paginated_access_collection(
+                client=client,
+                base_url=base_url,
+                headers=headers,
+                path=path,
+            )
+            if reason is not None:
+                return unavailable_resource_access(
+                    self.cluster_id,
+                    observed_at,
+                    f"{key}:{reason}",
+                )
+            collections[key] = rows
+        return {
+            "status": "success",
+            "cluster_id": self.cluster_id,
+            "collected_at": observed_at,
+            K8S_RESOURCE_ACCESS_KEY: {
+                "completeness": "exact",
+                "observed_at": observed_at,
+                "reason_codes": [],
+                **collections,
+            },
+        }
+
+    async def _paginated_access_collection(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        base_url: str,
+        headers: dict[str, str],
+        path: str,
+    ) -> tuple[list[JsonObject], str | None]:
+        rows: list[JsonObject] = []
+        continuation: str | None = None
+        for _page in range(KUBERNETES_ACCESS_MAX_PAGES):
+            params: dict[str, str | int] = {"limit": KUBERNETES_ACCESS_PAGE_SIZE}
+            if continuation:
+                params["continue"] = continuation
+            try:
+                response = await client.get(
+                    f"{base_url}{path}",
+                    headers=headers,
+                    params=params,
+                )
+            except httpx.TimeoutException:
+                return [], "timeout"
+            except httpx.NetworkError:
+                return [], "network_error"
+            if response.status_code in {401, 403}:
+                return [], "rbac_denied"
+            if response.is_error:
+                return [], f"http_{response.status_code}"
+            try:
+                payload = response.json()
+            except ValueError:
+                return [], "invalid_response"
+            if not isinstance(payload, dict):
+                return [], "invalid_response"
+            page_items = items(payload)
+            if len(rows) + len(page_items) > KUBERNETES_ACCESS_MAX_ITEMS:
+                return [], "item_limit_exceeded"
+            rows.extend(page_items)
+            next_continuation = metadata(payload).get("continue")
+            continuation = str(next_continuation) if next_continuation else None
+            if continuation is None:
+                return rows, None
+        return [], "page_limit_exceeded"
 
     async def query_cluster_api_discovery(
         self,
@@ -695,6 +815,8 @@ class KubernetesSnapshotProvider:
         """Turn raw Kubernetes API lists into small evidence summaries."""
         if telemetry_query.is_cluster_api_discovery:
             return self.normalize_cluster_api_discovery(payload, telemetry_query)
+        if telemetry_query.is_cluster_access_snapshot:
+            return self.normalize_cluster_access_snapshot(payload, telemetry_query)
         if telemetry_query.is_cluster_wide_event_capture:
             return self.normalize_cluster_wide_event_capture(payload, telemetry_query)
         snapshot = empty_snapshot(self.cluster_id)
@@ -740,6 +862,9 @@ class KubernetesSnapshotProvider:
         }
         raw_services = scoped_items(
             payload.get(K8S_RESOURCE_SERVICES), telemetry_query.label_selector
+        )
+        raw_resource_quotas = scoped_items(
+            payload.get(K8S_RESOURCE_RESOURCE_QUOTAS), telemetry_query.label_selector
         )
         selected_names = {
             str(metadata(item).get("name") or "")
@@ -798,6 +923,9 @@ class KubernetesSnapshotProvider:
             *revision_summaries("ControllerRevision", raw_controller_revisions),
         ]
         snapshot[K8S_RESOURCE_SERVICES] = [service_summary(item) for item in raw_services]
+        snapshot[K8S_RESOURCE_RESOURCE_QUOTAS] = [
+            resource_quota_summary(item) for item in raw_resource_quotas
+        ]
         service_names = {str(metadata(item).get("name") or "") for item in raw_services}
         snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY] = [
             endpoint_slice_summary(item)
@@ -824,7 +952,30 @@ class KubernetesSnapshotProvider:
                     ),
                     K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
                     K8S_SNAPSHOT_ENDPOINTS_KEY: len(snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY]),
+                    K8S_RESOURCE_RESOURCE_QUOTAS: len(snapshot[K8S_RESOURCE_RESOURCE_QUOTAS]),
                 },
+            }
+        }
+        return snapshot
+
+    def normalize_cluster_access_snapshot(
+        self,
+        payload: JsonObject,
+        telemetry_query: KubernetesSnapshotQuery,
+    ) -> JsonObject:
+        snapshot = empty_snapshot(self.cluster_id)
+        observed_at = str(payload.get("collected_at") or datetime.now(UTC).isoformat())
+        source = payload.get(K8S_RESOURCE_ACCESS_KEY)
+        normalized = normalize_resource_access(source, observed_at=observed_at)
+        snapshot["cluster"] = {
+            "cluster_id": str(payload.get("cluster_id") or self.cluster_id),
+            "collected_at": observed_at,
+        }
+        snapshot[K8S_RESOURCE_ACCESS_KEY] = normalized
+        snapshot["provider_status"] = {
+            telemetry_query.query_name: {
+                "status": normalized["completeness"],
+                "reason_codes": normalized["reason_codes"],
             }
         }
         return snapshot
@@ -898,6 +1049,8 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
         K8S_SNAPSHOT_NODES_KEY: [],
         K8S_RESOURCE_SERVICES: [],
         K8S_SNAPSHOT_ENDPOINTS_KEY: [],
+        K8S_RESOURCE_RESOURCE_QUOTAS: [],
+        K8S_RESOURCE_ACCESS_KEY: unavailable_resource_access_payload("not_requested"),
         # A missing global collector is an explicit coverage gap, not an empty
         # all-namespace Event list. Timeline must therefore fail closed.
         K8S_EVENT_CAPTURE_KEY: event_capture_failure(EVENT_CAPTURE_REASON_NOT_REQUESTED),
@@ -914,6 +1067,9 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
         target["detected_provider"] = source["detected_provider"]
     if isinstance(source.get(K8S_API_RESOURCE_DISCOVERY_KEY), dict):
         target[K8S_API_RESOURCE_DISCOVERY_KEY] = dict(source[K8S_API_RESOURCE_DISCOVERY_KEY])
+    source_access = source.get(K8S_RESOURCE_ACCESS_KEY)
+    if isinstance(source_access, dict) and source_access.get("reason_codes") != ["not_requested"]:
+        target[K8S_RESOURCE_ACCESS_KEY] = dict(source_access)
     source_event_capture = source.get(K8S_EVENT_CAPTURE_KEY)
     if isinstance(source_event_capture, dict) and source_event_capture.get("reason") != (
         EVENT_CAPTURE_REASON_NOT_REQUESTED
@@ -926,12 +1082,181 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
         K8S_SNAPSHOT_EVENTS_KEY,
         K8S_RESOURCE_SERVICES,
         K8S_SNAPSHOT_ENDPOINTS_KEY,
+        K8S_RESOURCE_RESOURCE_QUOTAS,
     ):
         target.setdefault(key, [])
         target[key].extend(source.get(key, []))
     merge_cluster_scoped_nodes(target, source)
     target.setdefault("provider_status", {})
     target["provider_status"].update(source.get("provider_status", {}))
+
+
+def unavailable_resource_access(
+    cluster_id: str,
+    observed_at: str,
+    reason_code: str,
+) -> JsonObject:
+    return {
+        "status": "unavailable",
+        "cluster_id": cluster_id,
+        "collected_at": observed_at,
+        K8S_RESOURCE_ACCESS_KEY: unavailable_resource_access_payload(
+            reason_code,
+            observed_at=observed_at,
+        ),
+    }
+
+
+def unavailable_resource_access_payload(
+    reason_code: str,
+    *,
+    observed_at: str | None = None,
+) -> JsonObject:
+    return {
+        "completeness": "unavailable",
+        "observed_at": observed_at,
+        "reason_codes": [reason_code],
+        "roles": [],
+        "cluster_roles": [],
+        "role_bindings": [],
+        "cluster_role_bindings": [],
+        "service_accounts": [],
+        "pod_subjects": [],
+    }
+
+
+def normalize_resource_access(value: object, *, observed_at: str) -> JsonObject:
+    if not isinstance(value, dict) or value.get("completeness") != "exact":
+        reasons = value.get("reason_codes") if isinstance(value, dict) else None
+        reason = (
+            str(reasons[0])
+            if isinstance(reasons, list) and reasons and isinstance(reasons[0], str)
+            else "invalid_access_observation"
+        )
+        return unavailable_resource_access_payload(reason, observed_at=observed_at)
+    try:
+        roles = [role_access_summary(item, "Role") for item in _dict_list(value.get("roles"))]
+        cluster_roles = [
+            role_access_summary(item, "ClusterRole")
+            for item in _dict_list(value.get("cluster_roles"))
+        ]
+        role_bindings = [
+            binding_access_summary(item, "RoleBinding")
+            for item in _dict_list(value.get("role_bindings"))
+        ]
+        cluster_role_bindings = [
+            binding_access_summary(item, "ClusterRoleBinding")
+            for item in _dict_list(value.get("cluster_role_bindings"))
+        ]
+        service_accounts = [
+            required_identity_summary(item) for item in _dict_list(value.get("service_accounts"))
+        ]
+        pod_subjects = [pod_subject_summary(item) for item in _dict_list(value.get("pod_subjects"))]
+    except (TypeError, ValueError):
+        return unavailable_resource_access_payload(
+            "invalid_access_observation",
+            observed_at=observed_at,
+        )
+    return {
+        "completeness": "exact",
+        "observed_at": observed_at,
+        "reason_codes": [],
+        "roles": sorted(roles, key=resource_sort_key),
+        "cluster_roles": sorted(cluster_roles, key=resource_sort_key),
+        "role_bindings": sorted(role_bindings, key=resource_sort_key),
+        "cluster_role_bindings": sorted(cluster_role_bindings, key=resource_sort_key),
+        "service_accounts": sorted(service_accounts, key=resource_sort_key),
+        "pod_subjects": sorted(pod_subjects, key=resource_sort_key),
+    }
+
+
+def role_access_summary(item: JsonObject, kind: str) -> JsonObject:
+    meta = metadata(item)
+    return {
+        "kind": kind,
+        "namespace": "" if kind == "ClusterRole" else _required_text(meta.get("namespace")),
+        "name": _required_text(meta.get("name")),
+        "rules": [policy_rule_summary(rule) for rule in _dict_list(item.get("rules"))],
+    }
+
+
+def binding_access_summary(item: JsonObject, kind: str) -> JsonObject:
+    meta = metadata(item)
+    role_ref = item.get("roleRef")
+    if not isinstance(role_ref, dict):
+        raise ValueError("binding roleRef is invalid")
+    role_kind = _required_text(role_ref.get("kind"))
+    if role_kind not in {"Role", "ClusterRole"}:
+        raise ValueError("binding role kind is invalid")
+    return {
+        "kind": kind,
+        "namespace": "" if kind == "ClusterRoleBinding" else _required_text(meta.get("namespace")),
+        "name": _required_text(meta.get("name")),
+        "roleRef": {
+            "kind": role_kind,
+            "name": _required_text(role_ref.get("name")),
+        },
+        "subjects": [subject_summary(subject) for subject in _dict_list(item.get("subjects"))],
+    }
+
+
+def policy_rule_summary(value: JsonObject) -> JsonObject:
+    return {
+        "verbs": _string_list(value.get("verbs")),
+        "apiGroups": _string_list(value.get("apiGroups")),
+        "resources": _string_list(value.get("resources")),
+        "resourceNames": _string_list(value.get("resourceNames")),
+        "nonResourceURLs": _string_list(value.get("nonResourceURLs")),
+    }
+
+
+def subject_summary(value: JsonObject) -> JsonObject:
+    kind = _required_text(value.get("kind"))
+    if kind not in {"ServiceAccount", "User", "Group"}:
+        raise ValueError("binding subject kind is invalid")
+    namespace = _required_text(value.get("namespace")) if kind == "ServiceAccount" else ""
+    return {
+        "kind": kind,
+        "namespace": namespace,
+        "name": _required_text(value.get("name")),
+    }
+
+
+def required_identity_summary(value: JsonObject) -> JsonObject:
+    meta = metadata(value)
+    return {
+        "namespace": _required_text(meta.get("namespace")),
+        "name": _required_text(meta.get("name")),
+    }
+
+
+def pod_subject_summary(value: JsonObject) -> JsonObject:
+    identity = required_identity_summary(value)
+    pod_spec = spec(value)
+    return {
+        **identity,
+        "service_account_name": _required_text(pod_spec.get("serviceAccountName")),
+    }
+
+
+def _dict_list(value: object) -> list[JsonObject]:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise TypeError("Kubernetes access collection is invalid")
+    return value
+
+
+def _string_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise TypeError("Kubernetes policy string list is invalid")
+    return list(value)
+
+
+def _required_text(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError("Kubernetes access identity is invalid")
+    return value
 
 
 def event_capture_query_result(
@@ -1283,6 +1608,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "name": meta.get("name"),
         "namespace": meta.get("namespace"),
         "node_name": pod_spec.get("nodeName"),
+        "service_account_name": as_text(pod_spec.get("serviceAccountName")) or None,
         "phase": pod_status.get("phase"),
         "reason": pod_status.get("reason"),
         "message": pod_status.get("message"),
@@ -1329,6 +1655,21 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
                 and container.get("last_state_reason")
             ),
         ],
+    }
+
+
+def resource_quota_summary(item: JsonObject) -> JsonObject:
+    """Preserve exact ResourceQuota identity plus observed hard/used quantities."""
+    meta = metadata(item)
+    quota_status = status(item)
+    return {
+        "uid": _required_text(meta.get("uid")),
+        "resource_version": _required_text(meta.get("resourceVersion")),
+        "name": _required_text(meta.get("name")),
+        "namespace": _required_text(meta.get("namespace")),
+        **bounded_label_summary(item),
+        "hard": compact_dict(object_or_empty(quota_status.get("hard"))),
+        "used": compact_dict(object_or_empty(quota_status.get("used"))),
     }
 
 

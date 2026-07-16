@@ -110,7 +110,7 @@ metadata:
   name: cluster-agent-read
 rules:
   - apiGroups: [""]
-    resources: ["pods", "events", "nodes", "services", "endpoints"]
+    resources: ["pods", "events", "nodes", "services", "endpoints", "serviceaccounts", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   # Kubernetes RBAC cannot resourceName-scope create on pods/exec. Runtime
   # authorization therefore requires exact inventory target, pod.exec, and
@@ -130,6 +130,9 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]
     verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]

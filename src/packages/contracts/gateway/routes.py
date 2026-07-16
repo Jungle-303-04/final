@@ -188,6 +188,12 @@ FILTERED_RESOURCES_PATH = "/resources"
 RESOURCE_LABEL_FACETS_PATH = "/resources/label-facets"
 FILTER_FACETS_PATH = "/filter-facets"
 RESOURCE_SEARCH_PATH = "/search"
+# Exact Kubernetes RBAC reverse projections. Cluster identity remains an explicit
+# query parameter because product sessions are workspace scoped, not kubeconfig scoped.
+RBAC_SUBJECT_NAMESPACED_PATH = "/rbac/subject/{kind}/{namespace}/{name}"
+RBAC_SUBJECT_GLOBAL_PATH = "/rbac/subject/{kind}/{name}"
+RBAC_ROLE_PATH = "/rbac/role/{kind}/{namespace}/{name}"
+RBAC_NAMESPACE_PATH = "/rbac/namespace/{namespace}"
 CLUSTER_NAMESPACE_SCOPE_PATH = "/cluster/namespace-scope"
 CLUSTER_NAMESPACE_PATH = "/cluster/namespace"
 SETTINGS_PATH = "/settings"

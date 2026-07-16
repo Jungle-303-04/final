@@ -36,6 +36,7 @@ import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDat
 import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
 import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { ResourceIssuesSection } from "../../features/issues/ResourceIssuesSection";
+import { ResourceAccessPanel } from "./ResourceAccessPanel";
 
 export function ResourceDetailBody({
   detail,
@@ -153,6 +154,7 @@ export function ResourceDetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
+        {detail.data.access ? <ResourceAccessPanel access={detail.data.access} /> : null}
         {detail.data.providerDetail ? (
           <ProviderResourceDetailPanel
             detail={detail.data.providerDetail}

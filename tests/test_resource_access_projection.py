@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from domains.resource_access.projection import (
     ResourceAccessUnavailable,
     namespace_access_projection,

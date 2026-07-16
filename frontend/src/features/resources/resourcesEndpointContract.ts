@@ -1,4 +1,5 @@
 import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointContract";
+import type { ResourceAccessDetailEndpoint } from "./resourceAccessContract";
 
 export type ResourcesEndpointJsonMap = Record<string, unknown>;
 
@@ -70,6 +71,7 @@ export interface ResourcesEndpointResourceDetail {
   identity: ResourcesEndpointJsonMap;
   resource: ResourcesEndpointResource;
   provider_detail?: ProviderResourceDetailEndpoint | null;
+  access?: ResourceAccessDetailEndpoint | null;
   related: Record<string, ResourcesEndpointResource[]>;
   events: ResourcesEndpointResource[];
 }
