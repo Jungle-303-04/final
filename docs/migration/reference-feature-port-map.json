@@ -998,14 +998,18 @@
       }
     },
     "reference.feature.070": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/features/resources/changeTimelineContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
         "tests/test_changes_router.py",
+        "frontend/src/api/refresh-policies.test.ts",
         "frontend/src/api/change-timeline.test.ts",
+        "frontend/src/shared/data/browserRefreshPolicyRegistry.test.ts",
+        "frontend/src/features/resources/changeTimelineInvalidation.test.ts",
+        "frontend/src/pages/resources/useChangeTimelineDataFrame.test.tsx",
         "frontend/src/pages/resources/ResourcesPage.timeline.test.tsx"
       ],
       "coverage": {
@@ -1016,11 +1020,18 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/useChangeTimelineDataFrame.ts#useChangeTimelineDataFrame",
           "consumer": "frontend/src/features/resources/createChangeTimelineAdapter.ts#createChangeTimelineAdapter",
-          "reason": "The bounded Changes read is implemented, but it inherits a browser revision clock and has neither the declared 15-second server cadence nor a Changes-specific SSE fallback.",
-          "test": "frontend/src/pages/resources/ResourcesPage.timeline.test.tsx"
+          "reason": "The Changes frame consumes the server-owned cadence, advances a bounded live window, pauses while hidden, preserves last success, and coalesces admitted Timeline invalidations.",
+          "test": "frontend/src/pages/resources/useChangeTimelineDataFrame.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "frontend/src/features/resources/changeTimelineInvalidation.ts#watchChangeTimelineInvalidations",
+          "consumer": "frontend/src/app/composition/timelinePort.ts#createApiTimelinePort",
+          "reason": "The shared authorized Timeline POST Fetch-SSE supplies signed-cursor invalidation, reconnect, resync, and live-session rotation while the server cadence remains the bounded fallback.",
+          "test": "frontend/src/features/resources/changeTimelineInvalidation.test.ts"
         }
       }
     },

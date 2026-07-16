@@ -749,7 +749,6 @@ test("주요 REST 갱신 정책은 서버 계약과 남은 화면 소비 차단�
     ["reference.feature.067", "upstream-ui:issues:queue:verified-severity-order:v1"],
     ["reference.feature.068", "upstream-ui:applications:projection:catalog-detail-refresh:v1"],
     ["reference.feature.069", "upstream-ui:resources:view:guarded-count-and-query-identity:v1"],
-    ["reference.feature.070", "upstream-ui:timeline:delta-sync:epoch-resync-test:v1"],
     ["reference.feature.071", "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1"],
     ["reference.feature.072", "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1"],
     ["reference.feature.073", "upstream-ui:gitops:fleet:authorized-catalog:v1"],
@@ -773,6 +772,20 @@ test("주요 REST 갱신 정책은 서버 계약과 남은 화면 소비 차단�
     assert.equal(feature.sourceKey, sourceKey);
     assert.ok(interaction.legacyContractIds.includes(contractId));
   }
+
+  const changes = portMap.features["reference.feature.070"];
+  const changesFeature = ledger.features.find(
+    (candidate) => candidate.contractId === "reference.feature.070",
+  );
+  assert.equal(changes.deliveryStatus, "implemented");
+  assert.equal(changes.coverage.backend.state, "implemented");
+  assert.equal(changes.coverage.frontend.state, "implemented");
+  assert.equal(changes.coverage.realtime.state, "implemented");
+  assert.equal(changesFeature.deliveryStatus, "implemented");
+  assert.equal(
+    aliases.aliases["reference.feature.070"],
+    "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
+  );
 
   assert.equal(portMap.features["reference.feature.075"].coverage.frontend.state, "in_progress");
   assert.equal(portMap.features["reference.feature.076"].coverage.frontend.state, "in_progress");
