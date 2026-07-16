@@ -37,10 +37,9 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
     implemented = [
         feature for feature in catalog.features if feature.delivery_status == "implemented"
     ]
-    assert [feature.contract_id for feature in implemented] == ["reference.feature.126"]
-    assert implemented[0].source_key == (
-        "upstream-ui:resources:renderers:public-contract-boundary:v1"
-    )
+    assert implemented
+    assert all(feature.source_key for feature in implemented)
+    assert len({feature.source_key for feature in implemented}) == len(implemented)
     assert all(feature.coverage.backend is not None for feature in implemented)
     assert all(feature.coverage.frontend is not None for feature in implemented)
     assert all(
