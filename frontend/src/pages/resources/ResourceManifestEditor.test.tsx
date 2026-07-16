@@ -85,6 +85,9 @@ describe("ResourceManifestEditor", () => {
     await user.click(screen.getByRole("button", { name: "검증 및 diff" }));
     expect(await screen.findByText("승인 준비 완료")).toBeTruthy();
     expect(screen.getAllByText(/restartPolicy: Never/u).length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-slot="unified-diff"]')).toBeTruthy();
+    expect(document.querySelector('[data-diff-kind="removal"]')).toBeTruthy();
+    expect(document.querySelector('[data-diff-kind="addition"]')).toBeTruthy();
 
     const approve = screen.getByRole("button", { name: "Safe PR 승인" });
     expect(approve.hasAttribute("disabled")).toBe(true);

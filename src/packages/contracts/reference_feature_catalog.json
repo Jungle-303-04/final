@@ -5579,11 +5579,11 @@
     },
     {
       "contractId": "reference.feature.187",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:manifest-diff:shared-classifier:v1",
       "legacyContractIds": [
         "reference.feature.187"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-187",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5609,11 +5609,11 @@
     },
     {
       "contractId": "reference.feature.188",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:revision-compare:shared-diff:v1",
       "legacyContractIds": [
         "reference.feature.188"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-188",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5727,11 +5727,11 @@
     },
     {
       "contractId": "reference.feature.192",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:chart-browser:shared-input:v1",
       "legacyContractIds": [
         "reference.feature.192"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-192",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5756,11 +5756,11 @@
     },
     {
       "contractId": "reference.feature.193",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:chart-browser:shared-input:v1",
       "legacyContractIds": [
         "reference.feature.193"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-193",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5785,11 +5785,11 @@
     },
     {
       "contractId": "reference.feature.194",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:chart-source:oci-guidance:v1",
       "legacyContractIds": [
         "reference.feature.194"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-194",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5814,11 +5814,11 @@
     },
     {
       "contractId": "reference.feature.195",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:chart-source:oci-guidance:v1",
       "legacyContractIds": [
         "reference.feature.195"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-195",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5844,11 +5844,11 @@
     },
     {
       "contractId": "reference.feature.196",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:chart-browser:shared-input:v1",
       "legacyContractIds": [
         "reference.feature.196"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-196",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5873,11 +5873,11 @@
     },
     {
       "contractId": "reference.feature.197",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:install-wizard:identifier-inputs:v1",
       "legacyContractIds": [
         "reference.feature.197"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-197",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5903,11 +5903,11 @@
     },
     {
       "contractId": "reference.feature.198",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:chart-browser:shared-input:v1",
       "legacyContractIds": [
         "reference.feature.198"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-198",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5932,11 +5932,11 @@
     },
     {
       "contractId": "reference.feature.199",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:install-wizard:identifier-inputs:v1",
       "legacyContractIds": [
         "reference.feature.199"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-199",
       "section": "7.8 Helm",
       "endpoints": [
@@ -5962,11 +5962,11 @@
     },
     {
       "contractId": "reference.feature.200",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:install-wizard:identifier-inputs:v1",
       "legacyContractIds": [
         "reference.feature.200"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-200",
       "section": "7.8 Helm",
       "endpoints": [
@@ -6049,11 +6049,11 @@
     },
     {
       "contractId": "reference.feature.203",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:values-preview:portal-confirmation:v1",
       "legacyContractIds": [
         "reference.feature.203"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-203",
       "section": "7.8 Helm",
       "endpoints": [
@@ -6078,11 +6078,11 @@
     },
     {
       "contractId": "reference.feature.204",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:values-preview:portal-confirmation:v1",
       "legacyContractIds": [
         "reference.feature.204"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-204",
       "section": "7.8 Helm",
       "endpoints": [

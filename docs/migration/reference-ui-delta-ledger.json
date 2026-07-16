@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 53,
+  "pendingCount": 46,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -4893,8 +4893,35 @@
         "blobId": "17b00085827406fd165d03a193f48ba55eae8fbc",
         "sha256": "0e01d705c14023a5b65b15e2d952a4011e6e7831fdf7b84ab18eda4ccd9139e3"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared:unified-diff:single-classifier:v1",
+          "legacyContractIds": [],
+          "symbol": "classifyDiffLine / hasDiffBodyChange / DiffLine",
+          "interaction": "all product diff surfaces use one semantic classifier that excludes file headers from body changes and renders additions, removals, headers, and context consistently",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/UnifiedDiff.tsx",
+              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "helm.diff.shared-classifier"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product primitive is source-independent and is already consumed by the authorized Git manifest preview; Helm and GitOps providers can reuse it without another classifier or renderer."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10743,8 +10770,41 @@
         "blobId": "9cb725b3216ad7ae9a040596b2862346641dc5b4",
         "sha256": "ad7c3154de942d9bc8986a970b2dd204b2d26c7bf8212ca3e43ca9b7c55e08ed"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:chart-browser:shared-input:v1",
+          "legacyContractIds": [
+            "reference.feature.192",
+            "reference.feature.193",
+            "reference.feature.196",
+            "reference.feature.198"
+          ],
+          "symbol": "ChartBrowser search input",
+          "interaction": "chart and repository search uses the shared identifier-safe input, while repository refresh, local chart search, and external catalog results require typed Python providers",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+              "frontend/src/pages/helm/HelmPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.chart-catalog.input-policy",
+              "helm.release-detail.availability"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python Helm domain exposes authorized release storage metadata only; it has no repository cache, chart index, external catalog search, or repository refresh contract.",
+            "rationale": "The shared input policy is complete, but an inert chart browser or fabricated repository list would violate the product data boundary."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10758,8 +10818,40 @@
         "blobId": "6c7182caff55d060ecfd11dff38f4110103ad599",
         "sha256": "b062b9b265e4747133286d3a4f40d01ab2589601d7286a976c48bcb2138751b3"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:revision-compare:shared-diff:v1",
+          "legacyContractIds": [
+            "reference.feature.188"
+          ],
+          "symbol": "HelmCompareRoute shared diff consumption",
+          "interaction": "revision comparison reuses one unified-diff primitive and opens only when an authorized provider supplies two distinct revision identities and their typed comparison artifacts",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/UnifiedDiff.tsx",
+              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "src/domains/helm/release_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.diff.shared-classifier",
+              "helm.compare.provider-gate",
+              "helm.release-detail.availability"
+            ],
+            "state": "blocked",
+            "blockedReason": "The release projection has storage revision labels but no decoded revision manifest, values, notes, hooks, or resource inventory, so a comparison route would display unsupported content.",
+            "rationale": "The common diff classifier is ready; the route remains absent until Python and the target agent can return redacted, revision-bound evidence."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -10906,8 +10998,46 @@
         "blobId": "99856cf82ee38cacf5481296c43278eb84c6b287",
         "sha256": "902a63fed678cfb65f62d2f40b5a9553eeeaac120d51a64afccb1427d2612237"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:install-wizard:identifier-inputs:v1",
+          "legacyContractIds": [
+            "reference.feature.197",
+            "reference.feature.199",
+            "reference.feature.200"
+          ],
+          "symbol": "InstallWizard release and namespace inputs",
+          "interaction": "release and namespace identifiers use the shared exact-text input before a validated install is handed to the existing command receipt and OperationEvent pipeline",
+          "transport": "fetch_sse",
+          "realtime": {
+            "resume": "resume the accepted command from the durable OperationEvent cursor rather than replaying an install request",
+            "backpressure": "bound operation events through the shared command stream and keep one idempotent install command per request key",
+            "merge": "merge progress only for the accepted command and exact workspace, cluster, namespace, release, and catalog recipe identity"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/shared/ui/primitives/form-primitives.test.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
+              "src/domains/catalog/router.py",
+              "src/services/target/cluster-agent/commands/helm.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.catalog.router",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "helm.install-wizard.input-policy",
+              "helm.install-wizard.provider-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The safe existing install path accepts server-owned catalog recipes in the sandbox namespace; arbitrary local or external charts, chart README/default values, and an install-stream endpoint do not exist.",
+            "rationale": "Opsia reuses the real idempotent catalog command and durable OperationEvent stream, but does not relabel that bounded path as a general chart installer."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10921,8 +11051,40 @@
         "blobId": "2c2742b1b813f07424e707f687011c66c26c6862",
         "sha256": "0d20f7de949752808ccad5a46f1fbeddc995eb7a4534e9f4774b12b0ee227ac3"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:manifest-diff:shared-classifier:v1",
+          "legacyContractIds": [
+            "reference.feature.187"
+          ],
+          "symbol": "ManifestDiffViewer shared classifier",
+          "interaction": "manifest and values patches render through one reusable classifier so headers never count as changes and Helm, GitOps, and Git-backed previews cannot drift",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/UnifiedDiff.tsx",
+              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+              "frontend/src/pages/resources/ResourceManifestEditor.test.tsx",
+              "frontend/src/pages/helm/HelmPage.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "packages.contracts.gateway.responses"
+            ],
+            "plannedTestIds": [
+              "helm.diff.shared-classifier",
+              "helm.compare.provider-gate"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The duplicate classifier and renderer are consolidated into a product-owned primitive that already consumes a real authorized Git diff. Helm diff bodies remain separately unavailable until a provider contract exists."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10936,8 +11098,40 @@
         "blobId": "0c06f0562ccfc3e536c8b0014d5b9b06b5c5e165",
         "sha256": "99c066561670e46df3f35a796a5cce4ef5be30536a0389972499fb172b61ff03"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:chart-source:oci-guidance:v1",
+          "legacyContractIds": [
+            "reference.feature.194",
+            "reference.feature.195"
+          ],
+          "symbol": "TrackChartSourceDialog source issue and OCI prefix guidance",
+          "interaction": "chart-source issue copy, normalized OCI probe guidance, and add or remove controls appear only after a workspace-scoped provider validates and audits persisted prefixes",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "src/domains/helm/release_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "domains.helm.release_router"
+            ],
+            "plannedTestIds": [
+              "helm.source-tracking.provider-gate",
+              "helm.release-detail.availability"
+            ],
+            "state": "blocked",
+            "blockedReason": "There is no workspace-scoped OCI source repository, public-registry probe, credential boundary, source-resolution result, or audited add and remove route in Python.",
+            "rationale": "The release detail keeps source resolution unavailable and exposes no inert mutation control; probe examples and source-issue copy will be added only with real persisted evidence."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10951,8 +11145,46 @@
         "blobId": "12737d042a5afe5ecbcd2ce5248090f46113cb77",
         "sha256": "b321002ffd78e114d712ab3323f890769c2c361d420199d70f4342dbe6bdaaed"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:helm:values-preview:portal-confirmation:v1",
+          "legacyContractIds": [
+            "reference.feature.203",
+            "reference.feature.204"
+          ],
+          "symbol": "ValuesDiffPreview portal and shared diff classification",
+          "interaction": "a values preview uses the product dialog portal, focus and Escape ownership, caller-provided action labels, pending dismissal guard, and the shared unified-diff classifier before apply",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "the shared dialog removes open and close animation when reduced motion is requested while preserving focus and modal state.",
+            "evidence": [
+              "references/upstream/web/src/components/helm/ValuesDiffPreview.tsx",
+              "frontend/src/shared/ui/primitives/dialog.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/UnifiedDiff.tsx",
+              "frontend/src/shared/ui/UnifiedDiff.test.tsx",
+              "frontend/src/shared/ui/primitives/confirmation-dialog.tsx",
+              "frontend/src/shared/ui/primitives/confirmation-dialog.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.helm.releases",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "helm.diff.shared-classifier",
+              "helm.values-preview.dialog-safety"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Helm domain has no values preview or apply route, redacted rendered manifest artifact, CommandReceipt, or audit record for this mutation.",
+            "rationale": "The reusable modal and diff mechanics are complete, but no preview or apply button is rendered until the server can validate the exact candidate values and impact."
+          }
+        }
+      ]
     },
     {
       "status": "M",

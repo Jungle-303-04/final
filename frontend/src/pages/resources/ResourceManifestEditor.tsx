@@ -10,6 +10,7 @@ import {
 } from "../../features/resources/resourceManifestContract";
 import type { ResourceDetail } from "../../features/resources/resourcesContract";
 import { useI18n } from "../../shared/i18n";
+import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -219,7 +220,7 @@ export function ResourceManifestEditor({
                     </div>
                     <div className="min-h-[24rem] overflow-auto rounded-lg border bg-muted/25 p-4">
                       {preview?.diff ? (
-                        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5">{preview.diff}</pre>
+                        <UnifiedDiff aria-label={t("resources.manifest.diff")} diff={preview.diff} wrap />
                       ) : (
                         <p className="text-sm text-muted-foreground">{t("resources.manifest.diffEmpty")}</p>
                       )}
