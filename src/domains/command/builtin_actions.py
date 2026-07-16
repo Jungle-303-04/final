@@ -36,7 +36,6 @@ class RolloutRestartCommand:
 @command.action(
     Command.APPLY_MANIFEST_ACTION,
     recovery_aliases=("apply_manifest",),
-    allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=True,
     supports_manual_retry=True,
     max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,

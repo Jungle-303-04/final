@@ -1,16 +1,20 @@
 export {
   approveResourceManifestEdit,
+  applyResourceManifestNow,
   getResourceManifestSource,
   previewResourceManifestEdit,
   type ResourceManifestApprovalInput,
+  type ResourceManifestDirectApplyInput,
   type ResourceManifestEditInput,
 } from "../resource-manifests";
 export {
   resourceManifestApproveSchema,
+  resourceManifestApplySchema,
   resourceManifestPreviewSchema,
   resourceManifestSourceChoiceSchema,
   resourceManifestSourceSchema,
   type ResourceManifestApproveEndpoint,
+  type ResourceManifestApplyEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
 } from "../resource-manifests-schemas";

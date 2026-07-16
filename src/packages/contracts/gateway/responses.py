@@ -874,6 +874,14 @@ class ResourceManifestSourceResponse(StrictModel):
     reason: str | None = None
 
 
+class ResourceManifestImpact(StrictModel):
+    api_version: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    namespace: str | None = None
+    name: str = Field(min_length=1)
+    selected: bool = False
+
+
 class ResourceManifestPreviewResponse(StrictModel):
     valid: bool
     changed: bool
@@ -883,6 +891,9 @@ class ResourceManifestPreviewResponse(StrictModel):
     diff: str
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    apply_availability: Literal["available", "unavailable"] = "unavailable"
+    apply_reason_codes: list[str] = Field(default_factory=list)
+    impact: list[ResourceManifestImpact] = Field(default_factory=list)
 
 
 class ResourceManifestApproveResponse(StrictModel):

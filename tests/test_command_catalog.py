@@ -51,6 +51,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_DAEMONSET_RESTART_ACTION,
         Command.KUBERNETES_NODE_CORDON_ACTION,
         Command.KUBERNETES_NODE_UNCORDON_ACTION,
+        Command.APPLY_MANIFEST_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:

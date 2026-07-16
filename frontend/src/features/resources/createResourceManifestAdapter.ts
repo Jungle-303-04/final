@@ -7,6 +7,7 @@ import {
   type ResourceManifestPort,
   type ResourceManifestSourceChoice,
 } from "./resourceManifestContract";
+import { toResourceActionReceipt } from "./resourceCapabilitiesCanonical";
 
 export function createResourceManifestAdapter(
   dependencies: ResourceManifestEndpointDependencies,
@@ -39,6 +40,15 @@ export function createResourceManifestAdapter(
           diff: value.diff,
           errors: value.errors,
           warnings: value.warnings,
+          applyAvailability: value.apply_availability,
+          applyReasonCodes: value.apply_reason_codes,
+          impact: value.impact.map((item) => ({
+            apiVersion: item.api_version,
+            kind: item.kind,
+            namespace: item.namespace,
+            name: item.name,
+            selected: item.selected,
+          })),
         };
       });
     },
@@ -56,6 +66,23 @@ export function createResourceManifestAdapter(
           syncState: "awaiting-pr-merge" as const,
         };
       });
+    },
+    async applyNow(resourceId, input, signal) {
+      return withFailure(async () => toResourceActionReceipt(
+        await dependencies.applyResourceManifestNow(
+          resourceId,
+          {
+            applicationId: input.applicationId,
+            baseSha: input.baseSha,
+            sourceSha256: input.sourceSha256,
+            editedYaml: input.editedYaml,
+            expectedDesiredSha256: input.desiredSha256,
+            confirmation: true,
+            reason: input.reason,
+          },
+          signal,
+        ),
+      ));
     },
   };
 }

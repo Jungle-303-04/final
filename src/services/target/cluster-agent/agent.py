@@ -1799,6 +1799,15 @@ class TargetClusterAgent:
     async def apply_manifest_command(self, ctx: CommandContext[JsonObject]) -> JsonObject:
         diff = ctx.raw_payload.get("diff", {}) if isinstance(ctx.raw_payload, dict) else {}
         namespace = str(diff.get("namespace") or Sandbox.NAMESPACE)
+        nested = ctx.raw_payload.get("payload") if isinstance(ctx.raw_payload, dict) else None
+        desired_documents = nested.get("desired_documents") if isinstance(nested, dict) else None
+        resource_ref = nested.get("resource_ref") if isinstance(nested, dict) else None
+        if isinstance(desired_documents, list):
+            return await self.apply_manifest_documents(
+                desired_documents,
+                resource_ref if isinstance(resource_ref, dict) else {},
+                namespace,
+            )
         desired_manifest = diff.get("desired_manifest")
         if isinstance(desired_manifest, dict) and desired_manifest:
             applied, message, rollout = await self.apply_kubernetes_manifest(
@@ -1834,6 +1843,105 @@ class TargetClusterAgent:
             resource=str(diff.get("resource", "")),
             rollout=rollout,
         )
+
+    async def apply_manifest_documents(
+        self,
+        desired_documents: list[object],
+        resource_ref: JsonObject,
+        fallback_namespace: str,
+    ) -> JsonObject:
+        if not desired_documents or len(desired_documents) > 100:
+            return self.command_result(False, "apply_manifest desired_documents is invalid")
+        expected_uid = str(resource_ref.get("uid") or "")
+        expected_kind = str(resource_ref.get("kind") or "")
+        expected_name = str(resource_ref.get("name") or "")
+        expected_namespace = str(resource_ref.get("namespace") or fallback_namespace)
+        if not expected_uid or not expected_kind or not expected_name:
+            return self.command_result(False, "apply_manifest resource identity is incomplete")
+
+        prepared: list[tuple[JsonObject, KubernetesManifestResource, str | None]] = []
+        identities: set[tuple[str, str, str, str]] = set()
+        selected_count = 0
+        try:
+            for value in desired_documents:
+                if not isinstance(value, dict):
+                    raise ValueError("every desired document must be an object")
+                manifest = dict(value)
+                resource = kubernetes_manifest_resource(manifest, fallback_namespace)
+                if not control_namespace_allowed(resource.namespace):
+                    raise ValueError(AgentConfig.WRITE_NAMESPACE_DENIED_MESSAGE)
+                identity = (
+                    resource.api_version,
+                    resource.kind.casefold(),
+                    resource.namespace,
+                    resource.name,
+                )
+                if identity in identities:
+                    raise ValueError("desired_documents contains duplicate resource identities")
+                identities.add(identity)
+                selected = (
+                    resource.kind.casefold() == expected_kind.casefold()
+                    and resource.namespace == expected_namespace
+                    and resource.name == expected_name
+                )
+                selected_count += int(selected)
+                prepared.append((resource.manifest, resource, expected_uid if selected else None))
+        except ValueError as exc:
+            return self.command_result(False, str(exc))
+        if selected_count != 1:
+            return self.command_result(
+                False,
+                "desired_documents must contain the exact selected resource once",
+            )
+
+        resources: list[JsonObject] = []
+        successes = 0
+        for manifest, resource, document_uid in prepared:
+            applied, message, rollout = await self.apply_kubernetes_manifest(
+                manifest,
+                resource.namespace,
+                expected_uid=document_uid,
+            )
+            successes += int(applied)
+            resources.append(
+                {
+                    "resource": f"{resource.kind}/{resource.name}",
+                    "namespace": resource.namespace,
+                    "status": (
+                        AgentConfig.COMMAND_COMPLETED_STATUS
+                        if applied
+                        else AgentConfig.COMMAND_FAILED_STATUS
+                    ),
+                    "applied": applied,
+                    "retryable": not applied,
+                    "message": message,
+                    "stdout": sanitize_command_output(message if applied else ""),
+                    "stderr": sanitize_command_output("" if applied else message),
+                    "rollout": rollout,
+                }
+            )
+        failures = len(resources) - successes
+        completeness = "exact" if failures == 0 else "partial" if successes else "unavailable"
+        status = (
+            AgentConfig.COMMAND_COMPLETED_STATUS
+            if failures == 0
+            else AgentConfig.COMMAND_FAILED_STATUS
+        )
+        return {
+            Gateway.STATUS: status,
+            Gateway.CLUSTER_ID: self.cluster_id,
+            Gateway.APPLIED: successes > 0,
+            Gateway.MESSAGE: (
+                "all manifest documents applied"
+                if failures == 0
+                else f"{successes} of {len(resources)} manifest documents applied"
+            ),
+            Gateway.RETRYABLE: failures > 0,
+            Gateway.RESOURCES: resources,
+            Gateway.STDOUT: "",
+            Gateway.STDERR: "" if failures == 0 else "one or more manifest documents failed",
+            "completeness": completeness,
+        }
 
     @command.handler(Command.RCA_TEST_SCENARIO_INJECT_ACTION)
     async def rca_test_scenario_inject_command(
@@ -2300,7 +2408,11 @@ class TargetClusterAgent:
         )
 
     async def apply_kubernetes_manifest(
-        self, manifest: JsonObject, fallback_namespace: str
+        self,
+        manifest: JsonObject,
+        fallback_namespace: str,
+        *,
+        expected_uid: str | None = None,
     ) -> tuple[bool, str, JsonObject]:
         base_url = kubernetes_api_base_url()
         token = service_account_token()
@@ -2319,6 +2431,8 @@ class TargetClusterAgent:
                 resource.resource_url(base_url), headers=kubernetes_headers(token)
             )
             if current.status_code == 404:
+                if expected_uid:
+                    return False, "selected resource identity is stale", {}
                 created = await client.post(
                     resource.collection_url(base_url),
                     json=resource.manifest,
@@ -2336,6 +2450,18 @@ class TargetClusterAgent:
 
             if current.is_error:
                 return False, kubernetes_failure_message("get", current), {}
+            if expected_uid:
+                current_body = current.json()
+                current_metadata = (
+                    current_body.get("metadata") if isinstance(current_body, dict) else None
+                )
+                current_uid = (
+                    str(current_metadata.get("uid") or "")
+                    if isinstance(current_metadata, dict)
+                    else ""
+                )
+                if current_uid != expected_uid:
+                    return False, "selected resource identity is stale", {}
             patched = await client.patch(
                 resource.resource_url(base_url),
                 json=resource.manifest,

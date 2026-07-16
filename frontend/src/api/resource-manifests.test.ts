@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  applyResourceManifestNow,
   approveResourceManifestEdit,
   getResourceManifestSource,
   previewResourceManifestEdit,
@@ -63,6 +64,15 @@ describe("resource manifest API", () => {
       diff: "+spec: {}\n",
       errors: [],
       warnings: [],
+      apply_availability: "available",
+      apply_reason_codes: [],
+      impact: [{
+        api_version: "apps/v1",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "checkout",
+        selected: true,
+      }],
     };
     const approval = {
       accepted: true,
@@ -90,6 +100,39 @@ describe("resource manifest API", () => {
       application_id: "app-1",
       confirmed: true,
       reason: "increase capacity",
+    });
+  });
+
+  it("posts a confirmed source-pinned direct apply with an idempotency key", async () => {
+    const receipt = {
+      accepted: true,
+      event_id: "event-apply-1",
+      audit_event_id: "event-apply-1",
+      correlation_id: "correlation-apply-1",
+      command_id: "command-apply-1",
+      status: "queued",
+    } as const;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(receipt), { status: 202 }),
+    );
+
+    await expect(applyResourceManifestNow("resource-1", {
+      applicationId: "app-1",
+      baseSha: "a".repeat(40),
+      sourceSha256: `sha256:${"b".repeat(64)}`,
+      editedYaml: SOURCE.content,
+      expectedDesiredSha256: `sha256:${"c".repeat(64)}`,
+      confirmation: true,
+      reason: "apply reviewed manifest",
+    })).resolves.toEqual(receipt);
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(headers.get("Idempotency-Key")).toMatch(/^manifest:[0-9a-f]{8}:[0-9a-f]{32}$/u);
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      expected_desired_sha256: `sha256:${"c".repeat(64)}`,
+      confirmation: true,
+      reason: "apply reviewed manifest",
     });
   });
 });

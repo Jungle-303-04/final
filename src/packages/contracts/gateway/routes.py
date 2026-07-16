@@ -222,6 +222,7 @@ SERVICE_REQUESTS_PATH = "/service-access/requests"
 RESOURCE_MANIFEST_SOURCE_PATH = "/resource-manifests/{resource_id}"
 RESOURCE_MANIFEST_PREVIEW_PATH = "/resource-manifests/{resource_id}/preview"
 RESOURCE_MANIFEST_APPROVE_PATH = "/resource-manifests/{resource_id}/approve"
+RESOURCE_MANIFEST_APPLY_PATH = "/resource-manifests/{resource_id}/apply"
 # 워크스페이스 범위 Issues 필터 계약 — mutable RCA timeline projection의 완전성을 명시한다.
 ISSUES_FILTER_RESULTS_PATH = "/issues"
 ISSUES_FILTER_FACETS_PATH = "/issues/filter-facets"

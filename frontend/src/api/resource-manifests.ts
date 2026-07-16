@@ -1,9 +1,11 @@
 import { apiRequest, type ApiPath } from "./client";
 import {
   resourceManifestApproveSchema,
+  resourceManifestApplySchema,
   resourceManifestPreviewSchema,
   resourceManifestSourceSchema,
   type ResourceManifestApproveEndpoint,
+  type ResourceManifestApplyEndpoint,
   type ResourceManifestPreviewEndpoint,
   type ResourceManifestSourceEndpoint,
 } from "./resource-manifests-schemas";
@@ -18,6 +20,12 @@ export interface ResourceManifestEditInput {
 
 export interface ResourceManifestApprovalInput extends ResourceManifestEditInput {
   confirmed: true;
+  reason: string;
+}
+
+export interface ResourceManifestDirectApplyInput extends ResourceManifestEditInput {
+  expectedDesiredSha256: string;
+  confirmation: true;
   reason: string;
 }
 
@@ -61,8 +69,48 @@ export function approveResourceManifestEdit(
   });
 }
 
-function resourceManifestPath(resourceId: string, action: "preview" | "approve"): ApiPath {
+export function applyResourceManifestNow(
+  resourceId: string,
+  input: ResourceManifestDirectApplyInput,
+  signal?: AbortSignal,
+): Promise<ResourceManifestApplyEndpoint> {
+  return apiRequest(resourceManifestPath(resourceId, "apply"), resourceManifestApplySchema, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "Idempotency-Key": manifestApplyIdempotencyKey(resourceId, input),
+    },
+    body: JSON.stringify({
+      ...requestBody(input),
+      expected_desired_sha256: input.expectedDesiredSha256,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+    signal,
+  });
+}
+
+function resourceManifestPath(resourceId: string, action: "preview" | "approve" | "apply"): ApiPath {
   return `/api/resource-manifests/${encodePathSegment(resourceId)}/${action}` as ApiPath;
+}
+
+function manifestApplyIdempotencyKey(
+  resourceId: string,
+  input: ResourceManifestDirectApplyInput,
+): string {
+  const key = [resourceId, input.applicationId, input.baseSha, input.expectedDesiredSha256]
+    .join(":")
+    .replace(/[^A-Za-z0-9._:-]/gu, "_");
+  return `manifest:${simpleHash(key)}:${input.expectedDesiredSha256.replace("sha256:", "").slice(0, 32)}`;
+}
+
+function simpleHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function requestBody(input: ResourceManifestEditInput) {

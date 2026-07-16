@@ -128,6 +128,12 @@ class ResourceManifestApproveRequest(ResourceManifestPreviewRequest):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ResourceManifestDirectApplyRequest(ResourceManifestPreviewRequest):
+    expected_desired_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    confirmation: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class AgentConnectRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     agent_id: str

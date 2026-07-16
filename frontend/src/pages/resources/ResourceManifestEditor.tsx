@@ -1,4 +1,4 @@
-import { GitPullRequestArrow, RefreshCw, ShieldCheck } from "lucide-react";
+import { GitPullRequestArrow, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -9,7 +9,12 @@ import {
   type ResourceManifestSource,
 } from "../../features/resources/resourceManifestContract";
 import type { ResourceDetail } from "../../features/resources/resourcesContract";
+import {
+  useOptionalOperationStatusSnapshots,
+  useOptionalOperationStatusStore,
+} from "../../features/operations/OperationStatusStore";
 import { useI18n } from "../../shared/i18n";
+import type { CommandReceipt } from "../../shared/parity/referenceParity";
 import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
@@ -26,7 +31,7 @@ import { Input } from "../../shared/ui/primitives/input";
 import { Label } from "../../shared/ui/primitives/label";
 import { Spinner } from "../../shared/ui/primitives/spinner";
 
-type Phase = "idle" | "loading" | "ready" | "previewing" | "approving" | "failed";
+type Phase = "idle" | "loading" | "ready" | "previewing" | "approving" | "applying" | "failed";
 
 export function ResourceManifestEditor({
   detail,
@@ -38,6 +43,8 @@ export function ResourceManifestEditor({
   onUnauthorized?: () => void;
 }) {
   const { t } = useI18n();
+  const operationStore = useOptionalOperationStatusStore();
+  const operationSnapshots = useOptionalOperationStatusSnapshots();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [source, setSource] = useState<ResourceManifestSource | null>(null);
@@ -46,6 +53,7 @@ export function ResourceManifestEditor({
   const [preview, setPreview] = useState<ResourceManifestPreview | null>(null);
   const [reason, setReason] = useState("");
   const [receipt, setReceipt] = useState<ResourceManifestApprovalReceipt | null>(null);
+  const [applyReceipt, setApplyReceipt] = useState<CommandReceipt | null>(null);
   const [failure, setFailure] = useState<"stale" | "generic" | null>(null);
   const controller = useRef<AbortController | null>(null);
 
@@ -59,6 +67,7 @@ export function ResourceManifestEditor({
     setFailure(null);
     setPreview(null);
     setReceipt(null);
+    setApplyReceipt(null);
     try {
       const next = await port.loadSource(
         detail.resource.inventoryKey,
@@ -108,6 +117,25 @@ export function ResourceManifestEditor({
     }
   };
 
+  const applyNow = async () => {
+    const input = editInput(source, applicationId, yaml);
+    if (!input || !preview?.valid || preview.applyAvailability !== "available" || reason.trim().length < 3) return;
+    setPhase("applying");
+    setFailure(null);
+    try {
+      const result = await port.applyNow(detail.resource.inventoryKey, {
+        ...input,
+        desiredSha256: preview.desiredSha256,
+        reason: reason.trim(),
+      });
+      setApplyReceipt(result);
+      operationStore?.start(result.commandId);
+      setPhase("ready");
+    } catch (error) {
+      handleFailure(error);
+    }
+  };
+
   function handleFailure(error: unknown) {
     if (error instanceof ResourceManifestPortFailure && error.code === "unauthorized") {
       onUnauthorized?.();
@@ -120,7 +148,22 @@ export function ResourceManifestEditor({
     setPhase("failed");
   }
 
-  const busy = ["loading", "previewing", "approving"].includes(phase);
+  const busy = ["loading", "previewing", "approving", "applying"].includes(phase);
+  const operation = applyReceipt
+    ? operationSnapshots.find((snapshot) => snapshot.commandId === applyReceipt.commandId) ?? null
+    : null;
+  const operationPartial = operation?.event?.payload.result !== null
+    && typeof operation?.event?.payload.result === "object"
+    && operation.event.payload.result !== undefined
+    && "completeness" in operation.event.payload.result
+    && operation.event.payload.result.completeness === "partial";
+  const operationFailed = operation !== null && [
+    "failed",
+    "cancelled",
+    "forbidden",
+    "invalid",
+    "unavailable",
+  ].includes(operation.status);
   const available = source?.status === "available" && source.content !== null;
   return (
     <>
@@ -200,12 +243,13 @@ export function ResourceManifestEditor({
                       autoCapitalize="off"
                       autoCorrect="off"
                       className="min-h-[24rem] w-full resize-y rounded-lg border border-input bg-[#0d1117] p-4 font-mono text-xs leading-5 text-[#e6edf3] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                      disabled={busy || receipt !== null}
+                      disabled={busy || receipt !== null || applyReceipt !== null}
                       id="resource-manifest-yaml"
                       onChange={(event) => {
                         setYaml(event.currentTarget.value);
                         setPreview(null);
                         setReceipt(null);
+                        setApplyReceipt(null);
                       }}
                       spellCheck={false}
                       value={yaml}
@@ -232,6 +276,25 @@ export function ResourceManifestEditor({
                 {preview?.errors.map((error) => (
                   <Alert key={error} variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
                 ))}
+                {preview?.impact.length ? (
+                  <section aria-label={t("resources.manifest.impact")} className="grid gap-2">
+                    <span className="text-sm font-medium">{t("resources.manifest.impact")}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {preview.impact.map((item) => (
+                        <Badge key={`${item.apiVersion}:${item.kind}:${item.namespace ?? ""}:${item.name}`} variant={item.selected ? "default" : "outline"}>
+                          <span>{item.kind}/{item.name}</span>
+                          {item.namespace ? <span>· {item.namespace}</span> : null}
+                        </Badge>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+                {preview?.valid && preview.applyAvailability === "unavailable" ? (
+                  <Alert>
+                    <AlertTitle>{t("resources.manifest.applyUnavailable")}</AlertTitle>
+                    <AlertDescription>{preview.applyReasonCodes.join(", ")}</AlertDescription>
+                  </Alert>
+                ) : null}
                 {failure ? (
                   <Alert variant="destructive">
                     <AlertTitle>{failure === "stale" ? t("resources.manifest.stale") : t("resources.manifest.failed")}</AlertTitle>
@@ -249,7 +312,24 @@ export function ResourceManifestEditor({
                     </AlertDescription>
                   </Alert>
                 ) : null}
-                {preview?.valid && !receipt ? (
+                {applyReceipt ? (
+                  <Alert variant={operationPartial || operationFailed ? "destructive" : "default"}>
+                    <ShieldCheck aria-hidden="true" />
+                    <AlertTitle>{t(
+                      operationPartial
+                        ? "resources.manifest.applyPartial"
+                        : operationFailed
+                          ? "resources.manifest.applyFailed"
+                          : "resources.manifest.applyAccepted",
+                    )}</AlertTitle>
+                    <AlertDescription>
+                      {operationStore
+                        ? t("resources.manifest.applyStatus", { status: operation?.status ?? applyReceipt.status })
+                        : t("resources.manifest.applyStreamUnavailable")}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                {preview?.valid && !receipt && !applyReceipt ? (
                   <div className="grid gap-2">
                     <Label htmlFor="resource-manifest-reason">{t("resources.manifest.reason")}</Label>
                     <Input
@@ -278,16 +358,22 @@ export function ResourceManifestEditor({
                 {t("resources.manifest.reload")}
               </Button>
             ) : null}
-            {available && !receipt ? (
+            {available && !receipt && !applyReceipt ? (
               <Button aria-busy={phase === "previewing"} disabled={busy} onClick={() => void previewEdit()} type="button" variant="outline">
                 {phase === "previewing" ? <Spinner decorative /> : null}
                 {t("resources.manifest.preview")}
               </Button>
             ) : null}
-            {preview?.valid && !receipt ? (
+            {preview?.valid && !receipt && !applyReceipt ? (
               <Button aria-busy={phase === "approving"} disabled={busy || reason.trim().length < 3} onClick={() => void approve()} type="button">
                 {phase === "approving" ? <Spinner decorative /> : <GitPullRequestArrow aria-hidden="true" />}
                 {t("resources.manifest.approve")}
+              </Button>
+            ) : null}
+            {preview?.valid && !receipt && !applyReceipt && preview.applyAvailability === "available" ? (
+              <Button aria-busy={phase === "applying"} disabled={busy || reason.trim().length < 3} onClick={() => void applyNow()} type="button" variant="destructive">
+                {phase === "applying" ? <Spinner decorative /> : <Play aria-hidden="true" />}
+                {t("resources.manifest.applyNow")}
               </Button>
             ) : null}
           </DialogFooter>

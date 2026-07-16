@@ -61,7 +61,7 @@ def test_manifest_edit_returns_exact_diff_without_rewriting_yaml() -> None:
     assert result.desired_sha256 == manifest_sha256(desired)
     assert "-  replicas: 2" in result.diff
     assert "+  replicas: 3" in result.diff
-    assert "cluster is not patched directly" in result.warnings[0]
+    assert "Safe PR or direct apply" in result.warnings[0]
 
 
 @pytest.mark.parametrize(

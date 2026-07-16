@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   approveResourceManifestEdit,
+  applyResourceManifestNow,
   cancelCommand,
   executeResourceCapability,
   getChangeTimeline,
@@ -78,6 +79,7 @@ export function loadResourcesSurface(
     createPodTerminalAdapter({ openPodTerminal }),
     createResourceManifestAdapter({
       approveResourceManifestEdit,
+      applyResourceManifestNow,
       getResourceManifestSource,
       previewResourceManifestEdit,
     }),

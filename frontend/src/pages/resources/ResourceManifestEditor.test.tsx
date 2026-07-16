@@ -202,10 +202,11 @@ describe("ResourceManifestEditor", () => {
 });
 
 function operationStore(start: (commandId: string) => void): OperationStatusStore {
+  const snapshots: ReturnType<OperationStatusStore["getSnapshots"]> = [];
   return {
     dispose: vi.fn(),
     getSnapshot: vi.fn(),
-    getSnapshots: () => [],
+    getSnapshots: () => snapshots,
     reobserve: vi.fn(),
     start,
     subscribe: () => () => undefined,

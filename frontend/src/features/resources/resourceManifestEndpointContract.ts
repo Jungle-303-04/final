@@ -1,4 +1,5 @@
 import type { ResourceManifestEditInput } from "./resourceManifestContract";
+import type { ResourceActionStatus } from "./resourceCapabilitiesContract";
 
 export interface ResourceManifestSourceChoiceEndpoint {
   application_id: string;
@@ -29,6 +30,24 @@ export interface ResourceManifestPreviewEndpoint {
   diff: string;
   errors: string[];
   warnings: string[];
+  apply_availability: "available" | "unavailable";
+  apply_reason_codes: string[];
+  impact: Array<{
+    api_version: string;
+    kind: string;
+    namespace: string | null;
+    name: string;
+    selected: boolean;
+  }>;
+}
+
+export interface ResourceManifestApplyEndpoint {
+  accepted: true;
+  event_id: string;
+  audit_event_id: string;
+  correlation_id: string;
+  command_id: string;
+  status: ResourceActionStatus;
 }
 
 export interface ResourceManifestApproveEndpoint {
@@ -56,4 +75,13 @@ export interface ResourceManifestEndpointDependencies {
     input: ResourceManifestEditInput & { confirmed: true; reason: string },
     signal?: AbortSignal,
   ): Promise<ResourceManifestApproveEndpoint>;
+  applyResourceManifestNow(
+    resourceId: string,
+    input: ResourceManifestEditInput & {
+      expectedDesiredSha256: string;
+      confirmation: true;
+      reason: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ResourceManifestApplyEndpoint>;
 }

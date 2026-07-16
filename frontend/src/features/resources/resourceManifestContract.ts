@@ -34,6 +34,22 @@ export interface ResourceManifestPreview {
   diff: string;
   errors: string[];
   warnings: string[];
+  applyAvailability: "available" | "unavailable";
+  applyReasonCodes: string[];
+  impact: ResourceManifestImpact[];
+}
+
+export interface ResourceManifestImpact {
+  apiVersion: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  selected: boolean;
+}
+
+export interface ResourceManifestDirectApplyInput extends ResourceManifestEditInput {
+  desiredSha256: string;
+  reason: string;
 }
 
 export interface ResourceManifestApprovalReceipt {
@@ -77,4 +93,10 @@ export interface ResourceManifestPort {
     input: ResourceManifestEditInput & { reason: string },
     signal?: AbortSignal,
   ): Promise<ResourceManifestApprovalReceipt>;
+  applyNow(
+    resourceId: string,
+    input: ResourceManifestDirectApplyInput,
+    signal?: AbortSignal,
+  ): Promise<CommandReceipt>;
 }
+import type { CommandReceipt } from "../../shared/parity/referenceParity";
