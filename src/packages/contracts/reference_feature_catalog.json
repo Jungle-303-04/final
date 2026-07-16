@@ -2668,6 +2668,7 @@
         "tests/test_cost_router.py",
         "tests/test_cost_observation_projection.py",
         "frontend/src/api/cost-overview.test.ts",
+        "frontend/src/features/cost/createCostAdapter.test.ts",
         "frontend/src/pages/cost/useCostOverviewData.test.tsx"
       ],
       "coverage": {
