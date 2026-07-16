@@ -34,6 +34,7 @@ import {
   type ResourceTableColumnKey,
 } from "./resourceTableModel";
 import { cn } from "@/shared/lib/cn";
+import { useAnimatedResourceRows } from "./useAnimatedResourceRows";
 
 export function ResourcesTable({
   items,
@@ -66,8 +67,9 @@ export function ResourcesTable({
     );
     return sort.direction === "asc" ? order : -order;
   }), [items, sort]);
+  const { rows, phase, revision } = useAnimatedResourceRows(sorted);
 
-  useRowShortcuts(sorted, rowButtons, dock.openLogs);
+  useRowShortcuts(rows, rowButtons, dock.openLogs);
 
   function updateSort(key: ResourceTableColumnKey) {
     setSort((current) => current.key === key
@@ -93,11 +95,14 @@ export function ResourcesTable({
           ))}
         </TableRow>
       </TableHeader>
-      <TableBody>
-        {sorted.map((item) => {
+      <TableBody className="motion-resource-rows" data-phase={phase}>
+        {rows.map((item) => {
           const identity = identityOf(item);
           return (
-            <TableRow key={item.id}>
+            <TableRow
+              className="motion-resource-row"
+              key={`${revision}:${item.id}`}
+            >
               {columns.map((column) => (
                 <TableCell className={column.key === "name" ? "max-w-72 font-medium" : undefined} key={column.key}>
                   {column.key === "name" ? (
@@ -192,7 +197,13 @@ function SortableHead({
     <TableHead aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
       <Button className="-ml-2" onClick={onSort} size="sm" type="button" variant="ghost">
         {label}
-        <Icon aria-hidden="true" data-icon="inline-end" />
+        <Icon
+          aria-hidden="true"
+          className="motion-sort-icon"
+          data-direction={active ? sort.direction : "none"}
+          data-icon="inline-end"
+          key={`${sortKey}:${active ? sort.direction : "none"}`}
+        />
       </Button>
     </TableHead>
   );
@@ -230,7 +241,7 @@ function ResourceNameButton({
           />
         )}
       >
-        <span className="truncate">{shortIdentity(item.name)}</span>
+        <span className={cn("truncate", item.facts.type === "event" && "motion-event-name")}>{shortIdentity(item.name)}</span>
         <span className="sr-only"> {t("resources.table.openDetail.sr")}</span>
       </TooltipTrigger>
       <TooltipContent className="break-all" side="top">{item.name}</TooltipContent>
@@ -242,10 +253,10 @@ export function resourceNameButtonClassName(item: ResourceSummary): string {
   return cn(
     "h-auto max-w-full justify-start px-0 text-left",
     item.facts.type === "event" && [
-      "text-resource-event-name no-underline",
-      "hover:text-resource-event-name-hover hover:underline",
+      "motion-event-trigger text-resource-event-name no-underline",
+      "hover:text-resource-event-name-hover hover:no-underline",
       "focus-visible:border-resource-event-name focus-visible:text-resource-event-name-hover",
-      "focus-visible:underline focus-visible:ring-resource-event-name/40",
+      "focus-visible:no-underline focus-visible:ring-resource-event-name/40",
     ],
   );
 }

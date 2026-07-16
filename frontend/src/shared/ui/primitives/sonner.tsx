@@ -1,9 +1,11 @@
 import { Toaster as Sonner, toast } from "sonner";
+import { SuccessCheckIcon } from "../SuccessCheckIcon";
 
 function Toaster() {
   return (
     <Sonner
       closeButton
+      icons={{ success: <SuccessCheckIcon /> }}
       position="bottom-center"
       toastOptions={{
         classNames: {

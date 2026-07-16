@@ -5,7 +5,8 @@ import type {
 import { useI18n } from "../../shared/i18n";
 import { OverflowIdentity } from "../../shared/ui/OverflowIdentity";
 import { StatusMark } from "../../shared/ui/StatusMark";
-import type { ResourceTableColumnKey } from "./resourceTableModel";
+import { LiveValueHighlight, type LiveValueTone } from "../../shared/ui/LiveValueHighlight";
+import { resourceTableSortValue, type ResourceTableColumnKey } from "./resourceTableModel";
 
 export function ResourceTableSmartCell({
   column,
@@ -15,6 +16,23 @@ export function ResourceTableSmartCell({
   item: ResourceSummary;
 }) {
   const { formatDate, formatNumber, t } = useI18n();
+  const content = smartCellContent(item, column, formatNumber, formatDate, t);
+  const tone = liveValueTone(item, column);
+  if (tone === null) return content;
+  return (
+    <LiveValueHighlight tone={tone} value={resourceTableSortValue(item, column)}>
+      {content}
+    </LiveValueHighlight>
+  );
+}
+
+function smartCellContent(
+  item: ResourceSummary,
+  column: ResourceTableColumnKey,
+  formatNumber: ReturnType<typeof useI18n>["formatNumber"],
+  formatDate: ReturnType<typeof useI18n>["formatDate"],
+  t: ReturnType<typeof useI18n>["t"],
+) {
   if (column === "namespace") return item.namespace ?? "—";
   if (column === "kind") return item.kind;
   if (column === "status") return item.status || t("common.state.unknown");
@@ -28,6 +46,14 @@ export function ResourceTableSmartCell({
   return value === null ? (
     <span aria-label={t("common.state.unavailable")} className="text-muted-foreground">—</span>
   ) : value;
+}
+
+function liveValueTone(item: ResourceSummary, column: ResourceTableColumnKey): LiveValueTone | null {
+  if (column === "cpu" || column === "memory" || column === "count") return "info";
+  if (column !== "status" && column !== "health") return null;
+  if (item.health === "healthy") return "healthy";
+  if (item.health === "warning" || item.health === "critical") return "warning";
+  return "info";
 }
 
 function factCell(

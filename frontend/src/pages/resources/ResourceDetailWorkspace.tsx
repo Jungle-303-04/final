@@ -9,6 +9,7 @@ import type {
 import type { ResourceActionsPort } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
 import { usePrefersReducedMotion } from "../../motion/usePrefersReducedMotion";
+import { MOTION_DURATION_MS } from "../../motion/useStagger";
 import { useI18n } from "../../shared/i18n";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
@@ -85,7 +86,7 @@ export function ResourceDetailWorkspace({
       return;
     }
     setClosing(true);
-    closeTimer.current = window.setTimeout(onClose, 320);
+    closeTimer.current = window.setTimeout(onClose, MOTION_DURATION_MS.detailExit);
   };
 
   return (
@@ -111,7 +112,7 @@ export function ResourceDetailWorkspace({
     >
       <header className="grid min-w-0 gap-3 border-b px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="min-w-0 flex-1">
+          <div className="motion-detail-item min-w-0 flex-1">
             <OverflowIdentity
               className="font-heading text-lg font-medium"
               render={<h2 aria-label={title} id="resource-detail-workspace-title" />}
@@ -125,37 +126,39 @@ export function ResourceDetailWorkspace({
                 : t("resources.detail.identityDescription")}
             />
           </div>
-          {detail.phase === "ready" ? (
-            <StatusMark
-              label={detail.data.resource.healthStatus}
-              tone={detail.data.resource.health}
-            />
-          ) : null}
-          <Button
-            aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
-            className="relative shrink-0"
-            onClick={() => onFullChange(!full)}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
-          </Button>
-          <Button
-            aria-label={t("resources.detail.close")}
-            className="relative shrink-0"
-            onClick={requestClose}
-            ref={closeRef}
-            size="icon"
-            type="button"
-            variant="outline"
-          >
-            <X aria-hidden="true" />
-          </Button>
+          <div className="motion-detail-item motion-detail-delay-1 flex shrink-0 items-center gap-2">
+            {detail.phase === "ready" ? (
+              <StatusMark
+                label={detail.data.resource.healthStatus}
+                tone={detail.data.resource.health}
+              />
+            ) : null}
+            <Button
+              aria-label={full ? t("resources.detail.collapse") : t("resources.detail.expand")}
+              className="relative shrink-0"
+              onClick={() => onFullChange(!full)}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+            </Button>
+            <Button
+              aria-label={t("resources.detail.close")}
+              className="relative shrink-0"
+              onClick={requestClose}
+              ref={closeRef}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </div>
         </div>
         <div
           aria-label={t("resources.detail.context")}
-          className="flex min-w-0 flex-wrap items-center gap-1.5"
+          className="motion-detail-item motion-detail-delay-2 flex min-w-0 flex-wrap items-center gap-1.5"
         >
           {labels.length > 0
             ? labels.map((label) => (
@@ -164,7 +167,7 @@ export function ResourceDetailWorkspace({
             : <span className="text-xs text-muted-foreground">{t("resources.detail.contextAll")}</span>}
         </div>
         {detail.phase === "ready" ? (
-          <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="resource-detail-command-bar">
+          <div className="motion-detail-item motion-detail-delay-2 flex min-w-0 flex-wrap items-center gap-2" data-slot="resource-detail-command-bar">
             {logTarget ? (
               <Button
                 onClick={() => dock.openLogs(logTarget)}
@@ -196,7 +199,7 @@ export function ResourceDetailWorkspace({
           </div>
         ) : null}
       </header>
-      <div className="min-h-0 min-w-0 overflow-y-auto px-4 pb-6 sm:px-6">
+      <div className="motion-detail-item motion-detail-delay-3 min-h-0 min-w-0 overflow-y-auto px-4 pb-6 sm:px-6">
         <ResourceDetailBody
           detail={detail}
           full={full}

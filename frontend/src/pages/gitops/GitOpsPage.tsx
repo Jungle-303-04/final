@@ -7,6 +7,7 @@ import { Button } from "../../shared/ui/primitives/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/primitives/tabs";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { SuccessCheckIcon } from "../../shared/ui/SuccessCheckIcon";
 import { ManifestWorkspace } from "./ManifestWorkspace";
 import { PlanEditor } from "./PlanEditor";
 import { PlanWizard } from "./PlanWizard";
@@ -207,7 +208,10 @@ function FeedbackBanner({ feedback, onClose }: { feedback: WorkflowFeedback; onC
   const { t } = useI18n();
   return (
     <div className={`flex min-w-0 items-start justify-between gap-3 rounded-lg border px-3 py-2 ${feedback.tone === "success" ? "border-emerald-500/40 bg-emerald-500/5" : "border-destructive/40 bg-destructive/5"}`}>
-      <span className="min-w-0 text-xs leading-5 [overflow-wrap:anywhere]">{feedback.message}</span>
+      <span className="flex min-w-0 items-start gap-2 text-xs leading-5 [overflow-wrap:anywhere]">
+        {feedback.tone === "success" ? <SuccessCheckIcon className="mt-0.5 size-4 shrink-0 text-status-healthy" /> : null}
+        {feedback.message}
+      </span>
       <Button aria-label={t("common.action.close")} onClick={onClose} size="icon-sm" variant="ghost"><X aria-hidden="true" /></Button>
     </div>
   );

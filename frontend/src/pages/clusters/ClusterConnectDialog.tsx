@@ -1,4 +1,4 @@
-import { Check, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "../../shared/ui/primitives/dialog";
 import { Input } from "../../shared/ui/primitives/input";
+import { SuccessCheckIcon } from "../../shared/ui/SuccessCheckIcon";
 import { ConnectionCommandStep } from "./ClusterConnectDialogParts";
 import { clusterResourcesHref } from "./clusterNavigation";
 
@@ -330,7 +331,7 @@ export function ClusterConnectDialog({
         {step === 3 && receipt ? (
           <div className={cn("grid justify-items-center gap-4 py-6 text-center", STEP_MOTION)}>
             <span className="grid size-12 place-items-center rounded-full bg-status-healthy/15 text-status-healthy">
-              <Check aria-hidden="true" className="size-6" />
+              <SuccessCheckIcon className="size-7" />
             </span>
             <div className="grid gap-1">
               <h3 className="text-lg font-semibold">{t("clusters.connect.connected.title")}</h3>

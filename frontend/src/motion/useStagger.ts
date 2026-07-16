@@ -5,8 +5,11 @@ export const MOTION_DURATION_MS = Object.freeze({
   quick: 180,
   pop: 340,
   layout: 320,
+  detailEnter: 220,
+  detailExit: 160,
   camera: 420,
   value: 500,
+  valueHighlight: 700,
 });
 
 export const STAGGER_MS = Object.freeze({
