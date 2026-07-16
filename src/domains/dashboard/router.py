@@ -15,6 +15,7 @@ from domains.identity.dependencies import (
     require_cluster_access,
     require_session,
 )
+from domains.inventory_filter.snapshot_scope import project_snapshot_scope
 from packages.config.constants import CommandStatus
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
@@ -38,6 +39,8 @@ from packages.contracts.gateway.responses import (
     RcaIssueListResponse,
     RcaTimelineItem,
     RcaTimelineResponse,
+    ResourceIssueItem,
+    ResourceIssueListResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, AccessResourceType, Permission
 from packages.runtime.dependencies import get_db
@@ -299,6 +302,63 @@ async def rca_issues(
 
 
 @router.get(
+    gateway_routes.RESOURCE_RCA_ISSUES_PATH,
+    response_model=ResourceIssueListResponse,
+)
+async def resource_rca_issues(
+    cluster_id: str = Query(min_length=1, max_length=253),
+    kind: str = Query(min_length=1, max_length=253),
+    name: str = Query(min_length=1, max_length=253),
+    namespace: str | None = Query(default=None, max_length=253),
+    limit: int = Query(default=25, ge=1, le=MAX_TIMELINE_LIMIT),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> ResourceIssueListResponse:
+    """Read issues for one exact resource without browser-side filtering or inference."""
+
+    workspace_id = _workspace_id(current)
+    for permission in (Permission.INVENTORY_READ.value, Permission.RCA_READ.value):
+        require_cluster_access(
+            db,
+            current,
+            workspace_id,
+            cluster_id,
+            permission,
+            detail=RESOURCE_ACCESS_DENIED_MESSAGE,
+        )
+    contexts = await asyncio.to_thread(
+        db.filter_snapshot_contexts,
+        workspace_id,
+        (cluster_id,),
+    )
+    projection = project_snapshot_scope(
+        workspace_id=workspace_id,
+        contexts=contexts,
+        namespace_refs=((cluster_id, namespace),) if namespace else (),
+        selected_cluster_ids=(cluster_id,),
+    )
+    rows = await asyncio.to_thread(
+        db.list_resource_issues,
+        workspace_id,
+        cluster_id,
+        namespace=namespace,
+        resource_kind=kind,
+        resource_name=name,
+        limit=limit + 1,
+    )
+    items = [resource_issue_item(row) for row in rows[:limit]]
+    return ResourceIssueListResponse(
+        scope=projection.scopes[0],
+        coverage_availability=projection.availability,
+        observed_at=projection.observed_at,
+        reason_codes=projection.reason_codes,
+        items=items,
+        limit=limit,
+        has_more=len(rows) > limit,
+    )
+
+
+@router.get(
     gateway_routes.DASHBOARD_RCA_INCIDENT_PATH,
     response_model=RcaIncidentResponse,
 )
@@ -358,6 +418,13 @@ def issue_item(row: JsonObject) -> RcaIssueItem:
     data["supporting_evidence"] = row.get("supporting_evidence") or []
     data["missing_evidence"] = row.get("missing_evidence") or []
     return RcaIssueItem(**data)
+
+
+def resource_issue_item(row: JsonObject) -> ResourceIssueItem:
+    data = {key: row.get(key) for key in ResourceIssueItem.model_fields}
+    data["supporting_evidence"] = row.get("supporting_evidence") or []
+    data["missing_evidence"] = row.get("missing_evidence") or []
+    return ResourceIssueItem(**data)
 
 
 def metric_query_item(row: JsonObject) -> MetricQueryPresetItem:

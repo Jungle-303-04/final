@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 159,
+  "pendingCount": 152,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -608,8 +608,36 @@
         "blobId": "5f3089d77d5ac22a7cfc24215f5be944287dec61",
         "sha256": "69891daef2b1aa33bd4f153a038e70a95ab9a57251883fa4362f7f0169cfbf0a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:audit:alerts:semantic-summary:v1",
+          "legacyContractIds": [],
+          "symbol": "AuditAlerts",
+          "interaction": "a compact issue summary uses a semantic section, accessible controls, shared status colors, and wrapping-safe text without reconstructing severity from audit messages",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/ResourceIssuesSection.tsx",
+              "frontend/src/features/issues/ResourceIssuesSection.test.tsx",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router"
+            ],
+            "plannedTestIds": [
+              "issues.resource.disclosure",
+              "issues.resource.server-contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses one typed resource-issue disclosure and common status tokens. Audit messages remain audit evidence and are never parsed in the browser to invent alert tiers."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -623,8 +651,36 @@
         "blobId": "6341f948a63a20923c10fbb613080c584d676e90",
         "sha256": "8ad50261e062ba1224504c6764a950c0b93a2154430a21bfab79f5a735892c35"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:checks:view:shared-input:v1",
+          "legacyContractIds": [],
+          "symbol": "ChecksView search Input",
+          "interaction": "a controlled findings search uses the shared accessible input boundary only after an authorized server result catalog exists",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/checks/ChecksPage.tsx",
+              "frontend/src/shared/ui/primitives/input.tsx",
+              "src/packages/contracts/checks/observations.py",
+              "src/domains/checks/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.checks.observations",
+              "domains.checks.router"
+            ],
+            "plannedTestIds": [
+              "checks.shared-input.boundary"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Python Checks boundary truthfully reports that both catalog and findings collectors are unavailable, so there is no authorized result set for a search field to filter.",
+            "rationale": "The shared Input destination is recorded, but rendering an inert search or a fabricated catalog would misstate product capability."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -638,8 +694,35 @@
         "blobId": "950c92ecff5424a0bc4d76ec5396d0da48b3f106",
         "sha256": "4d75d1940b9cac67dd005bec77b5cf4b79f7c34122110058944dfba6cf270f41"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:checks:severity:semantic-token:v1",
+          "legacyContractIds": [],
+          "symbol": "SEVERITY_CONFIG",
+          "interaction": "check severity colors and labels are selected from a typed server-issued effective severity and common semantic tokens rather than category or message heuristics",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/checks/ChecksPage.tsx",
+              "frontend/src/features/issues/IssueStatusMark.tsx",
+              "src/packages/contracts/checks/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.checks.observations",
+              "domains.checks.observation_projection"
+            ],
+            "plannedTestIds": [
+              "checks.severity.evidence"
+            ],
+            "state": "blocked",
+            "blockedReason": "No agent-backed check finding or effective-severity projection exists; the current contract deliberately returns effective_severity as unavailable.",
+            "rationale": "Shared status tokens are ready, while the actual check tier remains server-owned and cannot be hardcoded in the browser."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -1566,8 +1649,36 @@
         "blobId": "36ce5b797ae73b8d9314e097f646027d73928a69",
         "sha256": "9cb832a96ea565639edffc2410714211ed2a34074e1c027eb13070da4d189dcb"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:resource:public-contract:v1",
+          "legacyContractIds": [],
+          "symbol": "issues/index.ts resource issue exports",
+          "interaction": "resource issue contracts, adapters, and disclosures compose through product-owned feature modules without importing the isolated source public barrel",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/resourceIssuesContract.ts",
+              "frontend/src/features/issues/createResourceIssuesAdapter.ts",
+              "frontend/src/features/issues/ResourceIssuesSection.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router"
+            ],
+            "plannedTestIds": [
+              "issues.resource.public-api",
+              "issues.resource.frontend-adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The feature boundary is explicit and reusable through the Resources composition root, with no compatibility wrapper or source runtime import."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -1578,8 +1689,38 @@
         "blobId": "3924e5588be3ee0de5d59def9cdac5c25338cb45",
         "sha256": "b2f2f41a5e5105cc319ae072ce5e0bb6c6747dc0f1f379393a37a2b12d236d91"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:timing:first-observation:v1",
+          "legacyContractIds": [],
+          "symbol": "getIssueTiming",
+          "interaction": "a resource issue renders the server-owned first observation while keeping creation-versus-regression timing unavailable until a verified healthy transition exists",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/dashboard/repository.py",
+              "src/packages/contracts/gateway/responses.py",
+              "frontend/src/features/issues/resourceIssuesContract.ts",
+              "frontend/src/features/issues/ResourceIssuesSection.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.repository"
+            ],
+            "plannedTestIds": [
+              "issues.resource.server-contract",
+              "issues.resource.frontend-adapter",
+              "issues.resource.disclosure"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python projection now owns a durable first-observed timestamp and explicitly marks the timing basis unavailable. The browser formats that value but never derives a detector phase."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -1713,8 +1854,35 @@
         "blobId": "49ec7977e32082a4c3e0cd8c0bde92ec31791154",
         "sha256": "9b9dbae2a3276b9b1f33d78eb8ee4667521d5cc93912d5508893dc1c11f82194"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:resource:disclosure-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceIssuesSection tests",
+          "interaction": "resource-specific issue rows remain collapsed by default, preserve server severity order, and omit the already-visible resource subject",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/ResourceIssuesSection.test.tsx",
+              "frontend/src/features/issues/createResourceIssuesAdapter.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router"
+            ],
+            "plannedTestIds": [
+              "issues.resource.disclosure",
+              "issues.resource.frontend-adapter"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Focused tests pin default disclosure state, shared severity presentation, non-redundant identity, and the absence of browser timing inference."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -1728,8 +1896,50 @@
         "blobId": "31e6443a43add4f1fda6b36b8ebc664463c01d33",
         "sha256": "1dc0a1bec5982ebddbc159aec44beea1324a65fbdbae032f0afd09b2c405ae7e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:issues:resource:bounded-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "ResourceIssuesSection",
+          "interaction": "an exact resource detail polls a bounded authorized issue projection, displays server severity and freshness, and opens each issue through an accessible collapsed disclosure",
+          "transport": "poll",
+          "realtime": {
+            "resume": "the visible Resources refresh clock reissues the exact authorized resource query every ten seconds and immediately after visibility resumes",
+            "backpressure": "one AbortController and monotonically increasing request generation discard stale or superseded responses",
+            "merge": "replace only the frame whose workspace, cluster, resource identity, authority, and refresh revision match the current detail"
+          },
+          "motion": {
+            "reducedMotion": "the disclosure chevron removes its transform transition under reduced motion while native expanded state remains semantic",
+            "evidence": [
+              "frontend/src/features/issues/ResourceIssuesSection.tsx:data-slot=resource-issues"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/issues/ResourceIssuesSection.tsx",
+              "frontend/src/pages/resources/useResourceIssuesDataFrame.ts",
+              "frontend/src/features/issues/createResourceIssuesAdapter.ts",
+              "src/domains/dashboard/router.py",
+              "src/domains/dashboard/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.dashboard.repository"
+            ],
+            "plannedTestIds": [
+              "issues.resource.server-contract",
+              "issues.resource.query-boundary",
+              "issues.resource.frontend-adapter",
+              "issues.resource.disclosure"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product now owns the exact query, two-permission boundary, snapshot freshness, abortable polling frame, common presentation, i18n, and accessible collapsed disclosure."
+          }
+        }
+      ]
     },
     {
       "status": "M",

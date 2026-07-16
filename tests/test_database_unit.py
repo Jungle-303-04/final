@@ -2864,6 +2864,31 @@ def test_dashboard_issue_queue_query_reads_only_the_additive_severity_projection
     assert "rca_timeline.payload" not in select_list
 
 
+def test_resource_issue_query_is_exact_bounded_and_uses_server_timestamps() -> None:
+    recorded: list[Any] = []
+    repository = _repository_with_recorded_sql(DashboardRepository, recorded)
+
+    repository.list_resource_issues(
+        "workspace-1",
+        "cluster-1",
+        namespace="target",
+        resource_kind="Deployment",
+        resource_name="checkout-api",
+        limit=26,
+    )
+
+    compiled = recorded[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    select_list = sql.split("\nFROM rca_timeline", maxsplit=1)[0]
+    assert "rca_timeline.created_at" in select_list
+    assert "rca_timeline.severity" in select_list
+    assert "rca_timeline.payload" not in select_list
+    assert "lower(rca_timeline.incident_resource_kind)" in sql
+    assert "coalesce(rca_timeline.incident_namespace" in sql
+    assert "rca_timeline.incident_resource_name" in sql
+    assert "rca_timeline.cluster_id" in sql
+
+
 def test_disconnect_migration_drops_old_unique_index_before_status_conversion() -> None:
     migration = Path("alembic/versions/20260715_0260_cluster_disconnect_lifecycle.py").read_text()
 

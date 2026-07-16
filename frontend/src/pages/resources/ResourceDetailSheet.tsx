@@ -31,12 +31,15 @@ import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import { ResourceMetricsCharts } from "./ResourceMetricsCharts";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
+import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
+import { ResourceIssuesSection } from "../../features/issues/ResourceIssuesSection";
 
 export function ResourceDetailBody({
   detail,
   full,
   identity,
   metricHistory,
+  resourceIssues,
   onTabChange,
   tab,
 }: {
@@ -44,6 +47,7 @@ export function ResourceDetailBody({
   full: boolean;
   identity: ResourceIdentity | null;
   metricHistory: ResourceMetricsHistoryFrame;
+  resourceIssues: ResourceIssuesFrame;
   onTabChange: (tab: string) => void;
   tab: string;
 }) {
@@ -143,6 +147,7 @@ export function ResourceDetailBody({
         {detail.data.providerDetail ? (
           <ProviderResourceDetailPanel detail={detail.data.providerDetail} />
         ) : null}
+        <ResourceIssuesSection frame={resourceIssues} />
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
           <ResourceMetricsCharts
             frame={metricHistory}

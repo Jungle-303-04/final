@@ -215,6 +215,7 @@ PROVIDERS_VALIDATE_PATH = "/providers/validate"
 TARGETS_PREFLIGHT_PATH = "/targets/preflight"
 DASHBOARD_RCA_TIMELINE_PATH = "/dashboard/rca/timeline"
 DASHBOARD_RCA_ISSUES_PATH = "/dashboard/rca/issues"
+RESOURCE_RCA_ISSUES_PATH = "/dashboard/resources/issues"
 DASHBOARD_RCA_INCIDENT_PATH = "/dashboard/rca/incidents/{incident_id}"
 AUDIT_TIMELINE_PATH = "/audit/timeline"
 # 범용 조회 API — 세션 워크스페이스 범위의 evidence/RCA report 목록(read-only)

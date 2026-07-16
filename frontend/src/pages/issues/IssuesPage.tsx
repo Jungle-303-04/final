@@ -22,6 +22,7 @@ import {
   type EvidenceCountKind,
 } from "../../features/issues/issueEvidencePresentation";
 import { useI18n } from "../../shared/i18n";
+import { ISSUE_STATUS_MESSAGE } from "../../features/issues/issuePresentation";
 import type { MessageKey, TranslationFunction } from "../../shared/i18n/types";
 import { humanizeFilterValue } from "../../shared/presentation/humanizeFilterValue";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -37,38 +38,6 @@ const FAILURE_MESSAGE: Record<IssuesFailureCode, MessageKey> = {
   "rate-limited": "issues.surface.failure.rateLimited",
   unavailable: "issues.surface.failure.unavailable",
   error: "issues.surface.failure.error",
-};
-
-const STATUS_MESSAGE: Record<string, MessageKey> = {
-  investigating: "issues.status.investigating",
-  incident_detected: "issues.status.incidentDetected",
-  evidence_bundled: "issues.status.incidentDetected",
-  rule_missing: "issues.status.analysisRequired",
-  backlog_created: "issues.status.analysisRequired",
-  ai_fallback_requested: "issues.status.analysisRequired",
-  followup_required: "issues.status.analysisRequired",
-  action_required: "issues.status.analysisRequired",
-  rca_planned: "issues.status.analysisInProgress",
-  rca_evaluated: "issues.status.analysisInProgress",
-  rca_completed: "issues.status.rcaCompleted",
-  recovery_planned: "issues.status.recoveryPlanned",
-  selection_required: "issues.status.selectionRequested",
-  selection_requested: "issues.status.selectionRequested",
-  recovery_selected: "issues.status.approvalRecommended",
-  approval_recommended: "issues.status.approvalRecommended",
-  command_requested: "issues.status.recoveryInProgress",
-  command_dispatched: "issues.status.recoveryInProgress",
-  command_queued: "issues.status.recoveryInProgress",
-  command_completed: "issues.status.recoveryCompleted",
-  command_rejected: "issues.status.commandRejected",
-  pr_requested: "issues.status.changeInProgress",
-  pr_patch_prepared: "issues.status.changeInProgress",
-  pr_diff_explained: "issues.status.changeInProgress",
-  pr_ready_for_creation: "issues.status.changeInProgress",
-  pr_created: "issues.status.changeCompleted",
-  pr_failed: "issues.status.changeFailed",
-  incident_resolved: "issues.status.resolved",
-  resolved: "issues.status.resolved",
 };
 
 const CAUSE_MESSAGE: Record<string, MessageKey> = {
@@ -206,7 +175,7 @@ function createIssuesCopy(
     recoveryUnavailable: t("issues.surface.recoveryUnavailable"),
     refresh: t("common.action.refresh"),
     status: t("issues.surface.status"),
-    statusLabel: (status) => translateOperationalValue(status, STATUS_MESSAGE, t),
+    statusLabel: (status) => translateOperationalValue(status, ISSUE_STATUS_MESSAGE, t),
     severityLabel: (severity) => t(
       severity === "critical"
         ? "issues.severity.critical"

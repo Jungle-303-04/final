@@ -115,6 +115,33 @@ export const rcaIssueListSchema = z.strictObject({
   items: z.array(rcaIssueItemSchema),
 });
 
+export const resourceIssueOnsetSchema = z.strictObject({
+  first_observed_at: z.string().datetime({ offset: true }),
+  source: z.literal("timeline_created_at"),
+  timing_kind: z.null(),
+  timing_availability: z.literal("unavailable"),
+  timing_reason_code: z.literal("health_transition_evidence_unavailable"),
+});
+
+export const resourceIssueItemSchema = rcaIssueItemSchema.extend({
+  onset: resourceIssueOnsetSchema,
+});
+
+export const resourceIssueListSchema = z.strictObject({
+  scope: z.strictObject({
+    workspace_id: z.string().min(1),
+    cluster_id: z.string().min(1),
+    namespaces: z.array(z.string()),
+    freshness: z.enum(["live", "stale", "partial", "disconnected"]),
+  }),
+  coverage_availability: z.enum(["available", "partial", "unavailable"]),
+  observed_at: z.string().nullable(),
+  reason_codes: z.array(z.string()),
+  items: z.array(resourceIssueItemSchema),
+  limit: z.number().int().min(1).max(100),
+  has_more: z.boolean(),
+});
+
 export type AuthSession = z.infer<typeof authSessionSchema>;
 export type FleetHealth = z.infer<typeof fleetHealthSchema>;
 export type FleetClusterSummary = z.infer<typeof fleetClusterSummarySchema>;
@@ -124,3 +151,5 @@ export type RcaTimelineItem = z.infer<typeof rcaTimelineItemSchema>;
 export type RcaTimeline = z.infer<typeof rcaTimelineSchema>;
 export type RcaIssueItem = z.infer<typeof rcaIssueItemSchema>;
 export type RcaIssueList = z.infer<typeof rcaIssueListSchema>;
+export type ResourceIssueItem = z.infer<typeof resourceIssueItemSchema>;
+export type ResourceIssueList = z.infer<typeof resourceIssueListSchema>;

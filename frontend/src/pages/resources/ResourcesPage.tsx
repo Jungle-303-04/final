@@ -16,6 +16,7 @@ import type {
   ResourceCapabilitiesPort,
 } from "../../features/resources/resourceCapabilitiesContract";
 import type { ResourceManifestPort } from "../../features/resources/resourceManifestContract";
+import type { ResourceIssuesPort } from "../../features/issues/resourceIssuesContract";
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -40,6 +41,7 @@ import { ResourcesListSurface } from "./ResourcesListSurface";
 import { useResourceMetricsHistoryDataFrame } from "./useResourceMetricsHistoryDataFrame";
 import { useResourceDetailNavigation } from "./useResourceDetailNavigation";
 import { useResourceCapabilitiesDataFrame } from "./useResourceCapabilitiesDataFrame";
+import { useResourceIssuesDataFrame } from "./useResourceIssuesDataFrame";
 import { useRelationTopologyDataFrame } from "./useRelationTopologyDataFrame";
 import { useResourceTopologyViewController } from "./useResourceTopologyViewController";
 import { useChangeTimelineDataFrame } from "./useChangeTimelineDataFrame";
@@ -63,6 +65,7 @@ export function ResourcesPage({
   resourceActionsPort,
   podTerminalPort = EMPTY_POD_TERMINAL_PORT,
   resourceManifestPort,
+  resourceIssuesPort,
   port,
 }: {
   filterPort: ResourcesFilterPort;
@@ -76,6 +79,7 @@ export function ResourcesPage({
   resourceActionsPort: ResourceActionsPort;
   podTerminalPort?: PodTerminalPort;
   resourceManifestPort?: ResourceManifestPort;
+  resourceIssuesPort?: ResourceIssuesPort;
   port: ResourcesPort;
 }) {
   const { t } = useI18n();
@@ -181,6 +185,17 @@ export function ResourcesPage({
     port: resourceCapabilitiesPort,
     reportUnauthorized,
     resourceId: detailResourceId,
+  });
+  const resourceIssues = useResourceIssuesDataFrame({
+    active: resourceIssuesPort !== undefined && state.detailRequested && state.detailIdentity !== null,
+    authorityKey,
+    clusterId: state.detail.phase === "ready"
+      ? state.detail.data.clusterId
+      : state.selectedClusterId,
+    identity: state.detailIdentity,
+    port: resourceIssuesPort ?? INACTIVE_RESOURCE_ISSUES_PORT,
+    reportUnauthorized,
+    revision: state.revision,
   });
   const detailNavigationItems = useMemo(
     () => (filteredPage?.items ?? []).map((item) => item.resource),
@@ -329,6 +344,7 @@ export function ResourcesPage({
             full={state.detailFull}
             identity={state.detailIdentity}
             metricHistory={metricHistory}
+            resourceIssues={resourceIssues}
             manifestPort={resourceManifestPort}
             onUnauthorized={reportUnauthorized}
             onClose={state.closeDetail}
@@ -342,3 +358,7 @@ export function ResourcesPage({
     </div>
   );
 }
+
+const INACTIVE_RESOURCE_ISSUES_PORT: ResourceIssuesPort = {
+  loadResourceIssues: () => Promise.reject(new Error("resource issue port is inactive")),
+};

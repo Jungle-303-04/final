@@ -434,6 +434,64 @@ class DashboardRepository(DatabaseConnection):
             include_issue_severity=True,
         )
 
+    def list_resource_issues(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+        *,
+        namespace: str | None,
+        resource_kind: str,
+        resource_name: str,
+        limit: int = 26,
+    ) -> list[JsonObject]:
+        """Return an exact, bounded resource projection with server-owned onset evidence."""
+
+        bounded_limit = max(1, min(limit, 101))
+        scan_limit = min(max(bounded_limit * 50, bounded_limit), 5000)
+        table = RcaTimeline.__table__
+        statement: Select[Any] = (
+            select(
+                *_rca_timeline_response_columns(include_issue_severity=True),
+                table.c.created_at,
+            )
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.incident_id.is_not(None),
+                func.lower(table.c.incident_resource_kind) == resource_kind.casefold(),
+                func.coalesce(table.c.incident_namespace, "") == (namespace or ""),
+                table.c.incident_resource_name == resource_name,
+            )
+            .order_by(table.c.updated_at.desc(), table.c.id.desc())
+            .limit(scan_limit)
+        )
+        statement = _exclude_non_incident_detection(statement)
+        with self.connection() as conn:
+            rows = conn.execute(statement).mappings().all()
+        seen: set[str] = set()
+        items: list[JsonObject] = []
+        for row in rows:
+            item = serialize_timeline_row(row)
+            item.update(issue_severity_projection(row))
+            key = incident_logical_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            created_at = item.get("created_at")
+            if not isinstance(created_at, str) or not created_at:
+                continue
+            item["onset"] = {
+                "first_observed_at": created_at,
+                "source": "timeline_created_at",
+                "timing_kind": None,
+                "timing_availability": "unavailable",
+                "timing_reason_code": "health_transition_evidence_unavailable",
+            }
+            items.append(item)
+            if len(items) >= bounded_limit:
+                break
+        return items
+
     def _list_rca_timeline_projection(
         self,
         workspace_id: str,

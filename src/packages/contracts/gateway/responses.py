@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from packages.contracts.gateway.base import StrictModel
 from packages.contracts.inventory_provider import ResourceProviderDetail
-from packages.contracts.parity import ResourceRef
+from packages.contracts.parity import ClusterScope, ResourceRef
 
 JsonMap = dict[str, Any]
 AuditJourneyStage = Literal[
@@ -218,6 +218,40 @@ class RcaIssueItem(RcaTimelineItem):
 
 class RcaIssueListResponse(StrictModel):
     items: list[RcaIssueItem]
+
+
+class ResourceIssueOnset(StrictModel):
+    """Server-owned first-observation projection without a guessed detector phase."""
+
+    first_observed_at: str
+    source: Literal["timeline_created_at"] = "timeline_created_at"
+    timing_kind: None = None
+    timing_availability: Literal["unavailable"] = "unavailable"
+    timing_reason_code: Literal["health_transition_evidence_unavailable"] = (
+        "health_transition_evidence_unavailable"
+    )
+
+
+class ResourceIssueItem(RcaIssueItem):
+    onset: ResourceIssueOnset
+
+
+class ResourceIssueListResponse(StrictModel):
+    """Bounded resource issue list and its independently verified inventory freshness."""
+
+    scope: ClusterScope
+    coverage_availability: Literal["available", "partial", "unavailable"]
+    observed_at: str | None = None
+    reason_codes: tuple[str, ...] = ()
+    items: list[ResourceIssueItem]
+    limit: int = Field(ge=1, le=100)
+    has_more: bool
+
+    @model_validator(mode="after")
+    def incomplete_coverage_has_a_reason(self) -> Self:
+        if self.coverage_availability != "available" and not self.reason_codes:
+            raise ValueError("incomplete resource issue coverage requires a reason")
+        return self
 
 
 ChangeTimelineEventKind = Literal[

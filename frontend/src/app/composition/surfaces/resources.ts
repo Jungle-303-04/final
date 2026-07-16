@@ -8,6 +8,7 @@ import {
   getInventorySummary,
   getPhysicalTopology,
   getRelationTopology,
+  getResourceIssues,
   getResourceCapabilities,
   getResourceManifestSource,
   getResourceMetricsHistory,
@@ -34,6 +35,7 @@ import type {
   PhysicalTopologyRealtimeStreamPolicy,
 } from "../../../features/resources/physicalTopologyRealtimeContract";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
+import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
 
 export function loadResourcesSurface(homePort: HomePort): ComponentType {
   const physicalTopologyRealtimePort: PhysicalTopologyRealtimePort = {
@@ -84,6 +86,7 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
       getResourceManifestSource,
       previewResourceManifestEdit,
     }),
+    createResourceIssuesAdapter({ getResourceIssues }),
   );
 }
 

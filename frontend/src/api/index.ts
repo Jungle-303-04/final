@@ -345,6 +345,13 @@ export {
   type InventoryResourceQuery,
 } from "./inventory";
 export {
+  getResourceIssues,
+  RESOURCE_ISSUES_DEFAULT_LIMIT,
+  RESOURCE_ISSUES_MAX_LIMIT,
+  RESOURCE_ISSUES_PATH,
+  type ResourceIssuesQuery,
+} from "./resource-issues";
+export {
   FILTERED_RESOURCES_PATH,
   RESOURCES_FILTER_FACETS_PATH,
   RESOURCE_LABEL_FACETS_PATH,

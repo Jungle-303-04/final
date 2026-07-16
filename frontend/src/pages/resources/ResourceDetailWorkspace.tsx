@@ -20,6 +20,7 @@ import { ResourceDetailBody } from "./ResourceDetailSheet";
 import { ResourceDetailActions } from "./ResourceDetailActions";
 import { ResourceManifestEditor } from "./ResourceManifestEditor";
 import type { ResourceCapabilitiesFrame } from "./useResourceCapabilitiesDataFrame";
+import type { ResourceIssuesFrame } from "./useResourceIssuesDataFrame";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import { logStreamTargetFromDetail } from "../../features/log-stream/logStreamTarget";
 import {
@@ -38,6 +39,7 @@ export function ResourceDetailWorkspace({
   onTabChange,
   full,
   metricHistory,
+  resourceIssues,
   manifestPort,
   onUnauthorized,
   tab,
@@ -52,6 +54,7 @@ export function ResourceDetailWorkspace({
   onTabChange: (tab: string) => void;
   full: boolean;
   metricHistory: ResourceMetricsHistoryFrame;
+  resourceIssues: ResourceIssuesFrame;
   manifestPort?: ResourceManifestPort;
   onUnauthorized?: () => void;
   tab: string;
@@ -202,6 +205,7 @@ export function ResourceDetailWorkspace({
           full={full}
           identity={identity}
           metricHistory={metricHistory}
+          resourceIssues={resourceIssues}
           onTabChange={onTabChange}
           tab={tab}
         />
