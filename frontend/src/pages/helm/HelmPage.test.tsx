@@ -359,6 +359,46 @@ describe("HelmPage", () => {
     expect(screen.queryByText("token=must-not-leak")).toBeNull();
   });
 
+  it("resumes an exact revision comparison from URL state without re-enqueueing the read", async () => {
+    const port = helmPort();
+    const store = completedOperationStore({
+      artifact: "hooks_diff",
+      format: "structured",
+      namespace: "storefront",
+      release_name: "storefront",
+      revision: 3,
+      comparison_revision: 2,
+      all_values: false,
+      source_bytes: 200,
+      redaction_applied: true,
+      truncated: false,
+      projection_sha256: "0".repeat(64),
+      projection_bytes: 100,
+      hooks_diff: {
+        revision1: 3,
+        revision2: 2,
+        added: [],
+        removed: [],
+        modified: [],
+        unchanged: [],
+        parse_error_count: 0,
+      },
+    });
+    operationState.value = store;
+    renderRoute(
+      "/helm/detail/cluster-a/storefront/storefront?clusters=cluster-a&helmRevision=3&helmCompare=2&helmArtifact=hooks_diff&helmCommand=cmd-helm-1",
+      port,
+    );
+
+    await screen.findByRole("heading", { name: "storefront" });
+    await waitFor(() => expect(store.start).toHaveBeenCalledWith("cmd-helm-1"));
+    expect(port.readArtifact).not.toHaveBeenCalled();
+    expect((screen.getByRole("combobox", { name: "Revision" }) as HTMLSelectElement).value).toBe("3");
+    expect((screen.getByRole("combobox", { name: "Compare with" }) as HTMLSelectElement).value).toBe("2");
+    expect(screen.getByTestId("location").textContent).toContain("helmCommand=cmd-helm-1");
+    expect(await screen.findByText("The sanitized revision artifact is empty.")).toBeTruthy();
+  });
+
   it("renders typed resource changes and partial parse evidence", async () => {
     const port = helmPort();
     operationState.value = completedOperationStore({
@@ -423,7 +463,7 @@ function renderRoute(path: string, port: HelmPort) {
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.pathname}</output>;
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
 }
 
 function helmPort(): HelmPort & {

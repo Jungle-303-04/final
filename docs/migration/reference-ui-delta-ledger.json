@@ -13190,10 +13190,17 @@
               "frontend/src/shared/ui/UnifiedDiff.tsx",
               "frontend/src/shared/ui/UnifiedDiff.test.tsx",
               "frontend/src/pages/helm/HelmPage.tsx",
-              "src/domains/helm/release_projection.py"
+              "frontend/src/pages/helm/HelmPage.test.tsx",
+              "frontend/src/features/filters/helmArtifactUrlState.ts",
+              "frontend/src/features/filters/helmArtifactUrlState.test.ts",
+              "frontend/src/features/helm/createHelmAdapter.ts",
+              "src/domains/helm/release_router.py",
+              "src/services/target/cluster-agent/commands/helm.py",
+              "tests/test_helm_release_router.py",
+              "tests/test_catalog_agent_runner.py"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.helm.releases",
+              "packages.contracts.helm.artifacts",
               "domains.helm.release_router"
             ],
             "plannedTestIds": [
@@ -13201,9 +13208,9 @@
               "helm.compare.provider-gate",
               "helm.release-detail.availability"
             ],
-            "state": "blocked",
-            "blockedReason": "The release projection has storage revision labels but no decoded revision manifest, values, notes, hooks, or resource inventory, so a comparison route would display unsupported content.",
-            "rationale": "The common diff classifier is ready; the route remains absent until Python and the target agent can return redacted, revision-bound evidence."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Python and the target agent now return bounded, redacted, revision-bound manifest, values, notes, hooks, and resource comparisons through CommandReceipt and OperationEvent; the browser stores only validated revision and command identities in canonical URL state and resumes the durable operation after reload."
           }
         }
       ]

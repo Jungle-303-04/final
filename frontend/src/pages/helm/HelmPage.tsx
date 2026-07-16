@@ -1,6 +1,7 @@
 import { ArrowLeft, PackageSearch } from "lucide-react";
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -12,6 +13,12 @@ import {
 import { useMatch, useNavigate } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import {
+  parseHelmArtifactUrlState,
+  writeHelmArtifactSearchParams,
+  type HelmArtifactUrlState,
+} from "../../features/filters/helmArtifactUrlState";
+import { useFilterSearchParams } from "../../features/filters/routeSearchAdapter";
 import type {
   HelmArtifactKind,
   HelmFailureCode,
@@ -74,6 +81,16 @@ const FAILURE_DETAIL_COPY = {
 export function HelmPage({ port }: { port: HelmPort }) {
   const detailMatch = useMatch(HELM_RELEASE_DETAIL_MATCH);
   const navigate = useNavigate();
+  const searchParams = useFilterSearchParams();
+  const artifactUrlState = useMemo(
+    () => parseHelmArtifactUrlState(searchParams),
+    [searchParams],
+  );
+  const updateArtifactUrlState = useCallback((next: HelmArtifactUrlState) => {
+    const params = writeHelmArtifactSearchParams(searchParams, next);
+    const nextSearch = params.toString();
+    navigate({ search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
+  }, [navigate, searchParams]);
   const identity = detailMatch?.params.clusterId && detailMatch.params.namespace && detailMatch.params.releaseName
     ? {
       clusterId: detailMatch.params.clusterId,
@@ -83,7 +100,15 @@ export function HelmPage({ port }: { port: HelmPort }) {
     : null;
 
   if (identity) {
-    return <HelmReleaseDetailPage identity={identity} onBack={() => navigate("/helm")} port={port} />;
+    return (
+      <HelmReleaseDetailPage
+        artifactUrlState={artifactUrlState}
+        identity={identity}
+        onArtifactUrlStateChange={updateArtifactUrlState}
+        onBack={() => navigate("/helm")}
+        port={port}
+      />
+    );
   }
   return <HelmReleaseListPage onOpen={(release) => navigate(helmReleaseDetailHref({
     clusterId: release.scope.clusterId,
@@ -296,11 +321,15 @@ function ReleaseRow({
 }
 
 function HelmReleaseDetailPage({
+  artifactUrlState,
   identity,
+  onArtifactUrlStateChange,
   onBack,
   port,
 }: {
+  artifactUrlState: HelmArtifactUrlState;
   identity: { clusterId: string; namespace: string; releaseName: string };
+  onArtifactUrlStateChange: (next: HelmArtifactUrlState) => void;
   onBack: () => void;
   port: HelmPort;
 }) {
@@ -311,7 +340,9 @@ function HelmReleaseDetailPage({
         <ArrowLeft aria-hidden="true" />{HELM_COPY.backToReleases}
       </Button>
       <HelmDetailBoundary
+        artifactUrlState={artifactUrlState}
         frame={data.frame}
+        onArtifactUrlStateChange={onArtifactUrlStateChange}
         onMutationAccepted={data.refreshAfterMutation}
         onRefresh={data.refresh}
         port={port}
@@ -321,12 +352,16 @@ function HelmReleaseDetailPage({
 }
 
 function HelmDetailBoundary({
+  artifactUrlState,
   frame,
+  onArtifactUrlStateChange,
   onMutationAccepted,
   onRefresh,
   port,
 }: {
+  artifactUrlState: HelmArtifactUrlState;
   frame: ReturnType<typeof useHelmReleaseDetail>["frame"];
+  onArtifactUrlStateChange: (next: HelmArtifactUrlState) => void;
   onMutationAccepted: () => void;
   onRefresh: () => void;
   port: HelmPort;
@@ -380,7 +415,12 @@ function HelmDetailBoundary({
           </ul>
         )}
       </section>
-      <HelmArtifactsPanel detail={detail} port={port} />
+      <HelmArtifactsPanel
+        detail={detail}
+        onUrlStateChange={onArtifactUrlStateChange}
+        port={port}
+        urlState={artifactUrlState}
+      />
       <section className="grid gap-2" aria-labelledby="helm-release-integrations-title">
         <h2 className="text-base font-semibold" id="helm-release-integrations-title">{HELM_COPY.integrations}</h2>
         <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
@@ -410,35 +450,80 @@ const ARTIFACT_ACTION_COPY: Readonly<Record<HelmArtifactKind, string>> = {
   resources_diff: HELM_COPY.resourcesDiffAction,
 };
 
-function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port: HelmPort }) {
+function HelmArtifactsPanel({
+  detail,
+  onUrlStateChange,
+  port,
+  urlState,
+}: {
+  detail: HelmReleaseDetail;
+  onUrlStateChange: (next: HelmArtifactUrlState) => void;
+  port: HelmPort;
+  urlState: HelmArtifactUrlState;
+}) {
   const revisions = useMemo(() => Array.from(new Set(
     detail.history
       .map((entry) => entry.revision)
       .filter((revision): revision is number => revision !== null),
   )).sort((left, right) => right - left), [detail.history]);
-  const [revision, setRevision] = useState<number | null>(
-    detail.release.revision ?? revisions[0] ?? null,
-  );
-  const [comparisonRevision, setComparisonRevision] = useState<number | null>(
-    revisions.find((candidate) => candidate !== (detail.release.revision ?? revisions[0])) ?? null,
-  );
-  const [allValues, setAllValues] = useState(false);
-  const [commandId, setCommandId] = useState("");
+  const revision = urlState.revision !== null && revisions.includes(urlState.revision)
+    ? urlState.revision
+    : detail.release.revision ?? revisions[0] ?? null;
+  const comparisonRevision = (
+    urlState.comparisonRevision !== null
+    && urlState.comparisonRevision !== revision
+    && revisions.includes(urlState.comparisonRevision)
+  )
+    ? urlState.comparisonRevision
+    : revisions.find((candidate) => candidate !== revision) ?? null;
+  const allValues = urlState.allValues;
+  const commandId = urlState.commandId ?? "";
+  const [submitting, setSubmitting] = useState(false);
   const [submitFailure, setSubmitFailure] = useState<string | null>(null);
+  const resumedCommandRef = useRef("");
   const operationStore = useOptionalOperationStatusStore();
   const snapshot = useOptionalOperationSnapshot(operationStore, commandId);
   const artifact = snapshot?.event
     ? toHelmArtifactOperationResult(snapshot.event.payload)
     : null;
-  const pending = snapshot !== null && ["connecting", "running", "reconnecting"].includes(
-    snapshot.status,
+  const pending = submitting || (
+    snapshot !== null
+    && ["connecting", "running", "reconnecting"].includes(snapshot.status)
   );
 
+  useEffect(() => {
+    const comparisonRequired = urlState.artifact?.endsWith("_diff") === true;
+    const normalized: HelmArtifactUrlState = {
+      ...urlState,
+      revision,
+      comparisonRevision,
+      commandId:
+        urlState.commandId !== null
+        && urlState.revision === revision
+        && (!comparisonRequired || urlState.comparisonRevision === comparisonRevision)
+          ? urlState.commandId
+          : null,
+    };
+    if (!sameArtifactUrlState(normalized, urlState)) onUrlStateChange(normalized);
+  }, [comparisonRevision, onUrlStateChange, revision, urlState]);
+
+  useEffect(() => {
+    if (!operationStore || commandId === "" || resumedCommandRef.current === commandId) return;
+    resumedCommandRef.current = commandId;
+    operationStore.start(commandId);
+  }, [commandId, operationStore]);
+
   const selectRevision = (next: number) => {
-    setRevision(next);
-    if (comparisonRevision === next) {
-      setComparisonRevision(revisions.find((candidate) => candidate !== next) ?? null);
-    }
+    onUrlStateChange({
+      revision: next,
+      comparisonRevision:
+        comparisonRevision === next
+          ? revisions.find((candidate) => candidate !== next) ?? null
+          : comparisonRevision,
+      artifact: null,
+      commandId: null,
+      allValues,
+    });
   };
 
   const startRead = async (kind: HelmArtifactKind) => {
@@ -446,7 +531,14 @@ function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port:
     const isDiff = kind.endsWith("_diff");
     if (isDiff && comparisonRevision === null) return;
     setSubmitFailure(null);
-    setCommandId("");
+    setSubmitting(true);
+    onUrlStateChange({
+      revision,
+      comparisonRevision: isDiff ? comparisonRevision : null,
+      artifact: kind,
+      commandId: null,
+      allValues: kind === "values" || kind === "values_diff" ? allValues : false,
+    });
     try {
       const receipt = await port.readArtifact({
         clusterId: detail.release.scope.clusterId,
@@ -457,11 +549,20 @@ function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port:
         comparisonRevision: isDiff ? comparisonRevision ?? undefined : undefined,
         allValues: kind === "values" || kind === "values_diff" ? allValues : false,
       });
-      setCommandId(receipt.commandId);
+      resumedCommandRef.current = receipt.commandId;
       if (operationStore) operationStore.start(receipt.commandId);
       else setSubmitFailure(HELM_COPY.artifactStreamUnavailable);
+      onUrlStateChange({
+        revision,
+        comparisonRevision: isDiff ? comparisonRevision : null,
+        artifact: kind,
+        commandId: receipt.commandId,
+        allValues: kind === "values" || kind === "values_diff" ? allValues : false,
+      });
     } catch {
       setSubmitFailure(HELM_COPY.artifactFailed);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -491,7 +592,13 @@ function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port:
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
                 disabled={revisions.length < 2}
-                onChange={(event) => setComparisonRevision(Number(event.target.value))}
+                onChange={(event) => onUrlStateChange({
+                  ...urlState,
+                  revision,
+                  comparisonRevision: Number(event.target.value),
+                  artifact: null,
+                  commandId: null,
+                })}
                 value={comparisonRevision ?? ""}
               >
                 {revisions
@@ -502,7 +609,14 @@ function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port:
             <label className="flex h-9 items-center gap-2 text-sm">
               <input
                 checked={allValues}
-                onChange={(event) => setAllValues(event.target.checked)}
+                onChange={(event) => onUrlStateChange({
+                  ...urlState,
+                  revision,
+                  comparisonRevision,
+                  artifact: null,
+                  commandId: null,
+                  allValues: event.target.checked,
+                })}
                 type="checkbox"
               />
               {HELM_COPY.allValues}
@@ -526,7 +640,10 @@ function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port:
       )}
       <HelmArtifactOperationResult
         artifact={artifact}
-        failure={submitFailure}
+        failure={
+          submitFailure
+          ?? (commandId !== "" && !operationStore ? HELM_COPY.artifactStreamUnavailable : null)
+        }
         snapshot={snapshot}
       />
     </section>
@@ -585,6 +702,14 @@ function HelmArtifactOperationResult({
       {result}
     </div>
   );
+}
+
+function sameArtifactUrlState(left: HelmArtifactUrlState, right: HelmArtifactUrlState): boolean {
+  return left.revision === right.revision
+    && left.comparisonRevision === right.comparisonRevision
+    && left.artifact === right.artifact
+    && left.commandId === right.commandId
+    && left.allValues === right.allValues;
 }
 
 function HelmHooksDiffResult({
