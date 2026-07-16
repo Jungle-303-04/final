@@ -321,6 +321,8 @@ function mergeScopedFrame(
             ? "exact"
             : "partial",
         partialReasonCodes,
+        source: scoped.data.source,
+        sourceFreshness: scoped.data.freshness,
       },
       refreshFailure: scoped.refreshFailure ?? stored.refreshFailure,
       refreshing: stored.refreshing || scoped.refreshing,
@@ -336,6 +338,8 @@ function mergeScopedFrame(
       completeness: scoped.data.completeness,
       partialReasonCodes: scoped.data.partialReasonCodes,
       snapshot,
+      source: scoped.data.source,
+      sourceFreshness: scoped.data.freshness,
     },
     failure: null,
     refreshFailure: fallbackFailure,

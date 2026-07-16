@@ -169,4 +169,99 @@ describe("Resource metrics history adapter", () => {
     });
     expect(result.refreshPolicyKey).toBe("metrics_prometheus");
   });
+
+  it("maps exact PVC ratio evidence without deriving usage from capacity", async () => {
+    const runScopedMetricQuery = vi.fn().mockResolvedValue({
+      endpoint: {
+        refresh_policy_key: "metrics_pvc",
+        scope: { cluster_id: "cluster-1", freshness: "live" },
+        resource: {
+          kind: "PersistentVolumeClaim",
+          namespace: "shop",
+          name: "cache",
+        },
+      },
+      completeness: "exact",
+      reasonCodes: [],
+      observations: [{
+        category: "volume_usage",
+        result: {
+          series: [{ values: [{ timestamp: 10, value: 0.75 }] }],
+        },
+      }],
+    });
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery,
+    });
+
+    const result = await port.loadScopedResourceMetrics!(pvcResource(), "15m");
+
+    expect(runScopedMetricQuery).toHaveBeenCalledWith({
+      cluster_id: "cluster-1",
+      subject: { kind: "pvc", resource_id: "pvc:shop/cache" },
+      categories: ["volume_usage"],
+      range: "15m",
+    }, { signal: undefined });
+    expect(result.series).toMatchObject({
+      resourceId: "pvc:shop/cache",
+      resourceType: "pvc",
+      source: "prometheus",
+      freshness: "live",
+      points: [{ volumeUsagePercent: 75 }],
+    });
+  });
+
+  it("preserves unavailable PVC provenance, freshness, and coverage reasons", async () => {
+    const port = createResourceMetricsHistoryAdapter({
+      getResourceMetricsHistory: vi.fn(),
+      runScopedMetricQuery: vi.fn().mockResolvedValue({
+        endpoint: {
+          refresh_policy_key: "metrics_pvc",
+          scope: { cluster_id: "cluster-1", freshness: "disconnected" },
+          resource: {
+            kind: "PersistentVolumeClaim",
+            namespace: "shop",
+            name: "cache",
+          },
+        },
+        completeness: "unavailable",
+        reasonCodes: ["prometheus_unavailable"],
+        observations: [],
+      }),
+    });
+
+    const result = await port.loadScopedResourceMetrics!(pvcResource(), "15m");
+
+    expect(result).toMatchObject({
+      series: null,
+      completeness: "unavailable",
+      partialReasonCodes: ["prometheus_unavailable"],
+      source: "prometheus",
+      freshness: "disconnected",
+    });
+  });
 });
+
+function pvcResource() {
+  return {
+    id: "pvc-1",
+    identityStability: "uid" as const,
+    inventoryKey: "pvc:shop/cache",
+    uid: "pvc-uid-1",
+    clusterId: "cluster-1",
+    resourceType: "pvc",
+    apiVersion: "v1",
+    kind: "PersistentVolumeClaim",
+    namespace: "shop",
+    name: "cache",
+    status: "Bound",
+    health: "healthy" as const,
+    healthStatus: "healthy",
+    facts: { type: "generic" as const },
+    observedAt: "2026-07-17T00:01:00.000Z",
+    firstSeenAt: null,
+    lastSeenAt: "2026-07-17T00:01:00.000Z",
+    deletedAt: null,
+  };
+}

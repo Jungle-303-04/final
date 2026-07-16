@@ -154,7 +154,11 @@ export function ResourceDetailBody({
         </section>
         <ResourceFactsPanel facts={resource.facts} />
         {detail.data.providerDetail ? (
-          <ProviderResourceDetailPanel detail={detail.data.providerDetail} />
+          <ProviderResourceDetailPanel
+            detail={detail.data.providerDetail}
+            metricHistory={metricHistory}
+            resourceId={resource.inventoryKey}
+          />
         ) : null}
         <ResourceIssuesSection frame={resourceIssues} />
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (

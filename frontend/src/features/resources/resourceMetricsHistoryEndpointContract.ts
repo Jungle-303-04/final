@@ -1,4 +1,5 @@
 import type { ResourcesFilterEndpointQuery } from "./resourcesFilterEndpointContract";
+import type { ResourceMetricFreshness } from "./resourceMetricsHistoryContract";
 
 type Completeness = "exact" | "partial" | "unavailable";
 
@@ -76,7 +77,10 @@ export interface ScopedMetricEndpointRequest {
 export interface ScopedMetricEndpointRun {
   endpoint: {
     refresh_policy_key: "metrics_prometheus" | "metrics_pvc";
-    scope: { cluster_id: string };
+    scope: {
+      cluster_id: string;
+      freshness: ResourceMetricFreshness;
+    };
     resource: {
       kind: string;
       namespace: string | null;

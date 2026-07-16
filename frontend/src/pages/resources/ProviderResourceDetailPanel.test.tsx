@@ -6,10 +6,51 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../shared/i18n";
 import type { ProviderResourceDetail } from "../../features/resources/providerResourceContract";
 import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
+import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 
 afterEach(cleanup);
 
 describe("ProviderResourceDetailPanel", () => {
+  it("renders observed PVC usage with Prometheus provenance and freshness", () => {
+    renderPanel(pvcDetail(), pvcMetricFrame({
+      completeness: "exact",
+      freshness: "live",
+      volumeUsagePercent: 74,
+    }), "pvc:shop/cache");
+
+    expect(screen.getByRole("heading", { name: "Observed volume usage" })).toBeTruthy();
+    expect(screen.getByText("74.0%")).toBeTruthy();
+    expect(screen.getByText("Prometheus")).toBeTruthy();
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.getByText("Exact")).toBeTruthy();
+  });
+
+  it("keeps PVC usage unavailable when only capacity inventory exists", () => {
+    renderPanel(pvcDetail(), pvcMetricFrame({
+      completeness: "unavailable",
+      freshness: "disconnected",
+      volumeUsagePercent: null,
+    }), "pvc:shop/cache");
+
+    expect(screen.getByText("Observed usage unavailable")).toBeTruthy();
+    expect(screen.getByText("Prometheus")).toBeTruthy();
+    expect(screen.getByText("Disconnected")).toBeTruthy();
+    expect(screen.getAllByText("20Gi")).toHaveLength(2);
+    expect(screen.queryByText("100%")).toBeNull();
+  });
+
+  it("marks observed PVC usage partial and preserves coverage reasons", () => {
+    renderPanel(pvcDetail(), pvcMetricFrame({
+      completeness: "partial",
+      freshness: "partial",
+      volumeUsagePercent: 41.25,
+    }), "pvc:shop/cache");
+
+    expect(screen.getByText("41.3%")).toBeTruthy();
+    expect(screen.getAllByText("Partial")).toHaveLength(2);
+    expect(screen.getByText("pvc_metric_partial")).toBeTruthy();
+  });
+
   it("renders observed AWS fields and failed conditions without inventing missing values", () => {
     renderPanel({
       type: "aws-machine",
@@ -782,20 +823,97 @@ describe("ProviderResourceDetailPanel", () => {
   });
 });
 
-function renderPanel(detail: ProviderResourceDetail) {
-  return render(panel(detail));
+function renderPanel(
+  detail: ProviderResourceDetail,
+  metricHistory?: ResourceMetricsHistoryFrame,
+  resourceId?: string,
+) {
+  return render(panel(detail, undefined, metricHistory, resourceId));
 }
 
 function panel(
   detail: ProviderResourceDetail,
   onOpenExternalUrl?: (url: string) => Promise<void>,
+  metricHistory?: ResourceMetricsHistoryFrame,
+  resourceId?: string,
 ) {
   return (
     <I18nProvider navigatorLanguage="en-US" storage={null}>
       <ProviderResourceDetailPanel
         detail={detail}
+        metricHistory={metricHistory}
         onOpenExternalUrl={onOpenExternalUrl}
+        resourceId={resourceId}
       />
     </I18nProvider>
   );
+}
+
+function pvcDetail(): ProviderResourceDetail {
+  return {
+    type: "persistent-volume-claim",
+    phase: "Bound",
+    capacity: "20Gi",
+    requested: "20Gi",
+    storageClassName: "gp3",
+    accessModes: ["ReadWriteOnce"],
+    volumeMode: "Filesystem",
+    volumeName: "pvc-volume",
+    provisioner: "ebs.csi.aws.com",
+    selectedNode: null,
+    bindCompleted: true,
+    conditions: [],
+  };
+}
+
+function pvcMetricFrame(input: {
+  completeness: "exact" | "partial" | "unavailable";
+  freshness: "live" | "stale" | "partial" | "disconnected";
+  volumeUsagePercent: number | null;
+}): ResourceMetricsHistoryFrame {
+  const series = input.volumeUsagePercent === null ? [] : [{
+    resourceId: "pvc:shop/cache",
+    clusterId: "cluster-a",
+    resourceType: "pvc" as const,
+    namespace: "shop",
+    name: "cache",
+    points: [{
+      observedAt: "2026-07-17T00:01:00.000Z",
+      cpuMillicores: null,
+      memoryMebibytes: null,
+      volumeUsagePercent: input.volumeUsagePercent,
+    }],
+    hasSparklinePoints: false,
+    completeness: input.completeness,
+    partialReasonCodes: input.completeness === "exact"
+      ? []
+      : [input.completeness === "partial" ? "pvc_metric_partial" : "pvc_metric_unavailable"],
+    source: "prometheus" as const,
+    freshness: input.freshness,
+  }];
+  return {
+    phase: "ready",
+    data: {
+      refreshPolicyKey: "metrics_pvc",
+      series,
+      completeness: input.completeness,
+      partialReasonCodes: input.completeness === "exact"
+        ? []
+        : [input.completeness === "partial" ? "pvc_metric_partial" : "pvc_metric_unavailable"],
+      snapshot: {
+        snapshotRevision: 42,
+        authorizationRevision: "auth-42",
+        filterFingerprint: "filter-42",
+        observedAt: "2026-07-17T00:01:00.000Z",
+        stale: input.freshness !== "live",
+        partialReasonCodes: [],
+      },
+      source: "prometheus",
+      sourceFreshness: input.freshness,
+    },
+    failure: null,
+    refreshFailure: null,
+    refreshing: false,
+    unavailableRetry: null,
+  };
 }

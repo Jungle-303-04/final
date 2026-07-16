@@ -16,6 +16,8 @@ export type ResourcesRefreshPolicyKey =
   | "resource_list"
   | "resource_list_slow"
   | ResourceMetricsRefreshPolicyKey;
+export type ResourceMetricSource = "kubernetes" | "prometheus";
+export type ResourceMetricFreshness = "live" | "stale" | "partial" | "disconnected";
 
 export interface ResourceMetricHistoryPoint {
   observedAt: string;
@@ -34,6 +36,8 @@ export interface ResourceMetricHistorySeries {
   hasSparklinePoints: boolean;
   completeness: ResourcesFilterCompleteness;
   partialReasonCodes: string[];
+  source?: ResourceMetricSource;
+  freshness?: ResourceMetricFreshness;
 }
 
 export interface ResourceMetricsHistoryBatch {
@@ -42,6 +46,8 @@ export interface ResourceMetricsHistoryBatch {
   completeness: ResourcesFilterCompleteness;
   partialReasonCodes: string[];
   snapshot: ResourcesFilterSnapshot;
+  source?: ResourceMetricSource;
+  sourceFreshness?: ResourceMetricFreshness;
 }
 
 export interface ResourceMetricsHistoryOptions {
@@ -55,6 +61,8 @@ export interface ScopedResourceMetricsObservation {
   completeness: ResourcesFilterCompleteness;
   partialReasonCodes: string[];
   refreshPolicyKey: "metrics_prometheus" | "metrics_pvc";
+  source: "prometheus";
+  freshness: ResourceMetricFreshness;
 }
 
 export interface ResourceMetricsHistoryPort {

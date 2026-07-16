@@ -11,12 +11,18 @@ import type {
   ProviderCondition,
   ProviderResourceDetail,
 } from "../../features/resources/providerResourceContract";
+import type {
+  ResourceMetricFreshness,
+  ResourceMetricSource,
+} from "../../features/resources/resourceMetricsHistoryContract";
+import type { ResourcesFilterCompleteness } from "../../features/resources/resourcesFilterContract";
 import { DefinitionGrid } from "./ResourceFactsPanel";
 import {
   SbomComponentsPanel,
   VulnerabilityReportPanel,
 } from "./ProviderSecurityReportPanels";
 import { useMemo, useState } from "react";
+import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
 
 interface ProviderSection {
   id: string;
@@ -26,10 +32,14 @@ interface ProviderSection {
 
 export function ProviderResourceDetailPanel({
   detail,
+  metricHistory,
   onOpenExternalUrl = desktopBridge.openExternalUrl,
+  resourceId,
 }: {
   detail: ProviderResourceDetail;
+  metricHistory?: ResourceMetricsHistoryFrame;
   onOpenExternalUrl?: (url: string) => Promise<void>;
+  resourceId?: string;
 }) {
   const { t } = useI18n();
   const sections = providerSections(detail, t)
@@ -55,6 +65,9 @@ export function ProviderResourceDetailPanel({
           <DefinitionGrid entries={section.rows.map(([label, value]) => [t(label), value])} />
         </section>
       ))}
+      {detail.type === "persistent-volume-claim" ? (
+        <PvcObservedUsagePanel frame={metricHistory} resourceId={resourceId} />
+      ) : null}
       {detail.type === "cluster-compliance-report" ? (
         <ComplianceControlsPanel detail={detail} />
       ) : null}
@@ -83,6 +96,143 @@ export function ProviderResourceDetailPanel({
       {detail.conditions.length > 0 ? <ProviderConditions conditions={detail.conditions} /> : null}
     </section>
   );
+}
+
+function PvcObservedUsagePanel({
+  frame,
+  resourceId,
+}: {
+  frame?: ResourceMetricsHistoryFrame;
+  resourceId?: string;
+}) {
+  const { formatNumber, t } = useI18n();
+  const evidence = pvcObservedUsage(frame, resourceId);
+  const evidenceRows: Array<[string, string]> = [
+    ...(evidence.ratioPercent === null
+      ? []
+      : [[
+          t("resources.detail.provider.pvcUsedRatio"),
+          `${formatNumber(evidence.ratioPercent, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })}%`,
+        ] as [string, string]]),
+    [t("resources.detail.provider.metricSource"), metricSourceLabel(evidence.source, t)],
+    [t("resources.detail.provider.metricFreshness"), metricFreshnessLabel(evidence.freshness, t)],
+    ...(evidence.observedAt === null
+      ? []
+      : [[t("resources.detail.provider.metricObservedAt"), evidence.observedAt] as [string, string]]),
+    ...(evidence.reasonCodes.length === 0
+      ? []
+      : [[
+          t("resources.detail.provider.metricReasons"),
+          evidence.reasonCodes.join(" · "),
+        ] as [string, string]]),
+  ];
+  return (
+    <section aria-labelledby="provider-pvc-observed-usage" className="grid gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h4 className="text-sm font-medium" id="provider-pvc-observed-usage">
+          {t("resources.detail.provider.pvcObservedUsage")}
+        </h4>
+        <Badge variant="outline">
+          {metricCompletenessLabel(evidence.completeness, t)}
+        </Badge>
+      </div>
+      {evidence.ratioPercent === null ? (
+        <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+          {t("resources.detail.provider.metricUnavailable")}
+        </p>
+      ) : null}
+      <DefinitionGrid entries={evidenceRows} />
+    </section>
+  );
+}
+
+interface PvcObservedUsageEvidence {
+  ratioPercent: number | null;
+  source: ResourceMetricSource | null;
+  freshness: ResourceMetricFreshness | null;
+  completeness: ResourcesFilterCompleteness;
+  observedAt: string | null;
+  reasonCodes: string[];
+}
+
+function pvcObservedUsage(
+  frame: ResourceMetricsHistoryFrame | undefined,
+  resourceId: string | undefined,
+): PvcObservedUsageEvidence {
+  if (frame?.phase !== "ready" || resourceId === undefined) {
+    return unavailablePvcUsage();
+  }
+  const series = frame.data.series.find((item) => item.resourceId === resourceId);
+  const point = series === undefined
+    ? undefined
+    : [...series.points].reverse().find((item) => (
+        item.volumeUsagePercent !== null &&
+        item.volumeUsagePercent !== undefined &&
+        Number.isFinite(item.volumeUsagePercent) &&
+        item.volumeUsagePercent >= 0
+      ));
+  const completeness = series?.completeness ?? frame.data.completeness;
+  return {
+    ratioPercent: point?.volumeUsagePercent ?? null,
+    source: series?.source ?? frame.data.source ?? null,
+    freshness: series?.freshness ?? frame.data.sourceFreshness ?? null,
+    completeness,
+    observedAt: point?.observedAt ?? null,
+    reasonCodes: Array.from(new Set([
+      ...frame.data.partialReasonCodes,
+      ...(series?.partialReasonCodes ?? []),
+    ])),
+  };
+}
+
+function unavailablePvcUsage(): PvcObservedUsageEvidence {
+  return {
+    ratioPercent: null,
+    source: null,
+    freshness: null,
+    completeness: "unavailable",
+    observedAt: null,
+    reasonCodes: [],
+  };
+}
+
+function metricSourceLabel(
+  source: PvcObservedUsageEvidence["source"],
+  t: TranslationFunction,
+): string {
+  if (source === "prometheus") return t("resources.detail.provider.metricSourcePrometheus");
+  if (source === "kubernetes") return t("resources.detail.provider.metricSourceKubernetes");
+  return t("resources.detail.provider.metricUnavailableShort");
+}
+
+function metricFreshnessLabel(
+  freshness: PvcObservedUsageEvidence["freshness"],
+  t: TranslationFunction,
+): string {
+  const key: MessageKey = freshness === "live"
+    ? "resources.detail.provider.metricFreshnessLive"
+    : freshness === "stale"
+      ? "resources.detail.provider.metricFreshnessStale"
+      : freshness === "partial"
+        ? "resources.detail.provider.metricFreshnessPartial"
+        : freshness === "disconnected"
+          ? "resources.detail.provider.metricFreshnessDisconnected"
+          : "resources.detail.provider.metricUnavailableShort";
+  return t(key);
+}
+
+function metricCompletenessLabel(
+  completeness: PvcObservedUsageEvidence["completeness"],
+  t: TranslationFunction,
+): string {
+  return t(completeness === "exact"
+    ? "resources.detail.provider.metricCompletenessExact"
+    : completeness === "partial"
+      ? "resources.detail.provider.metricCompletenessPartial"
+      : "resources.detail.provider.metricCompletenessUnavailable");
 }
 
 type ComplianceDetail = Extract<ProviderResourceDetail, { type: "cluster-compliance-report" }>;

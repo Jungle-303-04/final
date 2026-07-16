@@ -51,6 +51,8 @@ export function createResourceMetricsHistoryAdapter(
           completeness: run.completeness,
           partialReasonCodes: run.reasonCodes,
           refreshPolicyKey: run.endpoint.refresh_policy_key,
+          source: "prometheus",
+          freshness: run.endpoint.scope.freshness,
         };
       });
     },
@@ -103,6 +105,8 @@ function toScopedSeries(
     hasSparklinePoints: ordered.length > 1,
     completeness: run.completeness,
     partialReasonCodes: run.reasonCodes,
+    source: "prometheus" as const,
+    freshness: run.endpoint.scope.freshness,
   };
 }
 

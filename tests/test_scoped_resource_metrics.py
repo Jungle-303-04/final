@@ -177,6 +177,15 @@ def test_pvc_query_uses_exact_inventory_identity_and_pvc_freshness_policy() -> N
     body = response.json()
     assert body["availability"] == "queued"
     assert body["refresh_policy_key"] == "metrics_pvc"
+    assert body["resource"] == {
+        "api_group": "",
+        "version": "v1",
+        "kind": "PersistentVolumeClaim",
+        "namespace": "shop",
+        "name": "cache",
+        "uid": "pvc-uid-a",
+    }
+    assert db.access == [("user-a", "workspace-a", "cluster", "cluster-a", "evidence.read")]
     assert body["queries"][0]["unit"] == "ratio"
     query = db.commands[0][1]["payload"]["query"]
     assert 'namespace="shop"' in query["query"]
