@@ -6119,28 +6119,29 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/features/service-access/serviceAccessContract.ts",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
+        "tests/contracts/test_service_access.py",
         "tests/test_service_access_router.py",
+        "tests/test_target_kubernetes_evidence.py",
         "frontend/src/features/service-access/createServiceAccessAdapter.test.ts",
+        "frontend/src/features/service-access/serviceAccessSchemas.test.ts",
         "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/service_access/router.py#get_service_access_capabilities",
           "consumer": "src/packages/contracts/service_access.py#ServiceAccessCapabilities",
-          "reason": "Exact Service TCP ports are implemented, but the source type parameter also permits Pod targets and no Pod container-port capability projection exists.",
           "test": "tests/test_service_access_router.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/PortForwardAction.tsx#PortForwardAction",
           "consumer": "frontend/src/features/service-access/createServiceAccessAdapter.ts#createServiceAccessAdapter",
-          "reason": "The dialog supports Service ports and a manual loopback command; Pod port discovery remains unavailable.",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
@@ -6167,14 +6168,17 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.service_access",
       "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
         "tests/contracts/test_service_access.py",
+        "tests/test_service_access_router.py",
+        "frontend/src/features/service-access/createPortForwardSessionAdapter.test.ts",
         "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
-        "frontend/src/desktop/desktopBridge.test.ts"
+        "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/src/port_forward/tests.rs"
       ],
       "coverage": {
         "backend": {
@@ -6184,9 +6188,9 @@
           "test": "tests/contracts/test_service_access.py"
         },
         "frontend": {
-          "state": "in_progress",
-          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#buildKubectlPortForwardCommand",
-          "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/PortForwardAction.tsx#PortForwardAction",
+          "consumer": "frontend/src/features/service-access/usePortForwardSessions.ts#usePortForwardSessions",
           "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
         },
         "desktop": {
