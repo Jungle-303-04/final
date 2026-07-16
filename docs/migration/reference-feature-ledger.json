@@ -1817,11 +1817,11 @@
     {
       "id": "reference-feature-045",
       "contractId": "reference.feature.045",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.045"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 258,
       "cells": [
@@ -1833,17 +1833,30 @@
       "streaming": false,
       "area": "keyboard-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
+      "frontendContract": "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_global_filter_facets",
+          "consumer": "src/domains/inventory_filter/repository.py#list_authorized_namespace_catalog",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1851,11 +1864,11 @@
     {
       "id": "reference-feature-046",
       "contractId": "reference.feature.046",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.046"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 259,
       "cells": [
@@ -1867,17 +1880,30 @@
       "streaming": false,
       "area": "keyboard-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
+      "frontendContract": "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_global_filter_facets",
+          "consumer": "src/domains/identity/repository.py#accessible_resource_ids",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

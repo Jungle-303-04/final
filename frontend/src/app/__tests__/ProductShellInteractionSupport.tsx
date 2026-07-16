@@ -13,6 +13,7 @@ import { I18nProvider } from "../../shared/i18n";
 import type { AiAssistantPort } from "../../features/ai-assistant/aiAssistantContract";
 import type { LogStreamPort } from "../../features/log-stream/logStreamContract";
 import type { AlertEventsPort } from "../../features/alerts/alertEventsContract";
+import type { GlobalFilterPort } from "../../features/global-filter/globalFilterContract";
 import type { ProductSurfaceId } from "../productRoutes";
 import { useBottomDock } from "../../features/bottom-dock/BottomDockProvider";
 import {
@@ -63,12 +64,14 @@ export function installMatchMedia(matches: boolean) {
 export function renderShell({
   alertEventsPort,
   aiAssistantPort,
+  globalFilterPort,
   initialEntry = "/home?clusters=cluster-1",
   logStreamPort,
   releasedSurfaceIds = new Set(["home", "issues"]),
 }: {
   alertEventsPort?: AlertEventsPort;
   aiAssistantPort?: AiAssistantPort;
+  globalFilterPort?: GlobalFilterPort;
   logStreamPort?: LogStreamPort;
   initialEntry?: string;
   releasedSurfaceIds?: ReadonlySet<ProductSurfaceId>;
@@ -92,6 +95,7 @@ export function renderShell({
                         alertEventsPort={alertEventsPort}
                         aiAssistantPort={aiAssistantPort}
                         auth={testAuth}
+                        globalFilterPort={globalFilterPort}
                         logStreamPort={logStreamPort}
                         releasedSurfaceIds={releasedSurfaceIds}
                       />

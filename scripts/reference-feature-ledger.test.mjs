@@ -873,7 +873,7 @@ test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계
       `reference.feature.${id}`,
       "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
     ]),
-    ...["043", "044", "047", "048", "049", "050", "053", "054", "057"].map((id) => [
+    ...["043", "044", "045", "046", "047", "048", "049", "050", "053", "054", "057"].map((id) => [
       `reference.feature.${id}`,
       "upstream-ui:app-shell:keyboard:single-authority:v1",
     ]),

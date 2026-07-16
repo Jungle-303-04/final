@@ -109,6 +109,18 @@ export function shellShortcutDefinitions(
       allowInInputs: true,
     },
     {
+      id: "namespace",
+      labelKey: "shell.filter.group.namespace",
+      group: "global",
+      sequence: ["n"],
+    },
+    {
+      id: "context",
+      labelKey: "shell.filter.group.cluster",
+      group: "global",
+      sequence: ["c"],
+    },
+    {
       id: "theme",
       labelKey: "shell.shortcut.theme",
       group: "global",

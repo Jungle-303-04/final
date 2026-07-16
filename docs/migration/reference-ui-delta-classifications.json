@@ -647,6 +647,10 @@
       "destination": "frontend/src/app/ProductShell.interaction.test.tsx",
       "rationale": "Ctrl or Command plus Shift+D opens the authenticated runtime diagnostics overlay even from an editable control without inserting text or bypassing the shared dialog focus boundary."
     },
+    "shell.scope-shortcuts.keyboard": {
+      "destination": "frontend/src/app/ProductShell.interaction.test.tsx",
+      "rationale": "The n and c shortcuts open only server-authorized namespace or cluster suggestions through the shared global filter and remain disabled while an editable control owns the key."
+    },
     "shell.cluster-load.disclosure": {
       "destination": "frontend/src/pages/home/HomeClusterHealth.test.tsx",
       "rationale": "Connection and inventory progress must be rendered only from server-owned stage and observation evidence, with unavailable per-kind coverage disclosed honestly."
@@ -13148,6 +13152,8 @@
           "legacyContractIds": [
             "reference.feature.043",
             "reference.feature.044",
+            "reference.feature.045",
+            "reference.feature.046",
             "reference.feature.047",
             "reference.feature.048",
             "reference.feature.049",
@@ -13156,8 +13162,8 @@
             "reference.feature.054",
             "reference.feature.057"
           ],
-          "symbol": "global route chords, command palette, diagnostics, theme, help, and Resources row grammar",
-          "interaction": "one collision-checked shortcut registry owns route chords, command palette, authenticated diagnostics, theme, help, Resources row movement and detail opening, editable-control suppression, chord timeout, overlay Escape, and focus return",
+          "symbol": "global route chords, scope switchers, command palette, diagnostics, theme, help, and Resources row grammar",
+          "interaction": "one collision-checked shortcut registry owns route chords, authorized namespace and cluster switchers, command palette, authenticated diagnostics, theme, help, Resources row movement and detail opening, editable-control suppression, chord timeout, overlay Escape, and focus return",
           "transport": "none",
           "realtime": null,
           "motion": null,
@@ -13165,6 +13171,7 @@
             "destinations": [
               "frontend/src/app/shortcutRegistry.ts",
               "frontend/src/app/useProductShortcuts.ts",
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
               "frontend/src/features/runtime-status/RuntimeDiagnosticsDialog.tsx",
               "frontend/src/app/resourcesShortcutDefinitions.ts",
               "frontend/src/app/ProductShell.interaction.test.tsx",
@@ -13172,16 +13179,18 @@
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity",
-              "packages.contracts.bootstrap"
+              "packages.contracts.bootstrap",
+              "packages.contracts.gateway.responses"
             ],
             "plannedTestIds": [
               "shell.command-palette.keyboard",
               "shell.diagnostics.keyboard",
+              "shell.scope-shortcuts.keyboard",
               "shell.resource-navigation.contract"
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The product registry validates duplicate identifiers and sequences, keeps global and context scopes separate, permits only the explicitly safe authenticated diagnostics chord inside editable controls, suppresses other unsafe activation, and dispatches Resources actions through one typed event boundary."
+            "rationale": "The product registry validates duplicate identifiers and sequences, keeps global and context scopes separate, opens scope switchers only from server-authorized global filter facets, permits only the explicitly safe authenticated diagnostics chord inside editable controls, suppresses other unsafe activation, and dispatches Resources actions through one typed event boundary."
           }
         },
         {

@@ -25,7 +25,10 @@ import { useProductTheme } from "../shared/ui/useProductTheme";
 import { ProductSessionProvider } from "../features/auth/ProductSessionContext";
 import type { AuthenticatedAuthState } from "../features/auth/authContract";
 import { useUnifiedFilter } from "../features/filters/UnifiedFilterProvider";
-import { UnifiedFilterBar } from "../features/global-filter/UnifiedFilterBar";
+import {
+  UnifiedFilterBar,
+  type UnifiedFilterBarHandle,
+} from "../features/global-filter/UnifiedFilterBar";
 import {
   EMPTY_GLOBAL_FILTER_PORT,
   type GlobalFilterPort,
@@ -139,6 +142,7 @@ function ProductShellFrame({
   const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [isAiOpen, setAiOpen] = useState(false);
   const diagnosticsDialogRef = useRef<RuntimeDiagnosticsDialogHandle>(null);
+  const unifiedFilterRef = useRef<UnifiedFilterBarHandle>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const filter = useUnifiedFilter();
@@ -194,8 +198,10 @@ function ProductShellFrame({
     isCommandPaletteOpen,
     isHelpOpen: isShortcutHelpOpen,
     onCommandPaletteOpen: () => setCommandPaletteOpen(true),
+    onContextOpen: () => unifiedFilterRef.current?.openGroup("cluster"),
     onDiagnosticsOpen: () => diagnosticsDialogRef.current?.open(),
     onHelpToggle: toggleShortcutHelp,
+    onNamespaceOpen: () => unifiedFilterRef.current?.openGroup("namespace"),
     onRouteSelect: selectProductRoute,
     onThemeToggle: themeController.toggle,
   });
@@ -347,7 +353,10 @@ function ProductShellFrame({
             <LocaleToggle />
           </div>
           <div className="order-3 w-full min-w-0 lg:order-2 lg:flex-1">
-            <UnifiedFilterBar port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT} />
+            <UnifiedFilterBar
+              port={globalFilterPort ?? EMPTY_GLOBAL_FILTER_PORT}
+              ref={unifiedFilterRef}
+            />
           </div>
         </header>
 

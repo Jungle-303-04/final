@@ -205,6 +205,60 @@
         "frontend": {"state": "implemented", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "consumer": "frontend/src/app/ProductRouter.tsx#ProductRouter", "test": "frontend/src/app/shortcutRegistry.test.ts"}
       }
     },
+    "reference.feature.045": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
+      "frontendContract": "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_global_filter_facets",
+          "consumer": "src/domains/inventory_filter/repository.py#list_authorized_namespace_catalog",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        }
+      }
+    },
+    "reference.feature.046": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.GlobalFilterFacetsResponse",
+      "frontendContract": "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+      "desktopContract": null,
+      "verification": [
+        "tests/test_inventory_filter_router.py",
+        "frontend/src/features/global-filter/createGlobalFilterAdapter.test.ts",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/inventory_filter/router.py#list_global_filter_facets",
+          "consumer": "src/domains/identity/repository.py#accessible_resource_ids",
+          "test": "tests/test_inventory_filter_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        }
+      }
+    },
     "reference.feature.047": {
       "deliveryStatus": "implemented",
       "desktopContract": null,

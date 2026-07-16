@@ -40,6 +40,10 @@ describe("shell shortcut registry", () => {
         modifier: "meta-or-control",
         sequence: ["shift+d"],
       });
+    expect(definitions.find((definition) => definition.id === "namespace"))
+      .toMatchObject({ sequence: ["n"] });
+    expect(definitions.find((definition) => definition.id === "context"))
+      .toMatchObject({ sequence: ["c"] });
   });
 
   it("matches an unavailable route chord so the shell can give honest feedback", () => {
@@ -57,6 +61,8 @@ describe("shell shortcut registry", () => {
     expect(matcher.handle(keyEvent("k", { ctrlKey: true }))?.id).toBe("command");
     expect(matcher.handle(keyEvent("D", { ctrlKey: true, shiftKey: true }))?.id)
       .toBe("diagnostics");
+    expect(matcher.handle(keyEvent("n"))?.id).toBe("namespace");
+    expect(matcher.handle(keyEvent("c"))?.id).toBe("context");
   });
 
   it("owns route and Resources collection chords in one active-surface registry", () => {
@@ -125,6 +131,8 @@ describe("shell shortcut registry", () => {
       shiftKey: true,
       target: input,
     }))?.id).toBe("diagnostics");
+    expect(matcher.handle(keyEvent("n", { target: input }))).toBeNull();
+    expect(matcher.handle(keyEvent("c", { target: input }))).toBeNull();
     expect(matcher.handle(keyEvent("?", {
       shiftKey: true,
       target: { tagName: "DIV", isContentEditable: true },
