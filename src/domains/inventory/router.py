@@ -48,6 +48,10 @@ async def record_inventory_snapshot(
         raise HTTPException(status_code=403, detail="cluster_id does not match agent identity")
 
     async def record_snapshot_event(result: dict[str, Any]) -> None:
+        # An ignored stale observation is retained only for collection audit; it
+        # must not impersonate an accepted inventory state transition downstream.
+        if result.get("accepted") is not True:
+            return
         await events.accept_body(
             InventorySnapshotRecordedBody(
                 workspace_id=identity.workspace_id,

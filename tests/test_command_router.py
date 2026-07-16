@@ -895,27 +895,26 @@ def test_scale_deployment_direct_execution_accepts_management_cluster_after_conf
     asyncio.run(run())
 
 
-def test_manual_direct_command_accepts_management_cluster_without_recorded_approval() -> None:
+def test_manual_command_rejects_dedicated_scale_action_before_a_false_receipt() -> None:
     async def run() -> None:
         events = SpyEvents()
-        response = await commands(
-            CommandRequest(
-                cluster_id="kubernetes-ops",
-                action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
-                namespace="sandbox",
-                diff=manual_diff(),
-                confirmation=True,
-            ),
-            current_session(),
-            SpyAccessDb(allowed=True, cluster_role="management"),
-            events,
-        )
+        with pytest.raises(HTTPException) as excinfo:
+            await commands(
+                CommandRequest(
+                    cluster_id="kubernetes-ops",
+                    action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                    namespace="sandbox",
+                    diff=manual_diff(),
+                    confirmation=True,
+                ),
+                current_session(),
+                SpyAccessDb(allowed=True, cluster_role="management"),
+                events,
+            )
 
-        assert response.accepted is True
-        assert response.command_id is not None
-        assert isinstance(events.body, CommandRequestedBody)
-        assert events.body.direct_execution is True
-        assert events.body.approval_ref is None
+        assert excinfo.value.status_code == 422
+        assert "typed dedicated command endpoint" in excinfo.value.detail
+        assert events.body is None
 
     asyncio.run(run())
 
@@ -927,7 +926,7 @@ def test_manual_direct_command_requires_explicit_confirmation() -> None:
             await commands(
                 CommandRequest(
                     cluster_id="cluster-1",
-                    action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+                    action=Command.DEFAULT_ACTION,
                     namespace="sandbox",
                     diff=manual_diff(),
                     direct_execution=True,

@@ -19,10 +19,15 @@ from packages.contracts.realtime import (
     STATE_RESOURCES_KEY,
     LiveSummary,
     LiveSummaryMessage,
+    RealtimeIngressLimits,
+    RealtimeLimitError,
     ResourceDelta,
+    ResyncRequiredMessage,
     SnapshotMessage,
     Subscription,
     delta_key_parts,
+    serialized_json_bytes,
+    validate_resource_delta,
 )
 
 
@@ -39,10 +44,25 @@ class BrowserClient:
     dropped_messages: int = 0
 
 
+class RealtimeSnapshotLimitError(RealtimeLimitError):
+    """The complete current cut cannot be delivered within its explicit budget."""
+
+    def __init__(self) -> None:
+        super().__init__("snapshot_limit_exceeded")
+
+
+class RealtimeResourceLimitError(RealtimeLimitError):
+    """A new retained resource would exceed the per-cluster authoritative cut."""
+
+    def __init__(self) -> None:
+        super().__init__("cluster_resource_limit_exceeded")
+
+
 class RealtimeHub:
     """cluster별 최신 요약 + 리소스 상태를 유지하고 browser 로 즉시 fan-out 함."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, limits: RealtimeIngressLimits | None = None) -> None:
+        self.limits = limits or RealtimeIngressLimits()
         self._seq = 0
         self._summaries: dict[str, LiveSummary] = {}
         self._resources: dict[str, dict] = {}
@@ -80,9 +100,14 @@ class RealtimeHub:
             for key, value in self._resources.items()
             if _delta_matches(subscription, key, value)
         }
+        if len(resources) > self.limits.snapshot_max_resources:
+            raise RealtimeSnapshotLimitError()
+        state = {STATE_CLUSTERS_KEY: clusters, STATE_RESOURCES_KEY: resources}
+        if serialized_json_bytes(state) > self.limits.snapshot_max_bytes:
+            raise RealtimeSnapshotLimitError()
         return SnapshotMessage(
             seq=self._seq,
-            state={STATE_CLUSTERS_KEY: clusters, STATE_RESOURCES_KEY: resources},
+            state=state,
         )
 
     def resources_for_cluster(self, cluster_id: str) -> dict[str, dict]:
@@ -105,6 +130,12 @@ class RealtimeHub:
         return message
 
     def publish_delta(self, delta: ResourceDelta) -> ResourceDelta:
+        validate_resource_delta(delta, self.limits)
+        cluster_id = delta_key_parts(delta.key)[0]
+        if delta.op == "replace" and delta.key not in self._resources:
+            retained = sum(1 for key in self._resources if delta_key_parts(key)[0] == cluster_id)
+            if retained >= self.limits.cluster_retained_resources:
+                raise RealtimeResourceLimitError()
         self._seq += 1
         if delta.op == "remove":
             self._resources.pop(delta.key, None)
@@ -126,7 +157,10 @@ class RealtimeHub:
             client.dropped_messages += client.queue.qsize()
             while not client.queue.empty():
                 client.queue.get_nowait()
-            client.queue.put_nowait(self.snapshot_for(client.subscription))
+            try:
+                client.queue.put_nowait(self.snapshot_for(client.subscription))
+            except RealtimeSnapshotLimitError:
+                client.queue.put_nowait(ResyncRequiredMessage())
 
 
 def _summary_matches(subscription: Subscription, cluster_id: str) -> bool:

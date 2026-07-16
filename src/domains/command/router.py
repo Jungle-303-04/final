@@ -98,6 +98,9 @@ RESOURCE_ACCESS_DENIED = RESOURCE_ACCESS_DENIED_MESSAGE
 UNPROCESSABLE_CODE = 422
 MANUAL_DIFF_REQUIRED_MESSAGE = "diff is required for manual command requests"
 DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE = "direct command requires explicit confirmation"
+DEDICATED_COMMAND_ACTION_REQUIRED_MESSAGE = (
+    "this action requires its typed dedicated command endpoint"
+)
 RCA_TEST_ACTION_DEDICATED_API_REQUIRED = (
     "RCA test actions are reserved; use the dedicated /rca/test-runs API"
 )
@@ -106,6 +109,11 @@ CONTROL_NAMESPACE_NOT_ALLOWED = CONTROL_NAMESPACE_DENIED_MESSAGE
 COMMAND_PRIORITY_HIGH = 100
 RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
 OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
+
+# `/commands` carries only an inspected diff. Actions that need a typed target
+# payload (replicas, Helm values, uninstall contract, and similar) must use their
+# dedicated endpoint so a queued receipt is always executable by the agent.
+MANUAL_DIFF_ACTIONS = frozenset({Command.DEFAULT_ACTION, Command.APPLY_MANIFEST_ACTION})
 
 router = APIRouter()
 __all__ = ["debug_query_plan", "router"]
@@ -478,6 +486,11 @@ async def commands(
         raise HTTPException(
             status_code=UNPROCESSABLE_CODE,
             detail=RCA_TEST_ACTION_DEDICATED_API_REQUIRED,
+        )
+    if payload.action not in MANUAL_DIFF_ACTIONS:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DEDICATED_COMMAND_ACTION_REQUIRED_MESSAGE,
         )
     require_direct_execution_confirmation(payload)
     direct_execution = direct_execution_from_confirmation(payload)
