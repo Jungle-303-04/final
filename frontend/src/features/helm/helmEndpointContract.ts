@@ -19,6 +19,29 @@ export interface HelmEndpointUnavailableFeature {
   reason_code: string;
 }
 
+export interface HelmEndpointResourceHealthObservation {
+  availability: "available" | "partial";
+  health: string;
+  resource_count: number;
+  observed_at: string | null;
+  reason_codes: string[];
+}
+
+export interface HelmEndpointOwnedResource {
+  resource: HelmEndpointResourceRef;
+  status: string;
+  health: string;
+  observed_at: string | null;
+}
+
+export interface HelmEndpointOwnedResourceObservation {
+  availability: "available" | "partial";
+  items: HelmEndpointOwnedResource[];
+  observed_at: string | null;
+  truncated: boolean;
+  reason_codes: string[];
+}
+
 export interface HelmEndpointRelease {
   scope: HelmEndpointClusterScope;
   name: string;
@@ -29,7 +52,9 @@ export interface HelmEndpointRelease {
   status: string | null;
   revision: number | null;
   observed_at: string | null;
-  resource_health: HelmEndpointUnavailableFeature & { health: null };
+  resource_health:
+    | (HelmEndpointUnavailableFeature & { health: null })
+    | HelmEndpointResourceHealthObservation;
 }
 
 export interface HelmReleaseListEndpoint {
@@ -56,7 +81,7 @@ export interface HelmReleaseDetailEndpoint {
     }[];
     manifest: HelmEndpointUnavailableFeature;
     values: HelmEndpointUnavailableFeature;
-    owned_resources: HelmEndpointUnavailableFeature;
+    owned_resources: HelmEndpointUnavailableFeature | HelmEndpointOwnedResourceObservation;
     commands: HelmEndpointUnavailableFeature;
   };
 }

@@ -3,11 +3,13 @@ import {
   type HelmClusterScope,
   type HelmFailureCode,
   type HelmObservationCoverage,
+  type HelmOwnedResourceObservation,
   type HelmPort,
   type HelmRelease,
   type HelmReleaseDetail,
   type HelmReleaseHistoryEntry,
   type HelmResourceRef,
+  type HelmResourceHealth,
   type HelmUnavailableFeature,
 } from "./helmContract";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
@@ -40,7 +42,7 @@ function toDetail(value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRel
     history: value.detail.history.map(toHistory),
     manifest: toUnavailable(value.detail.manifest),
     values: toUnavailable(value.detail.values),
-    ownedResources: toUnavailable(value.detail.owned_resources),
+    ownedResources: toOwnedResources(value.detail.owned_resources),
     commands: toUnavailable(value.detail.commands),
     refreshAfterSeconds: value.refresh_after_seconds,
     postMutationRefreshAfterSeconds: value.post_mutation_refresh_after_seconds,
@@ -58,10 +60,7 @@ function toRelease(value: Awaited<ReturnType<HelmEndpointDependencies["listHelmR
     status: value.status,
     revision: value.revision,
     observedAt: value.observed_at,
-    resourceHealth: {
-      ...toUnavailable(value.resource_health),
-      health: value.resource_health.health,
-    },
+    resourceHealth: toResourceHealth(value.resource_health),
   };
 }
 
@@ -78,6 +77,39 @@ function toCoverage(value: Awaited<ReturnType<HelmEndpointDependencies["listHelm
   return {
     availability: value.availability,
     observedAt: value.observed_at,
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toResourceHealth(
+  value: Awaited<ReturnType<HelmEndpointDependencies["listHelmReleases"]>>["releases"][number]["resource_health"],
+): HelmResourceHealth {
+  if (value.availability === "unavailable") {
+    return { ...toUnavailable(value), health: value.health };
+  }
+  return {
+    availability: value.availability,
+    health: value.health,
+    resourceCount: value.resource_count,
+    observedAt: value.observed_at,
+    reasonCodes: value.reason_codes,
+  };
+}
+
+function toOwnedResources(
+  value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRelease"]>>["detail"]["owned_resources"],
+): HelmUnavailableFeature | HelmOwnedResourceObservation {
+  if (value.availability === "unavailable") return toUnavailable(value);
+  return {
+    availability: value.availability,
+    items: value.items.map((item) => ({
+      resource: toResourceRef(item.resource),
+      status: item.status,
+      health: item.health,
+      observedAt: item.observed_at,
+    })),
+    observedAt: value.observed_at,
+    truncated: value.truncated,
     reasonCodes: value.reason_codes,
   };
 }

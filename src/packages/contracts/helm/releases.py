@@ -39,11 +39,54 @@ class HelmResourceHealthAvailability(StrictModel):
     reason_code: str = Field(min_length=1)
 
 
+class HelmResourceHealthObservation(StrictModel):
+    """Health rollup derived only from exactly correlated owned resources."""
+
+    availability: Literal["available", "partial"]
+    health: str = Field(min_length=1)
+    resource_count: int = Field(ge=0)
+    observed_at: str | None = None
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def incomplete_health_has_a_reason(self) -> HelmResourceHealthObservation:
+        if self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial Helm resource health requires a reason")
+        return self
+
+
 class HelmFeatureAvailability(StrictModel):
     """Explicit absence of an external Helm/provider integration."""
 
     availability: Literal["unavailable"] = "unavailable"
     reason_code: str = Field(min_length=1)
+
+
+class HelmOwnedResource(StrictModel):
+    """One inventory resource with exact standard Helm ownership metadata."""
+
+    resource: ResourceRef
+    status: str = Field(min_length=1)
+    health: str = Field(min_length=1)
+    observed_at: str | None = None
+
+
+class HelmOwnedResourceObservation(StrictModel):
+    """Bounded owned-resource collection from one inventory observation cut."""
+
+    availability: Literal["available", "partial"]
+    items: tuple[HelmOwnedResource, ...] = ()
+    observed_at: str | None = None
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def incomplete_resources_have_a_reason(self) -> HelmOwnedResourceObservation:
+        if self.availability == "partial" and not self.reason_codes:
+            raise ValueError("partial Helm owned resources require a reason")
+        if self.truncated and "helm_owned_resources_truncated" not in self.reason_codes:
+            raise ValueError("truncated Helm owned resources require the truncation reason")
+        return self
 
 
 class HelmRelease(StrictModel):
@@ -58,7 +101,7 @@ class HelmRelease(StrictModel):
     status: str | None = None
     revision: int | None = Field(default=None, ge=1)
     observed_at: str | None = None
-    resource_health: HelmResourceHealthAvailability
+    resource_health: HelmResourceHealthObservation | HelmResourceHealthAvailability
 
 
 class HelmReleaseHistoryEntry(StrictModel):
@@ -75,7 +118,7 @@ class HelmReleaseDetail(StrictModel):
     history: tuple[HelmReleaseHistoryEntry, ...] = ()
     manifest: HelmFeatureAvailability
     values: HelmFeatureAvailability
-    owned_resources: HelmFeatureAvailability
+    owned_resources: HelmOwnedResourceObservation | HelmFeatureAvailability
     commands: HelmFeatureAvailability
 
 

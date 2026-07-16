@@ -9,7 +9,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.helm.release_projection import helm_release_detail, helm_release_list
+from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.identity.dependencies import require_session, resolve_allowed_cluster_ids
+from packages.config.helm import helm_owned_resource_query_limit
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.helm.releases import HelmReleaseDetailResponse, HelmReleaseListResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
@@ -44,27 +46,36 @@ async def get_helm_releases(
     )
     _require_requested_clusters(requested_clusters, allowed_clusters)
     selected_clusters = requested_clusters or tuple(sorted(allowed_clusters))
-    contexts = await asyncio.to_thread(
-        db.helm_release_observation_contexts,
-        workspace_id=workspace_id,
-        cluster_ids=selected_clusters,
+    contexts, agent_statuses, storage_rows = await asyncio.gather(
+        asyncio.to_thread(
+            db.helm_release_observation_contexts,
+            workspace_id=workspace_id,
+            cluster_ids=selected_clusters,
+        ),
+        asyncio.to_thread(
+            db.latest_cluster_agent_statuses,
+            workspace_id,
+            set(selected_clusters),
+        ),
+        asyncio.to_thread(
+            db.list_helm_storage_observations,
+            workspace_id=workspace_id,
+            cluster_ids=selected_clusters,
+            namespaces=requested_namespaces,
+        ),
     )
-    agent_statuses = await asyncio.to_thread(
-        db.latest_cluster_agent_statuses,
-        workspace_id,
-        set(selected_clusters),
-    )
-    storage_rows = await asyncio.to_thread(
-        db.list_helm_storage_observations,
+    owned_resources = await _owned_resource_observations(
+        db,
         workspace_id=workspace_id,
-        cluster_ids=selected_clusters,
-        namespaces=requested_namespaces,
+        storage_rows=storage_rows,
     )
     return helm_release_list(
         storage_rows,
         contexts=contexts,
         agent_statuses=agent_statuses,
         selected_cluster_ids=selected_clusters,
+        owned_resource_rows=owned_resources.rows,
+        owned_resources_truncated=owned_resources.truncated,
     )
 
 
@@ -93,21 +104,29 @@ async def get_helm_release(
         Permission.INVENTORY_READ.value,
     )
     _require_requested_clusters((selected_cluster,), allowed_clusters)
-    contexts = await asyncio.to_thread(
-        db.helm_release_observation_contexts,
-        workspace_id=workspace_id,
-        cluster_ids=(selected_cluster,),
-    )
-    agent_statuses = await asyncio.to_thread(
-        db.latest_cluster_agent_statuses,
-        workspace_id,
-        {selected_cluster},
-    )
-    storage_rows = await asyncio.to_thread(
-        db.list_helm_storage_observations,
-        workspace_id=workspace_id,
-        cluster_ids=(selected_cluster,),
-        namespaces=(selected_namespace,),
+    contexts, agent_statuses, storage_rows, owned_resources = await asyncio.gather(
+        asyncio.to_thread(
+            db.helm_release_observation_contexts,
+            workspace_id=workspace_id,
+            cluster_ids=(selected_cluster,),
+        ),
+        asyncio.to_thread(
+            db.latest_cluster_agent_statuses,
+            workspace_id,
+            {selected_cluster},
+        ),
+        asyncio.to_thread(
+            db.list_helm_storage_observations,
+            workspace_id=workspace_id,
+            cluster_ids=(selected_cluster,),
+            namespaces=(selected_namespace,),
+        ),
+        asyncio.to_thread(
+            db.list_helm_owned_resource_observations,
+            workspace_id=workspace_id,
+            release_scopes=((selected_cluster, selected_namespace, selected_release),),
+            limit=helm_owned_resource_query_limit(),
+        ),
     )
     detail = helm_release_detail(
         storage_rows,
@@ -116,6 +135,8 @@ async def get_helm_release(
         selected_cluster_id=selected_cluster,
         namespace=selected_namespace,
         release_name=selected_release,
+        owned_resource_rows=owned_resources.rows,
+        owned_resources_truncated=owned_resources.truncated,
     )
     if detail is None:
         raise HTTPException(status_code=404, detail=RELEASE_NOT_FOUND_DETAIL)
@@ -145,3 +166,27 @@ def _single_scope_value(value: str) -> str:
 def _require_requested_clusters(requested: Iterable[str], allowed: set[str]) -> None:
     if not set(requested).issubset(allowed):
         raise HTTPException(status_code=404, detail=SCOPE_NOT_FOUND_DETAIL)
+
+
+async def _owned_resource_observations(
+    db: Any,
+    *,
+    workspace_id: str,
+    storage_rows: list[dict[str, Any]],
+) -> HelmOwnedResourceObservationBatch:
+    release_scopes: set[tuple[str, str, str]] = set()
+    for row in storage_rows:
+        cluster_id = str(row.get("cluster_id") or "").strip()
+        namespace = str(row.get("namespace") or "").strip()
+        labels = row.get("labels")
+        release_name = str(labels.get("name") or "").strip() if isinstance(labels, dict) else ""
+        if cluster_id and namespace and release_name:
+            release_scopes.add((cluster_id, namespace, release_name))
+    if not release_scopes:
+        return HelmOwnedResourceObservationBatch(rows=(), truncated=False)
+    return await asyncio.to_thread(
+        db.list_helm_owned_resource_observations,
+        workspace_id=workspace_id,
+        release_scopes=tuple(sorted(release_scopes)),
+        limit=helm_owned_resource_query_limit(),
+    )

@@ -94,10 +94,12 @@ describe("HelmPage", () => {
     expect(await screen.findByRole("heading", { name: "storefront" })).toBeTruthy();
     expect(screen.getByText("A safe manifest source is not available for this release.")).toBeTruthy();
     expect(screen.getByText("Helm commands are not available for this release.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Owned resources" })).toBeTruthy();
+    expect(screen.getByText("Deployment")).toBeTruthy();
+    expect(screen.getAllByText("healthy").length).toBeGreaterThan(0);
     for (const reasonCode of [
       "helm_manifest_provider_not_integrated",
       "helm_values_provider_not_integrated",
-      "owned_resources_not_correlated",
       "agent_helm_executor_not_integrated",
     ]) expect(screen.queryByText(reasonCode)).toBeNull();
     expect(screen.queryByRole("button", { name: /upgrade|rollback|uninstall/i })).toBeNull();
@@ -222,7 +224,25 @@ function detail() {
     }],
     manifest: unavailable("helm_manifest_provider_not_integrated"),
     values: unavailable("helm_values_provider_not_integrated"),
-    ownedResources: unavailable("owned_resources_not_correlated"),
+    ownedResources: {
+      availability: "available" as const,
+      items: [{
+        resource: {
+          apiGroup: "apps",
+          version: "v1",
+          kind: "Deployment",
+          namespace: "storefront",
+          name: "storefront",
+          uid: "deployment-storefront",
+        },
+        status: "Available",
+        health: "healthy",
+        observedAt: "2026-07-16T09:01:00Z",
+      }],
+      observedAt: "2026-07-16T09:01:00Z",
+      truncated: false,
+      reasonCodes: [],
+    },
     commands: unavailable("agent_helm_executor_not_integrated"),
     refreshAfterSeconds: 10,
     postMutationRefreshAfterSeconds: 1.2,
@@ -252,7 +272,13 @@ function release(): HelmRelease {
     status: "deployed",
     revision: 3,
     observedAt: "2026-07-16T09:00:00Z",
-    resourceHealth: { ...unavailable("owned_resources_not_correlated"), health: null },
+    resourceHealth: {
+      availability: "available",
+      health: "healthy",
+      resourceCount: 1,
+      observedAt: "2026-07-16T09:01:00Z",
+      reasonCodes: [],
+    },
   };
 }
 

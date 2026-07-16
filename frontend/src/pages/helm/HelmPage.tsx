@@ -5,9 +5,11 @@ import { useMatch, useNavigate } from "react-router-dom";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type {
   HelmFailureCode,
+  HelmOwnedResources,
   HelmPort,
   HelmPortFailure,
   HelmRelease,
+  HelmResourceHealth,
   HelmUnavailableFeature,
 } from "../../features/helm/helmContract";
 import { HELM_COPY } from "../../features/helm/helmCopy";
@@ -32,6 +34,7 @@ const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
   helm_manifest_provider_not_integrated: HELM_COPY.manifestUnavailable,
   helm_values_provider_not_integrated: HELM_COPY.valuesUnavailable,
   owned_resources_not_correlated: HELM_COPY.resourceHealthUnavailable,
+  owned_resources_snapshot_unavailable: HELM_COPY.resourceSnapshotUnavailable,
   agent_helm_executor_not_integrated: HELM_COPY.commandsUnavailable,
 };
 
@@ -210,6 +213,7 @@ function HelmReleaseTable({
           <TableHead>{HELM_COPY.namespace}</TableHead>
           <TableHead>{HELM_COPY.chart}</TableHead>
           <TableHead>{HELM_COPY.status}</TableHead>
+          <TableHead>{HELM_COPY.resourceHealth}</TableHead>
           <TableHead>{HELM_COPY.revision}</TableHead>
           <TableHead>{HELM_COPY.observed}</TableHead>
         </TableRow>
@@ -261,6 +265,7 @@ function ReleaseRow({
       <TableCell className="max-w-40 truncate text-muted-foreground">{release.storageNamespace}</TableCell>
       <TableCell className="text-muted-foreground">{HELM_COPY.unavailableValue}</TableCell>
       <TableCell><StatusBadge status={release.status} /></TableCell>
+      <TableCell><ResourceHealthBadge health={release.resourceHealth} /></TableCell>
       <TableCell className="text-muted-foreground">{release.revision ?? HELM_COPY.unavailableValue}</TableCell>
       <TableCell className="text-muted-foreground">{formatObservedAt(release.observedAt)}</TableCell>
     </TableRow>
@@ -337,13 +342,14 @@ function HelmDetailBoundary({
       <section className="grid gap-2" aria-labelledby="helm-release-integrations-title">
         <h2 className="text-base font-semibold" id="helm-release-integrations-title">{HELM_COPY.integrations}</h2>
         <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-          <UnavailableFact feature={detail.release.resourceHealth} label={HELM_COPY.resourceHealth} />
+          <ResourceHealthFact health={detail.release.resourceHealth} />
           <UnavailableFact feature={detail.manifest} label={HELM_COPY.manifest} />
           <UnavailableFact feature={detail.values} label={HELM_COPY.values} />
-          <UnavailableFact feature={detail.ownedResources} label={HELM_COPY.ownedResources} />
+          <OwnedResourcesFact ownedResources={detail.ownedResources} />
           <UnavailableFact feature={detail.commands} label={HELM_COPY.commands} />
         </dl>
       </section>
+      <OwnedResourcesPanel ownedResources={detail.ownedResources} />
     </section>
   );
 }
@@ -426,6 +432,82 @@ function UnavailableFact({ feature, label }: { feature: HelmUnavailableFeature; 
   return <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2"><dt className="text-sm font-medium">{label}</dt><dd className="m-0 break-words text-xs text-muted-foreground">{featureReasonCopy(feature.reasonCode)}</dd></div>;
 }
 
+function ResourceHealthFact({ health }: { health: HelmResourceHealth }) {
+  if (health.availability === "unavailable") {
+    return <UnavailableFact feature={health} label={HELM_COPY.resourceHealth} />;
+  }
+  return (
+    <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2">
+      <dt className="text-sm font-medium">{HELM_COPY.resourceHealth}</dt>
+      <dd className="m-0 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <HealthBadge health={health.health} />
+        <span>{HELM_COPY.resourceCount}: {health.resourceCount}</span>
+        {health.availability === "partial" ? <span>{HELM_COPY.ownedResourcesPartial}</span> : null}
+      </dd>
+    </div>
+  );
+}
+
+function OwnedResourcesFact({ ownedResources }: { ownedResources: HelmOwnedResources }) {
+  if (ownedResources.availability === "unavailable") {
+    return <UnavailableFact feature={ownedResources} label={HELM_COPY.ownedResources} />;
+  }
+  return (
+    <div className="grid min-w-0 gap-1 rounded-lg border bg-card px-3 py-2">
+      <dt className="text-sm font-medium">{HELM_COPY.ownedResources}</dt>
+      <dd className="m-0 break-words text-xs text-muted-foreground">
+        {HELM_COPY.resourceCount}: {ownedResources.items.length}
+        {ownedResources.availability === "partial" ? ` · ${HELM_COPY.ownedResourcesPartial}` : ""}
+      </dd>
+    </div>
+  );
+}
+
+function OwnedResourcesPanel({ ownedResources }: { ownedResources: HelmOwnedResources }) {
+  if (ownedResources.availability === "unavailable") return null;
+  return (
+    <section aria-labelledby="helm-owned-resources-title" className="grid min-w-0 gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold" id="helm-owned-resources-title">{HELM_COPY.ownedResources}</h2>
+        <span className="text-xs text-muted-foreground">{HELM_COPY.resourceCount}: {ownedResources.items.length}</span>
+      </div>
+      {ownedResources.availability === "partial" ? (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground" role="status">
+          {ownedResources.truncated ? HELM_COPY.ownedResourcesTruncated : HELM_COPY.ownedResourcesPartial}
+        </div>
+      ) : null}
+      {ownedResources.items.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{HELM_COPY.ownedResourcesEmpty}</p>
+      ) : (
+        <Table scrollAreaLabel={HELM_COPY.ownedResources}>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{HELM_COPY.resourceKind}</TableHead>
+              <TableHead>{HELM_COPY.resourceName}</TableHead>
+              <TableHead>{HELM_COPY.namespace}</TableHead>
+              <TableHead>{HELM_COPY.status}</TableHead>
+              <TableHead>{HELM_COPY.health}</TableHead>
+              <TableHead>{HELM_COPY.observed}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {ownedResources.items.map((item) => (
+              <TableRow key={item.resource.uid}>
+                <TableCell>{item.resource.kind}</TableCell>
+                <TableCell className="max-w-56 truncate font-medium">{item.resource.name}</TableCell>
+                <TableCell className="max-w-40 truncate text-muted-foreground">{item.resource.namespace ?? HELM_COPY.unavailableValue}</TableCell>
+                <TableCell><StatusBadge status={item.status} /></TableCell>
+                <TableCell><HealthBadge health={item.health} /></TableCell>
+                <TableCell className="text-muted-foreground">{formatObservedAt(item.observedAt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </section>
+  );
+}
+
 function coverageReasonCopy(reasonCodes: readonly string[]): readonly string[] {
   const messages = new Set<string>();
   for (const reasonCode of reasonCodes) {
@@ -447,6 +529,17 @@ function featureReasonCopy(reasonCode: string): string {
 
 function StatusBadge({ status }: { status: string | null }) {
   return <Badge variant={status?.toLowerCase() === "deployed" ? "secondary" : "outline"}>{status ?? HELM_COPY.unavailableValue}</Badge>;
+}
+
+function ResourceHealthBadge({ health }: { health: HelmResourceHealth }) {
+  if (health.availability === "unavailable") {
+    return <span className="text-muted-foreground">{HELM_COPY.unavailableValue}</span>;
+  }
+  return <HealthBadge health={health.health} />;
+}
+
+function HealthBadge({ health }: { health: string }) {
+  return <Badge variant={health.toLowerCase() === "healthy" ? "secondary" : "outline"}>{health}</Badge>;
 }
 
 function matchesRelease(release: HelmRelease, query: string): boolean {

@@ -45,6 +45,31 @@ def _contexts(*cluster_ids: str) -> dict[str, dict[str, object]]:
     }
 
 
+def _owned_row(
+    *,
+    release: str = "storefront",
+    namespace: str = "storefront",
+    kind: str = "Deployment",
+    name: str = "storefront",
+    health: str = "healthy",
+) -> dict[str, object]:
+    return {
+        "workspace_id": "workspace-a",
+        "cluster_id": "cluster-a",
+        "inventory_key": f"{kind.casefold()}-{namespace}-{name}",
+        "api_version": "apps/v1" if kind == "Deployment" else "v1",
+        "kind": kind,
+        "namespace": namespace,
+        "name": name,
+        "uid": f"uid-{kind.casefold()}-{name}",
+        "status": "Available",
+        "health": health,
+        "observed_at": datetime(2026, 7, 16, 9, 1, tzinfo=UTC),
+        "release_name": release,
+        "release_namespace": namespace,
+    }
+
+
 def _online_agents(*cluster_ids: str) -> dict[str, dict[str, str]]:
     return {
         cluster_id: {"last_seen_at": datetime.now(UTC).isoformat()} for cluster_id in cluster_ids
@@ -62,6 +87,7 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
         contexts=_contexts("cluster-a"),
         agent_statuses=_online_agents("cluster-a"),
         selected_cluster_ids=("cluster-a",),
+        owned_resource_rows=[_owned_row()],
     ).model_dump(mode="json")
 
     assert body["coverage"] == {
@@ -95,9 +121,11 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
             "revision": 3,
             "observed_at": "2026-07-16T09:00:00+00:00",
             "resource_health": {
-                "availability": "unavailable",
-                "health": None,
-                "reason_code": "owned_resources_not_correlated",
+                "availability": "available",
+                "health": "healthy",
+                "resource_count": 1,
+                "observed_at": "2026-07-16T09:01:00+00:00",
+                "reason_codes": [],
             },
         }
     ]
@@ -131,6 +159,10 @@ def test_detail_exposes_observed_history_and_explicitly_unavailable_integrations
         selected_cluster_id="cluster-a",
         namespace="storefront",
         release_name="storefront",
+        owned_resource_rows=[
+            _owned_row(),
+            _owned_row(kind="Service", name="storefront-http", health="unknown"),
+        ],
     )
 
     assert response is not None
@@ -143,8 +175,77 @@ def test_detail_exposes_observed_history_and_explicitly_unavailable_integrations
         "reason_code": "helm_manifest_provider_not_integrated",
     }
     assert detail["values"]["reason_code"] == "helm_values_provider_not_integrated"
-    assert detail["owned_resources"]["reason_code"] == "owned_resources_not_correlated"
+    assert detail["owned_resources"] == {
+        "availability": "available",
+        "items": [
+            {
+                "resource": {
+                    "api_group": "apps",
+                    "version": "v1",
+                    "kind": "Deployment",
+                    "namespace": "storefront",
+                    "name": "storefront",
+                    "uid": "uid-deployment-storefront",
+                },
+                "status": "Available",
+                "health": "healthy",
+                "observed_at": "2026-07-16T09:01:00+00:00",
+            },
+            {
+                "resource": {
+                    "api_group": "",
+                    "version": "v1",
+                    "kind": "Service",
+                    "namespace": "storefront",
+                    "name": "storefront-http",
+                    "uid": "uid-service-storefront-http",
+                },
+                "status": "Available",
+                "health": "unknown",
+                "observed_at": "2026-07-16T09:01:00+00:00",
+            },
+        ],
+        "observed_at": "2026-07-16T09:01:00+00:00",
+        "truncated": False,
+        "reason_codes": [],
+    }
+    assert detail["release"]["resource_health"]["health"] == "mixed"
     assert detail["commands"]["reason_code"] == "agent_helm_executor_not_integrated"
+
+
+def test_owned_resource_correlation_is_exact_and_reports_partial_truncation() -> None:
+    contexts = _contexts("cluster-a")
+    contexts["cluster-a"]["resources_complete"] = False
+    contexts["cluster-a"]["partial_reason_codes"] = ["source_namespaces_truncated"]
+    wrong_namespace = _owned_row()
+    wrong_namespace["release_namespace"] = "another"
+
+    response = helm_release_detail(
+        [_row()],
+        contexts=contexts,
+        agent_statuses=_online_agents("cluster-a"),
+        selected_cluster_id="cluster-a",
+        namespace="storefront",
+        release_name="storefront",
+        owned_resource_rows=[_owned_row(health="degraded"), wrong_namespace],
+        owned_resources_truncated=True,
+    )
+
+    assert response is not None
+    detail = response.model_dump(mode="json")["detail"]
+    assert detail["release"]["resource_health"] == {
+        "availability": "partial",
+        "health": "degraded",
+        "resource_count": 1,
+        "observed_at": "2026-07-16T09:01:00+00:00",
+        "reason_codes": [
+            "helm_owned_resources_truncated",
+            "source_namespaces_truncated",
+            "source_resources_incomplete",
+        ],
+    }
+    assert detail["owned_resources"]["truncated"] is True
+    assert len(detail["owned_resources"]["items"]) == 1
 
 
 def test_detail_returns_none_for_another_cluster_or_namespace() -> None:

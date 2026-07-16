@@ -48,6 +48,28 @@ describe("Helm release API", () => {
 
     await expect(listHelmReleases()).rejects.toMatchObject({ kind: "invalid-payload" });
   });
+
+  it("fails closed when a truncated owned-resource result omits its reason", async () => {
+    const fixture = detail();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      ...fixture,
+      detail: {
+        ...fixture.detail,
+        owned_resources: {
+          ...fixture.detail.owned_resources,
+          availability: "partial",
+          truncated: true,
+          reason_codes: [],
+        },
+      },
+    }));
+
+    await expect(getHelmRelease({
+      clusterId: "cluster-a",
+      namespace: "storefront",
+      releaseName: "storefront",
+    })).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
 });
 
 function list() {
@@ -72,7 +94,7 @@ function detail() {
       history: [],
       manifest: unavailable("helm_manifest_provider_not_integrated"),
       values: unavailable("helm_values_provider_not_integrated"),
-      owned_resources: unavailable("owned_resources_not_correlated"),
+      owned_resources: ownedResources(),
       commands: unavailable("agent_helm_executor_not_integrated"),
     },
   };
@@ -101,7 +123,35 @@ function release() {
     status: "deployed",
     revision: 3,
     observed_at: "2026-07-16T09:00:00Z",
-    resource_health: { ...unavailable("owned_resources_not_correlated"), health: null },
+    resource_health: {
+      availability: "available",
+      health: "healthy",
+      resource_count: 1,
+      observed_at: "2026-07-16T09:01:00Z",
+      reason_codes: [],
+    },
+  };
+}
+
+function ownedResources() {
+  return {
+    availability: "available",
+    items: [{
+      resource: {
+        api_group: "apps",
+        version: "v1",
+        kind: "Deployment",
+        namespace: "storefront",
+        name: "storefront",
+        uid: "deployment-storefront",
+      },
+      status: "Available",
+      health: "healthy",
+      observed_at: "2026-07-16T09:01:00Z",
+    }],
+    observed_at: "2026-07-16T09:01:00Z",
+    truncated: false,
+    reason_codes: [],
   };
 }
 

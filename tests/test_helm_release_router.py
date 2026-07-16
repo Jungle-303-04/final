@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.identity.dependencies import require_session
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
@@ -83,6 +84,37 @@ class HelmReleaseDb:
             }
         ]
 
+    def list_helm_owned_resource_observations(
+        self,
+        *,
+        workspace_id: str,
+        release_scopes: tuple[tuple[str, str, str], ...],
+        limit: int,
+    ) -> HelmOwnedResourceObservationBatch:
+        assert workspace_id == "workspace-a"
+        assert release_scopes == (("cluster-a", "storefront", "storefront"),)
+        assert limit > 0
+        return HelmOwnedResourceObservationBatch(
+            rows=(
+                {
+                    "workspace_id": "workspace-a",
+                    "cluster_id": "cluster-a",
+                    "inventory_key": "deployment-storefront",
+                    "api_version": "apps/v1",
+                    "kind": "Deployment",
+                    "namespace": "storefront",
+                    "name": "storefront",
+                    "uid": "deployment-storefront",
+                    "status": "Available",
+                    "health": "healthy",
+                    "observed_at": "2026-07-16T09:00:00+00:00",
+                    "release_name": "storefront",
+                    "release_namespace": "storefront",
+                },
+            ),
+            truncated=False,
+        )
+
     def latest_cluster_agent_statuses(
         self,
         workspace_id: str,
@@ -121,7 +153,13 @@ def test_release_list_is_rbac_scoped_and_never_decodes_storage_payload() -> None
     assert body["releases"][0]["name"] == "storefront"
     assert body["releases"][0]["scope"]["freshness"] == "live"
     assert body["releases"][0]["chart"] is None
-    assert body["releases"][0]["resource_health"]["reason_code"] == "owned_resources_not_correlated"
+    assert body["releases"][0]["resource_health"] == {
+        "availability": "available",
+        "health": "healthy",
+        "resource_count": 1,
+        "observed_at": "2026-07-16T09:00:00+00:00",
+        "reason_codes": [],
+    }
     assert "must-not-leak" not in response.text
     assert '"raw"' not in response.text
 
@@ -142,6 +180,8 @@ def test_release_detail_requires_the_exact_authorized_cluster_scope() -> None:
         "reason_code": "agent_helm_executor_not_integrated",
     }
     assert body["values"]["reason_code"] == "helm_values_provider_not_integrated"
+    assert body["owned_resources"]["availability"] == "available"
+    assert body["owned_resources"]["items"][0]["resource"]["kind"] == "Deployment"
 
 
 def test_release_list_hides_an_unauthorized_requested_scope() -> None:

@@ -26,7 +26,39 @@ export const helmUnavailableFeatureSchema = z.strictObject({
 
 export const helmResourceHealthSchema = helmUnavailableFeatureSchema.extend({
   health: z.null(),
+}).or(z.strictObject({
+  availability: z.enum(["available", "partial"]),
+  health: z.string().min(1),
+  resource_count: z.number().int().nonnegative(),
+  observed_at: nullableTextSchema,
+  reason_codes: z.array(z.string().min(1)),
+}).superRefine((value, context) => {
+  if (value.availability === "partial" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial Helm resource health requires reasons" });
+  }
+}));
+
+export const helmOwnedResourceSchema = z.strictObject({
+  resource: helmResourceRefSchema,
+  status: z.string().min(1),
+  health: z.string().min(1),
+  observed_at: nullableTextSchema,
 });
+
+export const helmOwnedResourcesSchema = helmUnavailableFeatureSchema.or(z.strictObject({
+  availability: z.enum(["available", "partial"]),
+  items: z.array(helmOwnedResourceSchema),
+  observed_at: nullableTextSchema,
+  truncated: z.boolean(),
+  reason_codes: z.array(z.string().min(1)),
+}).superRefine((value, context) => {
+  if (value.availability === "partial" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "partial Helm owned resources require reasons" });
+  }
+  if (value.truncated && !value.reason_codes.includes("helm_owned_resources_truncated")) {
+    context.addIssue({ code: "custom", message: "truncated Helm owned resources require a reason" });
+  }
+}));
 
 export const helmObservationCoverageSchema = z.strictObject({
   availability: availabilitySchema,
@@ -73,7 +105,7 @@ export const helmReleaseDetailSchema = z.strictObject({
     history: z.array(helmReleaseHistoryEntrySchema),
     manifest: helmUnavailableFeatureSchema,
     values: helmUnavailableFeatureSchema,
-    owned_resources: helmUnavailableFeatureSchema,
+    owned_resources: helmOwnedResourcesSchema,
     commands: helmUnavailableFeatureSchema,
   }),
 });

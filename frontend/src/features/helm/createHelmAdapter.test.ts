@@ -19,12 +19,23 @@ describe("createHelmAdapter", () => {
     expect(list.releases[0]).toMatchObject({
       chart: null,
       appVersion: null,
-      resourceHealth: { availability: "unavailable" },
+      resourceHealth: {
+        availability: "available",
+        health: "healthy",
+        resourceCount: 1,
+      },
     });
     expect(list.refreshAfterSeconds).toBe(30);
     expect(list.postMutationRefreshAfterSeconds).toBe(1.2);
     expect(detail).toMatchObject({
       manifest: { reasonCode: "helm_manifest_provider_not_integrated" },
+      ownedResources: {
+        availability: "available",
+        items: [{
+          resource: { kind: "Deployment", name: "storefront" },
+          health: "healthy",
+        }],
+      },
       commands: { reasonCode: "agent_helm_executor_not_integrated" },
       refreshAfterSeconds: 10,
       postMutationRefreshAfterSeconds: 1.2,
@@ -61,7 +72,25 @@ function detailEndpoint() {
       history: [],
       manifest: unavailable("helm_manifest_provider_not_integrated"),
       values: unavailable("helm_values_provider_not_integrated"),
-      owned_resources: unavailable("owned_resources_not_correlated"),
+      owned_resources: {
+        availability: "available" as const,
+        items: [{
+          resource: {
+            api_group: "apps",
+            version: "v1",
+            kind: "Deployment",
+            namespace: "storefront",
+            name: "storefront",
+            uid: "deployment-storefront",
+          },
+          status: "Available",
+          health: "healthy",
+          observed_at: "2026-07-16T09:01:00Z",
+        }],
+        observed_at: "2026-07-16T09:01:00Z",
+        truncated: false,
+        reason_codes: [],
+      },
       commands: unavailable("agent_helm_executor_not_integrated"),
     },
   };
@@ -90,7 +119,13 @@ function releaseEndpoint(freshness: "live" | "stale" | "partial" | "disconnected
     status: "deployed",
     revision: 3,
     observed_at: "2026-07-16T09:00:00Z",
-    resource_health: { ...unavailable("owned_resources_not_correlated"), health: null },
+    resource_health: {
+      availability: "available" as const,
+      health: "healthy",
+      resource_count: 1,
+      observed_at: "2026-07-16T09:01:00Z",
+      reason_codes: [],
+    },
   };
 }
 

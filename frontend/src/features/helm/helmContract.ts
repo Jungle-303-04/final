@@ -26,6 +26,33 @@ export interface HelmResourceHealthAvailability extends HelmUnavailableFeature {
   health: null;
 }
 
+export interface HelmResourceHealthObservation {
+  availability: "available" | "partial";
+  health: string;
+  resourceCount: number;
+  observedAt: string | null;
+  reasonCodes: readonly string[];
+}
+
+export type HelmResourceHealth = HelmResourceHealthAvailability | HelmResourceHealthObservation;
+
+export interface HelmOwnedResource {
+  resource: HelmResourceRef;
+  status: string;
+  health: string;
+  observedAt: string | null;
+}
+
+export interface HelmOwnedResourceObservation {
+  availability: "available" | "partial";
+  items: readonly HelmOwnedResource[];
+  observedAt: string | null;
+  truncated: boolean;
+  reasonCodes: readonly string[];
+}
+
+export type HelmOwnedResources = HelmUnavailableFeature | HelmOwnedResourceObservation;
+
 export interface HelmObservationCoverage {
   availability: HelmAvailability;
   observedAt: string | null;
@@ -42,7 +69,7 @@ export interface HelmRelease {
   status: string | null;
   revision: number | null;
   observedAt: string | null;
-  resourceHealth: HelmResourceHealthAvailability;
+  resourceHealth: HelmResourceHealth;
 }
 
 export interface HelmReleaseHistoryEntry {
@@ -57,7 +84,7 @@ export interface HelmReleaseDetail {
   history: readonly HelmReleaseHistoryEntry[];
   manifest: HelmUnavailableFeature;
   values: HelmUnavailableFeature;
-  ownedResources: HelmUnavailableFeature;
+  ownedResources: HelmOwnedResources;
   commands: HelmUnavailableFeature;
   refreshAfterSeconds: number;
   postMutationRefreshAfterSeconds: number;
