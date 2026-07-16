@@ -6909,7 +6909,7 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": "desktop",
@@ -6921,13 +6921,13 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/helm/release_router.py#get_helm_releases",
           "consumer": "src/domains/helm/release_projection.py#helm_release_list",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmPage",
           "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
@@ -6951,7 +6951,7 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": "desktop",
@@ -6963,13 +6963,13 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/helm/release_router.py#get_helm_release",
           "consumer": "src/domains/helm/release_projection.py#helm_release_detail",
           "test": "tests/test_helm_release_projection.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmReleaseDetail",
           "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
