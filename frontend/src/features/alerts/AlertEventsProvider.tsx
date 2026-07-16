@@ -13,16 +13,24 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "../../shared/ui/primitives/sonner";
 import { useI18n } from "../../shared/i18n";
 import type { AlertEvent, AlertEventsPort } from "./alertEventsContract";
+import { useOptionalActivityNotifications } from "../notifications/ActivityNotificationsProvider";
 
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INTERVAL_MS = 5_000;
+const EVENT_TOAST_DURATION_MS = 5_000;
 
 interface AlertEventsContextValue {
   events: readonly AlertEvent[];
+  creatingTestEvent: boolean;
   error: Error | null;
   initialLoading: boolean;
+  notifications: readonly AlertEvent[];
+  notificationCount: number;
   pending: Readonly<Record<string, "ack" | "promote">>;
   unreadCount: number;
   acknowledge(eventId: string): Promise<void>;
+  createTestEvent(): Promise<void>;
+  markAllNotificationsRead(): void;
+  markNotificationRead(eventId: string): void;
   promote(eventId: string): Promise<void>;
   refresh(): void;
 }
@@ -38,12 +46,27 @@ export function AlertEventsProvider({
 }) {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const activityNotifications = useOptionalActivityNotifications();
   const [events, setEvents] = useState<readonly AlertEvent[]>([]);
+  const [creatingTestEvent, setCreatingTestEvent] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [pending, setPending] = useState<Record<string, "ack" | "promote">>({});
+  const [readEventIds, setReadEventIds] = useState<ReadonlySet<string>>(() => new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const seen = useRef<Set<string> | null>(null);
+
+  const markNotificationRead = useCallback((eventId: string) => {
+    setReadEventIds((current) => new Set(current).add(eventId));
+  }, []);
+
+  const markAllNotificationsRead = useCallback(() => {
+    setReadEventIds((current) => {
+      const next = new Set(current);
+      for (const event of events) next.add(event.event_id);
+      return next;
+    });
+  }, [events]);
 
   useEffect(() => {
     let active = true;
@@ -59,15 +82,23 @@ export function AlertEventsProvider({
         if (!active) return;
         const currentIds = new Set(response.map((event) => event.event_id));
         if (seen.current !== null) {
-          for (const event of response) {
-            if (event.status !== "firing" || seen.current.has(event.event_id)) continue;
-            toast.warning(event.rule_name ?? t("alerts.toast.new"), {
+          const newFiringEvents = response
+            .filter((event) => event.status === "firing" && !seen.current?.has(event.event_id))
+            .sort((left, right) => Date.parse(left.fired_at) - Date.parse(right.fired_at));
+          for (const event of newFiringEvents) {
+            const options = {
+              id: event.event_id,
+              duration: EVENT_TOAST_DURATION_MS,
               description: alertTarget(event),
               action: {
                 label: t("alerts.toast.view"),
-                onClick: () => navigate("/alerts"),
+                onClick: () => {
+                  markNotificationRead(event.event_id);
+                  navigate("/alerts");
+                },
               },
-            });
+            };
+            showEventToast(event, event.rule_name ?? t("alerts.toast.new"), options);
           }
         }
         seen.current = currentIds;
@@ -94,7 +125,7 @@ export function AlertEventsProvider({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [navigate, port, refreshKey, t]);
+  }, [markNotificationRead, navigate, port, refreshKey, t]);
 
   const runMutation = useCallback(async (
     eventId: string,
@@ -108,17 +139,26 @@ export function AlertEventsProvider({
         toast.success(t("alerts.toast.acknowledged"));
       } else {
         const promotion = await port.promote(eventId);
+        const promotedEvent = events.find((event) => event.event_id === eventId);
         setEvents((current) => current.map((event) => (
           event.event_id === eventId
             ? { ...event, incident_id: promotion.incident_id }
             : event
         )));
-        toast.success(t("alerts.toast.promoted"), {
-          action: {
-            label: t("alerts.toast.incidentView"),
-            onClick: () => navigate("/issues"),
-          },
-        });
+        if (activityNotifications && promotedEvent) {
+          activityNotifications.beginIncidentAnalysis({
+            correlationId: promotion.incident_id,
+            target: promotedEvent.subject.name || promotedEvent.rule_name || promotion.incident_id,
+            href: issuesHref(promotedEvent.subject.cluster),
+          });
+        } else {
+          toast.success(t("alerts.toast.promoted"), {
+            action: {
+              label: t("alerts.toast.incidentView"),
+              onClick: () => navigate("/issues"),
+            },
+          });
+        }
       }
     } catch (cause) {
       toast.error(action === "ack"
@@ -132,18 +172,56 @@ export function AlertEventsProvider({
         return next;
       });
     }
-  }, [navigate, port, t]);
+  }, [activityNotifications, events, navigate, port, t]);
+
+  const createTestEvent = useCallback(async () => {
+    if (!port.createTest) {
+      toast.error(t("alerts.header.testFailed"));
+      return;
+    }
+    setCreatingTestEvent(true);
+    try {
+      await port.createTest();
+      setRefreshKey((current) => current + 1);
+    } catch {
+      toast.error(t("alerts.header.testFailed"));
+    } finally {
+      setCreatingTestEvent(false);
+    }
+  }, [port, t]);
+
+  const notifications = useMemo(
+    () => events.filter((event) => !readEventIds.has(event.event_id)),
+    [events, readEventIds],
+  );
 
   const value = useMemo<AlertEventsContextValue>(() => ({
+    creatingTestEvent,
     events,
     error,
     initialLoading,
+    notifications,
+    notificationCount: notifications.length,
     pending,
     unreadCount: events.filter((event) => event.status === "firing").length,
     acknowledge: (eventId) => runMutation(eventId, "ack"),
+    createTestEvent,
+    markAllNotificationsRead,
+    markNotificationRead,
     promote: (eventId) => runMutation(eventId, "promote"),
     refresh: () => setRefreshKey((current) => current + 1),
-  }), [error, events, initialLoading, pending, runMutation]);
+  }), [
+    createTestEvent,
+    creatingTestEvent,
+    error,
+    events,
+    initialLoading,
+    markAllNotificationsRead,
+    markNotificationRead,
+    notifications,
+    pending,
+    runMutation,
+  ]);
 
   return <AlertEventsContext.Provider value={value}>{children}</AlertEventsContext.Provider>;
 }
@@ -172,6 +250,28 @@ function alertTarget(event: AlertEvent): string {
   ].filter(Boolean).join(" · ");
 }
 
+function showEventToast(
+  event: AlertEvent,
+  title: string,
+  options: Parameters<typeof toast.warning>[1],
+) {
+  if (event.severity === "critical" || event.severity === "high") {
+    toast.error(title, options);
+    return;
+  }
+  if (event.severity === "info" || event.severity === "low") {
+    toast.info(title, options);
+    return;
+  }
+  toast.warning(title, options);
+}
+
 function isAbortError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
+
+function issuesHref(clusterId: string): string {
+  if (!clusterId) return "/issues";
+  const query = new URLSearchParams({ clusters: clusterId });
+  return `/issues?${query.toString()}`;
 }

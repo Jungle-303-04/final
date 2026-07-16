@@ -34,6 +34,10 @@ import {
 } from "../features/operations/OperationStatusStore";
 import { EMPTY_OPERATION_EVENTS_PORT } from "../features/operations/operationEventsContract";
 import type { ProductSurfaceLoader } from "./surfaceLoader";
+import {
+  EMPTY_ACTIVITY_NOTIFICATIONS_PORT,
+  type ActivityNotificationsPort,
+} from "../features/notifications/activityNotificationsContract";
 
 export interface ProductSurfaceRegistration {
   id: ProductSurfaceId;
@@ -47,6 +51,7 @@ export interface ProductComposition {
   aiAssistant: AiAssistantPort;
   logStream: LogStreamPort;
   alertEvents: AlertEventsPort;
+  activityNotifications: ActivityNotificationsPort;
   workloadDetail: WorkloadDetailPort;
   compare: ComparePort;
   operationStatusStore: OperationStatusStore;
@@ -67,6 +72,7 @@ export function createProductComposition(
   dispose: () => void = () => undefined,
   workloadDetail: WorkloadDetailPort = EMPTY_WORKLOAD_DETAIL_PORT,
   compare: ComparePort = EMPTY_COMPARE_PORT,
+  activityNotifications: ActivityNotificationsPort = EMPTY_ACTIVITY_NOTIFICATIONS_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -95,6 +101,7 @@ export function createProductComposition(
     aiAssistant,
     logStream,
     alertEvents,
+    activityNotifications,
     workloadDetail,
     compare,
     operationStatusStore,

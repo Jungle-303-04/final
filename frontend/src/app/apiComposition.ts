@@ -1,8 +1,10 @@
 import {
   acknowledgeAlertEvent,
+  createTestAlertEvent,
   createAlertRule,
   deleteAlertRule,
   getAiSuggestions,
+  getAuditTimeline,
   getClusterNodesSummary,
   getClusterSummary,
   getCompareCandidates,
@@ -33,6 +35,7 @@ import { createWorkloadDetailAdapter } from "../features/workload-detail/createW
 import { createCompareAdapter } from "../features/compare/createCompareAdapter";
 import { createOperationEventsAdapter } from "../features/operations/createOperationEventsAdapter";
 import { createOperationStatusStore } from "../features/operations/OperationStatusStore";
+import { createActivityNotificationsAdapter } from "../features/notifications/createActivityNotificationsAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
 
@@ -65,8 +68,12 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
   });
   const alertEventsPort = createAlertEventsAdapter({
     acknowledgeAlertEvent,
+    createTestAlertEvent,
     listAlertEvents,
     promoteAlertEvent,
+  });
+  const activityNotificationsPort = createActivityNotificationsAdapter({
+    getAuditTimeline,
   });
   const alertRulesPort = createAlertRulesAdapter({
     createAlertRule,
@@ -167,5 +174,5 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     },
   ], auth, homePort, globalFilterPort, aiAssistantPort, logStreamPort, alertEventsPort, operationStatusStore, () => {
     registry.dispose();
-  }, workloadDetailPort, comparePort);
+  }, workloadDetailPort, comparePort, activityNotificationsPort);
 }

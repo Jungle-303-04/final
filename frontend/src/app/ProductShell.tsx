@@ -31,6 +31,7 @@ import {
   type GlobalFilterPort,
 } from "../features/global-filter/globalFilterContract";
 import { ShortcutHelpDialog } from "./ShortcutHelpDialog";
+import { HeaderAlertsPopover } from "./HeaderAlertsPopover";
 import {
   landingProductRouteForReleasedSurfaces,
   productKeyboardNavigationRoutes,
@@ -62,6 +63,11 @@ import {
 } from "../features/alerts/alertEventsContract";
 import type { ProductRouteDefinition } from "./productRoutes";
 import { DesktopLocalTerminalEntry } from "../desktop/DesktopLocalTerminalEntry";
+import { ActivityNotificationsProvider } from "../features/notifications/ActivityNotificationsProvider";
+import {
+  EMPTY_ACTIVITY_NOTIFICATIONS_PORT,
+  type ActivityNotificationsPort,
+} from "../features/notifications/activityNotificationsContract";
 
 const ProductCommandPalette = lazy(async () => ({
   default: (await import("./ProductCommandPalette")).ProductCommandPalette,
@@ -75,6 +81,7 @@ interface ProductShellProps {
   aiAssistantPort?: AiAssistantPort;
   logStreamPort?: LogStreamPort;
   alertEventsPort?: AlertEventsPort;
+  activityNotificationsPort?: ActivityNotificationsPort;
 }
 
 export function ProductShell({
@@ -85,20 +92,26 @@ export function ProductShell({
   aiAssistantPort = EMPTY_AI_ASSISTANT_PORT,
   logStreamPort = EMPTY_LOG_STREAM_PORT,
   alertEventsPort = EMPTY_ALERT_EVENTS_PORT,
+  activityNotificationsPort = EMPTY_ACTIVITY_NOTIFICATIONS_PORT,
 }: ProductShellProps) {
   return (
     <ProductSessionProvider session={auth.session}>
       <TooltipProvider>
         <SidebarProvider defaultOpen={!defaultSidebarCollapsed}>
           <BottomDockProvider port={logStreamPort}>
-            <AlertEventsProvider port={alertEventsPort}>
-              <ProductShellFrame
-                auth={auth}
-                aiAssistantPort={aiAssistantPort}
-                globalFilterPort={globalFilterPort}
-                releasedSurfaceIds={releasedSurfaceIds}
-              />
-            </AlertEventsProvider>
+            <ActivityNotificationsProvider
+              port={activityNotificationsPort}
+              storageScope={`${auth.session.workspaceId}:${auth.session.userId}`}
+            >
+              <AlertEventsProvider port={alertEventsPort}>
+                <ProductShellFrame
+                  auth={auth}
+                  aiAssistantPort={aiAssistantPort}
+                  globalFilterPort={globalFilterPort}
+                  releasedSurfaceIds={releasedSurfaceIds}
+                />
+              </AlertEventsProvider>
+            </ActivityNotificationsProvider>
           </BottomDockProvider>
         </SidebarProvider>
       </TooltipProvider>
@@ -297,6 +310,7 @@ function ProductShellFrame({
             <h1 className="sr-only">{currentRouteLabel}</h1>
           </div>
           <div className="order-2 ml-auto flex items-center gap-1 lg:order-3">
+            <HeaderAlertsPopover alertsHref={filter.navigationHref("/alerts")} />
             <ShortcutHelpDialog
               definitions={shortcutDefinitions}
               onOpenChange={setShortcutHelpOpen}

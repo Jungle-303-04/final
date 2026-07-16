@@ -57,6 +57,7 @@ export function ProductRouter({
               aiAssistantPort={composition.aiAssistant}
               logStreamPort={composition.logStream}
               alertEventsPort={composition.alertEvents}
+              activityNotificationsPort={composition.activityNotifications}
               releasedSurfaceIds={composition.releasedSurfaceIds}
             />
           )}>
