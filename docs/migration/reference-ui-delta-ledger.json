@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 211,
+  "pendingCount": 207,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -3727,8 +3727,39 @@
         "blobId": "f4cfc1fbff07458d1104a04b910daf111a77de45",
         "sha256": "8ced4b2c8c861489f8cc16a3d8c6c16d63a8eda038cf44435b3df1a5df97ab7d"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:collapse:lazy-disclosure:v1",
+          "legacyContractIds": [],
+          "symbol": "Collapse and CollapseChevron",
+          "interaction": "controlled disclosure lazily mounts heavy content, retains it after first open, and removes closed content from keyboard and accessibility traversal while its grid row collapses",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "The grid-row disclosure and its rotating caret keep state feedback but suppress transitions when reduced motion is requested.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/Collapse.tsx",
+              "frontend/src/shared/ui/primitives/collapse.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/collapse.tsx",
+              "frontend/src/shared/ui/primitives/collapse.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.collapse.disclosure"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned primitive uses a controlled state boundary and canonical slots. It retains source lazy-mount behavior while adding `aria-hidden` alongside `inert` so hidden interactive descendants cannot be reached by assistive technology."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3811,8 +3842,33 @@
         "blobId": "6f0306703aa0f8f1ad20b4e282719af620f89a5f",
         "sha256": "1477455c44d45e36b4d4bbddc509587519ef4bd43b435f6bac939a1c576eeff4"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:multi-select:render-contract-test:v1",
+          "legacyContractIds": [],
+          "symbol": "MultiSelectPicker SSR render contract",
+          "interaction": "controlled multi-select verification covers option rows, search threshold, empty states, selected summary, unavailable clear action, and visible-set bulk labels",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/multi-select-picker.tsx",
+              "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.multi-select.controlled"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product test exercises the same reusable picker through actual user interactions instead of source-runtime SSR markup, including owner-controlled selection and completion callbacks."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -3823,8 +3879,33 @@
         "blobId": "2906c14969bb29ada686bac8681e775039f8e582",
         "sha256": "7c89dc76841ae4ab68721350525fa4978476573fccb3034801ca4451a0e9b034"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:multi-select:controlled-filter:v1",
+          "legacyContractIds": [],
+          "symbol": "MultiSelectPicker",
+          "interaction": "controlled multi-select filters a host-provided item list, toggles checkbox values, applies bulk changes only to visible values, and returns clear and completion events to its owner",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/multi-select-picker.tsx",
+              "frontend/src/shared/ui/primitives/multi-select-picker.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.multi-select.controlled"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product primitive keeps data and all visible copy owner-provided. It does not derive resource kinds, namespaces, authorization, or labels in the browser, so every scoped filter can reuse one behavior safely."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -3895,8 +3976,39 @@
         "blobId": "681cd611fe9e0eb08971f5bdf38c0fa1dd8c2ae4",
         "sha256": "c7530f1c1245dede08b3db60d8f969b3fee07ab54c15bef54ca93cc82ccb7402"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:select-menu:keyboard-dismissal:v1",
+          "legacyContractIds": [],
+          "symbol": "SelectMenu",
+          "interaction": "single-select menu opens from a named trigger, exposes option selection, dismisses on Escape and outside pointer input without mutation, and indicates open state with a rotating caret",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "The open-state caret retains its semantic expanded state while its transform transition is disabled for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/SelectMenu.tsx",
+              "frontend/src/shared/ui/primitives/select.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/select.tsx",
+              "frontend/src/shared/ui/primitives/select.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.select-menu.dismissal"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned Base UI Select supplies the source menu semantics with stronger keyboard and focus handling. Its trigger now owns a shared expanded-state caret motion token rather than feature-local chevrons."
+          }
+        }
+      ]
     },
     {
       "status": "M",

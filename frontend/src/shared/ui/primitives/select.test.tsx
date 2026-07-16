@@ -93,6 +93,22 @@ describe("product-owned Select", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("dismisses the option list on an outside pointer without mutating the value", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<ClusterSelect onValueChange={onValueChange} />);
+
+    const trigger = screen.getByRole("combobox", { name: "클러스터 선택" });
+    await user.click(trigger);
+    expect(await screen.findByRole("listbox")).toBeTruthy();
+
+    await user.click(document.body);
+
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    expect(trigger.textContent).toContain("kubernetes-ops");
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
   it("keeps disabled controls unavailable to pointer and keyboard input", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
@@ -135,7 +151,10 @@ describe("product-owned Select", () => {
     expect(trigger.className).toContain("bg-background");
     expect(trigger.className).toContain("motion-reduce:transition-none");
     expect(trigger.className).toContain("min-w-48");
-    expect(trigger.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    const triggerIcon = trigger.querySelector("svg");
+    expect(triggerIcon?.getAttribute("aria-hidden")).toBe("true");
+    expect(triggerIcon?.getAttribute("class")).toContain("group-aria-expanded/select-trigger:rotate-180");
+    expect(triggerIcon?.getAttribute("class")).toContain("motion-reduce:transition-none");
     expect(container.querySelector('[data-slot="select-value"]')?.className).toContain("truncate");
 
     await user.click(trigger);
