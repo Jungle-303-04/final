@@ -52,6 +52,7 @@ def _owned_row(
     kind: str = "Deployment",
     name: str = "storefront",
     health: str = "healthy",
+    chart_label: str | None = None,
 ) -> dict[str, object]:
     return {
         "workspace_id": "workspace-a",
@@ -67,6 +68,7 @@ def _owned_row(
         "observed_at": datetime(2026, 7, 16, 9, 1, tzinfo=UTC),
         "release_name": release,
         "release_namespace": namespace,
+        "chart_label": chart_label,
     }
 
 
@@ -87,7 +89,7 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
         contexts=_contexts("cluster-a"),
         agent_statuses=_online_agents("cluster-a"),
         selected_cluster_ids=("cluster-a",),
-        owned_resource_rows=[_owned_row()],
+        owned_resource_rows=[_owned_row(chart_label="storefront-1.2.3")],
     ).model_dump(mode="json")
 
     assert body["coverage"] == {
@@ -115,7 +117,9 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
                 "name": "sh.helm.release.v1.storefront.v3",
                 "uid": "uid-3",
             },
-            "chart": None,
+            "chart": "storefront",
+            "chart_version": "1.2.3",
+            "chart_reason_codes": [],
             "app_version": None,
             "status": "deployed",
             "revision": 3,
@@ -130,6 +134,23 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
         }
     ]
     assert "must-not-leak" not in str(body)
+
+
+def test_release_chart_identity_fails_closed_for_conflicting_owned_resource_labels() -> None:
+    body = helm_release_list(
+        [_row()],
+        contexts=_contexts("cluster-a"),
+        agent_statuses=_online_agents("cluster-a"),
+        selected_cluster_ids=("cluster-a",),
+        owned_resource_rows=[
+            _owned_row(chart_label="storefront-1.2.3"),
+            _owned_row(kind="Service", chart_label="another-chart-9.0.0"),
+        ],
+    ).model_dump(mode="json")
+
+    assert body["releases"][0]["chart"] is None
+    assert body["releases"][0]["chart_version"] is None
+    assert body["releases"][0]["chart_reason_codes"] == ["helm_chart_identity_ambiguous"]
 
 
 def test_incomplete_label_collection_is_partial_so_empty_result_is_not_misleading() -> None:
