@@ -3580,32 +3580,36 @@
       }
     },
     "reference.feature.201": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm",
-      "frontendContract": "frontend/src/pages/helm",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.releases.HelmReleaseUpgradeRequest",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
+        "tests/test_operation_event_hub.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_upgrade",
           "consumer": "src/services/target/cluster-agent/commands/helm.py#run_catalog_helm_install",
-          "reason": "The existing Agent executor is recipe-bound installation only; it cannot safely upgrade an observed release and no provider-backed values validation, upgrade payload, capability, or CommandReceipt exists.",
+          "reason": "The dedicated Python endpoint pins an observed release revision, enforces DEPLOY_RUN and the live agent capability, accepts only a digest-pinned server recipe, validates typed values server-side, and returns the common audited CommandReceipt before the existing atomic Helm executor runs.",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "Upgrade controls remain hidden until the Python contract exposes an authorized values payload and resumable operation stream.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx#HelmReleaseUpgradeDialog",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
+          "reason": "The detail page exposes Upgrade only from a server-advertised capability, renders the server-owned typed value inputs, confirms target and diff once, submits no raw chart or repository input, and hands the receipt to the shared operation dock.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         },
         "realtime": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/api/operation-events.ts#subscribeCommandOperationEvents",
-          "reason": "The durable stream is reusable, but no upgrade command can issue an accepted receipt or first event.",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.ts",
+          "reason": "Upgrade acceptance stages the first durable OperationEvent in the command transaction and the existing resumable stream carries progress, cancellation, failure, and completion for the exact command ID.",
           "test": "tests/test_operation_event_hub.py"
         }
       }

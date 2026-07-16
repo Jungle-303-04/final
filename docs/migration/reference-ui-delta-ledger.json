@@ -10285,7 +10285,9 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx",
               "frontend/src/pages/helm/HelmPage.test.tsx",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
               "src/domains/helm/release_router.py",
               "src/packages/contracts/helm/releases.py"
             ],
@@ -10298,9 +10300,9 @@
             "plannedTestIds": [
               "helm.upgrade.provider-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "The Python Helm provider is read-only and has no values validation, upgrade executor, CommandReceipt, or resumable progress stream.",
-            "rationale": "The product keeps upgrade controls unavailable rather than forwarding a source-shaped values object to an unowned runtime."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product exposes a capability-gated Upgrade dialog only for an observed release revision, validates server-owned typed values against a digest-pinned recipe, returns the common CommandReceipt, and reuses the durable OperationEvent stream."
           }
         }
       ]

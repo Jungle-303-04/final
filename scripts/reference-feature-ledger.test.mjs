@@ -806,6 +806,31 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "blocked");
 });
 
+test("Helm 업그레이드는 서버 값 검증과 공용 operation stream 증거로 완결한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const contractId = "reference.feature.201";
+  const sourceKey = "upstream-ui:helm:upgrade-client:values-payload:v1";
+  const port = portMap.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  const interaction = classifications.classifications["web/src/api/client.ts"].interactions
+    .find((candidate) => candidate.sourceKey === sourceKey);
+
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(port.coverage.realtime.state, "implemented");
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+  assert.equal(interaction.opsiaPort.state, "in_progress");
+  assert.equal(interaction.opsiaPort.blockedReason, null);
+});
+
 test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계약 증거로 승격한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
