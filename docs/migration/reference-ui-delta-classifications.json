@@ -710,6 +710,10 @@
     "design.severity-token.contract": {
       "destination": "frontend/src/shared/ui/primitives/badge.test.tsx",
       "rationale": "Severity presentation must use shared semantic product tokens with light, dark, reduced-motion, and forced-color coverage instead of copying literal provider palette classes."
+    },
+    "resources.kind-icons.registry": {
+      "destination": "frontend/src/pages/resources/resourcePresentation.test.tsx",
+      "rationale": "Every known Kubernetes and provider kind must resolve through one reusable icon registry while unknown CRDs retain a neutral fallback."
     }
   },
   "classifications": {
@@ -8834,6 +8838,37 @@
             "state": "blocked",
             "blockedReason": "The source file hardcodes red, orange, amber, yellow, and slate Tailwind classes; copying it would create a second palette outside the product semantic design tokens and forced-color contract.",
             "rationale": "The product preserves the severity semantics through shared status and badge primitives backed by canonical CSS variables, while deliberately rejecting a duplicate literal-class palette."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/resource-icons.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:kind-icons:canonical-registry:v1",
+          "legacyContractIds": [],
+          "symbol": "getResourceIcon and getTopologyIcon",
+          "interaction": "resource catalogs and topology surfaces resolve core, GitOps, provider, autoscaling, networking, security, and arbitrary CRD kinds through one canonical icon registry with a neutral unknown fallback",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/resourcePresentation.ts",
+              "frontend/src/pages/resources/resourcePresentation.test.tsx",
+              "frontend/src/pages/resources/ResourcesCatalog.tsx",
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.kind-icons.registry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product extends its existing shared registry instead of introducing renderer-local maps; resource catalogs and application topology consume the same normalized kind lookup and unknown CRDs remain safe."
           }
         }
       ]

@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 81,
+  "pendingCount": 80,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -7045,8 +7045,35 @@
         "blobId": "ac32f75b25ec92cc9a94bddf1816281c410ff898",
         "sha256": "248678abf711a85167c76b7f0d41160a20a47bf415be5252d5cf42c59826de99"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:kind-icons:canonical-registry:v1",
+          "legacyContractIds": [],
+          "symbol": "getResourceIcon and getTopologyIcon",
+          "interaction": "resource catalogs and topology surfaces resolve core, GitOps, provider, autoscaling, networking, security, and arbitrary CRD kinds through one canonical icon registry with a neutral unknown fallback",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/resources/resourcePresentation.ts",
+              "frontend/src/pages/resources/resourcePresentation.test.tsx",
+              "frontend/src/pages/resources/ResourcesCatalog.tsx",
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.kind-icons.registry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product extends its existing shared registry instead of introducing renderer-local maps; resource catalogs and application topology consume the same normalized kind lookup and unknown CRDs remain safe."
+          }
+        }
+      ]
     },
     {
       "status": "M",

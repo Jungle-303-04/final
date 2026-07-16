@@ -137,7 +137,7 @@ describe("ResourcesCatalog responsive disclosure", () => {
 
     expect(container.querySelector(".lucide-box")).toBeTruthy();
     expect(container.querySelector(".lucide-cpu")).toBeTruthy();
-    expect(container.querySelector(".lucide-plug-zap")).toBeTruthy();
+    expect(container.querySelector(".lucide-plug")).toBeTruthy();
     expect(container.querySelector(".lucide-puzzle")).toBeTruthy();
     const custom = screen.getByRole("button", {
       name: "VeryLongCustomResourceDefinition, 0개",
