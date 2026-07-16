@@ -564,6 +564,87 @@ def test_apply_manifest_keeps_plan_diff_payload() -> None:
     assert applied["manifest"]["kind"] == "ConfigMap"
 
 
+def test_apply_manifest_reports_each_document_and_partial_failure() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = StubKubernetesClient()
+    applied: list[str] = []
+
+    async def stub_apply(
+        manifest: dict[str, object],
+        namespace: str,
+        *,
+        expected_uid: str | None = None,
+    ) -> tuple[bool, str, dict]:
+        metadata = manifest["metadata"]
+        assert isinstance(metadata, dict)
+        name = str(metadata["name"])
+        applied.append(name)
+        assert namespace == "sandbox"
+        if name == "checkout-api":
+            assert expected_uid == "deployment-uid-1"
+            return True, "manifest applied", {}
+        assert expected_uid is None
+        return False, "configmap rejected", {}
+
+    agent.apply_kubernetes_manifest = stub_apply
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.AgentConfig.APPLY_MANIFEST_ACTION,
+                "direct_execution": True,
+                "payload": {
+                    "diff": {
+                        "resource": "Deployment/checkout-api",
+                        "namespace": "sandbox",
+                        "desired_manifest": {
+                            "apiVersion": "apps/v1",
+                            "kind": "Deployment",
+                            "metadata": {"name": "checkout-api", "namespace": "sandbox"},
+                        },
+                    },
+                    "payload": {
+                        "resource_ref": {
+                            "kind": "Deployment",
+                            "namespace": "sandbox",
+                            "name": "checkout-api",
+                            "uid": "deployment-uid-1",
+                        },
+                        "desired_documents": [
+                            {
+                                "apiVersion": "apps/v1",
+                                "kind": "Deployment",
+                                "metadata": {
+                                    "name": "checkout-api",
+                                    "namespace": "sandbox",
+                                },
+                            },
+                            {
+                                "apiVersion": "v1",
+                                "kind": "ConfigMap",
+                                "metadata": {"name": "shared", "namespace": "sandbox"},
+                            },
+                        ],
+                    },
+                },
+            }
+        )
+    )
+
+    assert applied == ["checkout-api", "shared"]
+    assert result["status"] == "failed"
+    assert result["applied"] is True
+    assert result["completeness"] == "partial"
+    assert [(item["resource"], item["status"]) for item in result["resources"]] == [
+        ("Deployment/checkout-api", "completed"),
+        ("ConfigMap/shared", "failed"),
+    ]
+
+
 def test_rollout_restart_keeps_plan_diff_payload() -> None:
     module = load_agent_module()
     agent = object.__new__(module.TargetClusterAgent)

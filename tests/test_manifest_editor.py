@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from domains.gitops.repository_discovery import RepositoryDiscoveryService
 from domains.manifest_editor.router import (
+    apply_resource_manifest_now,
     approve_resource_manifest_edit,
     edit_workflow_id,
     ensure_source_is_current,
@@ -21,7 +22,10 @@ from domains.manifest_editor.validation import (
 from domains.scm.events import SafePrRequestedBody
 from domains.scm.pipeline import safe_pr_patch_sha256
 from packages.contracts.auth import Actor
-from packages.contracts.gateway.requests import ResourceManifestApproveRequest
+from packages.contracts.gateway.requests import (
+    ResourceManifestApproveRequest,
+    ResourceManifestDirectApplyRequest,
+)
 
 SOURCE = """\
 apiVersion: apps/v1
@@ -137,6 +141,7 @@ class ManifestApprovalDb:
             "kind": "Deployment",
             "namespace": "shop",
             "name": "checkout-api",
+            "uid": "deployment-uid-1",
         }
 
     def list_resource_manifest_sources(
@@ -168,6 +173,17 @@ class ManifestApprovalDb:
     def request_workflow_approval(self, payload: dict[str, object]) -> None:
         self.approvals.append(payload)
 
+    def list_cluster_agent_statuses(
+        self, workspace_id: str, cluster_id: str
+    ) -> list[dict[str, object]]:
+        assert (workspace_id, cluster_id) == ("workspace-1", "cluster-1")
+        return [{"status": "connected", "capabilities": ["command_receiver"]}]
+
+    async def get_agent_command(
+        self, _command_id: str, _workspace_id: str
+    ) -> dict[str, object] | None:
+        return None
+
 
 class ManifestApprovalClient:
     async def branch_sha(self, repo_ref: str, branch: str) -> str:
@@ -183,16 +199,38 @@ class ManifestApprovalClient:
         return SOURCE.encode()
 
 
+class PinnedManifestClient(ManifestApprovalClient):
+    def __init__(self, content: str) -> None:
+        self.pinned_content = content
+
+    async def content(self, repo_ref: str, ref: str, path: str) -> bytes:
+        assert (repo_ref, ref, path) == (
+            "project/repo",
+            "a" * 40,
+            "deploy/checkout.yaml",
+        )
+        return self.pinned_content.encode()
+
+
 class ManifestApprovalEvents:
     def __init__(self) -> None:
         self.body: object | None = None
 
-    async def accept_body(self, body: object, *, actor: Actor) -> SimpleNamespace:
+    async def accept_body(self, body: object, *, actor: Actor, **kwargs: object) -> SimpleNamespace:
         self.body = body
+        self.accept_kwargs = kwargs
         assert actor.user_id == "operator-1"
         return SimpleNamespace(
             event=SimpleNamespace(event_id="event-1", correlation_id="correlation-1")
         )
+
+
+class ManifestOperationEvents:
+    def __init__(self) -> None:
+        self.published: list[dict[str, object]] = []
+
+    async def publish(self, **payload: object) -> None:
+        self.published.append(payload)
 
 
 def test_approval_records_exact_authority_before_requesting_safe_pr() -> None:
@@ -238,3 +276,109 @@ def test_approval_records_exact_authority_before_requesting_safe_pr() -> None:
     assert approval["details"]["source_sha256"] == manifest_sha256(SOURCE)
     assert approval["details"]["desired_sha256"] == manifest_sha256(desired)
     assert approval["details"]["patch_sha256"] == safe_pr_patch_sha256(request.patches)
+
+
+def test_direct_apply_builds_server_owned_exact_command_and_common_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "shop")
+    desired = SOURCE.replace("replicas: 2", "replicas: 3")
+    db = ManifestApprovalDb()
+    events = ManifestApprovalEvents()
+    operation_events = ManifestOperationEvents()
+
+    response = asyncio.run(
+        apply_resource_manifest_now(
+            "resource-1",
+            ResourceManifestDirectApplyRequest(
+                application_id="app-1",
+                base_sha="a" * 40,
+                source_sha256=manifest_sha256(SOURCE),
+                edited_yaml=desired,
+                expected_desired_sha256=manifest_sha256(desired),
+                confirmation=True,
+                reason="Apply the inspected replica change",
+            ),
+            "manifest-idempotency-key-001",
+            SimpleNamespace(
+                workspace_id="workspace-1",
+                user_id="operator-1",
+                roles=("release_operator",),
+            ),
+            db,
+            events,
+            operation_events,
+            RepositoryDiscoveryService(PinnedManifestClient(SOURCE)),
+        )
+    )
+
+    assert response.status == "queued"
+    assert response.audit_event_id == response.event_id
+    command = events.body
+    assert command.action == "apply_manifest"
+    assert command.direct_execution is command.direct_execution_confirmed is True
+    assert command.approval_ref is None
+    assert command.diff.basis["resource_ref"] == {
+        "api_group": "apps",
+        "version": "v1",
+        "kind": "Deployment",
+        "namespace": "shop",
+        "name": "checkout-api",
+        "uid": "deployment-uid-1",
+    }
+    assert command.payload["desired_documents"][0]["spec"]["replicas"] == 3
+    assert command.payload["source"]["base_sha"] == "a" * 40
+    assert callable(events.accept_kwargs["transactional_stage"])
+    assert operation_events.published[0]["command_id"] == response.command_id
+
+
+def test_direct_apply_rejects_any_multi_document_namespace_before_acceptance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "shop")
+    source = (
+        SOURCE
+        + """\
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared
+  namespace: kube-system
+data:
+  mode: safe
+"""
+    )
+    desired = source.replace("replicas: 2", "replicas: 3")
+    db = ManifestApprovalDb()
+    events = ManifestApprovalEvents()
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            apply_resource_manifest_now(
+                "resource-1",
+                ResourceManifestDirectApplyRequest(
+                    application_id="app-1",
+                    base_sha="a" * 40,
+                    source_sha256=manifest_sha256(source),
+                    edited_yaml=desired,
+                    expected_desired_sha256=manifest_sha256(desired),
+                    confirmation=True,
+                    reason="Apply two reviewed documents",
+                ),
+                "manifest-idempotency-key-002",
+                SimpleNamespace(
+                    workspace_id="workspace-1",
+                    user_id="operator-1",
+                    roles=("release_operator",),
+                ),
+                db,
+                events,
+                ManifestOperationEvents(),
+                RepositoryDiscoveryService(PinnedManifestClient(source)),
+            )
+        )
+
+    assert error.value.status_code == 422
+    assert "namespace" in str(error.value.detail)
+    assert events.body is None
