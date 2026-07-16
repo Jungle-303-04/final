@@ -9,6 +9,8 @@ from types import ModuleType
 import yaml
 
 from domains.catalog.install import CatalogHelmInstallPayload
+from packages.config.helm import HelmArtifactLimits
+from packages.contracts.helm import HelmArtifactCommandPayload
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 RUNNER_PATH = ROOT_DIR / "src" / "services" / "target" / "cluster-agent" / "commands" / "helm.py"
@@ -194,3 +196,140 @@ def test_service_image_installs_checksum_verified_pinned_helm() -> None:
     assert 'sha256sum -c "${helm_archive}.sha256sum"' in dockerfile
     assert "COPY --from=tools /usr/local/bin/helm /usr/local/bin/helm" in dockerfile
     assert "helm version --short" in dockerfile
+
+
+def artifact_payload(**updates: object) -> HelmArtifactCommandPayload:
+    values: dict[str, object] = {
+        "cluster_id": "cluster-a",
+        "namespace": "storefront",
+        "release_name": "storefront",
+        "artifact": "manifest",
+        "revision": 3,
+    }
+    values.update(updates)
+    return HelmArtifactCommandPayload.model_validate(values)
+
+
+def artifact_limits(*, output_max_bytes: int = 1024 * 1024) -> HelmArtifactLimits:
+    return HelmArtifactLimits(
+        timeout_seconds=30,
+        output_max_bytes=output_max_bytes,
+        source_max_bytes=4 * 1024 * 1024,
+    )
+
+
+def test_helm_manifest_artifact_redacts_secret_bodies_and_sensitive_fields() -> None:
+    module = load_runner_module()
+    captured: list[list[str]] = []
+    raw = """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storefront
+data:
+  username: dXNlcg==
+  password: cGFzcw==
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          env:
+            - name: API_TOKEN
+              value: token-must-not-leak
+"""
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout=raw, stderr="")
+
+    result = module.run_helm_artifact_query(
+        artifact_payload(),
+        helm_binary="/usr/local/bin/helm",
+        run=fake_run,
+        limits=artifact_limits(),
+    )
+
+    assert result.succeeded is True
+    assert result.artifact is not None
+    assert result.artifact.redaction_applied is True
+    assert "dXNlcg==" not in result.artifact.content
+    assert "cGFzcw==" not in result.artifact.content
+    assert "token-must-not-leak" not in result.artifact.content
+    assert "<redacted>" in result.artifact.content
+    assert captured == [
+        [
+            "/usr/local/bin/helm",
+            "get",
+            "manifest",
+            "storefront",
+            "--namespace",
+            "storefront",
+            "--revision",
+            "3",
+        ]
+    ]
+
+
+def test_helm_values_diff_runs_exact_revisions_and_never_returns_sensitive_values() -> None:
+    module = load_runner_module()
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        revision = args[args.index("--revision") + 1]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=f"replicas: {revision}\npassword: secret-{revision}\n",
+            stderr="",
+        )
+
+    result = module.run_helm_artifact_query(
+        artifact_payload(
+            artifact="values_diff",
+            revision=2,
+            comparison_revision=3,
+            all_values=True,
+        ),
+        helm_binary="/usr/local/bin/helm",
+        run=fake_run,
+        limits=artifact_limits(),
+    )
+
+    assert result.succeeded is True
+    assert result.artifact is not None
+    assert result.artifact.format == "unified_diff"
+    assert "--- revision-2.yaml" in result.artifact.content
+    assert "+++ revision-3.yaml" in result.artifact.content
+    assert "secret-2" not in result.artifact.content
+    assert "secret-3" not in result.artifact.content
+    assert all("--all" in args for args in calls)
+    assert [args[args.index("--revision") + 1] for args in calls] == ["2", "3"]
+
+
+def test_helm_artifact_projection_is_bounded_after_redaction() -> None:
+    module = load_runner_module()
+
+    result = module.run_helm_artifact_query(
+        artifact_payload(artifact="values"),
+        helm_binary="/usr/local/bin/helm",
+        run=lambda args, **_kwargs: subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=f"description: {'가' * 200}\n",
+            stderr="",
+        ),
+        limits=artifact_limits(output_max_bytes=128),
+    )
+
+    assert result.succeeded is True
+    assert result.artifact is not None
+    assert result.artifact.truncated is True
+    assert result.artifact.content_bytes <= 128
+    assert "artifact truncated" in result.artifact.content

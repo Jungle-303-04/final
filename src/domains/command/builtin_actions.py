@@ -6,6 +6,10 @@ from domains.command.policy import (
     DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+)
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
@@ -188,3 +192,16 @@ class ClusterAgentUninstallCommand:
 )
 class ServiceHttpRequestCommand:
     """One bounded, read-only HTTP GET resolved from an exact core/v1 Service."""
+
+
+@command.action(
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    enforce_control_namespace=False,
+    read_only=True,
+    required_agent_capability=HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+)
+class HelmReleaseArtifactReadCommand:
+    """Read one revision-bound Helm artifact through the target agent."""

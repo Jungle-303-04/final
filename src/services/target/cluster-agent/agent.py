@@ -21,7 +21,7 @@ from commands import (
     command,
     cronjob_job_body,
 )
-from commands.helm import run_catalog_helm_install
+from commands.helm import run_catalog_helm_install, run_helm_artifact_query
 from commands.service_access import (
     ServiceAccessExecutionError,
     ServiceRequestCancelled,
@@ -105,6 +105,7 @@ from config import (
     KUBERNETES_ROLLOUT_TIMEOUT_SECONDS as CONFIG_KUBERNETES_ROLLOUT_TIMEOUT_SECONDS,
 )
 from domains.catalog.install import CatalogHelmInstallPayload
+from domains.command.actions import command_action_spec
 from domains.rca.test_scenario_adapters import (
     RcaTestCleanupPlan,
     default_test_scenario_adapter_registry,
@@ -160,6 +161,10 @@ from packages.contracts.gateway.requests import (
     StrictModel,
 )
 from packages.contracts.gitops import supported_kubernetes_resource
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HelmArtifactCommandPayload,
+)
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 from packages.contracts.service_access import (
@@ -1101,10 +1106,12 @@ class TargetClusterAgent:
         payload = self.command_payload(command)
         if action in RCA_TEST_COMMAND_ACTIONS and not rca_test_runs_enabled():
             return self.command_result(False, RCA_TEST_RUNS_DISABLED_MESSAGE)
-        if not getattr(self, "direct_commands_enabled", True) and action not in {
-            QUERY_RUN_ACTION,
-            Command.CLUSTER_AGENT_UNINSTALL_ACTION,
-        }:
+        action_spec = command_action_spec(action)
+        if (
+            not getattr(self, "direct_commands_enabled", True)
+            and action not in {QUERY_RUN_ACTION, Command.CLUSTER_AGENT_UNINSTALL_ACTION}
+            and not bool(action_spec and action_spec.read_only)
+        ):
             return self.command_result(False, AgentConfig.DIRECT_COMMANDS_DISABLED_MESSAGE)
         if action in {
             Command.KUBERNETES_NODE_CORDON_ACTION,
@@ -1300,6 +1307,26 @@ class TargetClusterAgent:
             "telemetry query executed",
             query=definition.__dict__,
             result=result,
+        )
+
+    @command.handler(
+        HELM_RELEASE_ARTIFACT_READ_ACTION,
+        payload_model=HelmArtifactCommandPayload,
+    )
+    async def helm_release_artifact_read_command(
+        self,
+        ctx: CommandContext[HelmArtifactCommandPayload],
+    ) -> JsonObject:
+        result = await asyncio.to_thread(run_helm_artifact_query, ctx.payload)
+        if not result.succeeded or result.artifact is None:
+            return ctx.fail(
+                "Helm artifact read failed",
+                error_code=result.error_code or "helm_artifact_read_failed",
+                retryable=False,
+            )
+        return ctx.ok(
+            "Helm artifact read completed",
+            artifact=result.artifact.model_dump(mode="json"),
         )
 
     @command.k8s(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -7,8 +8,15 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from domains.helm.release_router import create_helm_artifact_read
 from domains.helm.repository import HelmOwnedResourceObservationBatch
 from domains.identity.dependencies import require_session
+from packages.contracts.helm import (
+    HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HelmArtifactReadRequest,
+)
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
 
@@ -128,6 +136,20 @@ class HelmReleaseDb:
             if cluster_id in cluster_ids
         }
 
+    def list_cluster_agent_statuses(
+        self,
+        workspace_id: str,
+        cluster_id: str,
+    ) -> list[dict[str, object]]:
+        assert workspace_id == "workspace-a"
+        assert cluster_id == "cluster-a"
+        return [
+            {
+                "status": "connected",
+                "capabilities": [HELM_RELEASE_ARTIFACT_READ_CAPABILITY],
+            }
+        ]
+
 
 def _client(agent_statuses: dict[str, dict[str, str]] | None = None) -> TestClient:
     module = importlib.import_module("domains.helm.release_router")
@@ -201,3 +223,56 @@ def test_release_scope_reports_stale_or_missing_agent_without_relaxing_rbac() ->
     assert disconnected.status_code == 200
     assert disconnected.json()["releases"][0]["scope"]["freshness"] == "disconnected"
     assert "must-not-leak" not in stale.text
+
+
+def test_artifact_read_queues_one_exact_read_only_agent_command(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_accept(_events, command, *, actor, max_active_per_action):
+        captured["command"] = command
+        assert actor.user_id == "user-a"
+        assert max_active_per_action == HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER
+        accepted = SimpleNamespace(
+            event=SimpleNamespace(event_id="evt-helm-1", correlation_id="corr-helm-1")
+        )
+        return accepted, None
+
+    monkeypatch.setattr(
+        "domains.helm.release_router.accept_command_with_receipt_stage",
+        fake_accept,
+    )
+    response = asyncio.run(
+        create_helm_artifact_read(
+            namespace="storefront",
+            release_name="storefront",
+            payload=HelmArtifactReadRequest(
+                cluster_id="cluster-a",
+                artifact="manifest_diff",
+                revision=2,
+                comparison_revision=3,
+            ),
+            current=SimpleNamespace(
+                user_id="user-a",
+                workspace_id="workspace-a",
+                roles=("user",),
+            ),
+            db=HelmReleaseDb(),
+            events=SimpleNamespace(),
+            operation_events=SimpleNamespace(),
+        )
+    )
+
+    assert response.event_id == response.audit_event_id == "evt-helm-1"
+    command = captured["command"]
+    assert command.action == HELM_RELEASE_ARTIFACT_READ_ACTION
+    assert command.namespace == "storefront"
+    assert command.payload == {
+        "cluster_id": "cluster-a",
+        "artifact": "manifest_diff",
+        "revision": 2,
+        "comparison_revision": 3,
+        "all_values": False,
+        "namespace": "storefront",
+        "release_name": "storefront",
+    }
+    assert command.direct_execution is False

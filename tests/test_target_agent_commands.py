@@ -13,6 +13,11 @@ import httpx
 import pytest
 
 from packages.config.constants import Command
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HelmArtifactResult,
+)
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
     SERVICE_REQUEST_MAX_BODY_BYTES,
@@ -393,6 +398,53 @@ def test_service_http_command_truncates_response_and_advertises_capability() -> 
     assert result["service_request"]["body_bytes"] == SERVICE_REQUEST_MAX_BODY_BYTES
     assert len(result["service_request"]["body"].encode()) == SERVICE_REQUEST_MAX_BODY_BYTES
     assert SERVICE_HTTP_REQUEST_AGENT_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
+
+
+def test_helm_artifact_command_returns_only_the_typed_sanitized_projection(monkeypatch) -> None:
+    module = load_agent_module()
+    artifact = HelmArtifactResult(
+        artifact="manifest",
+        format="yaml",
+        namespace="storefront",
+        release_name="storefront",
+        revision=3,
+        content="---\nkind: Deployment\n",
+        content_sha256="0" * 64,
+        content_bytes=21,
+        source_bytes=64,
+        redaction_applied=True,
+    )
+    monkeypatch.setattr(
+        module,
+        "run_helm_artifact_query",
+        lambda _payload: SimpleNamespace(succeeded=True, artifact=artifact, error_code=""),
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.direct_commands_enabled = False
+    agent.kubernetes = StubKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "command_id": "cmd-helm-artifact-1",
+                "action": HELM_RELEASE_ARTIFACT_READ_ACTION,
+                "payload": {
+                    "cluster_id": "cluster-1",
+                    "namespace": "storefront",
+                    "release_name": "storefront",
+                    "artifact": "manifest",
+                    "revision": 3,
+                },
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["artifact"] == artifact.model_dump(mode="json")
+    assert HELM_RELEASE_ARTIFACT_READ_CAPABILITY in module.AgentConfig.AGENT_CAPABILITIES
 
 
 def test_apply_manifest_keeps_plan_diff_payload() -> None:

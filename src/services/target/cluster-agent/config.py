@@ -6,6 +6,7 @@ from packages.config.realtime import (
 )
 from packages.config.settings import env
 from packages.contracts.gateway import requests as gateway_requests
+from packages.contracts.helm import HELM_RELEASE_ARTIFACT_READ_CAPABILITY
 from packages.contracts.service_access import SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
@@ -135,6 +136,7 @@ AGENT_CAPABILITIES = [
     "pod_exec_stream",
     Command.CATALOG_HELM_INSTALL_CAPABILITY,
     Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
 ]
 
