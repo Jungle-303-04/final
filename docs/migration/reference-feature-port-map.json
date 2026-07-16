@@ -1474,7 +1474,7 @@
       }
     },
     "reference.feature.116": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.RcaIssueListResponse",
       "frontendContract": "frontend/src/features/issues/issuesContract.ts",
       "desktopContract": null,
@@ -1487,17 +1487,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/dashboard/router.py#rca_issues",
           "consumer": "src/domains/dashboard/repository.py#DashboardRepository.list_rca_issues",
-          "reason": "The authorized bounded queue and server severity projection are implemented, but namespace, category, matched totals, recent changes, and visibility summary are not part of this response.",
-          "test": "tests/test_dashboard_router.py"
+          "reason": "The versioned additive queue contract applies authorized namespace, severity, and category filters in one bounded server query, returns exact total and matched counts, exposes bounded facets and one batched recent-change projection, and distinguishes permission restriction, incomplete projection, and a verified empty result while retaining the rolling-compatible legacy response.",
+          "test": "tests/test_dashboard_router.py#test_rca_issues_uses_the_same_cluster_permission_and_additive_contract"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/features/issues/IssuesSurface.tsx#IssuesSurface",
           "consumer": "frontend/src/features/issues/createIssuesAdapter.ts#createIssuesAdapter",
-          "reason": "The queue polls visibly, keeps the last successful list, and renders permission failures, but does not expose the complete source filter and visibility contract.",
+          "reason": "The shared Issues surface sends the unified URL category and namespace scope through the versioned adapter, preserves the last successful queue during refresh, and renders exact matched counts plus distinct limited, restricted, empty, retry, and partial-evidence states without client-side invented totals.",
           "test": "frontend/src/features/issues/IssuesSurface.test.tsx"
         }
       }
