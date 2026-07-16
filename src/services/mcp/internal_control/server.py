@@ -87,7 +87,7 @@ class InternalControlMcpServer:
             "instructions": (
                 "Opsia control-plane tools. Read tools issue authenticated GET "
                 "requests. Write tools default to dry-run proposals and only submit "
-                "existing Gateway POST requests when OPSIA_MCP_ENABLE_WRITES=true "
+                "existing Gateway POST/PATCH requests when OPSIA_MCP_ENABLE_WRITES=true "
                 "and the call is explicitly confirmed, relying on Gateway "
                 "authentication, RBAC, audit, and workflow state checks."
             ),

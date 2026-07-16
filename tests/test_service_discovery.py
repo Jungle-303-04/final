@@ -67,6 +67,22 @@ def test_missing_runner_fails_fast(tmp_path: Path) -> None:
         discover_services(tmp_path)
 
 
+def test_explicitly_ignored_entrypoint_is_not_discovered(tmp_path: Path) -> None:
+    ignored_dir = tmp_path / "src" / "services" / "mcp" / "internal_control"
+    ignored_dir.mkdir(parents=True)
+    (ignored_dir / "app.py").write_text(
+        "RUNTIME_DISCOVERY_IGNORE = True\nprint('stdio entrypoint')\n",
+        encoding="utf-8",
+    )
+    service_dir = tmp_path / "src" / "services" / "gitops" / "x-worker"
+    service_dir.mkdir(parents=True)
+    (service_dir / "app.py").write_text('app = App("x-worker")\n', encoding="utf-8")
+
+    (svc,) = discover_services(tmp_path)
+
+    assert svc.name == "x-worker"
+
+
 def test_service_spec_name_required() -> None:
     with pytest.raises(ValueError):
         ServiceSpec(name=" ")
