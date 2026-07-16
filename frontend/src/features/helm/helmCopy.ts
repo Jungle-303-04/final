@@ -2,6 +2,11 @@
 export const HELM_COPY = {
   title: "Helm releases",
   refresh: "Refresh",
+  refreshPending: "Refreshing Helm releases.",
+  refreshSucceeded: "Helm releases refreshed.",
+  refreshFailed: "Could not refresh Helm releases. Showing the last observed result.",
+  refreshReconnecting: "Reconnecting Helm release data.",
+  refreshCancelled: "Helm release refresh was cancelled.",
   description: "Inventory-observed Helm release metadata for the current authorized scope.",
   searchLabel: "Filter releases",
   searchPlaceholder: "Name, namespace, or status",

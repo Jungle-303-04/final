@@ -163,7 +163,7 @@ export function useRefreshAnimation(
     } catch (error) {
       settle(attempt.id, isAbortError(error) ? "cancelled" : "failed");
     }
-  }, [awaitVoidObservation, clearObservationTimer, clearSuccessTimer, observation.dataUpdatedAt, reconcile, settle]);
+  }, [awaitVoidObservation, clearObservationTimer, clearSuccessTimer, observation.dataUpdatedAt, observation.isFetching, reconcile, settle]);
 
   return { active: phase === "pending", phase, refresh };
 }

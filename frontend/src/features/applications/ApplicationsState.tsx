@@ -1,6 +1,6 @@
 import { useI18n } from "../../shared/i18n";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { RefreshAction } from "../../shared/ui/RefreshFeedback";
+import { RefreshAction } from "../../motion/RefreshAction";
 import { applicationsCopy } from "../../shared/i18n/applicationSurfaceCopy";
 import type { ApplicationsFailure } from "./applicationsContract";
 import type { ApplicationsResource } from "./useApplicationsData";
@@ -14,12 +14,6 @@ export function ApplicationsRefreshControl<T>({
 }) {
   const { locale } = useI18n();
   const copy = applicationsCopy(locale);
-  const feedback = resource.refreshing
-    ? copy.refreshing
-    : resource.refreshFailure
-      ? copy.refreshFailed
-      : null;
-
   return (
     <div className="flex min-w-0 items-center gap-2">
       <RefreshAction
@@ -29,18 +23,14 @@ export function ApplicationsRefreshControl<T>({
         label={copy.refresh}
         onRefresh={onRefresh}
         size="icon"
+        statusCopy={{
+          cancelled: copy.refreshCancelled,
+          failed: copy.refreshFailed,
+          pending: copy.refreshing,
+          reconnecting: copy.refreshReconnecting,
+          succeeded: copy.refreshSucceeded,
+        }}
       />
-      {feedback ? (
-        <span
-          aria-atomic="true"
-          aria-live="polite"
-          className={resource.refreshFailure ? "text-xs text-destructive" : "sr-only"}
-          data-slot="applications-refresh-feedback"
-          role={resource.refreshFailure ? "alert" : "status"}
-        >
-          {feedback}
-        </span>
-      ) : null}
     </div>
   );
 }

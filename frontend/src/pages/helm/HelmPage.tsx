@@ -11,9 +11,9 @@ import type {
   HelmUnavailableFeature,
 } from "../../features/helm/helmContract";
 import { HELM_COPY } from "../../features/helm/helmCopy";
+import { RefreshAction } from "../../motion/RefreshAction";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
@@ -136,7 +136,6 @@ function HelmListBoundary({
       </div>
       <h2 className="sr-only" id="helm-release-list-title">{HELM_COPY.title}</h2>
       <HelmReleaseTable releases={releases} onOpen={onOpen} query={query} />
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{frame.refreshFailure.code}</p> : null}
     </section>
   );
 }
@@ -328,7 +327,6 @@ function HelmDetailBoundary({
           <UnavailableFact feature={detail.commands} label={HELM_COPY.commands} />
         </dl>
       </section>
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{frame.refreshFailure.code}</p> : null}
     </section>
   );
 }
@@ -377,6 +375,13 @@ function HelmRefreshAction({
       isRefreshing={isRefreshing}
       label={HELM_COPY.refresh}
       onRefresh={onRefresh}
+      statusCopy={{
+        cancelled: HELM_COPY.refreshCancelled,
+        failed: HELM_COPY.refreshFailed,
+        pending: HELM_COPY.refreshPending,
+        reconnecting: HELM_COPY.refreshReconnecting,
+        succeeded: HELM_COPY.refreshSucceeded,
+      }}
     />
   );
 }

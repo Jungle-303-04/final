@@ -8,12 +8,11 @@ import {
   type CostPort,
 } from "../../features/cost/costContract";
 import { COST_COPY } from "../../features/cost/costCopy";
+import { RefreshAction } from "../../motion/RefreshAction";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
-import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useCostOverview } from "./useCostOverviewData";
 
@@ -63,6 +62,13 @@ function CostContent({
           isRefreshing={frame.refreshing}
           label={COST_COPY.refresh}
           onRefresh={onRefresh}
+          statusCopy={{
+            cancelled: COST_COPY.refreshCancelled,
+            failed: COST_COPY.refreshFailed,
+            pending: COST_COPY.refreshPending,
+            reconnecting: COST_COPY.refreshReconnecting,
+            succeeded: COST_COPY.refreshSucceeded,
+          }}
         />
       </div>
       <ObservationNotice overview={overview} />
@@ -75,7 +81,6 @@ function CostContent({
         <SummaryCard label={COST_COPY.savings} value={overview.summary.savingsRecommendations} />
       </section>
       <ScopeCard overview={overview} />
-      {frame.refreshFailure ? <p className="text-sm text-destructive">{COST_COPY.refreshFailed}</p> : null}
     </section>
   );
 }
