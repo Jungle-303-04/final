@@ -46,7 +46,6 @@ from domains.inventory.router import router as inventory_router
 from domains.inventory_filter.router import router as inventory_filter_router
 from domains.issue_filter.router import router as issue_filter_router
 from domains.log_stream.router import router as log_stream_router
-from domains.workload_detail.router import router as workload_detail_router
 from domains.manifest_editor.router import router as manifest_editor_router
 from domains.parity.router import router as parity_router
 from domains.providers.router import router as providers_router
@@ -62,6 +61,7 @@ from domains.target.router import router as target_router
 from domains.timeline.fanout import InMemoryTimelineEventFanout
 from domains.timeline.router import router as timeline_router
 from domains.traffic.router import router as traffic_router
+from domains.workload_detail.router import router as workload_detail_router
 from packages.config.constants import Auth, CommandStatus
 from packages.config.constants import Redis as RedisConfig
 from packages.config.logs import CONTEXT_KEY, get_logger
