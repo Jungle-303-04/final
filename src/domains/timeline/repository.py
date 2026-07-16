@@ -579,6 +579,37 @@ class TimelineLedgerRepository(DatabaseConnection):
                 ).scalar_one()
             )
 
+    def timeline_diagnostics(self, workspace_id: str) -> dict[str, Any]:
+        """Return one workspace-scoped aggregate without loading replay payloads."""
+        cursor = TimelineLedgerCursor.__table__
+        ledger = TimelineLedgerEvent.__table__
+        last_sequence = (
+            select(cursor.c.last_sequence)
+            .where(cursor.c.workspace_id == workspace_id)
+            .scalar_subquery()
+        )
+        retained_from_sequence = (
+            select(cursor.c.retained_from_sequence)
+            .where(cursor.c.workspace_id == workspace_id)
+            .scalar_subquery()
+        )
+        statement = select(
+            func.count(ledger.c.sequence).label("event_count"),
+            func.min(ledger.c.occurred_at).label("oldest_occurred_at"),
+            func.max(ledger.c.occurred_at).label("newest_occurred_at"),
+            func.coalesce(last_sequence, 0).label("high_water_sequence"),
+            func.coalesce(retained_from_sequence, 1).label("retained_from_sequence"),
+        ).where(ledger.c.workspace_id == workspace_id)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().one()
+        return {
+            "event_count": int(row["event_count"] or 0),
+            "oldest_occurred_at": row["oldest_occurred_at"],
+            "newest_occurred_at": row["newest_occurred_at"],
+            "high_water_sequence": int(row["high_water_sequence"] or 0),
+            "retained_from_sequence": int(row["retained_from_sequence"] or 1),
+        }
+
     def _cursor_state(self, workspace_id: str) -> tuple[int, int]:
         cursor = TimelineLedgerCursor.__table__
         with self.connection() as conn:

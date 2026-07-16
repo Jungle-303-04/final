@@ -7,16 +7,21 @@ from collections.abc import Mapping
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 
+from domains.diagnostics.runtime import collect_runtime_diagnostics
+from domains.diagnostics.version_check import VersionCheckService
 from domains.identity.dependencies import require_session
 from packages.config.environments import is_production_environment
+from packages.contracts.bootstrap import RuntimeDiagnosticsResponse, VersionCheckResponse
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import DiagnosticsRequest
 from packages.contracts.gateway.responses import DiagnosticItem, DiagnosticsResponse
 from packages.contracts.gitops import supported_kubernetes_resource
+from packages.runtime.dependencies import get_db
 
 router = APIRouter()
+VERSION_CHECK_SERVICE_STATE_KEY = "version_check_service"
 
 DNS_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 REPO_REF_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
@@ -35,6 +40,40 @@ FAILURE_POLICIES = {"stop_on_failure", "pause_for_operator", "continue_independe
 ROLLBACK_POLICIES = {"manual", "safe_pr", "restart_last_successful", "disabled"}
 DEPLOY_STRATEGIES = {"rolling", "canary", "blue_green"}
 APPROVAL_GATES = {"inherit", "auto", "manual", "safe_pr"}
+
+
+def get_version_check_service(request: Request) -> VersionCheckService:
+    service = getattr(request.app.state, VERSION_CHECK_SERVICE_STATE_KEY, None)
+    if service is None:
+        service = VersionCheckService()
+        setattr(request.app.state, VERSION_CHECK_SERVICE_STATE_KEY, service)
+    return service
+
+
+@router.get(
+    gateway_routes.DIAGNOSTICS_PATH,
+    response_model=RuntimeDiagnosticsResponse,
+)
+async def runtime_diagnostics(
+    response: Response,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> RuntimeDiagnosticsResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return await collect_runtime_diagnostics(db, current)
+
+
+@router.get(
+    gateway_routes.VERSION_CHECK_PATH,
+    response_model=VersionCheckResponse,
+)
+async def version_check(
+    response: Response,
+    _current: Any = Depends(require_session),
+    service: VersionCheckService = Depends(get_version_check_service),
+) -> VersionCheckResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return await service.check()
 
 
 @router.post(gateway_routes.DIAGNOSTICS_PATH, response_model=DiagnosticsResponse)
