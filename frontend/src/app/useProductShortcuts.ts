@@ -18,6 +18,7 @@ interface ProductShortcutOptions {
   onHelpToggle: () => void;
   onNamespaceOpen: () => void;
   onRouteSelect: (routeDefinition: ProductRouteDefinition) => void;
+  onSearchFocus: () => void;
   onThemeToggle: () => void;
 }
 
@@ -77,6 +78,10 @@ export function useProductShortcuts(options: ProductShortcutOptions) {
       }
       if (definition.id === "context") {
         current.onContextOpen();
+        return;
+      }
+      if (definition.id === "search") {
+        current.onSearchFocus();
         return;
       }
       if (definition.id === "theme") {

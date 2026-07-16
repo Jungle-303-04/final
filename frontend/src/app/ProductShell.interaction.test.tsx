@@ -181,6 +181,29 @@ describe("ProductShell keyboard and help interaction", () => {
     }
   });
 
+  it("focuses the current screen search with slash", async () => {
+    vi.stubGlobal("ResizeObserver", class {
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    });
+    const restoreScrollIntoView = replaceProperty(Element.prototype, "scrollIntoView", vi.fn());
+    const user = userEvent.setup();
+    try {
+      renderShell();
+
+      await user.keyboard("/");
+
+      const input = screen.getByRole("textbox", {
+        name: "클러스터, 앱, 라벨, 리소스 필터",
+      });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+    } finally {
+      restoreScrollIntoView();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("opens the descriptor-backed command palette and excludes the removed Topology route", async () => {
     vi.stubGlobal("ResizeObserver", class {
       disconnect() {}

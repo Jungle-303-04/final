@@ -93,6 +93,7 @@ export type ShellMessageKey =
   | "shell.shortcut.dialogTitle"
   | "shell.shortcut.help"
   | "shell.shortcut.keyColumn"
+  | "shell.shortcut.search"
   | "shell.shortcut.resources.firstRow"
   | "shell.shortcut.resources.lastRow"
   | "shell.shortcut.resources.nextRow"

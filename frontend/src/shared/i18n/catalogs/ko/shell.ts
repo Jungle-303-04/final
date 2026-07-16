@@ -95,6 +95,7 @@ export const shellKo = {
   "shell.shortcut.dialogTitle": "키보드 단축키",
   "shell.shortcut.help": "키보드 단축키 열기",
   "shell.shortcut.keyColumn": "단축키",
+  "shell.shortcut.search": "현재 화면 검색으로 이동",
   "shell.shortcut.resources.firstRow": "첫 리소스",
   "shell.shortcut.resources.lastRow": "마지막 리소스",
   "shell.shortcut.resources.nextRow": "다음 리소스",

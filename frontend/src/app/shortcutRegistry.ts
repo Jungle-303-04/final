@@ -123,6 +123,12 @@ export function shellShortcutDefinitions(
       sequence: ["c"],
     },
     {
+      id: "search",
+      labelKey: "shell.shortcut.search",
+      group: "global",
+      sequence: ["/"],
+    },
+    {
       id: "theme",
       labelKey: "shell.shortcut.theme",
       group: "global",
@@ -321,12 +327,12 @@ function isEditableCandidate(candidate: unknown): boolean {
 
 function normalizeDefinitionKey(key: string): string {
   const normalized = key.toLocaleLowerCase("en-US");
-  if (/^(?:[a-z0-9?]|\[|\]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
+  if (/^(?:[a-z0-9?/]|\[|\]|shift\+[a-z0-9])$/u.test(normalized)) return normalized;
   throw new Error(`invalid shortcut key: ${key}`);
 }
 
 function normalizeEventKey(key: string, shiftKey: boolean): string | null {
-  if (key === "?" || key === "[" || key === "]") return key;
+  if (key === "?" || key === "/" || key === "[" || key === "]") return key;
   if (key.length !== 1) return null;
   const normalized = key.toLocaleLowerCase("en-US");
   if (!/^[a-z0-9]$/u.test(normalized)) return null;

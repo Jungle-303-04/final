@@ -74,6 +74,7 @@ const groupIcons = {
 } satisfies Record<SuggestionType, typeof Server>;
 
 export interface UnifiedFilterBarHandle {
+  focus: () => void;
   openGroup: (type: "cluster" | "namespace") => void;
 }
 
@@ -221,8 +222,13 @@ export const UnifiedFilterBar = forwardRef<
       shortcutFocusRef.current = false;
     });
   }, []);
+  const focus = useCallback(() => {
+    setGroupFilter(null);
+    setOpen(true);
+    queueMicrotask(() => inputRef.current?.focus());
+  }, []);
 
-  useImperativeHandle(ref, () => ({ openGroup }), [openGroup]);
+  useImperativeHandle(ref, () => ({ focus, openGroup }), [focus, openGroup]);
 
   return (
     <div

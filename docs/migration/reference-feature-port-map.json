@@ -312,6 +312,15 @@
         }
       }
     },
+    "reference.feature.051": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/app/ProductShell.interaction.test.tsx", "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar", "reason": "Search focus is browser keyboard state and reuses the existing authorized filter contract.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
+      }
+    },
     "reference.feature.052": {
       "deliveryStatus": "not_applicable",
       "desktopContract": null,

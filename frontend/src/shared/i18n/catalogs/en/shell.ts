@@ -95,6 +95,7 @@ export const shellEn = {
   "shell.shortcut.dialogTitle": "Keyboard shortcuts",
   "shell.shortcut.help": "Open keyboard shortcuts",
   "shell.shortcut.keyColumn": "Shortcut",
+  "shell.shortcut.search": "Focus current screen search",
   "shell.shortcut.resources.firstRow": "First resource",
   "shell.shortcut.resources.lastRow": "Last resource",
   "shell.shortcut.resources.nextRow": "Next resource",

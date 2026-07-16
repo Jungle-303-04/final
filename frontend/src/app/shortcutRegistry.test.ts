@@ -44,6 +44,8 @@ describe("shell shortcut registry", () => {
       .toMatchObject({ sequence: ["n"] });
     expect(definitions.find((definition) => definition.id === "context"))
       .toMatchObject({ sequence: ["c"] });
+    expect(definitions.find((definition) => definition.id === "search"))
+      .toMatchObject({ sequence: ["/"] });
   });
 
   it("matches an unavailable route chord so the shell can give honest feedback", () => {
@@ -63,6 +65,7 @@ describe("shell shortcut registry", () => {
       .toBe("diagnostics");
     expect(matcher.handle(keyEvent("n"))?.id).toBe("namespace");
     expect(matcher.handle(keyEvent("c"))?.id).toBe("context");
+    expect(matcher.handle(keyEvent("/"))?.id).toBe("search");
   });
 
   it("owns route and Resources collection chords in one active-surface registry", () => {

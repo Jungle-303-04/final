@@ -1744,28 +1744,39 @@
     },
     {
       "contractId": "reference.feature.051",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.051"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-051",
       "section": "5. Keyboard 전수표",
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "reason": "Search focus is browser keyboard state and reuses the existing authorized filter contract.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/features/global-filter/UnifiedFilterBar.tsx#UnifiedFilterBar",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

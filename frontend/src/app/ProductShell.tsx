@@ -213,6 +213,7 @@ function ProductShellFrame({
     onHelpToggle: toggleShortcutHelp,
     onNamespaceOpen: () => unifiedFilterRef.current?.openGroup("namespace"),
     onRouteSelect: selectProductRoute,
+    onSearchFocus: () => unifiedFilterRef.current?.focus(),
     onThemeToggle: themeController.toggle,
   });
   if (!currentRoute) {
