@@ -465,8 +465,8 @@ def unit_of_work_or_null(db: Any) -> AbstractContextManager[Any]:
     """db 가 unit_of_work 를 제공하면 그 트랜잭션을, 아니면 no-op 컨텍스트를 반환함.
 
     라우터가 여러 저장소 쓰기와 outbox 스테이징을 한 트랜잭션으로 묶는 용도 —
-    안쪽의 connection()/unit_of_work() 호출과 accept_body 의 outbox 스테이징
-    (asyncio.to_thread 는 ContextVar 를 복사함)이 모두 이 트랜잭션에 합류함.
+    안쪽의 connection()/unit_of_work() 호출과 accept_body 의 outbox 스테이징이
+    같은 스레드에서 이 트랜잭션에 합류함.
     unit_of_work 가 없는 테스트 비실데이터는 기존처럼 개별 호출로 동작함.
     """
     unit_of_work = getattr(db, "unit_of_work", None)
