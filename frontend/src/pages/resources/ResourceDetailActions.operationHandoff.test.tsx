@@ -29,6 +29,7 @@ describe("ResourceDetailActions operation handoff", () => {
         .mockResolvedValueOnce({ accepted: true, correlationId: "correlation-a", commandId: "command-a", eventId: "event-a" })
         .mockResolvedValueOnce({ accepted: true, correlationId: "correlation-b", commandId: "command-b", eventId: "event-b" }),
       previewDeletion: vi.fn(),
+      previewRollback: vi.fn(),
     };
     const store = createOperationStatusStore(completedOperations());
     const view = renderSurface(store, actionsPort, true);
@@ -63,7 +64,7 @@ describe("ResourceDetailActions operation handoff", () => {
         }}>
           <DiagnoseSessionProvider port={diagnose}>
             <ResourceDetailActions
-              actionsPort={{ execute: vi.fn(), previewDeletion: vi.fn() }}
+              actionsPort={{ execute: vi.fn(), previewDeletion: vi.fn(), previewRollback: vi.fn() }}
               capabilities={{ ...capabilities, data: { ...capabilities.data!, capabilities: [] } }}
               detail={detail}
             />
@@ -147,7 +148,7 @@ describe("ResourceDetailActions operation handoff", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ResourceDetailActions
-          actionsPort={{ execute, previewDeletion: vi.fn() }}
+          actionsPort={{ execute, previewDeletion: vi.fn(), previewRollback: vi.fn() }}
           capabilities={cronjobCapabilities}
           detail={cronjobDetail}
           onInvalidate={onInvalidate}
@@ -220,7 +221,7 @@ describe("ResourceDetailActions operation handoff", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
         <ResourceDetailActions
-          actionsPort={{ execute, previewDeletion }}
+          actionsPort={{ execute, previewDeletion, previewRollback: vi.fn() }}
           capabilities={{
             ...capabilities,
             data: { ...capabilities.data!, capabilities: [deleteCapability] },
@@ -242,6 +243,91 @@ describe("ResourceDetailActions operation handoff", () => {
       expect.objectContaining({
         preview_revision: `sha256:${"a".repeat(64)}`,
         idempotency_key: expect.stringMatching(/^resource-delete-/u),
+      }),
+    ));
+  });
+
+  it("loads an exact revision preview and submits one rollback confirmation", async () => {
+    const user = userEvent.setup();
+    const execute = vi.fn().mockResolvedValue({
+      accepted: true,
+      auditEventId: "event-rollback",
+      commandId: "command-rollback",
+      correlationId: "correlation-rollback",
+      eventId: "event-rollback",
+      status: "queued",
+    });
+    const previewRollback = vi.fn().mockResolvedValue({
+      availability: "available",
+      completeness: "exact",
+      current: {
+        resource: {
+          apiGroup: "apps",
+          version: "v1",
+          kind: "Deployment",
+          namespace: "shop",
+          name: "checkout",
+          uid: "uid-1",
+        },
+        resourceVersion: "42",
+        templateSha256: `sha256:${"c".repeat(64)}`,
+      },
+      nextCursor: null,
+      reason: null,
+      revisions: [{
+        changes: [{ path: "/spec/containers/0/image", before: "checkout:v3", after: "checkout:v2" }],
+        createdAt: "2026-07-02T00:00:00Z",
+        previewRevision: `sha256:${"p".repeat(64)}`,
+        resource: {
+          apiGroup: "apps",
+          version: "v1",
+          kind: "ReplicaSet",
+          namespace: "shop",
+          name: "checkout-r2",
+          uid: "revision-uid-2",
+        },
+        resourceVersion: "2",
+        revision: "2",
+        templateSha256: `sha256:${"t".repeat(64)}`,
+      }],
+      snapshotId: "snapshot-42",
+    });
+    const rollbackCapability: ResourceActionCapability = {
+      ...capability,
+      capabilityId: "workload.rollback",
+      description: "Restore an exact observed workload revision.",
+      label: "Rollback",
+      path: "/resource-rollbacks/inventory-1",
+    };
+
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceDetailActions
+          actionsPort={{ execute, previewDeletion: vi.fn(), previewRollback }}
+          capabilities={{
+            ...capabilities,
+            data: { ...capabilities.data!, capabilities: [rollbackCapability] },
+          }}
+          detail={detail}
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Rollback" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(previewRollback).toHaveBeenCalledWith(rollbackCapability);
+    expect(within(dialog).getByText("checkout:v3 → checkout:v2")).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(execute).toHaveBeenCalledWith(
+      rollbackCapability,
+      {},
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^workload-rollback-/u),
+        rollback: expect.objectContaining({
+          previewRevision: `sha256:${"p".repeat(64)}`,
+          targetResourceVersion: "2",
+        }),
       }),
     ));
   });

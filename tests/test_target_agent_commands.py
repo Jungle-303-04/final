@@ -228,6 +228,86 @@ class CronJobKubernetesClient(StubKubernetesClient):
         }
 
 
+class WorkloadRollbackKubernetesClient(StubKubernetesClient):
+    def __init__(self, *, workload_uid: str = "deployment-uid") -> None:
+        super().__init__()
+        self.workload_uid = workload_uid
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        if kwargs["resource"] == "deployments":
+            return {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {
+                    "name": "checkout",
+                    "namespace": "sandbox",
+                    "uid": self.workload_uid,
+                    "resourceVersion": "42",
+                },
+                "spec": {
+                    "template": {
+                        "metadata": {"labels": {"app": "checkout"}},
+                        "spec": {"containers": [{"name": "api", "image": "checkout:v3"}]},
+                    }
+                },
+            }
+        return {
+            "apiVersion": "apps/v1",
+            "kind": "ReplicaSet",
+            "metadata": {
+                "name": "checkout-r2",
+                "namespace": "sandbox",
+                "uid": "revision-uid-2",
+                "resourceVersion": "2",
+                "annotations": {"deployment.kubernetes.io/revision": "2"},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "apps/v1",
+                        "kind": "Deployment",
+                        "name": "checkout",
+                        "uid": "deployment-uid",
+                        "controller": True,
+                    }
+                ],
+            },
+            "spec": {
+                "template": {
+                    "metadata": {"labels": {"app": "checkout"}},
+                    "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+                }
+            },
+        }
+
+
+def workload_rollback_payload() -> dict[str, object]:
+    return {
+        "namespace": "sandbox",
+        "name": "checkout",
+        "workload_ref": {
+            "api_group": "apps",
+            "version": "v1",
+            "kind": "Deployment",
+            "namespace": "sandbox",
+            "name": "checkout",
+            "uid": "deployment-uid",
+        },
+        "workload_resource_version": "42",
+        "target_revision_ref": {
+            "api_group": "apps",
+            "version": "v1",
+            "kind": "ReplicaSet",
+            "namespace": "sandbox",
+            "name": "checkout-r2",
+            "uid": "revision-uid-2",
+        },
+        "target_revision_resource_version": "2",
+        "target_revision": "2",
+        "target_template_sha256": "sha256:ce7e2d893e3d2f223a33c8ba9db28d6e5cdf8a3d6afc89f944f775777627f6c8",
+    }
+
+
 def cronjob_command_payload(
     *,
     namespace: str = "team-jobs",
@@ -2118,6 +2198,80 @@ def test_workload_commands_use_exact_registered_kubernetes_resource(
     else:
         assert patch["body"] == {"spec": {"replicas": replicas}}
         assert patch["subresource"] == "scale"
+
+
+def test_workload_rollback_revalidates_both_cas_identities_before_patch() -> None:
+    module = load_agent_module()
+    kubernetes = WorkloadRollbackKubernetesClient()
+    payload = workload_rollback_payload()
+    payload["target_template_sha256"] = module.workload_template_sha256(
+        {
+            "metadata": {"labels": {"app": "checkout"}},
+            "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+        }
+    )
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+                "direct_execution": True,
+                "payload": payload,
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["revision"] == "2"
+    assert result["partial_failure"] is False
+    assert [item["resource"] for item in kubernetes.gets] == ["deployments", "replicasets"]
+    assert kubernetes.patches == [
+        {
+            "api_group": "apps",
+            "version": "v1",
+            "namespace": "sandbox",
+            "resource": "deployments",
+            "name": "checkout",
+            "body": {
+                "metadata": {"resourceVersion": "42"},
+                "spec": {
+                    "template": {
+                        "metadata": {"labels": {"app": "checkout"}},
+                        "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+                    }
+                },
+            },
+        }
+    ]
+
+
+def test_workload_rollback_rejects_recreated_workload_without_any_patch() -> None:
+    module = load_agent_module()
+    kubernetes = WorkloadRollbackKubernetesClient(workload_uid="recreated-uid")
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = kubernetes
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+                "direct_execution": True,
+                "payload": workload_rollback_payload(),
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert "stale" in result["message"]
+    assert kubernetes.patches == []
 
 
 @pytest.mark.parametrize(

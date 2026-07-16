@@ -39,6 +39,9 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
         Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
         HELM_RELEASE_ARTIFACT_READ_ACTION,
     }
     cronjob_actions = {
@@ -54,6 +57,9 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_NODE_UNCORDON_ACTION,
         Command.APPLY_MANIFEST_ACTION,
         Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
@@ -95,6 +101,15 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         assert node is not None
         assert node.enforce_control_namespace is False
         assert node.required_agent_capability == Command.KUBERNETES_NODE_CONTROL_CAPABILITY
+    for action in (
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+    ):
+        rollback = command_action_spec(action)
+        assert rollback is not None
+        assert rollback.supports_cancel is True
+        assert rollback.required_agent_capability == Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY
 
 
 def test_spec_lookup_and_namespace_policy() -> None:

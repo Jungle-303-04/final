@@ -935,7 +935,7 @@ def test_regular_kubernetes_snapshot_excludes_rca_test_resources() -> None:
     assert [item["name"] for item in snapshot["endpoints"]] == ["normal-service-abc"]
 
 
-def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -> None:
+def test_regular_kubernetes_snapshot_separates_scaled_down_replicaset_history() -> None:
     _module, kubernetes_module = load_evidence_modules()
     provider = kubernetes_module.KubernetesSnapshotProvider(cluster_id="cluster-1")
 
@@ -972,6 +972,11 @@ def test_regular_kubernetes_snapshot_excludes_scaled_down_replicaset_history() -
     )
 
     assert [item["name"] for item in snapshot["workloads"]] == [
+        "orders-api-current",
+        "orders-api-terminating",
+    ]
+    assert [item["name"] for item in snapshot["workload_revisions"]] == [
+        "orders-api-old",
         "orders-api-current",
         "orders-api-terminating",
     ]
