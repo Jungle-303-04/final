@@ -95,4 +95,23 @@ export interface HelmEndpointDependencies {
     input: { clusterId: string; namespace: string; releaseName: string },
     signal?: AbortSignal,
   ): Promise<HelmReleaseDetailEndpoint>;
+  startHelmArtifactRead(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      artifact: "manifest" | "values" | "manifest_diff" | "values_diff";
+      revision: number;
+      comparisonRevision?: number;
+      allValues?: boolean;
+    },
+    signal?: AbortSignal,
+  ): Promise<{
+    accepted: true;
+    event_id: string;
+    audit_event_id: string;
+    correlation_id: string;
+    command_id: string;
+    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+  }>;
 }

@@ -1,4 +1,6 @@
 import {
+  type HelmArtifactReceipt,
+  type HelmArtifactResult,
   HelmPortFailure,
   type HelmClusterScope,
   type HelmFailureCode,
@@ -12,6 +14,7 @@ import {
   type HelmResourceHealth,
   type HelmUnavailableFeature,
 } from "./helmContract";
+import { helmArtifactResultSchema } from "./helmArtifactSchemas";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
@@ -33,6 +36,38 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
     async getRelease(request, signal) {
       return withPortFailure(async () => toDetail(await endpoints.getHelmRelease(request, signal)));
     },
+    async readArtifact(request, signal) {
+      return withPortFailure(async () => {
+        const receipt = await endpoints.startHelmArtifactRead(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm artifact audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+  };
+}
+
+export function toHelmArtifactOperationResult(value: unknown): HelmArtifactResult | null {
+  const payload = recordValue(value);
+  const result = recordValue(payload?.result);
+  const parsed = helmArtifactResultSchema.safeParse(result?.artifact);
+  if (!parsed.success) return null;
+  const artifact = parsed.data;
+  return {
+    artifact: artifact.artifact,
+    format: artifact.format === "unified_diff" ? "unified-diff" : "yaml",
+    namespace: artifact.namespace,
+    releaseName: artifact.release_name,
+    revision: artifact.revision,
+    comparisonRevision: artifact.comparison_revision,
+    allValues: artifact.all_values,
+    content: artifact.content,
+    contentSha256: artifact.content_sha256,
+    contentBytes: artifact.content_bytes,
+    sourceBytes: artifact.source_bytes,
+    redactionApplied: artifact.redaction_applied,
+    truncated: artifact.truncated,
   };
 }
 
@@ -136,6 +171,19 @@ function toResourceRef(value: Awaited<ReturnType<HelmEndpointDependencies["listH
 
 function toUnavailable(value: { availability: "unavailable"; reason_code: string }): HelmUnavailableFeature {
   return { availability: value.availability, reasonCode: value.reason_code };
+}
+
+function toArtifactReceipt(
+  value: Awaited<ReturnType<HelmEndpointDependencies["startHelmArtifactRead"]>>,
+): HelmArtifactReceipt {
+  return {
+    accepted: value.accepted,
+    eventId: value.event_id,
+    auditEventId: value.audit_event_id,
+    correlationId: value.correlation_id,
+    commandId: value.command_id,
+    status: value.status,
+  };
 }
 
 async function withPortFailure<T>(operation: () => Promise<T>): Promise<T> {

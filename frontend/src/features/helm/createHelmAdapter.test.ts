@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createHelmAdapter } from "./createHelmAdapter";
+import { createHelmAdapter, toHelmArtifactOperationResult } from "./createHelmAdapter";
 
 describe("createHelmAdapter", () => {
   it("keeps unavailable integrations explicit instead of casting provider data", async () => {
     const port = createHelmAdapter({
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint()),
       getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
+      startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
     });
 
     const list = await port.listReleases({ clusterIds: ["cluster-a"] });
@@ -14,6 +15,13 @@ describe("createHelmAdapter", () => {
       clusterId: "cluster-a",
       namespace: "storefront",
       releaseName: "storefront",
+    });
+    const artifactReceipt = await port.readArtifact({
+      clusterId: "cluster-a",
+      namespace: "storefront",
+      releaseName: "storefront",
+      artifact: "manifest",
+      revision: 3,
     });
 
     expect(list.releases[0]).toMatchObject({
@@ -40,17 +48,48 @@ describe("createHelmAdapter", () => {
       refreshAfterSeconds: 10,
       postMutationRefreshAfterSeconds: 1.2,
     });
+    expect(artifactReceipt).toMatchObject({
+      commandId: "cmd-helm-1",
+      auditEventId: "evt-helm-1",
+    });
   });
 
   it("preserves server-derived stale freshness without frontend inference", async () => {
     const port = createHelmAdapter({
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint("stale")),
       getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
+      startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
     });
 
     const list = await port.listReleases({ clusterIds: ["cluster-a"] });
 
     expect(list.releases[0]?.scope.freshness).toBe("stale");
+  });
+
+  it("accepts only a typed redacted artifact from a terminal operation event", () => {
+    const result = toHelmArtifactOperationResult({
+      result: {
+        artifact: artifactResult(),
+      },
+    });
+    const unsafe = toHelmArtifactOperationResult({
+      result: {
+        artifact: {
+          ...artifactResult(),
+          redaction_applied: false,
+          content: "password=must-not-leak",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      artifact: "manifest_diff",
+      format: "unified-diff",
+      revision: 2,
+      comparisonRevision: 3,
+      redactionApplied: true,
+    });
+    expect(unsafe).toBeNull();
   });
 });
 
@@ -131,4 +170,34 @@ function releaseEndpoint(freshness: "live" | "stale" | "partial" | "disconnected
 
 function unavailable(reason_code: string) {
   return { availability: "unavailable" as const, reason_code };
+}
+
+function receipt() {
+  return {
+    accepted: true as const,
+    event_id: "evt-helm-1",
+    audit_event_id: "evt-helm-1",
+    correlation_id: "corr-helm-1",
+    command_id: "cmd-helm-1",
+    status: "queued" as const,
+  };
+}
+
+function artifactResult() {
+  const content = "--- revision-2.yaml\n+++ revision-3.yaml\n";
+  return {
+    artifact: "manifest_diff" as const,
+    format: "unified_diff" as const,
+    namespace: "storefront",
+    release_name: "storefront",
+    revision: 2,
+    comparison_revision: 3,
+    all_values: false,
+    content,
+    content_sha256: "0".repeat(64),
+    content_bytes: new TextEncoder().encode(content).byteLength,
+    source_bytes: 120,
+    redaction_applied: true as const,
+    truncated: false,
+  };
 }

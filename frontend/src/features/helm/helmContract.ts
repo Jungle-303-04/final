@@ -53,6 +53,40 @@ export interface HelmOwnedResourceObservation {
 
 export type HelmOwnedResources = HelmUnavailableFeature | HelmOwnedResourceObservation;
 
+export type HelmArtifactKind = "manifest" | "values" | "manifest_diff" | "values_diff";
+
+export interface HelmArtifactReadRequest extends HelmReleaseDetailRequest {
+  artifact: HelmArtifactKind;
+  revision: number;
+  comparisonRevision?: number;
+  allValues?: boolean;
+}
+
+export interface HelmArtifactReceipt {
+  accepted: true;
+  eventId: string;
+  auditEventId: string;
+  correlationId: string;
+  commandId: string;
+  status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+}
+
+export interface HelmArtifactResult {
+  artifact: HelmArtifactKind;
+  format: "yaml" | "unified-diff";
+  namespace: string;
+  releaseName: string;
+  revision: number;
+  comparisonRevision: number | null;
+  allValues: boolean;
+  content: string;
+  contentSha256: string;
+  contentBytes: number;
+  sourceBytes: number;
+  redactionApplied: true;
+  truncated: boolean;
+}
+
 export interface HelmObservationCoverage {
   availability: HelmAvailability;
   observedAt: string | null;
@@ -133,4 +167,8 @@ export class HelmPortFailure extends Error {
 export interface HelmPort {
   listReleases(request: HelmReleaseListRequest, signal?: AbortSignal): Promise<HelmReleaseList>;
   getRelease(request: HelmReleaseDetailRequest, signal?: AbortSignal): Promise<HelmReleaseDetail>;
+  readArtifact(
+    request: HelmArtifactReadRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmArtifactReceipt>;
 }

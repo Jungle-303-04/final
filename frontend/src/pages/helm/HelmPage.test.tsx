@@ -13,9 +13,13 @@ import {
 import { HelmPage } from "./HelmPage";
 
 const scopeState = vi.hoisted(() => ({ value: null as unknown }));
+const operationState = vi.hoisted(() => ({ value: null as unknown }));
 
 vi.mock("../../features/cluster-scope/ClusterScopeProvider", () => ({
   useClusterScope: () => scopeState.value,
+}));
+vi.mock("../../features/operations/OperationStatusStore", () => ({
+  useOptionalOperationStatusStore: () => operationState.value,
 }));
 
 afterEach(() => cleanup());
@@ -24,6 +28,7 @@ beforeEach(() => {
   scopeState.value = {
     selection: { kind: "selected", cluster: { id: "cluster-a" } },
   };
+  operationState.value = null;
 });
 
 describe("HelmPage", () => {
@@ -185,6 +190,67 @@ describe("HelmPage", () => {
     expect(await screen.findByText("This release capability is not available from the current source.")).toBeTruthy();
     expect(screen.queryByText("unknown_internal_helm_feature_reason")).toBeNull();
   });
+
+  it("streams a redacted revision artifact and renders only the typed result", async () => {
+    const port = helmPort();
+    const content = "---\nkind: Deployment\nmetadata:\n  name: storefront\n";
+    const completedSnapshot = {
+      commandId: "cmd-helm-1",
+      event: {
+        commandId: "cmd-helm-1",
+        sequence: 2,
+        kind: "completed" as const,
+        occurredAt: "2026-07-16T09:02:00Z",
+        payload: {
+          result: {
+            artifact: {
+              artifact: "manifest",
+              format: "yaml",
+              namespace: "storefront",
+              release_name: "storefront",
+              revision: 3,
+              comparison_revision: null,
+              all_values: false,
+              content,
+              content_sha256: "0".repeat(64),
+              content_bytes: new TextEncoder().encode(content).byteLength,
+              source_bytes: 80,
+              redaction_applied: true,
+              truncated: false,
+            },
+          },
+        },
+      },
+      failure: null,
+      retry: null,
+      sequence: 2,
+      status: "completed" as const,
+      updatedAt: 1,
+    };
+    const store = {
+      start: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+      getSnapshot: vi.fn(() => completedSnapshot),
+    };
+    operationState.value = store;
+    renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load manifest" }));
+
+    await waitFor(() => expect(port.readArtifact).toHaveBeenCalledWith({
+      clusterId: "cluster-a",
+      namespace: "storefront",
+      releaseName: "storefront",
+      artifact: "manifest",
+      revision: 3,
+      comparisonRevision: undefined,
+      allValues: false,
+    }));
+    expect(store.start).toHaveBeenCalledWith("cmd-helm-1");
+    expect(await screen.findByText("Sensitive values were removed by the cluster agent.")).toBeTruthy();
+    expect(screen.getByText(/kind: Deployment/u)).toBeTruthy();
+    expect(screen.queryByText("password=must-not-leak")).toBeNull();
+  });
 });
 
 function renderRoute(path: string, port: HelmPort) {
@@ -201,7 +267,11 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname}</output>;
 }
 
-function helmPort(): HelmPort & { listReleases: ReturnType<typeof vi.fn>; getRelease: ReturnType<typeof vi.fn> } {
+function helmPort(): HelmPort & {
+  listReleases: ReturnType<typeof vi.fn>;
+  getRelease: ReturnType<typeof vi.fn>;
+  readArtifact: ReturnType<typeof vi.fn>;
+} {
   return {
     listReleases: vi.fn().mockResolvedValue({
       releases: [release()],
@@ -210,6 +280,14 @@ function helmPort(): HelmPort & { listReleases: ReturnType<typeof vi.fn>; getRel
       coverage: { availability: "available", observedAt: "2026-07-16T09:00:00Z", reasonCodes: [] },
     }),
     getRelease: vi.fn().mockResolvedValue(detail()),
+    readArtifact: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "evt-helm-1",
+      auditEventId: "evt-helm-1",
+      correlationId: "corr-helm-1",
+      commandId: "cmd-helm-1",
+      status: "queued",
+    }),
   };
 }
 

@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getHelmRelease,
+  HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
   listHelmReleases,
+  startHelmArtifactRead,
 } from "./helm-releases";
 
 describe("Helm release API", () => {
@@ -69,6 +71,35 @@ describe("Helm release API", () => {
       namespace: "storefront",
       releaseName: "storefront",
     })).rejects.toMatchObject({ kind: "invalid-payload" });
+  });
+
+  it("queues one revision-bound artifact read without browser-side Helm data", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(receipt()));
+
+    await expect(startHelmArtifactRead({
+      clusterId: "cluster-a",
+      namespace: "team/a",
+      releaseName: "shop/front",
+      artifact: "manifest_diff",
+      revision: 2,
+      comparisonRevision: 3,
+    })).resolves.toMatchObject({ command_id: "cmd-helm-1" });
+
+    expect(HELM_RELEASE_ARTIFACT_PATH).toBe(
+      "/api/helm/releases/{namespace}/{release_name}/artifacts",
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/helm/releases/team%2Fa/shop%2Ffront/artifacts",
+    );
+    const request = fetchMock.mock.calls[0]?.[1];
+    expect(request?.method).toBe("POST");
+    expect(JSON.parse(String(request?.body))).toEqual({
+      cluster_id: "cluster-a",
+      artifact: "manifest_diff",
+      revision: 2,
+      comparison_revision: 3,
+      all_values: false,
+    });
   });
 });
 
@@ -157,6 +188,17 @@ function ownedResources() {
 
 function unavailable(reason_code: string) {
   return { availability: "unavailable", reason_code };
+}
+
+function receipt() {
+  return {
+    accepted: true,
+    event_id: "evt-helm-1",
+    audit_event_id: "evt-helm-1",
+    correlation_id: "corr-helm-1",
+    command_id: "cmd-helm-1",
+    status: "queued",
+  };
 }
 
 function jsonResponse(payload: unknown): Response {

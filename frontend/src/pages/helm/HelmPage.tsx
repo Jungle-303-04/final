@@ -1,21 +1,38 @@
 import { ArrowLeft, PackageSearch } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type {
+  HelmArtifactKind,
   HelmFailureCode,
   HelmOwnedResources,
   HelmPort,
   HelmPortFailure,
   HelmRelease,
+  HelmReleaseDetail,
   HelmResourceHealth,
   HelmUnavailableFeature,
 } from "../../features/helm/helmContract";
+import { toHelmArtifactOperationResult } from "../../features/helm/createHelmAdapter";
 import { HELM_COPY } from "../../features/helm/helmCopy";
+import {
+  type OperationStatusSnapshot,
+  useOptionalOperationStatusStore,
+} from "../../features/operations/OperationStatusStore";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
+import { UnifiedDiff } from "../../shared/ui/UnifiedDiff";
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Button } from "../../shared/ui/primitives/button";
 import { Input } from "../../shared/ui/primitives/input";
@@ -287,7 +304,7 @@ function HelmReleaseDetailPage({
       <Button className="w-fit" onClick={onBack} size="sm" type="button" variant="ghost">
         <ArrowLeft aria-hidden="true" />{HELM_COPY.backToReleases}
       </Button>
-      <HelmDetailBoundary frame={data.frame} onRefresh={data.refresh} />
+      <HelmDetailBoundary frame={data.frame} onRefresh={data.refresh} port={port} />
     </ProductPageFrame>
   );
 }
@@ -295,9 +312,11 @@ function HelmReleaseDetailPage({
 function HelmDetailBoundary({
   frame,
   onRefresh,
+  port,
 }: {
   frame: ReturnType<typeof useHelmReleaseDetail>["frame"];
   onRefresh: () => void;
+  port: HelmPort;
 }) {
   if (frame.phase === "idle" || frame.phase === "loading") {
     return <ProductStateScreen kind="loading" placement="content" />;
@@ -339,6 +358,7 @@ function HelmDetailBoundary({
           </ul>
         )}
       </section>
+      <HelmArtifactsPanel detail={detail} port={port} />
       <section className="grid gap-2" aria-labelledby="helm-release-integrations-title">
         <h2 className="text-base font-semibold" id="helm-release-integrations-title">{HELM_COPY.integrations}</h2>
         <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
@@ -352,6 +372,193 @@ function HelmDetailBoundary({
       <OwnedResourcesPanel ownedResources={detail.ownedResources} />
     </section>
   );
+}
+
+const ARTIFACT_ACTION_COPY: Readonly<Record<HelmArtifactKind, string>> = {
+  manifest: HELM_COPY.manifestAction,
+  values: HELM_COPY.valuesAction,
+  manifest_diff: HELM_COPY.manifestDiffAction,
+  values_diff: HELM_COPY.valuesDiffAction,
+};
+
+function HelmArtifactsPanel({ detail, port }: { detail: HelmReleaseDetail; port: HelmPort }) {
+  const revisions = useMemo(() => Array.from(new Set(
+    detail.history
+      .map((entry) => entry.revision)
+      .filter((revision): revision is number => revision !== null),
+  )).sort((left, right) => right - left), [detail.history]);
+  const [revision, setRevision] = useState<number | null>(
+    detail.release.revision ?? revisions[0] ?? null,
+  );
+  const [comparisonRevision, setComparisonRevision] = useState<number | null>(
+    revisions.find((candidate) => candidate !== (detail.release.revision ?? revisions[0])) ?? null,
+  );
+  const [allValues, setAllValues] = useState(false);
+  const [commandId, setCommandId] = useState("");
+  const [submitFailure, setSubmitFailure] = useState<string | null>(null);
+  const operationStore = useOptionalOperationStatusStore();
+  const snapshot = useOptionalOperationSnapshot(operationStore, commandId);
+  const artifact = snapshot?.event
+    ? toHelmArtifactOperationResult(snapshot.event.payload)
+    : null;
+  const pending = snapshot !== null && ["connecting", "running", "reconnecting"].includes(
+    snapshot.status,
+  );
+
+  const selectRevision = (next: number) => {
+    setRevision(next);
+    if (comparisonRevision === next) {
+      setComparisonRevision(revisions.find((candidate) => candidate !== next) ?? null);
+    }
+  };
+
+  const startRead = async (kind: HelmArtifactKind) => {
+    if (revision === null) return;
+    const isDiff = kind.endsWith("_diff");
+    if (isDiff && comparisonRevision === null) return;
+    setSubmitFailure(null);
+    setCommandId("");
+    try {
+      const receipt = await port.readArtifact({
+        clusterId: detail.release.scope.clusterId,
+        namespace: detail.release.storageNamespace,
+        releaseName: detail.release.name,
+        artifact: kind,
+        revision,
+        comparisonRevision: isDiff ? comparisonRevision ?? undefined : undefined,
+        allValues: kind === "values" || kind === "values_diff" ? allValues : false,
+      });
+      setCommandId(receipt.commandId);
+      if (operationStore) operationStore.start(receipt.commandId);
+      else setSubmitFailure(HELM_COPY.artifactStreamUnavailable);
+    } catch {
+      setSubmitFailure(HELM_COPY.artifactFailed);
+    }
+  };
+
+  return (
+    <section aria-labelledby="helm-artifacts-title" className="grid min-w-0 gap-3 rounded-lg border bg-card p-3">
+      <div className="grid min-w-0 gap-1">
+        <h2 className="text-base font-semibold" id="helm-artifacts-title">{HELM_COPY.artifacts}</h2>
+        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactDescription}</p>
+      </div>
+      {revisions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{HELM_COPY.unavailableValue}</p>
+      ) : (
+        <>
+          <div className="flex min-w-0 flex-wrap items-end gap-3">
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              {HELM_COPY.primaryRevision}
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+                onChange={(event) => selectRevision(Number(event.target.value))}
+                value={revision ?? ""}
+              >
+                {revisions.map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              {HELM_COPY.comparisonRevision}
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+                disabled={revisions.length < 2}
+                onChange={(event) => setComparisonRevision(Number(event.target.value))}
+                value={comparisonRevision ?? ""}
+              >
+                {revisions
+                  .filter((candidate) => candidate !== revision)
+                  .map((candidate) => <option key={candidate} value={candidate}>{candidate}</option>)}
+              </select>
+            </label>
+            <label className="flex h-9 items-center gap-2 text-sm">
+              <input
+                checked={allValues}
+                onChange={(event) => setAllValues(event.target.checked)}
+                type="checkbox"
+              />
+              {HELM_COPY.allValues}
+            </label>
+          </div>
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {(Object.keys(ARTIFACT_ACTION_COPY) as HelmArtifactKind[]).map((kind) => (
+              <Button
+                disabled={pending || (kind.endsWith("_diff") && comparisonRevision === null)}
+                key={kind}
+                onClick={() => void startRead(kind)}
+                size="sm"
+                type="button"
+                variant={kind.endsWith("_diff") ? "outline" : "secondary"}
+              >
+                {ARTIFACT_ACTION_COPY[kind]}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
+      <HelmArtifactOperationResult
+        artifact={artifact}
+        failure={submitFailure}
+        snapshot={snapshot}
+      />
+    </section>
+  );
+}
+
+function HelmArtifactOperationResult({
+  artifact,
+  failure,
+  snapshot,
+}: {
+  artifact: ReturnType<typeof toHelmArtifactOperationResult>;
+  failure: string | null;
+  snapshot: OperationStatusSnapshot | null;
+}) {
+  if (failure) {
+    return <p className="text-sm text-destructive" role="alert">{failure}</p>;
+  }
+  if (snapshot === null || snapshot.status === "idle") return null;
+  if (["connecting", "running", "reconnecting"].includes(snapshot.status)) {
+    return <p className="text-sm text-muted-foreground" role="status">{HELM_COPY.artifactReading}</p>;
+  }
+  if (snapshot.status !== "completed" || artifact === null) {
+    return <p className="text-sm text-destructive" role="alert">{HELM_COPY.artifactFailed}</p>;
+  }
+  return (
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant="secondary">{ARTIFACT_ACTION_COPY[artifact.artifact]}</Badge>
+        <span>{HELM_COPY.artifactRedacted}</span>
+        {artifact.truncated ? <span className="text-amber-600">{HELM_COPY.artifactTruncated}</span> : null}
+      </div>
+      {artifact.content === "" ? (
+        <p className="text-sm text-muted-foreground">{HELM_COPY.artifactEmpty}</p>
+      ) : artifact.format === "unified-diff" ? (
+        <UnifiedDiff
+          aria-label={ARTIFACT_ACTION_COPY[artifact.artifact]}
+          className="max-h-[32rem] rounded-md border bg-background"
+          diff={artifact.content}
+          numbered
+        />
+      ) : (
+        <pre className="max-h-[32rem] min-w-0 overflow-auto rounded-md border bg-background p-3 font-mono text-xs leading-5">
+          <code>{artifact.content}</code>
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function useOptionalOperationSnapshot(
+  store: ReturnType<typeof useOptionalOperationStatusStore>,
+  commandId: string,
+): OperationStatusSnapshot | null {
+  const subscribe = useCallback((listener: () => void) => (
+    store && commandId ? store.subscribe(commandId, listener) : () => undefined
+  ), [commandId, store]);
+  const getSnapshot = useCallback(() => (
+    store && commandId ? store.getSnapshot(commandId) : null
+  ), [commandId, store]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 function CoverageNotice({

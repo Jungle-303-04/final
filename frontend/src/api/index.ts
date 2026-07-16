@@ -81,9 +81,11 @@ export {
 } from "./timeline";
 export {
   getHelmRelease,
+  HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
   listHelmReleases,
+  startHelmArtifactRead,
   type HelmReleaseListQuery,
 } from "./helm-releases";
 export {
