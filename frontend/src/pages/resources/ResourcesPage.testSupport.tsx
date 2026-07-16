@@ -246,9 +246,9 @@ export function resourcesRelationTopologyPort(
       graphRevision: "graph-test-support",
       refreshAfterSeconds: 60,
       nodes: [
-        { id: "deployment:shop/checkout-api", kind: "Deployment", name: "checkout-api", status: "Ready" },
-        { id: "pod:shop/checkout-api-0", kind: "Pod", name: "checkout-api-0", status: "CrashLoopBackOff" },
-        { id: "service:shop/checkout-api", kind: "Service", name: "checkout-api", status: "Ready" },
+        relationNode("deployment:shop/checkout-api", "workload", "Deployment", "checkout-api", "Ready"),
+        relationNode("pod:shop/checkout-api-0", "pod", "Pod", "checkout-api-0", "CrashLoopBackOff"),
+        relationNode("service:shop/checkout-api", "service", "Service", "checkout-api", "Ready"),
       ],
       edges: [
         { from: "deployment:shop/checkout-api", to: "pod:shop/checkout-api-0", type: "owns" },
@@ -275,6 +275,27 @@ export function resourcesRelationTopologyPort(
       },
     }),
     ...overrides,
+  };
+}
+
+function relationNode(
+  id: string,
+  resourceType: string,
+  kind: string,
+  name: string,
+  status: string,
+) {
+  return {
+    id,
+    identity: {
+      resourceType,
+      kind,
+      namespace: "shop",
+      name,
+    },
+    kind,
+    name,
+    status,
   };
 }
 
