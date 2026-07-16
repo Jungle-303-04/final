@@ -71,7 +71,7 @@ export function ProductRouter({
               const routeDefinition = routeDefinitionForSurface(id);
               return [
                 <Route
-                  element={<RouteSurface registration={registration} />}
+                  element={<RouteSurface key={id} registration={registration} />}
                   key={id}
                   path={routePathForDefinition(routeDefinition, routeDefinition.path)}
                 />,

@@ -63,6 +63,40 @@ describe("deferred product routes", () => {
       expect(screen.getByText("GitOps surface")).toBeTruthy();
     });
   });
+
+  it("renders the matching surface across a Resources to Settings round trip", async () => {
+    const user = userEvent.setup();
+    const composition = createProductComposition([
+      { id: "resources", loader: surfaceLoader(ResourcesSurface) },
+      { id: "settings", loader: surfaceLoader(SettingsSurface) },
+    ], authPort, testClusterScope);
+    const router = createMemoryRouter([{
+      path: "*",
+      element: (
+        <I18nProvider navigatorLanguage="en-US" storage={null}>
+          <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+            <AuthSessionGateProvider reportUnauthorized={vi.fn()}>
+              <ProductRouter auth={testAuth} composition={composition} />
+            </AuthSessionGateProvider>
+          </ThemeProvider>
+        </I18nProvider>
+      ),
+    }], { initialEntries: ["/resources"] });
+
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText("Resources surface")).toBeTruthy();
+
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings"));
+    expect(await screen.findByText("Settings surface")).toBeTruthy();
+    expect(screen.queryByText("Resources surface")).toBeNull();
+
+    await user.click(screen.getByRole("link", { name: "Resources" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/resources"));
+    expect(await screen.findByText("Resources surface")).toBeTruthy();
+    expect(screen.queryByText("Settings surface")).toBeNull();
+  });
 });
 
 function surfaceLoader(Component: ComponentType) {
@@ -75,4 +109,12 @@ function HomeSurface() {
 
 function GitOpsSurface() {
   return <p>GitOps surface</p>;
+}
+
+function ResourcesSurface() {
+  return <p>Resources surface</p>;
+}
+
+function SettingsSurface() {
+  return <p>Settings surface</p>;
 }
