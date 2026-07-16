@@ -45,6 +45,9 @@ AI_RESOURCE_PATH = "/ai/resources/{kind}/{namespace}/{name}"
 # path constants own only the target identity portion.
 POD_LOG_STREAM_PATH = "/pods/{namespace}/{name}/logs/stream"
 WORKLOAD_LOG_STREAM_PATH = "/workloads/{kind}/{namespace}/{name}/logs/stream"
+# Contextual Workload Detail.  API group/version and exact cluster identity are
+# query-owned because the upstream path is intentionally cluster agnostic.
+WORKLOAD_DETAIL_PATH = "/workloads/{kind}/{namespace}/{name}"
 # 관리 콘솔 — 조직/그룹/멤버/권한 (프론트 콘솔 전용, admin 세션)
 ORGS_PATH = "/orgs"
 ORG_PATH = "/orgs/{org_id}"

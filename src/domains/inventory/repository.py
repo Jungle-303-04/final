@@ -868,6 +868,47 @@ class InventoryRepository(DatabaseConnection):
             row = conn.execute(statement).mappings().first()
         return self.serialize_inventory_resource(dict(row)) if row else None
 
+    def get_inventory_resource_by_api_version(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        resource_type: str,
+        api_version: str,
+        kind: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> JsonObject | None:
+        """Read one resource only when its complete API-version identity matches.
+
+        ``kind``/``namespace``/``name`` alone are not a Kubernetes identity:
+        dynamic resources from different API groups can use the same kind and
+        object name.  Contextual routes that carry an API group/version must
+        use this query rather than the legacy detail lookup above.
+        """
+        table = ClusterInventoryResourceRecord.__table__
+        statement = (
+            select(table)
+            .where(
+                table.c.workspace_id == workspace_id,
+                table.c.cluster_id == cluster_id,
+                table.c.resource_type == resource_type.strip().lower(),
+                table.c.api_version == api_version.strip(),
+                func.lower(table.c.kind) == kind.strip().lower(),
+                table.c.name == name,
+                table.c.deleted_at.is_(None),
+            )
+            .order_by(table.c.last_seen_at.desc())
+            .limit(1)
+        )
+        if namespace is None:
+            statement = statement.where(table.c.namespace.is_(None))
+        else:
+            statement = statement.where(table.c.namespace == namespace)
+        with self.connection() as conn:
+            row = conn.execute(statement).mappings().first()
+        return self.serialize_inventory_resource(dict(row)) if row else None
+
     def get_inventory_resource_by_key(
         self,
         *,

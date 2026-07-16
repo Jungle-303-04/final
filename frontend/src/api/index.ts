@@ -140,6 +140,16 @@ export {
 } from "./auth";
 export { getFleetSummary } from "./fleet";
 export {
+  getWorkloadDetail,
+  WORKLOAD_DETAIL_PATH,
+  type WorkloadDetailQuery,
+} from "./workload-detail";
+export {
+  workloadDetailSchema,
+  workloadDetailResourceRefSchema,
+  type WorkloadDetailEndpoint,
+} from "./workload-detail-schemas";
+export {
   listClusters,
   unregisterCluster,
   type ClusterUnregisterResponse,
