@@ -6,7 +6,7 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import type {
   RightsizingAction,
@@ -19,6 +19,7 @@ import {
   flattenRightsizingScans,
   rightsizingClassCounts,
   type RightsizingClassFilter,
+  type RightsizingRowFilter,
   type RightsizingScanRow,
 } from "../../features/rightsizing/rightsizingModel";
 import {
@@ -32,6 +33,7 @@ import {
   type RightsizingClusterScope,
   type RightsizingScanFrame,
 } from "../../features/rightsizing/useRightsizingScans";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import { workloadDetailHref } from "../workload-detail/workloadDetailNavigation";
 import { useI18n } from "../../shared/i18n";
 import { StatusMark } from "../../shared/ui/StatusMark";
@@ -49,6 +51,7 @@ import {
   EmptyTitle,
 } from "../../shared/ui/primitives/empty";
 import { Input } from "../../shared/ui/primitives/input";
+import { Spinner } from "../../shared/ui/primitives/spinner";
 import {
   Select,
   SelectContent,
@@ -66,15 +69,6 @@ import {
 } from "../../shared/ui/primitives/table";
 
 const ROW_PAGE_SIZE = 50;
-const CLASS_FILTERS = new Set<RightsizingClassFilter>([
-  "actions",
-  "increase",
-  "reduction",
-  "review",
-  "in_range",
-  "need_data",
-]);
-
 export function RightsizingScanView({
   port,
   scopes,
@@ -84,11 +78,21 @@ export function RightsizingScanView({
 }) {
   const { formatDate, formatNumber, t } = useI18n();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const filter = useUnifiedFilter();
   const { frame, run } = useRightsizingScans(port, scopes);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const rows = useMemo(() => flattenRightsizingScans(frame.scans), [frame.scans]);
-  const filters = useMemo(() => readFilters(params), [params]);
+  const filters = useMemo<RightsizingRowFilter>(() => ({
+    classification: filter.detail.rightsizingClass ?? "actions",
+    kind: filter.detail.rightsizingKind ?? "",
+    namespace: filter.detail.rightsizingNamespace ?? "",
+    query: filter.detail.rightsizingQuery ?? "",
+  }), [
+    filter.detail.rightsizingClass,
+    filter.detail.rightsizingKind,
+    filter.detail.rightsizingNamespace,
+    filter.detail.rightsizingQuery,
+  ]);
   const filterKey = [
     filters.classification,
     filters.kind,
@@ -119,15 +123,22 @@ export function RightsizingScanView({
   const resultSummary = useMemo(() => summarizeScans(frame.scans), [frame.scans]);
 
   const setFilter = (key: string, value: string | null) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    setParams(next, { replace: true });
+    filter.updateDetail((current) => ({
+      ...current,
+      ...(key === "rfClass" ? { rightsizingClass: value as Exclude<RightsizingClassFilter, "actions"> | null } : {}),
+      ...(key === "rfKind" ? { rightsizingKind: value } : {}),
+      ...(key === "rfNs" ? { rightsizingNamespace: value } : {}),
+      ...(key === "rfQ" ? { rightsizingQuery: value } : {}),
+    }), "detail-tab");
   };
   const resetFilters = () => {
-    const next = new URLSearchParams(params);
-    for (const key of ["rfClass", "rfKind", "rfNs", "rfQ"]) next.delete(key);
-    setParams(next, { replace: true });
+    filter.updateDetail((current) => ({
+      ...current,
+      rightsizingClass: null,
+      rightsizingKind: null,
+      rightsizingNamespace: null,
+      rightsizingQuery: null,
+    }), "detail-tab");
   };
   const activeFilters = filters.classification !== "actions" ||
     Boolean(filters.kind || filters.namespace || filters.query);
@@ -156,10 +167,9 @@ export function RightsizingScanView({
           </p>
         </div>
         <Button disabled={frame.phase === "loading"} onClick={() => void run()}>
-          <RefreshCw
-            aria-hidden="true"
-            className={frame.phase === "loading" ? "animate-spin motion-reduce:animate-none" : ""}
-          />
+          {frame.phase === "loading"
+            ? <Spinner decorative />
+            : <RefreshCw aria-hidden="true" />}
           {frame.phase === "idle" ? t("rightsizing.scan.run") : t("rightsizing.scan.runAgain")}
         </Button>
       </div>
@@ -309,7 +319,7 @@ function LoadingState() {
   return (
     <Empty className="min-h-72 border bg-card" role="status">
       <EmptyMedia variant="icon">
-        <RefreshCw aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+        <Spinner decorative />
       </EmptyMedia>
       <EmptyHeader>
         <EmptyTitle>{t("rightsizing.scan.scanning")}</EmptyTitle>
@@ -666,26 +676,6 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dd className="truncate font-medium tabular-nums" title={value}>{value}</dd>
     </div>
   );
-}
-
-function readFilters(params: URLSearchParams) {
-  const rawClass = params.get("rfClass");
-  return {
-    classification: rawClass !== null && CLASS_FILTERS.has(rawClass as RightsizingClassFilter)
-      ? rawClass as RightsizingClassFilter
-      : "actions" as const,
-    kind: safeFilterText(params.get("rfKind")),
-    namespace: safeFilterText(params.get("rfNs")),
-    query: safeFilterText(params.get("rfQ"), 200),
-  };
-}
-
-function safeFilterText(value: string | null, maxLength = 253): string {
-  if (value === null || value.length > maxLength || value !== value.trim()) return "";
-  return Array.from(value).some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint <= 0x1f || codePoint === 0x7f;
-  }) ? "" : value;
 }
 
 function signed(

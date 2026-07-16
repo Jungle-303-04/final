@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { createEmptyUnifiedFilterState } from "./filterContract";
+import {
+  createEmptyProductDetailQuery,
+  createEmptyUnifiedFilterState,
+} from "./filterContract";
 import { parseProductFilterUrl, serializeProductFilterUrl } from "./filterUrl";
 
 describe("cost URL state", () => {
@@ -23,5 +26,27 @@ describe("cost URL state", () => {
     expect(serializeProductFilterUrl(createEmptyUnifiedFilterState(), defaultRange.detail)).toBe("");
     expect(invalid.detail.costRange).toBeUndefined();
     expect(invalid.invalidValues.costRange).toEqual(["7d", "30d"]);
+  });
+
+  it("round-trips request guidance view filters through the shared URL engine", () => {
+    const parsed = parseProductFilterUrl(
+      "?clusters=cluster-a&tab=rightsizing&rfClass=increase" +
+      "&rfKind=Deployment&rfNs=shop&rfQ=checkout%20api",
+    );
+
+    expect(parsed.detail).toMatchObject({
+      tab: "rightsizing",
+      rightsizingClass: "increase",
+      rightsizingKind: "Deployment",
+      rightsizingNamespace: "shop",
+      rightsizingQuery: "checkout api",
+    });
+    expect(serializeProductFilterUrl(parsed.state, parsed.detail)).toBe(
+      "?clusters=cluster-a&tab=rightsizing&rfClass=increase" +
+      "&rfKind=Deployment&rfNs=shop&rfQ=checkout%20api",
+    );
+    expect(parseProductFilterUrl(
+      "?rfClass=unknown&rfNs=bad%20namespace&rfQ=%00",
+    ).detail).toEqual(createEmptyProductDetailQuery());
   });
 });

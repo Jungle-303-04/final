@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RightsizingPort, RightsizingScan } from "../../features/rightsizing/rightsizingContract";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { I18nProvider } from "../../shared/i18n";
 import { RightsizingScanView } from "./RightsizingScanView";
 
@@ -18,11 +19,13 @@ describe("RightsizingScanView", () => {
     render(
       <I18nProvider navigatorLanguage="en" storage={null}>
         <MemoryRouter initialEntries={["/cost?clusters=cluster-a&rfClass=increase&rfQ=api"]}>
-          <RightsizingScanView
-            port={port}
-            scopes={[{ clusterId: "cluster-a", namespaces: ["shop"] }]}
-          />
-          <LocationProbe />
+          <UnifiedFilterProvider>
+            <RightsizingScanView
+              port={port}
+              scopes={[{ clusterId: "cluster-a", namespaces: ["shop"] }]}
+            />
+            <LocationProbe />
+          </UnifiedFilterProvider>
         </MemoryRouter>
       </I18nProvider>,
     );

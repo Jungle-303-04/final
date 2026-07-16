@@ -13,6 +13,12 @@ export interface KubernetesLabelFilter {
 export type ResourceView = "graph" | "table";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
 export type CostRange = "6h" | "24h" | "7d";
+export type RightsizingClassFilter =
+  | "increase"
+  | "reduction"
+  | "review"
+  | "in_range"
+  | "need_data";
 
 export interface UnifiedFilterState {
   common: {
@@ -76,6 +82,10 @@ export interface ProductDetailQuery {
   workflowMode?: "new" | null;
   timeRange?: TimelineRange;
   costRange?: CostRange;
+  rightsizingClass?: RightsizingClassFilter | null;
+  rightsizingKind?: string | null;
+  rightsizingNamespace?: string | null;
+  rightsizingQuery?: string | null;
   timeAt?: number;
   graphCollapsed?: true;
 }
