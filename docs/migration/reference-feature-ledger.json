@@ -6751,26 +6751,30 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
-      "frontendContract": "frontend/src/features/resources/providerResourceContract.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.scoped_metrics.ScopedMetricQueryResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_inventory_provider_detail.py",
+        "tests/test_scoped_resource_metrics.py",
+        "frontend/src/features/resources/createResourceMetricsHistoryAdapter.test.ts",
         "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+        "frontend/src/pages/resources/ResourceDetailSheet.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory/provider_detail.py",
-          "reason": "PVC identity and storage capacity are projected, but no observed volume-used metric with provider provenance and freshness is persisted.",
-          "test": "tests/test_inventory_provider_detail.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#scoped_resource_metrics_query",
+          "consumer": "src/domains/command/scoped_metrics.py#build_scoped_metric_plans",
+          "reason": "The authorized scoped metric contract resolves the exact PVC inventory key and UID, queues the server-owned Prometheus volume_usage ratio, and returns source, freshness policy, completeness, and reason codes without deriving usage from requested capacity.",
+          "test": "tests/test_scoped_resource_metrics.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-          "reason": "The PVC panel does not derive used bytes or ratio from capacity-only inventory evidence.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx#ProviderResourceDetailPanel",
+          "consumer": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
+          "reason": "The existing provider detail panel consumes only the observed PVC ratio for the selected inventory identity and exposes provenance, observed time, freshness, completeness, and unavailable or partial reasons; it never converts capacity into fabricated used bytes.",
           "test": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx"
         },
         "desktop": null,

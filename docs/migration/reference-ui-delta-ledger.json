@@ -14304,21 +14304,25 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+              "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts",
               "frontend/src/pages/resources/ResourceMetricsCharts.tsx",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
               "frontend/src/shared/ui/charts/saturation.ts",
-              "src/packages/contracts/gateway/responses.py"
+              "src/domains/command/scoped_metrics.py",
+              "src/packages/contracts/scoped_metrics.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
-              "domains.inventory_filter.router",
-              "domains.inventory.repository"
+              "packages.contracts.scoped_metrics",
+              "domains.command.router",
+              "domains.inventory_filter.router"
             ],
             "plannedTestIds": [
               "resources.metrics.range"
             ],
-            "state": "blocked",
-            "blockedReason": "The resource metric history response currently provides only CPU millicores and memory MiB; it does not carry network, filesystem, restart, request, limit, unit, or series-category evidence.",
-            "rationale": "The UI does not synthesize zero-valued panels or derive operational limits from untyped resource facts. These charts require an additive Python projection and persisted observation sources."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared scoped metric path now supplies exact-unit PVC volume usage with source, freshness, coverage, and inventory identity to provider detail. Network, filesystem, restart, request, limit, and saturation panels remain tracked by reference.feature.151 and are not synthesized."
           }
         }
       ]
