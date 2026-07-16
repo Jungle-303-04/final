@@ -2365,14 +2365,15 @@
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
         "frontend/src/api/refresh-policies.test.ts",
-        "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
+        "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx",
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -2382,10 +2383,10 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/useResourcesPageState.ts#useResourcesPageState",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "Resource pages preserve verified rows across refresh failures, but use browser-owned 10-second and 5-second clocks and have no resumable inventory invalidation cursor.",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "Catalog and list/detail consume the server-owned 60-second and 120-second policies, pause while hidden, preserve last success, and coalesce exact Pod delta invalidations after sequence and animation-frame admission.",
           "test": "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
         },
         "desktop": null,
@@ -2450,15 +2451,17 @@
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
       "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
         "tests/test_live_resource_metrics.py",
+        "tests/test_resource_metrics_history_router.py",
         "frontend/src/api/refresh-policies.test.ts",
-        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -2468,11 +2471,11 @@
           "test": "tests/test_refresh_policies.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "Kubernetes metric history is bounded and range-aware, but the view does not consume the server 30-second policy or expose a limited unavailable-source retry state.",
-          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "The bounded Kubernetes metric history response selects the server-owned 30-second policy, retains last success, pauses while hidden, and exposes the server-bounded unavailable retry state.",
+          "test": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -2499,21 +2502,23 @@
         "tests/test_refresh_policies.py",
         "frontend/src/api/refresh-policies.test.ts",
         "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.test.tsx",
         "frontend/src/features/rightsizing/useRightsizingScans.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "implemented",
-          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "state": "in_progress",
+          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
           "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
-          "test": "tests/test_refresh_policies.py"
+          "reason": "The response contract can select Prometheus, PVC, or rightsizing policies and rightsizing uses the server 10-minute cadence, but the current Python history producer emits Kubernetes metrics only; Prometheus and PVC producers remain absent.",
+          "test": "tests/test_resource_metrics_history_router.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "in_progress",
           "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
-          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
-          "reason": "Prometheus, PVC, and rightsizing cadences are declared centrally, but no shared consumer selects their 60-second, 120-second, and 10-minute policies by data source.",
-          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+          "consumer": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
+          "reason": "The shared consumer selects 60-second, 120-second, or 10-minute policies from the response source key and rightsizing uses the server cadence, but no real Prometheus or PVC data reaches the view yet.",
+          "test": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"

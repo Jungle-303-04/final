@@ -748,8 +748,8 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     ["reference.feature.066", ["upstream-ui:home:dashboard-api:sectioned-projection:v1", "implemented"]],
     ["reference.feature.067", ["upstream-ui:issues:queue:verified-severity-order:v1", "implemented"]],
     ["reference.feature.068", ["upstream-ui:applications:projection:catalog-detail-refresh:v1", "implemented"]],
-    ["reference.feature.069", ["upstream-ui:resources:view:guarded-count-and-query-identity:v1", "in_progress"]],
-    ["reference.feature.071", ["upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1", "in_progress"]],
+    ["reference.feature.069", ["upstream-ui:resources:view:guarded-count-and-query-identity:v1", "implemented"]],
+    ["reference.feature.071", ["upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1", "implemented"]],
     ["reference.feature.072", ["upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1", "in_progress"]],
     ["reference.feature.073", ["upstream-ui:gitops:fleet:authorized-catalog:v1", "implemented"]],
     ["reference.feature.074", ["upstream-ui:gitops:fleet:authorized-catalog:v1", "implemented"]],
@@ -766,7 +766,10 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
     assert.equal(port.deliveryStatus, deliveryStatus);
-    assert.equal(port.coverage.backend.state, "implemented");
+    assert.equal(
+      port.coverage.backend.state,
+      contractId === "reference.feature.072" ? "in_progress" : "implemented",
+    );
     assert.equal(aliases.aliases[contractId], sourceKey);
     assert.equal(feature.deliveryStatus, deliveryStatus);
     assert.equal(feature.sourceKey, sourceKey);
@@ -781,6 +784,10 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
   assert.equal(
     home.backendContract,
     "packages.contracts.freshness.HomeDashboardEventFrame",
+  );
+  assert.equal(
+    portMap.features["reference.feature.069"].coverage.realtime.state,
+    "implemented",
   );
 
   const changes = portMap.features["reference.feature.070"];
