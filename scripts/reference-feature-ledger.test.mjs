@@ -745,7 +745,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
   ]);
   const expected = new Map([
-    ["reference.feature.066", ["upstream-ui:home:dashboard-api:sectioned-projection:v1", "in_progress"]],
+    ["reference.feature.066", ["upstream-ui:home:dashboard-api:sectioned-projection:v1", "implemented"]],
     ["reference.feature.067", ["upstream-ui:issues:queue:verified-severity-order:v1", "implemented"]],
     ["reference.feature.068", ["upstream-ui:applications:projection:catalog-detail-refresh:v1", "implemented"]],
     ["reference.feature.069", ["upstream-ui:resources:view:guarded-count-and-query-identity:v1", "in_progress"]],
@@ -775,6 +775,13 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
       assert.equal(port.coverage.frontend.state, "implemented");
     }
   }
+
+  const home = portMap.features["reference.feature.066"];
+  assert.equal(home.coverage.realtime.state, "implemented");
+  assert.equal(
+    home.backendContract,
+    "packages.contracts.freshness.HomeDashboardEventFrame",
+  );
 
   const changes = portMap.features["reference.feature.070"];
   const changesFeature = ledger.features.find(

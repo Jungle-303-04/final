@@ -892,31 +892,43 @@
       }
     },
     "reference.feature.066": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
-      "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
+      "frontendContract": "frontend/src/features/home/homeEndpointContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
         "tests/test_shell_state_router.py",
+        "tests/test_home_dashboard_ready_stream.py",
+        "tests/test_inventory_timeline_ingest.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/api/home-dashboard-events.test.ts",
         "frontend/src/features/home/createHomeAdapter.mapping.test.ts",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
         "frontend/src/shared/data/serverRefreshScheduler.test.ts",
         "frontend/src/pages/home/useHomePageState.test.tsx"
       ],
       "coverage": {
         "backend": {
           "state": "implemented",
-          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
-          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
-          "test": "tests/test_refresh_policies.py"
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "src/domains/inventory/ingest.py#ingest_inventory_snapshot",
+          "reason": "The server policy owns cadence while accepted post-commit inventory snapshots supply durable, authorized, signed-cursor deferred-ready evidence.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/home/useHomePageState.ts#useHomePageState",
-          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
-          "reason": "Dashboard sections consume the server-owned cadence, pause while hidden, and retain last success without browser timing constants; the exact authorized deferred-ready invalidation signal remains to be connected.",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "Home consumes the server cadence and the exact deferred-ready SSE only when event invalidation is enabled, coalescing refresh while preserving hidden-tab abort, scope isolation, reconnect, and last success.",
           "test": "frontend/src/pages/home/useHomePageState.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/ready_stream.py#InMemoryDashboardReadyFanout",
+          "consumer": "frontend/src/api/home-dashboard-events.ts#subscribeHomeDashboardEvents",
+          "reason": "PostgreSQL snapshots are the replay authority; process-local fanout is only a coalesced wake-up and heartbeat repair covers other gateway replicas.",
+          "test": "frontend/src/features/home/createHomeAdapter.stream.test.ts"
         }
       }
     },
