@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { chromium } from "playwright";
@@ -63,6 +64,33 @@ export function isApiErrorResponse(status, rawUrl, baseUrl) {
 
 export function isFailureProductState(state) {
   return FAILURE_PRODUCT_STATES.has(state);
+}
+
+export function parseNetscapeSessionCookie(rawCookieJar) {
+  const candidates = [];
+  for (const rawLine of rawCookieJar.split(/\r?\n/u)) {
+    const httpOnly = rawLine.startsWith("#HttpOnly_");
+    if (!rawLine || (rawLine.startsWith("#") && !httpOnly)) continue;
+    const line = httpOnly ? rawLine.slice("#HttpOnly_".length) : rawLine;
+    const fields = line.split("\t");
+    if (fields.length < 7) continue;
+    const [, , path, secure, , name, value] = fields;
+    if (
+      httpOnly
+      && path === "/"
+      && secure?.toUpperCase() === "TRUE"
+      && name
+      && value
+    ) {
+      candidates.push({ name, value });
+    }
+  }
+  assert.equal(
+    candidates.length,
+    1,
+    "authentication handoff must contain exactly one secure HttpOnly root cookie",
+  );
+  return candidates[0];
 }
 
 async function run() {
@@ -166,22 +194,45 @@ async function run() {
 }
 
 async function authenticate(page, baseUrl, email, password) {
-  const loginResponse = await page.request.post(
-    new URL("/api/auth/login", baseUrl).href,
-    {
-      data: { email, password },
-      failOnStatusCode: false,
-      headers: { "x-service-csrf": "same-origin" },
-    },
-  );
-  assert.ok(
-    loginResponse.ok(),
-    `browser authentication failed with status ${loginResponse.status()}`,
-  );
+  const handoffPath = process.env.AUTH_COOKIE_JAR?.trim() ?? "";
+  const handoff = handoffPath ? await readCookieHandoff(handoffPath) : null;
+  if (handoff === null) {
+    const loginResponse = await page.request.post(
+      new URL("/api/auth/login", baseUrl).href,
+      {
+        data: { email, password },
+        failOnStatusCode: false,
+        headers: { "x-service-csrf": "same-origin" },
+      },
+    );
+    assert.ok(
+      loginResponse.ok(),
+      `browser authentication failed with status ${loginResponse.status()}`,
+    );
+  } else {
+    const cookie = parseNetscapeSessionCookie(handoff);
+    await page.context().addCookies([{
+      httpOnly: true,
+      name: cookie.name,
+      sameSite: "Lax",
+      secure: new URL(baseUrl).protocol === "https:",
+      url: new URL("/", baseUrl).href,
+      value: cookie.value,
+    }]);
+  }
 
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   const sidebar = page.locator(SIDEBAR_SELECTOR);
   await sidebar.waitFor({ state: "visible", timeout: AUTH_BOOTSTRAP_TIMEOUT_MS });
+}
+
+async function readCookieHandoff(path) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function collectReleasedRoutes(page) {

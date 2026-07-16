@@ -516,6 +516,7 @@ jobs:
           EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
           SERVICE_ROLLBACK_PLAN: ${{ runner.temp }}/service-rollback-plan.json
           CONSOLE_ROLLBACK_PLAN: ${{ runner.temp }}/console-rollback-plan.json
+          AUTH_COOKIE_JAR_OUT: ${{ runner.temp }}/browser-auth-cookie.jar
         run: |
           set -euo pipefail
           export EXPECTED_ALEMBIC_HEAD="$(uv run alembic heads | awk '{print $1}')"
@@ -531,7 +532,13 @@ jobs:
         run: bash scripts/post-deploy-console-smoke.sh
 
       - name: Run authenticated browser route smoke
+        env:
+          AUTH_COOKIE_JAR: ${{ runner.temp }}/browser-auth-cookie.jar
         run: npm --prefix frontend run smoke:routes
+
+      - name: Remove browser authentication handoff
+        if: always()
+        run: rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"
 
       - name: Record successful dev SHA in cluster
         if: env.DEPLOYMENT_SCOPE == 'FULL'

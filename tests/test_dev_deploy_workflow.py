@@ -175,6 +175,8 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     names = [step["name"] for step in deploy_job()["steps"]]
     install = steps["Install authenticated browser smoke dependencies"]
     smoke = steps["Run authenticated browser route smoke"]
+    post_smoke = steps["Run post-deploy smoke"]
+    cleanup = steps["Remove browser authentication handoff"]
     package = yaml.safe_load((ROOT / "frontend/package.json").read_text(encoding="utf-8"))
     script = (ROOT / "frontend/scripts/post-deploy-route-smoke.mjs").read_text(encoding="utf-8")
 
@@ -183,7 +185,11 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
         "npm --prefix frontend exec -- playwright install --with-deps chromium\n"
     )
     assert smoke["run"] == "npm --prefix frontend run smoke:routes"
-    assert smoke.get("env", {}) == {}
+    handoff = "${{ runner.temp }}/browser-auth-cookie.jar"
+    assert smoke["env"] == {"AUTH_COOKIE_JAR": handoff}
+    assert post_smoke["env"]["AUTH_COOKIE_JAR_OUT"] == handoff
+    assert cleanup["if"] == "always()"
+    assert cleanup["run"] == 'rm -f -- "${RUNNER_TEMP}/browser-auth-cookie.jar"'
     assert package["scripts"]["smoke:routes"] == ("node scripts/post-deploy-route-smoke.mjs")
     assert package["scripts"]["lint"] == "eslint src scripts/*.mjs --max-warnings 0"
     assert "SIDEBAR_SELECTOR = 'aside[data-slot=\"sidebar\"]'" in script
@@ -200,6 +206,8 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert 'page.goto(directUrl.href, { waitUntil: "domcontentloaded" })' in script
     assert "data-product-state" in script
     assert "diagnostics.apiErrors" in script
+    assert "parseNetscapeSessionCookie" in script
+    assert "page.context().addCookies" in script
     assert 'input[name="email"]' not in script
     assert 'input[name="password"]' not in script
     assert names.index("Run post-deploy smoke") < names.index(
@@ -209,6 +217,9 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
         "Run authenticated browser route smoke"
     )
     assert names.index("Run authenticated browser route smoke") < names.index(
+        "Remove browser authentication handoff"
+    )
+    assert names.index("Remove browser authentication handoff") < names.index(
         "Record successful dev SHA in cluster"
     )
     assert names.index("Run authenticated browser route smoke") < names.index(

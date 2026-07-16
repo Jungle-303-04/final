@@ -7,6 +7,7 @@ import {
   isFailureProductState,
   normalizeSurfaceText,
   orderRoutesForTraversal,
+  parseNetscapeSessionCookie,
 } from "./post-deploy-route-smoke.mjs";
 
 describe("post-deploy route smoke helpers", () => {
@@ -97,5 +98,21 @@ describe("post-deploy route smoke helpers", () => {
     expect(isFailureProductState("release")).toBe(true);
     expect(isFailureProductState("loading")).toBe(false);
     expect(isFailureProductState("empty")).toBe(false);
+  });
+
+  it("accepts one secure HttpOnly session handoff without exposing its value", () => {
+    const cookie = parseNetscapeSessionCookie([
+      "# Netscape HTTP Cookie File",
+      "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\topsia_session\tsecret-token",
+    ].join("\n"));
+
+    expect(cookie).toEqual({ name: "opsia_session", value: "secret-token" });
+    expect(() => parseNetscapeSessionCookie("# empty")).toThrow(
+      "exactly one secure HttpOnly root cookie",
+    );
+    expect(() => parseNetscapeSessionCookie([
+      "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\tone\ttoken-one",
+      "#HttpOnly_127.0.0.1\tFALSE\t/\tTRUE\t0\ttwo\ttoken-two",
+    ].join("\n"))).toThrow("exactly one secure HttpOnly root cookie");
   });
 });
