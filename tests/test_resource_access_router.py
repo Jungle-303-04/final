@@ -105,3 +105,23 @@ def test_routes_fail_closed_for_partial_snapshot() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "resource_access_incomplete"}
+
+
+def test_routes_fail_closed_for_malformed_exact_snapshot() -> None:
+    malformed = access_snapshot()
+    malformed["roles"] = [
+        {
+            "kind": "Role",
+            "namespace": "",
+            "name": "reader",
+            "rules": [],
+        }
+    ]
+
+    response = client(malformed).get(
+        "/rbac/namespace/shop",
+        params={"cluster_id": "cluster-a"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "resource_access_incomplete"}

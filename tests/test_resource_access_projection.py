@@ -62,7 +62,12 @@ def exact_access_snapshot() -> dict[str, object]:
             {"namespace": "shop", "name": "default"},
         ],
         "pod_subjects": [
-            {"namespace": "shop", "name": "checkout-7d9", "service_account_name": "checkout"},
+            {
+                "uid": "pod-checkout-7d9",
+                "namespace": "shop",
+                "name": "checkout-7d9",
+                "service_account_name": "checkout",
+            },
         ],
     }
 
@@ -123,6 +128,7 @@ def test_resource_projection_resolves_pod_service_account_without_name_guessing(
             "kind": "Pod",
             "namespace": "shop",
             "name": "checkout-7d9",
+            "uid": "pod-checkout-7d9",
             "summary": {"service_account_name": "checkout"},
         },
     )
@@ -130,6 +136,51 @@ def test_resource_projection_resolves_pod_service_account_without_name_guessing(
     assert result is not None
     assert result.type == "subject"
     assert result.subject.name == "checkout"
+
+
+def test_pod_projection_uses_same_uid_access_cut_instead_of_stale_inventory_summary() -> None:
+    snapshot = exact_access_snapshot()
+    snapshot["service_accounts"] = [
+        {"namespace": "shop", "name": "checkout"},
+        {"namespace": "shop", "name": "current"},
+    ]
+    snapshot["pod_subjects"] = [
+        {
+            "uid": "pod-current",
+            "namespace": "shop",
+            "name": "checkout-7d9",
+            "service_account_name": "current",
+        }
+    ]
+
+    result = resource_access_projection(
+        snapshot,
+        {
+            "kind": "Pod",
+            "namespace": "shop",
+            "name": "checkout-7d9",
+            "uid": "pod-current",
+            "summary": {"service_account_name": "stale"},
+        },
+    )
+
+    assert result is not None
+    assert result.type == "subject"
+    assert result.subject.name == "current"
+
+
+def test_pod_projection_fails_closed_for_same_name_recreated_uid() -> None:
+    with pytest.raises(ResourceAccessUnavailable):
+        resource_access_projection(
+            exact_access_snapshot(),
+            {
+                "kind": "Pod",
+                "namespace": "shop",
+                "name": "checkout-7d9",
+                "uid": "pod-recreated",
+                "summary": {"service_account_name": "checkout"},
+            },
+        )
 
 
 def test_partial_access_snapshot_fails_closed() -> None:

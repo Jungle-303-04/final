@@ -753,7 +753,11 @@ def test_cluster_access_snapshot_collects_one_exact_reverse_index(monkeypatch) -
             ],
             "/api/v1/pods": [
                 {
-                    "metadata": {"name": "checkout-0", "namespace": "shop"},
+                    "metadata": {
+                        "uid": "pod-checkout-0",
+                        "name": "checkout-0",
+                        "namespace": "shop",
+                    },
                     "spec": {"serviceAccountName": "checkout"},
                 }
             ],
@@ -790,6 +794,7 @@ def test_cluster_access_snapshot_collects_one_exact_reverse_index(monkeypatch) -
     assert access["service_accounts"] == [{"namespace": "shop", "name": "checkout"}]
     assert access["pod_subjects"] == [
         {
+            "uid": "pod-checkout-0",
             "namespace": "shop",
             "name": "checkout-0",
             "service_account_name": "checkout",
