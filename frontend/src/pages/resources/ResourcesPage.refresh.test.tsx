@@ -113,7 +113,7 @@ describe("ResourcesPage refresh and generation safety", () => {
     expect(screen.getByText("worker-new")).toBeTruthy();
   }, 15_000);
 
-  it("polls pod state every 5 seconds and resource counts every 10 seconds only while visible", async () => {
+  it("uses the server list and Kubernetes metrics policies only while visible", async () => {
     vi.useFakeTimers();
     setVisibility("visible");
     const port = resourcesPort();
@@ -130,12 +130,12 @@ describe("ResourcesPage refresh and generation safety", () => {
     await flushPromises();
     expect(port.listResources).toHaveBeenCalledOnce();
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledOnce();
-    expect(screen.getByText("5초마다 확인")).toBeTruthy();
+    expect(screen.getByText("120초마다 확인")).toBeTruthy();
     expect(document.querySelector('[data-slot="freshness-control"]')?.textContent)
       .toContain("0초 전 갱신");
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(30_000);
       await Promise.resolve();
     });
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(2);
@@ -143,23 +143,35 @@ describe("ResourcesPage refresh and generation safety", () => {
     expect(port.loadCatalog).toHaveBeenCalledOnce();
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(30_000);
       await Promise.resolve();
     });
     expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(3);
-    expect(port.listResources).toHaveBeenCalledTimes(2);
+    expect(port.listResources).toHaveBeenCalledOnce();
     expect(port.loadCatalog).toHaveBeenCalledTimes(2);
-    expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+    expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(5);
+    expect(port.listResources).toHaveBeenCalledTimes(2);
+    expect(port.loadCatalog).toHaveBeenCalledTimes(3);
+    expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(5);
 
     act(() => {
       setVisibility("hidden");
       document.dispatchEvent(new Event("visibilitychange"));
-      vi.advanceTimersByTime(20_000);
+      vi.advanceTimersByTime(240_000);
     });
     await act(async () => Promise.resolve());
     expect(port.listResources).toHaveBeenCalledTimes(2);
-    expect(port.loadCatalog).toHaveBeenCalledTimes(2);
-    expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(3);
+    expect(port.loadCatalog).toHaveBeenCalledTimes(3);
+    expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(5);
 
     await act(async () => {
       setVisibility("visible");
@@ -167,9 +179,9 @@ describe("ResourcesPage refresh and generation safety", () => {
       await Promise.resolve();
     });
     expect(port.listResources).toHaveBeenCalledTimes(3);
-    expect(port.loadCatalog).toHaveBeenCalledTimes(3);
-    expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(3);
-    expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(4);
+    expect(port.loadCatalog).toHaveBeenCalledTimes(4);
+    expect(rendered.clusterPort.listClusterChoices).toHaveBeenCalledTimes(6);
+    expect(topologyPort.loadPhysicalTopology).toHaveBeenCalledTimes(6);
   });
 
   it("does not automatically retry a forbidden read and exposes an explicit safe recovery", async () => {

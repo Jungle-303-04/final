@@ -178,6 +178,7 @@ def test_metric_history_returns_measured_node_series() -> None:
     )
 
     assert response.status_code == 200
+    assert response.json()["refresh_policy_key"] == "metrics_kubernetes"
     assert response.json()["series"] == [
         {
             "resource_id": "node-a",

@@ -33,7 +33,7 @@ describe("createRightsizingAdapter", () => {
         failures: [],
         reason_codes: [],
       },
-      refresh_after_seconds: 60,
+      refresh_after_seconds: 600,
     });
     const port = createRightsizingAdapter({ getRightsizingScan });
 

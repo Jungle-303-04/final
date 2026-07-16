@@ -53,6 +53,12 @@ export const resourceMetricHistorySeriesSchema = z.strictObject({
 });
 
 export const resourceMetricsHistorySchema = z.strictObject({
+  refresh_policy_key: z.enum([
+    "metrics_kubernetes",
+    "metrics_prometheus",
+    "metrics_pvc",
+    "metrics_rightsizing",
+  ]),
   series: z.array(resourceMetricHistorySeriesSchema),
   completeness: filterCountCompletenessSchema,
   partial_reason_codes: z.array(z.string()),

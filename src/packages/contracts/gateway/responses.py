@@ -1080,6 +1080,12 @@ class ResourceMetricHistorySeries(StrictModel):
 
 
 class ResourceMetricsHistoryResponse(StrictModel):
+    refresh_policy_key: Literal[
+        "metrics_kubernetes",
+        "metrics_prometheus",
+        "metrics_pvc",
+        "metrics_rightsizing",
+    ]
     series: list[ResourceMetricHistorySeries] = Field(default_factory=list)
     completeness: FilterCountCompleteness
     partial_reason_codes: list[str] = Field(default_factory=list)

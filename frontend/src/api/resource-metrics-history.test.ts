@@ -30,6 +30,7 @@ describe("resource metrics history API", () => {
 
   it("exports and requests one bounded batch with the canonical filter scope", async () => {
     const payload = {
+      refresh_policy_key: "metrics_kubernetes",
       series: [{
         resource_id: "pod:shop/api-0",
         cluster_id: "cluster-1",
@@ -70,6 +71,7 @@ describe("resource metrics history API", () => {
 
   it("accepts a measured Node series without a namespace", async () => {
     const payload = {
+      refresh_policy_key: "metrics_kubernetes",
       series: [{
         resource_id: "node-a",
         cluster_id: "cluster-1",
@@ -109,6 +111,7 @@ describe("resource metrics history API", () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     fetchMock.mockResolvedValue(response({
+      refresh_policy_key: "metrics_kubernetes",
       series: [{
         resource_id: "pod-1",
         cluster_id: "cluster-1",

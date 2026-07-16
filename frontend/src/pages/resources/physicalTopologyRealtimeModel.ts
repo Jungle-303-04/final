@@ -203,6 +203,14 @@ function resourceDeltaIdentity(
   return { namespace, name };
 }
 
+export function isPhysicalTopologyPodDelta(
+  message: unknown,
+  clusterId: string,
+): boolean {
+  const parsed = resourceDeltaMessageSchema.safeParse(message);
+  return parsed.success && resourceDeltaIdentity(parsed.data.key, clusterId) !== null;
+}
+
 function withValueMetadata(
   current: RealtimeOverlay,
   value: unknown,

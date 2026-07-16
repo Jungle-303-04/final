@@ -18,6 +18,7 @@ describe("resource detail metrics", () => {
   it("renders measured CPU and memory history in the metrics tab", async () => {
     const user = userEvent.setup();
     const loadResourceMetricsHistory = vi.fn().mockResolvedValue({
+      refreshPolicyKey: "metrics_kubernetes",
       completeness: "exact",
       partialReasonCodes: [],
       series: [{

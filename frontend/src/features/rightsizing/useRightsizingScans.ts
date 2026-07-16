@@ -5,6 +5,7 @@ import type {
   RightsizingPortFailure,
   RightsizingScan,
 } from "./rightsizingContract";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 
 export interface RightsizingClusterScope {
   clusterId: string;
@@ -42,13 +43,21 @@ export function useRightsizingScans(
     frame: { phase: "idle", scans: [], failures: [] },
   });
   const activeRequest = useRef<AbortController | null>(null);
+  const runRef = useRef<() => Promise<void>>(async () => undefined);
+  const refreshController = useServerRefreshScheduler(() => {
+    void runRef.current();
+  });
   const frame = record.scopeKey === scopeKey
     ? record.frame
     : { phase: "idle", scans: [], failures: [] } satisfies RightsizingScanFrame;
 
-  useEffect(() => () => activeRequest.current?.abort(), []);
+  useEffect(() => {
+    refreshController.backgroundFailure();
+    return () => activeRequest.current?.abort();
+  }, [refreshController, scopeKey]);
 
   const run = useCallback(async () => {
+    refreshController.backgroundFailure();
     activeRequest.current?.abort();
     const controller = new AbortController();
     activeRequest.current = controller;
@@ -96,6 +105,14 @@ export function useRightsizingScans(
 
     const scans = outcomes.flatMap((outcome) => outcome.ok ? [outcome.scan] : []);
     const failures = outcomes.flatMap((outcome) => outcome.ok ? [] : [outcome.failure]);
+    const refreshIntervals = new Set(scans.map((scan) => scan.refreshAfterSeconds));
+    if (refreshIntervals.size === 1) {
+      refreshController.acceptSuccess({
+        refreshAfterSeconds: refreshIntervals.values().next().value!,
+      });
+    } else {
+      refreshController.backgroundFailure();
+    }
     setRecord((current) => {
       if (current.scopeKey !== scopeKey) return current;
       const previousScans = new Map(current.frame.scans.map((scan) => [scan.scope.clusterId, scan]));
@@ -111,7 +128,11 @@ export function useRightsizingScans(
           : { phase: "ready", scans: mergedScans, failures },
       };
     });
-  }, [canonicalScopes, port, scopeKey]);
+  }, [canonicalScopes, port, refreshController, scopeKey]);
+
+  useEffect(() => {
+    runRef.current = run;
+  }, [run]);
 
   return { frame, run };
 }

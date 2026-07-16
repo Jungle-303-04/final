@@ -13,6 +13,7 @@ export function toResourceMetricsHistory(
     throw new ResourcesCanonicalError();
   }
   return {
+    refreshPolicyKey: value.refresh_policy_key,
     series: value.series.map((series) => ({
       resourceId: series.resource_id,
       clusterId: series.cluster_id,

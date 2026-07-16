@@ -17,7 +17,10 @@ import {
   type ChartConfig,
 } from "../../shared/ui/primitives/chart";
 import { Skeleton } from "../../shared/ui/primitives/skeleton";
-import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
+import type {
+  ResourceMetricsHistoryFrame,
+  ResourceMetricsUnavailableRetry,
+} from "./useResourceMetricsHistoryDataFrame";
 import type { ResourceMetricTimeRange } from "../../features/resources/resourceMetricsHistoryContract";
 import { TimelineRangeSelect } from "./ResourcesGraphChrome";
 
@@ -52,17 +55,19 @@ export function ResourceMetricsCharts({
   if (frame.phase === "idle" || frame.phase === "loading") {
     return <ResourceMetricsChartsLoading wide={wide} />;
   }
-  if (frame.phase === "failed") return <ResourceMetricsUnavailable />;
+  if (frame.phase === "failed") return <ResourceMetricsUnavailable retry={null} />;
 
   const series = frame.data.series.find((item) => item.resourceId === resourceId);
-  if (!series || series.points.length === 0) return <ResourceMetricsUnavailable />;
+  if (!series || series.points.length === 0) {
+    return <ResourceMetricsUnavailable retry={frame.unavailableRetry} />;
+  }
 
   const points = series.points.map((point) => ({
     cpu: point.cpuMillicores,
     memory: point.memoryMebibytes,
     time: Date.parse(point.observedAt),
   })).filter((point) => Number.isFinite(point.time));
-  if (points.length === 0) return <ResourceMetricsUnavailable />;
+  if (points.length === 0) return <ResourceMetricsUnavailable retry={frame.unavailableRetry} />;
 
   const partial = frame.data.completeness !== "exact" || series.completeness !== "exact";
   return (
@@ -217,13 +222,23 @@ function ResourceMetricsChartsLoading({ wide }: { wide: boolean }) {
   );
 }
 
-function ResourceMetricsUnavailable() {
+function ResourceMetricsUnavailable({ retry }: { retry: ResourceMetricsUnavailableRetry | null }) {
   const { t } = useI18n();
   return (
     <div className="grid min-h-48 place-items-center rounded-xl border border-dashed p-6 text-center">
       <div className="grid justify-items-center gap-2 text-sm text-muted-foreground">
         <Activity aria-hidden="true" className="size-6" />
         <p>{t("resources.detail.metricsUnavailable")}</p>
+        {retry === null ? null : (
+          <p role="status">
+            {retry.exhausted
+              ? t("resources.detail.metricsRetryExhausted")
+              : t("resources.detail.metricsRetrying", {
+                  attempt: retry.attempt,
+                  limit: retry.limit,
+                })}
+          </p>
+        )}
       </div>
     </div>
   );

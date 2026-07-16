@@ -10,7 +10,10 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceMetricsHistoryPort,
+  ResourcesRefreshPolicyKey,
+} from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
@@ -54,6 +57,7 @@ import {
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function ResourcesPage({
   filterPort,
@@ -64,6 +68,7 @@ export function ResourcesPage({
   changeTimelinePort,
   timelinePort,
   resourceMetricsHistoryPort,
+  refreshPolicies,
   resourceCapabilitiesPort,
   resourceActionsPort,
   podTerminalPort = EMPTY_POD_TERMINAL_PORT,
@@ -80,6 +85,7 @@ export function ResourcesPage({
   changeTimelinePort: ChangeTimelinePort;
   timelinePort?: TimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
   podTerminalPort?: PodTerminalPort;
@@ -92,7 +98,7 @@ export function ResourcesPage({
   const { reportUnauthorized } = useAuthSessionGate();
   const session = useOptionalProductSession();
   const filter = useUnifiedFilter();
-  const state = useResourcesPageState(port);
+  const state = useResourcesPageState(port, refreshPolicies);
   const topology = useResourceTopologyViewController();
   const authorityKey = session
     ? `${session.workspaceId}:${session.userId}`
@@ -103,6 +109,7 @@ export function ResourcesPage({
       filter.state.common.clusters.length === 1,
     filterState: filter.state,
     port: physicalTopologyPort,
+    refreshPolicies,
     reportUnauthorized,
     revision: state.podRevision,
   });
@@ -153,6 +160,7 @@ export function ResourcesPage({
     replayAtMs: filter.detail.timeAt,
     rows: currentResourceRows,
     workspaceId: session?.workspaceId ?? null,
+    onResourceDelta: state.requestPodEventInvalidation,
   });
   const changeTimeline = useChangeTimelineDataFrame({
     active:
@@ -183,6 +191,7 @@ export function ResourcesPage({
     filterState: filter.state,
     port: resourceMetricsHistoryPort,
     range: filter.detail.timeRange ?? "1h",
+    refreshPolicies,
     reportUnauthorized,
     resourceIds: metricResourceIds,
     snapshotRevision: filteredPage?.snapshot.snapshotRevision ?? null,
@@ -260,7 +269,7 @@ export function ResourcesPage({
                 <Badge variant="outline">{t("resources.refresh.paused")}</Badge>
               ) : null}
               <ResourcesLiveStatus state={physicalRealtime.live} />
-              {physicalRealtime.live.status === "connected" ? null : (
+              {physicalRealtime.live.status === "connected" || state.refreshAfterSeconds === null ? null : (
                 <PollingFreshness
                   connectionState={
                     physicalTopology.phase === "ready" && physicalTopology.refreshFailure
@@ -268,7 +277,7 @@ export function ResourcesPage({
                       : "connected"
                   }
                   dataUpdatedAt={Math.max(state.updatedAt, physicalTopology.updatedAt)}
-                  intervalSeconds={5}
+                  intervalSeconds={state.refreshAfterSeconds}
                   isFetching={refreshing || physicalTopology.refreshing}
                   onRefresh={state.refresh}
                 />

@@ -22,6 +22,7 @@ from domains.workload_detail.projection import (
     workload_detail_projection,
 )
 from domains.workload_detail.rightsizing_projection import rightsizing_scan_result
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.contracts.parity import ClusterScope
@@ -37,7 +38,6 @@ KUBERNETES_NAMESPACE_PATTERN = r"^(?:_|[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)$"
 KUBERNETES_KIND_PATTERN = r"^[A-Za-z][A-Za-z0-9.-]*$"
 
 router = APIRouter()
-RIGHTSIZING_REFRESH_AFTER_SECONDS = 300
 
 
 @router.get(
@@ -126,7 +126,7 @@ async def get_rightsizing_scan(
             namespaces=namespace_scope,
             limit=limit,
         ),
-        refresh_after_seconds=RIGHTSIZING_REFRESH_AFTER_SECONDS,
+        refresh_after_seconds=integral_refresh_after_seconds("metrics_rightsizing"),
     )
 
 

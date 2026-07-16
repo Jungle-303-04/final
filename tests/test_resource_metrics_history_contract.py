@@ -49,6 +49,7 @@ def test_metric_history_preserves_real_nulls_and_completeness() -> None:
 
     response = ResourceMetricsHistoryResponse(
         **built,
+        refresh_policy_key="metrics_kubernetes",
         snapshot=_snapshot(),
     )
     assert response.completeness == "partial"
@@ -108,7 +109,11 @@ def test_metric_history_preserves_real_node_samples_without_a_namespace() -> Non
         projection_complete=True,
     )
 
-    response = ResourceMetricsHistoryResponse(**built, snapshot=_snapshot())
+    response = ResourceMetricsHistoryResponse(
+        **built,
+        refresh_policy_key="metrics_kubernetes",
+        snapshot=_snapshot(),
+    )
     assert response.series[0].resource_type == "node"
     assert response.series[0].namespace is None
     assert response.series[0].points[0].cpu_mcores == 640.5

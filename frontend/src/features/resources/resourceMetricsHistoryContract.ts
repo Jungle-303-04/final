@@ -5,6 +5,16 @@ import type {
 } from "./resourcesFilterContract";
 
 export type ResourceMetricTimeRange = "15m" | "1h" | "6h" | "24h";
+export type ResourceMetricsRefreshPolicyKey =
+  | "metrics_kubernetes"
+  | "metrics_prometheus"
+  | "metrics_pvc"
+  | "metrics_rightsizing";
+export type ResourcesRefreshPolicyKey =
+  | "changes"
+  | "resource_list"
+  | "resource_list_slow"
+  | ResourceMetricsRefreshPolicyKey;
 
 export interface ResourceMetricHistoryPoint {
   observedAt: string;
@@ -25,6 +35,7 @@ export interface ResourceMetricHistorySeries {
 }
 
 export interface ResourceMetricsHistoryBatch {
+  refreshPolicyKey: ResourceMetricsRefreshPolicyKey;
   series: ResourceMetricHistorySeries[];
   completeness: ResourcesFilterCompleteness;
   partialReasonCodes: string[];

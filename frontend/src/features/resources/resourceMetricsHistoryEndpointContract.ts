@@ -10,6 +10,11 @@ export interface ResourceMetricsHistoryEndpointQuery extends ResourcesFilterEndp
 }
 
 export interface ResourceMetricsHistoryEndpointResponse {
+  refresh_policy_key:
+    | "metrics_kubernetes"
+    | "metrics_prometheus"
+    | "metrics_pvc"
+    | "metrics_rightsizing";
   series: Array<{
     resource_id: string;
     cluster_id: string;

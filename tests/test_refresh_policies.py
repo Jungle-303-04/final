@@ -24,6 +24,8 @@ def test_refresh_inventory_is_complete_and_domain_values_share_the_registry() ->
 
     assert len(response.policies) == 18
     assert response.policies["dashboard"].event_invalidation is True
+    assert response.policies["metrics_kubernetes"].retry_after_seconds == 5
+    assert response.policies["metrics_kubernetes"].retry_limit == 2
     assert response.policies["gitops_rows"].retry_after_seconds == 2
     assert response.policies["gitops_rows"].retry_limit == 4
     assert integral_refresh_after_seconds("helm_list") == 30
@@ -31,6 +33,7 @@ def test_refresh_inventory_is_complete_and_domain_values_share_the_registry() ->
     assert integral_refresh_after_seconds("cost_summary") == 60
     assert integral_refresh_after_seconds("cost_trend") == 120
     assert integral_refresh_after_seconds("cost_nodes") == 120
+    assert integral_refresh_after_seconds("metrics_rightsizing") == 600
     assert post_mutation_refresh_after_seconds("helm_detail") == 1.2
 
 

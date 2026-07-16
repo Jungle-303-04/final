@@ -4,7 +4,15 @@ import { useAuthSessionGate } from "../../features/auth/AuthSessionGate";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ResourcesPort } from "../../features/resources/resourcesContract";
-import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
+import type { ResourcesRefreshPolicyKey } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  BrowserRefreshPolicy,
+  BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
+import {
+  useServerRefreshScheduler,
+  type ServerRefreshController,
+} from "../../shared/data/useServerRefreshScheduler";
 import {
   blockForFailure,
   hasRetryBlocks,
@@ -20,13 +28,13 @@ import { resolveResourceType } from "./resourcesUrlState";
 import { useResourcesDataFrame } from "./useResourcesDataFrame";
 import { useResourcesDetailState } from "./useResourcesDetailState";
 
-const RESOURCE_COUNTS_POLL_INTERVAL_MS = 10_000;
-const POD_STATE_POLL_INTERVAL_MS = 5_000;
-export function useResourcesPageState(port: ResourcesPort) {
+export function useResourcesPageState(
+  port: ResourcesPort,
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
+) {
   const { reportUnauthorized } = useAuthSessionGate();
   const clusterScope = useClusterScope();
   const filter = useUnifiedFilter();
-  const refreshClusterScope = clusterScope.refresh;
   const params = useParams<"*">();
   const selectedClusterId = clusterScope.requestedClusterId;
   const legacyTypeResolution = resolveResourceType(params["*"]);
@@ -59,6 +67,10 @@ export function useResourcesPageState(port: ResourcesPort) {
   const includeDeleted = filter.state.resources.includeDeleted;
   const choices = clusterScope.collection;
   const [retryBlocks, setRetryBlocks] = useState<ResourcesRetryBlocks>({});
+  const retryBlocksRef = useRef(retryBlocks);
+  useEffect(() => {
+    retryBlocksRef.current = retryBlocks;
+  }, [retryBlocks]);
   const {
     closeDetail,
     detailIdentity,
@@ -73,69 +85,117 @@ export function useResourcesPageState(port: ResourcesPort) {
     setRetryBlocks,
   );
   const automaticRefreshPaused = hasRetryBlocks(retryBlocks);
-  const { refresh: advanceRevision, revision } = useVisibleRefreshClock(
-    !automaticRefreshPaused,
-    RESOURCE_COUNTS_POLL_INTERVAL_MS,
+  const [catalogRevision, setCatalogRevision] = useState(0);
+  const [revision, setRevision] = useState(0);
+  const [podRevision, setPodRevision] = useState(0);
+  const listPolicyScope = [
+    selectedClusterId ?? "",
+    selectedResourceType ?? "",
+    namespace ?? "",
+    includeDeleted ? "deleted" : "active",
+  ].join("\u001f");
+  const [listPolicyRecord, setListPolicyRecord] = useState<{
+    policy: BrowserRefreshPolicy;
+    scope: string;
+  } | null>(null);
+  const refreshAfterSeconds = listPolicyRecord?.scope === listPolicyScope
+    ? listPolicyRecord.policy.refreshAfterSeconds
+    : null;
+  const policyScope = useRef({ catalog: selectedClusterId, list: listPolicyScope });
+  useEffect(() => {
+    policyScope.current = { catalog: selectedClusterId, list: listPolicyScope };
+  }, [listPolicyScope, selectedClusterId]);
+  const catalogRefresh = useServerRefreshScheduler(
+    () => setCatalogRevision((current) => current + 1),
   );
-  const { refresh: advancePodRevision, revision: podRevision } = useVisibleRefreshClock(
-    !automaticRefreshPaused && clusterScope.selectedClusterExists,
-    POD_STATE_POLL_INTERVAL_MS,
+  const listRefresh = useServerRefreshScheduler(
+    () => setRevision((current) => current + 1),
   );
-  const observedRevision = useRef(revision);
-  const resumedFromBackground = useRef(false);
+  const acceptPolicy = useCallback((
+    key: "resource_list" | "resource_list_slow",
+    controller: ServerRefreshController,
+  ) => {
+    const requestedScope = key === "resource_list"
+      ? selectedClusterId
+      : listPolicyScope;
+    const isCurrentScope = () => (
+      key === "resource_list"
+        ? policyScope.current.catalog
+        : policyScope.current.list
+    ) === requestedScope;
+    void refreshPolicies.getPolicy(key).then(
+      (policy) => {
+        if (!isCurrentScope()) return;
+        if (key === "resource_list_slow") {
+          setListPolicyRecord({ policy, scope: listPolicyScope });
+        }
+        controller.acceptSuccess(policy);
+      },
+      () => {
+        if (isCurrentScope()) controller.backgroundFailure();
+      },
+    );
+  }, [listPolicyScope, refreshPolicies, selectedClusterId]);
   const recordFailure = useCallback(
     (
       target: ResourcesRequestTarget,
       failure: ReturnType<typeof toResourcesFailure>,
     ) => {
       const block = blockForFailure(target, failure);
-      setRetryBlocks((current) =>
-        block
-          ? withRetryBlock(current, block)
-          : withoutRetryBlock(current, target),
-      );
+      const next = block
+        ? withRetryBlock(retryBlocksRef.current, block)
+        : withoutRetryBlock(retryBlocksRef.current, target);
+      retryBlocksRef.current = next;
+      setRetryBlocks(next);
+      if (target === "catalog") catalogRefresh.backgroundFailure();
+      else listRefresh.backgroundFailure();
     },
-    [],
+    [catalogRefresh, listRefresh],
   );
   const recordSuccess = useCallback((target: ResourcesRequestTarget) => {
-    setRetryBlocks((current) => withoutRetryBlock(current, target));
-  }, []);
-  const refresh = useCallback(() => {
-    advanceRevision();
-    advancePodRevision();
-  }, [advancePodRevision, advanceRevision]);
-
-  useEffect(() => {
-    if (observedRevision.current === revision) return;
-    observedRevision.current = revision;
-    if (resumedFromBackground.current) {
-      resumedFromBackground.current = false;
-      return;
+    const next = withoutRetryBlock(retryBlocksRef.current, target);
+    retryBlocksRef.current = next;
+    setRetryBlocks(next);
+    if (target === "catalog") {
+      acceptPolicy("resource_list", catalogRefresh);
+    } else if (next.list === undefined && next.detail === undefined) {
+      acceptPolicy("resource_list_slow", listRefresh);
+    } else {
+      listRefresh.backgroundFailure();
     }
-    refreshClusterScope();
-  }, [refreshClusterScope, revision]);
+  }, [acceptPolicy, catalogRefresh, listRefresh]);
+  const refresh = useCallback(() => {
+    catalogRefresh.requestRefresh();
+    listRefresh.requestRefresh();
+    setPodRevision((current) => current + 1);
+    clusterScope.refresh();
+  }, [catalogRefresh, clusterScope, listRefresh]);
 
   useEffect(() => {
-    const rememberVisibilityResume = () => {
-      if (document.visibilityState === "visible") resumedFromBackground.current = true;
-    };
-    document.addEventListener("visibilitychange", rememberVisibilityResume);
-    return () => document.removeEventListener("visibilitychange", rememberVisibilityResume);
-  }, []);
+    catalogRefresh.backgroundFailure();
+  }, [catalogRefresh, selectedClusterId]);
+
+  useEffect(() => {
+    listRefresh.backgroundFailure();
+  }, [includeDeleted, listRefresh, namespace, selectedClusterId, selectedResourceType]);
 
   useEffect(() => {
     const retryAt = scheduledRateLimitRetryAt(retryBlocks);
     if (retryAt === null) return;
-    const timer = window.setTimeout(
-      advanceRevision,
-      Math.max(0, retryAt - Date.now()),
-    );
+    const timer = window.setTimeout(() => {
+      if (retryBlocks.catalog?.code === "rate-limited") catalogRefresh.requestRefresh();
+      if (
+        retryBlocks.list?.code === "rate-limited" ||
+        retryBlocks.detail?.code === "rate-limited"
+      ) listRefresh.requestRefresh();
+    }, Math.max(0, retryAt - Date.now()));
     return () => window.clearTimeout(timer);
-  }, [advanceRevision, retryBlocks]);
+  }, [catalogRefresh, listRefresh, retryBlocks]);
 
   const selectedClusterExists = clusterScope.selectedClusterExists;
   const frame = useResourcesDataFrame({
     catalogQuerySupported: true,
+    catalogRevision,
     detailClusterId: detailTarget?.clusterId ?? null,
     detailIdentity,
     includeDeleted,
@@ -145,7 +205,7 @@ export function useResourcesPageState(port: ResourcesPort) {
     onRequestFailure: recordFailure,
     onRequestSuccess: recordSuccess,
     reportUnauthorized,
-    revision,
+    listRevision: revision,
     selectedClusterExists,
     selectedClusterId,
     selectedResourceType,
@@ -166,6 +226,14 @@ export function useResourcesPageState(port: ResourcesPort) {
     },
     [filter],
   );
+  const requestPodEventInvalidation = useCallback(() => {
+    if (
+      selectedResourceType !== "pod" ||
+      listPolicyRecord?.scope !== listPolicyScope ||
+      listPolicyRecord.policy.eventInvalidation !== true
+    ) return;
+    listRefresh.requestEventInvalidation();
+  }, [listPolicyRecord, listPolicyScope, listRefresh, selectedResourceType]);
 
   return useMemo(
     () => ({
@@ -189,6 +257,7 @@ export function useResourcesPageState(port: ResourcesPort) {
       includeDeleted,
       detailTab: filter.detail.tab ?? "overview",
       automaticRefreshPaused,
+      refreshAfterSeconds,
       retryWaitSeconds: retryWaitSeconds(retryBlocks),
       recordListFailure(failure: ReturnType<typeof toResourcesFailure>) {
         recordFailure("list", failure);
@@ -199,6 +268,7 @@ export function useResourcesPageState(port: ResourcesPort) {
       revision,
       podRevision,
       refresh,
+      requestPodEventInvalidation,
       selectResourceType,
       cycleResourceType(direction: -1 | 1) {
         if (
@@ -303,6 +373,8 @@ export function useResourcesPageState(port: ResourcesPort) {
       navigateDetail,
       openDetail,
       refresh,
+      refreshAfterSeconds,
+      requestPodEventInvalidation,
       filter,
       recordFailure,
       recordSuccess,

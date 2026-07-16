@@ -22,7 +22,7 @@ describe("Rightsizing API", () => {
         availability: "unavailable",
         reason_codes: ["rightsizing_observation_not_integrated"],
       },
-      refresh_after_seconds: 300,
+      refresh_after_seconds: 600,
     }), { headers: { "content-type": "application/json" }, status: 200 }));
 
     await getRightsizingScan({

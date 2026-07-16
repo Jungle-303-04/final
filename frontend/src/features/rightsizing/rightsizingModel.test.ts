@@ -93,7 +93,7 @@ function scan(workloads: readonly RightsizingObservedWorkload[]): RightsizingSca
       failures: [],
       reasonCodes: [],
     },
-    refreshAfterSeconds: 60,
+    refreshAfterSeconds: 600,
   };
 }
 

@@ -184,6 +184,7 @@ def test_rightsizing_scan_is_rbac_bound_bounded_and_preserves_partial_failures()
     assert body["result"]["failures"] == [
         {"resource": None, "reason_code": "one_workload_metrics_unavailable"}
     ]
+    assert body["refresh_after_seconds"] == 600
     assert db.scan_calls == [
         {
             "workspace_id": WORKSPACE_ID,

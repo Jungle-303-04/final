@@ -8,6 +8,7 @@ function endpointResponse(
   overrides: Partial<ResourceMetricsHistoryEndpointResponse> = {},
 ): ResourceMetricsHistoryEndpointResponse {
   return {
+    refresh_policy_key: "metrics_kubernetes",
     series: [{
       resource_id: "inventory-pod-1",
       cluster_id: "cluster-a",

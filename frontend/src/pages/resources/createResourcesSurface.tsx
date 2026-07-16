@@ -6,7 +6,10 @@ import type { PhysicalTopologyPort } from "../../features/resources/physicalTopo
 import type { PhysicalTopologyRealtimePort } from "../../features/resources/physicalTopologyRealtimeContract";
 import type { RelationTopologyPort } from "../../features/resources/relationTopologyContract";
 import type { ChangeTimelinePort } from "../../features/resources/changeTimelineContract";
-import type { ResourceMetricsHistoryPort } from "../../features/resources/resourceMetricsHistoryContract";
+import type {
+  ResourceMetricsHistoryPort,
+  ResourcesRefreshPolicyKey,
+} from "../../features/resources/resourceMetricsHistoryContract";
 import type {
   ResourceActionsPort,
   ResourceCapabilitiesPort,
@@ -20,6 +23,7 @@ import {
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
 import type { TimelinePort } from "../../features/timeline/timelineContract";
+import type { BrowserRefreshPolicyRegistry } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -31,6 +35,7 @@ export function createResourcesSurface(
   changeTimelinePort: ChangeTimelinePort,
   timelinePort: TimelinePort,
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
+  refreshPolicies: BrowserRefreshPolicyRegistry<ResourcesRefreshPolicyKey>,
   resourceCapabilitiesPort: ResourceCapabilitiesPort,
   resourceActionsPort: ResourceActionsPort,
   podTerminalPort: PodTerminalPort = EMPTY_POD_TERMINAL_PORT,
@@ -49,6 +54,7 @@ export function createResourcesSurface(
         changeTimelinePort={changeTimelinePort}
         timelinePort={timelinePort}
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}
+        refreshPolicies={refreshPolicies}
         resourceCapabilitiesPort={resourceCapabilitiesPort}
         resourceActionsPort={resourceActionsPort}
         podTerminalPort={podTerminalPort}

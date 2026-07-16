@@ -39,7 +39,12 @@ _DEFAULT_POLICIES: dict[RefreshPolicyKey, dict[str, Any]] = {
         "event_invalidation": True,
     },
     "changes": {"stale_after_seconds": 5, "refresh_after_seconds": 15, "event_invalidation": True},
-    "metrics_kubernetes": {"stale_after_seconds": 20, "refresh_after_seconds": 30},
+    "metrics_kubernetes": {
+        "stale_after_seconds": 20,
+        "refresh_after_seconds": 30,
+        "retry_after_seconds": 5,
+        "retry_limit": 2,
+    },
     "metrics_prometheus": {"stale_after_seconds": 30, "refresh_after_seconds": 60},
     "metrics_pvc": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
     "metrics_rightsizing": {"stale_after_seconds": 30, "refresh_after_seconds": 600},

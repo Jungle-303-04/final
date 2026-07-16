@@ -782,6 +782,7 @@ async def get_resource_metrics_history(
     }
     fingerprint = filter_fingerprint(filters)
     return ResourceMetricsHistoryResponse(
+        refresh_policy_key="metrics_kubernetes",
         series=history["series"],
         completeness=history["completeness"],
         partial_reason_codes=sorted(reasons),

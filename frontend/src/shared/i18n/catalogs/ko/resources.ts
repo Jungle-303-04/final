@@ -260,6 +260,8 @@ export const resourcesKo = {
   "resources.detail.metricsCurrent": "현재",
   "resources.detail.metricsPeak": "최고",
   "resources.detail.metricsPartial": "일부 구간의 측정값만 표시 중",
+  "resources.detail.metricsRetryExhausted": "메트릭 소스를 계속 사용할 수 없어 일반 갱신 주기로 전환했습니다.",
+  "resources.detail.metricsRetrying": "메트릭 소스 재시도 {attempt}/{limit}",
   "resources.detail.yamlUnavailable": "이 리소스의 원본 YAML을 아직 볼 수 없습니다.",
   "resources.detail.metricsUnavailable": "이 리소스의 시각별 상세 메트릭을 사용할 수 없습니다.",
   "resources.detail.context": "읽기 전용 필터 맥락",
