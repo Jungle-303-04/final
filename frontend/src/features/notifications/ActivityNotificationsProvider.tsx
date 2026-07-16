@@ -797,16 +797,34 @@ function writeStoredActivities(key: string, activities: readonly ActivityNotific
 function isStoredActivity(value: unknown): value is ActivityNotification {
   if (typeof value !== "object" || value === null) return false;
   const activity = value as Partial<ActivityNotification>;
+  const kinds = new Set<ActivityNotification["kind"]>([
+    "incident-analysis",
+    "incident-recovery",
+    "safe-pr",
+    "workflow",
+    "ai",
+  ]);
+  const statuses = new Set<ActivityNotification["status"]>([
+    "running",
+    "waiting",
+    "succeeded",
+    "failed",
+  ]);
   return typeof activity.id === "string" &&
-    typeof activity.kind === "string" &&
-    typeof activity.status === "string" &&
+    kinds.has(activity.kind as ActivityNotification["kind"]) &&
+    statuses.has(activity.status as ActivityNotification["status"]) &&
     typeof activity.title === "string" &&
     typeof activity.description === "string" &&
     typeof activity.target === "string" &&
+    (typeof activity.href === "string" || activity.href === null) &&
     typeof activity.createdAt === "string" &&
+    Number.isFinite(Date.parse(activity.createdAt)) &&
     typeof activity.updatedAt === "string" &&
-    typeof activity.currentStep === "number" &&
-    typeof activity.totalSteps === "number" &&
+    Number.isFinite(Date.parse(activity.updatedAt)) &&
+    Number.isInteger(activity.currentStep) &&
+    Number.isInteger(activity.totalSteps) &&
+    (activity.currentStep ?? 0) >= 0 &&
+    (activity.totalSteps ?? 0) >= 1 &&
     typeof activity.muted === "boolean" &&
     typeof activity.read === "boolean";
 }

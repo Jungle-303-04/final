@@ -1,6 +1,5 @@
 import {
   Bell,
-  BellRing,
   CheckCheck,
   ChevronDown,
   CircleCheck,
@@ -203,34 +202,6 @@ export function HeaderAlertsPopover({
           </div>
         ) : null}
 
-        {import.meta.env.DEV ? (
-          <>
-            <Separator />
-            <div className="bg-muted/20 p-2">
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-2">
-                <Button
-                  className="w-full"
-                  disabled={alerts.initialLoading || alerts.creatingTestEvent}
-                  onClick={() => void alerts.createTestEvent()}
-                  type="button"
-                  variant="outline"
-                >
-                  {alerts.creatingTestEvent ? (
-                    <LoaderCircle aria-hidden="true" className="animate-spin" />
-                  ) : (
-                    <BellRing aria-hidden="true" />
-                  )}
-                  {alerts.creatingTestEvent
-                    ? t("alerts.header.testing")
-                    : t("alerts.header.test")}
-                </Button>
-                <p className="px-1 pt-2 text-xs leading-relaxed text-muted-foreground">
-                  {t("alerts.header.testHint")}
-                </p>
-              </div>
-            </div>
-          </>
-        ) : null}
         </PopoverContent>
       </Popover>
     </div>
@@ -439,5 +410,7 @@ function formatAlertTime(
   value: string,
   formatDate: (value: Date | number, options?: Intl.DateTimeFormatOptions) => string,
 ): string {
-  return formatDate(new Date(value), { hour: "2-digit", minute: "2-digit" });
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "-";
+  return formatDate(timestamp, { hour: "2-digit", minute: "2-digit" });
 }
