@@ -7,7 +7,8 @@ release payloads, values, rendered manifests, or credentials.
 
 from __future__ import annotations
 
-from typing import Literal
+import json
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -60,6 +61,93 @@ class HelmFeatureAvailability(StrictModel):
 
     availability: Literal["unavailable"] = "unavailable"
     reason_code: str = Field(min_length=1)
+
+
+HelmUpgradeValueType = Literal["string", "integer", "number", "boolean"]
+HelmUpgradeScalar = str | int | float | bool | None
+
+
+class HelmUpgradeInput(StrictModel):
+    """One server-declared primitive value accepted by an executable recipe."""
+
+    name: str = Field(min_length=1, max_length=253)
+    value_type: HelmUpgradeValueType
+    required: bool
+    default: HelmUpgradeScalar = None
+    allowed_values: tuple[HelmUpgradeScalar, ...] = ()
+
+    @model_validator(mode="after")
+    def scalar_types_match(self) -> HelmUpgradeInput:
+        values = (self.default, *self.allowed_values)
+        if any(
+            value is not None and not _upgrade_scalar_matches(self.value_type, value)
+            for value in values
+        ):
+            raise ValueError("Helm upgrade input scalar type is inconsistent")
+        return self
+
+
+class HelmUpgradeTarget(StrictModel):
+    """A target backed by the existing digest-pinned catalog Helm executor."""
+
+    item_id: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=120)
+    version: str = Field(min_length=1, max_length=80)
+    chart_version: str = Field(min_length=1, max_length=80)
+    inputs: tuple[HelmUpgradeInput, ...] = ()
+
+
+class HelmReleaseCommands(StrictModel):
+    availability: Literal["available"] = "available"
+    actions: tuple[Literal["upgrade"], ...] = ("upgrade",)
+    confirmation_required: Literal[True] = True
+    realtime: Literal[True] = True
+    upgrade_targets: tuple[HelmUpgradeTarget, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def executable_actions_are_exact(self) -> HelmReleaseCommands:
+        if self.actions != ("upgrade",):
+            raise ValueError("Helm release commands must expose only upgrade")
+        identities = tuple((item.item_id, item.version) for item in self.upgrade_targets)
+        if len(set(identities)) != len(identities):
+            raise ValueError("Helm upgrade targets must be unique")
+        for target in self.upgrade_targets:
+            names = tuple(item.name for item in target.inputs)
+            if len(set(names)) != len(names):
+                raise ValueError("Helm upgrade inputs must be unique")
+        return self
+
+
+class HelmReleaseUpgradeRequest(StrictModel):
+    cluster_id: str = Field(min_length=1, max_length=253)
+    expected_revision: int = Field(ge=1)
+    catalog_item_id: str = Field(min_length=1, max_length=120)
+    catalog_version: str = Field(min_length=1, max_length=80)
+    values: dict[str, Any] = Field(default_factory=dict)
+    confirmation: Literal[True]
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def values_are_bounded(self) -> HelmReleaseUpgradeRequest:
+        if len(self.values) > 100:
+            raise ValueError("Helm upgrade values exceed the field limit")
+        try:
+            encoded = json.dumps(self.values, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Helm upgrade values must be JSON compatible") from error
+        if len(encoded.encode("utf-8")) > 65_536:
+            raise ValueError("Helm upgrade values exceed the byte limit")
+        return self
+
+
+def _upgrade_scalar_matches(value_type: HelmUpgradeValueType, value: object) -> bool:
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if value_type == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, bool)
 
 
 class HelmOwnedResource(StrictModel):
@@ -119,7 +207,7 @@ class HelmReleaseDetail(StrictModel):
     manifest: HelmFeatureAvailability
     values: HelmFeatureAvailability
     owned_resources: HelmOwnedResourceObservation | HelmFeatureAvailability
-    commands: HelmFeatureAvailability
+    commands: HelmFeatureAvailability | HelmReleaseCommands
 
 
 class HelmReleaseListResponse(StrictModel):

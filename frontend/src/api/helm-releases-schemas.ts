@@ -24,6 +24,52 @@ export const helmUnavailableFeatureSchema = z.strictObject({
   reason_code: z.string().min(1),
 });
 
+const helmUpgradeScalarSchema = z.union([
+  z.string(),
+  z.number().finite(),
+  z.boolean(),
+  z.null(),
+]);
+
+export const helmUpgradeInputSchema = z.strictObject({
+  name: z.string().min(1).max(253),
+  value_type: z.enum(["string", "integer", "number", "boolean"]),
+  required: z.boolean(),
+  default: helmUpgradeScalarSchema,
+  allowed_values: z.array(helmUpgradeScalarSchema),
+}).superRefine((value, context) => {
+  for (const candidate of [value.default, ...value.allowed_values]) {
+    if (candidate !== null && !upgradeScalarMatches(value.value_type, candidate)) {
+      context.addIssue({ code: "custom", message: "Helm upgrade input scalar type is inconsistent" });
+    }
+  }
+});
+
+export const helmReleaseCommandsSchema = z.strictObject({
+  availability: z.literal("available"),
+  actions: z.tuple([z.literal("upgrade")]),
+  confirmation_required: z.literal(true),
+  realtime: z.literal(true),
+  upgrade_targets: z.array(z.strictObject({
+    item_id: z.string().min(1).max(120),
+    name: z.string().min(1).max(120),
+    version: z.string().min(1).max(80),
+    chart_version: z.string().min(1).max(80),
+    inputs: z.array(helmUpgradeInputSchema),
+  })).min(1),
+}).superRefine((value, context) => {
+  const targets = value.upgrade_targets.map((item) => `${item.item_id}\u001f${item.version}`);
+  if (new Set(targets).size !== targets.length) {
+    context.addIssue({ code: "custom", message: "Helm upgrade targets must be unique" });
+  }
+  for (const target of value.upgrade_targets) {
+    const names = target.inputs.map((item) => item.name);
+    if (new Set(names).size !== names.length) {
+      context.addIssue({ code: "custom", message: "Helm upgrade inputs must be unique" });
+    }
+  }
+});
+
 export const helmResourceHealthSchema = helmUnavailableFeatureSchema.extend({
   health: z.null(),
 }).or(z.strictObject({
@@ -106,9 +152,19 @@ export const helmReleaseDetailSchema = z.strictObject({
     manifest: helmUnavailableFeatureSchema,
     values: helmUnavailableFeatureSchema,
     owned_resources: helmOwnedResourcesSchema,
-    commands: helmUnavailableFeatureSchema,
+    commands: helmUnavailableFeatureSchema.or(helmReleaseCommandsSchema),
   }),
 });
 
 export type HelmReleaseListEndpoint = z.infer<typeof helmReleaseListSchema>;
 export type HelmReleaseDetailEndpoint = z.infer<typeof helmReleaseDetailSchema>;
+
+function upgradeScalarMatches(
+  valueType: "string" | "integer" | "number" | "boolean",
+  value: string | number | boolean,
+): boolean {
+  if (valueType === "string") return typeof value === "string";
+  if (valueType === "integer") return typeof value === "number" && Number.isInteger(value);
+  if (valueType === "number") return typeof value === "number" && Number.isFinite(value);
+  return typeof value === "boolean";
+}

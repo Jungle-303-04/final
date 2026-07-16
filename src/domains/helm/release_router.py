@@ -1,4 +1,4 @@
-"""HTTP boundary for the read-only Helm release projection."""
+"""HTTP boundary for Helm release observations and capability-gated commands."""
 
 from __future__ import annotations
 
@@ -8,6 +8,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from domains.catalog.install import (
+    CatalogHelmInstallPayload,
+    CatalogInstallValidationError,
+    CatalogRecipeUnsupported,
+    server_helm_recipe,
+    server_helm_recipes,
+    validate_catalog_values,
+    validate_install_names,
+)
 from domains.command.events import CommandRequestedBody
 from domains.command.repository import AgentCommandCapacityExceeded
 from domains.command.router import (
@@ -21,8 +30,14 @@ from domains.command.router import (
 from domains.gitops.events import Diff
 from domains.helm.release_projection import helm_release_detail, helm_release_list
 from domains.helm.repository import HelmOwnedResourceObservationBatch
-from domains.identity.dependencies import require_session, resolve_allowed_cluster_ids
-from packages.config.constants import RiskLevel
+from domains.identity.dependencies import (
+    require_cluster_access,
+    require_session,
+    resolve_allowed_cluster_ids,
+)
+from domains.target.connectivity import AGENT_STATUS_ONLINE, cluster_connection_status
+from packages.config.constants import Command, RiskLevel, Sandbox
+from packages.config.control import control_namespace_allowed
 from packages.config.helm import helm_owned_resource_query_limit
 from packages.contracts.auth import Actor
 from packages.contracts.gateway import routes as gateway_routes
@@ -32,6 +47,11 @@ from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HelmArtifactCommandPayload,
     HelmArtifactReadRequest,
+    HelmFeatureAvailability,
+    HelmReleaseCommands,
+    HelmReleaseUpgradeRequest,
+    HelmUpgradeInput,
+    HelmUpgradeTarget,
 )
 from packages.contracts.helm.releases import HelmReleaseDetailResponse, HelmReleaseListResponse
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
@@ -45,6 +65,14 @@ SCOPE_NOT_FOUND_DETAIL = "Helm release scope not found"
 RELEASE_NOT_FOUND_DETAIL = "Helm release not found"
 ARTIFACT_AGENT_UNAVAILABLE_DETAIL = "Helm artifact reader is unavailable"
 ARTIFACT_CAPACITY_DETAIL = "too many active Helm artifact reads"
+UPGRADE_AGENT_UNAVAILABLE_DETAIL = "Helm release upgrade runner is unavailable"
+UPGRADE_STALE_REVISION_DETAIL = "Helm release revision changed; refresh before upgrading"
+UPGRADE_RECIPE_INVALID_DETAIL = "Helm release upgrade recipe is invalid"
+UPGRADE_NAMESPACE_UNAVAILABLE = "helm_upgrade_namespace_not_supported"
+UPGRADE_PERMISSION_UNAVAILABLE = "helm_upgrade_permission_denied"
+UPGRADE_AGENT_UNAVAILABLE = "helm_upgrade_agent_unavailable"
+UPGRADE_REVISION_UNAVAILABLE = "helm_release_revision_unavailable"
+UPGRADE_TARGETS_UNAVAILABLE = "helm_upgrade_targets_unavailable"
 MAX_SCOPE_VALUES = 200
 
 
@@ -127,7 +155,7 @@ async def get_helm_release(
         Permission.INVENTORY_READ.value,
     )
     _require_requested_clusters((selected_cluster,), allowed_clusters)
-    contexts, agent_statuses, storage_rows, owned_resources = await asyncio.gather(
+    contexts, agent_statuses, storage_rows, owned_resources, deploy_clusters = await asyncio.gather(
         asyncio.to_thread(
             db.helm_release_observation_contexts,
             workspace_id=workspace_id,
@@ -150,6 +178,13 @@ async def get_helm_release(
             release_scopes=((selected_cluster, selected_namespace, selected_release),),
             limit=helm_owned_resource_query_limit(),
         ),
+        asyncio.to_thread(
+            resolve_allowed_cluster_ids,
+            db,
+            current,
+            workspace_id,
+            Permission.DEPLOY_RUN.value,
+        ),
     )
     detail = helm_release_detail(
         storage_rows,
@@ -163,7 +198,132 @@ async def get_helm_release(
     )
     if detail is None:
         raise HTTPException(status_code=404, detail=RELEASE_NOT_FOUND_DETAIL)
-    return detail
+    commands = await asyncio.to_thread(
+        _release_upgrade_commands,
+        db,
+        workspace_id,
+        selected_cluster,
+        selected_namespace,
+        detail.detail.release.revision,
+        selected_cluster in deploy_clusters,
+    )
+    return detail.model_copy(
+        update={"detail": detail.detail.model_copy(update={"commands": commands})}
+    )
+
+
+@router.post(
+    gateway_routes.HELM_RELEASE_UPGRADE_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def create_helm_release_upgrade(
+    namespace: str,
+    release_name: str,
+    payload: HelmReleaseUpgradeRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    """Upgrade one observed release through the existing digest-pinned agent executor."""
+
+    selected_namespace = _single_scope_value(namespace)
+    selected_release = _single_scope_value(release_name)
+    selected_cluster = _single_scope_value(payload.cluster_id)
+    workspace_id = _workspace_id(current)
+    require_cluster_access(
+        db,
+        current,
+        workspace_id,
+        selected_cluster,
+        Permission.DEPLOY_RUN.value,
+    )
+    if selected_namespace != Sandbox.NAMESPACE or not control_namespace_allowed(selected_namespace):
+        raise HTTPException(status_code=409, detail=UPGRADE_NAMESPACE_UNAVAILABLE)
+    if not await asyncio.to_thread(
+        _agent_supports_release_upgrade,
+        db,
+        workspace_id,
+        selected_cluster,
+    ):
+        raise HTTPException(status_code=409, detail=UPGRADE_AGENT_UNAVAILABLE_DETAIL)
+    storage_rows = await asyncio.to_thread(
+        db.list_helm_storage_observations,
+        workspace_id=workspace_id,
+        cluster_ids=(selected_cluster,),
+        namespaces=(selected_namespace,),
+    )
+    observed_revision = _release_observed_revision(storage_rows, selected_release)
+    if observed_revision is None:
+        raise HTTPException(status_code=404, detail=RELEASE_NOT_FOUND_DETAIL)
+    if observed_revision != payload.expected_revision:
+        raise HTTPException(status_code=409, detail=UPGRADE_STALE_REVISION_DETAIL)
+    try:
+        recipe = server_helm_recipe(payload.catalog_item_id, payload.catalog_version)
+        validate_install_names(
+            application_name=selected_release,
+            namespace=selected_namespace,
+            release_name=selected_release,
+        )
+        values = validate_catalog_values(recipe.values_schema, payload.values)
+    except (CatalogRecipeUnsupported, CatalogInstallValidationError) as error:
+        raise HTTPException(status_code=422, detail=UPGRADE_RECIPE_INVALID_DETAIL) from error
+
+    command_payload = CatalogHelmInstallPayload(
+        catalog_item_id=recipe.item_id,
+        catalog_version=recipe.version,
+        namespace=selected_namespace,
+        application_name=selected_release,
+        release_name=selected_release,
+        values=values,
+    )
+    command = CommandRequestedBody(
+        cluster_id=selected_cluster,
+        action=Command.CATALOG_HELM_INSTALL_ACTION,
+        namespace=selected_namespace,
+        reason=payload.reason or f"upgrade Helm release {selected_release}",
+        diff=Diff(
+            workspace_id=workspace_id,
+            cluster_id=selected_cluster,
+            resource=f"helm-release/{selected_namespace}/{selected_release}",
+            namespace=selected_namespace,
+            desired_image=f"catalog:{recipe.item_id}@{recipe.version}",
+            actual_image=f"helm-revision:{observed_revision}",
+            risk=RiskLevel.SANDBOX_ONLY,
+            status="upgrade",
+            basis={
+                "expected_revision": observed_revision,
+                "catalog_item_id": recipe.item_id,
+                "catalog_version": recipe.version,
+                "chart_version": recipe.chart_version,
+            },
+        ),
+        command_id=new_command_id(),
+        payload=command_payload.model_dump(mode="json"),
+        workspace_id=workspace_id,
+        priority=COMMAND_PRIORITY_HIGH,
+        requested_by=str(getattr(current, "user_id", "")),
+        direct_execution=True,
+        direct_execution_confirmed=True,
+    )
+    accepted, receipt_event = await accept_command_with_receipt_stage(
+        events,
+        command,
+        actor=Actor(
+            str(getattr(current, "user_id", "")),
+            tuple(getattr(current, "roles", ()) or ()),
+        ),
+    )
+    response = command_accepted_response(command, accepted)
+    if not await announce_staged_operation_event(
+        operation_events,
+        receipt_event,
+        workspace_id=workspace_id,
+    ):
+        await publish_accepted_operation(operation_events, command, response)
+    return response
 
 
 @router.post(
@@ -326,6 +486,119 @@ def _release_is_observed(rows: list[dict[str, Any]], release_name: str) -> bool:
         if isinstance(labels, Mapping) and str(labels.get("name") or "").strip() == release_name:
             return True
     return False
+
+
+def _release_observed_revision(
+    rows: list[dict[str, Any]],
+    release_name: str,
+) -> int | None:
+    revisions: list[int] = []
+    for row in rows:
+        labels = row.get("labels")
+        if not isinstance(labels, Mapping):
+            continue
+        if str(labels.get("name") or "").strip() != release_name:
+            continue
+        try:
+            revision = int(str(labels.get("version") or ""))
+        except ValueError:
+            continue
+        if revision > 0:
+            revisions.append(revision)
+    return max(revisions) if revisions else None
+
+
+def _release_upgrade_commands(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+    namespace: str,
+    revision: int | None,
+    has_deploy_access: bool,
+) -> HelmFeatureAvailability | HelmReleaseCommands:
+    if not has_deploy_access:
+        return HelmFeatureAvailability(reason_code=UPGRADE_PERMISSION_UNAVAILABLE)
+    if namespace != Sandbox.NAMESPACE or not control_namespace_allowed(namespace):
+        return HelmFeatureAvailability(reason_code=UPGRADE_NAMESPACE_UNAVAILABLE)
+    if revision is None:
+        return HelmFeatureAvailability(reason_code=UPGRADE_REVISION_UNAVAILABLE)
+    if not _agent_supports_release_upgrade(db, workspace_id, cluster_id):
+        return HelmFeatureAvailability(reason_code=UPGRADE_AGENT_UNAVAILABLE)
+    targets = _helm_upgrade_targets()
+    if not targets:
+        return HelmFeatureAvailability(reason_code=UPGRADE_TARGETS_UNAVAILABLE)
+    return HelmReleaseCommands(upgrade_targets=targets)
+
+
+def _helm_upgrade_targets() -> tuple[HelmUpgradeTarget, ...]:
+    targets: list[HelmUpgradeTarget] = []
+    for recipe in server_helm_recipes():
+        inputs = _upgrade_inputs(recipe.values_schema)
+        if inputs is None:
+            continue
+        targets.append(
+            HelmUpgradeTarget(
+                item_id=recipe.item_id,
+                name=recipe.display_name,
+                version=recipe.version,
+                chart_version=recipe.chart_version,
+                inputs=inputs,
+            )
+        )
+    return tuple(targets)
+
+
+def _upgrade_inputs(schema: Mapping[str, Any]) -> tuple[HelmUpgradeInput, ...] | None:
+    properties_value = schema.get("properties")
+    properties = properties_value if isinstance(properties_value, Mapping) else {}
+    required_value = schema.get("required")
+    required = {str(name) for name in required_value} if isinstance(required_value, list) else set()
+    inputs: list[HelmUpgradeInput] = []
+    for name, rule_value in sorted(properties.items(), key=lambda item: str(item[0])):
+        rule = rule_value if isinstance(rule_value, Mapping) else {}
+        value_type = str(rule.get("type") or "")
+        if value_type not in {"string", "integer", "number", "boolean"}:
+            if str(name) in required:
+                return None
+            continue
+        default = rule.get("default")
+        if not isinstance(default, (str, int, float, bool)):
+            default = None
+        allowed = rule.get("enum")
+        allowed_values = (
+            tuple(value for value in allowed if isinstance(value, (str, int, float, bool)))
+            if isinstance(allowed, list)
+            else ()
+        )
+        inputs.append(
+            HelmUpgradeInput(
+                name=str(name),
+                value_type=value_type,
+                required=str(name) in required,
+                default=default,
+                allowed_values=allowed_values,
+            )
+        )
+    if not required.issubset({item.name for item in inputs}):
+        return None
+    return tuple(inputs)
+
+
+def _agent_supports_release_upgrade(
+    db: Any,
+    workspace_id: str,
+    cluster_id: str,
+) -> bool:
+    reader = getattr(db, "list_cluster_agent_statuses", None)
+    if not callable(reader):
+        return False
+    required = {"command_receiver", Command.CATALOG_HELM_INSTALL_CAPABILITY}
+    return any(
+        isinstance(item, Mapping)
+        and cluster_connection_status(item) == AGENT_STATUS_ONLINE
+        and required.issubset(set(item.get("capabilities") or ()))
+        for item in reader(workspace_id, cluster_id)
+    )
 
 
 def _agent_supports_artifact_reads(

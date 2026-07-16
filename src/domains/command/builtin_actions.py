@@ -47,6 +47,20 @@ class ApplyManifestCommand:
 
 
 @command.action(
+    Command.CATALOG_HELM_INSTALL_ACTION,
+    allowed_namespaces=(Sandbox.NAMESPACE,),
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.CATALOG_HELM_INSTALL_CAPABILITY,
+)
+class CatalogHelmUpgradeCommand:
+    """Digest-pinned catalog execution reused for an observed release upgrade."""
+
+
+@command.action(
     Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     recovery_aliases=("deployment_scale",),
     allowed_namespaces=(Sandbox.NAMESPACE,),

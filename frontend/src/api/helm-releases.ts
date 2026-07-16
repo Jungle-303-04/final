@@ -16,6 +16,8 @@ export const HELM_RELEASES_PATH = "/api/helm/releases" as const;
 export const HELM_RELEASE_PATH = "/api/helm/releases/{namespace}/{release_name}" as const;
 export const HELM_RELEASE_ARTIFACT_PATH =
   "/api/helm/releases/{namespace}/{release_name}/artifacts" as const;
+export const HELM_RELEASE_UPGRADE_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/upgrade" as const;
 
 export interface HelmReleaseListQuery {
   clusterIds?: readonly string[];
@@ -79,6 +81,47 @@ export function startHelmArtifactRead(
       revision: input.revision,
       comparison_revision: input.comparisonRevision ?? null,
       all_values: input.allValues ?? false,
+    }),
+    signal,
+  });
+}
+
+export function startHelmReleaseUpgrade(
+  input: {
+    clusterId: string;
+    namespace: string;
+    releaseName: string;
+    expectedRevision: number;
+    catalogItemId: string;
+    catalogVersion: string;
+    values: Readonly<Record<string, unknown>>;
+    confirmation: true;
+    reason?: string;
+  },
+  signal?: AbortSignal,
+): Promise<ResourceActionAccepted> {
+  const clusterId = requiredIdentity(input.clusterId, "clusterId");
+  const namespace = requiredIdentity(input.namespace, "namespace");
+  const releaseName = requiredIdentity(input.releaseName, "releaseName");
+  const catalogItemId = requiredIdentity(input.catalogItemId, "catalogItemId");
+  const catalogVersion = requiredIdentity(input.catalogVersion, "catalogVersion");
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    throw new RangeError("expectedRevision must be a positive integer");
+  }
+  const path = HELM_RELEASE_UPGRADE_PATH
+    .replace("{namespace}", encodePathSegment(namespace))
+    .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
+  return apiRequest(path, resourceActionAcceptedSchema, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cluster_id: clusterId,
+      expected_revision: input.expectedRevision,
+      catalog_item_id: catalogItemId,
+      catalog_version: catalogVersion,
+      values: input.values,
+      confirmation: input.confirmation,
+      reason: input.reason,
     }),
     signal,
   });

@@ -44,6 +44,33 @@ export interface HelmUnavailableFeature {
   reasonCode: string;
 }
 
+export type HelmUpgradeValueType = "string" | "integer" | "number" | "boolean";
+export type HelmUpgradeScalar = string | number | boolean | null;
+
+export interface HelmUpgradeInput {
+  name: string;
+  valueType: HelmUpgradeValueType;
+  required: boolean;
+  defaultValue: HelmUpgradeScalar;
+  allowedValues: readonly HelmUpgradeScalar[];
+}
+
+export interface HelmUpgradeTarget {
+  itemId: string;
+  name: string;
+  version: string;
+  chartVersion: string;
+  inputs: readonly HelmUpgradeInput[];
+}
+
+export interface HelmReleaseCommands {
+  availability: "available";
+  actions: readonly ["upgrade"];
+  confirmationRequired: true;
+  realtime: true;
+  upgradeTargets: readonly HelmUpgradeTarget[];
+}
+
 export interface HelmResourceHealthAvailability extends HelmUnavailableFeature {
   health: null;
 }
@@ -99,6 +126,8 @@ export interface HelmArtifactReceipt {
   commandId: string;
   status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
 }
+
+export type HelmReleaseUpgradeReceipt = HelmArtifactReceipt;
 
 interface HelmArtifactResultBase {
   artifact: HelmArtifactKind;
@@ -226,7 +255,7 @@ export interface HelmReleaseDetail {
   manifest: HelmUnavailableFeature;
   values: HelmUnavailableFeature;
   ownedResources: HelmOwnedResources;
-  commands: HelmUnavailableFeature;
+  commands: HelmUnavailableFeature | HelmReleaseCommands;
   refreshAfterSeconds: number;
   postMutationRefreshAfterSeconds: number;
 }
@@ -247,6 +276,15 @@ export interface HelmReleaseDetailRequest {
   clusterId: string;
   namespace: string;
   releaseName: string;
+}
+
+export interface HelmReleaseUpgradeRequest extends HelmReleaseDetailRequest {
+  expectedRevision: number;
+  catalogItemId: string;
+  catalogVersion: string;
+  values: Readonly<Record<string, unknown>>;
+  confirmation: true;
+  reason?: string;
 }
 
 export type HelmFailureCode =
@@ -278,6 +316,10 @@ export interface HelmPort {
     request: HelmArtifactReadRequest,
     signal?: AbortSignal,
   ): Promise<HelmArtifactReceipt>;
+  upgradeRelease(
+    request: HelmReleaseUpgradeRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeReceipt>;
   listChartSources(
     request?: HelmChartSourceListRequest,
     signal?: AbortSignal,

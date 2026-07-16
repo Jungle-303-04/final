@@ -22,7 +22,10 @@ vi.mock("../../features/operations/OperationStatusStore", () => ({
   useOptionalOperationStatusStore: () => operationState.value,
 }));
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   scopeState.value = {
@@ -113,6 +116,55 @@ describe("HelmPage", () => {
       namespace: "storefront",
       releaseName: "storefront",
     }, expect.any(AbortSignal)));
+  });
+
+  it("confirms the server-advertised upgrade once, starts its stream, and refreshes immediately", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const port = helmPort();
+    const upgradeDetail = detail();
+    port.getRelease.mockResolvedValue({
+      ...upgradeDetail,
+      release: {
+        ...upgradeDetail.release,
+        storageNamespace: "sandbox",
+        scope: { ...upgradeDetail.release.scope, namespaces: ["sandbox"] },
+        storage: { ...upgradeDetail.release.storage, namespace: "sandbox" },
+      },
+      commands: availableUpgradeCommands(),
+    });
+    const store = {
+      start: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+      getSnapshot: vi.fn(() => null),
+    };
+    operationState.value = store;
+    renderRoute("/helm/detail/cluster-a/sandbox/storefront", port);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Upgrade" }));
+    expect(screen.getByRole("dialog", { name: "Confirm Helm upgrade" })).toBeTruthy();
+    expect(screen.getByText(/cluster-a · sandbox · storefront · revision 3/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /rollback|uninstall/i })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("master.persistence.storageClass"), {
+      target: { value: "gp3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm upgrade" }));
+
+    await waitFor(() => expect(port.upgradeRelease).toHaveBeenCalledWith({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "storefront",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+      confirmation: true,
+      reason: "Upgrade storefront to Redis 1.0.0",
+    }, expect.any(AbortSignal)));
+    expect(store.start).toHaveBeenCalledWith("cmd-helm-upgrade-1");
+    await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await vi.advanceTimersByTimeAsync(1_200);
+    await waitFor(() => expect(port.getRelease.mock.calls.length).toBeGreaterThanOrEqual(3));
   });
 
   it("maps known and unknown coverage reasons to safe copy", async () => {
@@ -378,6 +430,7 @@ function helmPort(): HelmPort & {
   listReleases: ReturnType<typeof vi.fn>;
   getRelease: ReturnType<typeof vi.fn>;
   readArtifact: ReturnType<typeof vi.fn>;
+  upgradeRelease: ReturnType<typeof vi.fn>;
   listChartSources: ReturnType<typeof vi.fn>;
   registerChartSource: ReturnType<typeof vi.fn>;
   deleteChartSource: ReturnType<typeof vi.fn>;
@@ -396,6 +449,14 @@ function helmPort(): HelmPort & {
       auditEventId: "evt-helm-1",
       correlationId: "corr-helm-1",
       commandId: "cmd-helm-1",
+      status: "queued",
+    }),
+    upgradeRelease: vi.fn().mockResolvedValue({
+      accepted: true,
+      eventId: "evt-helm-upgrade-1",
+      auditEventId: "evt-helm-upgrade-1",
+      correlationId: "corr-helm-upgrade-1",
+      commandId: "cmd-helm-upgrade-1",
       status: "queued",
     }),
     deleteChartSource: vi.fn().mockResolvedValue({
@@ -505,6 +566,28 @@ function release(): HelmRelease {
 
 function unavailable(reasonCode: string) {
   return { availability: "unavailable" as const, reasonCode };
+}
+
+function availableUpgradeCommands() {
+  return {
+    availability: "available" as const,
+    actions: ["upgrade" as const],
+    confirmationRequired: true as const,
+    realtime: true as const,
+    upgradeTargets: [{
+      itemId: "catalog-redis",
+      name: "Redis",
+      version: "1.0.0",
+      chartVersion: "23.1.1",
+      inputs: [{
+        name: "master.persistence.storageClass",
+        valueType: "string" as const,
+        required: true,
+        defaultValue: null,
+        allowedValues: [],
+      }],
+    }],
+  };
 }
 
 function completedOperationStore(artifact: Record<string, unknown>) {

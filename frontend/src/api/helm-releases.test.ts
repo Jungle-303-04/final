@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getHelmRelease,
   HELM_RELEASE_ARTIFACT_PATH,
+  HELM_RELEASE_UPGRADE_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
   listHelmReleases,
   startHelmArtifactRead,
+  startHelmReleaseUpgrade,
 } from "./helm-releases";
 
 describe("Helm release API", () => {
@@ -121,6 +123,38 @@ describe("Helm release API", () => {
       revision: 2,
       comparison_revision: 3,
       all_values: false,
+    });
+  });
+
+  it("queues one confirmed revision-bound upgrade through the dedicated audited route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(receipt()));
+
+    await expect(startHelmReleaseUpgrade({
+      clusterId: "cluster-a",
+      namespace: "team/a",
+      releaseName: "shop/front",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+      confirmation: true,
+      reason: "upgrade to selected chart",
+    })).resolves.toMatchObject({ command_id: "cmd-helm-1" });
+
+    expect(HELM_RELEASE_UPGRADE_PATH).toBe(
+      "/api/helm/releases/{namespace}/{release_name}/upgrade",
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/helm/releases/team%2Fa/shop%2Ffront/upgrade",
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      cluster_id: "cluster-a",
+      expected_revision: 3,
+      catalog_item_id: "catalog-redis",
+      catalog_version: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+      confirmation: true,
+      reason: "upgrade to selected chart",
     });
   });
 });

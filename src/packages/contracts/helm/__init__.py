@@ -1,4 +1,4 @@
-"""Typed contracts for read-only Helm release observations."""
+"""Typed contracts for Helm release observations and agent commands."""
 
 from packages.contracts.helm.artifacts import (
     HELM_ARTIFACT_CONTENT_MAX_BYTES,
@@ -22,12 +22,16 @@ from packages.contracts.helm.releases import (
     HelmOwnedResource,
     HelmOwnedResourceObservation,
     HelmRelease,
+    HelmReleaseCommands,
     HelmReleaseDetail,
     HelmReleaseDetailResponse,
     HelmReleaseHistoryEntry,
     HelmReleaseListResponse,
+    HelmReleaseUpgradeRequest,
     HelmResourceHealthAvailability,
     HelmResourceHealthObservation,
+    HelmUpgradeInput,
+    HelmUpgradeTarget,
 )
 from packages.contracts.helm.sources import (
     HELM_CHART_SOURCE_PAGE_MAX,
@@ -70,12 +74,16 @@ __all__ = [
     "HelmRenderedResourceChange",
     "HelmRenderedResourceRef",
     "HelmRelease",
+    "HelmReleaseCommands",
     "HelmReleaseDetail",
     "HelmReleaseDetailResponse",
     "HelmReleaseHistoryEntry",
     "HelmReleaseListResponse",
+    "HelmReleaseUpgradeRequest",
     "HelmResourceFieldChange",
     "HelmResourceHealthAvailability",
     "HelmResourceHealthObservation",
     "HelmResourcesDiff",
+    "HelmUpgradeInput",
+    "HelmUpgradeTarget",
 ]

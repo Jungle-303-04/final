@@ -111,6 +111,7 @@ function endpointDependencies() {
     listHelmReleases: vi.fn(),
     getHelmRelease: vi.fn(),
     startHelmArtifactRead: vi.fn(),
+    startHelmReleaseUpgrade: vi.fn(),
     deleteHelmChartSource: vi.fn().mockResolvedValue({
       accepted: true as const,
       event_id: "event-delete-source",

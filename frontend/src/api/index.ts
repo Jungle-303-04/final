@@ -107,8 +107,10 @@ export {
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
+  HELM_RELEASE_UPGRADE_PATH,
   listHelmReleases,
   startHelmArtifactRead,
+  startHelmReleaseUpgrade,
   type HelmReleaseListQuery,
 } from "./helm-releases";
 export {

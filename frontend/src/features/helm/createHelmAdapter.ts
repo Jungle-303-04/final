@@ -6,6 +6,7 @@ import {
   type HelmOwnedResourceObservation,
   type HelmPort,
   type HelmRelease,
+  type HelmReleaseCommands,
   type HelmReleaseDetail,
   type HelmReleaseHistoryEntry,
   type HelmResourceRef,
@@ -42,6 +43,15 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         const receipt = await endpoints.startHelmArtifactRead(request, signal);
         if (receipt.audit_event_id !== receipt.event_id) {
           throw new TypeError("Helm artifact audit identity is invalid");
+        }
+        return toArtifactReceipt(receipt);
+      });
+    },
+    async upgradeRelease(request, signal) {
+      return withHelmPortFailure(async () => {
+        const receipt = await endpoints.startHelmReleaseUpgrade(request, signal);
+        if (receipt.audit_event_id !== receipt.event_id) {
+          throw new TypeError("Helm upgrade audit identity is invalid");
         }
         return toArtifactReceipt(receipt);
       });
@@ -166,7 +176,7 @@ function toDetail(value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRel
     manifest: toUnavailable(value.detail.manifest),
     values: toUnavailable(value.detail.values),
     ownedResources: toOwnedResources(value.detail.owned_resources),
-    commands: toUnavailable(value.detail.commands),
+    commands: toCommands(value.detail.commands),
     refreshAfterSeconds: value.refresh_after_seconds,
     postMutationRefreshAfterSeconds: value.post_mutation_refresh_after_seconds,
   };
@@ -261,8 +271,35 @@ function toUnavailable(value: { availability: "unavailable"; reason_code: string
   return { availability: value.availability, reasonCode: value.reason_code };
 }
 
+function toCommands(
+  value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRelease"]>>["detail"]["commands"],
+): HelmUnavailableFeature | HelmReleaseCommands {
+  if (value.availability === "unavailable") return toUnavailable(value);
+  return {
+    availability: value.availability,
+    actions: value.actions,
+    confirmationRequired: value.confirmation_required,
+    realtime: value.realtime,
+    upgradeTargets: value.upgrade_targets.map((target) => ({
+      itemId: target.item_id,
+      name: target.name,
+      version: target.version,
+      chartVersion: target.chart_version,
+      inputs: target.inputs.map((input) => ({
+        name: input.name,
+        valueType: input.value_type,
+        required: input.required,
+        defaultValue: input.default,
+        allowedValues: input.allowed_values,
+      })),
+    })),
+  };
+}
+
 function toArtifactReceipt(
-  value: Awaited<ReturnType<HelmEndpointDependencies["startHelmArtifactRead"]>>,
+  value:
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmArtifactRead"]>>
+    | Awaited<ReturnType<HelmEndpointDependencies["startHelmReleaseUpgrade"]>>,
 ): HelmArtifactReceipt {
   return {
     accepted: value.accepted,

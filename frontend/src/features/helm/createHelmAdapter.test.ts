@@ -11,6 +11,7 @@ describe("createHelmAdapter", () => {
       listHelmChartSources: vi.fn(),
       registerHelmChartSource: vi.fn(),
       startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
+      startHelmReleaseUpgrade: vi.fn().mockResolvedValue(receipt()),
     });
 
     const list = await port.listReleases({ clusterIds: ["cluster-a"] });
@@ -65,6 +66,7 @@ describe("createHelmAdapter", () => {
       listHelmChartSources: vi.fn(),
       registerHelmChartSource: vi.fn(),
       startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
+      startHelmReleaseUpgrade: vi.fn().mockResolvedValue(receipt()),
     });
 
     const list = await port.listReleases({ clusterIds: ["cluster-a"] });
@@ -200,6 +202,73 @@ describe("createHelmAdapter", () => {
         parseErrorCount: 1,
       },
     });
+  });
+
+  it("maps only server-advertised upgrade targets and the shared command receipt", async () => {
+    const startHelmReleaseUpgrade = vi.fn().mockResolvedValue(receipt());
+    const currentDetail = detailEndpoint();
+    const detail = {
+      ...currentDetail,
+      detail: {
+        ...currentDetail.detail,
+        commands: {
+          availability: "available" as const,
+          actions: ["upgrade" as const] as ["upgrade"],
+          confirmation_required: true as const,
+          realtime: true as const,
+          upgrade_targets: [{
+            item_id: "catalog-redis",
+            name: "Redis",
+            version: "1.0.0",
+            chart_version: "23.1.1",
+            inputs: [{
+              name: "master.persistence.storageClass",
+              value_type: "string" as const,
+              required: true,
+              default: null,
+              allowed_values: [],
+            }],
+          }],
+        },
+      },
+    };
+    const port = createHelmAdapter({
+      listHelmReleases: vi.fn().mockResolvedValue(listEndpoint()),
+      getHelmRelease: vi.fn().mockResolvedValue(detail),
+      deleteHelmChartSource: vi.fn(),
+      listHelmChartSources: vi.fn(),
+      registerHelmChartSource: vi.fn(),
+      startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
+      startHelmReleaseUpgrade,
+    });
+
+    const release = await port.getRelease({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "storefront",
+    });
+    expect(release.commands).toMatchObject({
+      availability: "available",
+      actions: ["upgrade"],
+      upgradeTargets: [{ itemId: "catalog-redis", inputs: [{ required: true }] }],
+    });
+
+    const accepted = await port.upgradeRelease({
+      clusterId: "cluster-a",
+      namespace: "sandbox",
+      releaseName: "storefront",
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+      catalogVersion: "1.0.0",
+      values: { "master.persistence.storageClass": "gp3" },
+      confirmation: true,
+      reason: "upgrade",
+    });
+    expect(accepted).toMatchObject({ commandId: "cmd-helm-1", auditEventId: "evt-helm-1" });
+    expect(startHelmReleaseUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevision: 3,
+      catalogItemId: "catalog-redis",
+    }), undefined);
   });
 });
 

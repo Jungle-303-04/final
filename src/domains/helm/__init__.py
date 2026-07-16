@@ -1,5 +1,5 @@
-"""Read-only Helm release observation domain.
+"""Inventory-backed Helm release observation and command domain.
 
-The domain projects only metadata observed in the workspace inventory.  It
-never decodes release Secret data or executes Helm commands.
+The domain never decodes release Secret data. Mutations are exposed only when
+an authorized target Agent advertises an existing executable capability.
 """

@@ -6,6 +6,7 @@ import {
   listHelmReleases,
   registerHelmChartSource,
   startHelmArtifactRead,
+  startHelmReleaseUpgrade,
 } from "../../../api";
 import { createHelmAdapter } from "../../../features/helm/createHelmAdapter";
 import { createHelmSurface } from "../../../pages/helm/createHelmSurface";
@@ -18,5 +19,6 @@ export function loadHelmSurface(): ComponentType {
     listHelmReleases,
     registerHelmChartSource,
     startHelmArtifactRead,
+    startHelmReleaseUpgrade,
   }));
 }

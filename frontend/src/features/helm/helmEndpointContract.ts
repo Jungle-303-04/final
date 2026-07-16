@@ -19,6 +19,28 @@ export interface HelmEndpointUnavailableFeature {
   reason_code: string;
 }
 
+export interface HelmEndpointUpgradeInput {
+  name: string;
+  value_type: "string" | "integer" | "number" | "boolean";
+  required: boolean;
+  default: string | number | boolean | null;
+  allowed_values: Array<string | number | boolean | null>;
+}
+
+export interface HelmEndpointReleaseCommands {
+  availability: "available";
+  actions: ["upgrade"];
+  confirmation_required: true;
+  realtime: true;
+  upgrade_targets: Array<{
+    item_id: string;
+    name: string;
+    version: string;
+    chart_version: string;
+    inputs: HelmEndpointUpgradeInput[];
+  }>;
+}
+
 export interface HelmEndpointResourceHealthObservation {
   availability: "available" | "partial";
   health: string;
@@ -82,7 +104,7 @@ export interface HelmReleaseDetailEndpoint {
     manifest: HelmEndpointUnavailableFeature;
     values: HelmEndpointUnavailableFeature;
     owned_resources: HelmEndpointUnavailableFeature | HelmEndpointOwnedResourceObservation;
-    commands: HelmEndpointUnavailableFeature;
+    commands: HelmEndpointUnavailableFeature | HelmEndpointReleaseCommands;
   };
 }
 
@@ -153,6 +175,27 @@ export interface HelmEndpointDependencies {
       revision: number;
       comparisonRevision?: number;
       allValues?: boolean;
+    },
+    signal?: AbortSignal,
+  ): Promise<{
+    accepted: true;
+    event_id: string;
+    audit_event_id: string;
+    correlation_id: string;
+    command_id: string;
+    status: "queued" | "leased" | "running" | "cancel_requested" | "cancelling" | "completed" | "failed" | "cancelled";
+  }>;
+  startHelmReleaseUpgrade(
+    input: {
+      clusterId: string;
+      namespace: string;
+      releaseName: string;
+      expectedRevision: number;
+      catalogItemId: string;
+      catalogVersion: string;
+      values: Readonly<Record<string, unknown>>;
+      confirmation: true;
+      reason?: string;
     },
     signal?: AbortSignal,
   ): Promise<{

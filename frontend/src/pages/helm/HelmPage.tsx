@@ -49,6 +49,7 @@ import {
 } from "../../shared/ui/primitives/table";
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
 import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
+import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
 import { useHelmReleaseDetail, useHelmReleaseList } from "./useHelmReleaseData";
 
 const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
@@ -309,17 +310,24 @@ function HelmReleaseDetailPage({
       <Button className="w-fit" onClick={onBack} size="sm" type="button" variant="ghost">
         <ArrowLeft aria-hidden="true" />{HELM_COPY.backToReleases}
       </Button>
-      <HelmDetailBoundary frame={data.frame} onRefresh={data.refresh} port={port} />
+      <HelmDetailBoundary
+        frame={data.frame}
+        onMutationAccepted={data.refreshAfterMutation}
+        onRefresh={data.refresh}
+        port={port}
+      />
     </ProductPageFrame>
   );
 }
 
 function HelmDetailBoundary({
   frame,
+  onMutationAccepted,
   onRefresh,
   port,
 }: {
   frame: ReturnType<typeof useHelmReleaseDetail>["frame"];
+  onMutationAccepted: () => void;
   onRefresh: () => void;
   port: HelmPort;
 }) {
@@ -336,11 +344,20 @@ function HelmDetailBoundary({
           <h1 className="truncate text-2xl font-semibold tracking-tight" id="helm-release-detail-title">{detail.release.name}</h1>
           <p className="mt-1 break-words text-sm text-muted-foreground">{scopeText(detail.release)}</p>
         </div>
-        <HelmRefreshAction
-          hasFailed={frame.refreshFailure !== null}
-          isRefreshing={frame.refreshing}
-          onRefresh={onRefresh}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {detail.commands.availability === "available" ? (
+            <HelmReleaseUpgradeDialog
+              detail={detail}
+              onAccepted={onMutationAccepted}
+              port={port}
+            />
+          ) : null}
+          <HelmRefreshAction
+            hasFailed={frame.refreshFailure !== null}
+            isRefreshing={frame.refreshing}
+            onRefresh={onRefresh}
+          />
+        </div>
       </header>
       <dl className="grid min-w-0 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4">
         <Fact label={HELM_COPY.status} value={<StatusBadge status={detail.release.status} />} />
@@ -371,7 +388,11 @@ function HelmDetailBoundary({
           <UnavailableFact feature={detail.manifest} label={HELM_COPY.manifest} />
           <UnavailableFact feature={detail.values} label={HELM_COPY.values} />
           <OwnedResourcesFact ownedResources={detail.ownedResources} />
-          <UnavailableFact feature={detail.commands} label={HELM_COPY.commands} />
+          {detail.commands.availability === "unavailable" ? (
+            <UnavailableFact feature={detail.commands} label={HELM_COPY.commands} />
+          ) : (
+            <Fact label={HELM_COPY.commands} value={detail.commands.actions.join(", ")} />
+          )}
         </dl>
       </section>
       <OwnedResourcesPanel ownedResources={detail.ownedResources} />
