@@ -10619,7 +10619,9 @@
         },
         {
           "sourceKey": "upstream-ui:desktop:external-link:native-bridge:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.109"
+          ],
           "symbol": "external anchor interception",
           "interaction": "desktop external HTTP and HTTPS links open through a validated native bridge instead of remaining trapped in the webview",
           "transport": "none",
@@ -10628,7 +10630,9 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/desktop/desktopBridge.ts",
-              "frontend/src/desktop/desktopBridge.test.ts"
+              "frontend/src/desktop/desktopBridge.test.ts",
+              "desktop/src-tauri/src/bridge.rs",
+              "desktop/src-tauri/tests/reference_parity.rs"
             ],
             "requiredBackendContracts": [
               "packages.contracts.parity"
@@ -10638,7 +10642,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The Tauri bridge accepts only credential-free HTTP(S) URLs and the browser fallback uses a new isolated tab; the server never receives local desktop authority."
+            "rationale": "The Tauri bridge accepts only credential-free HTTP(S) URLs, exposes only the registered native command to the main window, and the browser fallback uses a new isolated tab; the server never receives local desktop authority."
           }
         },
         {

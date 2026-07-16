@@ -381,6 +381,37 @@ test('분류 interaction은 등록되지 않은 Opsia 목적지와 테스트 ID�
   assert.ok(errors.includes('web/src/components/timeline/TimelineStrip.tsx: interactions[0]: opsiaPort.plannedTestIds[0]: is not declared by classification input'))
 })
 
+test('분류 interaction은 추적되는 Tauri 제품·테스트 목적지를 허용한다', () => {
+  const ledger = buildDeltaLedger({
+    baseRevision: BASE,
+    targetRevision: TARGET,
+    changes: [{ status: 'A', path: 'web/src/main.tsx' }],
+    baseFiles: new Map(),
+    targetFiles: new Map([['web/src/main.tsx', sourceFile(BLOB_B, SHA_B)]]),
+  })
+  const [row] = ledger.files
+  const destination = 'desktop/src-tauri/src/bridge.rs'
+  row.classification = 'classified'
+  row.interactions = [
+    classifiedInteraction({
+      sourceKey: 'upstream-ui:desktop:external-link:native-bridge:v1',
+      opsiaPort: {
+        ...classifiedInteraction().opsiaPort,
+        destinations: [destination],
+      },
+    }),
+  ]
+  ledger.pendingCount = 0
+
+  assert.deepEqual(
+    validateDeltaLedger(ledger, {
+      knownOpsiaDestinations: new Set([destination]),
+      knownPlannedTestIds: new Set(['timeline.fixture.classified-interaction']),
+    }),
+    [],
+  )
+})
+
 test('분류 입력은 Timeline에 한정하지 않고 제품 도메인별 테스트 계획을 허용한다', () => {
   const input = {
     schemaVersion: 1,

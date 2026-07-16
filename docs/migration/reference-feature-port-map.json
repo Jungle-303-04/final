@@ -2,17 +2,33 @@
   "schemaVersion": 1,
   "features": {
     "reference.feature.109": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/desktop/desktopBridge.ts",
       "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
         "frontend/src/desktop/desktopBridge.test.ts",
+        "desktop/src-tauri/src/bridge.rs",
         "desktop/src-tauri/tests/reference_parity.rs"
       ],
       "coverage": {
-        "desktop": {
-          "state": "in_progress",
+        "backend": {
+          "state": "not_required",
           "destination": "desktop/src-tauri/src/bridge.rs#desktop_open_external_url",
+          "reason": "External URL opening is local desktop authority; the Python gateway and target agents must never receive or execute it.",
+          "test": "frontend/src/desktop/desktopBridge.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/desktop/desktopBridge.ts#createDesktopBridge",
           "consumer": "frontend/src/desktop/desktopBridge.ts#openExternalUrl",
           "test": "frontend/src/desktop/desktopBridge.test.ts"
+        },
+        "desktop": {
+          "state": "implemented",
+          "destination": "desktop/src-tauri/src/bridge.rs#desktop_open_external_url",
+          "consumer": "frontend/src/desktop/desktopBridge.ts#openExternalUrl",
+          "test": "desktop/src-tauri/tests/reference_parity.rs"
         }
       }
     },

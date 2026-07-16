@@ -33,6 +33,16 @@ fn main_window_grants_only_the_registered_local_pty_commands() {
 }
 
 #[test]
+fn main_window_grants_the_validated_external_url_command() {
+    let build_manifest = include_str!("../build.rs");
+    let capability = include_str!("../capabilities/default.json");
+
+    assert!(build_manifest.contains("desktop_open_external_url"));
+    assert!(capability.contains("allow-desktop-open-external-url"));
+    assert!(!capability.contains("opener:allow-open-url"));
+}
+
+#[test]
 fn desktop_build_uses_the_shared_frontend_from_the_desktop_working_directory() {
     let config = include_str!("../tauri.conf.json");
 
