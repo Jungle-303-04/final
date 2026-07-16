@@ -2806,75 +2806,82 @@
       }
     },
     "reference.feature.185": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacts",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_helm_release_projection.py",
+        "tests/test_helm_release_router.py",
+        "tests/test_catalog_agent_runner.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
-          "reason": "The inventory projection observes Helm storage labels but never reads Secret payloads and has no provider-backed, revision-bound manifest reader.",
-          "test": "tests/test_helm_release_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_artifact_read",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_artifact_query",
+          "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmReleaseDetailPage",
-          "reason": "The release detail renders the explicit manifest-unavailable reason and does not fabricate revision content.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmRevisionArtifacts",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
     },
     "reference.feature.186": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacts",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_helm_release_projection.py",
+        "tests/test_helm_release_router.py",
+        "tests/test_catalog_agent_runner.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
-          "reason": "No authorized provider decodes revision values or defines redaction for Secret-derived Helm values.",
-          "test": "tests/test_helm_release_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_artifact_read",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_artifact_query",
+          "test": "tests/test_catalog_agent_runner.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmReleaseDetailPage",
-          "reason": "Values remain unavailable until the server supplies a redacted revision-bound artifact.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmRevisionArtifacts",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
     },
     "reference.feature.187": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.artifacts",
       "frontendContract": "frontend/src/shared/ui/UnifiedDiff.tsx",
       "desktopContract": null,
       "verification": [
-        "tests/test_helm_release_projection.py",
+        "tests/test_helm_release_router.py",
+        "tests/test_catalog_agent_runner.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/shared/ui/UnifiedDiff.test.tsx",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_projection.py#helm_release_detail",
-          "reason": "No provider returns two redacted manifest or values revisions for comparison.",
-          "test": "tests/test_helm_release_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_artifact_read",
+          "consumer": "src/services/target/cluster-agent/commands/helm.py#run_helm_artifact_query",
+          "test": "tests/test_catalog_agent_runner.py"
         },
         "frontend": {
           "state": "implemented",
           "destination": "frontend/src/shared/ui/UnifiedDiff.tsx#UnifiedDiff",
-          "consumer": "frontend/src/pages/resources/ResourceManifestEditor.tsx#ResourceManifestEditor",
-          "reason": "The shared semantic diff classifier and renderer are implemented once and ready for Helm artifacts without a duplicate viewer.",
+          "consumer": "frontend/src/pages/helm/HelmPage.tsx#HelmArtifactResult",
           "test": "frontend/src/shared/ui/UnifiedDiff.test.tsx"
         }
       }

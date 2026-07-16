@@ -5806,11 +5806,16 @@
               "frontend/src/pages/helm/HelmPage.tsx",
               "frontend/src/pages/helm/useHelmReleaseData.ts",
               "frontend/src/features/helm/helmContract.ts",
+              "frontend/src/features/helm/createHelmAdapter.ts",
+              "frontend/src/features/operations/OperationStatusStore.tsx",
               "frontend/src/shared/data/useServerRefreshScheduler.ts",
               "src/domains/helm/release_router.py",
+              "src/packages/contracts/helm/artifacts.py",
+              "src/services/target/cluster-agent/commands/helm.py",
               "src/packages/config/refresh_policies.py"
             ],
             "requiredBackendContracts": [
+              "packages.contracts.helm.artifacts",
               "packages.contracts.helm.releases",
               "packages.contracts.freshness",
               "domains.helm.release_router"
@@ -5821,7 +5826,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "Only non-secret storage metadata already observed by the inventory is projected; provider reads and Helm execution are unavailable until dedicated integrations exist."
+            "rationale": "Release identity, owned resources, redacted revision manifest and values, and revision diffs now use one authorized Python/agent boundary with durable operation events. Notes, hooks, source tracking, history, and upgrade mutations remain separately tracked."
           }
         }
       ]
@@ -5929,7 +5934,7 @@
               "frontend/src/pages/helm/HelmPage.tsx"
             ],
             "requiredBackendContracts": [
-              "packages.contracts.helm.releases",
+              "packages.contracts.helm.artifacts",
               "packages.contracts.gateway.responses"
             ],
             "plannedTestIds": [
@@ -5938,7 +5943,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The duplicate classifier and renderer are consolidated into a product-owned primitive that already consumes a real authorized Git diff. Helm diff bodies remain separately unavailable until a provider contract exists."
+            "rationale": "The product-owned classifier now renders agent-sanitized, revision-bound Helm manifest and values diffs through the same primitive used by other product surfaces; notes, hooks and resource-aware comparison remain separate feature rows."
           }
         }
       ]
