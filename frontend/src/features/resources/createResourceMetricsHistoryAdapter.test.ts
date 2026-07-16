@@ -242,6 +242,21 @@ describe("Resource metrics history adapter", () => {
       health: "healthy",
       healthStatus: "healthy",
       facts: { type: "generic" },
+      tableMetrics: {
+        kind: "pod",
+        resourceUid: "pod-uid-1",
+        sourceSnapshotId: "snapshot-1",
+        observedAt: "2026-07-17T00:00:10Z",
+        measurementWindow: "5m",
+        cpuMillicores: 250,
+        memoryMebibytes: 2,
+        cpuRequestMillicores: 200,
+        cpuLimitMillicores: 500,
+        memoryRequestMebibytes: 1,
+        memoryLimitMebibytes: 4,
+        completeness: "exact",
+        reasonCodes: [],
+      },
       observedAt: null,
       firstSeenAt: null,
       lastSeenAt: null,
@@ -263,6 +278,12 @@ describe("Resource metrics history adapter", () => {
       range: "1h",
     }, { signal: undefined });
     expect(result.refreshPolicyKey).toBe("metrics_prometheus");
+    expect(result.series?.references).toEqual({
+      cpuRequestMillicores: 200,
+      cpuLimitMillicores: 500,
+      memoryRequestMebibytes: 1,
+      memoryLimitMebibytes: 4,
+    });
   });
 
   it("maps network, filesystem, restart, and HPA observations without browser PromQL", async () => {

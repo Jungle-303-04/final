@@ -254,6 +254,57 @@ describe("resource detail metrics", () => {
     expect(screen.getAllByText("4.00").length).toBeGreaterThan(0);
   });
 
+  it("renders request and limit reference evidence with saturation", () => {
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ResourceMetricsCharts
+          frame={{
+            phase: "ready",
+            failure: null,
+            refreshFailure: null,
+            refreshing: false,
+            unavailableRetry: null,
+            data: {
+              completeness: "exact",
+              partialReasonCodes: [],
+              refreshPolicyKey: "metrics_prometheus",
+              series: [{
+                clusterId: "cluster-1",
+                completeness: "exact",
+                hasSparklinePoints: true,
+                name: "checkout-0",
+                namespace: "shop",
+                partialReasonCodes: [],
+                points: [{
+                  cpuMillicores: 450,
+                  memoryMebibytes: 3,
+                  observedAt: "2026-07-17T00:00:00Z",
+                }],
+                references: {
+                  cpuRequestMillicores: 200,
+                  cpuLimitMillicores: 500,
+                  memoryRequestMebibytes: 1,
+                  memoryLimitMebibytes: 4,
+                },
+                resourceId: "pod:shop/checkout-0",
+                resourceType: "pod",
+              }],
+              snapshot: resourcesFilterPage().snapshot,
+            },
+          }}
+          onRangeChange={vi.fn()}
+          range="1h"
+          resourceId="pod:shop/checkout-0"
+          wide={false}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("90% of limit")).toBeTruthy();
+    expect(screen.getAllByText("request 200m").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("limit 500m").length).toBeGreaterThan(0);
+  });
+
   it("renders the exact current Node observation time and measurement window", () => {
     render(
       <I18nProvider navigatorLanguage="en-US" storage={null}>
