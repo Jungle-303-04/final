@@ -111,18 +111,20 @@ async function run() {
 }
 
 async function authenticate(page, baseUrl, email, password) {
+  const loginResponse = await page.request.post(
+    new URL("/api/auth/login", baseUrl).href,
+    {
+      data: { email, password },
+      failOnStatusCode: false,
+    },
+  );
+  assert.ok(
+    loginResponse.ok(),
+    `browser authentication failed with status ${loginResponse.status()}`,
+  );
+
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   const sidebar = page.locator(SIDEBAR_SELECTOR);
-
-  if (!(await sidebar.isVisible())) {
-    const emailInput = page.locator('input[name="email"]');
-    const passwordInput = page.locator('input[name="password"]');
-    await emailInput.waitFor({ state: "visible", timeout: ROUTE_SETTLE_TIMEOUT_MS });
-    await emailInput.fill(email);
-    await passwordInput.fill(password);
-    await page.locator('button[type="submit"]').click();
-  }
-
   await sidebar.waitFor({ state: "visible", timeout: ROUTE_SETTLE_TIMEOUT_MS });
 }
 

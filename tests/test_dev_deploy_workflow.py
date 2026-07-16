@@ -193,6 +193,10 @@ def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording(
     assert 'page.on("requestfailed"' in script
     assert "isChangeTimelineLimitResponse(response.status(), response.url())" in script
     assert 'requiredEnvironment("AUTH_PASSWORD", { trim: false })' in script
+    assert 'new URL("/api/auth/login", baseUrl).href' in script
+    assert "page.request.post" in script
+    assert 'input[name="email"]' not in script
+    assert 'input[name="password"]' not in script
     assert names.index("Run post-deploy smoke") < names.index(
         "Run authenticated browser route smoke"
     )
