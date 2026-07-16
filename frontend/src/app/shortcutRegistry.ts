@@ -64,7 +64,6 @@ const shortcutRouteLabelKeys = {
   issues: "shell.shortcut.route.issues",
   alerts: "settings.section.alerts",
   resources: "shell.shortcut.route.resources",
-  topology: "shell.shortcut.route.topology",
   timeline: "shell.shortcut.route.timeline",
   traffic: "shell.shortcut.route.traffic",
   helm: "shell.shortcut.route.helm",

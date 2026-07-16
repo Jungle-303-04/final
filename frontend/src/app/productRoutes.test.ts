@@ -11,13 +11,12 @@ import {
 } from "./productRoutes";
 
 describe("product route release registry", () => {
-  it("keeps every upstream primary navigation surface in the product descriptor", () => {
+  it("keeps every supported primary navigation surface in the product descriptor", () => {
     expect(referenceNavigationRoutes().map((route) => [route.id, route.path, route.shortcut]))
       .toEqual([
         ["home", "/home", "g h"],
         ["resources", "/resources", "g r"],
         ["issues", "/issues", "g i"],
-        ["topology", "/topology", "g t"],
         ["applications", "/applications", "g a"],
         ["timeline", "/timeline", "g l"],
         ["traffic", "/traffic", "g f"],
@@ -33,7 +32,6 @@ describe("product route release registry", () => {
       "home",
       "resources",
       "issues",
-      "topology",
       "applications",
       "timeline",
       "traffic",
@@ -78,7 +76,6 @@ describe("product route release registry", () => {
     ["/clusters", "clusters"],
     ["/resources/pods", "resources"],
     ["/alerts", "alerts"],
-    ["/topology", "topology"],
     ["/timeline", "timeline"],
     ["/traffic", "traffic"],
     ["/helm", "helm"],
@@ -102,8 +99,10 @@ describe("product route release registry", () => {
     }
   });
 
-  it("falls unknown routes back to Home without treating known upstream screens as retired", () => {
+  it("falls unknown and removed routes back to Home", () => {
     expect(resolveProductRoute("/not-a-route").id).toBe("home");
     expect(resolveProductRoute("/legacy-metrics").id).toBe("home");
+    expect(productRouteForPath("/topology")).toBeNull();
+    expect(resolveProductRoute("/topology").id).toBe("home");
   });
 });

@@ -20,7 +20,6 @@ describe("shell shortcut registry", () => {
         ["route:home", "g h", true],
         ["route:resources", "g r", false],
         ["route:issues", "g i", true],
-        ["route:topology", "g t", false],
         ["route:applications", "g a", false],
         ["route:timeline", "g l", false],
         ["route:traffic", "g f", false],
@@ -45,7 +44,7 @@ describe("shell shortcut registry", () => {
     expect(prefix.preventDefault).toHaveBeenCalledOnce();
     expect(matcher.handle(keyEvent("i"))?.id).toBe("route:issues");
     matcher.handle(keyEvent("g"));
-    expect(matcher.handle(keyEvent("t"))?.id).toBe("route:topology");
+    expect(matcher.handle(keyEvent("t"))).toBeNull();
     expect(matcher.handle(keyEvent("t"))?.id).toBe("theme");
     expect(matcher.handle(keyEvent("?", { shiftKey: true }))?.id).toBe("help");
     expect(matcher.handle(keyEvent("k", { metaKey: true }))?.id).toBe("command");
@@ -59,7 +58,6 @@ describe("shell shortcut registry", () => {
     expect(resources.map((definition) => definition.id)).toEqual(expect.arrayContaining([
       "route:home",
       "route:resources",
-      "route:topology",
       "route:timeline",
       "route:cost",
       "resources:next-row",
@@ -75,7 +73,6 @@ describe("shell shortcut registry", () => {
     expect(resources.map((definition) => definition.sequence.join(" "))).toEqual(expect.arrayContaining([
       "g h",
       "g r",
-      "g t",
       "g l",
       "g c",
       "j",

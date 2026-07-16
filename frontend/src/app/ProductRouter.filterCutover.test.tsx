@@ -212,14 +212,17 @@ describe("ProductRouter unified filter cutover", () => {
     expect(currentLocation(router)).toBe(`/home${FILTER_SEARCH}#detail`);
   });
 
-  it("keeps a known but unregistered upstream screen at its URL and explains that it is unavailable", async () => {
+  it("redirects the removed Topology route through the normal unknown-route fallback", async () => {
     const { router } = renderProductRouter(
       `/topology${FILTER_SEARCH}#detail`,
       emptyClusterScope,
     );
 
-    expect(await screen.findByRole("heading", { name: "Topology is unavailable" })).toBeTruthy();
-    expect(currentLocation(router)).toBe(`/topology${FILTER_SEARCH}#detail`);
+    await waitFor(() => {
+      expect(currentLocation(router)).toBe(`/home${FILTER_ONLY_SEARCH}`);
+    });
+    expect(router.state.historyAction).toBe("REPLACE");
+    expect(screen.queryByRole("heading", { name: "Topology is unavailable" })).toBeNull();
   });
 });
 
