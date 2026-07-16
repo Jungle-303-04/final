@@ -124,7 +124,11 @@ function CostObservedContent({
   timeRange: CostTimeRange;
   view: Exclude<CostView, "rightsizing">;
 }) {
-  const data = useCostOverview(port, { clusterIds, timeRange });
+  const data = useCostOverview(
+    port,
+    { clusterIds, timeRange },
+    view === "trend" ? "trend" : "summary",
+  );
   return (
     <CostContent
       frame={data.frame}

@@ -8,6 +8,7 @@ from packages.config.refresh_policies import (
     REFRESH_POLICIES_ENV,
     browser_refresh_policies,
     integral_refresh_after_seconds,
+    post_mutation_refresh_after_seconds,
 )
 
 
@@ -21,13 +22,16 @@ def clear_policy_cache() -> None:
 def test_refresh_inventory_is_complete_and_domain_values_share_the_registry() -> None:
     response = browser_refresh_policies()
 
-    assert len(response.policies) == 17
+    assert len(response.policies) == 18
     assert response.policies["dashboard"].event_invalidation is True
     assert response.policies["gitops_rows"].retry_after_seconds == 2
     assert response.policies["gitops_rows"].retry_limit == 4
     assert integral_refresh_after_seconds("helm_list") == 30
     assert integral_refresh_after_seconds("helm_detail") == 10
     assert integral_refresh_after_seconds("cost_summary") == 60
+    assert integral_refresh_after_seconds("cost_trend") == 120
+    assert integral_refresh_after_seconds("cost_nodes") == 120
+    assert post_mutation_refresh_after_seconds("helm_detail") == 1.2
 
 
 def test_deployment_override_changes_policy_and_revision(

@@ -54,6 +54,7 @@ function list() {
   return {
     releases: [release()],
     refresh_after_seconds: 30,
+    post_mutation_refresh_after_seconds: 1.2,
     coverage: {
       availability: "available",
       observed_at: "2026-07-16T09:00:00Z",
@@ -65,6 +66,7 @@ function list() {
 function detail() {
   return {
     refresh_after_seconds: 10,
+    post_mutation_refresh_after_seconds: 1.2,
     detail: {
       release: release(),
       history: [],

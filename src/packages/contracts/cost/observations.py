@@ -172,3 +172,5 @@ class CostOverviewResponse(StrictModel):
     summary: CostObservationSummary
     trend: CostObservedTrend | CostUnavailableTrend
     refresh_after_seconds: int = Field(ge=1, le=3600)
+    trend_refresh_after_seconds: int = Field(ge=1, le=3600)
+    nodes_refresh_after_seconds: int = Field(ge=1, le=3600)

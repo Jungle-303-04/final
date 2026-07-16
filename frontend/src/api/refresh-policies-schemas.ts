@@ -17,6 +17,7 @@ export const refreshPolicyKeys = [
   "helm_detail",
   "cost_summary",
   "cost_trend",
+  "cost_nodes",
   "port_sessions",
 ] as const;
 

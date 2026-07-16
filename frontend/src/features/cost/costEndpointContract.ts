@@ -74,6 +74,8 @@ export interface CostOverviewEndpoint {
   };
   trend: CostEndpointTrend;
   refresh_after_seconds: number;
+  trend_refresh_after_seconds: number;
+  nodes_refresh_after_seconds: number;
 }
 
 export interface CostEndpointDependencies {

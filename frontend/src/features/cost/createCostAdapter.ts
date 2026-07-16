@@ -68,6 +68,8 @@ function toOverview(value: Awaited<ReturnType<CostEndpointDependencies["getCostO
       reasonCodes: value.trend.reason_codes,
     },
     refreshAfterSeconds: value.refresh_after_seconds,
+    trendRefreshAfterSeconds: value.trend_refresh_after_seconds,
+    nodesRefreshAfterSeconds: value.nodes_refresh_after_seconds,
   };
 }
 

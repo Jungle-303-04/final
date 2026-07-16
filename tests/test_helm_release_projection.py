@@ -70,6 +70,7 @@ def test_release_list_uses_only_standard_helm_storage_metadata_and_latest_revisi
         "reason_codes": [],
     }
     assert body["refresh_after_seconds"] == 30
+    assert body["post_mutation_refresh_after_seconds"] == 1.2
     assert body["releases"] == [
         {
             "scope": {
@@ -134,6 +135,7 @@ def test_detail_exposes_observed_history_and_explicitly_unavailable_integrations
 
     assert response is not None
     assert response.refresh_after_seconds == 10
+    assert response.post_mutation_refresh_after_seconds == 1.2
     detail = response.model_dump(mode="json")["detail"]
     assert [entry["revision"] for entry in detail["history"]] == [3, 2]
     assert detail["manifest"] == {

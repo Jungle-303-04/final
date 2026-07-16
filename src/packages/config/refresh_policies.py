@@ -62,6 +62,7 @@ _DEFAULT_POLICIES: dict[RefreshPolicyKey, dict[str, Any]] = {
     },
     "cost_summary": {"stale_after_seconds": 30, "refresh_after_seconds": 60},
     "cost_trend": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
+    "cost_nodes": {"stale_after_seconds": 30, "refresh_after_seconds": 120},
     "port_sessions": {"refresh_after_seconds": 30},
 }
 
@@ -99,6 +100,13 @@ def integral_refresh_after_seconds(key: RefreshPolicyKey) -> int:
     if not value.is_integer():
         raise RuntimeError(f"{key} refresh_after_seconds must be an integer")
     return int(value)
+
+
+def post_mutation_refresh_after_seconds(key: RefreshPolicyKey) -> float:
+    value = browser_refresh_policy(key).post_mutation_refresh_after_seconds
+    if value is None:
+        raise RuntimeError(f"{key} post-mutation refresh policy is required")
+    return value
 
 
 def _parse_override(raw: str) -> Mapping[str, Any]:

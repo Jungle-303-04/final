@@ -101,7 +101,11 @@ export interface CostOverview {
   summary: CostUnavailableSummary;
   trend: CostTrend;
   refreshAfterSeconds: number;
+  trendRefreshAfterSeconds: number;
+  nodesRefreshAfterSeconds: number;
 }
+
+export type CostRefreshChannel = "summary" | "trend" | "nodes";
 
 export interface CostOverviewRequest {
   clusterIds: readonly string[];

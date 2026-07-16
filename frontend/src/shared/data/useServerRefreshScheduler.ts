@@ -10,6 +10,7 @@ export interface ServerRefreshController {
   acceptSuccess(policy: ServerDeclaredRefreshPolicy): void;
   backgroundFailure(): void;
   requestRefresh(): void;
+  requestMutationRefresh(followUpAfterSeconds: number): void;
 }
 
 /**
@@ -23,6 +24,7 @@ export function useServerRefreshScheduler(
   onEligibleRefresh: () => void,
 ): ServerRefreshController {
   const callbackRef = useRef(onEligibleRefresh);
+  const mutationFollowUpRef = useRef<number | null>(null);
   const schedulerRef = useRef<ServerRefreshScheduler | null>(null);
 
   useEffect(() => {
@@ -41,18 +43,39 @@ export function useServerRefreshScheduler(
   }, []);
 
   const acceptSuccess = useCallback((policy: ServerDeclaredRefreshPolicy) => {
-    schedulerRef.current?.complete(policy);
+    const followUpAfterSeconds = mutationFollowUpRef.current;
+    mutationFollowUpRef.current = null;
+    schedulerRef.current?.complete(
+      followUpAfterSeconds === null
+        ? policy
+        : { refreshAfterSeconds: followUpAfterSeconds },
+    );
   }, []);
   const backgroundFailure = useCallback(() => {
+    mutationFollowUpRef.current = null;
     schedulerRef.current?.backgroundFailure();
   }, []);
   const requestRefresh = useCallback(() => {
+    mutationFollowUpRef.current = null;
+    schedulerRef.current?.backgroundFailure();
+    callbackRef.current();
+  }, []);
+  const requestMutationRefresh = useCallback((followUpAfterSeconds: number) => {
+    if (!Number.isFinite(followUpAfterSeconds) || followUpAfterSeconds <= 0) {
+      throw new RangeError("server mutation follow-up interval must be positive and finite");
+    }
+    mutationFollowUpRef.current = followUpAfterSeconds;
     schedulerRef.current?.backgroundFailure();
     callbackRef.current();
   }, []);
 
   return useMemo(
-    () => ({ acceptSuccess, backgroundFailure, requestRefresh }),
-    [acceptSuccess, backgroundFailure, requestRefresh],
+    () => ({
+      acceptSuccess,
+      backgroundFailure,
+      requestMutationRefresh,
+      requestRefresh,
+    }),
+    [acceptSuccess, backgroundFailure, requestMutationRefresh, requestRefresh],
   );
 }

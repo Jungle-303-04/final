@@ -13,6 +13,8 @@ describe("createCostAdapter", () => {
       summary: { hourlyCost: null, monthlyProjection: null, savingsRecommendations: null },
       trend: { availability: "unavailable", timeRange: "24h", series: [] },
       refreshAfterSeconds: 60,
+      trendRefreshAfterSeconds: 120,
+      nodesRefreshAfterSeconds: 120,
     });
     expect(overview.scopeCoverage.scopes[0]).toMatchObject({ clusterId: "cluster-a", freshness: "live" });
   });
@@ -45,6 +47,8 @@ function endpoint() {
       reason_codes: ["cost_observation_not_integrated"],
     },
     refresh_after_seconds: 60,
+    trend_refresh_after_seconds: 120,
+    nodes_refresh_after_seconds: 120,
   };
 }
 

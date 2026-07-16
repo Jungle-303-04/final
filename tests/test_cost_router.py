@@ -102,6 +102,8 @@ def test_cost_overview_is_scope_and_permission_bound_without_fabricating_money()
         "reason_codes": ["cost_observation_not_integrated"],
     }
     assert body["refresh_after_seconds"] == 60
+    assert body["trend_refresh_after_seconds"] == 120
+    assert body["nodes_refresh_after_seconds"] == 120
 
 
 def test_cost_overview_hides_unauthorized_scope_and_rejects_invalid_cluster_syntax() -> None:

@@ -83,8 +83,10 @@ class HelmReleaseListResponse(StrictModel):
     releases: tuple[HelmRelease, ...] = ()
     coverage: HelmObservationCoverage
     refresh_after_seconds: int = Field(ge=1, le=3600)
+    post_mutation_refresh_after_seconds: float = Field(gt=0, le=60)
 
 
 class HelmReleaseDetailResponse(StrictModel):
     detail: HelmReleaseDetail
     refresh_after_seconds: int = Field(ge=1, le=3600)
+    post_mutation_refresh_after_seconds: float = Field(gt=0, le=60)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ASYNC_IDLE,
@@ -25,6 +25,7 @@ export function useHelmReleaseList(
 ): {
   frame: AsyncResourceState<HelmReleaseList, HelmPortFailure>;
   refresh: () => void;
+  refreshAfterMutation: () => void;
 } {
   const [revision, setRevision] = useState(0);
   const refreshController = useServerRefreshScheduler(
@@ -69,7 +70,16 @@ export function useHelmReleaseList(
     };
   }, [canonicalClusterIds, port, refreshController, revision, scopeKey]);
 
-  return { frame, refresh: refreshController.requestRefresh };
+  const refreshAfterMutation = useCallback(() => {
+    if (frame.phase !== "ready") return;
+    refreshController.requestMutationRefresh(frame.data.postMutationRefreshAfterSeconds);
+  }, [frame, refreshController]);
+
+  return {
+    frame,
+    refresh: refreshController.requestRefresh,
+    refreshAfterMutation,
+  };
 }
 
 export function useHelmReleaseDetail(
@@ -78,6 +88,7 @@ export function useHelmReleaseDetail(
 ): {
   frame: AsyncResourceState<HelmReleaseDetail, HelmPortFailure>;
   refresh: () => void;
+  refreshAfterMutation: () => void;
 } {
   const [revision, setRevision] = useState(0);
   const refreshController = useServerRefreshScheduler(
@@ -124,7 +135,16 @@ export function useHelmReleaseDetail(
     };
   }, [identityKey, port, refreshController, request, revision]);
 
-  return { frame, refresh: refreshController.requestRefresh };
+  const refreshAfterMutation = useCallback(() => {
+    if (frame.phase !== "ready") return;
+    refreshController.requestMutationRefresh(frame.data.postMutationRefreshAfterSeconds);
+  }, [frame, refreshController]);
+
+  return {
+    frame,
+    refresh: refreshController.requestRefresh,
+    refreshAfterMutation,
+  };
 }
 
 function toPortFailure(error: unknown): HelmPortFailure {

@@ -16,6 +16,8 @@ describe("Cost overview API", () => {
       summary: { hourly_cost: null, monthly_projection: null, savings_recommendations: null },
       trend: { availability: "unavailable", range: "7d", series: [] },
       refresh_after_seconds: 60,
+      trend_refresh_after_seconds: 120,
+      nodes_refresh_after_seconds: 120,
     });
 
     expect(COST_OVERVIEW_PATH).toBe("/api/cost/overview");
@@ -120,6 +122,8 @@ function overview() {
       reason_codes: ["cost_observation_not_integrated"],
     },
     refresh_after_seconds: 60,
+    trend_refresh_after_seconds: 120,
+    nodes_refresh_after_seconds: 120,
   };
 }
 

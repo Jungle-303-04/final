@@ -60,12 +60,14 @@ export interface HelmReleaseDetail {
   ownedResources: HelmUnavailableFeature;
   commands: HelmUnavailableFeature;
   refreshAfterSeconds: number;
+  postMutationRefreshAfterSeconds: number;
 }
 
 export interface HelmReleaseList {
   releases: readonly HelmRelease[];
   coverage: HelmObservationCoverage;
   refreshAfterSeconds: number;
+  postMutationRefreshAfterSeconds: number;
 }
 
 export interface HelmReleaseListRequest {

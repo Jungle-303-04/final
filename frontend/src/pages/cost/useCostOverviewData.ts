@@ -14,12 +14,14 @@ import {
   CostPortFailure,
   type CostOverview,
   type CostPort,
+  type CostRefreshChannel,
   type CostTimeRange,
 } from "../../features/cost/costContract";
 
 export function useCostOverview(
   port: CostPort,
   request: { clusterIds: readonly string[]; timeRange: CostTimeRange },
+  refreshChannel: CostRefreshChannel = "summary",
 ): {
   frame: AsyncResourceState<CostOverview, CostPortFailure>;
   refresh: () => void;
@@ -40,7 +42,7 @@ export function useCostOverview(
 
   useEffect(() => {
     refreshController.backgroundFailure();
-  }, [refreshController, request.timeRange, scopeKey]);
+  }, [refreshChannel, refreshController, request.timeRange, scopeKey]);
 
   useEffect(() => {
     let active = true;
@@ -49,14 +51,16 @@ export function useCostOverview(
     });
     const sharedRequest = acquireSharedRequest(
       port,
-      `cost-overview:${scopeKey}:${request.timeRange}:r${revision}`,
+      `cost-overview:${scopeKey}:${request.timeRange}:${refreshChannel}:r${revision}`,
       (signal) => port.getOverview(canonicalRequest, signal),
     );
     void sharedRequest.promise.then(
       (data) => {
         if (!active) return;
         setFrame(asyncResourceSuccess(data));
-        refreshController.acceptSuccess(data);
+        refreshController.acceptSuccess({
+          refreshAfterSeconds: refreshAfterSeconds(data, refreshChannel),
+        });
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
@@ -68,9 +72,26 @@ export function useCostOverview(
       active = false;
       sharedRequest.release();
     };
-  }, [canonicalRequest, port, refreshController, request.timeRange, revision, scopeKey]);
+  }, [
+    canonicalRequest,
+    port,
+    refreshChannel,
+    refreshController,
+    request.timeRange,
+    revision,
+    scopeKey,
+  ]);
 
   return { frame, refresh: refreshController.requestRefresh };
+}
+
+function refreshAfterSeconds(
+  overview: CostOverview,
+  channel: CostRefreshChannel,
+): number {
+  if (channel === "trend") return overview.trendRefreshAfterSeconds;
+  if (channel === "nodes") return overview.nodesRefreshAfterSeconds;
+  return overview.refreshAfterSeconds;
 }
 
 function toPortFailure(error: unknown): CostPortFailure {

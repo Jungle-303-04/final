@@ -102,6 +102,8 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
         reasonCodes: ["cost_observation_not_integrated"],
       },
       refreshAfterSeconds: 60,
+      trendRefreshAfterSeconds: 120,
+      nodesRefreshAfterSeconds: 120,
     })),
   };
 }

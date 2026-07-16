@@ -40,6 +40,8 @@ def cost_overview(
         summary=CostObservationSummary(reason_codes=reasons),
         trend=CostUnavailableTrend(range=time_range, reason_codes=reasons),
         refresh_after_seconds=integral_refresh_after_seconds("cost_summary"),
+        trend_refresh_after_seconds=integral_refresh_after_seconds("cost_trend"),
+        nodes_refresh_after_seconds=integral_refresh_after_seconds("cost_nodes"),
     )
 
 

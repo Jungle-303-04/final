@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
-import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CostPort } from "../../features/cost/costContract";
 import { useCostOverview } from "./useCostOverviewData";
+
+afterEach(() => vi.useRealTimers());
 
 describe("useCostOverview", () => {
   it("uses the server refresh policy rather than a browser-owned Cost interval", async () => {
@@ -23,6 +25,27 @@ describe("useCostOverview", () => {
       phase: "ready",
       data: { refreshAfterSeconds: 1, summary: { hourlyCost: null } },
     });
+    rendered.unmount();
+  });
+
+  it("selects the server node cadence without reusing the summary interval", async () => {
+    vi.useFakeTimers();
+    const port: CostPort = { getOverview: vi.fn().mockResolvedValue(overview()) };
+    const rendered = renderHook(() => useCostOverview(port, {
+      clusterIds: ["cluster-a"],
+      timeRange: "24h",
+    }, "nodes"));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(port.getOverview).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(2_999));
+    expect(port.getOverview).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(port.getOverview).toHaveBeenCalledTimes(2);
     rendered.unmount();
   });
 });
@@ -60,5 +83,7 @@ function overview() {
       reasonCodes: ["cost_observation_not_integrated"],
     },
     refreshAfterSeconds: 1,
+    trendRefreshAfterSeconds: 2,
+    nodesRefreshAfterSeconds: 3,
   };
 }
