@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { HelmPort, HelmRelease } from "../../features/helm/helmContract";
+import { HelmPortFailure, type HelmPort, type HelmRelease } from "../../features/helm/helmContract";
 import { HelmPage } from "./HelmPage";
 
 const scopeState = vi.hoisted(() => ({ value: null as unknown }));
@@ -98,6 +98,17 @@ describe("HelmPage", () => {
       "helm_storage_labels_incomplete",
       "unknown_internal_helm_reason",
     ]) expect(screen.queryByText(reasonCode)).toBeNull();
+  });
+
+  it("keeps forbidden Helm reads safe without rendering the raw failure code twice", async () => {
+    const port = helmPort();
+    port.listReleases.mockRejectedValue(new HelmPortFailure("forbidden"));
+    renderRoute("/helm", port);
+
+    expect(await screen.findByText("You cannot access this scope")).toBeTruthy();
+    expect(screen.getByText("Your account is not authorized to read Helm release metadata for this scope.")).toBeTruthy();
+    // ProductStateScreen supplies the single standardized error code. Helm must not echo it as detail.
+    expect(screen.getAllByText("forbidden", { exact: true })).toHaveLength(1);
   });
 
   it("uses generic safe copy for an unknown unavailable feature reason", async () => {

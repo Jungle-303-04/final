@@ -19,6 +19,7 @@ export const HELM_COPY = {
   coverageReasonUnavailable: "A current inventory observation is not available for this scope.",
   coverageReasonPartial: "Some inventory observations are incomplete for this scope.",
   coverageReasonGeneric: "The source did not provide complete release discovery evidence.",
+  permissionDenied: "Your account is not authorized to read Helm release metadata for this scope.",
   manifestUnavailable: "A safe manifest source is not available for this release.",
   valuesUnavailable: "A safe values source is not available for this release.",
   resourceHealthUnavailable: "Owned-resource health has not been correlated for this release.",
