@@ -1840,6 +1840,7 @@ def _resource_metric_history_statements(
             filtered.c.resource_type,
             filtered.c.namespace,
             filtered.c.name,
+            filtered.c.uid,
         )
         .where(
             filtered.c.inventory_key.in_(resource_ids),

@@ -29,6 +29,7 @@ def build_resource_metric_history(
         namespace_value = resource.get("namespace")
         namespace = str(namespace_value) if namespace_value is not None else None
         name = str(resource["name"])
+        expected_uid = _non_empty_text(resource.get("uid"))
         usage_key = f"{namespace}/{name}" if resource_type == "pod" else name
         usage_collection = "pods" if resource_type == "pod" else "nodes"
         points: list[JsonObject] = []
@@ -62,10 +63,14 @@ def build_resource_metric_history(
                 and isinstance(raw_container_metrics, list)
                 and len(container_metrics) == len(raw_container_metrics)
             )
+            resource_identity_matches = resource_type != "pod" or (
+                expected_uid is not None and _non_empty_text(measured.get("uid")) == expected_uid
+            )
             if (
                 metrics_observed_at is not None
                 and metrics_window is not None
                 and (cpu_mcores is not None or mem_mib is not None)
+                and resource_identity_matches
             ):
                 current_observations.append(
                     {

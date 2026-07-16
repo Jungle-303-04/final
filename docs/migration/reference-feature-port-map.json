@@ -2040,7 +2040,7 @@
           "state": "implemented",
           "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
           "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
-          "reason": "The existing bounded metrics contract retains the metrics-server Pod timestamp, measurement window, exact aggregate, and unique ordered per-container CPU and memory observations with an explicit completeness bit.",
+          "reason": "The existing bounded metrics contract pins the current Pod UID and retains the metrics-server timestamp, measurement window, exact aggregate, and unique ordered per-container CPU and memory observations with an explicit completeness bit.",
           "test": "tests/test_resource_metrics_history_contract.py#test_metric_history_preserves_real_nulls_and_completeness"
         },
         "frontend": {

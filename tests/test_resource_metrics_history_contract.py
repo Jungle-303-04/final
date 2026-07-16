@@ -30,6 +30,7 @@ def test_metric_history_preserves_real_nulls_and_completeness() -> None:
                 "cluster_id": "cluster-a",
                 "namespace": "shop",
                 "name": "checkout-a",
+                "uid": "pod-checkout-a",
             }
         ],
         {
@@ -41,6 +42,7 @@ def test_metric_history_preserves_real_nulls_and_completeness() -> None:
                             "shop/checkout-a": {
                                 "cpu_mcores": 125.5,
                                 "mem_mib": 192,
+                                "uid": "pod-checkout-a",
                                 "metrics_observed_at": "2026-07-14T04:59:58Z",
                                 "metrics_window": "30s",
                                 "container_metrics_complete": True,
@@ -107,6 +109,56 @@ def test_metric_history_without_samples_is_empty_not_zero() -> None:
     assert built["series"][0]["has_sparkline_points"] is False
     assert built["series"][0]["completeness"] == "unavailable"
     assert built["completeness"] == "unavailable"
+
+
+def test_current_pod_container_metrics_reject_same_name_recreation() -> None:
+    built = build_resource_metric_history(
+        [
+            {
+                "resource_id": "pod-new",
+                "cluster_id": "cluster-a",
+                "resource_type": "pod",
+                "namespace": "shop",
+                "name": "checkout-a",
+                "uid": "pod-new-uid",
+            }
+        ],
+        {
+            "cluster-a": [
+                {
+                    "sampled_at": "2026-07-14T05:00:00Z",
+                    "usage": {
+                        "pods": {
+                            "shop/checkout-a": {
+                                "uid": "pod-old-uid",
+                                "cpu_mcores": 125.5,
+                                "metrics_observed_at": "2026-07-14T04:59:58Z",
+                                "metrics_window": "30s",
+                                "container_metrics_complete": True,
+                                "container_metrics": [
+                                    {
+                                        "name": "app",
+                                        "cpu_mcores": 125.5,
+                                        "mem_mib": 128,
+                                    }
+                                ],
+                            }
+                        }
+                    },
+                }
+            ],
+        },
+        projection_complete=True,
+    )
+
+    response = ResourceMetricsHistoryResponse(
+        **built,
+        refresh_policy_key="metrics_kubernetes",
+        snapshot=_snapshot(),
+    )
+
+    assert response.series[0].points[0].cpu_mcores == 125.5
+    assert response.series[0].current_observation is None
 
 
 def test_metric_history_preserves_real_node_samples_without_a_namespace() -> None:

@@ -92,6 +92,9 @@ def _pod_usage(pods: list[JsonObject]) -> JsonObject:
         if not name:
             continue
         payload: JsonObject = {}
+        uid = pod.get("uid")
+        if isinstance(uid, str) and uid.strip():
+            payload["uid"] = uid
         for source_key, target_key in (("cpu_mcores", "cpu_mcores"), ("mem_mib", "mem_mib")):
             value = _float_or_none(pod.get(source_key))
             if value is not None:
