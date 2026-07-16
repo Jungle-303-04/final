@@ -3328,76 +3328,78 @@
       }
     },
     "reference.feature.189": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.releases.HelmReleaseUpgradeInfo",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_helm_release_projection.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "reason": "The read-only release projection has no repository metadata provider that can compare current and latest chart versions.",
-          "test": "tests/test_helm_release_projection.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#get_helm_release_upgrade_info",
+          "consumer": "src/domains/helm/upgrade_service.py#resolve_helm_release_catalogs",
+          "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "Upgrade availability remains hidden rather than inferred from chart labels.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmUpgradeEvidence",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
     },
     "reference.feature.190": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.helm.sources.HelmChartVersionObservation",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.releases.HelmReleaseVersionList",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_chart_provider_fetch.py",
         "tests/test_helm_chart_source_router.py",
-        "tests/test_helm_release_projection.py",
+        "tests/test_helm_release_router.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/helm/source_router.py#get_helm_chart_source_versions",
-          "consumer": "src/domains/helm/source_provider.py#HelmChartVersionProvider.fetch_versions",
-          "reason": "Bounded repository and OCI version discovery is implemented, but a release is not yet linked to its authorized chart source for current-versus-latest comparison.",
-          "test": "tests/test_helm_chart_provider_fetch.py"
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#get_helm_release_versions",
+          "consumer": "src/domains/helm/upgrade_service.py#resolve_helm_release_catalogs",
+          "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The browser does not construct version options from release history.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmUpgradeEvidence",
+          "consumer": "frontend/src/features/helm/createHelmAdapter.ts#createHelmAdapter",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }
     },
     "reference.feature.191": {
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.helm.releases",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.helm.releases.HelmReleaseUpgradeBatch",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_release_router.py",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/helm/release_router.py",
-          "reason": "Batch upgrade decoration requires the same missing repository and version observation provider.",
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#get_helm_upgrade_check",
+          "consumer": "src/domains/helm/upgrade_service.py#resolve_helm_release_catalogs",
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/helm/HelmPage.tsx",
-          "reason": "The list remains evidence-only and does not advertise guessed upgrades.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#UpgradeAvailability",
+          "consumer": "frontend/src/pages/helm/useHelmReleaseData.ts#useHelmReleaseList",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
         }
       }

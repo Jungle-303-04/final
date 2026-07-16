@@ -5891,11 +5891,15 @@
             "destinations": [
               "frontend/src/pages/helm/HelmPage.tsx",
               "frontend/src/pages/helm/useHelmReleaseData.ts",
+              "frontend/src/api/helm-releases.ts",
               "frontend/src/features/helm/helmContract.ts",
               "frontend/src/features/helm/createHelmAdapter.ts",
               "frontend/src/features/operations/OperationStatusStore.tsx",
               "frontend/src/shared/data/useServerRefreshScheduler.ts",
               "src/domains/helm/release_router.py",
+              "src/domains/helm/upgrade_service.py",
+              "src/domains/helm/source_provider.py",
+              "src/packages/contracts/helm/releases.py",
               "src/packages/contracts/helm/artifacts.py",
               "src/services/target/cluster-agent/commands/helm.py",
               "src/packages/config/refresh_policies.py"
@@ -5912,7 +5916,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "Release identity, owned resources, redacted revision manifest and values, and revision diffs now use one authorized Python/agent boundary with durable operation events. Notes, hooks, source tracking, history, and upgrade mutations remain separately tracked."
+            "rationale": "Release identity, owned resources, redacted revision artifacts, exact authorized chart-source selection, current/latest comparison, and bounded batch upgrade decoration use typed Python boundaries and server-owned refresh policy. Remaining drawer interaction families stay independently tracked by their own semantic source keys."
           }
         }
       ]
