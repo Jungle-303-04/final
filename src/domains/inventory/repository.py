@@ -13,6 +13,7 @@ from typing import Any, Literal
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from domains.inventory.change_correlation import correlate_inventory_timeline_events
 from domains.inventory.kubernetes_events import (
     EVENT_CAPTURE_REASON_COMPLETE,
     EVENT_CAPTURE_SUMMARY_KEY,
@@ -819,7 +820,7 @@ class InventoryRepository(DatabaseConnection):
                 )
                 marked_deleted = int(result.rowcount or 0)
 
-            sync_inventory_filter_projection(
+            projection = sync_inventory_filter_projection(
                 conn,
                 workspace_id=workspace_id,
                 cluster_id=cluster_id,
@@ -828,6 +829,11 @@ class InventoryRepository(DatabaseConnection):
                 labels_complete=labels_complete,
                 resources_complete=resources_complete,
                 partial_reason_codes=partial_reason_codes,
+            )
+            timeline_events = correlate_inventory_timeline_events(
+                timeline_events,
+                source_snapshot_id=snapshot_id,
+                projection=projection,
             )
 
         return InventorySnapshotMutation(

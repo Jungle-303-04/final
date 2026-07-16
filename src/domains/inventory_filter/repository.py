@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application, DeploymentBinding, ManifestArtifact, WorkflowRun
 from domains.identity.models import ClusterRegistration
+from domains.inventory.change_correlation import INVENTORY_CHANGE_LEDGER_EPOCH
 from domains.inventory.models import ClusterInventoryResourceRecord, ClusterUsageSampleRecord
 from domains.inventory_filter.models import (
     InventoryFilterRevision,
@@ -38,6 +39,26 @@ PHYSICAL_TOPOLOGY_PODS_PER_SERVER = 12
 RESOURCE_SEARCH_TEXT_VERSION = 2
 
 
+@dataclass(frozen=True)
+class InventoryFilterProjectionMutation:
+    """Exact revision and version identities created or retained by one snapshot."""
+
+    revision_id: int
+    version_ids_by_inventory_key: Mapping[str, int]
+
+    def __post_init__(self) -> None:
+        if self.revision_id < 1:
+            raise ValueError("inventory filter revision must be positive")
+        normalized = {
+            str(key): int(value)
+            for key, value in self.version_ids_by_inventory_key.items()
+            if str(key) and int(value) > 0
+        }
+        if len(normalized) != len(self.version_ids_by_inventory_key):
+            raise ValueError("inventory filter version correlation is invalid")
+        object.__setattr__(self, "version_ids_by_inventory_key", normalized)
+
+
 def inventory_snapshot_lock_key(workspace_id: str, cluster_id: str) -> int:
     digest = hashlib.sha256(f"inventory-snapshot|{workspace_id}|{cluster_id}".encode()).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
@@ -58,7 +79,7 @@ def sync_inventory_filter_projection(
     labels_complete: bool,
     resources_complete: bool,
     partial_reason_codes: Sequence[str],
-) -> int:
+) -> InventoryFilterProjectionMutation:
     """Advance one cluster's immutable filter revision in the snapshot transaction."""
     revision_table = InventoryFilterRevision.__table__
     version_table = InventoryResourceVersion.__table__
@@ -83,6 +104,7 @@ def sync_inventory_filter_projection(
                 labels_complete=labels_complete,
                 resources_complete=resources_complete,
                 application_bindings_complete=False,
+                change_ledger_epoch=INVENTORY_CHANGE_LEDGER_EPOCH,
                 partial_reason_codes=sorted(set(partial_reason_codes)),
             )
             .returning(revision_table.c.revision_id)
@@ -136,6 +158,9 @@ def sync_inventory_filter_projection(
     desired_applications: dict[str, tuple[str, ...]] = {}
     current_keys: set[str] = set()
     close_ids: set[int] = set()
+    version_ids_by_inventory_key = {
+        inventory_key: int(row["version_id"]) for inventory_key, row in active_rows.items()
+    }
 
     for resource in current_rows:
         inventory_key = str(resource["inventory_key"])
@@ -188,6 +213,7 @@ def sync_inventory_filter_projection(
         application_rows: list[JsonObject] = []
         for version_id, inventory_key_value in inserted:
             inventory_key = str(inventory_key_value)
+            version_ids_by_inventory_key[inventory_key] = int(version_id)
             for key, value in desired_labels[inventory_key].items():
                 label_rows.append(
                     {
@@ -212,7 +238,10 @@ def sync_inventory_filter_projection(
             conn.execute(pg_insert(label_table).values(label_rows))
         if application_rows:
             conn.execute(pg_insert(application_table).values(application_rows))
-    return revision_id
+    return InventoryFilterProjectionMutation(
+        revision_id=revision_id,
+        version_ids_by_inventory_key=version_ids_by_inventory_key,
+    )
 
 
 def _application_ids_by_resource_identity(

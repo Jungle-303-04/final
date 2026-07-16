@@ -76,6 +76,9 @@ def append_inventory_timeline_events(
     """Append immutable facts within the caller-owned inventory transaction."""
     if not mutation.timeline_events:
         return ()
+    append_many = getattr(db, "append_timeline_events", None)
+    if callable(append_many):
+        return tuple(append_many(mutation.timeline_events))
     append = getattr(db, "append_timeline_event", None)
     if not callable(append):
         raise RuntimeError("inventory timeline ledger append is unavailable")
