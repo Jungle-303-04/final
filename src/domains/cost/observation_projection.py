@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.cost.observations import (
     CostObservationStatus,
     CostObservationSummary,
@@ -16,7 +17,6 @@ from packages.contracts.cost.observations import (
 from packages.contracts.parity import ClusterScope
 
 COST_OBSERVATION_UNAVAILABLE = "cost_observation_not_integrated"
-COST_REFRESH_AFTER_SECONDS = 60
 
 
 def cost_overview(
@@ -39,7 +39,7 @@ def cost_overview(
         observation=CostObservationStatus(reason_codes=reasons),
         summary=CostObservationSummary(reason_codes=reasons),
         trend=CostUnavailableTrend(range=time_range, reason_codes=reasons),
-        refresh_after_seconds=COST_REFRESH_AFTER_SECONDS,
+        refresh_after_seconds=integral_refresh_after_seconds("cost_summary"),
     )
 
 

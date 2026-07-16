@@ -11,6 +11,7 @@ from domains.target.connectivity import (
     AGENT_STATUS_STALE,
     cluster_connection_status,
 )
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.helm.releases import (
     HelmFeatureAvailability,
     HelmObservationCoverage,
@@ -73,7 +74,11 @@ def helm_release_list(
             key=lambda pair: (pair[0][0], pair[0][1], pair[0][2]),
         )
     )
-    return HelmReleaseListResponse(releases=releases, coverage=coverage)
+    return HelmReleaseListResponse(
+        releases=releases,
+        coverage=coverage,
+        refresh_after_seconds=integral_refresh_after_seconds("helm_list"),
+    )
 
 
 def helm_release_detail(
@@ -117,7 +122,8 @@ def helm_release_detail(
             values=HelmFeatureAvailability(reason_code=_VALUES_UNAVAILABLE),
             owned_resources=HelmFeatureAvailability(reason_code=_RESOURCE_HEALTH_UNAVAILABLE),
             commands=HelmFeatureAvailability(reason_code=_COMMANDS_UNAVAILABLE),
-        )
+        ),
+        refresh_after_seconds=integral_refresh_after_seconds("helm_detail"),
     )
 
 

@@ -82,7 +82,9 @@ class HelmReleaseDetail(StrictModel):
 class HelmReleaseListResponse(StrictModel):
     releases: tuple[HelmRelease, ...] = ()
     coverage: HelmObservationCoverage
+    refresh_after_seconds: int = Field(ge=1, le=3600)
 
 
 class HelmReleaseDetailResponse(StrictModel):
     detail: HelmReleaseDetail
+    refresh_after_seconds: int = Field(ge=1, le=3600)

@@ -182,6 +182,7 @@ CLUSTER_NAMESPACE_SCOPE_PATH = "/cluster/namespace-scope"
 CLUSTER_NAMESPACE_PATH = "/cluster/namespace"
 SETTINGS_PATH = "/settings"
 SETTINGS_ACCESS_PATH = "/settings/access"
+REFRESH_POLICIES_PATH = "/refresh-policies"
 RESOURCES_GRAPH_PATH = "/resources/graph"
 TOPOLOGY_PATH = "/topology"
 # Resources time scrubber: actual observed changes plus explicit collection gaps.

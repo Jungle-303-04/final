@@ -116,6 +116,7 @@ def test_release_list_is_rbac_scoped_and_never_decodes_storage_payload() -> None
     assert response.status_code == 200
     body = response.json()
     assert body["coverage"]["availability"] == "available"
+    assert body["refresh_after_seconds"] == 30
     assert body["releases"][0]["name"] == "storefront"
     assert body["releases"][0]["scope"]["freshness"] == "live"
     assert body["releases"][0]["chart"] is None
@@ -132,6 +133,7 @@ def test_release_detail_requires_the_exact_authorized_cluster_scope() -> None:
 
     assert denied.status_code == 404
     assert allowed.status_code == 200
+    assert allowed.json()["refresh_after_seconds"] == 10
     body = allowed.json()["detail"]
     assert body["commands"] == {
         "availability": "unavailable",

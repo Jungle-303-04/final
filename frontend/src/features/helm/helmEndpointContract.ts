@@ -34,6 +34,7 @@ export interface HelmEndpointRelease {
 
 export interface HelmReleaseListEndpoint {
   releases: HelmEndpointRelease[];
+  refresh_after_seconds: number;
   coverage: {
     availability: "available" | "partial" | "unavailable";
     observed_at: string | null;
@@ -42,6 +43,7 @@ export interface HelmReleaseListEndpoint {
 }
 
 export interface HelmReleaseDetailEndpoint {
+  refresh_after_seconds: number;
   detail: {
     release: HelmEndpointRelease;
     history: {

@@ -23,6 +23,7 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
         return {
           releases: response.releases.map(toRelease),
           coverage: toCoverage(response.coverage),
+          refreshAfterSeconds: response.refresh_after_seconds,
         };
       });
     },
@@ -40,6 +41,7 @@ function toDetail(value: Awaited<ReturnType<HelmEndpointDependencies["getHelmRel
     values: toUnavailable(value.detail.values),
     ownedResources: toUnavailable(value.detail.owned_resources),
     commands: toUnavailable(value.detail.commands),
+    refreshAfterSeconds: value.refresh_after_seconds,
   };
 }
 

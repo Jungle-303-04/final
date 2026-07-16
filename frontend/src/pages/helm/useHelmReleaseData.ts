@@ -10,7 +10,7 @@ import {
   type AsyncResourceState,
 } from "../../shared/data/asyncResourceState";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
-import { useVisibleRefreshClock } from "../../shared/data/useVisibleRefreshClock";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import {
   HelmPortFailure,
   type HelmPort,
@@ -19,8 +19,6 @@ import {
   type HelmReleaseList,
 } from "../../features/helm/helmContract";
 
-const HELM_READ_REFRESH_INTERVAL_MS = 30_000;
-
 export function useHelmReleaseList(
   port: HelmPort,
   clusterIds: readonly string[],
@@ -28,13 +26,20 @@ export function useHelmReleaseList(
   frame: AsyncResourceState<HelmReleaseList, HelmPortFailure>;
   refresh: () => void;
 } {
-  const { refresh, revision } = useVisibleRefreshClock(true, HELM_READ_REFRESH_INTERVAL_MS);
+  const [revision, setRevision] = useState(0);
+  const refreshController = useServerRefreshScheduler(
+    () => setRevision((current) => current + 1),
+  );
   const canonicalClusterIds = useMemo(
     () => [...new Set(clusterIds)].sort(),
     [clusterIds],
   );
   const scopeKey = canonicalClusterIds.join("\u001f");
   const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseList, HelmPortFailure>>(ASYNC_LOADING);
+
+  useEffect(() => {
+    refreshController.backgroundFailure();
+  }, [refreshController, scopeKey]);
 
   useEffect(() => {
     let active = true;
@@ -48,10 +53,13 @@ export function useHelmReleaseList(
     );
     void request.promise.then(
       (data) => {
-        if (active) setFrame(asyncResourceSuccess(data));
+        if (!active) return;
+        setFrame(asyncResourceSuccess(data));
+        refreshController.acceptSuccess(data);
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
+        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -59,9 +67,9 @@ export function useHelmReleaseList(
       active = false;
       request.release();
     };
-  }, [canonicalClusterIds, port, revision, scopeKey]);
+  }, [canonicalClusterIds, port, refreshController, revision, scopeKey]);
 
-  return { frame, refresh };
+  return { frame, refresh: refreshController.requestRefresh };
 }
 
 export function useHelmReleaseDetail(
@@ -71,11 +79,18 @@ export function useHelmReleaseDetail(
   frame: AsyncResourceState<HelmReleaseDetail, HelmPortFailure>;
   refresh: () => void;
 } {
-  const { refresh, revision } = useVisibleRefreshClock(request !== null, HELM_READ_REFRESH_INTERVAL_MS);
+  const [revision, setRevision] = useState(0);
+  const refreshController = useServerRefreshScheduler(
+    () => setRevision((current) => current + 1),
+  );
   const identityKey = request
     ? [request.clusterId, request.namespace, request.releaseName].join("\u001f")
     : null;
   const [frame, setFrame] = useState<AsyncResourceState<HelmReleaseDetail, HelmPortFailure>>(ASYNC_IDLE);
+
+  useEffect(() => {
+    refreshController.backgroundFailure();
+  }, [identityKey, refreshController]);
 
   useEffect(() => {
     if (request === null || identityKey === null) {
@@ -93,10 +108,13 @@ export function useHelmReleaseDetail(
     );
     void sharedRequest.promise.then(
       (data) => {
-        if (active) setFrame(asyncResourceSuccess(data));
+        if (!active) return;
+        setFrame(asyncResourceSuccess(data));
+        refreshController.acceptSuccess(data);
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
+        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -104,9 +122,9 @@ export function useHelmReleaseDetail(
       active = false;
       sharedRequest.release();
     };
-  }, [identityKey, port, request, revision]);
+  }, [identityKey, port, refreshController, request, revision]);
 
-  return { frame, refresh };
+  return { frame, refresh: refreshController.requestRefresh };
 }
 
 function toPortFailure(error: unknown): HelmPortFailure {

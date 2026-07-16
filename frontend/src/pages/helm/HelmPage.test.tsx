@@ -112,6 +112,7 @@ describe("HelmPage", () => {
     const port = helmPort();
     port.listReleases.mockResolvedValue({
       releases: [release()],
+      refreshAfterSeconds: 30,
       coverage: {
         availability: "unavailable",
         observedAt: "2026-07-16T09:00:00Z",
@@ -201,6 +202,7 @@ function helmPort(): HelmPort & { listReleases: ReturnType<typeof vi.fn>; getRel
   return {
     listReleases: vi.fn().mockResolvedValue({
       releases: [release()],
+      refreshAfterSeconds: 30,
       coverage: { availability: "available", observedAt: "2026-07-16T09:00:00Z", reasonCodes: [] },
     }),
     getRelease: vi.fn().mockResolvedValue(detail()),
@@ -220,6 +222,7 @@ function detail() {
     values: unavailable("helm_values_provider_not_integrated"),
     ownedResources: unavailable("owned_resources_not_correlated"),
     commands: unavailable("agent_helm_executor_not_integrated"),
+    refreshAfterSeconds: 10,
   };
 }
 

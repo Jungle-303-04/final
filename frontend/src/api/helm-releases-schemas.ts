@@ -61,9 +61,11 @@ export const helmReleaseHistoryEntrySchema = z.strictObject({
 export const helmReleaseListSchema = z.strictObject({
   releases: z.array(helmReleaseSchema),
   coverage: helmObservationCoverageSchema,
+  refresh_after_seconds: z.number().int().min(1).max(3600),
 });
 
 export const helmReleaseDetailSchema = z.strictObject({
+  refresh_after_seconds: z.number().int().min(1).max(3600),
   detail: z.strictObject({
     release: helmReleaseSchema,
     history: z.array(helmReleaseHistoryEntrySchema),

@@ -21,9 +21,11 @@ describe("createHelmAdapter", () => {
       appVersion: null,
       resourceHealth: { availability: "unavailable" },
     });
+    expect(list.refreshAfterSeconds).toBe(30);
     expect(detail).toMatchObject({
       manifest: { reasonCode: "helm_manifest_provider_not_integrated" },
       commands: { reasonCode: "agent_helm_executor_not_integrated" },
+      refreshAfterSeconds: 10,
     });
   });
 
@@ -42,12 +44,14 @@ describe("createHelmAdapter", () => {
 function listEndpoint(freshness: "live" | "stale" | "partial" | "disconnected" = "live") {
   return {
     releases: [releaseEndpoint(freshness)],
+    refresh_after_seconds: 30,
     coverage: { availability: "available" as const, observed_at: null, reason_codes: [] },
   };
 }
 
 function detailEndpoint() {
   return {
+    refresh_after_seconds: 10,
     detail: {
       release: releaseEndpoint(),
       history: [],

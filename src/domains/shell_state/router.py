@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from domains.identity.dependencies import require_cluster_access, require_session
 from domains.shell_state.events import NamespaceScopeUpdatedBody, UiPreferencesUpdatedBody
+from packages.config.refresh_policies import browser_refresh_policies
 from packages.contracts.auth import Actor
+from packages.contracts.freshness import BrowserRefreshPoliciesResponse
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.identity import (
     DEFAULT_WORKSPACE_ID,
@@ -39,6 +41,18 @@ CONFLICT_DETAIL = "shell state revision conflict"
 INVALID_NAMESPACE_DETAIL = "namespace scope contains inaccessible namespaces"
 SCOPE_UNAVAILABLE_DETAIL = "namespace catalog is unavailable"
 SETTINGS_ACCESS_UNAVAILABLE_DETAIL = "effective access repository is unavailable"
+
+
+@router.get(
+    gateway_routes.REFRESH_POLICIES_PATH,
+    response_model=BrowserRefreshPoliciesResponse,
+)
+async def get_refresh_policies(
+    _current: Any = Depends(require_session),
+) -> BrowserRefreshPoliciesResponse:
+    """Return the validated refresh inventory without browser-owned defaults."""
+
+    return browser_refresh_policies()
 
 
 @router.get(

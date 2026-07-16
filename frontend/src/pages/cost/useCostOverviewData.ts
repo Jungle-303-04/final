@@ -9,6 +9,7 @@ import {
   type AsyncResourceState,
 } from "../../shared/data/asyncResourceState";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import {
   CostPortFailure,
   type CostOverview,
@@ -32,8 +33,14 @@ export function useCostOverview(
     timeRange: request.timeRange,
   }), [request.timeRange, scopeKey]);
   const [revision, setRevision] = useState(0);
-  const [completedAt, setCompletedAt] = useState(0);
   const [frame, setFrame] = useState<AsyncResourceState<CostOverview, CostPortFailure>>(ASYNC_LOADING);
+  const refreshController = useServerRefreshScheduler(
+    () => setRevision((current) => current + 1),
+  );
+
+  useEffect(() => {
+    refreshController.backgroundFailure();
+  }, [refreshController, request.timeRange, scopeKey]);
 
   useEffect(() => {
     let active = true;
@@ -49,10 +56,11 @@ export function useCostOverview(
       (data) => {
         if (!active) return;
         setFrame(asyncResourceSuccess(data));
-        setCompletedAt(Date.now());
+        refreshController.acceptSuccess(data);
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
+        refreshController.backgroundFailure();
         setFrame((current) => asyncResourceFailure(current, toPortFailure(error)));
       },
     );
@@ -60,19 +68,9 @@ export function useCostOverview(
       active = false;
       sharedRequest.release();
     };
-  }, [canonicalRequest, port, request.timeRange, revision, scopeKey]);
+  }, [canonicalRequest, port, refreshController, request.timeRange, revision, scopeKey]);
 
-  const refreshAfterSeconds = frame.phase === "ready" ? frame.data.refreshAfterSeconds : null;
-  useEffect(() => {
-    if (refreshAfterSeconds === null || completedAt === 0) return undefined;
-    const timer = window.setTimeout(
-      () => setRevision((current) => current + 1),
-      refreshAfterSeconds * 1_000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [completedAt, refreshAfterSeconds, request.timeRange, scopeKey]);
-
-  return { frame, refresh: () => setRevision((current) => current + 1) };
+  return { frame, refresh: refreshController.requestRefresh };
 }
 
 function toPortFailure(error: unknown): CostPortFailure {

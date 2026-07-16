@@ -204,6 +204,18 @@ def test_ui_preferences_round_trip_with_revision_and_audit_event() -> None:
     assert events.subjects == ["ui.preferences.updated"]
 
 
+def test_refresh_policy_inventory_is_server_owned_and_complete() -> None:
+    response = _client(ShellStateDb(), ShellStateEvents()).get("/refresh-policies")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["revision"]) == 64
+    assert body["policies"]["dashboard"]["refresh_after_seconds"] == 30
+    assert body["policies"]["helm_detail"]["refresh_after_seconds"] == 10
+    assert body["policies"]["cost_summary"]["keep_last_success"] is True
+    assert body["policies"]["port_sessions"]["pause_when_hidden"] is True
+
+
 def test_settings_access_returns_product_rbac_and_explicit_kubernetes_unavailability() -> None:
     db = ShellStateDb()
     response = _client(db, ShellStateEvents()).get(

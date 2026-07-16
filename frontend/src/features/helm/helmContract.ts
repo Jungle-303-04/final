@@ -59,11 +59,13 @@ export interface HelmReleaseDetail {
   values: HelmUnavailableFeature;
   ownedResources: HelmUnavailableFeature;
   commands: HelmUnavailableFeature;
+  refreshAfterSeconds: number;
 }
 
 export interface HelmReleaseList {
   releases: readonly HelmRelease[];
   coverage: HelmObservationCoverage;
+  refreshAfterSeconds: number;
 }
 
 export interface HelmReleaseListRequest {
