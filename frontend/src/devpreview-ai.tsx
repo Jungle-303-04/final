@@ -231,22 +231,7 @@ function deriveSummary(turn: AiTurn): { text: string; tone: AiTone } {
   return { text: turn.summary ?? "대화", tone: "neutral" };
 }
 
-// rAF 트윈 (motion 스프링 느낌의 이징을 직접 적용 — .finished 미해결 이슈 회피)
-const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
-const easeSpring = (t: number) => { const a = t - 1; return 1 + 2.3 * a * a * a + 1.3 * a * a; }; // easeOutBack (살짝 오버슈트)
-function tween(ms: number, ease: (t: number) => number, onUpdate: (p: number) => void): Promise<void> {
-  return new Promise((resolve) => {
-    const start = performance.now();
-    const frame = (now: number) => {
-      const t = Math.min(1, (now - start) / ms);
-      onUpdate(ease(t));
-      if (t < 1) requestAnimationFrame(frame); else resolve();
-    };
-    requestAnimationFrame(frame);
-  });
-}
-
-/** 순차 전환: 내용이 완전히 사라진 뒤 요약이 나타남(겹침 없음). 다 표시되면 2.8초 뒤 자동 접힘. */
+/** 접힘/펼침 — CSS grid-template-rows(0fr↔1fr)로 height:auto를 트랜지션. React는 is-collapsed 클래스만 토글(측정·JS조작 없음). */
 function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => void }) {
   const parts = turn.parts ?? [];
   const evidenceCount = (parts.find((p) => p.kind === "evidence") as { items?: unknown[] } | undefined)?.items?.length ?? 0;
@@ -256,18 +241,13 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   const [collapsed, setCollapsed] = useState(false);
   const [actionIdle, setActionIdle] = useState(parts.some((p) => p.kind === "action"));
   const summary = deriveSummary(turn);
+  const didAuto = useRef(false);
 
   const advance = () => setShown((s) => {
     if (s >= parts.length) { setPhase("review"); onComplete(); return s; }
     return s + 1;
   });
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
-
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const fullRef = useRef<HTMLDivElement>(null);
-  const capRef = useRef<HTMLDivElement>(null);
-  const didAuto = useRef(false);
-  const firstRun = useRef(true);
 
   const instant = phase === "review";
   const canCollapse = instant && !hasRunning && !actionIdle;
@@ -286,56 +266,30 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
     return () => window.clearTimeout(id);
   }, [canCollapse, collapsed]);
 
-  // 초기 표시: 펼침=본문만, 접힘=요약만
-  useLayoutEffect(() => {
-    const full = fullRef.current, cap = capRef.current;
-    if (full) { full.style.display = collapsed ? "none" : "block"; full.style.opacity = collapsed ? "0" : "1"; }
-    if (cap) { cap.style.display = collapsed ? "flex" : "none"; cap.style.opacity = collapsed ? "1" : "0"; }
-  }, []);
-
-  // 순차 전환(motion 스프링): 사라질 것 페이드아웃 → 높이 스프링 → 나타날 것 페이드인 (겹침 없음)
-  useEffect(() => {
-    if (firstRun.current) { firstRun.current = false; return; }
-    const wrap = wrapRef.current, full = fullRef.current, cap = capRef.current;
-    if (!wrap || !full || !cap) return;
-    let cancelled = false;
-    const outEl = collapsed ? full : cap;
-    const inEl = collapsed ? cap : full;
-    (async () => {
-      const fromH = wrap.getBoundingClientRect().height;
-      await tween(80, easeOut, (p) => { if (!cancelled) outEl.style.opacity = String(1 - p); });
-      if (cancelled) return;
-      outEl.style.display = "none";
-      inEl.style.display = collapsed ? "flex" : "block";
-      inEl.style.opacity = "0";
-      const toH = wrap.getBoundingClientRect().height;
-      wrap.style.height = `${fromH}px`; void wrap.offsetHeight;
-      await tween(230, easeSpring, (p) => { if (!cancelled && wrapRef.current) wrapRef.current.style.height = `${fromH + (toH - fromH) * p}px`; });
-      if (cancelled) return;
-      if (wrapRef.current) wrapRef.current.style.height = "auto";
-      await tween(110, easeOut, (p) => { if (!cancelled) inEl.style.opacity = String(p); });
-    })();
-    return () => { cancelled = true; };
-  }, [collapsed]);
-
   return (
-    <div ref={wrapRef} onClick={onSurfaceClick}
-      className={`group/msg mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
+    <div onClick={onSurfaceClick}
+      className={`group/msg mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.04] bg-card shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${collapsed ? "is-collapsed" : ""} ${clickable ? "cursor-pointer" : ""}`}
       style={{ borderRadius: 20 }}>
-      {/* 펼친 내용 */}
-      <div ref={fullRef}>
-        <div className="grid gap-3.5 px-4 py-4">
-          {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
-            <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
-              onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
-          ))}
+      {/* 접힌 요약 */}
+      <div className="ac-cap">
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 py-3">
+            <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+            <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/40" />
+          </div>
         </div>
       </div>
-      {/* 접힌 요약 — display/opacity는 전부 ref로만 제어(React가 되돌리지 못하게) */}
-      <div className="items-center gap-2.5 px-4 py-3" ref={capRef}>
-        <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
-        <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/40" />
+      {/* 펼친 내용 */}
+      <div className="ac-full">
+        <div className="min-h-0 overflow-hidden">
+          <div className="grid gap-3.5 px-4 py-4">
+            {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
+              <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
+                onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -498,6 +452,11 @@ function Panel() {
         .chatscroll::-webkit-scrollbar-track { background: transparent; }
         .chatscroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.14); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
         .chatscroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.24); background-clip: padding-box; }
+        .ac-cap, .ac-full { display: grid; }
+        .ac-cap { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease; }
+        .ac-full { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease 150ms; }
+        .is-collapsed .ac-cap { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease 150ms; }
+        .is-collapsed .ac-full { grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 150ms ease; }
         .island-pulse { animation: islandPulse 2s ease-in-out infinite; }
         @keyframes islandPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--destructive) 45%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--destructive) 0%, transparent); } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
