@@ -229,6 +229,27 @@ describe("useHomePageState refresh authority", () => {
       }
     });
   });
+
+  it("keeps the last success when a deferred-ready refresh fails", async () => {
+    const api = homeApi();
+    api.overview
+      .mockResolvedValueOnce(overview("cluster-a", "last-success"))
+      .mockRejectedValueOnce(new HomePortFailure("offline"));
+    const { result } = renderHomeState(api.port, "/?clusters=cluster-a");
+    await waitFor(() => expect(api.dashboardStreams).toHaveLength(1));
+    await waitFor(() => expect(result.current.overview.phase).toBe("ready"));
+
+    act(() => api.dashboardStreams[0]?.emit("snapshot-after-sync"));
+
+    await waitFor(() => expect(api.overview).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(result.current.overview.phase).toBe("ready");
+      if (result.current.overview.phase === "ready") {
+        expect(result.current.overview.data.name).toBe("last-success");
+        expect(result.current.overview.refreshFailure?.code).toBe("offline");
+      }
+    });
+  });
 });
 
 describe("useHomePageState deep-link and generation safety", () => {

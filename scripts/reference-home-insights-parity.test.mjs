@@ -21,12 +21,14 @@ const FEATURE_IDS = [
     { length: 11 },
     (_, index) => `reference.feature.${String(index + 113).padStart(3, "0")}`,
   ),
+  "reference.feature.063",
   "reference.feature.065",
 ];
 
 const IMPLEMENTED = new Set([
   "reference.feature.038",
   "reference.feature.042",
+  "reference.feature.063",
   "reference.feature.065",
   "reference.feature.114",
   "reference.feature.115",
@@ -137,4 +139,40 @@ test("server polling, last-success retention, and Timeline SSE stay contractual"
   assert.match(timelineFrame, /createRafStreamCoalescer/);
   assert.match(timelineFrame, /resync_required/);
   assert.equal(ports.features["reference.feature.119"].coverage.realtime.state, "implemented");
+});
+
+test("deferred-ready owns its immutable source and exact authorized stream evidence", async () => {
+  const [ports, aliases, classifications, ledger, sourceLedger] = await Promise.all([
+    readJson("docs/migration/reference-feature-port-map.json"),
+    readJson("docs/migration/reference-feature-source-aliases.json"),
+    readJson("docs/migration/reference-ui-delta-classifications.json"),
+    readJson("docs/migration/reference-feature-ledger.json"),
+    readJson("docs/migration/reference-source-ledger.json"),
+  ]);
+  const contractId = "reference.feature.063";
+  const sourceKey = "upstream-ui:home:deferred-ready:dashboard-refetch:v1";
+  const port = ports.features[contractId];
+  const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+  const interaction = classifications.classifications["web/src/hooks/useEventSource.ts"]
+    .interactions.find((candidate) => candidate.sourceKey === sourceKey);
+  const sourceByPath = new Map(sourceLedger.files.map((file) => [file.path, file]));
+
+  assert.equal(aliases.aliases[contractId], sourceKey);
+  assert.equal(port.deliveryStatus, "implemented");
+  assert.equal(port.backendContract, "packages.contracts.freshness.HomeDashboardEventFrame");
+  assert.equal(port.frontendContract, "frontend/src/features/home/homeEndpointContract.ts");
+  assert.equal(port.coverage.backend.state, "implemented");
+  assert.equal(port.coverage.frontend.state, "implemented");
+  assert.equal(port.coverage.realtime.state, "implemented");
+  assert.equal(feature.deliveryStatus, "implemented");
+  assert.equal(feature.sourceKey, sourceKey);
+  assert.deepEqual(interaction.legacyContractIds, [contractId]);
+  assert.ok(interaction.opsiaPort.destinations.includes(
+    "src/domains/dashboard/ready_stream.py",
+  ));
+  assert.ok(interaction.opsiaPort.destinations.includes(
+    "frontend/src/features/home/createHomeAdapter.ts",
+  ));
+  assert.equal(sourceByPath.get("internal/server/sse.go")?.disposition, "python-port");
+  assert.equal(sourceByPath.get("web/src/hooks/useEventSource.ts")?.disposition, "frontend-port");
 });

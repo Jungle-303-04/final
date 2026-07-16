@@ -155,6 +155,22 @@ def test_dashboard_ready_wakeup_and_cursor_cannot_cross_cluster_scope() -> None:
                 authorization_revision="authorization-a",
             ),
         )
+    for unauthorized_binding in (
+        DashboardReadyCursorBinding(
+            workspace_id="workspace-a",
+            cluster_id="cluster-a",
+            user_id="user-b",
+            authorization_revision="authorization-a",
+        ),
+        DashboardReadyCursorBinding(
+            workspace_id="workspace-a",
+            cluster_id="cluster-a",
+            user_id="user-a",
+            authorization_revision="authorization-b",
+        ),
+    ):
+        with pytest.raises(ValueError, match="cursor scope changed"):
+            codec.decode(token, binding=unauthorized_binding)
 
 
 async def _collect(stream: object) -> list[str]:
