@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from domains.helm.release_router import create_helm_artifact_read, create_helm_release_upgrade
 from domains.helm.repository import HelmOwnedResourceObservationBatch
+from domains.helm.source_router import get_helm_chart_version_provider
 from domains.identity.dependencies import require_session
 from packages.config.constants import Command
 from packages.contracts.helm import (
@@ -19,6 +20,11 @@ from packages.contracts.helm import (
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
     HelmArtifactReadRequest,
     HelmReleaseUpgradeRequest,
+)
+from packages.contracts.helm.sources import (
+    HelmChartSource,
+    HelmChartVersion,
+    HelmChartVersionObservation,
 )
 from packages.contracts.identity import Permission
 from packages.runtime.dependencies import get_db
@@ -239,6 +245,87 @@ class HelmUpgradeDb(HelmReleaseDb):
         ]
 
 
+class HelmUpgradeInfoDb(HelmReleaseDb):
+    def accessible_resource_ids(
+        self,
+        _user_id: str,
+        workspace_id: str,
+        resource_type: str,
+        permission: str,
+    ) -> set[str]:
+        assert workspace_id == "workspace-a"
+        if resource_type == "cluster" and permission == Permission.INVENTORY_READ.value:
+            return {"cluster-a"}
+        if resource_type == "helm_chart_source" and permission == Permission.CATALOG_READ.value:
+            return {"source-a"}
+        return set()
+
+    def list_helm_owned_resource_observations(
+        self,
+        *,
+        workspace_id: str,
+        release_scopes: tuple[tuple[str, str, str], ...],
+        limit: int,
+    ) -> HelmOwnedResourceObservationBatch:
+        batch = super().list_helm_owned_resource_observations(
+            workspace_id=workspace_id,
+            release_scopes=release_scopes,
+            limit=limit,
+        )
+        rows = [dict(row) for row in batch.rows]
+        rows[0]["chart_label"] = "storefront-1.2.3"
+        return HelmOwnedResourceObservationBatch(rows=tuple(rows), truncated=False)
+
+    def list_helm_chart_source_records(
+        self,
+        *,
+        workspace_id: str,
+        source_ids: set[str] | None,
+        limit: int,
+    ) -> SimpleNamespace:
+        assert workspace_id == "workspace-a"
+        assert source_ids == {"source-a"}
+        assert limit > 0
+        return SimpleNamespace(
+            rows=(
+                {
+                    "source_id": "source-a",
+                    "workspace_id": "workspace-a",
+                    "provider": "repository",
+                    "name": "stable",
+                    "canonical_ref": "https://charts.example.test/stable",
+                    "credential_ref": None,
+                    "status": "active",
+                    "updated_at": datetime(2026, 7, 17, tzinfo=UTC),
+                },
+            ),
+            truncated=False,
+        )
+
+
+class HelmUpgradeInfoProvider:
+    async def fetch_versions(
+        self,
+        source: HelmChartSource,
+        chart_name: str,
+        *,
+        credential: object = None,
+    ) -> HelmChartVersionObservation:
+        assert source.source_id == "source-a"
+        assert chart_name == "storefront"
+        assert credential is None
+        return HelmChartVersionObservation(
+            source=source,
+            chart_name=chart_name,
+            availability="available",
+            versions=(
+                HelmChartVersion(version="2.0.0"),
+                HelmChartVersion(version="1.2.3"),
+            ),
+            observed_at="2026-07-17T00:01:00+00:00",
+        )
+
+
 def _client(agent_statuses: dict[str, dict[str, str]] | None = None) -> TestClient:
     module = importlib.import_module("domains.helm.release_router")
     app = FastAPI()
@@ -249,6 +336,20 @@ def _client(agent_statuses: dict[str, dict[str, str]] | None = None) -> TestClie
         roles=("user",),
     )
     app.dependency_overrides[get_db] = lambda: HelmReleaseDb(agent_statuses)
+    return TestClient(app)
+
+
+def _upgrade_info_client() -> TestClient:
+    module = importlib.import_module("domains.helm.release_router")
+    app = FastAPI()
+    app.include_router(module.router)
+    app.dependency_overrides[require_session] = lambda: SimpleNamespace(
+        user_id="user-a",
+        workspace_id="workspace-a",
+        roles=("user",),
+    )
+    app.dependency_overrides[get_db] = HelmUpgradeInfoDb
+    app.dependency_overrides[get_helm_chart_version_provider] = HelmUpgradeInfoProvider
     return TestClient(app)
 
 
@@ -311,6 +412,43 @@ def test_release_scope_reports_stale_or_missing_agent_without_relaxing_rbac() ->
     assert disconnected.status_code == 200
     assert disconnected.json()["releases"][0]["scope"]["freshness"] == "disconnected"
     assert "must-not-leak" not in stale.text
+
+
+def test_release_upgrade_info_and_versions_share_one_authorized_source_resolution() -> None:
+    client = _upgrade_info_client()
+
+    info = client.get("/helm/releases/storefront/storefront/upgrade-info?cluster_id=cluster-a")
+    versions = client.get("/helm/releases/storefront/storefront/versions?cluster_id=cluster-a")
+
+    assert info.status_code == 200
+    assert info.json()["availability"] == "available"
+    assert info.json()["current_version"] == "1.2.3"
+    assert info.json()["latest_version"] == "2.0.0"
+    assert info.json()["update_available"] is True
+    assert info.json()["source"]["source_id"] == "source-a"
+    assert info.json()["refresh_after_seconds"] == 10
+    assert versions.status_code == 200
+    assert [item["version"] for item in versions.json()["versions"]] == [
+        "2.0.0",
+        "1.2.3",
+    ]
+    assert versions.json()["source"]["source_id"] == "source-a"
+    assert versions.json()["refresh_after_seconds"] == 10
+
+
+def test_batch_upgrade_check_is_bounded_and_uses_cluster_safe_release_keys() -> None:
+    response = _upgrade_info_client().get(
+        "/helm/upgrade-check?clusters=cluster-a&namespaces=storefront"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert list(body["releases"]) == ["cluster-a/storefront/storefront"]
+    assert body["releases"]["cluster-a/storefront/storefront"]["latest_version"] == "2.0.0"
+    assert body["coverage"]["availability"] == "available"
+    assert body["truncated"] is False
+    assert body["reason_codes"] == []
+    assert body["refresh_after_seconds"] == 30
 
 
 def test_artifact_read_queues_one_exact_read_only_agent_command(monkeypatch) -> None:
