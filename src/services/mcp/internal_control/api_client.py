@@ -10,7 +10,9 @@ from packages.security.log_lines import redact_log_line
 from services.mcp.internal_control.config import McpSettings
 
 MAX_ERROR_DETAIL_LENGTH = 500
-SUPPORTED_MANAGEMENT_API_METHODS = frozenset({"GET", "POST"})
+SUPPORTED_MANAGEMENT_API_METHODS = frozenset({"GET", "POST", "PATCH"})
+BODY_MANAGEMENT_API_METHODS = frozenset({"POST", "PATCH"})
+ALLOWED_MANAGEMENT_API_EXTRA_HEADERS = frozenset({"idempotency-key"})
 
 
 @dataclass
@@ -41,8 +43,30 @@ class ManagementApiClient:
         path: str,
         body: dict[str, Any],
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
-        return await self._request_json("POST", path, params=params, json_body=body)
+        return await self._request_json(
+            "POST",
+            path,
+            params=params,
+            json_body=body,
+            headers=headers,
+        )
+
+    async def patch_json(
+        self,
+        path: str,
+        body: dict[str, Any],
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        return await self._request_json(
+            "PATCH",
+            path,
+            params=params,
+            json_body=body,
+            headers=headers,
+        )
 
     async def _request_json(
         self,
@@ -51,13 +75,17 @@ class ManagementApiClient:
         *,
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
         if method not in SUPPORTED_MANAGEMENT_API_METHODS:
             raise ManagementApiError(0, "unsupported management API method")
-        if method != "POST" and json_body is not None:
-            raise ManagementApiError(0, "management API request body is only allowed for POST")
+        if method not in BODY_MANAGEMENT_API_METHODS and json_body is not None:
+            raise ManagementApiError(
+                0,
+                "management API request body is only allowed for POST or PATCH",
+            )
         kwargs: dict[str, Any] = {
-            "headers": self.settings.auth_headers(),
+            "headers": _request_headers(self.settings.auth_headers(), headers or {}),
             "params": _query_params(params or {}),
         }
         if json_body is not None:
@@ -102,6 +130,28 @@ def _query_params(params: dict[str, Any]) -> dict[str, str]:
                 raise ManagementApiError(0, "unsafe management API query parameter value")
             query[key] = text
     return query
+
+
+def _request_headers(base: dict[str, str], extra: dict[str, str]) -> dict[str, str]:
+    headers = dict(base)
+    existing = {key.casefold() for key in headers}
+    for key, value in extra.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or _has_unsafe_url_character(key)
+            or ":" in key
+        ):
+            raise ManagementApiError(0, "unsafe management API header name")
+        normalized_key = key.casefold()
+        if normalized_key not in ALLOWED_MANAGEMENT_API_EXTRA_HEADERS:
+            raise ManagementApiError(0, "unsupported management API extra header")
+        if normalized_key in existing:
+            raise ManagementApiError(0, "management API header override is not allowed")
+        if not isinstance(value, str) or _has_unsafe_url_character(value):
+            raise ManagementApiError(0, "unsafe management API header value")
+        headers[key] = value
+    return headers
 
 
 async def _read_limited_content(response: httpx.Response, *, max_bytes: int) -> bytes:

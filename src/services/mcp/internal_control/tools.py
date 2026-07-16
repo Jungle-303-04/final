@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import quote
 
 from packages.contracts.gateway import routes
+from packages.contracts.gitops import ApprovalStatus, WorkflowRunStatus
 from packages.security.log_lines import REDACTED_VALUE, redact_log_line
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
 from services.mcp.internal_control.config import OPSIA_MCP_ENABLE_WRITES_ENV
@@ -19,10 +20,28 @@ DEFAULT_LIST_RESOURCES_LIMIT = 200
 DEFAULT_RECENT_INCIDENT_LIMIT = 20
 DEFAULT_RELATED_LIMIT = 100
 DEFAULT_EVENT_LIMIT = 50
+DEFAULT_APPLICATION_LIMIT = 100
+DEFAULT_RELEASE_RUN_LIMIT = 50
+DEFAULT_AUDIT_TIMELINE_LIMIT = 50
+MAX_PENDING_APPROVAL_APPLICATIONS = 50
 MAX_LIST_LIMIT = 1000
 MAX_QUERY_LIMIT = 200
 MAX_WRITE_PAYLOAD_BYTES = 64 * 1024
 LOG_EVIDENCE_SOURCE = "logs"
+PENDING_APPROVAL_STATUS = ApprovalStatus.REQUESTED.value
+WAITING_FOR_APPROVAL_STATUS = WorkflowRunStatus.WAITING_FOR_APPROVAL.value
+IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
+APPLICATIONS_ENVIRONMENT_QUERY = "applications.environment"
+APPLICATIONS_STATUS_QUERY = "applications.status"
+APPLICATIONS_PENDING_PROMOTION_QUERY = "applications.pendingPromotion"
+APPLICATIONS_SEARCH_QUERY = "applications.q"
+GITOPS_APPROVAL_QUERY = "gitops.approval"
+RESPONSE_RULES_KEY = "rules"
+RESPONSE_RUNS_KEY = "runs"
+RESPONSE_ITEMS_KEY = "items"
+ALERT_RULE_ID_KEY = "rule_id"
+APPLICATION_ID_KEY = "application_id"
+WORKFLOW_RUN_ID_KEY = "workflow_run_id"
 READ_ONLY_TOOL_ANNOTATIONS = {
     "readOnlyHint": True,
     "destructiveHint": False,
@@ -33,7 +52,6 @@ WRITE_TOOL_ANNOTATIONS = {
     "destructiveHint": False,
     "idempotentHint": False,
 }
-WRITE_HTTP_METHOD = "POST"
 SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
     {
         "api_key",
@@ -51,12 +69,13 @@ SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
         "token",
     }
 )
-SENSITIVE_PROPOSAL_EXACT_KEYS = frozenset({"data", "stringdata"})
+SENSITIVE_PROPOSAL_EXACT_KEYS = frozenset({"data", "edited_yaml", "stringdata"})
 SENSITIVE_PROPOSAL_MARKER_KEYS = frozenset({"key", "name"})
 SENSITIVE_PROPOSAL_MARKER_VALUE_KEYS = frozenset({"default", "literal", "value"})
 DIRECT_EXECUTION_KEYS = frozenset(
     {"confirmation", "direct_execution", "direct_execution_confirmed"}
 )
+WRITE_METHODS = frozenset({"POST", "PATCH"})
 
 
 class ToolInputError(ValueError):
@@ -269,6 +288,242 @@ def default_tool_registry() -> ToolRegistry:
                 handler=get_log_evidence,
             ),
             McpTool(
+                name="get_command_status",
+                title="Get Command Status",
+                description=(
+                    "Fetch command status and agent result details through the existing "
+                    "command status API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "command_id": _string("Existing command id.", max_length=200),
+                    },
+                    required=["command_id"],
+                ),
+                handler=get_command_status,
+            ),
+            McpTool(
+                name="list_alert_rules",
+                title="List Alert Rules",
+                description=(
+                    "List existing alert rules through the admin alert-rule API before "
+                    "creating or updating a rule."
+                ),
+                input_schema=_schema(properties={}),
+                handler=list_alert_rules,
+            ),
+            McpTool(
+                name="get_alert_rule",
+                title="Get Alert Rule",
+                description=(
+                    "Return one alert rule by filtering the existing alert-rule list API; "
+                    "no direct database lookup is used."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "rule_id": _string("Existing alert rule id.", max_length=120),
+                    },
+                    required=["rule_id"],
+                ),
+                handler=get_alert_rule,
+            ),
+            McpTool(
+                name="get_recovery_plan",
+                title="Get Recovery Plan",
+                description=(
+                    "Fetch the existing RCA recovery plan for an incident correlation id "
+                    "before requesting one of its actions."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "correlation_id": _string(
+                            "Existing incident correlation id.",
+                            max_length=2048,
+                        ),
+                    },
+                    required=["correlation_id"],
+                ),
+                handler=get_recovery_plan,
+            ),
+            McpTool(
+                name="list_applications",
+                title="List Applications",
+                description=(
+                    "List applications visible to the authenticated Opsia session through "
+                    "the product applications API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "clusters": _string("Optional comma-separated cluster filter.", max_length=2048),
+                        "namespaces": _string("Optional comma-separated namespace filter.", max_length=2048),
+                        "applications": _string("Optional comma-separated application filter.", max_length=2048),
+                        "labels": _string("Optional comma-separated label filter.", max_length=2048),
+                        "environment": _string("Optional application environment filter.", max_length=120),
+                        "status": _string("Optional application status filter.", max_length=120),
+                        "pending_promotion": _string(
+                            "Optional pending promotion filter accepted by the Gateway.",
+                            max_length=120,
+                        ),
+                        "query": _string("Optional application search query.", max_length=200),
+                        "limit": _integer(
+                            "Maximum number of applications to return.",
+                            minimum=1,
+                            maximum=200,
+                            default=DEFAULT_APPLICATION_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_applications,
+            ),
+            McpTool(
+                name="get_application_detail",
+                title="Get Application Detail",
+                description=(
+                    "Fetch one application detail projection through the existing "
+                    "applications API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "application_id": _string("Existing application id.", max_length=200),
+                        "instance": _string("Optional application instance id.", max_length=200),
+                        "workload": _string("Optional workload key within the application.", max_length=128),
+                    },
+                    required=["application_id"],
+                ),
+                handler=get_application_detail,
+            ),
+            McpTool(
+                name="list_audit_timeline",
+                title="List Audit Timeline",
+                description=(
+                    "List an authorized audit timeline for an existing correlation id "
+                    "through the audit API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "correlation_id": _string("Existing correlation id.", max_length=2048),
+                        "cursor": _string("Optional cursor returned by the audit API.", max_length=2048),
+                        "limit": _integer(
+                            "Maximum number of audit items to return.",
+                            minimum=1,
+                            maximum=MAX_QUERY_LIMIT,
+                            default=DEFAULT_AUDIT_TIMELINE_LIMIT,
+                        ),
+                    },
+                    required=["correlation_id"],
+                ),
+                handler=list_audit_timeline,
+            ),
+            McpTool(
+                name="list_workflow_runs",
+                title="List Workflow Runs",
+                description=(
+                    "List workflow-like runs from the existing application-runs API when "
+                    "application_id is supplied, otherwise from release-runs."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "application_id": _string(
+                            "Optional application id for application workflow runs.",
+                            max_length=200,
+                        ),
+                        "plan_id": _string("Optional release plan id for release runs.", max_length=160),
+                        "status": _string("Optional release run status filter.", max_length=80),
+                        "attention_only": _boolean("Only release runs needing attention.", default=False),
+                        "active_only": _boolean("Only active release runs.", default=False),
+                        "limit": _integer(
+                            "Maximum number of runs to return.",
+                            minimum=1,
+                            maximum=500,
+                            default=DEFAULT_RELEASE_RUN_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_workflow_runs,
+            ),
+            McpTool(
+                name="get_workflow_run",
+                title="Get Workflow Run",
+                description=(
+                    "Fetch a release run by id, or filter one application run from the "
+                    "existing application-runs API when application_id is supplied."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "run_id": _string("Existing release run id or workflow_run_id.", max_length=200),
+                        "application_id": _string(
+                            "Optional application id when run_id is an application workflow_run_id.",
+                            max_length=200,
+                        ),
+                    },
+                    required=["run_id"],
+                ),
+                handler=get_workflow_run,
+            ),
+            McpTool(
+                name="list_pending_approvals",
+                title="List Pending Approvals",
+                description=(
+                    "Find pending approvals from existing application workflow runs or "
+                    "waiting release runs. MCP does not query approval tables directly."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "application_id": _string(
+                            "Optional application id to search application workflow approvals.",
+                            max_length=200,
+                        ),
+                        "limit": _integer(
+                            "Maximum number of runs to inspect.",
+                            minimum=1,
+                            maximum=500,
+                            default=DEFAULT_RELEASE_RUN_LIMIT,
+                        ),
+                    }
+                ),
+                handler=list_pending_approvals,
+            ),
+            McpTool(
+                name="get_resource_capabilities",
+                title="Get Resource Capabilities",
+                description=(
+                    "Return the authorized actions currently available for one existing "
+                    "inventory resource key."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "resource": _string("Existing inventory resource key.", max_length=255),
+                    },
+                    required=["resource"],
+                ),
+                handler=get_resource_capabilities,
+            ),
+            McpTool(
+                name="run_metric_query_preset",
+                title="Run Metric Query Preset",
+                description=(
+                    "Dry-run or queue an existing metric preset through the Gateway. The "
+                    "Gateway records a read-only agent debug command and returns command_id."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "cluster_id": _string("Cluster id from list_clusters.", max_length=512),
+                        "preset_id": _string("Existing metric query preset id.", max_length=120),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not queue the query.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the query.",
+                            default=False,
+                        ),
+                    },
+                    required=["cluster_id", "preset_id"],
+                ),
+                handler=run_metric_query_preset,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
                 name="create_alert_rule",
                 title="Create Alert Rule",
                 description=(
@@ -396,6 +651,246 @@ def default_tool_registry() -> ToolRegistry:
                 handler=approve_or_reject_workflow,
                 annotations=WRITE_TOOL_ANNOTATIONS,
             ),
+            McpTool(
+                name="update_alert_rule",
+                title="Update Alert Rule",
+                description=(
+                    "Dry-run or submit a partial alert-rule update through the existing "
+                    "admin alert-rule PATCH API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "rule_id": _string("Existing alert rule id.", max_length=120),
+                        "payload": _object(
+                            "Existing AlertRulePatchRequest body from the Opsia API contract."
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["rule_id", "payload"],
+                ),
+                handler=update_alert_rule,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="disable_alert_rule",
+                title="Disable Alert Rule",
+                description=(
+                    "Dry-run or disable an alert rule by sending enabled=false through "
+                    "the existing alert-rule PATCH API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "rule_id": _string("Existing alert rule id.", max_length=120),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["rule_id"],
+                ),
+                handler=disable_alert_rule,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="cancel_command_request",
+                title="Cancel Command Request",
+                description=(
+                    "Dry-run or request command cancellation through the existing command "
+                    "control API with a caller-supplied idempotency key."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "command_id": _string("Existing command id.", max_length=200),
+                        "idempotency_key": _string(
+                            "Stable key for this cancel request; Gateway uses it for idempotency.",
+                            max_length=200,
+                        ),
+                        "reason": _string("Optional cancellation reason.", max_length=500),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["command_id", "idempotency_key"],
+                ),
+                handler=cancel_command_request,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="retry_command_request",
+                title="Retry Command Request",
+                description=(
+                    "Dry-run or request command retry through the existing command "
+                    "control API with a caller-supplied idempotency key."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "command_id": _string("Existing command id.", max_length=200),
+                        "idempotency_key": _string(
+                            "Stable key for this retry request; Gateway uses it for idempotency.",
+                            max_length=200,
+                        ),
+                        "reason": _string("Optional retry reason.", max_length=500),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["command_id", "idempotency_key"],
+                ),
+                handler=retry_command_request,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="ack_alert_event",
+                title="Ack Alert Event",
+                description=(
+                    "Dry-run or acknowledge an existing alert event through the Gateway. "
+                    "The alert API records actor and state."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "event_id": _string("Existing alert event id.", max_length=120),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["event_id"],
+                ),
+                handler=ack_alert_event,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="promote_alert_incident",
+                title="Promote Alert Incident",
+                description=(
+                    "Dry-run or promote an existing alert event to an incident through "
+                    "the Gateway alert API."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "event_id": _string("Existing alert event id.", max_length=120),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["event_id"],
+                ),
+                handler=promote_alert_incident,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="propose_manifest_change",
+                title="Propose Manifest Change",
+                description=(
+                    "Preview a manifest edit through the existing manifest editor, or "
+                    "after approval submit it only to the Safe PR workflow."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "resource_id": _string("Existing inventory resource key.", max_length=255),
+                        "payload": _object(
+                            "Existing ResourceManifestPreviewRequest body from the Opsia API contract."
+                        ),
+                        "reason": _string(
+                            "Required audit reason used if the proposal is submitted to Safe PR.",
+                            max_length=500,
+                        ),
+                        "dry_run": _boolean(
+                            "When true, call only the non-mutating preview API and return the Safe PR proposal.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the preview.",
+                            default=False,
+                        ),
+                    },
+                    required=["resource_id", "payload", "reason"],
+                ),
+                handler=propose_manifest_change,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="create_release_plan",
+                title="Create Release Plan",
+                description=(
+                    "Dry-run or create/update a release plan through the existing release "
+                    "plan API. Gateway application permissions and blockers still apply."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "payload": _object(
+                            "Existing ReleasePlanUpsertRequest body from the Opsia API contract."
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["payload"],
+                ),
+                handler=create_release_plan,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="start_release_run",
+                title="Start Release Run",
+                description=(
+                    "Dry-run or start a release run through the existing release-plan "
+                    "start API. Gateway blocker and approval-evidence checks still apply."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "payload": _object(
+                            "Existing ReleasePlanUpsertRequest body, usually with an existing plan_id."
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["payload"],
+                ),
+                handler=start_release_run,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
         ]
     )
 
@@ -516,6 +1011,295 @@ async def get_log_evidence(
             "reason": "logs evidence source is not available for this evidence window",
         }
     return _read_result("get_log_evidence", path, data)
+
+
+async def get_command_status(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"command_id"})
+    command_id = _required_str(arguments, "command_id", max_length=200)
+    path = _format_path(routes.COMMAND_STATUS_PATH, command_id=command_id)
+    data = await client.get_json(path)
+    return _read_result("get_command_status", path, data)
+
+
+async def list_alert_rules(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, set())
+    data = await client.get_json(routes.ALERT_RULES_PATH)
+    return _read_result("list_alert_rules", routes.ALERT_RULES_PATH, data)
+
+
+async def get_alert_rule(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"rule_id"})
+    rule_id = _required_str(arguments, "rule_id", max_length=120)
+    data = await client.get_json(routes.ALERT_RULES_PATH)
+    rule = _find_mapping_by_key(
+        _list_from_response(data, RESPONSE_RULES_KEY),
+        ALERT_RULE_ID_KEY,
+        rule_id,
+    )
+    return _read_result(
+        "get_alert_rule",
+        routes.ALERT_RULES_PATH,
+        {
+            "rule": rule,
+            "available": rule is not None,
+        },
+    )
+
+
+async def get_recovery_plan(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"correlation_id"})
+    correlation_id = _required_str(arguments, "correlation_id", max_length=2048)
+    path = _format_path(
+        routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH,
+        correlation_id=correlation_id,
+    )
+    data = await client.get_json(path)
+    return _read_result("get_recovery_plan", path, data)
+
+
+async def list_applications(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {
+            "clusters",
+            "namespaces",
+            "applications",
+            "labels",
+            "environment",
+            "status",
+            "pending_promotion",
+            "query",
+            "limit",
+        },
+    )
+    data = await client.get_json(
+        routes.APPLICATIONS_PATH,
+        {
+            "clusters": _optional_str(arguments, "clusters", max_length=2048),
+            "namespaces": _optional_str(arguments, "namespaces", max_length=2048),
+            "applications": _optional_str(arguments, "applications", max_length=2048),
+            "labels": _optional_str(arguments, "labels", max_length=2048),
+            APPLICATIONS_ENVIRONMENT_QUERY: _optional_str(
+                arguments,
+                "environment",
+                max_length=120,
+            ),
+            APPLICATIONS_STATUS_QUERY: _optional_str(arguments, "status", max_length=120),
+            APPLICATIONS_PENDING_PROMOTION_QUERY: _optional_str(
+                arguments,
+                "pending_promotion",
+                max_length=120,
+            ),
+            APPLICATIONS_SEARCH_QUERY: _optional_str(arguments, "query", max_length=200),
+            "limit": _bounded_int(arguments, "limit", DEFAULT_APPLICATION_LIMIT, 1, 200),
+        },
+    )
+    return _read_result("list_applications", routes.APPLICATIONS_PATH, data)
+
+
+async def get_application_detail(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"application_id", "instance", "workload"})
+    application_id = _required_str(arguments, "application_id", max_length=200)
+    path = _format_path(routes.APPLICATION_PATH, application_id=application_id)
+    data = await client.get_json(
+        path,
+        {
+            "instance": _optional_str(arguments, "instance", max_length=200),
+            "workload": _optional_str(arguments, "workload", max_length=128),
+        },
+    )
+    return _read_result("get_application_detail", path, data)
+
+
+async def list_audit_timeline(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"correlation_id", "cursor", "limit"})
+    data = await client.get_json(
+        routes.AUDIT_TIMELINE_PATH,
+        {
+            "correlation_id": _required_str(arguments, "correlation_id", max_length=2048),
+            "cursor": _optional_str(arguments, "cursor", max_length=2048),
+            "limit": _bounded_int(
+                arguments,
+                "limit",
+                DEFAULT_AUDIT_TIMELINE_LIMIT,
+                1,
+                MAX_QUERY_LIMIT,
+            ),
+        },
+    )
+    return _read_result("list_audit_timeline", routes.AUDIT_TIMELINE_PATH, data)
+
+
+async def list_workflow_runs(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {"application_id", "plan_id", "status", "attention_only", "active_only", "limit"},
+    )
+    application_id = _optional_str(arguments, "application_id", max_length=200)
+    limit = _bounded_int(arguments, "limit", DEFAULT_RELEASE_RUN_LIMIT, 1, 500)
+    if application_id is not None:
+        path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
+        data = await client.get_json(path, {"limit": limit})
+        return _read_result("list_workflow_runs", path, data)
+    data = await client.get_json(
+        routes.RELEASE_RUNS_PATH,
+        {
+            "plan_id": _optional_str(arguments, "plan_id", max_length=160),
+            "status": _optional_str(arguments, "status", max_length=80),
+            "attention_only": _optional_bool(arguments, "attention_only", default=False),
+            "active_only": _optional_bool(arguments, "active_only", default=False),
+            "limit": limit,
+        },
+    )
+    return _read_result("list_workflow_runs", routes.RELEASE_RUNS_PATH, data)
+
+
+async def get_workflow_run(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"run_id", "application_id"})
+    run_id = _required_str(arguments, "run_id", max_length=200)
+    application_id = _optional_str(arguments, "application_id", max_length=200)
+    if application_id is not None:
+        path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
+        data = await client.get_json(path, {"limit": 500})
+        run = _find_mapping_by_key(
+            _list_from_response(data, RESPONSE_RUNS_KEY),
+            WORKFLOW_RUN_ID_KEY,
+            run_id,
+        )
+        return _read_result(
+            "get_workflow_run",
+            path,
+            {
+                "run": run,
+                "available": run is not None,
+            },
+        )
+    path = _format_path(routes.RELEASE_RUN_PATH, run_id=run_id)
+    data = await client.get_json(path)
+    return _read_result("get_workflow_run", path, data)
+
+
+async def list_pending_approvals(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"application_id", "limit"})
+    application_id = _optional_str(arguments, "application_id", max_length=200)
+    limit = _bounded_int(arguments, "limit", DEFAULT_RELEASE_RUN_LIMIT, 1, 500)
+    if application_id is not None:
+        path = _format_path(routes.APPLICATION_RUNS_PATH, application_id=application_id)
+        data = await client.get_json(path, {"limit": limit})
+        runs = _pending_runs(_list_from_response(data, RESPONSE_RUNS_KEY))
+        return _read_result(
+            "list_pending_approvals",
+            path,
+            {
+                "source": "application_runs",
+                "runs": runs,
+                "pending_count": len(runs),
+            },
+        )
+
+    gitops_data = await client.get_json(
+        routes.GITOPS_FILTER_RESULTS_PATH,
+        {
+            GITOPS_APPROVAL_QUERY: PENDING_APPROVAL_STATUS,
+            "limit": min(limit, MAX_QUERY_LIMIT),
+        },
+    )
+    gitops_items = _list_from_response(gitops_data, RESPONSE_ITEMS_KEY)
+    application_runs: list[dict[str, Any]] = []
+    for pending_application_id in _unique_strings(
+        item.get(APPLICATION_ID_KEY) for item in gitops_items
+    )[:MAX_PENDING_APPROVAL_APPLICATIONS]:
+        path = _format_path(
+            routes.APPLICATION_RUNS_PATH,
+            application_id=pending_application_id,
+        )
+        run_data = await client.get_json(path, {"limit": limit})
+        application_runs.extend(_pending_runs(_list_from_response(run_data, RESPONSE_RUNS_KEY)))
+
+    release_data = await client.get_json(
+        routes.RELEASE_RUNS_PATH,
+        {
+            "status": WAITING_FOR_APPROVAL_STATUS,
+            "limit": min(limit, MAX_QUERY_LIMIT),
+        },
+    )
+    release_runs = _pending_runs(_list_from_response(release_data, RESPONSE_RUNS_KEY))
+    return _read_result(
+        "list_pending_approvals",
+        routes.GITOPS_FILTER_RESULTS_PATH,
+        {
+            "source": "gitops_filter_application_runs_release_runs",
+            "gitops_changes": gitops_items,
+            "application_runs": application_runs,
+            "release_runs": release_runs,
+            "pending_count": len(application_runs) + len(release_runs),
+            "gitops_pending_count": len(gitops_items),
+            "application_scan_truncated": len(
+                _unique_strings(item.get(APPLICATION_ID_KEY) for item in gitops_items)
+            )
+            > MAX_PENDING_APPROVAL_APPLICATIONS,
+        },
+    )
+
+
+async def get_resource_capabilities(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"resource"})
+    data = await client.get_json(
+        routes.RESOURCE_CAPABILITIES_PATH,
+        {
+            "resource": _required_str(arguments, "resource", max_length=255),
+        },
+    )
+    return _read_result("get_resource_capabilities", routes.RESOURCE_CAPABILITIES_PATH, data)
+
+
+async def run_metric_query_preset(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"cluster_id", "preset_id", "dry_run", "approval_confirmed"})
+    cluster_id = _required_str(arguments, "cluster_id", max_length=512)
+    preset_id = _required_str(arguments, "preset_id", max_length=120)
+    path = _format_path(
+        routes.CLUSTER_METRIC_QUERY_PRESET_RUN_PATH,
+        cluster_id=cluster_id,
+        preset_id=preset_id,
+    )
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="run_metric_query_preset",
+        api_path=path,
+        payload={},
+        operation_keys=("command_id", "correlation_id"),
+        reason=(
+            "Running a metric preset is cluster-read-only, but the existing Gateway "
+            "queues an agent debug command and records command status. MCP therefore "
+            "defaults to dry_run and requires approval_confirmed=true before it queues "
+            "the request. The Gateway verifies preset existence and evidence access."
+        ),
+    )
 
 
 async def create_alert_rule(
@@ -652,6 +1436,273 @@ async def approve_or_reject_workflow(
     )
 
 
+async def update_alert_rule(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"rule_id", "payload", "dry_run", "approval_confirmed"})
+    rule_id = _required_str(arguments, "rule_id", max_length=120)
+    payload = _required_object(arguments, "payload")
+    path = _format_path(routes.ALERT_RULE_PATH, rule_id=rule_id)
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="update_alert_rule",
+        api_path=path,
+        payload=payload,
+        operation_keys=("rule_id",),
+        reason=(
+            "Alert rule updates persist operational policy, so MCP defaults to dry_run "
+            "and requires approval_confirmed=true before it submits the existing "
+            "alert-rule PATCH. Gateway admin-session and request-model validation "
+            "remain authoritative."
+        ),
+        method="PATCH",
+    )
+
+
+async def disable_alert_rule(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"rule_id", "dry_run", "approval_confirmed"})
+    rule_id = _required_str(arguments, "rule_id", max_length=120)
+    path = _format_path(routes.ALERT_RULE_PATH, rule_id=rule_id)
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="disable_alert_rule",
+        api_path=path,
+        payload={"enabled": False},
+        operation_keys=("rule_id",),
+        reason=(
+            "Disabling an alert rule is implemented as the existing alert-rule PATCH "
+            "with enabled=false, not as deletion. MCP defaults to dry_run and requires "
+            "approval_confirmed=true before submission; Gateway admin-session checks "
+            "still decide whether the request is allowed."
+        ),
+        method="PATCH",
+    )
+
+
+async def cancel_command_request(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    return await _command_control_request(
+        client,
+        arguments,
+        tool_name="cancel_command_request",
+        route_template=routes.COMMAND_CANCEL_PATH,
+        action_label="cancel",
+    )
+
+
+async def retry_command_request(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    return await _command_control_request(
+        client,
+        arguments,
+        tool_name="retry_command_request",
+        route_template=routes.COMMAND_RETRY_PATH,
+        action_label="retry",
+    )
+
+
+async def _command_control_request(
+    client: ManagementApiClient,
+    arguments: dict[str, Any],
+    *,
+    tool_name: str,
+    route_template: str,
+    action_label: str,
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {"command_id", "idempotency_key", "reason", "dry_run", "approval_confirmed"},
+    )
+    command_id = _required_str(arguments, "command_id", max_length=200)
+    idempotency_key = _idempotency_key(arguments)
+    reason = _optional_str(arguments, "reason", max_length=500)
+    payload: dict[str, Any] = {}
+    if reason is not None:
+        payload["reason"] = reason
+    path = _format_path(route_template, command_id=command_id)
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name=tool_name,
+        api_path=path,
+        payload=payload,
+        operation_keys=(
+            "command_id",
+            "event_id",
+            "audit_event_id",
+            "correlation_id",
+            "attempt_id",
+        ),
+        reason=(
+            f"Command {action_label} changes command lifecycle state, so MCP defaults "
+            "to dry_run, requires approval_confirmed=true before submission, and "
+            "sends the caller-supplied Idempotency-Key to the existing command control "
+            "API. The Gateway re-checks deployment access, command state, and agent "
+            "capabilities."
+        ),
+        headers={IDEMPOTENCY_KEY_HEADER: idempotency_key},
+    )
+
+
+async def ack_alert_event(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"event_id", "dry_run", "approval_confirmed"})
+    event_id = _required_str(arguments, "event_id", max_length=120)
+    path = _format_path(routes.ALERT_EVENT_ACK_PATH, event_id=event_id)
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="ack_alert_event",
+        api_path=path,
+        payload={},
+        operation_keys=("event_id", "incident_id"),
+        reason=(
+            "Acknowledging an alert event changes alert lifecycle state, so MCP "
+            "defaults to dry_run and requires approval_confirmed=true before it "
+            "submits the existing alert-event ack POST. The Gateway records the "
+            "authenticated actor and rejects invalid state transitions."
+        ),
+    )
+
+
+async def promote_alert_incident(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"event_id", "dry_run", "approval_confirmed"})
+    event_id = _required_str(arguments, "event_id", max_length=120)
+    path = _format_path(routes.ALERT_EVENT_PROMOTE_INCIDENT_PATH, event_id=event_id)
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="promote_alert_incident",
+        api_path=path,
+        payload={},
+        operation_keys=("incident_id", "event_id", "correlation_id"),
+        reason=(
+            "Promoting an alert event creates an incident linkage through the existing "
+            "alert API, so MCP defaults to dry_run and requires approval_confirmed=true "
+            "before submission. The Gateway checks event existence and records the "
+            "authenticated actor."
+        ),
+    )
+
+
+async def propose_manifest_change(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {"resource_id", "payload", "reason", "dry_run", "approval_confirmed"},
+    )
+    resource_id = _required_str(arguments, "resource_id", max_length=255)
+    payload = _required_object(arguments, "payload")
+    reason_text = _required_str(arguments, "reason", max_length=500)
+    if len(reason_text) < 3:
+        raise ToolInputError("reason must be at least 3 characters")
+    preview_path = _format_path(routes.RESOURCE_MANIFEST_PREVIEW_PATH, resource_id=resource_id)
+    approve_path = _format_path(routes.RESOURCE_MANIFEST_APPROVE_PATH, resource_id=resource_id)
+    approve_payload = {**payload, "confirmed": True, "reason": reason_text}
+    _validate_json_payload(approve_payload, "payload")
+    proposal = _write_proposal("POST", approve_path, approve_payload)
+    dry_run = _optional_bool(arguments, "dry_run", default=True)
+    if dry_run:
+        preview = _redact_manifest_preview_data(await client.post_json(preview_path, payload))
+        return {
+            "tool": "propose_manifest_change",
+            "data": preview,
+            "safety": {
+                "mutating": False,
+                "dry_run": True,
+                "proposal": proposal,
+                "approval_required": True,
+                "operation_id": None,
+                "api_path": preview_path,
+                "reason": (
+                    "The dry run calls only the existing manifest preview API to obtain "
+                    "Gateway validation and diff data. Submitting the same approved "
+                    "change would call the Safe PR approve API, which creates a PR "
+                    "workflow rather than applying directly to the cluster."
+                ),
+            },
+        }
+    if not _optional_bool(arguments, "approval_confirmed", default=False):
+        raise ToolInputError("approval_confirmed must be true when dry_run is false")
+    if not client.settings.writes_enabled:
+        raise ToolInputError(
+            f"{OPSIA_MCP_ENABLE_WRITES_ENV}=true is required before MCP write tools can submit"
+        )
+    data = await client.post_json(approve_path, approve_payload)
+    return {
+        "tool": "propose_manifest_change",
+        "data": data,
+        "safety": {
+            "mutating": True,
+            "dry_run": False,
+            "proposal": proposal,
+            "approval_required": False,
+            "operation_id": _operation_id_from_response(
+                data,
+                ("event_id", "correlation_id", "workflow_run_id", "approval_id"),
+            ),
+            "api_path": approve_path,
+            "reason": (
+                "The approved submission uses the existing manifest approve API. That "
+                "API emits a Safe PR workflow and does not apply the manifest directly "
+                "to the cluster."
+            ),
+        },
+    }
+
+
+async def create_release_plan(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"payload", "dry_run", "approval_confirmed"})
+    payload = _required_object(arguments, "payload")
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="create_release_plan",
+        api_path=routes.RELEASE_PLANS_PATH,
+        payload=payload,
+        operation_keys=("plan_id", "plan.plan_id"),
+        reason=(
+            "Release plan creation is persistent deployment configuration, so MCP "
+            "defaults to dry_run and requires approval_confirmed=true before it "
+            "submits the existing release-plan POST. Gateway application manage "
+            "permissions and plan validation remain authoritative."
+        ),
+    )
+
+
+async def start_release_run(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"payload", "dry_run", "approval_confirmed"})
+    payload = _required_object(arguments, "payload")
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="start_release_run",
+        api_path=routes.RELEASE_PLAN_START_PATH,
+        payload=payload,
+        operation_keys=("run_id", "run.run_id"),
+        reason=(
+            "Starting a release can dispatch deployment work, so MCP defaults to "
+            "dry_run and requires approval_confirmed=true before it submits the "
+            "existing release-plan start POST. Gateway blocker checks, application "
+            "permissions, and production approval-evidence checks still apply."
+        ),
+    )
+
+
 def _read_result(tool_name: str, api_path: str, data: Any) -> dict[str, Any]:
     return {
         "tool": tool_name,
@@ -681,11 +1732,15 @@ async def _post_or_propose(
     payload: dict[str, Any],
     operation_keys: tuple[str, ...],
     reason: str,
+    method: str = "POST",
+    headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    if method not in WRITE_METHODS:
+        raise ToolInputError(f"unsupported MCP write method: {method}")
     _validate_json_payload(payload, "payload")
     dry_run = _optional_bool(arguments, "dry_run", default=True)
     approval_confirmed = _optional_bool(arguments, "approval_confirmed", default=False)
-    proposal = _write_proposal(api_path, payload)
+    proposal = _write_proposal(method, api_path, payload, headers=headers)
     if dry_run:
         return {
             "tool": tool_name,
@@ -706,7 +1761,10 @@ async def _post_or_propose(
         raise ToolInputError(
             f"{OPSIA_MCP_ENABLE_WRITES_ENV}=true is required before MCP write tools can submit"
         )
-    data = await client.post_json(api_path, payload)
+    if method == "POST":
+        data = await client.post_json(api_path, payload, headers=headers)
+    else:
+        data = await client.patch_json(api_path, payload, headers=headers)
     return {
         "tool": tool_name,
         "data": data,
@@ -725,15 +1783,48 @@ async def _post_or_propose(
     }
 
 
-def _write_proposal(api_path: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _write_proposal(
+    method: str,
+    api_path: str,
+    payload: dict[str, Any],
+    *,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     redacted_body = _redact_proposal_value(payload)
-    return {
-        "method": WRITE_HTTP_METHOD,
+    proposal: dict[str, Any] = {
+        "method": method,
         "api_path": api_path,
         "body": redacted_body,
         "body_redacted": redacted_body != payload,
         "uses_existing_gateway_api": True,
     }
+    if headers:
+        proposal["headers"] = _redact_proposal_headers(headers)
+    return proposal
+
+
+def _redact_proposal_headers(headers: dict[str, str]) -> dict[str, str]:
+    return {key: REDACTED_VALUE for key in headers}
+
+
+def _redact_manifest_preview_data(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return data
+    redacted = deepcopy(data)
+    if isinstance(redacted.get("diff"), str) and redacted["diff"]:
+        redacted["diff"] = REDACTED_VALUE
+        redacted["diff_redacted"] = True
+    return _redact_response_strings(redacted)
+
+
+def _redact_response_strings(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _redact_response_strings(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_response_strings(item) for item in value]
+    if isinstance(value, str):
+        return redact_log_line(value)
+    return deepcopy(value)
 
 
 def _operation_id_from_response(
@@ -742,13 +1833,83 @@ def _operation_id_from_response(
 ) -> str | None:
     if isinstance(data, dict):
         for key in keys:
-            value = data.get(key)
+            value = _response_value(data, key)
             if value is None:
                 continue
             text = str(value).strip()
             if text:
                 return text
     return None
+
+
+def _response_value(data: dict[str, Any], key: str) -> Any:
+    current: Any = data
+    for part in key.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def _list_from_response(data: Any, key: str) -> list[dict[str, Any]]:
+    if not isinstance(data, dict):
+        return []
+    values = data.get(key)
+    if not isinstance(values, list):
+        return []
+    return [dict(item) for item in values if isinstance(item, dict)]
+
+
+def _find_mapping_by_key(
+    values: list[dict[str, Any]],
+    key: str,
+    expected: str,
+) -> dict[str, Any] | None:
+    for value in values:
+        if str(value.get(key) or "") == expected:
+            return value
+    return None
+
+
+def _unique_strings(values: Any) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        unique.append(text)
+        seen.add(text)
+    return unique
+
+
+def _pending_runs(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [value for value in values if _has_pending_approval(value)]
+
+
+def _has_pending_approval(value: dict[str, Any]) -> bool:
+    if str(value.get("approval_status") or "") == PENDING_APPROVAL_STATUS:
+        return True
+    if str(value.get("status") or value.get("derived_status") or "") == WAITING_FOR_APPROVAL_STATUS:
+        return True
+    approvals = value.get("approvals")
+    if isinstance(approvals, list) and any(
+        isinstance(item, dict) and str(item.get("status") or "") == PENDING_APPROVAL_STATUS
+        for item in approvals
+    ):
+        return True
+    steps = value.get("steps")
+    return isinstance(steps, list) and any(
+        isinstance(item, dict) and str(item.get("status") or "") == WAITING_FOR_APPROVAL_STATUS
+        for item in steps
+    )
+
+
+def _idempotency_key(arguments: dict[str, Any]) -> str:
+    value = _required_str(arguments, "idempotency_key", max_length=200)
+    if len(value) < 8:
+        raise ToolInputError("idempotency_key must be at least 8 characters")
+    return value
 
 
 def _redact_proposal_value(value: Any) -> Any:

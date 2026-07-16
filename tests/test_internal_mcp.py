@@ -218,27 +218,59 @@ def test_registry_exposes_expected_tools_with_safety_annotations() -> None:
     names = {tool["name"] for tool in tools}
 
     assert names == {
+        "ack_alert_event",
         "approve_or_reject_workflow",
+        "cancel_command_request",
         "create_alert_rule",
         "create_command_request",
+        "create_release_plan",
+        "disable_alert_rule",
+        "get_alert_rule",
+        "get_application_detail",
         "get_cluster_summary",
+        "get_command_status",
         "get_log_evidence",
+        "get_recovery_plan",
+        "get_resource_capabilities",
         "get_resource_detail",
+        "get_workflow_run",
+        "list_alert_rules",
+        "list_applications",
+        "list_audit_timeline",
         "list_evidence_windows",
         "list_clusters",
+        "list_pending_approvals",
         "list_recent_incidents",
         "list_resources",
+        "list_workflow_runs",
+        "promote_alert_incident",
+        "propose_manifest_change",
         "request_recovery_action",
+        "retry_command_request",
+        "run_metric_query_preset",
+        "start_release_run",
+        "update_alert_rule",
     }
     assert all(tool["inputSchema"]["additionalProperties"] is False for tool in tools)
     read_tools = {
         "get_cluster_summary",
+        "get_alert_rule",
+        "get_application_detail",
+        "get_command_status",
         "get_log_evidence",
+        "get_recovery_plan",
+        "get_resource_capabilities",
         "get_resource_detail",
+        "get_workflow_run",
+        "list_alert_rules",
+        "list_applications",
+        "list_audit_timeline",
         "list_evidence_windows",
         "list_clusters",
+        "list_pending_approvals",
         "list_recent_incidents",
         "list_resources",
+        "list_workflow_runs",
     }
     write_tools = names - read_tools
     annotations_by_name = {tool["name"]: tool["annotations"] for tool in tools}
@@ -269,6 +301,28 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
 
         def handler(request: httpx.Request) -> httpx.Response:
             seen.append(request)
+            if request.url.path == routes.ALERT_RULES_PATH:
+                return httpx.Response(200, json={"rules": [{"rule_id": "rule-1"}]})
+            if request.url.path == routes.APPLICATIONS_PATH:
+                return httpx.Response(200, json={"applications": [{"id": "app-1"}]})
+            if request.url.path == routes.GITOPS_FILTER_RESULTS_PATH:
+                return httpx.Response(
+                    200,
+                    json={"items": [{"change_id": "change-1", "application_id": "app-1"}]},
+                )
+            if request.url.path.endswith("/runs") or request.url.path == routes.RELEASE_RUNS_PATH:
+                return httpx.Response(
+                    200,
+                    json={
+                        "runs": [
+                            {
+                                "workflow_run_id": "workflow-1",
+                                "run_id": "run-1",
+                                "approval_status": "requested",
+                            }
+                        ]
+                    },
+                )
             return httpx.Response(200, json={"ok": True})
 
         registry = default_tool_registry()
@@ -291,6 +345,22 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
         await registry.call("list_recent_incidents", {}, client)
         await registry.call("list_evidence_windows", {}, client)
         await registry.call("get_log_evidence", {"evidence_key": "evidence-1"}, client)
+        await registry.call("get_command_status", {"command_id": "cmd-1"}, client)
+        await registry.call("list_alert_rules", {}, client)
+        await registry.call("get_alert_rule", {"rule_id": "rule-1"}, client)
+        await registry.call("get_recovery_plan", {"correlation_id": "corr-1"}, client)
+        await registry.call("list_applications", {"limit": 2}, client)
+        await registry.call("get_application_detail", {"application_id": "app-1"}, client)
+        await registry.call("list_audit_timeline", {"correlation_id": "corr-1"}, client)
+        await registry.call("list_workflow_runs", {"application_id": "app-1"}, client)
+        await registry.call(
+            "get_workflow_run",
+            {"application_id": "app-1", "run_id": "workflow-1"},
+            client,
+        )
+        await registry.call("get_workflow_run", {"run_id": "run-1"}, client)
+        await registry.call("list_pending_approvals", {}, client)
+        await registry.call("get_resource_capabilities", {"resource": "resource-1"}, client)
 
         expected_paths = [
             routes.CLUSTERS_PATH,
@@ -300,6 +370,20 @@ def test_all_read_tools_call_existing_gateway_routes_with_get_only() -> None:
             routes.RCA_REPORTS_PATH,
             routes.EVIDENCE_WINDOWS_PATH,
             routes.EVIDENCE_WINDOW_PATH.format(evidence_key="evidence-1"),
+            routes.COMMAND_STATUS_PATH.format(command_id="cmd-1"),
+            routes.ALERT_RULES_PATH,
+            routes.ALERT_RULES_PATH,
+            routes.RCA_RECOVERY_PLAN_BY_CORRELATION_PATH.format(correlation_id="corr-1"),
+            routes.APPLICATIONS_PATH,
+            routes.APPLICATION_PATH.format(application_id="app-1"),
+            routes.AUDIT_TIMELINE_PATH,
+            routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
+            routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
+            routes.RELEASE_RUN_PATH.format(run_id="run-1"),
+            routes.GITOPS_FILTER_RESULTS_PATH,
+            routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
+            routes.RELEASE_RUNS_PATH,
+            routes.RESOURCE_CAPABILITIES_PATH,
         ]
         assert [request.method for request in seen] == ["GET"] * len(expected_paths)
         assert [request.url.path for request in seen] == expected_paths
@@ -528,6 +612,125 @@ def test_create_alert_rule_requires_confirmation_then_posts_existing_admin_api()
     asyncio.run(run())
 
 
+def test_update_and_disable_alert_rule_use_existing_patch_api() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            body = json.loads(request.content)
+            return httpx.Response(200, json={"rule_id": "rule-1", **body})
+
+        registry = default_tool_registry()
+        client = _client(handler, writes_enabled=True)
+
+        dry_run = await registry.call(
+            "disable_alert_rule",
+            {"rule_id": "rule-1"},
+            client,
+        )
+        assert seen == []
+        assert dry_run["safety"]["proposal"]["method"] == "PATCH"
+        assert dry_run["safety"]["proposal"]["body"] == {"enabled": False}
+
+        result = await registry.call(
+            "update_alert_rule",
+            {
+                "rule_id": "rule-1",
+                "payload": {"threshold": 95, "enabled": True},
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+        await registry.call(
+            "disable_alert_rule",
+            {
+                "rule_id": "rule-1",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+
+        assert [request.method for request in seen] == ["PATCH", "PATCH"]
+        assert [request.url.path for request in seen] == [
+            routes.ALERT_RULE_PATH.format(rule_id="rule-1"),
+            routes.ALERT_RULE_PATH.format(rule_id="rule-1"),
+        ]
+        assert json.loads(seen[0].content) == {"threshold": 95, "enabled": True}
+        assert json.loads(seen[1].content) == {"enabled": False}
+        assert result["safety"]["operation_id"] == "rule-1"
+
+    asyncio.run(run())
+
+
+def test_command_control_tools_post_existing_api_with_idempotency_key() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(
+                202,
+                json={
+                    "command_id": "cmd-1",
+                    "event_id": "event-1",
+                    "audit_event_id": "event-1",
+                    "correlation_id": "corr-1",
+                    "status": "cancel_requested",
+                },
+            )
+
+        registry = default_tool_registry()
+        client = _client(handler, writes_enabled=True)
+
+        dry_run = await registry.call(
+            "cancel_command_request",
+            {
+                "command_id": "cmd-1",
+                "idempotency_key": "cancel-1",
+                "reason": "wrong target",
+            },
+            client,
+        )
+        assert seen == []
+        assert dry_run["safety"]["proposal"]["headers"] == {"Idempotency-Key": "[REDACTED]"}
+
+        result = await registry.call(
+            "cancel_command_request",
+            {
+                "command_id": "cmd-1",
+                "idempotency_key": "cancel-1",
+                "reason": "wrong target",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+        await registry.call(
+            "retry_command_request",
+            {
+                "command_id": "cmd-1",
+                "idempotency_key": "retry-01",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+
+        assert [request.method for request in seen] == ["POST", "POST"]
+        assert seen[0].url.path == routes.COMMAND_CANCEL_PATH.format(command_id="cmd-1")
+        assert seen[1].url.path == routes.COMMAND_RETRY_PATH.format(command_id="cmd-1")
+        assert seen[0].headers["Idempotency-Key"] == "cancel-1"
+        assert seen[1].headers["Idempotency-Key"] == "retry-01"
+        assert json.loads(seen[0].content) == {"reason": "wrong target"}
+        assert json.loads(seen[1].content) == {}
+        assert result["safety"]["operation_id"] == "cmd-1"
+
+    asyncio.run(run())
+
+
 def test_request_recovery_action_posts_existing_selection_api() -> None:
     async def run() -> None:
         seen: list[httpx.Request] = []
@@ -720,6 +923,214 @@ def test_approve_or_reject_workflow_posts_existing_approval_api() -> None:
     asyncio.run(run())
 
 
+def test_alert_lifecycle_tools_post_existing_gateway_apis() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path.endswith("/promote-incident"):
+                return httpx.Response(200, json={"incident_id": "incident-1"})
+            return httpx.Response(200, json={"event_id": "alert-1", "status": "acked"})
+
+        registry = default_tool_registry()
+        client = _client(handler, writes_enabled=True)
+
+        await registry.call(
+            "ack_alert_event",
+            {
+                "event_id": "alert-1",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+        result = await registry.call(
+            "promote_alert_incident",
+            {
+                "event_id": "alert-1",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+
+        assert [request.method for request in seen] == ["POST", "POST"]
+        assert seen[0].url.path == routes.ALERT_EVENT_ACK_PATH.format(event_id="alert-1")
+        assert seen[1].url.path == routes.ALERT_EVENT_PROMOTE_INCIDENT_PATH.format(
+            event_id="alert-1"
+        )
+        assert all(json.loads(request.content) == {} for request in seen)
+        assert result["safety"]["operation_id"] == "incident-1"
+
+    asyncio.run(run())
+
+
+def test_manifest_change_preview_and_safe_pr_submission_are_separate() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+        payload = {
+            "application_id": "app-1",
+            "base_sha": "a" * 40,
+            "source_sha256": f"sha256:{'b' * 64}",
+            "edited_yaml": "apiVersion: v1\nkind: Secret\nstringData:\n  password: plain\n",
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path.endswith("/preview"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "valid": True,
+                        "changed": True,
+                        "base_sha": "a" * 40,
+                        "source_sha256": f"sha256:{'b' * 64}",
+                        "desired_sha256": f"sha256:{'c' * 64}",
+                        "diff": "--- old\n+++ new\n+  password: plain\n",
+                        "errors": [],
+                        "warnings": [],
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "accepted": True,
+                    "event_id": "event-1",
+                    "correlation_id": "corr-1",
+                    "workflow_run_id": "workflow-1",
+                    "approval_id": "approval-1",
+                    "sync_state": "awaiting_pr_merge",
+                },
+            )
+
+        registry = default_tool_registry()
+        preview = await registry.call(
+            "propose_manifest_change",
+            {
+                "resource_id": "resource-1",
+                "payload": payload,
+                "reason": "reviewed yaml edit",
+            },
+            _client(handler),
+        )
+
+        assert len(seen) == 1
+        assert seen[0].method == "POST"
+        assert seen[0].url.path == routes.RESOURCE_MANIFEST_PREVIEW_PATH.format(
+            resource_id="resource-1"
+        )
+        assert json.loads(seen[0].content) == payload
+        assert preview["data"]["valid"] is True
+        assert preview["data"]["diff"] == "[REDACTED]"
+        assert preview["data"]["diff_redacted"] is True
+        assert "plain" not in json.dumps(preview["data"], ensure_ascii=False)
+        assert preview["safety"]["mutating"] is False
+        assert preview["safety"]["approval_required"] is True
+        assert preview["safety"]["proposal"]["api_path"] == routes.RESOURCE_MANIFEST_APPROVE_PATH.format(
+            resource_id="resource-1"
+        )
+        assert preview["safety"]["proposal"]["body"]["edited_yaml"] == "[REDACTED]"
+
+        result = await registry.call(
+            "propose_manifest_change",
+            {
+                "resource_id": "resource-1",
+                "payload": payload,
+                "reason": "reviewed yaml edit",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            _client(handler, writes_enabled=True),
+        )
+
+        assert seen[1].url.path == routes.RESOURCE_MANIFEST_APPROVE_PATH.format(
+            resource_id="resource-1"
+        )
+        assert json.loads(seen[1].content) == {
+            **payload,
+            "confirmed": True,
+            "reason": "reviewed yaml edit",
+        }
+        assert result["safety"]["operation_id"] == "event-1"
+
+    asyncio.run(run())
+
+
+def test_metric_query_and_release_tools_use_controlled_existing_apis() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+        plan_payload = {
+            "name": "backend release",
+            "steps": [{"application_id": "app-1", "position": 0}],
+        }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path.endswith("/run"):
+                return httpx.Response(
+                    200,
+                    json={"accepted": True, "command_id": "cmd-metric", "correlation_id": "corr-1"},
+                )
+            if request.url.path == routes.RELEASE_PLANS_PATH:
+                return httpx.Response(200, json={"plan": {"plan_id": "plan-1"}})
+            return httpx.Response(200, json={"run": {"run_id": "run-1"}})
+
+        registry = default_tool_registry()
+        client = _client(handler, writes_enabled=True)
+
+        dry_run = await registry.call(
+            "run_metric_query_preset",
+            {"cluster_id": "cluster-1", "preset_id": "cpu-high"},
+            client,
+        )
+        assert seen == []
+        assert dry_run["safety"]["approval_required"] is True
+
+        metric = await registry.call(
+            "run_metric_query_preset",
+            {
+                "cluster_id": "cluster-1",
+                "preset_id": "cpu-high",
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+        created = await registry.call(
+            "create_release_plan",
+            {
+                "payload": plan_payload,
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+        started = await registry.call(
+            "start_release_run",
+            {
+                "payload": {**plan_payload, "plan_id": "plan-1"},
+                "dry_run": False,
+                "approval_confirmed": True,
+            },
+            client,
+        )
+
+        assert [request.url.path for request in seen] == [
+            routes.CLUSTER_METRIC_QUERY_PRESET_RUN_PATH.format(
+                cluster_id="cluster-1",
+                preset_id="cpu-high",
+            ),
+            routes.RELEASE_PLANS_PATH,
+            routes.RELEASE_PLAN_START_PATH,
+        ]
+        assert metric["safety"]["operation_id"] == "cmd-metric"
+        assert created["safety"]["operation_id"] == "plan-1"
+        assert started["safety"]["operation_id"] == "run-1"
+
+    asyncio.run(run())
+
+
 def test_write_operation_id_only_uses_gateway_response_ids() -> None:
     async def run() -> None:
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -850,6 +1261,95 @@ def test_resource_tools_use_inventory_routes_and_actual_arguments() -> None:
         assert seen[1].url.path == "/clusters/cluster-1/inventory/resource-detail"
         assert dict(seen[1].url.params)["kind"] == "Pod"
         assert dict(seen[1].url.params)["name"] == "api"
+
+    asyncio.run(run())
+
+
+def test_list_pending_approvals_uses_gitops_filter_then_existing_run_apis() -> None:
+    async def run() -> None:
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path == routes.GITOPS_FILTER_RESULTS_PATH:
+                return httpx.Response(
+                    200,
+                    json={
+                        "items": [
+                            {"change_id": "change-1", "application_id": "app-1"},
+                            {"change_id": "change-2", "application_id": "app-1"},
+                            {"change_id": "change-3", "application_id": "app-2"},
+                        ],
+                        "has_more": False,
+                    },
+                )
+            if request.url.path == routes.APPLICATION_RUNS_PATH.format(application_id="app-1"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "runs": [
+                            {
+                                "workflow_run_id": "workflow-1",
+                                "approval_id": "approval-1",
+                                "approval_status": "requested",
+                            },
+                            {
+                                "workflow_run_id": "workflow-done",
+                                "approval_status": "granted",
+                            },
+                        ]
+                    },
+                )
+            if request.url.path == routes.APPLICATION_RUNS_PATH.format(application_id="app-2"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "runs": [
+                            {
+                                "workflow_run_id": "workflow-2",
+                                "approval_id": "approval-2",
+                                "approvals": [{"status": "requested"}],
+                            }
+                        ]
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "runs": [
+                        {
+                            "run_id": "release-run-1",
+                            "steps": [{"status": "waiting_for_approval"}],
+                        }
+                    ]
+                },
+            )
+
+        result = await default_tool_registry().call(
+            "list_pending_approvals",
+            {"limit": 3},
+            _client(handler),
+        )
+
+        assert [request.url.path for request in seen] == [
+            routes.GITOPS_FILTER_RESULTS_PATH,
+            routes.APPLICATION_RUNS_PATH.format(application_id="app-1"),
+            routes.APPLICATION_RUNS_PATH.format(application_id="app-2"),
+            routes.RELEASE_RUNS_PATH,
+        ]
+        assert dict(seen[0].url.params) == {"gitops.approval": "requested", "limit": "3"}
+        assert dict(seen[3].url.params) == {
+            "status": "waiting_for_approval",
+            "limit": "3",
+        }
+        assert result["data"]["source"] == "gitops_filter_application_runs_release_runs"
+        assert [run["approval_id"] for run in result["data"]["application_runs"]] == [
+            "approval-1",
+            "approval-2",
+        ]
+        assert result["data"]["release_runs"][0]["run_id"] == "release-run-1"
+        assert result["data"]["pending_count"] == 3
+        assert result["data"]["gitops_pending_count"] == 3
 
     asyncio.run(run())
 
@@ -1033,9 +1533,38 @@ def test_management_api_rejects_unsafe_paths_and_query_values() -> None:
         try:
             await client._request_json("GET", "/clusters", json_body={})  # noqa: SLF001
         except ManagementApiError as exc:
-            assert "request body is only allowed for POST" in exc.detail
+            assert "request body is only allowed for POST or PATCH" in exc.detail
         else:
             raise AssertionError("GET request bodies should fail closed")
+
+        try:
+            await client.post_json("/commands/cmd-1/cancel", {}, headers={"Host": "evil.test"})
+        except ManagementApiError as exc:
+            assert "unsupported management API extra header" in exc.detail
+        else:
+            raise AssertionError("arbitrary extra headers should fail closed")
+
+        try:
+            await client.post_json(
+                "/commands/cmd-1/cancel",
+                {},
+                headers={"Authorization": "Bearer other"},
+            )
+        except ManagementApiError as exc:
+            assert "unsupported management API extra header" in exc.detail
+        else:
+            raise AssertionError("auth header overrides should fail closed")
+
+        try:
+            await client.post_json(
+                "/commands/cmd-1/cancel",
+                {},
+                headers={"Idempotency-Key": "bad\nkey"},
+            )
+        except ManagementApiError as exc:
+            assert "unsafe management API header value" in exc.detail
+        else:
+            raise AssertionError("unsafe idempotency header should fail closed")
 
     asyncio.run(run())
 
