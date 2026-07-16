@@ -20,6 +20,7 @@ def test_generated_feature_contract_catalog_contains_every_ledger_feature() -> N
     assert len({feature.contract_id for feature in catalog.features}) == catalog.feature_count
     assert len({feature.id for feature in catalog.features}) == catalog.feature_count
     assert all(feature.area for feature in catalog.features)
+    assert all(feature.release_phase in {"baseline", "post_parity"} for feature in catalog.features)
     assert all(feature.backend_contract for feature in catalog.features)
     assert all(feature.frontend_contract for feature in catalog.features)
     assert all(feature.verification for feature in catalog.features)

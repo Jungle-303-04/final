@@ -22,6 +22,18 @@ test('웹 운영 배포와 최종 desktop package gate를 분리한다', async (
     makefile,
     /^release-governance-web: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-web-parity-check ## 웹 운영 배포용/m,
   )
+  assert.match(
+    makefile,
+    /^reference-feature-web-parity-check:.*\n\t.*--surface web --phase baseline$/m,
+  )
+  assert.match(
+    makefile,
+    /^reference-feature-post-parity-check:.*\n\t.*--surface web --phase post_parity$/m,
+  )
+  assert.match(
+    makefile,
+    /^reference-feature-parity-check:.*\n\t(?!.*--phase).*--require-complete$/m,
+  )
 
   const upstreamPreparation = workflow.indexOf('Prepare approved upstream delta evidence')
   const strictGovernance = workflow.indexOf('Run strict web release governance')

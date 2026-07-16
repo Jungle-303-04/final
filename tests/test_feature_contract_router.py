@@ -24,5 +24,7 @@ def test_feature_contract_catalog_route_returns_generated_catalog_for_authentica
     assert serialized_feature["legacyContractIds"] == ("reference.feature.001",)
     assert serialized_feature["identityStatus"] == "legacy-unmapped"
     assert catalog.features[0].area == "migration-governance"
+    assert catalog.features[0].release_phase == "baseline"
+    assert serialized_feature["releasePhase"] == "baseline"
     assert catalog.features[0].delivery_status == "not_applicable"
     assert any(feature.streaming for feature in catalog.features)

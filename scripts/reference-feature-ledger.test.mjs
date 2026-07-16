@@ -62,6 +62,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
       endpoints,
       streaming,
       area,
+      releasePhase,
       deliveryStatus,
       backendContract,
       frontendContract,
@@ -73,6 +74,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
       endpoints,
       streaming,
       area,
+      releasePhase,
       deliveryStatus,
       backendContract,
       frontendContract,
@@ -86,6 +88,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
         endpoints: [],
         streaming: false,
         area: "global-shell",
+        releasePhase: "baseline",
         deliveryStatus: "in_progress",
         backendContract: "domains.catalog",
         frontendContract: "frontend/src/app",
@@ -98,6 +101,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
         endpoints: ["GET /resources"],
         streaming: false,
         area: "global-shell",
+        releasePhase: "baseline",
         deliveryStatus: "in_progress",
         backendContract: "domains.catalog",
         frontendContract: "frontend/src/app",
@@ -110,6 +114,7 @@ test("원본 인벤토리의 모든 표 행을 backend/frontend/streaming 계약
         endpoints: ["SSE /events/stream", "WS /pods/{name}/exec"],
         streaming: true,
         area: "global-shell",
+        releasePhase: "baseline",
         deliveryStatus: "in_progress",
         backendContract: "domains.catalog",
         frontendContract: "frontend/src/app",
@@ -160,6 +165,7 @@ test("기능 ledger는 섹션별 단일 제품 경계에서 행별 이식 상태
     endpoints: [],
     streaming: false,
     area: "global-shell",
+    releasePhase: "baseline",
     deliveryStatus: "in_progress",
     backendContract: "domains.catalog",
     frontendContract: "frontend/src/app",
@@ -399,6 +405,70 @@ test("웹 출하 게이트는 desktop-only 행과 desktop coverage를 최종 OS 
   );
 });
 
+test("baseline 웹 출하 게이트는 명시적 post-parity 기능을 제외하고 최종 제품 게이트는 계속 추적한다", () => {
+  const ledger = parseReferenceInventory(
+    [
+      "## 전역 셸",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 명령 팔레트 | 기준 동등성 |",
+      "## RCA",
+      "| 영역 | 동작 |",
+      "|---|---|",
+      "| 원인 분석 | 기준 동등성 이후 확장 |",
+    ].join("\n"),
+    REVISION,
+    {
+      schemaVersion: 1,
+      sections: {
+        "전역 셸": {
+          area: "global-shell",
+          deliveryStatus: "implemented",
+          backendContract: "domains.catalog",
+          frontendContract: "frontend/src/app",
+          desktopContract: null,
+          verification: ["scripts/reference-feature-ledger.test.mjs"],
+          coverage: {
+            backend: { state: "implemented" },
+            frontend: { state: "implemented" },
+          },
+        },
+        RCA: {
+          area: "rca-extension",
+          releasePhase: "post_parity",
+          deliveryStatus: "planned",
+          backendContract: "domains.rca",
+          frontendContract: "frontend/src/features/rca",
+          desktopContract: null,
+          verification: ["scripts/reference-feature-ledger.test.mjs"],
+        },
+      },
+    },
+    {
+      "reference.feature.001": "upstream-ui:shell:command-palette:open:v1",
+    },
+  );
+
+  assert.deepEqual(
+    ledger.features.map((feature) => feature.releasePhase),
+    ["baseline", "post_parity"],
+  );
+  assert.doesNotThrow(() =>
+    assertFeatureDeliveryComplete(ledger, { surface: "web", phase: "baseline" }));
+  assert.throws(
+    () => assertFeatureDeliveryComplete(ledger, { surface: "web" }),
+    /reference.feature.002: incomplete backend coverage/,
+  );
+  assert.throws(
+    () => assertFeatureDeliveryComplete(ledger, { surface: "web", phase: "post_parity" }),
+    /reference.feature.002: incomplete backend coverage/,
+  );
+  assert.throws(
+    () => assertFeatureDeliveryComplete(ledger, { surface: "web", phase: "phase-three" }),
+    /지원하지 않는 release phase/,
+  );
+});
+
 test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
   const errors = validateFeatureLedger({
     schemaVersion: 1,
@@ -417,6 +487,7 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
         endpoints: ["GET /health"],
         streaming: false,
         area: "api",
+        releasePhase: "baseline",
         deliveryStatus: "implemented",
         backendContract: "",
         frontendContract: "",
@@ -441,6 +512,7 @@ test("feature ledger는 누락된 계약과 중복 ID를 거부한다", () => {
         endpoints: ["GET /readyz"],
         streaming: false,
         area: "api",
+        releasePhase: "baseline",
         deliveryStatus: "implemented",
         backendContract: "packages.contracts.parity",
         frontendContract: "frontend/src/shared/parity/referenceParity.ts",
@@ -515,6 +587,7 @@ test("기능 ledger는 런타임이 읽는 feature별 backend contract catalog�
           endpoints: ["SSE /events/stream"],
           streaming: true,
           area: "events",
+          releasePhase: "baseline",
           deliveryStatus: "in_progress",
           backendContract: "packages.runtime.operation_events",
           frontendContract: "frontend/src/shared/streaming",

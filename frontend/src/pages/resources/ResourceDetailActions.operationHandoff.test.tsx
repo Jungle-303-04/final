@@ -5,6 +5,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BottomDock } from "../../app/BottomDock";
+import { ProductSessionProvider } from "../../features/auth/ProductSessionContext";
+import { DiagnoseSessionProvider } from "../../features/diagnose/DiagnoseSessionContext";
+import type {
+  DiagnoseCapabilities,
+  DiagnosePort,
+} from "../../features/diagnose/diagnoseContract";
 import { createOperationStatusStore, OperationStatusStoreProvider } from "../../features/operations/OperationStatusStore";
 import type { OperationEventsPort } from "../../features/operations/operationEventsContract";
 import type { ResourceActionCapability, ResourceActionsPort } from "../../features/resources/resourceCapabilitiesContract";
@@ -41,6 +47,45 @@ describe("ResourceDetailActions operation handoff", () => {
     expect(screen.getAllByText("command-b")).toHaveLength(1);
     expect(screen.getAllByRole("region")).toHaveLength(1);
     store.dispose();
+  });
+
+  it("launches a resource investigation with the server identity carried by the detail contract", async () => {
+    const user = userEvent.setup();
+    const diagnose = diagnosePort();
+
+    render(
+      <I18nProvider navigatorLanguage="en-US" storage={null}>
+        <ProductSessionProvider session={{
+          roles: ["viewer"],
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        }}>
+          <DiagnoseSessionProvider port={diagnose}>
+            <ResourceDetailActions
+              actionsPort={{ execute: vi.fn() }}
+              capabilities={{ ...capabilities, data: { ...capabilities.data!, capabilities: [] } }}
+              detail={detail}
+            />
+          </DiagnoseSessionProvider>
+        </ProductSessionProvider>
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Opsia AI" }));
+
+    await waitFor(() => expect(diagnose.startResourceRun).toHaveBeenCalledWith(
+      {
+        apiGroup: "apps",
+        apiVersion: "v1",
+        clusterId: "cluster-1",
+        kind: "Deployment",
+        name: "checkout",
+        namespace: "shop",
+        resourceType: "workloads",
+        uid: "uid-1",
+      },
+      DIAGNOSE_CAPABILITIES,
+    ));
   });
 });
 
@@ -137,7 +182,7 @@ const detail: ResourceDetail = {
   },
 };
 
-const capabilities: ResourceCapabilitiesFrame = {
+const capabilities = {
   data: {
     capabilities: [capability],
     revision: "revision-1",
@@ -153,7 +198,7 @@ const capabilities: ResourceCapabilitiesFrame = {
   },
   failure: null,
   phase: "ready",
-};
+} satisfies ResourceCapabilitiesFrame;
 
 function completedOperations(): OperationEventsPort {
   return {
@@ -165,6 +210,46 @@ function completedOperations(): OperationEventsPort {
         occurredAt: "2026-07-15T00:00:00Z",
         payload: {},
       };
+    },
+  };
+}
+
+const DIAGNOSE_CAPABILITIES: DiagnoseCapabilities = {
+  agent: {
+    effort: "medium",
+    id: "opsia-resource-investigator",
+    isolated: true,
+    model: null,
+  },
+  consented: true,
+  disclosureRevision: "diagnose-v1",
+  enabled: true,
+  label: "Resource investigation",
+  reasonCodes: [],
+};
+
+function diagnosePort(): DiagnosePort {
+  return {
+    addTurn: vi.fn(),
+    clearFinished: vi.fn(),
+    getCapabilities: vi.fn().mockResolvedValue(DIAGNOSE_CAPABILITIES),
+    grantBrowserConsent: vi.fn(),
+    listRuns: vi.fn(),
+    startResourceRun: vi.fn().mockImplementation(async (target) => ({
+      created: true,
+      deduplicated: false,
+      run: {
+        createdAt: "2026-07-16T00:00:00Z",
+        runId: "run-1",
+        status: "queued",
+        statusReason: null,
+        target,
+        updatedAt: "2026-07-16T00:00:00Z",
+      },
+    })),
+    stopRun: vi.fn(),
+    async *subscribeEvents() {
+      yield* [];
     },
   };
 }

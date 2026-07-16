@@ -3429,7 +3429,7 @@
       }
     },
     "reference.feature.237": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.diagnose",
       "frontendContract": "frontend/src/features/diagnose/diagnoseContract.ts",
       "desktopContract": null,
@@ -3440,20 +3440,21 @@
         "tests/test_diagnose_migration.py",
         "frontend/src/api/diagnose.test.ts",
         "frontend/src/features/diagnose/createDiagnoseAdapter.test.ts",
-        "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+        "frontend/src/features/diagnose/DiagnoseSurface.test.tsx",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/diagnose/router.py#create_diagnose_run",
           "consumer": "src/domains/diagnose/engine.py#ContextDiagnoseEngine",
           "test": "tests/test_diagnose_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
           "consumer": "frontend/src/features/diagnose/createDiagnoseAdapter.ts#createDiagnoseAdapter",
-          "test": "frontend/src/features/diagnose/DiagnoseSurface.test.tsx"
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "realtime": {
           "state": "implemented",
@@ -3688,6 +3689,7 @@
     },
     "9. RCA 후속 삽입 후보": {
       "area": "rca-extension",
+      "releasePhase": "post_parity",
       "deliveryStatus": "planned",
       "backendContract": "domains.rca",
       "frontendContract": "frontend/src/features/rca",
