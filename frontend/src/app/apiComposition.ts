@@ -56,6 +56,8 @@ import { createSettingsAdapter } from "../features/settings/createSettingsAdapte
 import { createRuntimeStatusAdapter } from "../features/runtime-status/createRuntimeStatusAdapter";
 import { createPortRegistry } from "./composition/PortRegistry";
 import { createProductComposition, type ProductComposition } from "./productComposition";
+import { createApiBrowserRefreshPolicyRegistry } from "./composition/browserRefreshPolicyRegistry";
+import { createApiTimelinePort } from "./composition/timelinePort";
 
 /**
  * The authenticated composition is intentionally small: global providers and
@@ -63,6 +65,8 @@ import { createProductComposition, type ProductComposition } from "./productComp
  * only through its registered route module.
  */
 export function createApiComposition(auth: AuthPort): ProductComposition {
+  const refreshPolicies = createApiBrowserRefreshPolicyRegistry();
+  const timelinePort = createApiTimelinePort();
   const homePort = createHomeAdapter({
     getClusterNodesSummary,
     getClusterSummary,
@@ -142,7 +146,11 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "resources",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(registry.homePort),
+        default: (await import("./composition/surfaces/resources")).loadResourcesSurface(
+          registry.homePort,
+          refreshPolicies,
+          timelinePort,
+        ),
       })),
     },
     {
@@ -154,7 +162,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "timeline",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(),
+        default: (await import("./composition/surfaces/timeline")).loadTimelineSurface(timelinePort),
       })),
     },
     {

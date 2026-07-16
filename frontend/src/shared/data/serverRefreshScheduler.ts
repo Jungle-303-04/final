@@ -37,6 +37,8 @@ export interface ServerRefreshScheduler {
    * through another successful response.
    */
   backgroundFailure(): void;
+  /** Coalesces server-event invalidations behind the current successful read. */
+  invalidate(): void;
   dispose(): void;
   isDisposed(): boolean;
   isRefreshInFlight(): boolean;
@@ -96,6 +98,7 @@ export function createServerRefreshScheduler(
   return {
     complete,
     backgroundFailure,
+    invalidate: makeEligible,
     dispose,
     isDisposed: () => disposed,
     isRefreshInFlight: () => refreshInFlight,

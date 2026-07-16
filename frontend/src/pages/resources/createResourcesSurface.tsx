@@ -19,6 +19,7 @@ import {
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { TimelinePort } from "../../features/timeline/timelineContract";
 
 export function createResourcesSurface(
   port: ResourcesPort,
@@ -28,6 +29,7 @@ export function createResourcesSurface(
   nodePodsPort: Pick<HomePort, "loadNodePods">,
   relationTopologyPort: RelationTopologyPort,
   changeTimelinePort: ChangeTimelinePort,
+  timelinePort: TimelinePort,
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort,
   resourceCapabilitiesPort: ResourceCapabilitiesPort,
   resourceActionsPort: ResourceActionsPort,
@@ -45,6 +47,7 @@ export function createResourcesSurface(
         nodePodsPort={nodePodsPort}
         relationTopologyPort={relationTopologyPort}
         changeTimelinePort={changeTimelinePort}
+        timelinePort={timelinePort}
         resourceMetricsHistoryPort={resourceMetricsHistoryPort}
         resourceCapabilitiesPort={resourceCapabilitiesPort}
         resourceActionsPort={resourceActionsPort}

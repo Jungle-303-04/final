@@ -33,8 +33,14 @@ import { createResourcesSurface } from "../../../pages/resources/createResources
 import { createResourceIssuesAdapter } from "../../../features/issues/createResourceIssuesAdapter";
 import { createServiceAccessAdapter } from "../../../features/service-access/createServiceAccessAdapter";
 import { createTopologyPorts } from "../topologyPorts";
+import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
+import type { TimelinePort } from "../../../features/timeline/timelineContract";
 
-export function loadResourcesSurface(homePort: HomePort): ComponentType {
+export function loadResourcesSurface(
+  homePort: HomePort,
+  refreshPolicies: BrowserRefreshPolicyRegistry<"changes">,
+  timelinePort: TimelinePort,
+): ComponentType {
   const topologyPorts = createTopologyPorts();
   return createResourcesSurface(
     createResourcesAdapter({
@@ -52,7 +58,8 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
     topologyPorts.realtime,
     homePort,
     topologyPorts.relation,
-    createChangeTimelineAdapter({ getChangeTimeline }),
+    createChangeTimelineAdapter({ getChangeTimeline, refreshPolicies }),
+    timelinePort,
     createResourceMetricsHistoryAdapter({ getResourceMetricsHistory }),
     createResourceCapabilitiesAdapter({ getResourceCapabilities }),
     createResourceActionsAdapter({

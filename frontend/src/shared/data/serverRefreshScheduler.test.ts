@@ -48,6 +48,32 @@ describe("server refresh scheduler", () => {
     expect(harness.timerCount()).toBe(0);
   });
 
+  it("coalesces repeated event invalidations into one in-flight refresh", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+
+    scheduler.complete({ refreshAfterSeconds: 15 });
+    scheduler.invalidate();
+    scheduler.invalidate();
+
+    expect(harness.refreshCount).toBe(1);
+    expect(scheduler.isRefreshInFlight()).toBe(true);
+    expect(harness.timerCount()).toBe(0);
+  });
+
+  it("defers an event invalidation until a hidden tab becomes visible", () => {
+    const harness = schedulerHarness();
+    const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });
+
+    scheduler.complete({ refreshAfterSeconds: 15 });
+    harness.setVisible(false);
+    scheduler.invalidate();
+    expect(harness.refreshCount).toBe(0);
+
+    harness.setVisible(true);
+    expect(harness.refreshCount).toBe(1);
+  });
+
   it("does not create an uncontrolled retry after a background failure", () => {
     const harness = schedulerHarness();
     const scheduler = createServerRefreshScheduler({ onEligibleRefresh: harness.refresh, runtime: harness.runtime });

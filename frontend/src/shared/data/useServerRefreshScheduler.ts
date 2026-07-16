@@ -9,6 +9,7 @@ import {
 export interface ServerRefreshController {
   acceptSuccess(policy: ServerDeclaredRefreshPolicy): void;
   backgroundFailure(): void;
+  requestEventInvalidation(): void;
   requestRefresh(): void;
   requestMutationRefresh(followUpAfterSeconds: number): void;
 }
@@ -60,6 +61,9 @@ export function useServerRefreshScheduler(
     schedulerRef.current?.backgroundFailure();
     callbackRef.current();
   }, []);
+  const requestEventInvalidation = useCallback(() => {
+    schedulerRef.current?.invalidate();
+  }, []);
   const requestMutationRefresh = useCallback((followUpAfterSeconds: number) => {
     if (!Number.isFinite(followUpAfterSeconds) || followUpAfterSeconds <= 0) {
       throw new RangeError("server mutation follow-up interval must be positive and finite");
@@ -73,9 +77,16 @@ export function useServerRefreshScheduler(
     () => ({
       acceptSuccess,
       backgroundFailure,
+      requestEventInvalidation,
       requestMutationRefresh,
       requestRefresh,
     }),
-    [acceptSuccess, backgroundFailure, requestMutationRefresh, requestRefresh],
+    [
+      acceptSuccess,
+      backgroundFailure,
+      requestEventInvalidation,
+      requestMutationRefresh,
+      requestRefresh,
+    ],
   );
 }

@@ -53,6 +53,7 @@ import {
   type PodTerminalPort,
 } from "../../features/pod-terminal/podTerminalContract";
 import type { ServiceAccessPort } from "../../features/service-access/serviceAccessContract";
+import type { TimelinePort } from "../../features/timeline/timelineContract";
 
 export function ResourcesPage({
   filterPort,
@@ -61,6 +62,7 @@ export function ResourcesPage({
   nodePodsPort,
   relationTopologyPort,
   changeTimelinePort,
+  timelinePort,
   resourceMetricsHistoryPort,
   resourceCapabilitiesPort,
   resourceActionsPort,
@@ -76,6 +78,7 @@ export function ResourcesPage({
   nodePodsPort: Pick<HomePort, "loadNodePods">;
   relationTopologyPort: RelationTopologyPort;
   changeTimelinePort: ChangeTimelinePort;
+  timelinePort?: TimelinePort;
   resourceMetricsHistoryPort: ResourceMetricsHistoryPort;
   resourceCapabilitiesPort: ResourceCapabilitiesPort;
   resourceActionsPort: ResourceActionsPort;
@@ -119,18 +122,6 @@ export function ResourcesPage({
     filter.state.common.labels.length > 0 ||
     filter.state.resources.health.length > 0 ||
     filter.state.resources.query.trim().length > 0;
-  const changeTimeline = useChangeTimelineDataFrame({
-    active:
-      state.selectedClusterExists &&
-      filter.state.common.clusters.length === 1 &&
-      timelineReadBounded,
-    authorityKey,
-    filterState: filter.state,
-    port: changeTimelinePort,
-    range: filter.detail.timeRange ?? "1h",
-    reportUnauthorized,
-    revision: state.revision,
-  });
   const filtered = useResourcesFilterDataFrame({
     active:
       state.selectedClusterExists &&
@@ -161,6 +152,20 @@ export function ResourcesPage({
     port: physicalTopologyRealtimePort,
     replayAtMs: filter.detail.timeAt,
     rows: currentResourceRows,
+    workspaceId: session?.workspaceId ?? null,
+  });
+  const changeTimeline = useChangeTimelineDataFrame({
+    active:
+      state.selectedClusterExists &&
+      filter.state.common.clusters.length === 1 &&
+      timelineReadBounded,
+    authorityKey,
+    filterState: filter.state,
+    port: changeTimelinePort,
+    range: filter.detail.timeRange ?? "1h",
+    reportUnauthorized,
+    revision: state.revision,
+    timelinePort,
     workspaceId: session?.workspaceId ?? null,
   });
   const physicalTopology = physicalRealtime.frame;
