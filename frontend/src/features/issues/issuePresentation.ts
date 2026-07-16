@@ -4,7 +4,7 @@ import type {
   IssueSummary,
 } from "./issuesContract";
 
-const RESOLVED_STATUS = /(^|[._-])(resolved|closed|completed|recovered|healthy)($|[._-])/i;
+const RESOLVED_STATUS = /(^|[._-])(resolved|closed|recovered|healthy)($|[._-])/i;
 const CRITICAL_STATUS = /(^|[._-])(critical|failed|error|crash|blocked)($|[._-])/i;
 const ACTIVE_STATUS = /(^|[._-])(open|active|investigating|pending|warning|degraded|waiting)($|[._-])/i;
 

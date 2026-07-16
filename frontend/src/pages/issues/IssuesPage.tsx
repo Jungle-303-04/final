@@ -207,6 +207,13 @@ function createIssuesCopy(
     refresh: t("common.action.refresh"),
     status: t("issues.surface.status"),
     statusLabel: (status) => translateOperationalValue(status, STATUS_MESSAGE, t),
+    lifecycleOpen: "열림",
+    lifecycleClosed: "닫힘",
+    actionReviewRequired: "조치 검토 필요",
+    actionReviewAgainRequired: "조치 재검토 필요",
+    actionAutoApprovalAvailable: "자동 승인 가능",
+    scope: "범위",
+    namespaceSuffix: "namespace",
     severityLabel: (severity) => t(
       severity === "critical"
         ? "issues.severity.critical"

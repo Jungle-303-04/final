@@ -62,6 +62,13 @@ export interface IssuesSurfaceCopy {
   refresh: string;
   status: string;
   statusLabel: (status: string) => string;
+  lifecycleOpen: string;
+  lifecycleClosed: string;
+  actionReviewRequired: string;
+  actionReviewAgainRequired: string;
+  actionAutoApprovalAvailable: string;
+  scope: string;
+  namespaceSuffix: string;
   severityLabel: (severity: "critical" | "warning") => string;
   causeLabel: (cause: string) => string;
   target: string;
