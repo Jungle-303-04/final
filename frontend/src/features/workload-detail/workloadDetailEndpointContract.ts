@@ -1,5 +1,5 @@
-import type { WorkloadDetailEndpoint } from "../../api/workload-detail-schemas";
 import type { WorkloadDetailRequest } from "./workloadDetailContract";
+import type { WorkloadDetailEndpoint } from "./workloadDetailWireContract";
 
 export interface WorkloadDetailEndpointDependencies {
   getWorkloadDetail(

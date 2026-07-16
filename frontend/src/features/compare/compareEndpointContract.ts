@@ -1,11 +1,11 @@
 import type {
-  CompareCandidateListEndpoint,
-  CompareResourcePairEndpoint,
-} from "../../api/compare-schemas";
-import type {
   CompareIdentityRequest,
   CompareRequest,
 } from "./compareContract";
+import type {
+  CompareCandidateListEndpoint,
+  CompareResourcePairEndpoint,
+} from "./compareWireContract";
 
 export interface CompareEndpointDependencies {
   getCompareResourcePair(

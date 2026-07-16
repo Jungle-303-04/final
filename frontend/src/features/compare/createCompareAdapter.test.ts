@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { compareCandidateListSchema, compareResourcePairSchema } from "../../api/compare-schemas";
 import { createCompareAdapter } from "./createCompareAdapter";
 import { ComparePortFailure } from "./compareContract";
+import type {
+  CompareCandidateListEndpoint,
+  CompareResourcePairEndpoint,
+  CompareWireDescriptor,
+  CompareWireManifest,
+  CompareWireProvenance,
+} from "./compareWireContract";
 
 describe("createCompareAdapter", () => {
   it("accepts only the descriptor-resolved safe projection and serializes side targets", async () => {
@@ -53,8 +59,10 @@ describe("createCompareAdapter", () => {
   });
 });
 
-function pairResponse(descriptorOverride: Record<string, unknown> = {}) {
-  return compareResourcePairSchema.parse({
+function pairResponse(
+  descriptorOverride: Partial<CompareWireDescriptor> = {},
+): CompareResourcePairEndpoint {
+  return {
     comparison: {
       scope: { workspace_id: "workspace-a", cluster_id: "cluster-a", namespaces: ["shop"], freshness: "live" },
       descriptor: {
@@ -71,11 +79,11 @@ function pairResponse(descriptorOverride: Record<string, unknown> = {}) {
       a: manifest("api-a", "uid-a", 2),
       b: manifest("api-b", "uid-b", 3),
     },
-  });
+  };
 }
 
-function candidatesResponse() {
-  return compareCandidateListSchema.parse({
+function candidatesResponse(): CompareCandidateListEndpoint {
+  return {
     result: {
       scope: { workspace_id: "workspace-a", cluster_id: "cluster-a", namespaces: ["shop"], freshness: "live" },
       descriptor: {
@@ -90,10 +98,10 @@ function candidatesResponse() {
       candidates: [{ resource: manifest("api-a", "uid-a", 2).resource, provenance: provenance() }],
       excluded_count: 0,
     },
-  });
+  };
 }
 
-function manifest(name: string, uid: string, replicas: number) {
+function manifest(name: string, uid: string, replicas: number): CompareWireManifest {
   return {
     projection_version: "safe-manifest-v1",
     resource: { api_group: "apps", version: "v1", kind: "Deployment", namespace: "shop", name, uid },
@@ -104,7 +112,7 @@ function manifest(name: string, uid: string, replicas: number) {
   };
 }
 
-function provenance() {
+function provenance(): CompareWireProvenance {
   return {
     source_kind: "inventory_snapshot",
     observation_snapshot_id: "snapshot-a",
