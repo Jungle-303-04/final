@@ -115,6 +115,14 @@
       "destination": "frontend/src/api/operation-events.test.ts",
       "rationale": "Command operation reconnect resumes from the last durable contiguous sequence."
     },
+    "resources.workload.rollback-history": {
+      "destination": "tests/test_workload_rollback.py",
+      "rationale": "Workload revision history remains bounded to one exact snapshot, owner UID, and complete observed revision set."
+    },
+    "resources.workload.rollback-cas": {
+      "destination": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
+      "rationale": "The selected revision, server diff, one confirmation, idempotency key, and exact CAS evidence remain one action handoff."
+    },
     "events.topology.resync": {
       "destination": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx",
       "rationale": "Topology sequence loss requests a full typed resynchronization instead of merging an unknown gap."
@@ -12281,7 +12289,7 @@
               "resources.workload.rollback-cas",
               "events.operation.resume"
             ],
-            "state": "implemented",
+            "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product merges the source revision selector and rollback flow into the existing capability and operation dock while strengthening it with snapshot, UID, resourceVersion, template-hash, idempotency, audit, RBAC, and durable event validation."
           }
