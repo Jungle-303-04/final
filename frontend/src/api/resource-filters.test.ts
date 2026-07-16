@@ -153,6 +153,54 @@ describe("workspace Resources filter API", () => {
     );
   });
 
+  it("accepts snapshot-bound Pod table metrics without treating missing values as zero", async () => {
+    const metrics = {
+      kind: "pod",
+      resource_uid: "uid-checkout",
+      source_snapshot_id: "snapshot-42",
+      observed_at: "2026-07-17T01:00:00Z",
+      measurement_window: "30s",
+      cpu_mcores: 250,
+      memory_mib: 192,
+      cpu_request_mcores: 150,
+      cpu_limit_mcores: 600,
+      memory_request_mib: 192,
+      memory_limit_mib: null,
+      completeness: "partial",
+      reason_codes: ["pod_memory_limit_unavailable"],
+    };
+    const payload = {
+      items: [{
+        resource: {
+          ...RESOURCE,
+          resource_type: "pod",
+          api_version: "v1",
+          kind: "Pod",
+          uid: "uid-checkout",
+        },
+        cluster: { cluster_id: "cluster-a", name: "production", provider: "eks" },
+        application_ids: [],
+        application_binding_completeness: "exact",
+        metrics,
+      }],
+      next_cursor: null,
+      has_more: false,
+      counts: {
+        filtered_count: 1,
+        unfiltered_count: 1,
+        filtered_count_completeness: "exact",
+        unfiltered_count_completeness: "exact",
+      },
+      snapshot: SNAPSHOT,
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));
+
+    const response = await listFilteredResources({ resourceTypes: ["pod"] });
+
+    expect(response.items[0]?.metrics).toEqual(metrics);
+    expect(response.items[0]?.metrics?.memory_limit_mib).toBeNull();
+  });
+
   it("loads server-computed Label facets without changing the selected AND set", async () => {
     const payload = {
       surface: "resources",

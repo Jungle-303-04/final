@@ -136,6 +136,48 @@ def test_pod_requests_survive_provider_inventory_and_physical_usage_projection()
     assert topology["pods"][0]["usage_pct"] == 50.0
 
 
+def test_pod_requests_and_limits_survive_one_provider_inventory_projection() -> None:
+    _, kubernetes_module = load_evidence_modules()
+    summary = kubernetes_module.pod_summary(
+        {
+            "metadata": {"uid": "pod-1", "name": "checkout-0", "namespace": "shop"},
+            "spec": {
+                "containers": [
+                    {
+                        "name": "app",
+                        "resources": {
+                            "requests": {"cpu": "250m", "memory": "128Mi"},
+                            "limits": {"cpu": "500m", "memory": "256Mi"},
+                        },
+                    },
+                    {
+                        "name": "sidecar",
+                        "resources": {
+                            "requests": {"cpu": "0.1", "memory": "1Gi"},
+                            "limits": {"cpu": "200m", "memory": "2Gi"},
+                        },
+                    },
+                ]
+            },
+            "status": {"phase": "Running", "containerStatuses": []},
+        }
+    )
+
+    assert summary["cpu_request_mcores"] == 350.0
+    assert summary["cpu_limit_mcores"] == 700.0
+    assert summary["mem_request_mib"] == 1152.0
+    assert summary["mem_limit_mib"] == 2304.0
+
+    snapshot = kubernetes_evidence_to_inventory_snapshot(
+        {"pods": [summary]},
+        cluster_id="cluster-1",
+        agent_id="agent-1",
+    )
+    persisted = snapshot["resources"][0]["summary"]
+    assert persisted["cpu_limit_mcores"] == 700.0
+    assert persisted["mem_limit_mib"] == 2304.0
+
+
 def test_pod_summary_preserves_spec_container_ports_and_honest_completeness() -> None:
     _, kubernetes_module = load_evidence_modules()
     summary = kubernetes_module.pod_summary(
