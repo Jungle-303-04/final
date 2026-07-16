@@ -2212,337 +2212,499 @@
     },
     {
       "contractId": "reference.feature.066",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:home:dashboard-api:sectioned-projection:v1",
       "legacyContractIds": [
         "reference.feature.066"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-066",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/home/useHomePageState.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/home/useHomeRefreshClock.ts#useHomeRefreshClock",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "Dashboard sections still use browser-owned 10-second and 5-second clocks and do not consume the server dashboard policy or an SSE deferred-ready invalidation.",
+          "test": "frontend/src/pages/home/useHomePageState.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.067",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:issues:queue:verified-severity-order:v1",
       "legacyContractIds": [
         "reference.feature.067"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-067",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_shell_state_router.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/features/issues/IssuesSurface.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/features/issues/IssuesSurface.tsx#IssuesSurface",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "The queue preserves its last successful list, but its browser-owned 10-second interval does not consume the server issues and audit policy.",
+          "test": "frontend/src/features/issues/IssuesSurface.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.068",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:applications:projection:catalog-detail-refresh:v1",
       "legacyContractIds": [
         "reference.feature.068"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-068",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/features/applications/ApplicationsSurface.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/features/applications/useApplicationsData.ts#useApplicationsResource",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "Application catalog and detail retain last-success and refresh visibly at sixty seconds, but the cadence remains a browser constant instead of a response-owned policy.",
+          "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.069",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:view:guarded-count-and-query-identity:v1",
       "legacyContractIds": [
         "reference.feature.069"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-069",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/useResourcesPageState.ts#useResourcesPageState",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "Resource pages preserve verified rows across refresh failures, but use browser-owned 10-second and 5-second clocks and have no resumable inventory invalidation cursor.",
+          "test": "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.070",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
       "legacyContractIds": [
         "reference.feature.070"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-070",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/features/resources/changeTimelineContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_changes_router.py",
+        "frontend/src/api/change-timeline.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.timeline.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/useChangeTimelineDataFrame.ts#useChangeTimelineDataFrame",
+          "consumer": "frontend/src/features/resources/createChangeTimelineAdapter.ts#createChangeTimelineAdapter",
+          "reason": "The bounded Changes read is implemented, but it inherits a browser revision clock and has neither the declared 15-second server cadence nor a Changes-specific SSE fallback.",
+          "test": "frontend/src/pages/resources/ResourcesPage.timeline.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.071",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.071"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-071",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_live_resource_metrics.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "Kubernetes metric history is bounded and range-aware, but the view does not consume the server 30-second policy or expose a limited unavailable-source retry state.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.072",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
       "legacyContractIds": [
         "reference.feature.072"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-072",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
+        "frontend/src/features/rightsizing/useRightsizingScans.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "Prometheus, PVC, and rightsizing cadences are declared centrally, but no shared consumer selects their 60-second, 120-second, and 10-minute policies by data source.",
+          "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.073",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:fleet:authorized-catalog:v1",
       "legacyContractIds": [
         "reference.feature.073"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-073",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_gitops_filter_router.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "GitOps rows support manual authorized reloads, but do not schedule the server 120-second cadence or the bounded cold-empty two-second retry.",
+          "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.074",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:fleet:authorized-catalog:v1",
       "legacyContractIds": [
         "reference.feature.074"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-074",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/features/gitops/gitOpsContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_gitops_filter_router.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/gitops/GitOpsSyncTableView.tsx#GitOpsSyncTableView",
+          "consumer": "frontend/src/api/refresh-policies.ts#getBrowserRefreshPolicies",
+          "reason": "GitOps counts are derived with rows and can be refreshed manually, but no consumer schedules the independent server 60-second count policy.",
+          "test": "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.075",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:helm:release-list:scope-rbac:v1",
       "legacyContractIds": [
         "reference.feature.075"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-075",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.helm.releases",
+      "frontendContract": "frontend/src/features/helm/helmContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_helm_release_router.py",
+        "tests/test_helm_release_projection.py",
+        "frontend/src/api/helm-releases.test.ts",
+        "frontend/src/features/helm/createHelmAdapter.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#get_helm_releases",
+          "consumer": "src/domains/helm/release_projection.py#helm_release_list",
+          "test": "tests/test_helm_release_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/helm/useHelmReleaseData.ts#useHelmReleaseList",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "List and detail consume server-owned 30-second and 10-second policies after successful reads, but post-mutation immediate and 1.2-second refetch cannot complete until Helm mutations exist.",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.076",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:cost:overview:availability-scope:v1",
       "legacyContractIds": [
         "reference.feature.076"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-076",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.cost.observations",
+      "frontendContract": "frontend/src/features/cost/costContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "tests/test_cost_router.py",
+        "tests/test_cost_observation_projection.py",
+        "frontend/src/api/cost-overview.test.ts",
+        "frontend/src/pages/cost/useCostOverviewData.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/cost/router.py#get_cost_overview",
+          "consumer": "src/domains/cost/observation_projection.py#cost_overview",
+          "test": "tests/test_cost_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/cost/useCostOverviewData.ts#useCostOverview",
+          "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
+          "reason": "The bundled summary and trend use the server 60-second policy and retain last-success after failure; a separate node-cost consumer for the declared 120-second cadence is unavailable.",
+          "test": "frontend/src/pages/cost/useCostOverviewData.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
     },
     {
       "contractId": "reference.feature.077",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:service-access:port-session:list-and-layout:v1",
       "legacyContractIds": [
         "reference.feature.077"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-077",
       "section": "6.2 주요 REST 갱신 주기",
       "endpoints": [],
       "streaming": false,
       "area": "freshness-policy",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/shared/api",
-      "desktopContract": "desktop",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "frontendContract": "frontend/src/pages/resources/ServiceAccessActions.tsx",
+      "desktopContract": "frontend/src/desktop/desktopBridge.ts",
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_refresh_policies.py",
+        "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/pages/resources/ServiceAccessActions.test.tsx",
+        "frontend/src/desktop/desktopBridge.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
-        "desktop": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/shell_state/router.py#get_refresh_policies",
+          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
+          "test": "tests/test_refresh_policies.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "The web surface can disclose a local bridge requirement but cannot truthfully list active workstation sessions.",
+          "test": "frontend/src/pages/resources/ServiceAccessActions.test.tsx"
+        },
+        "desktop": {
+          "state": "blocked",
+          "destination": "frontend/src/desktop/desktopBridge.ts#DesktopCapabilitySet",
+          "consumer": "frontend/src/pages/resources/ServiceAccessActions.tsx#ServiceAccessActions",
+          "reason": "Desktop OS work is deferred and no Tauri-owned local-port registry can consume the server 30-second display policy.",
+          "test": "frontend/src/desktop/desktopBridge.test.ts"
+        },
         "realtime": "not_required"
       }
     },

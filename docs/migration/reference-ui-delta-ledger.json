@@ -1817,6 +1817,7 @@
         {
           "sourceKey": "upstream-ui:issues:queue:verified-severity-order:v1",
           "legacyContractIds": [
+            "reference.feature.067",
             "reference.feature.116"
           ],
           "symbol": "IssuesView / IssueRow severity meta chips",
@@ -9432,6 +9433,7 @@
           "sourceKey": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
           "legacyContractIds": [
             "reference.feature.059",
+            "reference.feature.070",
             "reference.feature.119"
           ],
           "symbol": "runDeltaSyncFetch orchestration tests",
@@ -9570,6 +9572,7 @@
         {
           "sourceKey": "upstream-ui:home:dashboard-api:sectioned-projection:v1",
           "legacyContractIds": [
+            "reference.feature.066",
             "reference.feature.113"
           ],
           "symbol": "useDashboard main response and section refresh",
@@ -10720,6 +10723,7 @@
         {
           "sourceKey": "upstream-ui:applications:projection:catalog-detail-refresh:v1",
           "legacyContractIds": [
+            "reference.feature.068",
             "reference.feature.117"
           ],
           "symbol": "useApplications, application detail evidence, history, topology and issues composition",
@@ -11262,6 +11266,7 @@
         {
           "sourceKey": "upstream-ui:cost:overview:availability-scope:v1",
           "legacyContractIds": [
+            "reference.feature.076",
             "reference.feature.217"
           ],
           "symbol": "CostView availability surface",
@@ -11276,11 +11281,15 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/pages/cost/useCostOverviewData.ts",
               "frontend/src/features/cost/createCostAdapter.ts",
-              "src/domains/cost/router.py"
+              "frontend/src/shared/data/useServerRefreshScheduler.ts",
+              "src/domains/cost/router.py",
+              "src/packages/config/refresh_policies.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.cost.observations",
+              "packages.contracts.freshness",
               "domains.cost.router"
             ],
             "plannedTestIds": [
@@ -11289,7 +11298,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The vertical preserves source availability semantics while refusing to fabricate money from inventory or resource metrics."
+            "rationale": "The vertical preserves source availability semantics, consumes the server-owned successful-response cadence, and refuses to fabricate money while the separate node-cost projection remains unavailable."
           }
         }
       ]
@@ -12911,6 +12920,8 @@
         {
           "sourceKey": "upstream-ui:gitops:fleet:authorized-catalog:v1",
           "legacyContractIds": [
+            "reference.feature.073",
+            "reference.feature.074",
             "reference.feature.206"
           ],
           "symbol": "GitOpsView fleet list, controlled search, status presentation, and application detail route",
@@ -13168,11 +13179,15 @@
           "opsiaPort": {
             "destinations": [
               "frontend/src/pages/helm/HelmPage.tsx",
+              "frontend/src/pages/helm/useHelmReleaseData.ts",
               "frontend/src/features/helm/helmContract.ts",
-              "src/domains/helm/release_router.py"
+              "frontend/src/shared/data/useServerRefreshScheduler.ts",
+              "src/domains/helm/release_router.py",
+              "src/packages/config/refresh_policies.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.helm.releases",
+              "packages.contracts.freshness",
               "domains.helm.release_router"
             ],
             "plannedTestIds": [
@@ -13203,6 +13218,7 @@
         {
           "sourceKey": "upstream-ui:helm:release-list:scope-rbac:v1",
           "legacyContractIds": [
+            "reference.feature.075",
             "reference.feature.183"
           ],
           "symbol": "HelmView release list",
@@ -13230,7 +13246,7 @@
             ],
             "state": "in_progress",
             "blockedReason": null,
-            "rationale": "The source uses a stale 30-second release read; this port retains bounded polling and exposes inventory completeness rather than manufacturing release values."
+            "rationale": "List and detail now consume response-owned 30-second and 10-second policies through the shared success-gated scheduler while post-mutation refresh remains tracked separately with the unavailable mutation capability."
           }
         }
       ]
@@ -14008,6 +14024,7 @@
         {
           "sourceKey": "upstream-ui:service-access:port-session:list-and-layout:v1",
           "legacyContractIds": [
+            "reference.feature.077",
             "reference.feature.160"
           ],
           "symbol": "PortForwardProvider and PortForwardPanel",
@@ -14120,6 +14137,8 @@
         {
           "sourceKey": "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1",
           "legacyContractIds": [
+            "reference.feature.071",
+            "reference.feature.072",
             "reference.feature.143",
             "reference.feature.144",
             "reference.feature.145",
@@ -14545,6 +14564,7 @@
         {
           "sourceKey": "upstream-ui:resources:view:guarded-count-and-query-identity:v1",
           "legacyContractIds": [
+            "reference.feature.069",
             "reference.feature.125",
             "reference.feature.135"
           ],

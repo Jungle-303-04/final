@@ -733,8 +733,50 @@ test("Applications 경로와 투영은 URL·Python 계약·갱신 증거를 연�
     assert.equal(aliases.aliases[contractId], sourceKey);
     assert.equal(feature.deliveryStatus, "implemented");
     assert.equal(feature.sourceKey, sourceKey);
-    assert.deepEqual(interaction.legacyContractIds, [contractId]);
+    assert.ok(interaction.legacyContractIds.includes(contractId));
   }
+});
+
+test("주요 REST 갱신 정책은 서버 계약과 남은 화면 소비 차단을 행별로 기록한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const expected = new Map([
+    ["reference.feature.066", "upstream-ui:home:dashboard-api:sectioned-projection:v1"],
+    ["reference.feature.067", "upstream-ui:issues:queue:verified-severity-order:v1"],
+    ["reference.feature.068", "upstream-ui:applications:projection:catalog-detail-refresh:v1"],
+    ["reference.feature.069", "upstream-ui:resources:view:guarded-count-and-query-identity:v1"],
+    ["reference.feature.070", "upstream-ui:timeline:delta-sync:epoch-resync-test:v1"],
+    ["reference.feature.071", "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1"],
+    ["reference.feature.072", "upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1"],
+    ["reference.feature.073", "upstream-ui:gitops:fleet:authorized-catalog:v1"],
+    ["reference.feature.074", "upstream-ui:gitops:fleet:authorized-catalog:v1"],
+    ["reference.feature.075", "upstream-ui:helm:release-list:scope-rbac:v1"],
+    ["reference.feature.076", "upstream-ui:cost:overview:availability-scope:v1"],
+    ["reference.feature.077", "upstream-ui:service-access:port-session:list-and-layout:v1"],
+  ]);
+  const interactions = Object.values(classifications.classifications)
+    .flatMap((classification) => classification.interactions ?? []);
+
+  assert.equal(portMap.sections["6.2 주요 REST 갱신 주기"].deliveryStatus, "in_progress");
+  for (const [contractId, sourceKey] of expected) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
+    assert.equal(port.deliveryStatus, "in_progress");
+    assert.equal(port.coverage.backend.state, "implemented");
+    assert.equal(aliases.aliases[contractId], sourceKey);
+    assert.equal(feature.deliveryStatus, "in_progress");
+    assert.equal(feature.sourceKey, sourceKey);
+    assert.ok(interaction.legacyContractIds.includes(contractId));
+  }
+
+  assert.equal(portMap.features["reference.feature.075"].coverage.frontend.state, "in_progress");
+  assert.equal(portMap.features["reference.feature.076"].coverage.frontend.state, "in_progress");
+  assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "blocked");
 });
 
 test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계약 증거로 승격한다", async () => {
