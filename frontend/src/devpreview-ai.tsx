@@ -5,7 +5,7 @@ import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
   Clock3, FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
@@ -244,57 +244,70 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   });
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
 
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const pendingFrom = useRef<number | null>(null);
+
+  // 접기/펼치기 순간에만 실측 높이 FLIP → 타이핑/줄바꿈 중엔 height:auto라 튐이 없음
+  const setCollapse = (val: boolean) => {
+    const wrap = wrapRef.current, inner = innerRef.current;
+    if (wrap && inner) {
+      pendingFrom.current = inner.offsetHeight;
+      wrap.style.transition = "none";
+      wrap.style.height = pendingFrom.current + "px";
+    }
+    setCollapsed(val);
+  };
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current, inner = innerRef.current;
+    if (!wrap || !inner || pendingFrom.current == null) return;
+    const target = inner.offsetHeight;
+    void wrap.offsetHeight; // reflow
+    wrap.style.transition = `height 560ms ${MORPH}`;
+    wrap.style.height = target + "px";
+    pendingFrom.current = null;
+    const id = window.setTimeout(() => { if (wrapRef.current) { wrapRef.current.style.transition = "none"; wrapRef.current.style.height = "auto"; } }, 620);
+    return () => window.clearTimeout(id);
+  }, [collapsed]);
+
   useEffect(() => {
     if (phase !== "review" || hasRunning || actionIdle || collapsed) return;
-    const id = window.setTimeout(() => setCollapsed(true), AUTO_COLLAPSE_MS);
+    const id = window.setTimeout(() => setCollapse(true), AUTO_COLLAPSE_MS);
     return () => window.clearTimeout(id);
   }, [phase, actionIdle, hasRunning, collapsed]);
 
   const instant = phase === "review";
   const canCollapse = instant && !hasRunning && !actionIdle;
+  const overlay = (on: boolean): CSSProperties => on
+    ? { position: "relative" }
+    : { position: "absolute", top: 0, left: 0, right: 0, pointerEvents: "none" };
+  const onSurfaceClick = (e: ReactMouseEvent) => {
+    if (!canCollapse) return;
+    if ((e.target as HTMLElement).closest("a,button,input,textarea,select,label")) return;
+    setCollapse(true);
+  };
   return (
-    <div className="mr-auto w-full max-w-[97%]" style={{ willChange: "transform" }}>
-      {/* 펼친 표면 — 내용이 먼저 fade+blur로 사라진 뒤 높이가 0으로 접힘 */}
-      <div className="grid" style={{
-        transition: `grid-template-rows 620ms ${MORPH}, opacity 260ms ease ${collapsed ? "0ms" : "120ms"}, transform 520ms ${MORPH}, filter 300ms ease`,
-        gridTemplateRows: collapsed ? "0fr" : "1fr",
-        opacity: collapsed ? 0 : 1,
-        transform: collapsed ? "translateY(-10px) scale(0.965)" : "none",
-        filter: collapsed ? "blur(4px)" : "blur(0)",
-        transformOrigin: "top center",
-        pointerEvents: collapsed ? "none" : "auto",
-      }}>
-        <div className="min-h-0 overflow-hidden">
-          <div className="group/msg relative rounded-[20px] border border-black/[0.055] bg-card/80 px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_14px_36px_-20px_rgba(0,0,0,0.22)] backdrop-blur-xl"
+    <div className="mr-auto w-full max-w-[97%] overflow-hidden" ref={wrapRef} style={{ height: "auto" }}>
+      <div className="relative" ref={innerRef}>
+        {/* 펼친 카드 — 빈 공간 클릭 시 접힘 */}
+        <div style={{ ...overlay(!collapsed), opacity: collapsed ? 0 : 1, transform: collapsed ? "scale(0.97)" : "none", transformOrigin: "top center", transition: `opacity 300ms ${MORPH} ${collapsed ? "0ms" : "160ms"}, transform 460ms ${MORPH}`, filter: collapsed ? "blur(2px)" : "none" }}>
+          <div onClick={onSurfaceClick} className={`group/msg relative rounded-[22px] border border-black/[0.035] bg-card/70 px-4 py-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_20px_48px_-24px_rgba(0,0,0,0.2)] backdrop-blur-2xl ${canCollapse ? "cursor-pointer" : ""}`}
             style={{ animation: `surfaceIn 0.5s ${SPRING}` }}>
-            <div className="grid gap-3">
+            <div className="grid gap-3.5">
               {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
                 <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
                   onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
               ))}
             </div>
-            {canCollapse ? (
-              <button onClick={() => setCollapsed(true)} type="button"
-                className="absolute right-2.5 top-2.5 grid size-6 place-items-center rounded-full text-muted-foreground/0 transition-all hover:bg-muted group-hover/msg:text-muted-foreground/60" title="접기">
-                <ChevronDown className="size-3.5" />
-              </button>
-            ) : null}
           </div>
         </div>
-      </div>
-      {/* 접힌 캡슐(다이나믹 아일랜드풍) — 살짝 늦게 오버슈트로 톡 올라옴 */}
-      <div className="grid" style={{
-        transition: `grid-template-rows 620ms ${MORPH}, opacity 300ms ease ${collapsed ? "160ms" : "0ms"}`,
-        gridTemplateRows: collapsed ? "1fr" : "0fr",
-        opacity: collapsed ? 1 : 0,
-      }}>
-        <div className="min-h-0 overflow-hidden">
-          <button onClick={() => setCollapsed(false)} type="button"
-            className="group flex w-full items-center gap-2.5 rounded-full border border-black/[0.06] bg-card/85 px-3.5 py-2 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05),0_10px_24px_-16px_rgba(0,0,0,0.3)] backdrop-blur-xl hover:-translate-y-px hover:shadow-[0_2px_4px_rgba(0,0,0,0.06),0_14px_28px_-16px_rgba(0,0,0,0.35)]"
-            style={{ transform: collapsed ? "scale(1) translateY(0)" : "scale(0.92) translateY(6px)", transition: `transform 560ms ${BACK} ${collapsed ? "120ms" : "0ms"}, box-shadow 300ms ease` }}>
+        {/* 접힌 캡슐 — 클릭하면 펼침 */}
+        <div style={{ ...overlay(collapsed), opacity: collapsed ? 1 : 0, transition: `opacity 260ms ${MORPH} ${collapsed ? "140ms" : "0ms"}` }}>
+          <button onClick={() => setCollapse(false)} type="button"
+            className="group flex w-full items-center gap-2.5 rounded-full bg-card/75 px-4 py-2.5 text-left shadow-[0_2px_8px_-3px_rgba(0,0,0,0.08),0_12px_28px_-18px_rgba(0,0,0,0.3)] backdrop-blur-2xl transition-shadow hover:shadow-[0_3px_10px_-3px_rgba(0,0,0,0.1),0_16px_32px_-18px_rgba(0,0,0,0.35)]"
+            style={{ transform: collapsed ? "scale(1)" : "scale(0.92)", transition: `transform 520ms ${BACK} ${collapsed ? "120ms" : "0ms"}, box-shadow 300ms ease` }}>
             <span className={`size-2 shrink-0 rounded-full ${dot[summary.tone]} ${summary.tone === "critical" ? "island-pulse" : ""}`} />
             <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover:text-foreground/80">{summary.text}</span>
-            <ChevronDown className="size-3.5 shrink-0 -rotate-90 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
       </div>
