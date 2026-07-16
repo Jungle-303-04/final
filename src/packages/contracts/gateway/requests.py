@@ -148,6 +148,42 @@ class ResourceDeleteRequest(StrictModel):
     )
 
 
+class WorkloadRollbackRequest(StrictModel):
+    """One preview-pinned rollback against exact workload and revision identities."""
+
+    resource_id: str = Field(min_length=1, max_length=255)
+    snapshot_id: str = Field(min_length=1, max_length=255)
+    capability_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    workload: ResourceRef
+    workload_resource_version: str = Field(min_length=1, max_length=253)
+    target_revision: ResourceRef
+    target_resource_version: str = Field(min_length=1, max_length=253)
+    preview_revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    confirmation: Literal[True]
+    reason: str = Field(min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_revision_pair(self) -> WorkloadRollbackRequest:
+        workload_kind = self.workload.kind.casefold()
+        expected_revision_kind = {
+            "deployment": "replicaset",
+            "statefulset": "controllerrevision",
+            "daemonset": "controllerrevision",
+        }.get(workload_kind)
+        if (
+            self.workload.api_group != "apps"
+            or self.workload.version != "v1"
+            or self.workload.namespace is None
+            or expected_revision_kind is None
+            or self.target_revision.api_group != "apps"
+            or self.target_revision.version != "v1"
+            or self.target_revision.kind.casefold() != expected_revision_kind
+            or self.target_revision.namespace != self.workload.namespace
+        ):
+            raise ValueError("workload rollback requires an exact apps/v1 revision pair")
+        return self
+
+
 class ResourceManifestCreateDryRunRequest(StrictModel):
     cluster_id: str = Field(min_length=1, max_length=200)
     namespace: str = Field(min_length=1, max_length=253)

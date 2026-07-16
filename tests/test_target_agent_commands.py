@@ -282,6 +282,10 @@ class WorkloadRollbackKubernetesClient(StubKubernetesClient):
 
 
 def workload_rollback_payload() -> dict[str, object]:
+    target_template = {
+        "metadata": {"labels": {"app": "checkout"}},
+        "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+    }
     return {
         "namespace": "sandbox",
         "name": "checkout",
@@ -304,7 +308,8 @@ def workload_rollback_payload() -> dict[str, object]:
         },
         "target_revision_resource_version": "2",
         "target_revision": "2",
-        "target_template_sha256": "sha256:ce7e2d893e3d2f223a33c8ba9db28d6e5cdf8a3d6afc89f944f775777627f6c8",
+        "target_template_sha256": "sha256:9b58a2c145b1c0bf9065a8b7f438ddae260bb80b823001515f1dd777854e96e2",
+        "target_template": target_template,
     }
 
 

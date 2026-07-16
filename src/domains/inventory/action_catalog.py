@@ -35,6 +35,7 @@ ResourceState = Literal[
     "cronjob-suspended",
     "node-cordoned",
     "node-schedulable",
+    "rollback-available",
 ]
 
 
@@ -117,6 +118,51 @@ def _command_action_allows(action: str, namespace: str | None) -> bool:
 
 
 RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
+    ResourceActionDefinition(
+        capability_id="workload.rollback",
+        label="Rollback",
+        description="Restore an exact observed Deployment revision and stream the result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+        resource_type="workload",
+        kind="deployment",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        resource_state="rollback-available",
+    ),
+    ResourceActionDefinition(
+        capability_id="workload.rollback",
+        label="Rollback",
+        description="Restore an exact observed StatefulSet revision and stream the result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+        resource_type="workload",
+        kind="statefulset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        resource_state="rollback-available",
+    ),
+    ResourceActionDefinition(
+        capability_id="workload.rollback",
+        label="Rollback",
+        description="Restore an exact observed DaemonSet revision and stream the result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+        resource_type="workload",
+        kind="daemonset",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        resource_state="rollback-available",
+    ),
     ResourceActionDefinition(
         capability_id="resource.delete",
         label="Delete",
@@ -345,6 +391,17 @@ def _resource_state_matches(state: ResourceState, resource: Mapping[str, Any]) -
             str(resource.get("uid") or "").strip()
             and str(resource.get("resource_version") or "").strip()
             and resource.get("deleted_at") is None
+        )
+    if state == "rollback-available":
+        raw = resource.get("raw")
+        raw_object = raw if isinstance(raw, Mapping) else {}
+        return bool(
+            str(resource.get("uid") or "").strip()
+            and str(resource.get("resource_version") or "").strip()
+            and isinstance(raw_object.get("pod_template"), Mapping)
+            and raw_object.get("revision_history_complete") is True
+            and isinstance(raw_object.get("revision_history_count"), int)
+            and int(raw_object["revision_history_count"]) > 1
         )
     raw = resource.get("raw")
     raw_object = raw if isinstance(raw, Mapping) else {}

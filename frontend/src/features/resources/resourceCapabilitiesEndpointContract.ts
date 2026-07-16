@@ -66,6 +66,10 @@ export interface ResourceActionsEndpointDependencies {
     actionPath: string,
     signal?: AbortSignal,
   ): Promise<ResourceDeletionPreviewEndpoint>;
+  getWorkloadRollbackPreview?(
+    actionPath: string,
+    signal?: AbortSignal,
+  ): Promise<WorkloadRollbackPreviewEndpoint>;
   executeResourceCapability(
     capability: ResourceActionCapability,
     values: Readonly<Record<string, unknown>>,
@@ -79,4 +83,35 @@ export interface ResourceActionsEndpointDependencies {
     command_id: string;
     status: ResourceActionStatus;
   }>;
+}
+
+export interface WorkloadRollbackPreviewEndpoint {
+  availability: "available" | "unavailable";
+  completeness: "exact" | "partial";
+  reason: string | null;
+  snapshot_id: string;
+  current: {
+    resource: ResourceRollbackRefEndpoint;
+    resource_version: string;
+    template_sha256: string;
+  };
+  revisions: Array<{
+    revision: string;
+    resource: ResourceRollbackRefEndpoint;
+    resource_version: string;
+    created_at: string | null;
+    template_sha256: string;
+    preview_revision: string;
+    changes: Array<{ path: string; before: string; after: string }>;
+  }>;
+  next_cursor: number | null;
+}
+
+export interface ResourceRollbackRefEndpoint {
+  api_group: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
 }

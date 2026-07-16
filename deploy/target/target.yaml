@@ -62,7 +62,7 @@ rules:
     verbs: ["get", "list", "watch"]
   # workload controller도 읽기 권한만 둔다.
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    resources: ["deployments", "replicasets", "controllerrevisions", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["batch"]
     resources: ["jobs", "cronjobs"]

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from domains.inventory.workload_revisions import workload_revision_history_response
-
 from packages.contracts.gateway.requests import WorkloadRollbackRequest
 
 

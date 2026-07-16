@@ -151,7 +151,7 @@ rules:
     resources: ["pods", "nodes", "events", "services", "configmaps", "resourcequotas"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    resources: ["deployments", "replicasets", "controllerrevisions", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]

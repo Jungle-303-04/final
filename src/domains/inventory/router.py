@@ -16,6 +16,7 @@ from domains.inventory.capabilities import resource_capabilities_response
 from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.ingest import ingest_inventory_snapshot
 from domains.inventory.provider_detail import provider_detail_projection
+from domains.inventory.workload_revisions import workload_revision_history_response
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
@@ -28,6 +29,7 @@ from packages.contracts.gateway.responses import (
     InventorySummaryResponse,
     KubernetesApiResourcesResponse,
     ResourceCapabilitiesResponse,
+    WorkloadRevisionHistoryResponse,
 )
 from packages.contracts.identity import DEFAULT_WORKSPACE_ID, Permission
 from packages.contracts.kubernetes_discovery import ApiResourceDiscoveryObservation
@@ -241,6 +243,35 @@ async def get_resource_capabilities(
         workspace_id=workspace_id,
         current=current,
         resource=inventory_resource,
+    )
+
+
+@router.get(
+    gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+    response_model=WorkloadRevisionHistoryResponse,
+)
+async def get_workload_revision_history(
+    resource_id: str,
+    cursor: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=50),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+) -> WorkloadRevisionHistoryResponse:
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    resource = db.get_inventory_resource_by_key(
+        workspace_id=workspace_id,
+        inventory_key=resource_id,
+    )
+    if resource is None:
+        raise HTTPException(status_code=404, detail="inventory resource not found")
+    cluster_id = str(resource["cluster_id"])
+    require_inventory_access(db, current, workspace_id, cluster_id)
+    return workload_revision_history_response(
+        db,
+        workspace_id=workspace_id,
+        resource=resource,
+        cursor=cursor,
+        limit=limit,
     )
 
 

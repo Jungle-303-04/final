@@ -59,6 +59,10 @@ class Command:
     KUBERNETES_CRONJOB_CONTROL_CAPABILITY: Final[str] = "cronjob_control.v1"
     KUBERNETES_RESOURCE_DELETE_ACTION: Final[str] = "k8s.resource.delete"
     KUBERNETES_RESOURCE_DELETE_CAPABILITY: Final[str] = "resource_delete.v1"
+    KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION: Final[str] = "k8s.apps.v1.deployments.rollback"
+    KUBERNETES_STATEFULSET_ROLLBACK_ACTION: Final[str] = "k8s.apps.v1.statefulsets.rollback"
+    KUBERNETES_DAEMONSET_ROLLBACK_ACTION: Final[str] = "k8s.apps.v1.daemonsets.rollback"
+    KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY: Final[str] = "workload_rollback.v1"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
     CLUSTER_AGENT_UNINSTALL_ACTION: Final[str] = "cluster.agent.uninstall"
 

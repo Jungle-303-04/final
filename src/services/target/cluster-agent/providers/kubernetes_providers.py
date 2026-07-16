@@ -41,6 +41,7 @@ from providers.kubernetes_utils import (
     K8S_ENDPOINT_SLICE_SERVICE_NAME_LABEL,
     K8S_KIND_DEPLOYMENT,
     K8S_KIND_REPLICA_SET,
+    K8S_RESOURCE_CONTROLLER_REVISIONS,
     K8S_RESOURCE_DEPLOYMENTS,
     K8S_RESOURCE_ENDPOINT_SLICES,
     K8S_RESOURCE_PODS,
@@ -59,6 +60,7 @@ K8S_EVENT_CAPTURE_KEY = "event_capture"
 K8S_EVENT_CAPTURE_EVENTS_KEY = "events"
 K8S_SNAPSHOT_NODES_KEY = "nodes"
 K8S_SNAPSHOT_WORKLOADS_KEY = "workloads"
+K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY = "workload_revisions"
 K8S_STATEFULSETS_KEY = "statefulsets"
 K8S_DAEMONSETS_KEY = "daemonsets"
 K8S_JOBS_KEY = "jobs"
@@ -77,6 +79,7 @@ KUBERNETES_LIST_LIMITS = {
     K8S_SNAPSHOT_EVENTS_KEY: MAX_KUBERNETES_EVENTS,
     K8S_SNAPSHOT_NODES_KEY: MAX_KUBERNETES_NODES,
     K8S_SNAPSHOT_WORKLOADS_KEY: MAX_KUBERNETES_WORKLOADS,
+    K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: MAX_KUBERNETES_WORKLOADS,
     K8S_RESOURCE_SERVICES: MAX_KUBERNETES_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY: MAX_KUBERNETES_ENDPOINTS,
 }
@@ -84,6 +87,7 @@ KUBERNETES_NAMESPACED_LIST_KEYS = {
     K8S_RESOURCE_PODS,
     K8S_SNAPSHOT_EVENTS_KEY,
     K8S_SNAPSHOT_WORKLOADS_KEY,
+    K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY,
     K8S_RESOURCE_SERVICES,
     K8S_SNAPSHOT_ENDPOINTS_KEY,
 }
@@ -268,6 +272,13 @@ class KubernetesSnapshotProvider:
                     base_url,
                     headers,
                     f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_REPLICASETS}",
+                    label_selector=telemetry_query.label_selector,
+                ),
+                K8S_RESOURCE_CONTROLLER_REVISIONS: await self.get_json(
+                    client,
+                    base_url,
+                    headers,
+                    f"/apis/apps/v1/namespaces/{namespace}/{K8S_RESOURCE_CONTROLLER_REVISIONS}",
                     label_selector=telemetry_query.label_selector,
                 ),
                 K8S_JOBS_KEY: await self.get_json(
@@ -707,6 +718,12 @@ class KubernetesSnapshotProvider:
         if detected_provider is not None:
             snapshot["detected_provider"] = detected_provider
         raw_pods = scoped_items(payload.get(K8S_RESOURCE_PODS), telemetry_query.label_selector)
+        raw_replicasets = scoped_items(
+            payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector
+        )
+        raw_controller_revisions = scoped_items(
+            payload.get(K8S_RESOURCE_CONTROLLER_REVISIONS), telemetry_query.label_selector
+        )
         raw_workloads = {
             K8S_KIND_DEPLOYMENT: scoped_items(
                 payload.get(K8S_RESOURCE_DEPLOYMENTS), telemetry_query.label_selector
@@ -717,9 +734,7 @@ class KubernetesSnapshotProvider:
             "DaemonSet": scoped_items(
                 payload.get(K8S_DAEMONSETS_KEY), telemetry_query.label_selector
             ),
-            K8S_KIND_REPLICA_SET: active_replicasets(
-                scoped_items(payload.get(K8S_RESOURCE_REPLICASETS), telemetry_query.label_selector)
-            ),
+            K8S_KIND_REPLICA_SET: active_replicasets(raw_replicasets),
             "Job": scoped_items(payload.get(K8S_JOBS_KEY), telemetry_query.label_selector),
             "CronJob": scoped_items(payload.get(K8S_CRONJOBS_KEY), telemetry_query.label_selector),
         }
@@ -765,8 +780,22 @@ class KubernetesSnapshotProvider:
             *(
                 summary
                 for kind, rows in raw_workloads.items()
-                for summary in workload_summaries(kind, rows)
+                for summary in workload_summaries(
+                    kind,
+                    rows,
+                    revisions=(
+                        raw_replicasets
+                        if kind == K8S_KIND_DEPLOYMENT
+                        else raw_controller_revisions
+                        if kind in {"StatefulSet", "DaemonSet"}
+                        else []
+                    ),
+                )
             ),
+        ]
+        snapshot[K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY] = [
+            *revision_summaries(K8S_KIND_REPLICA_SET, raw_replicasets),
+            *revision_summaries("ControllerRevision", raw_controller_revisions),
         ]
         snapshot[K8S_RESOURCE_SERVICES] = [service_summary(item) for item in raw_services]
         service_names = {str(metadata(item).get("name") or "") for item in raw_services}
@@ -790,6 +819,9 @@ class KubernetesSnapshotProvider:
                     "pod_metrics": len(pod_metrics),
                     "node_metrics": len(node_metrics),
                     K8S_SNAPSHOT_WORKLOADS_KEY: len(snapshot[K8S_SNAPSHOT_WORKLOADS_KEY]),
+                    K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: len(
+                        snapshot[K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY]
+                    ),
                     K8S_RESOURCE_SERVICES: len(snapshot[K8S_RESOURCE_SERVICES]),
                     K8S_SNAPSHOT_ENDPOINTS_KEY: len(snapshot[K8S_SNAPSHOT_ENDPOINTS_KEY]),
                 },
@@ -860,6 +892,7 @@ def empty_snapshot(cluster_id: str) -> JsonObject:
         "cluster": {"cluster_id": cluster_id},
         "collection_scopes": [],
         K8S_SNAPSHOT_WORKLOADS_KEY: [],
+        K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY: [],
         K8S_RESOURCE_PODS: [],
         K8S_SNAPSHOT_EVENTS_KEY: [],
         K8S_SNAPSHOT_NODES_KEY: [],
@@ -888,6 +921,7 @@ def merge_snapshot(target: JsonObject, source: JsonObject) -> None:
         target[K8S_EVENT_CAPTURE_KEY] = dict(source_event_capture)
     for key in (
         K8S_SNAPSHOT_WORKLOADS_KEY,
+        K8S_SNAPSHOT_WORKLOAD_REVISIONS_KEY,
         K8S_RESOURCE_PODS,
         K8S_SNAPSHOT_EVENTS_KEY,
         K8S_RESOURCE_SERVICES,
@@ -1722,17 +1756,28 @@ def as_float(value: Any) -> float | None:
         return None
 
 
-def workload_summaries(kind: str, rows: list[JsonObject]) -> list[JsonObject]:
+def workload_summaries(
+    kind: str,
+    rows: list[JsonObject],
+    *,
+    revisions: list[JsonObject] | None = None,
+) -> list[JsonObject]:
     """Build workload summaries for all objects of one workload kind."""
-    return [workload_summary(kind, item) for item in rows]
+    revision_rows = revisions or []
+    return [workload_summary(kind, item, revisions=revision_rows) for item in rows]
 
 
-def workload_summary(kind: str, item: JsonObject) -> JsonObject:
+def workload_summary(
+    kind: str,
+    item: JsonObject,
+    *,
+    revisions: list[JsonObject] | None = None,
+) -> JsonObject:
     """Build a small workload summary for deployments and similar objects."""
     meta = metadata(item)
     workload_status = status(item)
     owner_kind, owner_name = owner_ref(item)
-    return {
+    summary: JsonObject = {
         "kind": kind,
         "api_version": "batch/v1" if kind in {"Job", "CronJob"} else "apps/v1",
         **bounded_label_summary(item),
@@ -1764,6 +1809,101 @@ def workload_summary(kind: str, item: JsonObject) -> JsonObject:
         "completion_time": workload_status.get("completionTime"),
         "scheduled_run_kinds": ["Job"] if kind == "CronJob" else [],
     }
+    if kind in {K8S_KIND_DEPLOYMENT, "StatefulSet", "DaemonSet"}:
+        owned = owned_workload_revisions(item, kind, revisions or [])
+        summary.update(
+            {
+                "pod_template": spec(item).get("template"),
+                "revision_history_count": len(owned),
+                "revision_history_complete": True,
+            }
+        )
+    return summary
+
+
+def revision_summaries(kind: str, rows: list[JsonObject]) -> list[JsonObject]:
+    return [summary for row in rows if (summary := revision_summary(kind, row)) is not None]
+
+
+def revision_summary(kind: str, item: JsonObject) -> JsonObject | None:
+    meta = metadata(item)
+    owner_kind, owner_name = owner_ref(item)
+    annotations = meta.get("annotations") if isinstance(meta.get("annotations"), dict) else {}
+    revision = (
+        annotations.get("deployment.kubernetes.io/revision")
+        if kind == K8S_KIND_REPLICA_SET
+        else item.get("revision")
+    )
+    template = (
+        spec(item).get("template")
+        if kind == K8S_KIND_REPLICA_SET
+        else controller_revision_template(item)
+    )
+    if not all(
+        (
+            meta.get("uid"),
+            meta.get("resourceVersion"),
+            meta.get("namespace"),
+            meta.get("name"),
+            owner_kind,
+            owner_name,
+            owner_uid(item),
+            revision is not None,
+            isinstance(template, dict) and bool(template),
+        )
+    ):
+        return None
+    return {
+        "api_version": "apps/v1",
+        "kind": kind,
+        "uid": meta["uid"],
+        "resource_version": meta["resourceVersion"],
+        "namespace": meta["namespace"],
+        "name": meta["name"],
+        "owner_kind": owner_kind,
+        "owner_name": owner_name,
+        "owner_uid": owner_uid(item),
+        "revision": str(revision),
+        "created_at": meta.get("creationTimestamp"),
+        "template": template,
+    }
+
+
+def owned_workload_revisions(
+    workload: JsonObject,
+    workload_kind: str,
+    revisions: list[JsonObject],
+) -> list[JsonObject]:
+    workload_meta = metadata(workload)
+    workload_uid = str(workload_meta.get("uid") or "")
+    workload_name = str(workload_meta.get("name") or "")
+    return [
+        revision
+        for revision in revisions
+        if any(
+            str(owner.get("kind") or "") == workload_kind
+            and (
+                str(owner.get("uid") or "") == workload_uid
+                if workload_uid
+                else str(owner.get("name") or "") == workload_name
+            )
+            for owner in (
+                metadata(revision).get("ownerReferences")
+                if isinstance(metadata(revision).get("ownerReferences"), list)
+                else []
+            )
+            if isinstance(owner, dict)
+        )
+    ]
+
+
+def controller_revision_template(item: JsonObject) -> JsonObject:
+    data = item.get("data")
+    data_object = data if isinstance(data, dict) else {}
+    data_spec = data_object.get("spec")
+    spec_object = data_spec if isinstance(data_spec, dict) else {}
+    template = spec_object.get("template")
+    return template if isinstance(template, dict) else {}
 
 
 def service_summary(item: JsonObject) -> JsonObject:

@@ -39,6 +39,49 @@ export function createResourceActionsAdapter(
         };
       });
     },
+    async previewRollback(capability, signal) {
+      if (
+        capability.capabilityId !== "workload.rollback" ||
+        capability.execution !== "command" ||
+        capability.method !== "POST" ||
+        endpoints.getWorkloadRollbackPreview === undefined
+      ) {
+        throw new ResourcesPortFailure("invalid-request");
+      }
+      return withActionFailure(async () => {
+        const value = await endpoints.getWorkloadRollbackPreview?.(capability.path, signal);
+        if (value === undefined) throw new ResourcesPortFailure("invalid-response");
+        const mapRef = (item: typeof value.current.resource) => ({
+          apiGroup: item.api_group,
+          version: item.version,
+          kind: item.kind,
+          namespace: item.namespace,
+          name: item.name,
+          uid: item.uid,
+        });
+        return {
+          availability: value.availability,
+          completeness: value.completeness,
+          reason: value.reason,
+          snapshotId: value.snapshot_id,
+          current: {
+            resource: mapRef(value.current.resource),
+            resourceVersion: value.current.resource_version,
+            templateSha256: value.current.template_sha256,
+          },
+          revisions: value.revisions.map((item) => ({
+            revision: item.revision,
+            resource: mapRef(item.resource),
+            resourceVersion: item.resource_version,
+            createdAt: item.created_at,
+            templateSha256: item.template_sha256,
+            previewRevision: item.preview_revision,
+            changes: item.changes,
+          })),
+          nextCursor: value.next_cursor,
+        };
+      });
+    },
     async execute(capability, values, context, signal) {
       if (capability.execution !== "command" || capability.method !== "POST") {
         throw new ResourcesPortFailure("invalid-request");

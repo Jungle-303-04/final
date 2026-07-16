@@ -366,6 +366,11 @@ export {
 } from "./resource-capabilities";
 export { executeResourceCapability } from "./resource-capability-actions";
 export { getResourceDeletionPreview } from "./resource-deletions";
+export { getWorkloadRollbackPreview } from "./workload-rollbacks";
+export {
+  workloadRollbackPreviewSchema,
+  type WorkloadRollbackPreviewEndpoint,
+} from "./workload-rollbacks-schemas";
 export {
   resourceDeletionPreviewSchema,
   resourceDeletionRefSchema,

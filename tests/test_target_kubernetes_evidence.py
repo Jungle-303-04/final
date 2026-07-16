@@ -520,6 +520,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
             "/apis/apps/v1/namespaces/target/statefulsets": {"items": []},
             "/apis/apps/v1/namespaces/target/daemonsets": {"items": []},
             "/apis/apps/v1/namespaces/target/replicasets": {"items": []},
+            "/apis/apps/v1/namespaces/target/controllerrevisions": {"items": []},
             "/api/v1/namespaces/target/services": {
                 "items": [
                     {
@@ -586,7 +587,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         }
     )
 
-    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 13
+    assert [request.headers["authorization"] for request in requests] == ["Bearer token-1"] * 14
     assert validated.kubernetes["cluster"]["cluster_id"] == "cluster-1"
     assert validated.kubernetes["cluster"]["namespace"] == "target"
     assert validated.kubernetes["detected_provider"] == "eks"
@@ -662,6 +663,7 @@ def test_kubernetes_snapshot_provider_collects_namespace_state(monkeypatch) -> N
         "pod_metrics": 1,
         "node_metrics": 1,
         "workloads": 1,
+        "workload_revisions": 0,
         "services": 1,
         "endpoints": 1,
     }
@@ -862,6 +864,7 @@ def test_kubernetes_snapshot_provider_scopes_one_rca_test_run(monkeypatch) -> No
         "/apis/apps/v1/namespaces/sandbox/statefulsets",
         "/apis/apps/v1/namespaces/sandbox/daemonsets",
         "/apis/apps/v1/namespaces/sandbox/replicasets",
+        "/apis/apps/v1/namespaces/sandbox/controllerrevisions",
         "/apis/batch/v1/namespaces/sandbox/jobs",
         "/apis/batch/v1/namespaces/sandbox/cronjobs",
         "/api/v1/namespaces/sandbox/services",
@@ -941,8 +944,24 @@ def test_regular_kubernetes_snapshot_separates_scaled_down_replicaset_history() 
 
     def replicaset(name: str, desired: int, current: int) -> dict[str, object]:
         return {
-            "metadata": {"name": name, "namespace": "production"},
-            "spec": {"replicas": desired},
+            "metadata": {
+                "name": name,
+                "namespace": "production",
+                "uid": f"uid-{name}",
+                "resourceVersion": f"rv-{name}",
+                "annotations": {"deployment.kubernetes.io/revision": name.rsplit("-", 1)[-1]},
+                "ownerReferences": [
+                    {
+                        "kind": "Deployment",
+                        "name": "orders-api",
+                        "uid": "deployment-orders-api",
+                    }
+                ],
+            },
+            "spec": {
+                "replicas": desired,
+                "template": {"spec": {"containers": [{"name": "api", "image": name}]}},
+            },
             "status": {"replicas": current, "readyReplicas": current},
         }
 

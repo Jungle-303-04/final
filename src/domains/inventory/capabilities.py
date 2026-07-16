@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from domains.identity.dependencies import require_cluster_access
 from domains.inventory.action_catalog import applicable_resource_actions
+from domains.inventory.workload_revisions import workload_rollback_available
 from packages.contracts.gateway.responses import (
     ResourceCapabilitiesResponse,
     ResourceCapabilitySubject,
@@ -27,7 +28,12 @@ def resource_capabilities_response(
 ) -> ResourceCapabilitiesResponse:
     """실제 route가 수용할 조건을 모두 만족하는 action만 반환한다."""
     subject = _subject(resource)
-    applicable = applicable_resource_actions(subject, resource)
+    applicable = tuple(
+        definition
+        for definition in applicable_resource_actions(subject, resource)
+        if definition.capability_id != "workload.rollback"
+        or workload_rollback_available(db, workspace_id=workspace_id, resource=resource)
+    )
     required_permissions = {definition.permission for definition in applicable}
     permissions = {
         permission: _has_cluster_permission(

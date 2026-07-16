@@ -180,6 +180,39 @@ class DeleteResourceCommand:
 
 
 @command.action(
+    Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+)
+class RollbackDeploymentCommand:
+    """Restore an exact observed ReplicaSet template with CAS revalidation."""
+
+
+@command.action(
+    Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+)
+class RollbackStatefulSetCommand:
+    """Restore an exact observed ControllerRevision template with CAS revalidation."""
+
+
+@command.action(
+    Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+    requires_approval=False,
+    supports_cancel=True,
+    supports_manual_retry=False,
+    required_agent_capability=Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+)
+class RollbackDaemonSetCommand:
+    """Restore an exact observed ControllerRevision template with CAS revalidation."""
+
+
+@command.action(
     Command.RCA_TEST_SCENARIO_INJECT_ACTION,
     allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=False,

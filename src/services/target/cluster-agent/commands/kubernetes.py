@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -105,6 +107,101 @@ class KubernetesCronJobPayload(KubernetesGetPayload):
         ):
             raise ValueError("CronJob payload ResourceRef does not match the command target")
         return self
+
+
+class KubernetesWorkloadRollbackPayload(KubernetesGetPayload):
+    workload_ref: ResourceRef
+    workload_resource_version: str = Field(min_length=1, max_length=253)
+    target_revision_ref: ResourceRef
+    target_revision_resource_version: str = Field(min_length=1, max_length=253)
+    target_revision: str = Field(min_length=1, max_length=253)
+    target_template_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    target_template: dict[str, Any] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_revision_pair(self) -> KubernetesWorkloadRollbackPayload:
+        workload = self.workload_ref
+        target = self.target_revision_ref
+        expected_revision = {
+            "deployment": "replicaset",
+            "statefulset": "controllerrevision",
+            "daemonset": "controllerrevision",
+        }.get(workload.kind.casefold())
+        if (
+            workload.api_group != "apps"
+            or workload.version != "v1"
+            or workload.namespace != self.namespace
+            or workload.name != self.name
+            or expected_revision is None
+            or target.api_group != "apps"
+            or target.version != "v1"
+            or target.namespace != self.namespace
+            or target.kind.casefold() != expected_revision
+            or workload_template_sha256(self.target_template) != self.target_template_sha256
+        ):
+            raise ValueError("workload rollback payload is inconsistent")
+        return self
+
+
+def workload_template_sha256(template: dict[str, Any]) -> str:
+    encoded = json.dumps(template, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    return f"sha256:{hashlib.sha256(encoded.encode()).hexdigest()}"
+
+
+def validate_exact_resource(
+    observed: JsonObject,
+    expected: ResourceRef,
+    expected_resource_version: str,
+) -> None:
+    meta = observed.get("metadata")
+    metadata = meta if isinstance(meta, dict) else {}
+    api_version = (
+        f"{expected.api_group}/{expected.version}" if expected.api_group else expected.version
+    )
+    if (
+        str(observed.get("apiVersion") or "") != api_version
+        or str(observed.get("kind") or "").casefold() != expected.kind.casefold()
+        or str(metadata.get("namespace") or "") != (expected.namespace or "")
+        or str(metadata.get("name") or "") != expected.name
+        or str(metadata.get("uid") or "") != expected.uid
+        or str(metadata.get("resourceVersion") or "") != expected_resource_version
+    ):
+        raise ValueError(f"selected {expected.kind} identity is stale")
+
+
+def rollback_template_from_revision(
+    revision: JsonObject,
+    *,
+    workload: ResourceRef,
+    expected_revision: str,
+) -> JsonObject:
+    meta = revision.get("metadata")
+    metadata = meta if isinstance(meta, dict) else {}
+    owners = metadata.get("ownerReferences")
+    owner_rows = owners if isinstance(owners, list) else []
+    owned = any(
+        isinstance(owner, dict)
+        and str(owner.get("kind") or "").casefold() == workload.kind.casefold()
+        and str(owner.get("uid") or "") == workload.uid
+        for owner in owner_rows
+    )
+    if not owned:
+        raise ValueError("selected workload revision owner is stale")
+    if workload.kind.casefold() == "deployment":
+        annotations = metadata.get("annotations")
+        annotation_map = annotations if isinstance(annotations, dict) else {}
+        observed_revision = annotation_map.get("deployment.kubernetes.io/revision")
+        source = revision.get("spec")
+    else:
+        observed_revision = revision.get("revision")
+        data = revision.get("data")
+        source = data.get("spec") if isinstance(data, dict) else None
+    if str(observed_revision) != expected_revision or not isinstance(source, dict):
+        raise ValueError("selected workload revision content is stale")
+    template = source.get("template")
+    if not isinstance(template, dict) or not template:
+        raise ValueError("selected workload revision template is unavailable")
+    return deepcopy(template)
 
 
 def kubernetes_generate_name(

@@ -54,6 +54,7 @@ from domains.identity.dependencies import (
 )
 from domains.inventory.action_catalog import resource_action_capability_id
 from domains.inventory.capabilities import resource_capabilities_response
+from domains.inventory.workload_revisions import workload_revision_selection
 from domains.target.management_guard import (
     cluster_role_from_policy,
     is_management_registration,
@@ -80,6 +81,7 @@ from packages.contracts.gateway.requests import (
     CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
+    WorkloadRollbackRequest,
 )
 from packages.contracts.gateway.responses import (
     AgentCommandPollResponse,
@@ -134,6 +136,8 @@ RESERVED_LOG_STREAM_QUERY_MESSAGE = "reserved browser log stream query"
 OPERATION_EVENT_REPLAY_POLL_SECONDS = 5.0
 CRONJOB_RESOURCE_STALE = "selected CronJob capability is stale"
 CRONJOB_IDEMPOTENCY_REUSED = "cronjob_idempotency_key_reused"
+WORKLOAD_ROLLBACK_STALE = "workload_rollback_stale"
+WORKLOAD_ROLLBACK_IDEMPOTENCY_REUSED = "workload_rollback_idempotency_key_reused"
 WORKLOAD_RESTART_ACTIONS = {
     "deployment": Command.DEFAULT_ACTION,
     "statefulset": Command.KUBERNETES_STATEFULSET_RESTART_ACTION,
@@ -142,6 +146,11 @@ WORKLOAD_RESTART_ACTIONS = {
 WORKLOAD_SCALE_ACTIONS = {
     "deployment": Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
     "statefulset": Command.KUBERNETES_STATEFULSET_SCALE_ACTION,
+}
+WORKLOAD_ROLLBACK_ACTIONS = {
+    "deployment": Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+    "statefulset": Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+    "daemonset": Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
 }
 
 # `/commands` carries only an inspected diff. Actions that need a typed target
@@ -1041,6 +1050,7 @@ async def replay_resource_action_receipt(
     workspace_id: str,
     command_id: str,
     request_fingerprint: str,
+    idempotency_reused_code: str = CRONJOB_IDEMPOTENCY_REUSED,
 ) -> CommandReceipt | None:
     reader = getattr(db, "get_agent_command", None)
     if not callable(reader):
@@ -1057,7 +1067,7 @@ async def replay_resource_action_receipt(
         raise HTTPException(
             status_code=409,
             detail={
-                "code": CRONJOB_IDEMPOTENCY_REUSED,
+                "code": idempotency_reused_code,
                 "detail": "Idempotency-Key was already used for another resource action.",
             },
         )
@@ -1072,6 +1082,151 @@ async def replay_resource_action_receipt(
         correlation_id=correlation_id,
         status=str(existing.get("status") or CommandStatus.QUEUED),
     )
+
+
+@router.post(
+    gateway_routes.RESOURCE_WORKLOAD_ROLLBACK_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+    status_code=202,
+)
+async def rollback_workload(
+    resource_id: str,
+    payload: WorkloadRollbackRequest,
+    idempotency_key: Annotated[
+        str,
+        Header(alias="Idempotency-Key", min_length=8, max_length=128),
+    ],
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    if resource_id != payload.resource_id:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
+    reader = getattr(db, "get_inventory_resource_by_key", None)
+    resource = (
+        reader(workspace_id=workspace_id, inventory_key=resource_id) if callable(reader) else None
+    )
+    if not isinstance(resource, Mapping):
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    try:
+        current_ref = inventory_resource_ref(resource)
+    except HTTPException as exc:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE) from exc
+    kind = current_ref.kind.casefold()
+    action = WORKLOAD_ROLLBACK_ACTIONS.get(kind)
+    cluster_id = str(resource.get("cluster_id") or "")
+    namespace = current_ref.namespace
+    if (
+        action is None
+        or namespace is None
+        or str(resource.get("snapshot_id") or "") != payload.snapshot_id
+        or str(resource.get("resource_version") or "") != payload.workload_resource_version
+        or current_ref != payload.workload
+    ):
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    decision = resource_capabilities_response(
+        db,
+        workspace_id=workspace_id,
+        current=current,
+        resource=dict(resource),
+    )
+    enabled = {item.capability_id for item in decision.capabilities}
+    if decision.revision != payload.capability_revision or "workload.rollback" not in enabled:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    selected = workload_revision_selection(
+        db,
+        workspace_id=workspace_id,
+        resource=resource,
+        uid=payload.target_revision.uid,
+        resource_version=payload.target_resource_version,
+    )
+    if selected is None:
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+    revision, target_template = selected
+    if (
+        revision.resource != payload.target_revision
+        or revision.preview_revision != payload.preview_revision
+    ):
+        raise HTTPException(status_code=409, detail=WORKLOAD_ROLLBACK_STALE)
+
+    request_fingerprint = workload_rollback_request_fingerprint(
+        workspace_id=workspace_id,
+        user_id=str(current.user_id),
+        payload=payload,
+    )
+    command_id = resource_action_command_id(workspace_id, str(current.user_id), idempotency_key)
+    replay = await replay_resource_action_receipt(
+        db,
+        workspace_id=workspace_id,
+        command_id=command_id,
+        request_fingerprint=request_fingerprint,
+        idempotency_reused_code=WORKLOAD_ROLLBACK_IDEMPOTENCY_REUSED,
+    )
+    if replay is not None:
+        return replay
+    diff_basis = {
+        "request_fingerprint": request_fingerprint,
+        "resource_id": resource_id,
+        "snapshot_id": payload.snapshot_id,
+        "capability_revision": payload.capability_revision,
+        "workload": current_ref.model_dump(),
+        "workload_resource_version": payload.workload_resource_version,
+        "target_revision": revision.resource.model_dump(),
+        "target_resource_version": revision.resource_version,
+        "revision": revision.revision,
+        "preview_revision": revision.preview_revision,
+        "changes": [item.model_dump() for item in revision.changes],
+    }
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind=kind,
+        resource_name=current_ref.name,
+        action=action,
+        reason=payload.reason,
+        payload={
+            "namespace": namespace,
+            "name": current_ref.name,
+            "workload_ref": current_ref.model_dump(),
+            "workload_resource_version": payload.workload_resource_version,
+            "target_revision_ref": revision.resource.model_dump(),
+            "target_revision_resource_version": revision.resource_version,
+            "target_revision": revision.revision,
+            "target_template_sha256": revision.template_sha256,
+            "target_template": target_template,
+        },
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+        command_id=command_id,
+        diff_basis=diff_basis,
+    )
+
+
+def workload_rollback_request_fingerprint(
+    *,
+    workspace_id: str,
+    user_id: str,
+    payload: WorkloadRollbackRequest,
+) -> str:
+    encoded = json.dumps(
+        {
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            **payload.model_dump(mode="json"),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 @router.post(

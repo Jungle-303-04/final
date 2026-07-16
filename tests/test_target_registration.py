@@ -714,6 +714,7 @@ def test_static_management_agent_manifest_is_read_only() -> None:
     assert set(apps_rule["resources"]) == {
         "deployments",
         "replicasets",
+        "controllerrevisions",
         "daemonsets",
         "statefulsets",
     }

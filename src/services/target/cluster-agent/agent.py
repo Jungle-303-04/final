@@ -18,9 +18,13 @@ from commands import (
     KubernetesNodeSchedulingPayload,
     KubernetesPatchPayload,
     KubernetesScalePayload,
+    KubernetesWorkloadRollbackPayload,
     command,
     cronjob_job_body,
+    rollback_template_from_revision,
     validate_cronjob_resource_ref,
+    validate_exact_resource,
+    workload_template_sha256,
 )
 from commands.helm import run_catalog_helm_install, run_helm_artifact_query
 from commands.service_access import (
@@ -863,6 +867,7 @@ class TargetClusterAgent:
         if not direct_commands_enabled:
             capabilities.remove(Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY)
             capabilities.remove(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
+            capabilities.remove(Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY)
         if direct_commands_enabled and getattr(self, "node_control_enabled", False):
             capabilities.append(Command.KUBERNETES_NODE_CONTROL_CAPABILITY)
         return capabilities
@@ -1246,6 +1251,9 @@ class TargetClusterAgent:
             Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
             Command.KUBERNETES_CRONJOB_RESUME_ACTION,
             Command.KUBERNETES_RESOURCE_DELETE_ACTION,
+            Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+            Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+            Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
             Command.RCA_TEST_SCENARIO_INJECT_ACTION,
             Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
             Command.CLUSTER_AGENT_UNINSTALL_ACTION,
@@ -1560,6 +1568,121 @@ class TargetClusterAgent:
         return ctx.ok(
             f"kubernetes {label} restarted",
             applied=True,
+            result=result,
+        )
+
+    @command.k8s(
+        Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="deployments",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesWorkloadRollbackPayload,
+    )
+    async def rollback_deployment_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+    ) -> JsonObject:
+        return await self.rollback_workload_command(ctx, revision_resource="replicasets")
+
+    @command.k8s(
+        Command.KUBERNETES_STATEFULSET_ROLLBACK_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="statefulsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesWorkloadRollbackPayload,
+    )
+    async def rollback_statefulset_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+    ) -> JsonObject:
+        return await self.rollback_workload_command(ctx, revision_resource="controllerrevisions")
+
+    @command.k8s(
+        Command.KUBERNETES_DAEMONSET_ROLLBACK_ACTION,
+        api_group="apps",
+        version="v1",
+        resource="daemonsets",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesWorkloadRollbackPayload,
+    )
+    async def rollback_daemonset_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+    ) -> JsonObject:
+        return await self.rollback_workload_command(ctx, revision_resource="controllerrevisions")
+
+    async def rollback_workload_command(
+        self,
+        ctx: CommandContext[KubernetesWorkloadRollbackPayload],
+        *,
+        revision_resource: str,
+    ) -> JsonObject:
+        spec = ctx.kubernetes_spec
+        payload = ctx.payload
+        workload = await ctx.kubernetes.get_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=payload.namespace,
+            resource=spec.resource,
+            name=payload.name,
+        )
+        validate_exact_resource(
+            workload,
+            payload.workload_ref,
+            payload.workload_resource_version,
+        )
+        target = await ctx.kubernetes.get_namespaced_resource(
+            api_group="apps",
+            version="v1",
+            namespace=payload.namespace,
+            resource=revision_resource,
+            name=payload.target_revision_ref.name,
+        )
+        validate_exact_resource(
+            target,
+            payload.target_revision_ref,
+            payload.target_revision_resource_version,
+        )
+        template = rollback_template_from_revision(
+            target,
+            workload=payload.workload_ref,
+            expected_revision=payload.target_revision,
+        )
+        if (
+            workload_template_sha256(template) != payload.target_template_sha256
+            or template != payload.target_template
+        ):
+            raise ValueError("selected workload revision template is stale")
+        workload_spec = workload.get("spec")
+        current_template = (
+            workload_spec.get("template") if isinstance(workload_spec, dict) else None
+        )
+        if (
+            isinstance(current_template, dict)
+            and workload_template_sha256(current_template) == payload.target_template_sha256
+        ):
+            raise ValueError("selected workload revision is already current")
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group=spec.api_group,
+            version=spec.version,
+            namespace=payload.namespace,
+            resource=spec.resource,
+            name=payload.name,
+            body={
+                "metadata": {"resourceVersion": payload.workload_resource_version},
+                "spec": {"template": template},
+            },
+        )
+        return ctx.ok(
+            "kubernetes workload revision restored",
+            applied=True,
+            revision=payload.target_revision,
+            partial_failure=False,
             result=result,
         )
 

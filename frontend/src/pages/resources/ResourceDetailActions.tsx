@@ -7,6 +7,8 @@ import type {
   ResourceDeletionPreview,
   ResourceActionReceipt,
   ResourceActionsPort,
+  WorkloadRollbackPreview,
+  WorkloadRollbackRevision,
 } from "../../features/resources/resourceCapabilitiesContract";
 import {
   useOptionalOperationStatusStore,
@@ -58,6 +60,9 @@ export function ResourceDetailActions({
   const [deletePreview, setDeletePreview] = useState<ResourceDeletionPreview | null>(null);
   const [deletePreviewPending, setDeletePreviewPending] = useState(false);
   const [deleteIdempotencyKey, setDeleteIdempotencyKey] = useState("");
+  const [rollbackPreview, setRollbackPreview] = useState<WorkloadRollbackPreview | null>(null);
+  const [rollbackPreviewPending, setRollbackPreviewPending] = useState(false);
+  const [selectedRollbackUid, setSelectedRollbackUid] = useState("");
   const [diagnoseConsent, setDiagnoseConsent] = useState<{
     capabilities: DiagnoseCapabilities;
     target: DiagnoseResourceTarget;
@@ -73,14 +78,19 @@ export function ResourceDetailActions({
     setPending(true);
     setFailed(false);
     try {
-      const context = cronjobExecutionContext(
+      const context = resourceActionExecutionContext(
         capabilities,
         detail,
         dialog,
         executionKey,
+        rollbackPreview,
+        selectedRollbackUid,
       );
       if (dialog.capabilityId.startsWith("cronjob.") && context === null) {
         throw new Error("CronJob action identity is incomplete");
+      }
+      if (dialog.capabilityId === "workload.rollback" && context?.rollback === undefined) {
+        throw new Error("Workload rollback identity is incomplete");
       }
       const deleteValues = dialog.capabilityId === "resource.delete"
         ? {
@@ -214,6 +224,49 @@ export function ResourceDetailActions({
                 )}
               </div>
             ) : null}
+            {dialog?.capabilityId === "workload.rollback" ? (
+              <div className="grid gap-3" data-slot="workload-rollback-preview">
+                {rollbackPreviewPending ? (
+                  <p className="text-sm text-muted-foreground" role="status">
+                    {t("resources.detail.action.rollbackLoading")}
+                  </p>
+                ) : rollbackPreview?.availability === "available" ? (
+                  <>
+                    <Label htmlFor="workload-rollback-revision">
+                      {t("resources.detail.action.rollbackRevision")}
+                    </Label>
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      id="workload-rollback-revision"
+                      onChange={(event) => setSelectedRollbackUid(event.currentTarget.value)}
+                      value={selectedRollbackUid}
+                    >
+                      {rollbackPreview.revisions.map((item) => (
+                        <option key={`${item.resource.uid}:${item.resourceVersion}`} value={item.resource.uid}>
+                          {item.revision} · {item.resource.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-3 text-sm">
+                      {selectedRollback(rollbackPreview, selectedRollbackUid)?.changes.map((change) => (
+                        <li key={change.path}>
+                          <span className="font-mono text-xs text-muted-foreground">{change.path}</span>
+                          <span className="block">{change.before} → {change.after}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {t("resources.detail.action.rollbackUnavailable", {
+                        reason: rollbackPreview?.reason ?? "revision_history_unavailable",
+                      })}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            ) : null}
             {failed ? (
               <Alert variant="destructive">
                 <AlertDescription>{t("resources.detail.action.failed")}</AlertDescription>
@@ -233,6 +286,8 @@ export function ResourceDetailActions({
                     disabled={
                       dialog?.capabilityId === "resource.delete" &&
                       (deletePreviewPending || deletePreview === null)
+                      || dialog?.capabilityId === "workload.rollback" &&
+                      (rollbackPreviewPending || selectedRollback(rollbackPreview, selectedRollbackUid) === null)
                     }
                     type="submit"
                   >
@@ -293,16 +348,34 @@ export function ResourceDetailActions({
     setDeletePreview(null);
     setDeletePreviewPending(false);
     setDeleteIdempotencyKey("");
+    setRollbackPreview(null);
+    setRollbackPreviewPending(false);
+    setSelectedRollbackUid("");
     setDialog(capability);
-    if (capability.capabilityId !== "resource.delete") return;
-    setDeletePreviewPending(true);
-    setDeleteIdempotencyKey(resourceActionIdempotencyKey("resource-delete"));
-    try {
-      setDeletePreview(await actionsPort.previewDeletion(capability));
-    } catch {
-      setFailed(true);
-    } finally {
-      setDeletePreviewPending(false);
+    if (capability.capabilityId === "resource.delete") {
+      setDeletePreviewPending(true);
+      setDeleteIdempotencyKey(resourceActionIdempotencyKey("resource-delete"));
+      try {
+        setDeletePreview(await actionsPort.previewDeletion(capability));
+      } catch {
+        setFailed(true);
+      } finally {
+        setDeletePreviewPending(false);
+      }
+    }
+    if (capability.capabilityId === "workload.rollback") {
+      setRollbackPreviewPending(true);
+      setExecutionKey(resourceActionIdempotencyKey("workload-rollback"));
+      try {
+        const preview = await actionsPort.previewRollback?.(capability);
+        if (preview === undefined) throw new Error("Rollback preview is unavailable");
+        setRollbackPreview(preview);
+        setSelectedRollbackUid(preview.revisions[0]?.resource.uid ?? "");
+      } catch {
+        setFailed(true);
+      } finally {
+        setRollbackPreviewPending(false);
+      }
     }
   }
 
@@ -357,18 +430,21 @@ export function ResourceDetailActions({
   }
 }
 
-function cronjobExecutionContext(
+function resourceActionExecutionContext(
   frame: ResourceCapabilitiesFrame,
   detail: ResourceDetail,
   capability: ResourceActionCapability,
   idempotencyKey: string | null,
+  rollbackPreview: WorkloadRollbackPreview | null,
+  selectedRollbackUid: string,
 ): ResourceActionExecutionContext | null {
-  if (!capability.capabilityId.startsWith("cronjob.")) return null;
+  const rollback = capability.capabilityId === "workload.rollback";
+  if (!capability.capabilityId.startsWith("cronjob.") && !rollback) return null;
   if (frame.phase !== "ready" || idempotencyKey === null) return null;
   const uid = detail.resource.uid;
   const apiIdentity = splitApiVersion(detail.resource.apiVersion);
   if (!uid || apiIdentity === null) return null;
-  return {
+  const context: ResourceActionExecutionContext = {
     capabilityId: capability.capabilityId,
     idempotencyKey,
     resourceId: frame.data.subject.resourceId,
@@ -383,6 +459,27 @@ function cronjobExecutionContext(
       uid,
     },
   };
+  if (!rollback) return context;
+  const selected = selectedRollback(rollbackPreview, selectedRollbackUid);
+  if (rollbackPreview === null || selected === null) return null;
+  return {
+    ...context,
+    resource: rollbackPreview.current.resource,
+    snapshotId: rollbackPreview.snapshotId,
+    rollback: {
+      workloadResourceVersion: rollbackPreview.current.resourceVersion,
+      targetRevision: selected.resource,
+      targetResourceVersion: selected.resourceVersion,
+      previewRevision: selected.previewRevision,
+    },
+  };
+}
+
+function selectedRollback(
+  preview: WorkloadRollbackPreview | null,
+  uid: string,
+): WorkloadRollbackRevision | null {
+  return preview?.revisions.find((item) => item.resource.uid === uid) ?? null;
 }
 
 function resourceActionIdempotencyKey(prefix = "resource-action"): string {

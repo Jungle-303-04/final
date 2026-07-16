@@ -14,6 +14,7 @@ import {
   getResourceIssues,
   getResourceCapabilities,
   getResourceDeletionPreview,
+  getWorkloadRollbackPreview,
   getResourceManifestSource,
   getResourceMetricsHistory,
   listFilteredResources,
@@ -77,6 +78,7 @@ export function loadResourcesSurface(
     createResourceCapabilitiesAdapter({ getResourceCapabilities }),
     createResourceActionsAdapter({
       getResourceDeletionPreview,
+      getWorkloadRollbackPreview,
       executeResourceCapability(capability, values, context, signal) {
         return executeResourceCapability(capability.path, values, context, signal);
       },

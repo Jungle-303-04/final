@@ -13,7 +13,7 @@ rules:
     resources: ["pods", "events", "nodes", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    resources: ["deployments", "replicasets", "controllerrevisions", "daemonsets", "statefulsets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "rollouts"]

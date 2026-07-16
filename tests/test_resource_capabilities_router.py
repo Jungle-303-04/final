@@ -80,6 +80,7 @@ class ResourceCapabilitiesDb:
         pod_exec_supported: bool = True,
         node_control_supported: bool = True,
         delete_supported: bool = False,
+        workload_rollback_supported: bool = False,
         management: bool = False,
         resource: dict[str, object] | None = None,
     ) -> None:
@@ -91,10 +92,12 @@ class ResourceCapabilitiesDb:
         self.pod_exec_supported = pod_exec_supported
         self.node_control_supported = node_control_supported
         self.delete_supported = delete_supported
+        self.workload_rollback_supported = workload_rollback_supported
         self.management = management
         self.resource = deployment_resource() if resource is None else resource
         self.lookups: list[tuple[str, str]] = []
         self.access_checks: list[tuple[str, str, str, str, str]] = []
+        self.revision_rows: list[dict[str, object]] = []
 
     def get_inventory_resource_by_key(
         self,
@@ -143,7 +146,12 @@ class ResourceCapabilitiesDb:
             capabilities.append("node_control.v1")
         if self.delete_supported:
             capabilities.append(Command.KUBERNETES_RESOURCE_DELETE_CAPABILITY)
+        if self.workload_rollback_supported:
+            capabilities.append(Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY)
         return [{"status": "connected", "capabilities": capabilities}]
+
+    def list_inventory_resources(self, **_kwargs: object) -> list[dict[str, object]]:
+        return [dict(row) for row in self.revision_rows]
 
     def get_cluster_registration(
         self,
@@ -260,6 +268,61 @@ def test_capabilities_projects_delete_only_with_exact_cas_and_agent_support() ->
     assert all(
         item["capability_id"] != "resource.delete" for item in unavailable.json()["capabilities"]
     )
+
+
+def test_capabilities_projects_rollback_only_from_complete_exact_revision_evidence() -> None:
+    current_template = {"spec": {"containers": [{"name": "api", "image": "checkout:v2"}]}}
+    resource = {
+        **deployment_resource(),
+        "api_version": "apps/v1",
+        "uid": "deployment-uid-1",
+        "resource_version": "42",
+        "raw": {
+            "pod_template": current_template,
+            "revision_history_complete": True,
+            "revision_history_count": 2,
+        },
+    }
+    db = ResourceCapabilitiesDb(
+        resource=resource,
+        workload_rollback_supported=True,
+    )
+    db.revision_rows = [
+        {
+            "inventory_key": f"revision-{number}",
+            "snapshot_id": "snapshot-42",
+            "cluster_id": "cluster-a",
+            "resource_type": "workload_revision",
+            "api_version": "apps/v1",
+            "kind": "ReplicaSet",
+            "namespace": "sandbox",
+            "name": f"checkout-api-r{number}",
+            "uid": f"revision-uid-{number}",
+            "resource_version": str(number),
+            "raw": {
+                "owner_kind": "Deployment",
+                "owner_name": "checkout-api",
+                "owner_uid": "deployment-uid-1",
+                "revision": str(number),
+                "template": template,
+            },
+        }
+        for number, template in (
+            (1, {"spec": {"containers": [{"name": "api", "image": "checkout:v1"}]}}),
+            (2, current_template),
+        )
+    ]
+
+    response = client(db).get("/capabilities", params={"resource": resource["inventory_key"]})
+
+    assert response.status_code == 200
+    rollback = next(
+        item
+        for item in response.json()["capabilities"]
+        if item["capability_id"] == "workload.rollback"
+    )
+    assert rollback["path"] == "/resource-rollbacks/resource-deployment-api"
+    assert rollback["realtime"] is True
 
 
 def test_capabilities_are_server_owned_execution_descriptors() -> None:

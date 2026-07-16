@@ -26,6 +26,7 @@ from domains.command.router import (
     restart_workload,
     resume_cronjob,
     retry_command,
+    rollback_workload,
     scale_deployment,
     scale_workload,
     suspend_cronjob,
@@ -34,6 +35,7 @@ from domains.command.router import (
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from domains.inventory.capabilities import resource_capabilities_response
+from domains.inventory.workload_revisions import workload_revision_history_response
 from packages.config.constants import Command
 from packages.contracts.gateway.requests import (
     AgentDebugQueryRequest,
@@ -46,6 +48,7 @@ from packages.contracts.gateway.requests import (
     CronJobControlRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
+    WorkloadRollbackRequest,
 )
 from packages.contracts.gateway.responses import AcceptedResponse
 from packages.contracts.parity import ResourceRef
@@ -64,6 +67,7 @@ class SpyAccessDb:
         self.calls: list[tuple[str, str, str, str, str]] = []
         self.inventory_resource: dict[str, object] | None = None
         self.agent_command: dict[str, object] | None = None
+        self.revision_rows: list[dict[str, object]] = []
 
     def user_has_resource_access(
         self,
@@ -100,6 +104,9 @@ class SpyAccessDb:
             return None
         return dict(resource)
 
+    def list_inventory_resources(self, **_kwargs: object) -> list[dict[str, object]]:
+        return [dict(row) for row in self.revision_rows]
+
     def list_cluster_agent_statuses(
         self,
         workspace_id: str,
@@ -111,7 +118,11 @@ class SpyAccessDb:
         return [
             {
                 "status": "connected",
-                "capabilities": ["command_receiver", Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY],
+                "capabilities": [
+                    "command_receiver",
+                    Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+                    Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY,
+                ],
             }
         ]
 
@@ -309,6 +320,84 @@ def cronjob_control_request(
             name="nightly",
             uid="cronjob-uid-1",
         ),
+    )
+
+
+def workload_rollback_request(db: SpyAccessDb) -> WorkloadRollbackRequest:
+    current_template = {
+        "metadata": {"labels": {"app": "checkout"}},
+        "spec": {"containers": [{"name": "api", "image": "checkout:v2"}]},
+    }
+    previous_template = {
+        "metadata": {"labels": {"app": "checkout"}},
+        "spec": {"containers": [{"name": "api", "image": "checkout:v1"}]},
+    }
+    db.inventory_resource = {
+        "inventory_key": "resource-deployment-checkout",
+        "snapshot_id": "snapshot-workload-42",
+        "workspace_id": "workspace-1",
+        "cluster_id": "cluster-1",
+        "resource_type": "workload",
+        "api_version": "apps/v1",
+        "kind": "Deployment",
+        "namespace": "sandbox",
+        "name": "checkout",
+        "uid": "deployment-uid-1",
+        "resource_version": "42",
+        "raw": {
+            "pod_template": current_template,
+            "revision_history_complete": True,
+            "revision_history_count": 2,
+        },
+    }
+    db.revision_rows = [
+        {
+            "inventory_key": f"revision-{number}",
+            "snapshot_id": "snapshot-workload-42",
+            "workspace_id": "workspace-1",
+            "cluster_id": "cluster-1",
+            "resource_type": "workload_revision",
+            "api_version": "apps/v1",
+            "kind": "ReplicaSet",
+            "namespace": "sandbox",
+            "name": f"checkout-r{number}",
+            "uid": f"revision-uid-{number}",
+            "resource_version": str(number),
+            "raw": {
+                "owner_kind": "Deployment",
+                "owner_name": "checkout",
+                "owner_uid": "deployment-uid-1",
+                "revision": str(number),
+                "template": template,
+            },
+        }
+        for number, template in ((1, previous_template), (2, current_template))
+    ]
+    decision = resource_capabilities_response(
+        db,
+        workspace_id="workspace-1",
+        current=current_session(),
+        resource=db.inventory_resource,
+    )
+    preview = workload_revision_history_response(
+        db,
+        workspace_id="workspace-1",
+        resource=db.inventory_resource,
+        cursor=0,
+        limit=20,
+    )
+    selected = preview.revisions[0]
+    return WorkloadRollbackRequest(
+        resource_id="resource-deployment-checkout",
+        snapshot_id=preview.snapshot_id,
+        capability_revision=decision.revision,
+        workload=preview.current.resource,
+        workload_resource_version=preview.current.resource_version,
+        target_revision=selected.resource,
+        target_resource_version=selected.resource_version,
+        preview_revision=selected.preview_revision,
+        confirmation=True,
+        reason="operator selected the exact observed revision",
     )
 
 
@@ -1259,6 +1348,72 @@ def test_cronjob_control_replays_the_original_receipt_for_one_idempotency_key() 
 
         assert replay == first
         assert replay_events.body is None
+
+    asyncio.run(run())
+
+
+def test_workload_rollback_queues_one_audited_exact_revision_command() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = workload_rollback_request(db)
+        events = SpyEvents()
+        operation_events = SpyOperationEvents()
+
+        response = await rollback_workload(
+            "resource-deployment-checkout",
+            payload,
+            "rollback-action-key-1",
+            current_session(),
+            db,
+            events,
+            operation_events,
+        )
+
+        assert response.accepted is True
+        assert response.audit_event_id == response.event_id
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == Command.KUBERNETES_DEPLOYMENT_ROLLBACK_ACTION
+        assert events.body.direct_execution is True
+        assert events.body.payload["workload_ref"]["uid"] == "deployment-uid-1"
+        assert events.body.payload["workload_resource_version"] == "42"
+        assert events.body.payload["target_revision_ref"]["uid"] == "revision-uid-1"
+        assert events.body.payload["target_revision_resource_version"] == "1"
+        assert events.body.payload["target_template"]["spec"]["containers"][0]["image"] == (
+            "checkout:v1"
+        )
+        assert events.body.diff.basis["preview_revision"] == payload.preview_revision
+        assert events.body.diff.basis["request_fingerprint"]
+        plan = build_plan(events.body, response.correlation_id)
+        assert (
+            plan.routing_constraint.required_capability
+            == Command.KUBERNETES_WORKLOAD_ROLLBACK_CAPABILITY
+        )
+        assert operation_events.published[0]["command_id"] == response.command_id
+
+    asyncio.run(run())
+
+
+def test_workload_rollback_rejects_stale_workload_cas_before_dispatch() -> None:
+    async def run() -> None:
+        db = SpyAccessDb(allowed=True)
+        payload = workload_rollback_request(db).model_copy(
+            update={"workload_resource_version": "stale-rv"}
+        )
+        events = SpyEvents()
+
+        with pytest.raises(HTTPException) as excinfo:
+            await rollback_workload(
+                "resource-deployment-checkout",
+                payload,
+                "rollback-action-key-2",
+                current_session(),
+                db,
+                events,
+                SpyOperationEvents(),
+            )
+
+        assert excinfo.value.status_code == 409
+        assert events.body is None
 
     asyncio.run(run())
 

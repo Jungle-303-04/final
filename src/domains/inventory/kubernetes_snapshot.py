@@ -19,6 +19,7 @@ def kubernetes_evidence_to_inventory_snapshot(
     collected_at = cluster.get("collected_at")
     resources = [
         *(_workload_resource(item) for item in _items(kubernetes, "workloads")),
+        *(_workload_revision_resource(item) for item in _items(kubernetes, "workload_revisions")),
         *(_pod_resource(item) for item in _items(kubernetes, "pods")),
         *(_node_resource(item, _items(kubernetes, "pods")) for item in _items(kubernetes, "nodes")),
         *(_service_resource(item) for item in _items(kubernetes, "services")),
@@ -215,6 +216,29 @@ def _workload_resource(item: JsonObject) -> JsonObject:
         "health": _health(healthy),
         "labels": _labels(item),
         "summary": item,
+        "raw": item,
+    }
+
+
+def _workload_revision_resource(item: JsonObject) -> JsonObject:
+    return {
+        "resource_type": "workload_revision",
+        "api_version": _text(item.get("api_version"), "apps/v1"),
+        "kind": _text(item.get("kind"), "ControllerRevision"),
+        "namespace": _text(item.get("namespace"), "default"),
+        "name": _text(item.get("name"), "revision"),
+        "uid": item.get("uid"),
+        "resource_version": item.get("resource_version"),
+        "status": _text(item.get("revision"), "observed"),
+        "health": "healthy",
+        "labels": {},
+        "summary": {
+            "owner_kind": item.get("owner_kind"),
+            "owner_name": item.get("owner_name"),
+            "owner_uid": item.get("owner_uid"),
+            "revision": item.get("revision"),
+            "created_at": item.get("created_at"),
+        },
         "raw": item,
     }
 

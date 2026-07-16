@@ -946,6 +946,38 @@ class ResourceDeletePreviewResponse(StrictModel):
         return self
 
 
+class WorkloadRollbackChange(StrictModel):
+    path: str = Field(min_length=1, max_length=500)
+    before: str = Field(max_length=500)
+    after: str = Field(max_length=500)
+
+
+class WorkloadRollbackCurrent(StrictModel):
+    resource: ResourceRef
+    resource_version: str = Field(min_length=1, max_length=253)
+    template_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class WorkloadRollbackRevision(StrictModel):
+    revision: str = Field(min_length=1, max_length=253)
+    resource: ResourceRef
+    resource_version: str = Field(min_length=1, max_length=253)
+    created_at: str | None = None
+    template_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    preview_revision: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    changes: list[WorkloadRollbackChange] = Field(default_factory=list, max_length=200)
+
+
+class WorkloadRevisionHistoryResponse(StrictModel):
+    availability: Literal["available", "unavailable"]
+    completeness: Literal["exact", "partial"]
+    reason: str | None = Field(default=None, max_length=160)
+    snapshot_id: str = Field(min_length=1)
+    current: WorkloadRollbackCurrent
+    revisions: list[WorkloadRollbackRevision] = Field(default_factory=list, max_length=50)
+    next_cursor: int | None = Field(default=None, ge=1)
+
+
 class ResourceManifestSourceChoice(StrictModel):
     application_id: str
     application_name: str

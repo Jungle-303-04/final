@@ -249,6 +249,7 @@ CLUSTER_WORKLOAD_SCALE_PATH = (
 CLUSTER_WORKLOAD_RESTART_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/workloads/{kind}/{workload}/restart"
 )
+RESOURCE_WORKLOAD_ROLLBACK_PATH = "/resource-rollbacks/{resource_id}"
 CLUSTER_NODE_CORDON_PATH = "/clusters/{cluster_id}/nodes/{node}/cordon"
 CLUSTER_NODE_UNCORDON_PATH = "/clusters/{cluster_id}/nodes/{node}/uncordon"
 CLUSTER_CRONJOB_TRIGGER_PATH = (
