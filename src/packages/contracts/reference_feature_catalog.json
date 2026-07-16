@@ -7335,14 +7335,16 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.sources.HelmChartSourcePage",
-      "frontendContract": "frontend/src/features/helm/helmEndpointContract.ts",
+      "frontendContract": "frontend/src/features/helm/helmChartSourcesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_chart_source_provider.py",
         "tests/test_helm_chart_source_router.py",
-        "frontend/src/pages/helm/HelmPage.test.tsx"
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/features/helm/createHelmChartSourcesAdapter.test.ts",
+        "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -7352,10 +7354,10 @@
           "test": "tests/test_helm_chart_source_router.py#test_source_list_materializes_per_source_workspace_rbac_before_pagination"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/features/helm/helmEndpointContract.ts",
-          "reason": "The Helm endpoint port has no chart-source list method and the Helm page has no repository catalog surface.",
-          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartSourcesPanel.tsx#HelmChartSourcesPanel",
+          "consumer": "frontend/src/features/helm/createHelmChartSourcesPort.ts#createHelmChartSourcesPort",
+          "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -7416,15 +7418,17 @@
       "streaming": false,
       "area": "helm-release-management",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.sources.HelmChartSourcePage",
-      "frontendContract": "frontend/src/features/helm/helmEndpointContract.ts",
+      "frontendContract": "frontend/src/features/helm/helmChartSourcesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_helm_chart_provider_fetch.py",
         "tests/test_helm_chart_source_provider.py",
         "tests/test_helm_chart_source_router.py",
-        "frontend/src/pages/helm/HelmPage.test.tsx"
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/features/helm/createHelmChartSourcesAdapter.test.ts",
+        "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -7434,10 +7438,10 @@
           "test": "tests/test_helm_chart_provider_fetch.py#test_oci_tag_fetch_uses_registry_api_and_returns_one_source_only"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/features/helm/helmEndpointContract.ts",
-          "reason": "The browser has no OCI source list adapter or user-managed source surface.",
-          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartSourcesPanel.tsx#HelmChartSourcesPanel",
+          "consumer": "frontend/src/features/helm/createHelmChartSourcesPort.ts#createHelmChartSourcesPort",
+          "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
@@ -7466,7 +7470,9 @@
       "verification": [
         "tests/test_helm_chart_source_provider.py",
         "tests/test_helm_chart_source_router.py",
-        "frontend/src/pages/helm/HelmPage.test.tsx"
+        "frontend/src/api/helm-chart-sources.test.ts",
+        "frontend/src/features/helm/createHelmChartSourcesAdapter.test.ts",
+        "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
       ],
       "coverage": {
         "backend": {
@@ -7477,10 +7483,11 @@
           "test": "tests/test_helm_chart_source_router.py#test_admin_source_registration_reuses_encrypted_workspace_credential"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/features/helm/helmEndpointContract.ts",
-          "reason": "The browser has no source registration or deletion contract, form, or post-mutation refetch.",
-          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmChartSourceRegistrationDialog.tsx#HelmChartSourceRegistrationDialog",
+          "consumer": "frontend/src/api/helm-chart-sources.ts#registerHelmChartSource",
+          "reason": "Registration and post-mutation refetch are implemented; deletion, command receipt, and mutation audit remain backend gaps.",
+          "test": "frontend/src/pages/helm/HelmChartSourcesPanel.test.tsx"
         },
         "desktop": null,
         "realtime": "not_required"
