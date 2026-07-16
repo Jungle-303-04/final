@@ -105,6 +105,14 @@ class SpyEvents:
         return SimpleNamespace(event=event)
 
 
+class SpyOperationEvents:
+    def __init__(self) -> None:
+        self.published: list[dict[str, object]] = []
+
+    async def publish(self, **event: object) -> None:
+        self.published.append(event)
+
+
 class ControlStageResult:
     def __init__(
         self, *, first: dict[str, object] | None = None, one: dict[str, object] | None = None
@@ -845,6 +853,7 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
 
     async def run() -> None:
         events = SpyEvents()
+        operation_events = SpyOperationEvents()
         response = await route(
             "cluster-1",
             "team-jobs",
@@ -856,6 +865,7 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
             current_session(),
             SpyAccessDb(allowed=True),
             events,
+            operation_events,
         )
 
         assert response.accepted is True
@@ -872,11 +882,34 @@ def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
             plan.routing_constraint.required_capability
             == Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY
         )
+        assert operation_events.published == [
+            {
+                "command_id": response.command_id,
+                "kind": "progress",
+                "payload": {
+                    "status": "queued",
+                    "cluster_id": "cluster-1",
+                    "action": action,
+                    "correlation_id": response.correlation_id,
+                },
+                "workspace_id": "workspace-1",
+            }
+        ]
 
     asyncio.run(run())
 
 
-def test_cronjob_control_requires_one_explicit_confirmation() -> None:
+@pytest.mark.parametrize(
+    "payload",
+    [
+        ConfirmedResourceActionRequest(),
+        ConfirmedResourceActionRequest(direct_execution=True),
+        ConfirmedResourceActionRequest(direct_execution_confirmed=True),
+    ],
+)
+def test_cronjob_control_requires_one_explicit_confirmation(
+    payload: ConfirmedResourceActionRequest,
+) -> None:
     async def run() -> None:
         events = SpyEvents()
         with pytest.raises(HTTPException) as excinfo:
@@ -884,7 +917,7 @@ def test_cronjob_control_requires_one_explicit_confirmation() -> None:
                 "cluster-1",
                 "sandbox",
                 "nightly",
-                ConfirmedResourceActionRequest(),
+                payload,
                 current_session(),
                 SpyAccessDb(allowed=True),
                 events,
@@ -900,6 +933,7 @@ def test_cronjob_control_requires_one_explicit_confirmation() -> None:
 def test_cronjob_direct_confirmation_allows_management_cluster() -> None:
     async def run() -> None:
         events = SpyEvents()
+        operation_events = SpyOperationEvents()
         response = await trigger_cronjob(
             "management-1",
             "sandbox",
@@ -908,12 +942,14 @@ def test_cronjob_direct_confirmation_allows_management_cluster() -> None:
             current_session(),
             SpyAccessDb(allowed=True, cluster_role="management"),
             events,
+            operation_events,
         )
 
         assert response.accepted is True
         assert isinstance(events.body, CommandRequestedBody)
         assert events.body.direct_execution is True
         assert events.body.direct_execution_confirmed is True
+        assert operation_events.published[0]["command_id"] == response.command_id
 
     asyncio.run(run())
 

@@ -1391,7 +1391,7 @@ class TargetClusterAgent:
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         api_group="batch",
         version="v1",
-        resource="cronjobs",
+        resource="jobs",
         verb="create",
         scope="user-workload",
         payload_model=KubernetesCronJobPayload,

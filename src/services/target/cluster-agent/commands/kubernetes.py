@@ -26,6 +26,8 @@ from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway.requests import StrictModel
 
 CORE_API_GROUP = "core"
+KUBERNETES_DNS_LABEL_MAX_LENGTH = 63
+KUBERNETES_GENERATED_NAME_SUFFIX_LENGTH = 5
 TARGET_CLUSTER_ROLE = "target"
 MANAGEMENT_CLUSTER_ROLE = "management"
 TARGET_AGENT_NAMESPACE = "target"
@@ -60,7 +62,30 @@ class KubernetesScalePayload(KubernetesGetPayload):
 
 
 class KubernetesCronJobPayload(KubernetesGetPayload):
-    pass
+    name: str = Field(
+        min_length=1,
+        max_length=52,
+        pattern=r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+    )
+
+
+def kubernetes_generate_name(
+    resource_name: str,
+    qualifier: str,
+    *,
+    max_length: int = KUBERNETES_DNS_LABEL_MAX_LENGTH,
+    generated_suffix_length: int = KUBERNETES_GENERATED_NAME_SUFFIX_LENGTH,
+) -> str:
+    """Return a bounded generateName prefix with room for the API suffix."""
+
+    infix = f"-{qualifier}-"
+    name_budget = max_length - generated_suffix_length - len(infix)
+    if name_budget < 1:
+        raise ValueError("Kubernetes generated name budget is invalid")
+    bounded_name = resource_name[:name_budget].rstrip("-")
+    if not bounded_name:
+        raise ValueError("Kubernetes generated name requires a resource name")
+    return f"{bounded_name}{infix}"
 
 
 def cronjob_job_body(cronjob: JsonObject, *, namespace: str, name: str) -> JsonObject:
@@ -82,7 +107,7 @@ def cronjob_job_body(cronjob: JsonObject, *, namespace: str, name: str) -> JsonO
     template_metadata = template_object.get("metadata")
     template_metadata_object = template_metadata if isinstance(template_metadata, dict) else {}
     job_metadata: JsonObject = {
-        "generateName": f"{name}-manual-",
+        "generateName": kubernetes_generate_name(name, "manual"),
         "namespace": namespace,
     }
     for field in ("labels", "annotations"):
@@ -145,7 +170,7 @@ class KubernetesCommandPolicy:
             raise PermissionError("user workload control is only enabled on target clusters")
         allowed = {
             ("apps", "v1", "deployments", "patch"),
-            ("batch", "v1", "cronjobs", "create"),
+            ("batch", "v1", "jobs", "create"),
             ("batch", "v1", "cronjobs", "patch"),
         }
         if (spec.api_group, spec.version, spec.resource, spec.verb) not in allowed:

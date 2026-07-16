@@ -4921,16 +4921,29 @@
       "streaming": false,
       "area": "resource-commands",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.parity.CommandRequest",
+      "frontendContract": "frontend/src/features/resources/resourceManifestContract.ts",
+      "desktopContract": null,
       "verification": [
         "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_target_agent_commands.py",
+        "tests/test_manifest_editor.py",
+        "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/command/router.py#commands",
+          "consumer": "src/services/target/cluster-agent/agent.py#apply_manifest_command",
+          "reason": "The command executor can apply one inspected desired_manifest, but no server-discovered create/apply capability accepts the upstream multi-document mode contract.",
+          "test": "tests/test_target_agent_commands.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceManifestEditor.tsx",
+          "reason": "The current editor intentionally emits a Safe PR and does not expose direct create/apply modes or an operation receipt.",
+          "test": "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4950,16 +4963,29 @@
       "streaming": false,
       "area": "resource-commands",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.requests.ResourceManifestApproveRequest",
+      "frontendContract": "frontend/src/features/resources/resourceManifestContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_manifest_editor.py",
+        "frontend/src/features/resources/createResourceManifestAdapter.test.ts",
+        "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/manifest_editor/router.py#approve_resource_manifest_edit",
+          "consumer": "src/domains/scm/events.py#SafePrRequestedBody",
+          "reason": "Identity-pinned YAML validation and diff exist, but the product contract writes through Safe PR instead of the direct authoritative object update.",
+          "test": "tests/test_manifest_editor.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceManifestEditor.tsx#ResourceManifestEditor",
+          "consumer": "frontend/src/features/resources/createResourceManifestAdapter.ts#createResourceManifestAdapter",
+          "reason": "The YAML editor, exact diff, stale-source guard, and confirmation UI are implemented; direct cluster update and command streaming are intentionally absent.",
+          "test": "frontend/src/pages/resources/ResourceManifestEditor.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -4978,17 +5004,28 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_command_catalog.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No exact resource delete action, UID/resourceVersion precondition, bulk receipt, or target-agent delete executor is registered.",
+          "test": "tests/test_command_catalog.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "The browser has no server-projected delete capability and must not infer destructive authority from resource kind.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5008,16 +5045,31 @@
       "streaming": false,
       "area": "resource-commands",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+      "desktopContract": null,
       "verification": [
         "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/command/router.py#restart_deployment",
+          "consumer": "src/services/target/cluster-agent/agent.py#rollout_restart_command",
+          "reason": "Deployment restart has RBAC, one-time confirmation, audit receipt, and durable operation events; StatefulSet and DaemonSet restart executors are not registered.",
+          "test": "tests/test_command_router.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "The generic server-owned action handoff is complete for Deployment, but other restartable workload kinds are not projected.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5037,16 +5089,30 @@
       "streaming": false,
       "area": "resource-commands",
       "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.gateway.requests.DeploymentScaleRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
+      "desktopContract": null,
       "verification": [
         "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
         "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "in_progress",
+          "destination": "src/domains/command/router.py#scale_deployment",
+          "consumer": "src/services/target/cluster-agent/agent.py#scale_deployment_command",
+          "reason": "Deployment scale is typed, bounded, confirmed, audited, and streamed; StatefulSet scale is not yet registered.",
+          "test": "tests/test_target_agent_commands.py"
+        },
+        "frontend": {
+          "state": "in_progress",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "The server-owned replica input and confirmation flow work for Deployment only.",
+          "test": "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5065,17 +5131,27 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_command_catalog.py",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command",
+          "reason": "No ReplicaSet or ControllerRevision history projection is exposed for an exact workload identity.",
+          "test": "tests/test_command_catalog.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "No server-backed revision selector or rollback preview contract exists.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5094,17 +5170,28 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_command_catalog.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No workload revision rollback action, typed payload, diff, or target-agent executor is registered.",
+          "test": "tests/test_command_catalog.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "Rollback remains hidden because no authorized revision capability can be discovered.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5123,25 +5210,32 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_command_catalog.py",
         "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
+        "frontend/src/features/operations/OperationStatusStore.test.ts",
         "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No CronJob trigger action, agent capability, exact Job receipt payload, or audited command executor is registered.",
-          "test": "tests/test_command_router.py"
+          "state": "in_progress",
+          "destination": "src/domains/command/router.py#trigger_cronjob",
+          "consumer": "src/services/target/cluster-agent/agent.py#trigger_cronjob_command",
+          "reason": "The typed action, dynamic namespace policy, exact CronJob template validation, Job creation, audit receipt, and operation stream are implemented; deployment RBAC packaging still needs an end-to-end cluster proof.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "The generic resource action handoff has no server-projected CronJob trigger capability and must not manufacture one in the browser.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "The browser consumes only the exact server-projected CronJob trigger descriptor, confirms once, and hands the receipt to the shared operation dock.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
@@ -5163,25 +5257,32 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "in_progress",
+      "backendContract": "packages.contracts.parity.CommandReceipt",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
+        "tests/test_command_catalog.py",
         "tests/test_command_router.py",
+        "tests/test_resource_capabilities_router.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
+        "frontend/src/features/operations/OperationStatusStore.test.ts",
         "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No CronJob suspend or resume action, agent capability, diff contract, or audited command executor is registered.",
-          "test": "tests/test_command_router.py"
+          "state": "in_progress",
+          "destination": "src/domains/command/router.py#suspend_cronjob",
+          "consumer": "src/services/target/cluster-agent/agent.py#set_cronjob_suspended",
+          "reason": "State-derived suspend or resume descriptors, typed patch commands, dynamic namespace policy, audit receipts, and operation streams are implemented; deployment RBAC packaging still needs an end-to-end cluster proof.",
+          "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "The browser has no server-projected CronJob suspend or resume capability and cannot infer it from resource kind alone.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
+          "consumer": "src/domains/inventory/action_catalog.py#applicable_resource_actions",
+          "reason": "The server exposes only suspend or resume from the observed CronJob spec, so the browser never infers schedule state.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
@@ -5203,17 +5304,27 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_command_catalog.py",
+        "tests/test_target_agent_commands.py"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No Node cordon or uncordon action, cluster-scoped RBAC decision, or target-agent patch executor exists.",
+          "test": "tests/test_command_catalog.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "No server-projected Node scheduling capability is exposed.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5232,17 +5343,28 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_command_catalog.py",
+        "tests/test_target_agent_commands.py",
+        "frontend/src/features/operations/OperationStatusStore.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No cancellable drain action, eviction option contract, PodDisruptionBudget handling, or progress-producing executor is registered.",
+          "test": "tests/test_command_catalog.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "The common operation dock can stream progress, but no Node drain capability or option form is available.",
+          "test": "frontend/src/features/operations/OperationStatusStore.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5261,17 +5383,27 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/PodTerminalDialog.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_terminal_gateway.py",
+        "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/terminal/router.py",
+          "reason": "The current terminal opens an existing container; no ephemeral-container debug mutation or resulting debug session receipt exists.",
+          "test": "tests/test_terminal_gateway.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/PodTerminalDialog.tsx",
+          "reason": "Existing Pod exec cannot be treated as an ephemeral debug container action.",
+          "test": "frontend/src/pages/resources/PodTerminalDialog.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5291,17 +5423,27 @@
       ],
       "streaming": false,
       "area": "resource-commands",
-      "deliveryStatus": "in_progress",
-      "backendContract": "domains.command",
-      "frontendContract": "frontend/src/features/resources",
-      "desktopContract": "desktop",
+      "deliveryStatus": "planned",
+      "backendContract": "packages.contracts.parity",
+      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "desktopContract": null,
       "verification": [
-        "tests/test_command_router.py",
-        "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+        "tests/test_command_catalog.py",
+        "tests/test_target_agent_commands.py"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/command/builtin_actions.py",
+          "reason": "No Node debug Pod lifecycle, cleanup action, session ownership, or target-agent executor is registered.",
+          "test": "tests/test_command_catalog.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+          "reason": "No Node debug session capability is exposed to the browser.",
+          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5371,16 +5513,26 @@
       "streaming": false,
       "area": "traffic-analysis",
       "deliveryStatus": "planned",
-      "backendContract": "domains.traffic",
-      "frontendContract": "frontend/src/pages/traffic",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.traffic.observations",
+      "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_traffic_router.py",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/traffic/router.py",
+          "reason": "Authorized scope coverage exists, but no agent-reported source detection catalog or freshness timestamp is persisted.",
+          "test": "tests/test_traffic_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
+          "reason": "The page truthfully reports collector absence and has no source wizard contract.",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5400,16 +5552,26 @@
       "streaming": false,
       "area": "traffic-analysis",
       "deliveryStatus": "planned",
-      "backendContract": "domains.traffic",
-      "frontendContract": "frontend/src/pages/traffic",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.traffic.observations",
+      "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_traffic_router.py",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/traffic/router.py",
+          "reason": "No workspace-cluster scoped source selection, agent capability validation, audit receipt, or cache invalidation contract exists.",
+          "test": "tests/test_traffic_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
+          "reason": "No server-authorized traffic source selector is rendered.",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5429,16 +5591,26 @@
       "streaming": false,
       "area": "traffic-analysis",
       "deliveryStatus": "planned",
-      "backendContract": "domains.traffic",
-      "frontendContract": "frontend/src/pages/traffic",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.traffic.observations",
+      "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_traffic_router.py",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/traffic/router.py",
+          "reason": "No target-agent traffic collector connection command or durable connection state projection exists.",
+          "test": "tests/test_traffic_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
+          "reason": "No connect command receipt, progress stream, or reconnect feedback is available.",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -5499,16 +5671,26 @@
       "streaming": false,
       "area": "traffic-analysis",
       "deliveryStatus": "planned",
-      "backendContract": "domains.traffic",
-      "frontendContract": "frontend/src/pages/traffic",
-      "desktopContract": "desktop",
+      "backendContract": "packages.contracts.traffic.observations",
+      "frontendContract": "frontend/src/features/traffic/trafficContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "tests/test_traffic_router.py",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "blocked",
+          "destination": "src/domains/traffic/router.py",
+          "reason": "No exact Pod or label identity NetworkPolicy evaluator is exposed from the Python traffic boundary.",
+          "test": "tests/test_traffic_router.py"
+        },
+        "frontend": {
+          "state": "blocked",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx",
+          "reason": "Flow details cannot request a policy verdict until collector-backed endpoints and an evaluator contract exist.",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

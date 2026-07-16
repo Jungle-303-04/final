@@ -1802,6 +1802,9 @@ def test_cronjob_trigger_uses_observed_template_and_advertised_capability(
     assert module.Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY in (
         module.AgentConfig.AGENT_CAPABILITIES
     )
+    registered = agent.command_registry.handlers[module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION]
+    assert registered.spec.kubernetes.resource == "jobs"
+    assert registered.spec.kubernetes.verb == "create"
     assert agent.kubernetes.gets == [
         {
             "api_group": "batch",
@@ -1819,6 +1822,41 @@ def test_cronjob_trigger_uses_observed_template_and_advertised_capability(
         created["body"]["metadata"]["annotations"]["opsia.io/source-cronjob-uid"] == "cronjob-uid-1"
     )
     assert created["body"]["spec"]["template"]["spec"]["restartPolicy"] == "Never"
+
+
+def test_cronjob_trigger_generate_name_reserves_the_kubernetes_suffix_boundary() -> None:
+    module = load_agent_module()
+    cronjob_name = "a" * 52
+    cronjob = {
+        "metadata": {
+            "name": cronjob_name,
+            "namespace": "team-jobs",
+            "uid": "cronjob-uid-1",
+        },
+        "spec": {
+            "jobTemplate": {
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [{"name": "job", "image": "example/job:v1"}],
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    body = module.cronjob_job_body(
+        cronjob,
+        namespace="team-jobs",
+        name=cronjob_name,
+    )
+    prefix = body["metadata"]["generateName"]
+
+    assert prefix.endswith("-manual-")
+    assert len(prefix) == 58
+    assert len(f"{prefix}abcde") == 63
 
 
 def test_cronjob_capability_is_hidden_when_direct_commands_are_disabled() -> None:

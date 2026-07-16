@@ -8,6 +8,7 @@ from commands.kubernetes import (
     KubernetesPatchPayload,
     KubernetesScalePayload,
     cronjob_job_body,
+    kubernetes_generate_name,
 )
 from commands.outbox import CommandResultOutbox, CommandResultRecord
 from commands.registry import (
@@ -29,6 +30,7 @@ __all__ = [
     "KubernetesPatchPayload",
     "KubernetesScalePayload",
     "cronjob_job_body",
+    "kubernetes_generate_name",
     "command",
     "command_handler",
     "kubernetes_command",
