@@ -119,8 +119,8 @@ jobs:
       - name: Prepare approved upstream delta evidence
         run: make reference-upstream-prepare
 
-      - name: Run strict web release governance
-        run: make release-governance-web
+      - name: Run incremental web patch governance
+        run: make release-governance-web-patch
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4

@@ -22,7 +22,7 @@ export REFERENCE_UI_BASE_REVISION
 export REFERENCE_UPSTREAM_GIT
 export REFERENCE_UPSTREAM_REPOSITORY
 
-.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
+.PHONY: help setup setup-hooks env local-test-env local-up local-smoke sync hooks doctor lint format test manifest-check product-brand-boundary-check reference-ledger reference-ledger-check reference-feature-ledger reference-feature-ledger-check reference-upstream-prepare reference-ui-delta-ledger reference-ui-delta-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check reference-feature-web-parity-check reference-feature-post-parity-check release-governance release-governance-web release-governance-web-patch gate gate-fast events event-bus-equivalence crash-test check build-image up install-telemetry down status smoke demo scale kill-pod external-instances external-kubeconfig cluster-interactions aws-up aws-down clean
 
 help: ## 사용 가능한 명령어 출력
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -125,6 +125,8 @@ reference-feature-post-parity-check: reference-ui-delta-rebaseline-check ## 기�
 release-governance: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-parity-check ## 출하 차단용 최신 원본 동등성 gate
 
 release-governance-web: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-web-parity-check ## 웹 운영 배포용 최신 원본 동등성 gate
+
+release-governance-web-patch: reference-ledger-check reference-ui-delta-rebaseline-check reference-feature-ledger-check ## Dev 증분 패치용 원본 무결성·계약 구조 gate
 
 gate: product-brand-boundary-check reference-ledger-check reference-feature-ledger-check ## PR 진단용 백엔드·manifest·프론트 전체 gate
 	bash scripts/test.sh

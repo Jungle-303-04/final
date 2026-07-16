@@ -27,18 +27,19 @@ const FEATURE_IDS = [
 const IMPLEMENTED = new Set([
   "reference.feature.042",
   "reference.feature.065",
+  "reference.feature.114",
+  "reference.feature.115",
   "reference.feature.117",
   "reference.feature.119",
+  "reference.feature.123",
 ]);
 
 const PROVIDER_BLOCKED = new Set([
   "reference.feature.039",
   "reference.feature.040",
   "reference.feature.041",
-  "reference.feature.114",
   "reference.feature.121",
   "reference.feature.122",
-  "reference.feature.123",
 ]);
 
 test("Home, Issues, Applications, Topology, and Timeline rows own one source decision", async () => {

@@ -5167,7 +5167,7 @@
       "streaming": false,
       "area": "cluster-insights",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses",
       "frontendContract": "frontend/src/features/home/homeContract.ts",
       "desktopContract": null,
@@ -5178,15 +5178,15 @@
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
-          "reason": "Observed per-resource certificate fields may be returned, but no authorized expiry summary, completeness model, or bounded Secret collection exists.",
-          "test": "scripts/reference-home-insights-parity.test.mjs"
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#cluster_home_insights",
+          "consumer": "src/domains/inventory/certificate_expiry.py#project_certificate_expiry_summary",
+          "test": "tests/test_certificate_expiry_projection.py"
         },
         "frontend": {
-          "state": "blocked",
-          "destination": "frontend/src/pages/home/HomePage.tsx#HomePage",
-          "reason": "No certificate health card consumes a server summary; the browser does not parse Secret data to derive expiry.",
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/HomeInsightsBand.tsx#HomeInsightsBand",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
           "test": "frontend/src/pages/home/HomePage.test.tsx"
         },
         "desktop": null,

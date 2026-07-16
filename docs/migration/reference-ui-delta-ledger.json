@@ -9720,20 +9720,24 @@
           "motion": null,
           "opsiaPort": {
             "destinations": [
-              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/pages/home/HomeInsightsBand.tsx",
+              "frontend/src/features/home/createHomeAdapter.ts",
               "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
-              "src/domains/inventory/router.py"
+              "src/domains/dashboard/fleet_router.py",
+              "src/domains/inventory/certificate_expiry.py",
+              "src/domains/inventory/repository.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.gateway.responses",
-              "domains.inventory.router"
+              "domains.dashboard.fleet_router",
+              "domains.inventory.repository"
             ],
             "plannedTestIds": [
               "home.optional-capabilities.contract-gate"
             ],
-            "state": "blocked",
-            "blockedReason": "Per-resource provider detail can render observed certificate fields, but no authorized certificate-expiry summary endpoint, completeness model, or Home card exists.",
-            "rationale": "The product does not scan Secret manifests or derive expiry buckets in the browser."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The authorized Home projection matches observed TLS Secret identity to cert-manager Certificate status.notAfter, bounds returned rows, exposes completeness, and never reads or returns Secret data."
           }
         },
         {
