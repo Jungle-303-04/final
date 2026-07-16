@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 181,
+  "pendingCount": 174,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -1833,14 +1833,14 @@
           "realtime": null,
           "motion": null,
           "opsiaPort": {
-        "destinations": [
-          "frontend/src/app/LogStreamTab.tsx",
-          "frontend/src/features/log-stream/logStreamContract.ts",
-          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
-          "frontend/src/app/LogStreamTab.test.tsx",
-          "src/packages/contracts/log_stream.py",
-          "src/domains/log_stream/service.py",
-          "tests/test_log_stream.py"
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/app/LogStreamTab.test.tsx",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/service.py",
+              "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -1849,9 +1849,9 @@
             "plannedTestIds": [
               "logs.viewer.empty-diagnostic"
             ],
-        "state": "in_progress",
-        "blockedReason": null,
-        "rationale": "The Python terminal envelope now supplies a typed diagnostic and server-built read-only recovery command for the authorized target. The browser maps and renders it as copy-only content and never executes it."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python terminal envelope now supplies a typed diagnostic and server-built read-only recovery command for the authorized target. The browser maps and renders it as copy-only content and never executes it."
           }
         }
       ]
@@ -1964,15 +1964,15 @@
           "realtime": null,
           "motion": null,
           "opsiaPort": {
-        "destinations": [
-          "frontend/src/app/LogStreamTab.tsx",
-          "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
-          "frontend/src/features/bottom-dock/bottomDockState.ts",
-          "frontend/src/features/log-stream/logStreamContract.ts",
-          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
-          "src/packages/contracts/log_stream.py",
-          "src/domains/log_stream/service.py",
-          "tests/test_log_stream.py"
+            "destinations": [
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/features/bottom-dock/bottomDockState.ts",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/service.py",
+              "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -1981,9 +1981,9 @@
             "plannedTestIds": [
               "logs.workload.empty-diagnostic"
             ],
-        "state": "in_progress",
-        "blockedReason": null,
-        "rationale": "Workload terminal events now carry the same typed server diagnostic as pod streams. The bounded dock state retains the diagnostic and the viewer exposes only a copy action for the authorized read-only command."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Workload terminal events now carry the same typed server diagnostic as pod streams. The bounded dock state retains the diagnostic and the viewer exposes only a copy action for the authorized read-only command."
           }
         }
       ]
@@ -6282,18 +6282,18 @@
           },
           "motion": null,
           "opsiaPort": {
-        "destinations": [
-          "frontend/src/api/log-stream.ts",
-          "frontend/src/api/log-stream-schemas.ts",
-          "frontend/src/app/LogStreamTab.tsx",
-          "frontend/src/features/log-stream/logStreamContract.ts",
-          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
-          "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
-          "src/packages/contracts/log_stream.py",
-          "src/domains/log_stream/router.py",
-          "src/domains/log_stream/service.py",
-          "src/domains/inventory/repository.py",
-          "tests/test_log_stream.py"
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/api/log-stream-schemas.ts",
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py",
+              "src/domains/log_stream/service.py",
+              "src/domains/inventory/repository.py",
+              "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -6302,9 +6302,9 @@
             "plannedTestIds": [
               "logs.scheduled-run.target"
             ],
-        "state": "in_progress",
-        "blockedReason": null,
-        "rationale": "The browser now routes a server-issued immutable run UID through the typed scheduled endpoint. Python re-resolves the owner/run UID and exact pod ownership before every persisted stream batch; final page-level picker composition remains in progress."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The browser now routes a server-issued immutable run UID through the typed scheduled endpoint. Python re-resolves the owner/run UID and exact pod ownership before every persisted stream batch; final page-level picker composition remains in progress."
           }
         }
       ]
@@ -6766,19 +6766,19 @@
           },
           "motion": null,
           "opsiaPort": {
-        "destinations": [
-          "frontend/src/api/log-stream.ts",
-          "frontend/src/api/log-stream-schemas.ts",
-          "frontend/src/app/LogStreamTab.tsx",
-          "frontend/src/features/log-stream/logStreamContract.ts",
-          "frontend/src/features/log-stream/createLogStreamAdapter.ts",
-          "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
-          "src/packages/contracts/log_stream.py",
-          "src/domains/log_stream/router.py",
-          "src/domains/log_stream/service.py",
-          "src/domains/inventory/repository.py",
-          "src/services/target/cluster-agent/providers/kubernetes_providers.py",
-          "tests/test_log_stream.py"
+            "destinations": [
+              "frontend/src/api/log-stream.ts",
+              "frontend/src/api/log-stream-schemas.ts",
+              "frontend/src/app/LogStreamTab.tsx",
+              "frontend/src/features/log-stream/logStreamContract.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.ts",
+              "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+              "src/packages/contracts/log_stream.py",
+              "src/domains/log_stream/router.py",
+              "src/domains/log_stream/service.py",
+              "src/domains/inventory/repository.py",
+              "src/services/target/cluster-agent/providers/kubernetes_providers.py",
+              "tests/test_log_stream.py"
             ],
             "requiredBackendContracts": [
               "packages.contracts.log_stream",
@@ -6787,9 +6787,9 @@
             "plannedTestIds": [
               "logs.scheduled-run.target"
             ],
-        "state": "in_progress",
-        "blockedReason": null,
-        "rationale": "The Python catalog now returns retained executions, observed lifecycle counts, a server-selected default run, coverage reasons, and immutable resource references from two bounded queries. The strict browser schema consumes that catalog without deriving Job or pod names; final page-level picker composition remains in progress."
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python catalog now returns retained executions, observed lifecycle counts, a server-selected default run, coverage reasons, and immutable resource references from two bounded queries. The strict browser schema consumes that catalog without deriving Job or pod names; final page-level picker composition remains in progress."
           }
         }
       ]
