@@ -1,0 +1,127 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const ROOT = new URL("../", import.meta.url);
+
+async function readJson(path) {
+  return JSON.parse(await readFile(new URL(path, ROOT), "utf8"));
+}
+
+const FEATURE_IDS = Array.from(
+  { length: 40 },
+  (_, index) => `reference.feature.${String(index + 124).padStart(3, "0")}`,
+);
+
+const IMPLEMENTED = new Set([
+  "reference.feature.126",
+  "reference.feature.128",
+  "reference.feature.146",
+  "reference.feature.156",
+  "reference.feature.157",
+  "reference.feature.158",
+  "reference.feature.159",
+]);
+
+const PROVIDER_BLOCKED = new Set([
+  "reference.feature.127",
+  "reference.feature.129",
+  "reference.feature.130",
+  "reference.feature.131",
+  "reference.feature.132",
+  "reference.feature.133",
+  "reference.feature.134",
+  "reference.feature.135",
+  "reference.feature.136",
+  "reference.feature.137",
+  "reference.feature.138",
+  "reference.feature.139",
+  "reference.feature.140",
+  "reference.feature.141",
+  "reference.feature.142",
+  "reference.feature.147",
+  "reference.feature.148",
+  "reference.feature.149",
+  "reference.feature.150",
+  "reference.feature.153",
+  "reference.feature.160",
+  "reference.feature.162",
+  "reference.feature.163",
+]);
+
+test("resource, metrics, logs, and service access rows own immutable source evidence", async () => {
+  const [ports, aliases, classifications, ledger] = await Promise.all([
+    readJson("docs/migration/reference-feature-port-map.json"),
+    readJson("docs/migration/reference-feature-source-aliases.json"),
+    readJson("docs/migration/reference-ui-delta-classifications.json"),
+    readJson("docs/migration/reference-feature-ledger.json"),
+  ]);
+  const sourceOwners = new Map();
+  for (const [path, classification] of Object.entries(classifications.classifications)) {
+    for (const interaction of classification.interactions ?? []) {
+      for (const contractId of interaction.legacyContractIds ?? []) {
+        assert.equal(sourceOwners.has(contractId), false, `${contractId} source owner is duplicated`);
+        sourceOwners.set(contractId, { path, sourceKey: interaction.sourceKey });
+      }
+    }
+  }
+  const ledgerById = new Map(
+    ledger.features.map((feature) => [feature.contractId, feature]),
+  );
+
+  for (const contractId of FEATURE_IDS) {
+    const port = ports.features[contractId];
+    const sourceKey = aliases.aliases[contractId];
+    const feature = ledgerById.get(contractId);
+    assert.ok(port, `${contractId} requires an explicit port decision`);
+    assert.match(sourceKey, /^upstream-ui:[a-z0-9][a-z0-9:-]+:v1$/, contractId);
+    assert.equal(sourceOwners.get(contractId)?.sourceKey, sourceKey, contractId);
+    assert.equal(feature?.sourceKey, sourceKey, contractId);
+    assert.equal(feature?.deliveryStatus, port.deliveryStatus, contractId);
+    assert.ok(port.coverage?.backend, `${contractId} requires backend coverage`);
+    assert.ok(port.coverage?.frontend, `${contractId} requires frontend coverage`);
+
+    if (IMPLEMENTED.has(contractId)) {
+      assert.equal(port.deliveryStatus, "implemented", contractId);
+      assert.ok(
+        ["implemented", "not_required"].includes(port.coverage.backend.state),
+        contractId,
+      );
+      assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    } else {
+      assert.equal(port.deliveryStatus, "in_progress", contractId);
+    }
+  }
+});
+
+test("unavailable providers and deferred native port sessions remain explicit", async () => {
+  const ports = await readJson("docs/migration/reference-feature-port-map.json");
+  for (const contractId of PROVIDER_BLOCKED) {
+    const coverage = ports.features[contractId].coverage;
+    const blocked = Object.values(coverage).filter((item) => item?.state === "blocked");
+    assert.ok(blocked.length > 0, `${contractId} requires a blocked boundary`);
+    assert.ok(
+      blocked.every((item) => typeof item.reason === "string" && item.reason.length > 0),
+      `${contractId} requires an actionable blocked reason`,
+    );
+  }
+  for (const contractId of [
+    "reference.feature.160",
+    "reference.feature.162",
+    "reference.feature.163",
+  ]) {
+    assert.equal(ports.features[contractId].coverage.desktop.state, "blocked", contractId);
+  }
+});
+
+test("pod and workload stream parity uses bounded authenticated realtime contracts", async () => {
+  const ports = await readJson("docs/migration/reference-feature-port-map.json");
+  for (const contractId of [
+    "reference.feature.156",
+    "reference.feature.157",
+    "reference.feature.158",
+    "reference.feature.159",
+  ]) {
+    assert.equal(ports.features[contractId].coverage.realtime.state, "implemented", contractId);
+  }
+});
