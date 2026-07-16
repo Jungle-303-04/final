@@ -37,7 +37,38 @@ class ChangeTimelineApiDb:
 
     def list_change_timeline_evidence(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(dict(kwargs))
-        return {
+        if self.overflow:
+            all_events = [
+                {
+                    "id": f"inventory:{index}",
+                    "kind": "inventory_event",
+                    "occurredMs": FROM_MS + index,
+                    "title": f"Pod checkout change {index}",
+                    "severity": "warning" if index % 10 == 0 else "info",
+                }
+                for index in range(1_503)
+            ]
+            selected_events = [
+                event
+                for event in all_events
+                if int(kwargs["from_ms"]) <= event["occurredMs"] < int(kwargs["to_ms"])
+            ]
+            return {
+                "events": selected_events[:1_000],
+                "observations": [
+                    observation
+                    for observation in (
+                        {"cluster_id": "cluster-a", "observed_ms": FROM_MS + 10_000},
+                        {"cluster_id": "cluster-b", "observed_ms": FROM_MS + 11_000},
+                        {"cluster_id": "cluster-a", "observed_ms": FROM_MS + 130_000},
+                        {"cluster_id": "cluster-b", "observed_ms": FROM_MS + 131_000},
+                    )
+                    if int(kwargs["from_ms"]) <= observation["observed_ms"] < int(kwargs["to_ms"])
+                ],
+                "event_overflow": len(selected_events) > 1_000,
+                "observation_overflow": False,
+            }
+        evidence = {
             "events": [
                 {
                     "id": "incident:incident-a",
@@ -63,6 +94,7 @@ class ChangeTimelineApiDb:
             "event_overflow": self.overflow,
             "observation_overflow": False,
         }
+        return evidence
 
 
 def _client(db: ChangeTimelineApiDb) -> TestClient:
@@ -170,7 +202,7 @@ def test_change_timeline_rejects_unauthorized_filter_before_query() -> None:
     assert db.calls == []
 
 
-def test_change_timeline_rejects_unbounded_or_overflowing_reads() -> None:
+def test_change_timeline_rejects_unbounded_reads_but_serves_capped_overflow_details() -> None:
     db = ChangeTimelineApiDb(overflow=True)
     client = _client(db)
 
@@ -199,8 +231,16 @@ def test_change_timeline_rejects_unbounded_or_overflowing_reads() -> None:
     assert reversed_window.status_code == 422
     assert too_wide.status_code == 422
     assert invalid_epoch.status_code == 422
-    assert overflow.status_code == 422
-    assert "bounded read limit" in overflow.text
+    assert overflow.status_code == 200
+    assert len(overflow.json()["events"]) == 1_503
+    assert overflow.json()["buckets"][0] == {
+        "startMs": FROM_MS,
+        "endMs": FROM_MS + BUCKET_MS,
+        "total": 1_503,
+        "warnings": 151,
+    }
+    assert len(db.calls) > 1
+    assert all(call["from_ms"] < call["to_ms"] for call in db.calls)
 
 
 def test_change_timeline_openapi_owns_the_exact_bq057_contract() -> None:
