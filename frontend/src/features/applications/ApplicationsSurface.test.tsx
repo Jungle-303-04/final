@@ -230,8 +230,8 @@ describe("S10 Applications surface", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Deployment instance scope" }));
-    expect(screen.getByRole("option", { name: /stage.*Connection delayed/i })).toBeTruthy();
-    await user.click(screen.getByRole("option", { name: /prod.*Live connection/i }));
+    expect(await screen.findByRole("option", { name: /stage.*Connection delayed/i })).toBeTruthy();
+    await user.click(await screen.findByRole("option", { name: /prod.*Live connection/i }));
     await waitFor(() => expect(screen.getByTestId("location").textContent)
       .toContain("instance=binding-prod"));
     await waitFor(() => expect(getApplication).toHaveBeenCalledWith(
