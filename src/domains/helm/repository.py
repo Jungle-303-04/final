@@ -58,6 +58,14 @@ class HelmOwnedResourceObservationBatch:
     truncated: bool
 
 
+@dataclass(frozen=True)
+class HelmChartSourceRecordBatch:
+    """Bounded internal source rows used only after workspace RBAC filtering."""
+
+    rows: tuple[dict[str, Any], ...]
+    truncated: bool
+
+
 class HelmReleaseRepository(DatabaseConnection):
     """Read current Helm storage labels without reading Secret data."""
 
@@ -219,6 +227,45 @@ class HelmReleaseRepository(DatabaseConnection):
         with self.connection() as conn:
             row = conn.execute(statement).mappings().first()
         return dict(row) if row is not None else None
+
+    def list_helm_chart_source_records(
+        self,
+        *,
+        workspace_id: str,
+        source_ids: Collection[str] | None,
+        limit: int,
+    ) -> HelmChartSourceRecordBatch:
+        """Read active authorized provider records with an explicit hard bound."""
+
+        effective_limit = max(1, int(limit))
+        if not workspace_id:
+            return HelmChartSourceRecordBatch(rows=(), truncated=False)
+        table = HelmChartSourceRecord.__table__
+        statement = select(
+            table.c.source_id,
+            table.c.workspace_id,
+            table.c.provider,
+            table.c.name,
+            table.c.canonical_ref,
+            table.c.credential_ref,
+            table.c.status,
+            table.c.updated_at,
+        ).where(
+            table.c.workspace_id == workspace_id,
+            table.c.status == "active",
+        )
+        if source_ids is not None:
+            allowed_source_ids = _ids(source_ids)
+            if not allowed_source_ids:
+                return HelmChartSourceRecordBatch(rows=(), truncated=False)
+            statement = statement.where(table.c.source_id.in_(allowed_source_ids))
+        statement = statement.order_by(table.c.source_id).limit(effective_limit + 1)
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+        return HelmChartSourceRecordBatch(
+            rows=tuple(rows[:effective_limit]),
+            truncated=len(rows) > effective_limit,
+        )
 
     def delete_helm_chart_source(
         self,

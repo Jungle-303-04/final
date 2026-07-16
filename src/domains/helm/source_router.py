@@ -104,7 +104,7 @@ async def list_helm_chart_sources(
     db: Any = Depends(get_db),
 ) -> HelmChartSourcePage:
     workspace_id = _workspace_id(current)
-    source_ids = await _accessible_source_ids(
+    source_ids = await accessible_helm_chart_source_ids(
         db,
         current,
         workspace_id,
@@ -112,7 +112,7 @@ async def list_helm_chart_sources(
     )
     delete_ids: set[str] | None = set()
     if ServiceRole.SERVICE_ADMIN.value in tuple(getattr(current, "roles", ()) or ()):
-        delete_ids = await _accessible_source_ids(
+        delete_ids = await accessible_helm_chart_source_ids(
             db,
             current,
             workspace_id,
@@ -268,7 +268,7 @@ async def get_helm_chart_source_versions(
     source = helm_chart_source_from_row(row)
     try:
         credential = await asyncio.to_thread(
-            _load_provider_credential,
+            load_helm_provider_credential,
             db,
             workspace_id,
             row,
@@ -292,7 +292,7 @@ def _workspace_id(current: Any) -> str:
     return str(getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID) or DEFAULT_WORKSPACE_ID)
 
 
-async def _accessible_source_ids(
+async def accessible_helm_chart_source_ids(
     db: Any,
     current: Any,
     workspace_id: str,
@@ -416,7 +416,7 @@ def _register_chart_source(
         )
 
 
-def _load_provider_credential(
+def load_helm_provider_credential(
     db: Any,
     workspace_id: str,
     row: dict[str, Any],

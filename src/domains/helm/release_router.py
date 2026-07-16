@@ -30,6 +30,16 @@ from domains.command.router import (
 from domains.gitops.events import Diff
 from domains.helm.release_projection import helm_release_detail, helm_release_list
 from domains.helm.repository import HelmOwnedResourceObservationBatch
+from domains.helm.source_provider import HelmChartVersionProvider
+from domains.helm.source_router import get_helm_chart_version_provider
+from domains.helm.upgrade_projection import (
+    helm_release_upgrade_info,
+    helm_release_version_list,
+)
+from domains.helm.upgrade_service import (
+    helm_release_upgrade_key,
+    resolve_helm_release_catalogs,
+)
 from domains.identity.dependencies import (
     require_cluster_access,
     require_session,
@@ -45,11 +55,15 @@ from packages.contracts.helm import (
     HELM_ARTIFACT_MAX_ACTIVE_PER_CLUSTER,
     HELM_RELEASE_ARTIFACT_READ_ACTION,
     HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+    HELM_UPGRADE_BATCH_MAX_RELEASES,
     HelmArtifactCommandPayload,
     HelmArtifactReadRequest,
     HelmFeatureAvailability,
     HelmReleaseCommands,
+    HelmReleaseUpgradeBatch,
+    HelmReleaseUpgradeInfo,
     HelmReleaseUpgradeRequest,
+    HelmReleaseVersionList,
     HelmUpgradeInput,
     HelmUpgradeTarget,
 )
@@ -209,6 +223,96 @@ async def get_helm_release(
     )
     return detail.model_copy(
         update={"detail": detail.detail.model_copy(update={"commands": commands})}
+    )
+
+
+@router.get(
+    gateway_routes.HELM_RELEASE_UPGRADE_INFO_PATH,
+    response_model=HelmReleaseUpgradeInfo,
+)
+async def get_helm_release_upgrade_info(
+    namespace: str,
+    release_name: str,
+    cluster_id: str = Query(min_length=1),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmReleaseUpgradeInfo:
+    detail = await get_helm_release(namespace, release_name, cluster_id, current, db)
+    release = detail.detail.release
+    catalogs = await resolve_helm_release_catalogs(
+        db=db,
+        current=current,
+        releases=(release,),
+        provider=provider,
+    )
+    return helm_release_upgrade_info(
+        chart_name=release.chart,
+        current_version=release.chart_version,
+        resolution=catalogs[helm_release_upgrade_key(release)],
+    )
+
+
+@router.get(
+    gateway_routes.HELM_RELEASE_VERSIONS_PATH,
+    response_model=HelmReleaseVersionList,
+)
+async def get_helm_release_versions(
+    namespace: str,
+    release_name: str,
+    cluster_id: str = Query(min_length=1),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmReleaseVersionList:
+    detail = await get_helm_release(namespace, release_name, cluster_id, current, db)
+    release = detail.detail.release
+    catalogs = await resolve_helm_release_catalogs(
+        db=db,
+        current=current,
+        releases=(release,),
+        provider=provider,
+    )
+    return helm_release_version_list(
+        chart_name=release.chart,
+        current_version=release.chart_version,
+        resolution=catalogs[helm_release_upgrade_key(release)],
+    )
+
+
+@router.get(
+    gateway_routes.HELM_UPGRADE_CHECK_PATH,
+    response_model=HelmReleaseUpgradeBatch,
+)
+async def get_helm_upgrade_check(
+    clusters: str | None = Query(default=None),
+    namespaces: str | None = Query(default=None),
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    provider: HelmChartVersionProvider = Depends(get_helm_chart_version_provider),
+) -> HelmReleaseUpgradeBatch:
+    release_list = await get_helm_releases(clusters, namespaces, current, db)
+    selected = release_list.releases[:HELM_UPGRADE_BATCH_MAX_RELEASES]
+    truncated = len(release_list.releases) > len(selected)
+    catalogs = await resolve_helm_release_catalogs(
+        db=db,
+        current=current,
+        releases=selected,
+        provider=provider,
+    )
+    return HelmReleaseUpgradeBatch(
+        releases={
+            helm_release_upgrade_key(release): helm_release_upgrade_info(
+                chart_name=release.chart,
+                current_version=release.chart_version,
+                resolution=catalogs[helm_release_upgrade_key(release)],
+            )
+            for release in selected
+        },
+        coverage=release_list.coverage,
+        truncated=truncated,
+        reason_codes=("helm_upgrade_batch_truncated",) if truncated else (),
+        refresh_after_seconds=release_list.refresh_after_seconds,
     )
 
 

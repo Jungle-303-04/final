@@ -17,6 +17,7 @@ from packages.contracts.helm.sources import HelmChartSource, HelmChartVersion
 from packages.contracts.parity import ClusterScope, ResourceRef
 
 HelmAvailability = Literal["available", "partial", "unavailable"]
+HELM_UPGRADE_BATCH_MAX_RELEASES = 100
 
 
 class HelmObservationCoverage(StrictModel):
@@ -216,6 +217,7 @@ class HelmReleaseUpgradeInfo(StrictModel):
     source: HelmChartSource | None = None
     observed_at: str | None = None
     reason_codes: tuple[str, ...] = ()
+    refresh_after_seconds: int = Field(ge=1, le=3600)
 
     @model_validator(mode="after")
     def availability_is_consistent(self) -> HelmReleaseUpgradeInfo:
@@ -252,6 +254,7 @@ class HelmReleaseVersionList(StrictModel):
     observed_at: str | None = None
     truncated: bool = False
     reason_codes: tuple[str, ...] = ()
+    refresh_after_seconds: int = Field(ge=1, le=3600)
 
     @model_validator(mode="after")
     def availability_is_consistent(self) -> HelmReleaseVersionList:
@@ -271,6 +274,27 @@ class HelmReleaseVersionList(StrictModel):
             raise ValueError("available Helm versions cannot contain reasons")
         if self.truncated and "helm_chart_versions_truncated" not in self.reason_codes:
             raise ValueError("truncated Helm versions require the truncation reason")
+        return self
+
+
+class HelmReleaseUpgradeBatch(StrictModel):
+    """Bounded multi-cluster release upgrade decoration."""
+
+    releases: dict[str, HelmReleaseUpgradeInfo] = Field(
+        default_factory=dict,
+        max_length=HELM_UPGRADE_BATCH_MAX_RELEASES,
+    )
+    coverage: HelmObservationCoverage
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+    refresh_after_seconds: int = Field(ge=1, le=3600)
+
+    @model_validator(mode="after")
+    def truncation_is_explicit(self) -> HelmReleaseUpgradeBatch:
+        if self.truncated and "helm_upgrade_batch_truncated" not in self.reason_codes:
+            raise ValueError("truncated Helm upgrade batch requires a reason")
+        if not self.truncated and "helm_upgrade_batch_truncated" in self.reason_codes:
+            raise ValueError("Helm upgrade batch truncation reason requires truncation")
         return self
 
 

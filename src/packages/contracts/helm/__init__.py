@@ -16,6 +16,7 @@ from packages.contracts.helm.artifacts import (
     HelmResourcesDiff,
 )
 from packages.contracts.helm.releases import (
+    HELM_UPGRADE_BATCH_MAX_RELEASES,
     HelmAvailability,
     HelmFeatureAvailability,
     HelmObservationCoverage,
@@ -27,6 +28,7 @@ from packages.contracts.helm.releases import (
     HelmReleaseDetailResponse,
     HelmReleaseHistoryEntry,
     HelmReleaseListResponse,
+    HelmReleaseUpgradeBatch,
     HelmReleaseUpgradeInfo,
     HelmReleaseUpgradeRequest,
     HelmReleaseVersionList,
@@ -55,6 +57,7 @@ __all__ = [
     "HELM_CHART_VERSION_PAGE_MAX",
     "HELM_RELEASE_ARTIFACT_READ_ACTION",
     "HELM_RELEASE_ARTIFACT_READ_CAPABILITY",
+    "HELM_UPGRADE_BATCH_MAX_RELEASES",
     "HelmAvailability",
     "HelmArtifactCommandPayload",
     "HelmArtifactReadRequest",
@@ -82,6 +85,7 @@ __all__ = [
     "HelmReleaseHistoryEntry",
     "HelmReleaseListResponse",
     "HelmReleaseUpgradeInfo",
+    "HelmReleaseUpgradeBatch",
     "HelmReleaseUpgradeRequest",
     "HelmReleaseVersionList",
     "HelmResourceFieldChange",

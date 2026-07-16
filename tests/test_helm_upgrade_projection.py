@@ -117,6 +117,8 @@ def test_upgrade_projection_preserves_partial_provider_evidence_and_exact_versio
         },
         "observed_at": "2026-07-17T00:00:00+00:00",
         "reason_codes": ["helm_chart_versions_truncated"],
+        "refresh_after_seconds": 10,
     }
     assert [item["version"] for item in versions["versions"]] == ["2.0.0", "1.2.3"]
     assert versions["truncated"] is True
+    assert versions["refresh_after_seconds"] == 10

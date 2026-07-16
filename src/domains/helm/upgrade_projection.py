@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from domains.helm.source_provider import compare_helm_chart_versions
+from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.helm.releases import (
     HelmReleaseUpgradeInfo,
     HelmReleaseVersionList,
@@ -28,6 +29,7 @@ def helm_release_upgrade_info(
             chart_name=chart_name,
             current_version=current_version,
             reason_codes=resolution.reason_codes or ("helm_chart_identity_unavailable",),
+            refresh_after_seconds=integral_refresh_after_seconds("helm_detail"),
         )
     latest = resolution.versions[0].version
     return HelmReleaseUpgradeInfo(
@@ -39,6 +41,7 @@ def helm_release_upgrade_info(
         source=resolution.source,
         observed_at=resolution.observed_at,
         reason_codes=resolution.reason_codes,
+        refresh_after_seconds=integral_refresh_after_seconds("helm_detail"),
     )
 
 
@@ -60,6 +63,7 @@ def helm_release_version_list(
             chart_name=chart_name,
             current_version=current_version,
             reason_codes=resolution.reason_codes or ("helm_chart_identity_unavailable",),
+            refresh_after_seconds=integral_refresh_after_seconds("helm_detail"),
         )
     return HelmReleaseVersionList(
         availability=resolution.availability,
@@ -70,4 +74,5 @@ def helm_release_version_list(
         observed_at=resolution.observed_at,
         truncated=resolution.truncated,
         reason_codes=resolution.reason_codes,
+        refresh_after_seconds=integral_refresh_after_seconds("helm_detail"),
     )
