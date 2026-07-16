@@ -486,6 +486,42 @@
     "checks.severity.evidence": {
       "destination": "frontend/src/pages/checks/ChecksPage.test.tsx",
       "rationale": "Checks severity must remain unavailable until the Python collector emits a typed effective severity; the browser must not infer it from labels or counts."
+    },
+    "shell.cluster-scope.selection": {
+      "destination": "frontend/src/features/cluster-scope/ClusterScopePicker.test.tsx",
+      "rationale": "The authenticated cluster catalog, unknown selection, keyboard selection, accessible connection state, and URL-owned scope must remain deterministic."
+    },
+    "shell.connection-retry.safety": {
+      "destination": "frontend/src/shared/ui/ProductStateScreen.test.tsx",
+      "rationale": "Connection failures must expose only sanitized codes, preserve a single retry action, prevent duplicate retries, and never render raw credentials or stack traces."
+    },
+    "shell.context-scope.preservation": {
+      "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx",
+      "rationale": "Cluster rescoping must follow the authenticated server catalog and browser history without mutating local kubeconfig or discarding unrelated active sessions."
+    },
+    "shell.bottom-dock.sessions": {
+      "destination": "frontend/src/app/BottomDock.operationP2.test.tsx",
+      "rationale": "The dock must preserve bounded log sessions and audited operation progress across tabs, collapse state, focus restoration, and terminal outcomes."
+    },
+    "shell.namespace-facets.search": {
+      "destination": "frontend/src/features/global-filter/UnifiedFilterBar.test.tsx",
+      "rationale": "Large namespace catalogs must use an abortable server facet query, preserve selected URL chips, and expose loading, empty, partial-count, and failure states."
+    },
+    "shell.command-palette.keyboard": {
+      "destination": "frontend/src/app/ProductShell.interaction.test.tsx",
+      "rationale": "The canonical route catalog must drive command search, keyboard opening, Escape dismissal, availability disclosure, selection, and focus return."
+    },
+    "shell.cluster-load.disclosure": {
+      "destination": "frontend/src/pages/home/HomeClusterHealth.test.tsx",
+      "rationale": "Connection and inventory progress must be rendered only from server-owned stage and observation evidence, with unavailable per-kind coverage disclosed honestly."
+    },
+    "shell.resource-navigation.contract": {
+      "destination": "frontend/src/features/filters/filterUrl.test.ts",
+      "rationale": "Resource and workload deep links must round-trip through the canonical URL codec without path heuristics or hidden browser state."
+    },
+    "shell.external-link.policy": {
+      "destination": "frontend/src/desktop/desktopBridge.test.ts",
+      "rationale": "Desktop external navigation must accept only credential-free HTTP(S) URLs and cross the typed Tauri bridge rather than a server shell."
     }
   },
   "classifications": {
@@ -5393,6 +5429,353 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product now owns the exact query, two-permission boundary, snapshot freshness, abortable polling frame, common presentation, i18n, and accessible collapsed disclosure."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/cluster-switcher/ClusterSwitcher.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:cluster-switcher:selection:v1",
+          "legacyContractIds": [],
+          "symbol": "ClusterSwitcher",
+          "interaction": "the global scope trigger renders the authenticated cluster catalog, searchable connection status, keyboard selection, outside-click dismissal, and unknown URL selections without reading local kubeconfig",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/shared/ui/ClusterConnectionStatus.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-scope.selection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned picker consumes the normalized server cluster catalog, keeps URL scope authority in one provider, and delegates focus and Escape behavior to the shared accessible Select primitive."
+          }
+        }
+      ]
+    },
+    "web/src/components/ConnectionErrorView.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:connection-error:retry:v1",
+          "legacyContractIds": [],
+          "symbol": "ConnectionErrorView retry and disclosure",
+          "interaction": "a failed authenticated request renders a sanitized connection category, safe correlation evidence, and one idempotent retry control while suppressing raw secrets and stack traces",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/ProductStateScreen.tsx",
+              "frontend/src/shared/ui/ProductStateScreen.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.identity.dependencies"
+            ],
+            "plannedTestIds": [
+              "shell.connection-retry.safety"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The common product state boundary centralizes safe failure copy and prevents duplicate retry dispatch while the transport adapter owns error classification."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:shell:connection-error:terminal-remediation:v1",
+          "legacyContractIds": [],
+          "symbol": "CopyableCommand terminal remediation",
+          "interaction": "an authentication remediation command may be handed to a local desktop terminal only when it is produced by a trusted desktop capability rather than from a browser error string",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/DesktopLocalTerminalSheet.tsx",
+              "frontend/src/desktop/desktopBridge.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.routes",
+              "domains.identity.dependencies"
+            ],
+            "plannedTestIds": [
+              "shell.connection-retry.safety",
+              "shell.external-link.policy"
+            ],
+            "state": "blocked",
+            "blockedReason": "No server-owned remediation-command contract binds an authentication failure, executable text, target cluster, and audit identity; deriving shell commands from error messages would be unsafe.",
+            "rationale": "The local terminal bridge exists and remains device-local, but connection failures do not yet expose a typed trusted remediation command."
+          }
+        }
+      ]
+    },
+    "web/src/components/ContextSwitcher.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:context-switcher:server-scope:v1",
+          "legacyContractIds": [],
+          "symbol": "ContextSwitcher",
+          "interaction": "cluster context changes select an authorized workspace cluster scope, preserve browser history semantics, and never modify a server or desktop kubeconfig",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx",
+              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/features/filters/UnifiedFilterProvider.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.identity.dependencies"
+            ],
+            "plannedTestIds": [
+              "shell.context-scope.preservation",
+              "shell.cluster-scope.selection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Opsia treats context as an authenticated multi-cluster product scope; active log and operation sessions remain separately owned by the dock, so scope selection is non-destructive."
+          }
+        }
+      ]
+    },
+    "web/src/components/dock/BottomDock.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:bottom-dock:session-tabs:v1",
+          "legacyContractIds": [],
+          "symbol": "BottomDock",
+          "interaction": "the bottom dock owns concurrent bounded log tabs and audited operation progress, supports selection, retry, collapse, resize, close, unseen counts, AI handoff, and accessible focus restoration",
+          "transport": "sse",
+          "realtime": {
+            "resume": "each log or command tab reconnects with its server cursor and remains independently resumable after another tab becomes active",
+            "backpressure": "bounded stream reducers cap retained lines and operation events while connection generations discard superseded readers",
+            "merge": "events merge only into the tab whose stream or audited command identity matches the server frame"
+          },
+          "motion": {
+            "reducedMotion": "dock resize and collapse feedback retain semantic state while product motion tokens disable transforms and transitions under reduced motion",
+            "evidence": [
+              "frontend/src/app/BottomDock.tsx:data-slot=bottom-dock"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/BottomDock.tsx",
+              "frontend/src/features/bottom-dock/BottomDockProvider.tsx",
+              "frontend/src/features/operations/OperationStatusCenter.tsx",
+              "frontend/src/app/LogStreamTab.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.log_stream",
+              "domains.log_stream.router",
+              "packages.contracts.parity",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "shell.bottom-dock.sessions"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The dock composes two reusable session stores: bounded redacted log SSE and persisted command OperationEvent streams, without duplicating their lifecycle reducers."
+          }
+        }
+      ]
+    },
+    "web/src/components/shared/LargeClusterNamespacePicker.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:namespace-picker:server-facets:v1",
+          "legacyContractIds": [],
+          "symbol": "LargeClusterNamespacePicker",
+          "interaction": "large namespace catalogs are searched through a bounded authorized server facet query, rendered as keyboard-selectable results, and committed as canonical cluster-qualified URL chips",
+          "transport": "poll",
+          "realtime": {
+            "resume": "opening or refocusing the filter issues the current authorized query after a short debounce",
+            "backpressure": "one AbortController cancels the previous facet request and the backend enforces cursor and result limits",
+            "merge": "results replace only the suggestion frame for the current text and selected scope while committed chips remain URL-owned"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/global-filter/UnifiedFilterBar.tsx",
+              "frontend/src/features/global-filter/createGlobalFilterAdapter.ts",
+              "frontend/src/features/filters/filterUrlCodec.ts",
+              "src/domains/inventory_filter/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.inventory_filter.router",
+              "domains.inventory_filter.repository"
+            ],
+            "plannedTestIds": [
+              "shell.namespace-facets.search"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared global filter supersedes an unbounded browser list with debounced server facets, explicit count completeness, stable cluster/namespace identities, and one canonical URL serializer."
+          }
+        }
+      ]
+    },
+    "web/src/components/ui/CommandPalette.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:command-palette:navigation:v1",
+          "legacyContractIds": [],
+          "symbol": "CommandPalette",
+          "interaction": "the command palette opens from the global shortcut, searches canonical route descriptors, discloses unavailable surfaces, supports keyboard selection, closes on Escape, and restores trigger focus",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductCommandPalette.tsx",
+              "frontend/src/app/useProductShortcuts.ts",
+              "frontend/src/app/productRoutes.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "domains.parity.router"
+            ],
+            "plannedTestIds": [
+              "shell.command-palette.keyboard"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Routes, labels, shortcuts, icons, and release availability come from one descriptor catalog, while the shared dialog and command primitives own focus and keyboard behavior."
+          }
+        }
+      ]
+    },
+    "web/src/types/clusterLoadState.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:cluster-load:server-stage:v1",
+          "legacyContractIds": [],
+          "symbol": "dashboardClusterLoadState",
+          "interaction": "cluster loading feedback derives connection stage, observation freshness, and readiness from server evidence rather than browser timers or assumed Kubernetes kinds",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/home/homeContract.ts",
+              "frontend/src/features/cluster-scope/ClusterScopePicker.tsx",
+              "frontend/src/pages/home/HomeClusterHealth.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.dashboard.repository"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-load.disclosure",
+              "shell.cluster-scope.selection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The current product displays server-owned connection stages and observed timestamps consistently in the picker and Home health surface."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:shell:cluster-load:pending-kinds:v1",
+          "legacyContractIds": [],
+          "symbol": "ClusterLoadState.pendingKinds",
+          "interaction": "a partial inventory load identifies the exact Kubernetes resource kinds that remain incomplete instead of presenting a synthetic generic progress value",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/home/homeContract.ts",
+              "src/packages/contracts/gateway/responses.py",
+              "src/domains/dashboard/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.router",
+              "domains.inventory.repository"
+            ],
+            "plannedTestIds": [
+              "shell.cluster-load.disclosure"
+            ],
+            "state": "blocked",
+            "blockedReason": "The inventory read model currently records snapshot freshness but does not persist per-kind expected-versus-observed completeness, so exact pendingKinds cannot be produced truthfully.",
+            "rationale": "The UI intentionally does not invent pending kind names; an additive server completeness projection is required."
+          }
+        }
+      ]
+    },
+    "web/src/utils/navigation.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shell:resource-navigation:canonical-url:v1",
+          "legacyContractIds": [],
+          "symbol": "resourcePath and buildWorkloadPath",
+          "interaction": "resource, related-resource, and workload navigation round-trip exact kind, namespace, name, and view state through the product URL codec with explicit push or replace history policy",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "frontend/src/features/filters/filterUrl.ts",
+              "frontend/src/pages/workload-detail/workloadDetailNavigation.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "packages.contracts.gateway.routes"
+            ],
+            "plannedTestIds": [
+              "shell.resource-navigation.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "All callers share typed URL codecs and ResourceRef-shaped identities instead of hand-rolling route strings or storing hidden selection state."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:shell:external-navigation:tauri-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "openExternal",
+          "interaction": "external links open through the native desktop bridge only after a credential-free HTTP(S) policy check, while the browser uses normal anchors",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/desktop/desktopBridge.ts",
+                "frontend/src/desktop/DesktopRuntimeSync.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.routes",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shell.external-link.policy"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Tauri bridge is device-local and rejects file, credential-bearing, and non-HTTP URL schemes before invoking the operating system."
           }
         }
       ]
