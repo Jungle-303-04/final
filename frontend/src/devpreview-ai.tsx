@@ -5,8 +5,8 @@ import {
   Activity, ArrowUpRight, BellPlus, Boxes, Check, ChevronDown, CircleAlert,
   FileText, GitBranch, Play, Plus, Send, Server, Sparkles, SquarePen, X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { animate } from "motion/react";
 import "./styles/tokens.css";
 import "./styles/foundation.css";
 import { Spinner } from "./shared/ui/primitives/spinner";
@@ -19,9 +19,6 @@ import type {
 
 const SPRING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const AUTO_COLLAPSE_MS = 2800;
-// 애플 물리 스프링 (motion)
-const SPRING_LAYOUT = { type: "spring", visualDuration: 0.42, bounce: 0.16 } as const;
-const SPRING_FADE = { duration: 0.2, ease: [0.32, 0.72, 0, 1] } as const;
 // 애플 시스템 컬러
 const APPLE = { blue: "#0A84FF", red: "#FF3B30", orange: "#FF9500", green: "#30D158", gray: "#8E8E93" };
 const toneHex: Record<AiTone, string> = { healthy: APPLE.green, warning: APPLE.orange, critical: APPLE.red, neutral: APPLE.gray };
@@ -248,48 +245,75 @@ function AssistantTurn({ turn, onComplete }: { turn: AiTurn; onComplete: () => v
   });
   useEffect(() => { if (parts.length === 0) { setPhase("review"); onComplete(); } }, []);
 
-  useEffect(() => {
-    if (phase !== "review" || hasRunning || actionIdle || collapsed) return;
-    const id = window.setTimeout(() => setCollapsed(true), AUTO_COLLAPSE_MS);
-    return () => window.clearTimeout(id);
-  }, [phase, actionIdle, hasRunning, collapsed]);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const fromRef = useRef<number | null>(null);
 
   const instant = phase === "review";
   const canCollapse = instant && !hasRunning && !actionIdle;
   const clickable = collapsed || canCollapse;
+
+  // 기준: 상태 변경 "직전"의 현재 높이를 캡처(FLIP) → from이 항상 정확 → 튐/단계 버그 없음
+  const setCollapse = (val: boolean) => {
+    const wrap = wrapRef.current;
+    if (wrap) fromRef.current = wrap.getBoundingClientRect().height;
+    setCollapsed(val);
+  };
   const onSurfaceClick = (e: ReactMouseEvent) => {
     if ((e.target as HTMLElement).closest("a,button,input,textarea,select,label")) return;
-    if (collapsed) { setCollapsed(false); return; }
-    if (canCollapse) setCollapsed(true);
+    if (collapsed) setCollapse(false);
+    else if (canCollapse) setCollapse(true);
   };
-  // 단일 표면이 borderRadius·패딩·크기를 물리 스프링으로 morph → 카드가 그대로 캡슐이 됨(크기 불일치 없음)
+
+  const didAuto = useRef(false);
+  useEffect(() => {
+    if (didAuto.current || phase !== "review" || hasRunning || actionIdle || collapsed) return;
+    const id = window.setTimeout(() => { didAuto.current = true; setCollapse(true); }, AUTO_COLLAPSE_MS);
+    return () => window.clearTimeout(id);
+  }, [phase, actionIdle, hasRunning, collapsed]);
+
+  // 폭 100% 고정, 높이만 단일 물리 스프링으로 (캡처한 from → wrap 자연높이 to)
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || fromRef.current == null) return;
+    const from = fromRef.current; fromRef.current = null;
+    // 목표를 wrap 자연높이로 측정 → 끝에서 auto 전환 시 테두리 오차(2px 틱) 없음
+    wrap.style.height = "auto";
+    const to = wrap.getBoundingClientRect().height;
+    if (Math.abs(from - to) < 0.5) return; // 이미 auto = 자연높이, 매끄럽게 끝
+    wrap.style.height = `${from}px`;
+    void wrap.offsetHeight;
+    const controls = animate(from, to, {
+      type: "spring", visualDuration: 0.26, bounce: 0.3,
+      onUpdate: (v) => { const el = wrapRef.current; if (el) el.style.height = `${v}px`; },
+      onComplete: () => { const el = wrapRef.current; if (el) el.style.height = "auto"; },
+    });
+    return () => controls.stop();
+  }, [collapsed]);
+
   return (
-    <motion.div
-      layout layoutDependency={`${shown}-${collapsed}-${phase}`}
-      onClick={onSurfaceClick}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1, borderRadius: collapsed ? 999 : 22, paddingTop: collapsed ? 10 : 16, paddingBottom: collapsed ? 10 : 16 }}
-      transition={{ layout: SPRING_LAYOUT, borderRadius: SPRING_LAYOUT, paddingTop: SPRING_LAYOUT, paddingBottom: SPRING_LAYOUT, opacity: SPRING_FADE }}
-      className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.035] bg-card/75 px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] backdrop-blur-2xl ${clickable ? "cursor-pointer" : ""}`}
-    >
-      <AnimatePresence mode="popLayout" initial={false}>
-        {collapsed ? (
-          <motion.div key="sum" layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
-            className="flex items-center gap-2.5">
-            <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
-            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
-          </motion.div>
-        ) : (
-          <motion.div key="full" layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
-            className="grid gap-3.5">
-            {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
-              <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
-                onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+    <div ref={wrapRef} onClick={onSurfaceClick}
+      className={`group/msg relative mr-auto w-full max-w-[97%] overflow-hidden border border-black/[0.035] bg-card/75 px-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.06),0_18px_44px_-22px_rgba(0,0,0,0.2)] backdrop-blur-2xl animate-in fade-in-0 slide-in-from-bottom-2 duration-300 ${clickable ? "cursor-pointer" : ""}`}
+      style={{ height: "auto", borderRadius: 20 }}>
+      <div ref={innerRef} style={{ paddingTop: 14, paddingBottom: 14 }}>
+        <AnimatePresence mode="popLayout" initial={false}>
+          {collapsed ? (
+            <motion.div key="sum" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
+              className="flex items-center gap-2.5">
+              <span className={`size-2 shrink-0 rounded-full ${summary.tone === "critical" ? "island-pulse" : ""}`} style={{ background: toneHex[summary.tone] }} />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground group-hover/msg:text-foreground/80">{summary.text}</span>
+            </motion.div>
+          ) : (
+            <motion.div key="full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SPRING_FADE}
+              className="grid gap-3.5">
+              {(instant ? parts : parts.slice(0, shown)).map((part, i) => (
+                <PartView active={!instant && i === shown - 1} evidenceCount={evidenceCount} first={i === 0} key={i}
+                  onIdleChange={setActionIdle} onReady={!instant && i === shown - 1 ? advance : () => {}} part={part} />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
 
@@ -414,7 +438,7 @@ function Panel() {
         </div>
       ) : null}
 
-      <div className="flex-1 space-y-3.5 overflow-y-auto scroll-smooth px-4 py-5" ref={scrollRef}>
+      <div className="chatscroll flex-1 space-y-3.5 overflow-y-auto scroll-smooth px-4 py-5 [scrollbar-gutter:stable]" ref={scrollRef}>
         {turns.slice(0, count).map((turn) => {
           if (turn.role === "user") return <UserTurn key={turn.id} onShown={reveal} turn={turn} />;
           if (turn.collapsed) return <CollapsedTurn key={turn.id} onShown={reveal} turn={turn} />;
@@ -445,6 +469,11 @@ function Panel() {
         @keyframes collapseIn { from { opacity: 0; transform: translateY(-4px) scale(0.99); } to { opacity: 1; transform: none; } }
         @keyframes bob { 0%, 100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-4px); opacity: 1; } }
         @keyframes islandIn { from { opacity: 0; transform: translateY(-6px) scale(0.94); } to { opacity: 1; transform: none; } }
+        .chatscroll { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.16) transparent; }
+        .chatscroll::-webkit-scrollbar { width: 10px; }
+        .chatscroll::-webkit-scrollbar-track { background: transparent; }
+        .chatscroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.14); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+        .chatscroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.24); background-clip: padding-box; }
         .island-pulse { animation: islandPulse 2s ease-in-out infinite; }
         @keyframes islandPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--destructive) 45%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--destructive) 0%, transparent); } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
