@@ -30,6 +30,16 @@ const issue: IssueSummary = {
 
 export function issuesPort(overrides: Partial<IssuesPort> = {}): IssuesPort {
   return {
+    loadIssuesAuditRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 60,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     listIssues: vi.fn().mockResolvedValue({
       clusterId: "cluster-1",
       completeness: "unknown",

@@ -1,5 +1,6 @@
 import type { CostWorkloadAllocation } from "../cost/costContract";
 import type { CostWorkloadAllocationEndpoint } from "../cost/costEndpointContract";
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type ApplicationsFailureCode =
   | "forbidden"
@@ -283,6 +284,7 @@ export interface ApplicationDriftModel {
 }
 
 export interface ApplicationsPort {
+  loadApplicationsRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listApplications(
     filter: ApplicationCatalogFilter,
     signal?: AbortSignal,

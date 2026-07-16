@@ -60,18 +60,19 @@ describe("useHomePageState refresh authority", () => {
     },
   );
 
-  it("polls cluster summaries every 10 seconds only while visible", async () => {
+  it("refreshes every dashboard section on the exact server cadence only while visible", async () => {
     vi.useFakeTimers();
     setVisibility("visible");
-    const api = homeApi();
-    const { result } = renderHomeState(api.port, "/?clusters=cluster-a");
+    const api = homeApi(7);
+    const { result } = renderHomeState(api.port, "/?clusters=cluster-a&node=worker-a");
     await flushEffects();
     expect(api.list).toHaveBeenCalledTimes(1);
     expect(api.overview).toHaveBeenCalledTimes(1);
     expect(api.nodes).toHaveBeenCalledTimes(1);
+    expect(api.pods).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(6_999);
       await flushPromises();
     });
     expect(api.list).toHaveBeenCalledTimes(1);
@@ -79,12 +80,13 @@ describe("useHomePageState refresh authority", () => {
     expect(api.nodes).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(1);
       await flushPromises();
     });
     expect(api.list).toHaveBeenCalledTimes(2);
     expect(api.overview).toHaveBeenCalledTimes(2);
     expect(api.nodes).toHaveBeenCalledTimes(2);
+    expect(api.pods).toHaveBeenCalledTimes(2);
 
     act(() => {
       setVisibility("hidden");
@@ -102,6 +104,7 @@ describe("useHomePageState refresh authority", () => {
     });
     expect(api.list).toHaveBeenCalledTimes(3);
     expect(api.overview).toHaveBeenCalledTimes(3);
+    expect(api.pods).toHaveBeenCalledTimes(3);
 
     await act(async () => {
       result.current.refresh();
@@ -109,23 +112,7 @@ describe("useHomePageState refresh authority", () => {
     });
     expect(api.list).toHaveBeenCalledTimes(4);
     expect(api.overview).toHaveBeenCalledTimes(4);
-  });
-
-  it("polls the selected node pods every 5 seconds", async () => {
-    vi.useFakeTimers();
-    setVisibility("visible");
-    const api = homeApi();
-    renderHomeState(api.port, "/?clusters=cluster-a&node=worker-a");
-    await flushEffects();
-    expect(api.pods).toHaveBeenCalledOnce();
-
-    await act(async () => {
-      vi.advanceTimersByTime(5_000);
-      await flushPromises();
-    });
-    expect(api.pods).toHaveBeenCalledTimes(2);
-    expect(api.overview).toHaveBeenCalledOnce();
-    expect(api.nodes).toHaveBeenCalledOnce();
+    expect(api.pods).toHaveBeenCalledTimes(4);
   });
 
   it("uses the server-declared Home insights cadence instead of the summary poll", async () => {

@@ -153,6 +153,25 @@ const recoveryPlan = {
   }],
 };
 describe("createIssuesAdapter", () => {
+  it("loads only the composition-injected issues audit refresh policy", async () => {
+    const policy = {
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 43,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    };
+    const getPolicy = vi.fn().mockResolvedValue(policy);
+
+    await expect(
+      createIssuesAdapter(endpoints(), { getPolicy }).loadIssuesAuditRefreshPolicy(),
+    ).resolves.toBe(policy);
+    expect(getPolicy).toHaveBeenCalledWith("issues_audit", undefined);
+  });
+
   it("loads the list and detail through canonical request boundaries", async () => {
     const dependencies = endpoints();
     const port = createIssuesAdapter(dependencies);

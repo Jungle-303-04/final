@@ -9,11 +9,19 @@ import {
   type ApplicationsPort,
 } from "./applicationsContract";
 import { toCostWorkloadAllocation } from "../cost/costWorkloadAdapter";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
 export function createApplicationsAdapter(
   api: ApplicationsApiDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"applications">,
 ): ApplicationsPort {
   return {
+    loadApplicationsRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "applications", signal);
+    },
     listApplications: (filter, signal) => withFailure(async () => {
       const response = await api.listApplicationCatalog(filter, signal);
       return sortApplicationsByAttention(response.applications.map(toCard));

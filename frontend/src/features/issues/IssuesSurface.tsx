@@ -25,9 +25,7 @@ import type {
 } from "./issuesSurfaceContract";
 import { useIssueAuditPagination } from "./useIssueAuditPagination";
 import { useIssueDetailFocus } from "./useIssueDetailFocus";
-
-const ISSUE_REFRESH_INTERVAL_MS = 10_000;
-const RECOVERY_PROGRESS_REFRESH_INTERVAL_MS = 2_000;
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 
 export function IssuesSurface({
   clusterId,
@@ -64,6 +62,11 @@ export function IssuesSurface({
     : `${clusterId ?? ""}\u0000${selected.correlationId}`;
   const { detailRegionId, detailRegionRef, requestDetailFocus } =
     useIssueDetailFocus(selected?.id ?? null);
+  const requestScheduledRefresh = useCallback(
+    () => setRevision((value) => value + 1),
+    [],
+  );
+  const refreshController = useServerRefreshScheduler(requestScheduledRefresh);
 
   const { abortAuditPage, loadMoreAudit } = useIssueAuditPagination({
     auditScope,
@@ -75,13 +78,17 @@ export function IssuesSurface({
 
   useEffect(() => {
     const controller = new AbortController();
-    void port.listIssues(clusterId, 50, controller.signal).then(
-      (data) => {
+    void Promise.all([
+      port.listIssues(clusterId, 50, controller.signal),
+      port.loadIssuesAuditRefreshPolicy(controller.signal),
+    ]).then(
+      ([data, refreshPolicy]) => {
         setListRecord({
           scope: clusterId,
           state: { data, loading: false, failure: null },
         });
         setLastRefreshedAt(Date.now());
+        refreshController.acceptSuccess(refreshPolicy);
         setSelectedRecord((current) => {
           if (current?.scope !== clusterId) return current;
           const latest = data.items.find((issue) => issue.id === current.issue.id);
@@ -92,6 +99,7 @@ export function IssuesSurface({
       },
       (error: unknown) => {
         if (!isAbortError(error)) {
+          refreshController.backgroundFailure();
           setListRecord((current) => ({
             scope: clusterId,
             state: {
@@ -104,23 +112,7 @@ export function IssuesSurface({
       },
     );
     return () => controller.abort();
-  }, [clusterId, port, revision]);
-
-  useEffect(() => {
-    const refreshVisibleList = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      setRevision((value) => value + 1);
-    };
-    const interval = window.setInterval(refreshVisibleList, ISSUE_REFRESH_INTERVAL_MS);
-    const refreshAfterVisibility = () => {
-      if (document.visibilityState === "visible") refreshVisibleList();
-    };
-    document.addEventListener("visibilitychange", refreshAfterVisibility);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refreshAfterVisibility);
-    };
-  }, [clusterId, port]);
+  }, [clusterId, port, refreshController, revision]);
 
   useEffect(() => {
     if (selectedCorrelationId === null) return;
@@ -165,30 +157,48 @@ export function IssuesSurface({
   useEffect(() => () => mutationRef.current?.abort(), []);
 
   useEffect(() => {
+    if (revision === 0 || selectedCorrelationId === null || panels.receipt !== null) return;
+    const controller = new AbortController();
+    void Promise.all([
+      port.loadAuditTimeline(selectedCorrelationId, {}, controller.signal),
+      port.loadIssuesAuditRefreshPolicy(controller.signal),
+    ]).then(([audit, refreshPolicy]) => {
+      if (controller.signal.aborted) return;
+      setPanels((current) => ({
+        ...current,
+        audit: { data: audit, loading: false, failure: null },
+      }));
+      refreshController.acceptSuccess(refreshPolicy);
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted || isAbortError(error)) return;
+      refreshController.backgroundFailure();
+      setPanels((current) => ({
+        ...current,
+        audit: {
+          data: current.audit.data,
+          loading: false,
+          failure: portFailure(error),
+        },
+      }));
+    });
+    return () => controller.abort();
+  }, [panels.receipt, port, refreshController, revision, selectedCorrelationId]);
+
+  useEffect(() => {
     if (
       selectedCorrelationId === null || selectedId === null || selectedStatus === null ||
       panels.receipt === null
     ) return;
     if (recoveryProgressIsTerminalStatus(selectedStatus)) return;
     const controller = new AbortController();
-    let refreshing = false;
     const refreshProgress = async () => {
-      if (refreshing || controller.signal.aborted) return;
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      refreshing = true;
       try {
-        const [issuesResult, recoveryResult, auditResult] = await Promise.allSettled([
-          port.listIssues(clusterId, 50, controller.signal),
+        const [recoveryResult, auditResult, policyResult] = await Promise.allSettled([
           port.loadRecoveryPlan(selectedCorrelationId, controller.signal),
           port.loadAuditTimeline(selectedCorrelationId, {}, controller.signal),
+          port.loadIssuesAuditRefreshPolicy(controller.signal),
         ]);
         if (controller.signal.aborted) return;
-        if (issuesResult.status === "fulfilled") {
-          const latest = issuesResult.value.items.find((issue) => issue.id === selectedId);
-          if (latest !== undefined) {
-            setSelectedRecord({ scope: clusterId, issue: latest });
-          }
-        }
         setPanels((current) => ({
           ...current,
           audit: auditResult.status === "fulfilled"
@@ -207,17 +217,23 @@ export function IssuesSurface({
               },
         }));
         setLastRefreshedAt(Date.now());
-      } finally {
-        refreshing = false;
+        if (
+          policyResult.status === "fulfilled" &&
+          (recoveryResult.status === "fulfilled" || auditResult.status === "fulfilled")
+        ) {
+          refreshController.acceptSuccess(policyResult.value);
+        } else {
+          refreshController.backgroundFailure();
+        }
+      } catch (error: unknown) {
+        if (!controller.signal.aborted && !isAbortError(error)) {
+          refreshController.backgroundFailure();
+        }
       }
     };
     void refreshProgress();
-    const interval = window.setInterval(refreshProgress, RECOVERY_PROGRESS_REFRESH_INTERVAL_MS);
-    return () => {
-      controller.abort();
-      window.clearInterval(interval);
-    };
-  }, [clusterId, panels.receipt, port, selectedCorrelationId, selectedId, selectedStatus]);
+    return () => controller.abort();
+  }, [panels.receipt, port, refreshController, revision, selectedCorrelationId, selectedId, selectedStatus]);
 
   const selectRecovery = useCallback((actionId: string) => {
     const plan = panels.recovery.data;
@@ -250,23 +266,7 @@ export function IssuesSurface({
         selectionFailure: null,
         selectionPendingId: null,
       }));
-      try {
-        const refreshed = await port.loadRecoveryPlan(selected.correlationId, controller.signal);
-        setPanels((current) => ({
-          ...current,
-          recovery: { data: refreshed, loading: false, failure: null },
-        }));
-      } catch (error: unknown) {
-        if (isAbortError(error)) return;
-        setPanels((current) => ({
-          ...current,
-          recovery: {
-            data: current.recovery.data,
-            loading: false,
-            failure: portFailure(error),
-          },
-        }));
-      }
+      refreshController.requestRefresh();
     }).catch((error: unknown) => {
       if (isAbortError(error)) return;
       setPanels((current) => ({
@@ -282,7 +282,7 @@ export function IssuesSurface({
     }).finally(() => {
       if (mutationRef.current === controller) mutationRef.current = null;
     });
-  }, [panels.recovery.data, port, recoverySelection.state, selected]);
+  }, [panels.recovery.data, port, recoverySelection.state, refreshController, selected]);
 
   const selectIssue = useCallback((issue: IssueSummary) => {
     abortAuditPage();
@@ -323,8 +323,8 @@ export function IssuesSurface({
         loading: true,
       },
     }));
-    setRevision((value) => value + 1);
-  }, [clusterId]);
+    refreshController.requestRefresh();
+  }, [clusterId, refreshController]);
 
   return (
     <div

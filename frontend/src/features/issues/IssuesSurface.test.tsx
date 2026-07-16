@@ -1,11 +1,61 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IssuesSurface } from "./IssuesSurface";
 import { IssuesPortFailure, type IssuesPort } from "./issuesContract";
 import { COPY, issuesPort, renderSurface } from "./IssuesSurface.testSupport";
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "visible",
+  });
+});
 describe("IssuesSurface", () => {
+  it("refreshes the incident queue on the exact issues audit cadence only while visible", async () => {
+    vi.useFakeTimers();
+    const baseline = issuesPort();
+    const listIssues = vi.fn().mockImplementation(baseline.listIssues);
+    const loadIssuesAuditRefreshPolicy = vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 7,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    });
+    renderSurface(
+      <IssuesSurface
+        clusterId="cluster-1"
+        copy={COPY}
+        port={issuesPort({ listIssues, loadIssuesAuditRefreshPolicy })}
+        recoverySelection={{ state: "enabled" }}
+      />,
+    );
+    await act(async () => Promise.resolve());
+    expect(listIssues).toHaveBeenCalledTimes(1);
+
+    await act(async () => vi.advanceTimersByTimeAsync(6_999));
+    expect(listIssues).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(listIssues).toHaveBeenCalledTimes(2);
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await act(async () => vi.advanceTimersByTimeAsync(70_000));
+    expect(listIssues).toHaveBeenCalledTimes(2);
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    expect(listIssues).toHaveBeenCalledTimes(3);
+  });
+
   it("uses motion-safe refresh feedback while the incident list is loading", () => {
     const pending = deferred<Awaited<ReturnType<IssuesPort["listIssues"]>>>();
     const port = issuesPort({ listIssues: vi.fn(() => pending.promise) });

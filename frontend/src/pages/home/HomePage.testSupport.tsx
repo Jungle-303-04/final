@@ -238,6 +238,16 @@ export function renderHome(
 
 export function homePort(overrides: Partial<HomePort> = {}): HomePort {
   return {
+    loadDashboardRefreshPolicy: vi.fn().mockResolvedValue({
+      staleAfterSeconds: 15,
+      refreshAfterSeconds: 30,
+      keepLastSuccess: true,
+      pauseWhenHidden: true,
+      eventInvalidation: true,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    }),
     listClusterChoices: vi.fn().mockResolvedValue(CLUSTERS),
     loadClusterOverview: vi.fn().mockResolvedValue(OVERVIEW),
     loadInsights: vi.fn().mockResolvedValue(INSIGHTS),

@@ -5,9 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationsFailure } from "./applicationsContract";
 import {
-  APPLICATIONS_REFRESH_INTERVAL_MS,
-} from "./useApplicationsData";
-import {
   APPLICATION_CARD,
   APPLICATION_DETAIL,
   applicationsPort,
@@ -157,7 +154,17 @@ describe("S10 Applications surface", () => {
     vi.useFakeTimers();
     const listApplications = vi.fn<ApplicationsPort["listApplications"]>()
       .mockResolvedValue([APPLICATION_CARD]);
-    renderApplications(applicationsPort({ listApplications }));
+    const loadApplicationsRefreshPolicy = vi.fn().mockResolvedValue({
+      staleAfterSeconds: 30,
+      refreshAfterSeconds: 7,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: false,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    });
+    renderApplications(applicationsPort({ listApplications, loadApplicationsRefreshPolicy }));
 
     await act(async () => {
       await Promise.resolve();
@@ -166,7 +173,7 @@ describe("S10 Applications surface", () => {
     expect(listApplications).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(APPLICATIONS_REFRESH_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(7_000);
     });
     expect(listApplications).toHaveBeenCalledTimes(2);
 
@@ -175,7 +182,7 @@ describe("S10 Applications surface", () => {
       value: "hidden",
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(APPLICATIONS_REFRESH_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(70_000);
     });
     expect(listApplications).toHaveBeenCalledTimes(2);
 

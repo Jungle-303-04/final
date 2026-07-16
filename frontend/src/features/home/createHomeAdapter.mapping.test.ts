@@ -8,6 +8,25 @@ import { createHomeAdapter } from "./createHomeAdapter";
 import { CLUSTER_LIST, endpoints } from "./createHomeAdapter.testSupport";
 
 describe("canonical Home adapter mapping", () => {
+  it("loads only the composition-injected dashboard refresh policy", async () => {
+    const policy = {
+      staleAfterSeconds: 15,
+      refreshAfterSeconds: 37,
+      keepLastSuccess: true as const,
+      pauseWhenHidden: true as const,
+      eventInvalidation: true,
+      retryAfterSeconds: null,
+      retryLimit: null,
+      postMutationRefreshAfterSeconds: null,
+    };
+    const getPolicy = vi.fn().mockResolvedValue(policy);
+
+    await expect(
+      createHomeAdapter(endpoints(), { getPolicy }).loadDashboardRefreshPolicy(),
+    ).resolves.toBe(policy);
+    expect(getPolicy).toHaveBeenCalledWith("dashboard", undefined);
+  });
+
   it("maps the session-visible cluster list and forwards the AbortSignal", async () => {
     const controller = new AbortController();
     const dependencies = endpoints();

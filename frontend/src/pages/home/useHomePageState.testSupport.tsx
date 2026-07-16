@@ -30,7 +30,7 @@ export function renderHomeState(port: HomePort, entry: string) {
   });
 }
 
-export function homeApi() {
+export function homeApi(refreshAfterSeconds = 30) {
   const list = vi.fn<(...args: [AbortSignal?]) => Promise<HomeClusterChoices>>()
     .mockResolvedValue(clusterChoices());
   const overviewMock = vi.fn<(...args: [string, AbortSignal?]) => Promise<HomeClusterOverview>>()
@@ -48,6 +48,16 @@ export function homeApi() {
     nodes: nodesMock,
     pods: podsMock,
     port: {
+      loadDashboardRefreshPolicy: vi.fn().mockResolvedValue({
+        staleAfterSeconds: 15,
+        refreshAfterSeconds,
+        keepLastSuccess: true,
+        pauseWhenHidden: true,
+        eventInvalidation: true,
+        retryAfterSeconds: null,
+        retryLimit: null,
+        postMutationRefreshAfterSeconds: null,
+      }),
       listClusterChoices: list,
       loadClusterOverview: overviewMock,
       loadInsights: insightsMock,

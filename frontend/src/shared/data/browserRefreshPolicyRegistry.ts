@@ -13,6 +13,17 @@ export interface BrowserRefreshPolicyRegistry<Key extends string = string> {
   getPolicy(key: Key, signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
 }
 
+export function loadInjectedBrowserRefreshPolicy<Key extends string>(
+  registry: BrowserRefreshPolicyRegistry<Key> | undefined,
+  key: Key,
+  signal?: AbortSignal,
+): Promise<BrowserRefreshPolicy> {
+  if (registry === undefined) {
+    return Promise.reject(new TypeError(`browser refresh policy registry was not injected for ${key}`));
+  }
+  return registry.getPolicy(key, signal);
+}
+
 export function createBrowserRefreshPolicyRegistry<Key extends string, WirePolicy>(options: {
   load(signal?: AbortSignal): Promise<{
     revision: string;

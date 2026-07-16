@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { acquireSharedRequest } from "../../shared/data/sharedRequest";
+import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
 import {
   ApplicationsFailure,
   type ApplicationCardModel,
@@ -9,8 +10,6 @@ import {
   type ApplicationDriftModel,
   type ApplicationsPort,
 } from "./applicationsContract";
-
-export const APPLICATIONS_REFRESH_INTERVAL_MS = 60_000;
 
 export type ApplicationsResource<T> =
   | { phase: "loading" }
@@ -36,7 +35,7 @@ export function useApplicationCatalog(
     port,
     `applications:catalog:${filterKey}`,
     load,
-    { refreshIntervalMs: APPLICATIONS_REFRESH_INTERVAL_MS },
+    { automaticRefresh: true },
   );
 }
 
@@ -63,7 +62,7 @@ export function useApplicationDetail(
     applicationId === null ? null : `applications:detail:${applicationId}:${instanceId ?? "default"}:${workloadKey ?? "application"}`,
     load,
     {
-      refreshIntervalMs: APPLICATIONS_REFRESH_INTERVAL_MS,
+      automaticRefresh: true,
       reuseReady: (data) => data !== null &&
         instanceId !== null &&
         data.scope.selectedInstanceId === instanceId &&
@@ -123,7 +122,7 @@ function useApplicationsResource<T>(
   key: string | null,
   load: (signal: AbortSignal) => Promise<T>,
   options: {
-    refreshIntervalMs?: number;
+    automaticRefresh?: boolean;
     reuseReady?: (data: T) => boolean;
   } = {},
 ): readonly [ApplicationsResource<T>, () => void] {
@@ -153,6 +152,26 @@ function useApplicationsResource<T>(
       activeRefreshRef.current = null;
     }
   }, []);
+  const startRefresh = useCallback(() => {
+    if (key === null || activeRefreshRef.current?.key === key) return;
+    const token = nextRefreshTokenRef.current + 1;
+    nextRefreshTokenRef.current = token;
+    activeRefreshRef.current = { key, token };
+    setManualRefresh({ key, token });
+    setRecord((current) => {
+      if (current.key !== key || current.state.phase !== "ready") return current;
+      return {
+        key,
+        state: {
+          ...current.state,
+          refreshing: true,
+          refreshFailure: null,
+        },
+      };
+    });
+    refresh();
+  }, [key, refresh]);
+  const refreshController = useServerRefreshScheduler(startRefresh);
 
   useEffect(() => {
     const activeRefresh = activeRefreshRef.current;
@@ -162,20 +181,35 @@ function useApplicationsResource<T>(
   }, [clearActiveRefresh, key]);
 
   useEffect(() => {
-    if (key === null || reusable) return;
-    const request = acquireSharedRequest(owner, `${key}:${revision}`, load);
+    if (key === null || reusable) {
+      if (key === null && options.automaticRefresh === true) {
+        refreshController.backgroundFailure();
+      }
+      return;
+    }
+    const request = acquireSharedRequest(owner, `${key}:${revision}`, async (signal) => {
+      if (options.automaticRefresh !== true) {
+        return { data: await load(signal), refreshPolicy: null };
+      }
+      const [data, refreshPolicy] = await Promise.all([
+        load(signal),
+        owner.loadApplicationsRefreshPolicy(signal),
+      ]);
+      return { data, refreshPolicy };
+    });
     const isManualRefresh = manualRefresh?.key === key &&
       activeRefreshRef.current?.key === key &&
       activeRefreshRef.current.token === manualRefresh.token;
     let active = true;
     void request.promise.then(
-      (data) => {
+      ({ data, refreshPolicy }) => {
         if (!active) return;
         if (isManualRefresh) clearActiveRefresh(key, manualRefresh.token);
         setRecord({
           key,
           state: { phase: "ready", data, refreshing: false, refreshFailure: null },
         });
+        if (refreshPolicy !== null) refreshController.acceptSuccess(refreshPolicy);
       },
       (error: unknown) => {
         if (!active || isAbortError(error)) return;
@@ -196,6 +230,7 @@ function useApplicationsResource<T>(
           }
           return { key, state: { phase: "failed", failure } };
         });
+        if (options.automaticRefresh === true) refreshController.backgroundFailure();
       },
     );
     return () => {
@@ -203,47 +238,22 @@ function useApplicationsResource<T>(
       request.release();
       if (isManualRefresh) clearActiveRefresh(key, manualRefresh.token);
     };
-  }, [clearActiveRefresh, key, load, manualRefresh, owner, reusable, revision]);
+  }, [
+    clearActiveRefresh,
+    key,
+    load,
+    manualRefresh,
+    options.automaticRefresh,
+    owner,
+    refreshController,
+    reusable,
+    revision,
+  ]);
 
   const requestRefresh = useCallback(() => {
-    if (key === null || activeRefreshRef.current?.key === key) return;
-    const token = nextRefreshTokenRef.current + 1;
-    nextRefreshTokenRef.current = token;
-    activeRefreshRef.current = { key, token };
-    setManualRefresh({ key, token });
-    setRecord((current) => {
-      if (current.key !== key || current.state.phase !== "ready") return current;
-      return {
-        key,
-        state: {
-          ...current.state,
-          refreshing: true,
-          refreshFailure: null,
-        },
-      };
-    });
-    refresh();
-  }, [key, refresh]);
-
-  useEffect(() => {
-    if (key === null || options.refreshIntervalMs === undefined) return;
-    const refreshVisibleResource = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      requestRefresh();
-    };
-    const interval = window.setInterval(
-      refreshVisibleResource,
-      options.refreshIntervalMs,
-    );
-    const refreshAfterVisibility = () => {
-      if (document.visibilityState === "visible") refreshVisibleResource();
-    };
-    document.addEventListener("visibilitychange", refreshAfterVisibility);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refreshAfterVisibility);
-    };
-  }, [key, options.refreshIntervalMs, requestRefresh]);
+    if (options.automaticRefresh === true) refreshController.requestRefresh();
+    else startRefresh();
+  }, [options.automaticRefresh, refreshController, startRefresh]);
 
   return [state, requestRefresh] as const;
 }

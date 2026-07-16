@@ -73,7 +73,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     getHomeInsights,
     getNodePodsSummary,
     listClusters,
-  });
+  }, refreshPolicies);
   const operationStatusStore = createOperationStatusStore(
     createOperationEventsAdapter({ subscribeCommandOperationEvents }),
   );
@@ -156,7 +156,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "issues",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(),
+        default: (await import("./composition/surfaces/issues")).loadIssuesSurface(refreshPolicies),
       })),
     },
     {
@@ -174,7 +174,7 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
     {
       id: "applications",
       loader: registry.createSurfaceLoader(async () => ({
-        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(),
+        default: (await import("./composition/surfaces/applications")).loadApplicationsSurface(refreshPolicies),
       })),
     },
     {

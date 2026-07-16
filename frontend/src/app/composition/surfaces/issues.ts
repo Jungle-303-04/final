@@ -12,8 +12,11 @@ import {
 } from "../../../api";
 import { createIssuesAdapter } from "../../../features/issues/createIssuesAdapter";
 import { createIssuesSurface } from "../../../pages/issues/createIssuesSurface";
+import type { BrowserRefreshPolicyRegistry } from "../../../shared/data/browserRefreshPolicyRegistry";
 
-export function loadIssuesSurface(): ComponentType {
+export function loadIssuesSurface(
+  refreshPolicies: BrowserRefreshPolicyRegistry<"issues_audit">,
+): ComponentType {
   return createIssuesSurface(createIssuesAdapter({
     getAuditTimeline,
     getIncidentRecentChanges,
@@ -24,5 +27,5 @@ export function loadIssuesSurface(): ComponentType {
     listRcaReports,
     listRcaTimeline,
     selectRecoveryAction,
-  }));
+  }, refreshPolicies));
 }

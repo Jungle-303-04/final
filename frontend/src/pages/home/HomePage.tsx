@@ -39,13 +39,15 @@ export function HomePage({ port }: { port: HomePort }) {
   return (
     <ProductPageFrame>
       <header className="flex min-w-0 justify-end">
-        <PollingFreshness
-          connectionState={homeConnectionState(state)}
-          dataUpdatedAt={state.dataUpdatedAt}
-          intervalSeconds={state.selectedNodeName ? 5 : 10}
-          isFetching={refreshing}
-          onRefresh={state.refresh}
-        />
+        {state.refreshIntervalSeconds === null ? null : (
+          <PollingFreshness
+            connectionState={homeConnectionState(state)}
+            dataUpdatedAt={state.dataUpdatedAt}
+            intervalSeconds={state.refreshIntervalSeconds}
+            isFetching={refreshing}
+            onRefresh={state.refresh}
+          />
+        )}
       </header>
       {!state.selectedClusterExists ? (
         state.clusterSelection.kind === "unfiltered" ? (

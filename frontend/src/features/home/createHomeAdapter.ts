@@ -8,6 +8,10 @@ import {
 } from "./homeCanonical";
 import type { HomeEndpointDependencies } from "./homeEndpointContract";
 import { isHomeCanonicalError } from "./homeValidation";
+import {
+  loadInjectedBrowserRefreshPolicy,
+  type BrowserRefreshPolicyRegistry,
+} from "../../shared/data/browserRefreshPolicyRegistry";
 
 export type {
   HomeEndpointClusterList,
@@ -18,8 +22,15 @@ export type {
   HomeEndpointPodCollection,
 } from "./homeEndpointContract";
 
-export function createHomeAdapter(endpoints: HomeEndpointDependencies): HomePort {
+export function createHomeAdapter(
+  endpoints: HomeEndpointDependencies,
+  refreshPolicies?: BrowserRefreshPolicyRegistry<"dashboard">,
+): HomePort {
   return {
+    loadDashboardRefreshPolicy(signal) {
+      return loadInjectedBrowserRefreshPolicy(refreshPolicies, "dashboard", signal);
+    },
+
     async listClusterChoices(signal) {
       return withCanonicalFailure(async () =>
         toClusterChoices(await endpoints.listClusters({}, signal))

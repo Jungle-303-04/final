@@ -257,6 +257,7 @@ export class HomePortFailure extends Error {
 }
 
 export interface HomePort {
+  loadDashboardRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listClusterChoices(signal?: AbortSignal): Promise<HomeClusterChoices>;
   loadClusterOverview(clusterId: string, signal?: AbortSignal): Promise<HomeClusterOverview>;
   loadInsights(clusterId: string, signal?: AbortSignal): Promise<HomeInsights>;
@@ -267,3 +268,4 @@ export interface HomePort {
     signal?: AbortSignal,
   ): Promise<HomePodCollection>;
 }
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";

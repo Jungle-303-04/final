@@ -15,6 +15,7 @@ import type {
   IssueRecoverySelectionResult,
 } from "./issuesRecoveryContract";
 import type { IssueRecentChanges } from "./issuesRecentChangesContract";
+import type { BrowserRefreshPolicy } from "../../shared/data/browserRefreshPolicyRegistry";
 
 export interface IssuesEndpointTimelineItem {
   workspace_id: unknown;
@@ -153,6 +154,7 @@ export class IssuesPortFailure extends Error {
 }
 
 export interface IssuesPort {
+  loadIssuesAuditRefreshPolicy(signal?: AbortSignal): Promise<BrowserRefreshPolicy>;
   listIssues(
     clusterId: string | null,
     limit?: number,
