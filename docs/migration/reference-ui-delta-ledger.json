@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 67,
+  "pendingCount": 59,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -4635,8 +4635,33 @@
         "blobId": "c4a6b847c24d95688c1000af345f12cede9fca9f",
         "sha256": "34fcd23815f9f931aa9f2124fd3efb487464813412c3985395b58b8fc227011a"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:status:normalization-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "getArgoApplicationStatus and isArgoOperationInProgress tests",
+          "interaction": "status tests keep suspended, synchronized, degraded, terminating, running, and unknown controller values semantically distinct",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/gitOpsPresentation.test.ts",
+              "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.list.status-normalization"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned tests cover every status actually emitted by the current deployment observation contract plus an explicit unknown fallback. Provider-specific suspension and operation phases remain server projection work rather than raw-object browser parsing."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -4650,8 +4675,39 @@
         "blobId": "1282d7d18e0b2b4f8cf1cda05fc42da6bae8e451",
         "sha256": "acbbf83e0deda4cacb56f47de4649e43f0adf33c9037d6e61a556245e73d8773"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:status:provider-neutral-normalization:v1",
+          "legacyContractIds": [],
+          "symbol": "getArgoApplicationStatus and isArgoOperationInProgress",
+          "interaction": "observed provider status aliases normalize into stable synchronized, out-of-sync, checking, failed, or unknown presentation categories without interpreting an unknown value as success",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded deployment observation read when the visible GitOps section explicitly refreshes",
+            "backpressure": "reuse the existing application and deployment requests and filter only the authorized bounded rows already returned",
+            "merge": "replace a row only through its stable application and binding identity; local search never changes server evidence"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/gitOpsPresentation.ts",
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.status-normalization",
+              "gitops.list.search-input"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "One reusable feature model now owns status normalization and search over the authorized deployment projection. Argo suspension annotations and raw operation state remain absent until Python projects those provider facts explicitly."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -7038,8 +7094,47 @@
         "blobId": "6de0e57d1a573d3c0c1802e0adb9b027c3609a31",
         "sha256": "0767bea94429b632b0c56166b335f58616a33ef75755ffc7e408f495b47b518d"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:application-evidence:v1",
+          "legacyContractIds": [
+            "reference.feature.208"
+          ],
+          "symbol": "GitOpsInsight, GitOpsCapabilities, ArgoRevisionMetadata, and GitOpsResourceDiff",
+          "interaction": "application detail keeps resource identity, authorized scope, source revision, operation observation, action capability, and desired/live comparison availability in one strict provider-neutral contract",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact application detail after route refresh while preserving application identity and scope",
+            "backpressure": "abort superseded detail requests and keep at most one active request for the selected application",
+            "merge": "accept a detail response only for the route-owned application id and render unavailable evidence without constructing a browser diff"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/gitops-application-detail-schemas.ts",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "src/packages/contracts/gitops/detail.py",
+              "src/domains/gitops/detail_projection.py",
+              "src/domains/gitops/detail_router.py",
+              "tests/test_gitops_application_detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.availability",
+              "gitops.detail.operation-gate",
+              "gitops.detail.revision-meta"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The strict Python and Zod detail contract already provides truthful scope, revision, workflow, capability, and comparison-availability evidence. Managed-resource changes, controller health, issue history, revision metadata, and full resource diffs remain unavailable until a provider observation boundary is added."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -7053,8 +7148,41 @@
         "blobId": "cb764310ad293817df2634f86dac4ec3e436a3d9",
         "sha256": "731a41f8b21fba3e9e0f0f3f6013fec48745297708f684d895863624fc31ac06"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:contract:provider-neutral-status:v1",
+          "legacyContractIds": [],
+          "symbol": "GitOpsStatus, ManagedResource, and provider status mappers",
+          "interaction": "the browser consumes product-owned GitOps resource, scope, operation, capability, deployment target, and normalized status types instead of importing controller-shaped source records",
+          "transport": "poll",
+          "realtime": {
+            "resume": "the existing detail and deployment reads restart on explicit refresh or route identity change",
+            "backpressure": "each product port aborts superseded reads and preserves one bounded authorized projection",
+            "merge": "adapters map strict endpoint fields once and presentation helpers never mutate or supplement server records"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "frontend/src/features/gitops/createGitOpsAdapter.ts",
+              "frontend/src/features/gitops/gitOpsPresentation.ts",
+              "frontend/src/features/gitops/gitOpsPresentation.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail"
+            ],
+            "plannedTestIds": [
+              "gitops.list.status-normalization",
+              "gitops.insights.availability"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product owns a reusable provider-neutral contract and one status normalizer. Managed resource inventory and controller-specific lifecycle facts are deliberately not parsed from unknown payloads in the browser."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -7916,8 +8044,42 @@
         "blobId": "480daeeeeac65c36eba209b9b243908cc2befe28",
         "sha256": "9a8d38474c57dcd5c3e0f94c1b258bdb2e8642b5edf208307b83e6017edf3660"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:application-sync:selective-resource-payload:v1",
+          "legacyContractIds": [
+            "reference.feature.212"
+          ],
+          "symbol": "buildArgoResourceSyncVars tests",
+          "interaction": "selective application resource sync preserves exact resource identity while forbidding revision, prune, and apply-only options that are unsafe for a partial sync",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume only from a durable CommandReceipt cursor for the exact application, resource, and command attempt",
+            "backpressure": "coalesce non-terminal operation progress while preserving validation, cancellation, and terminal events",
+            "merge": "reject an event whose application scope, immutable ResourceRef, receipt, or attempt differs from the submitted selective sync"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/createGitOpsAdapter.test.ts",
+              "frontend/src/features/gitops/gitOpsContract.ts",
+              "src/domains/gitops/detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "gitops.sync-options.payload"
+            ],
+            "state": "blocked",
+            "blockedReason": "The product has no provider-neutral selective resource sync CommandRequest, resource eligibility projection, provider executor, CommandReceipt, or operation event stream.",
+            "rationale": "The existing release workflow cannot be reused because selective controller sync has different safety fields and requires exact managed-resource ownership evidence."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -10143,8 +10305,41 @@
         "blobId": "5a6060e9fe0a492db29438959668d9c6f9940dc7",
         "sha256": "d30b799992c3b0418fda4101bde3cc351528c69c558a9c15c5610c52392de400"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:insights:resource-diff-loader:v1",
+          "legacyContractIds": [],
+          "symbol": "ArgoResourceDiffLoader",
+          "interaction": "the application detail exposes revision-bound desired/live comparison availability and shows an explicit provider-integration reason instead of fetching or fabricating a diff in the browser",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload the exact application detail after an explicit refresh",
+            "backpressure": "abort a superseded detail request and retain no independent diff request while integration is unavailable",
+            "merge": "render comparison evidence only from the application response whose route identity is still active"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+              "src/domains/gitops/detail_projection.py",
+              "src/packages/contracts/gitops/detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.insights.availability",
+              "gitops.insights.resource-diff"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Availability, source revision, live observation revision, and reason are strict server evidence today. A redacted desired/live artifact endpoint and provider observation provenance are still required before the lazy diff viewer can exist."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -10158,8 +10353,56 @@
         "blobId": "d5593bbe6b8e9cefa6f883554e9f8a3cefe4a7b7",
         "sha256": "8d383d52ea2f3a38f557c621a0249d9869c9e9a2127446d50695c08de1d31f3f"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:fleet:authorized-catalog:v1",
+          "legacyContractIds": [
+            "reference.feature.206"
+          ],
+          "symbol": "GitOpsView fleet list, controlled search, status presentation, and application detail route",
+          "interaction": "the GitOps surface lists authorized deployment observations, normalizes status through one reusable model, filters the visible projection with a controlled accessible search, clears an empty result, expands stable row details, and routes exact application identity to provider-neutral evidence",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded deployment reads on explicit refresh and restart exact detail reads on route identity change",
+            "backpressure": "abort stale reads, keep search local to the already authorized projection, and never issue a request per keystroke",
+            "merge": "replace rows by stable application and binding identity while the search query only changes visibility"
+          },
+          "motion": {
+            "reducedMotion": "row disclosure keeps expanded state while the shared transition utility suppresses chevron animation for reduced-motion users.",
+            "evidence": [
+              "references/upstream/web/src/components/gitops/GitOpsView.tsx",
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/gitops/gitOpsPresentation.ts",
+              "frontend/src/features/gitops/gitOpsPresentation.test.ts",
+              "frontend/src/pages/gitops/GitOpsPage.tsx",
+              "frontend/src/pages/gitops/GitOpsSyncSearch.tsx",
+              "frontend/src/pages/gitops/GitOpsSyncTargetDetails.tsx",
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "frontend/src/pages/gitops/GitOpsSyncTableView.test.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "src/domains/gitops/detail_router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops",
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.list.search-input",
+              "gitops.list.status-normalization",
+              "gitops.insights.availability"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The current product surface reuses authorized applications and deployment bindings rather than raw controller objects, and the new search/status model contains no provider logic or fake rows. External GitOps CR discovery, labels, topology, health, and managed-resource inventory remain separate typed contract work."
+          }
+        }
+      ]
     },
     {
       "status": "A",
@@ -10170,8 +10413,41 @@
         "blobId": "83910099f445fa04954d39584f52d817fb2aa8b1",
         "sha256": "0f677ba4902b07308a4fe9637e61dbb87caeae63393d630621af5a90e65ce6fe"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:gitops:revision:metadata-evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "RevisionMetaChip",
+          "interaction": "the application detail and deployment table render only the exact observed revision and keep author, message, tags, date, and signature evidence unavailable until a trusted provider supplies them",
+          "transport": "poll",
+          "realtime": {
+            "resume": "reload revision evidence with the owning application detail or deployment observation",
+            "backpressure": "reuse the owning request and do not fan out a metadata request for each visible row",
+            "merge": "associate a revision only with the exact application and deployment scope that observed it"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx",
+              "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx",
+              "frontend/src/pages/gitops/GitOpsSyncTableView.tsx",
+              "src/domains/gitops/detail_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gitops.detail",
+              "domains.gitops.detail_router"
+            ],
+            "plannedTestIds": [
+              "gitops.detail.revision-meta",
+              "gitops.list.status-normalization"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Exact revision identity is available from an RBAC-filtered workflow or deployment observation. Commit author and signature are not inferred from repository text and require a future provider-owned metadata contract."
+          }
+        }
+      ]
     },
     {
       "status": "M",

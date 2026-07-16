@@ -6132,11 +6132,11 @@
     },
     {
       "contractId": "reference.feature.206",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:fleet:authorized-catalog:v1",
       "legacyContractIds": [
         "reference.feature.206"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-206",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -6192,11 +6192,11 @@
     },
     {
       "contractId": "reference.feature.208",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:insights:application-evidence:v1",
       "legacyContractIds": [
         "reference.feature.208"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-208",
       "section": "7.9 GitOps",
       "endpoints": [
@@ -6309,11 +6309,11 @@
     },
     {
       "contractId": "reference.feature.212",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:gitops:application-sync:selective-resource-payload:v1",
       "legacyContractIds": [
         "reference.feature.212"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "id": "reference-feature-212",
       "section": "7.9 GitOps",
       "endpoints": [

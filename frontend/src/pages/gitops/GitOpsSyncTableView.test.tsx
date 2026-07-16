@@ -53,6 +53,47 @@ describe("GitOpsSyncTableView", () => {
     expect(screen.getByRole("button", { name: "New deployment target" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
   });
+
+  it("filters the authorized projection and clears an empty result without another request", async () => {
+    const user = userEvent.setup();
+    const port = gitOpsPort();
+    vi.mocked(port.listSyncTargets).mockResolvedValue([{
+      id: "checkout-api:production",
+      applicationId: "checkout-api",
+      applicationName: "Checkout API",
+      clusterId: "production-east",
+      namespace: "checkout",
+      environment: "production",
+      syncStatus: "out_of_sync",
+      revision: "abc123",
+      observedAt: "2026-07-15T01:02:03Z",
+    }, {
+      id: "inventory-api:staging",
+      applicationId: "inventory-api",
+      applicationName: "Inventory API",
+      clusterId: "staging-east",
+      namespace: "inventory",
+      environment: "staging",
+      syncStatus: "synced",
+      revision: "def456",
+      observedAt: "2026-07-15T01:02:03Z",
+    }]);
+    renderView(port);
+
+    const search = await screen.findByRole("searchbox", { name: "Search deployments" });
+    await user.type(search, "production");
+    expect(screen.getByText("Checkout API")).toBeTruthy();
+    expect(screen.queryByText("Inventory API")).toBeNull();
+
+    await user.clear(search);
+    await user.type(search, "missing");
+    expect(screen.getByText("No matching deployments")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
+
+    expect(screen.getByText("Checkout API")).toBeTruthy();
+    expect(screen.getByText("Inventory API")).toBeTruthy();
+    expect(port.listSyncTargets).toHaveBeenCalledTimes(1);
+  });
 });
 
 function renderView(port: ReturnType<typeof gitOpsPort>) {
