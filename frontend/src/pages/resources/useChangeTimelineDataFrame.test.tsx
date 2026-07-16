@@ -121,10 +121,12 @@ describe("useChangeTimelineDataFrame freshness", () => {
     };
     const filterState = boundedFilter();
     const reportUnauthorized = vi.fn();
+    const onResourceInvalidation = vi.fn();
     renderHook(() => useChangeTimelineDataFrame({
       active: true,
       authorityKey: "workspace-a:user-a",
       filterState,
+      onResourceInvalidation,
       port,
       range: "1h" as const,
       reportUnauthorized,
@@ -134,6 +136,7 @@ describe("useChangeTimelineDataFrame freshness", () => {
     }));
     await flushPromises();
     expect(port.loadChangeTimeline).toHaveBeenCalledTimes(2);
+    expect(onResourceInvalidation).toHaveBeenCalledTimes(1);
   });
 });
 

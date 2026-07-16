@@ -160,7 +160,7 @@ export function ResourcesPage({
     replayAtMs: filter.detail.timeAt,
     rows: currentResourceRows,
     workspaceId: session?.workspaceId ?? null,
-    onResourceDelta: state.requestPodEventInvalidation,
+    onResourceDelta: state.requestResourceEventInvalidation,
   });
   const changeTimeline = useChangeTimelineDataFrame({
     active:
@@ -169,6 +169,7 @@ export function ResourcesPage({
       timelineReadBounded,
     authorityKey,
     filterState: filter.state,
+    onResourceInvalidation: state.requestResourceEventInvalidation,
     port: changeTimelinePort,
     range: filter.detail.timeRange ?? "1h",
     reportUnauthorized,

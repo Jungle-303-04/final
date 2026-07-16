@@ -5345,7 +5345,7 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
       "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
       "desktopContract": null,
@@ -5353,6 +5353,8 @@
         "tests/test_inventory_filter_router.py",
         "tests/test_inventory_filter_response_contract.py",
         "frontend/src/api/resource-filters.test.ts",
+        "frontend/src/features/resources/changeTimelineInvalidation.test.ts",
+        "frontend/src/pages/resources/useChangeTimelineDataFrame.test.tsx",
         "frontend/src/pages/resources/useResourcesFilterDataFrame.pagination.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],

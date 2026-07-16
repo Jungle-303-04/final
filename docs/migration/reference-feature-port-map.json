@@ -1493,7 +1493,7 @@
       }
     },
     "reference.feature.125": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.FilteredInventoryResourceListResponse",
       "frontendContract": "frontend/src/features/resources/resourcesFilterContract.ts",
       "desktopContract": null,
@@ -1501,6 +1501,8 @@
         "tests/test_inventory_filter_router.py",
         "tests/test_inventory_filter_response_contract.py",
         "frontend/src/api/resource-filters.test.ts",
+        "frontend/src/features/resources/changeTimelineInvalidation.test.ts",
+        "frontend/src/pages/resources/useChangeTimelineDataFrame.test.tsx",
         "frontend/src/pages/resources/useResourcesFilterDataFrame.pagination.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
@@ -1518,11 +1520,11 @@
           "test": "frontend/src/pages/resources/useResourcesFilterDataFrame.pagination.test.tsx"
         },
         "realtime": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/useResourcesPageState.ts#useResourcesPageState",
-          "consumer": "frontend/src/pages/resources/useResourcesFilterDataFrame.ts#useResourcesFilterDataFrame",
-          "reason": "Visible polling and generation-safe refresh exist, but no inventory invalidation cursor resumes a filtered resource page after an agent snapshot.",
-          "test": "frontend/src/pages/resources/ResourcesPage.refresh.test.tsx"
+          "consumer": "frontend/src/features/resources/changeTimelineInvalidation.ts#watchChangeTimelineInvalidations",
+          "reason": "Filtered pages reuse the authorized, scope-bound Timeline snapshot and resumable cursor. An admitted inventory change or resync frame enters the same server-policy scheduler as polling, coalesces a generation-safe first-page refresh, pauses while hidden, and retains the last successful page.",
+          "test": "frontend/src/pages/resources/useChangeTimelineDataFrame.test.tsx"
         }
       }
     },

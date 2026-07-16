@@ -28,6 +28,7 @@ export function useChangeTimelineDataFrame(input: {
   active: boolean;
   authorityKey: string;
   filterState: UnifiedFilterState;
+  onResourceInvalidation?: () => void;
   port: ChangeTimelinePort;
   range: TimelineRange;
   reportUnauthorized: () => void;
@@ -39,6 +40,7 @@ export function useChangeTimelineDataFrame(input: {
     active,
     authorityKey,
     filterState,
+    onResourceInvalidation,
     port,
     range,
     reportUnauthorized,
@@ -175,7 +177,10 @@ export function useChangeTimelineDataFrame(input: {
     const controller = new AbortController();
     void watchChangeTimelineInvalidations({
       filterState: requestState,
-      onInvalidate: refreshController.requestEventInvalidation,
+      onInvalidate() {
+        refreshController.requestEventInvalidation();
+        onResourceInvalidation?.();
+      },
       port: timelinePort,
       signal: controller.signal,
       window,
@@ -191,6 +196,7 @@ export function useChangeTimelineDataFrame(input: {
     return () => controller.abort();
   }, [
     refreshController,
+    onResourceInvalidation,
     reportUnauthorized,
     requestState,
     scope,

@@ -226,14 +226,13 @@ export function useResourcesPageState(
     },
     [filter],
   );
-  const requestPodEventInvalidation = useCallback(() => {
+  const requestResourceEventInvalidation = useCallback(() => {
     if (
-      selectedResourceType !== "pod" ||
       listPolicyRecord?.scope !== listPolicyScope ||
       listPolicyRecord.policy.eventInvalidation !== true
     ) return;
     listRefresh.requestEventInvalidation();
-  }, [listPolicyRecord, listPolicyScope, listRefresh, selectedResourceType]);
+  }, [listPolicyRecord, listPolicyScope, listRefresh]);
 
   return useMemo(
     () => ({
@@ -268,7 +267,7 @@ export function useResourcesPageState(
       revision,
       podRevision,
       refresh,
-      requestPodEventInvalidation,
+      requestResourceEventInvalidation,
       selectResourceType,
       cycleResourceType(direction: -1 | 1) {
         if (
@@ -374,7 +373,7 @@ export function useResourcesPageState(
       openDetail,
       refresh,
       refreshAfterSeconds,
-      requestPodEventInvalidation,
+      requestResourceEventInvalidation,
       filter,
       recordFailure,
       recordSuccess,
