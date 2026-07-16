@@ -25,6 +25,10 @@ import {
   type WorkloadDetailPort,
 } from "../features/workload-detail/workloadDetailContract";
 import {
+  EMPTY_COMPARE_PORT,
+  type ComparePort,
+} from "../features/compare/compareContract";
+import {
   createOperationStatusStore,
   type OperationStatusStore,
 } from "../features/operations/OperationStatusStore";
@@ -44,6 +48,7 @@ export interface ProductComposition {
   logStream: LogStreamPort;
   alertEvents: AlertEventsPort;
   workloadDetail: WorkloadDetailPort;
+  compare: ComparePort;
   operationStatusStore: OperationStatusStore;
   surfaces: readonly ProductSurfaceRegistration[];
   releasedSurfaceIds: ReadonlySet<ProductSurfaceId>;
@@ -61,6 +66,7 @@ export function createProductComposition(
   operationStatusStore: OperationStatusStore = createOperationStatusStore(EMPTY_OPERATION_EVENTS_PORT),
   dispose: () => void = () => undefined,
   workloadDetail: WorkloadDetailPort = EMPTY_WORKLOAD_DETAIL_PORT,
+  compare: ComparePort = EMPTY_COMPARE_PORT,
 ): ProductComposition {
   const byId = new Map<ProductSurfaceId, ProductSurfaceRegistration>();
 
@@ -90,6 +96,7 @@ export function createProductComposition(
     logStream,
     alertEvents,
     workloadDetail,
+    compare,
     operationStatusStore,
     surfaces,
     releasedSurfaceIds: new Set(surfaces.map((surface) => surface.id)),

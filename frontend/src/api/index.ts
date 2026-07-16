@@ -150,6 +150,26 @@ export {
   type WorkloadDetailEndpoint,
 } from "./workload-detail-schemas";
 export {
+  COMPARE_CANDIDATES_PATH,
+  COMPARE_DESCRIPTORS_PATH,
+  COMPARE_RESOURCES_PATH,
+  getCompareCandidates,
+  getCompareDescriptors,
+  getCompareResourcePair,
+  type CompareIdentityQuery,
+  type ComparePairQuery,
+} from "./compare";
+export {
+  compareCandidateListSchema,
+  compareDescriptorListSchema,
+  compareDescriptorSchema,
+  compareResourcePairSchema,
+  compareResourceRefSchema,
+  type CompareCandidateListEndpoint,
+  type CompareDescriptorListEndpoint,
+  type CompareResourcePairEndpoint,
+} from "./compare-schemas";
+export {
   listClusters,
   unregisterCluster,
   type ClusterUnregisterResponse,

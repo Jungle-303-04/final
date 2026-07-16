@@ -11,6 +11,7 @@ import { DesktopRuntimeSync } from "../desktop/DesktopRuntimeSync";
 import type { ProductComposition } from "./productComposition";
 import { RouteSurface } from "./RouteSurface";
 import { WorkloadDetailRoute } from "../pages/workload-detail/WorkloadDetailRoute";
+import { CompareRoute } from "../pages/compare/CompareRoute";
 import {
   landingProductRouteForReleasedSurfaces,
   PRODUCT_ROUTE_CATALOG,
@@ -91,6 +92,7 @@ export function ProductRouter({
               element={<WorkloadDetailRoute port={composition.workloadDetail} />}
               path="/workload/:kind/:namespace/:name"
             />
+            <Route element={<CompareRoute port={composition.compare} />} path="/compare" />
             <Route path="*" element={<ProductFallbackRedirect path={landingRoute.path} />} />
           </Route>
           </Routes>
