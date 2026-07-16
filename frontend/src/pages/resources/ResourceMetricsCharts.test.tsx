@@ -61,6 +61,44 @@ describe("resource detail metrics", () => {
             },
           ],
         },
+        containerSeries: [
+          {
+            name: "app",
+            completeness: "exact",
+            partialReasonCodes: [],
+            points: [
+              {
+                cpuMillicores: 28,
+                memoryMebibytes: 124,
+                observedAt: "2026-07-15T05:00:00.000Z",
+              },
+              {
+                cpuMillicores: 30,
+                memoryMebibytes: 128,
+                observedAt: "2026-07-15T05:01:00.000Z",
+              },
+            ],
+          },
+          {
+            name: "sidecar",
+            completeness: "exact",
+            partialReasonCodes: [],
+            points: [
+              {
+                cpuMillicores: 8,
+                memoryMebibytes: 30,
+                observedAt: "2026-07-15T05:00:00.000Z",
+              },
+              {
+                cpuMillicores: 10,
+                memoryMebibytes: 32,
+                observedAt: "2026-07-15T05:01:00.000Z",
+              },
+            ],
+          },
+        ],
+        containerHistoryCompleteness: "exact",
+        containerHistoryReasonCodes: [],
         resourceId: POD_DETAIL.resource.inventoryKey,
         resourceType: "pod",
       }],
@@ -79,17 +117,18 @@ describe("resource detail metrics", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "checkout-api-0 상세" });
-    expect(await within(dialog).findByText("CPU 사용량")).toBeTruthy();
-    expect(within(dialog).getByText("메모리 사용량")).toBeTruthy();
+    expect((await within(dialog).findAllByText("CPU 사용량")).length).toBe(3);
+    expect(within(dialog).getAllByText("메모리 사용량")).toHaveLength(3);
     expect(within(dialog).getAllByText("40.0m").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("86.0m").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("160MiB").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("192MiB").length).toBeGreaterThan(0);
-    expect(within(dialog).getByText("app")).toBeTruthy();
-    expect(within(dialog).getByText("sidecar")).toBeTruthy();
+    expect(within(dialog).getAllByText("app")).toHaveLength(2);
+    expect(within(dialog).getAllByText("sidecar")).toHaveLength(2);
     expect(within(dialog).getByText("30.0m · 128MiB")).toBeTruthy();
     expect(within(dialog).getByText("10.0m · 32.0MiB")).toBeTruthy();
-    expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(2);
+    expect(within(dialog).getByText("컨테이너 사용 이력")).toBeTruthy();
+    expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(6);
     await waitFor(() => expect(loadResourceMetricsHistory).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -108,8 +147,8 @@ describe("resource detail metrics", () => {
     ));
     await user.click(within(dialog).getByRole("tab", { name: "개요" }));
     expect(dialog.querySelector('[data-slot="resource-history-unavailable"]')).toBeNull();
-    expect(within(dialog).getByText("CPU 사용량")).toBeTruthy();
-    expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(2);
+    expect(within(dialog).getAllByText("CPU 사용량")).toHaveLength(3);
+    expect(dialog.querySelectorAll('[data-slot="chart"]')).toHaveLength(6);
   });
 
   it("renders a real PVC volume observation without inventing CPU or memory", () => {

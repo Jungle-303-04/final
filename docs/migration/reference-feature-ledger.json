@@ -6428,7 +6428,7 @@
       "streaming": false,
       "area": "observability-sessions",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ResourceMetricsHistoryResponse",
       "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
@@ -6442,17 +6442,17 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
           "consumer": "src/domains/inventory_filter/metrics_history.py#build_resource_metric_history",
-          "reason": "The bounded range, exact resource identity, gaps, and completeness are implemented, but container-level Pod history is not retained.",
-          "test": "tests/test_inventory_filter_router.py"
+          "reason": "The bounded history contract retains each metrics-server Pod container observation under the exact Pod UID, caps series cardinality, preserves missing values, and reports identity, collection, and projection completeness without synthetic samples.",
+          "test": "tests/test_resource_metrics_history_contract.py#test_pod_container_history_preserves_each_exact_observation"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
           "consumer": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
-          "reason": "The canonical range chart is complete for aggregate Pod evidence; per-container series remain a provider follow-up.",
+          "reason": "The canonical metrics surface validates and renders bounded CPU and memory history charts for every observed container alongside the exact current observation and explicit partial or unavailable state.",
           "test": "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx"
         },
         "desktop": null,

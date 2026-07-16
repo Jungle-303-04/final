@@ -19,6 +19,16 @@ function endpointResponse(
         { observed_at: "2026-07-14T00:00:00Z", cpu_mcores: 10, mem_mib: null },
         { observed_at: "2026-07-14T00:01:00Z", cpu_mcores: null, mem_mib: 64 },
       ],
+      container_series: [{
+        name: "app",
+        points: [
+          { observed_at: "2026-07-14T00:00:00Z", cpu_mcores: 10, mem_mib: 64 },
+        ],
+        completeness: "partial",
+        partial_reason_codes: ["container_metrics_history_partial"],
+      }],
+      container_history_completeness: "partial",
+      container_history_reason_codes: ["container_metrics_history_partial"],
       has_sparkline_points: true,
       completeness: "partial",
       partial_reason_codes: ["sample_gap"],
@@ -59,6 +69,16 @@ describe("Resource metrics history adapter", () => {
       { observedAt: "2026-07-14T00:00:00Z", cpuMillicores: 10, memoryMebibytes: null },
       { observedAt: "2026-07-14T00:01:00Z", cpuMillicores: null, memoryMebibytes: 64 },
     ]);
+    expect(result.series[0]?.containerSeries).toEqual([{
+      name: "app",
+      points: [{
+        observedAt: "2026-07-14T00:00:00Z",
+        cpuMillicores: 10,
+        memoryMebibytes: 64,
+      }],
+      completeness: "partial",
+      partialReasonCodes: ["container_metrics_history_partial"],
+    }]);
   });
 
   it("preserves the server-observed current Node timestamp and measurement window", async () => {
@@ -84,6 +104,9 @@ describe("Resource metrics history adapter", () => {
           container_metrics_complete: false,
           containers: [],
         },
+        container_series: [],
+        container_history_completeness: "unavailable",
+        container_history_reason_codes: ["container_metrics_not_applicable"],
         has_sparkline_points: true,
         completeness: "exact",
         partial_reason_codes: [],

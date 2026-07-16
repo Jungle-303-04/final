@@ -22,6 +22,7 @@ import type {
   ResourceMetricsUnavailableRetry,
 } from "./useResourceMetricsHistoryDataFrame";
 import type {
+  ResourceMetricContainerHistorySeries,
   ResourceMetricContainerObservation,
   ResourceMetricTimeRange,
 } from "../../features/resources/resourceMetricsHistoryContract";
@@ -145,6 +146,149 @@ export function ResourceMetricsCharts({
           containers={series.currentObservation.containers}
         />
       ) : null}
+      {series.resourceType === "pod" && series.containerSeries !== undefined ? (
+        <ContainerMetricsHistory
+          completeness={series.containerHistoryCompleteness ?? "unavailable"}
+          series={series.containerSeries}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ContainerMetricsHistory({
+  completeness,
+  series,
+}: {
+  completeness: "exact" | "partial" | "unavailable";
+  series: ResourceMetricContainerHistorySeries[];
+}) {
+  const { t } = useI18n();
+  if (series.length === 0) {
+    return completeness === "unavailable" ? (
+      <section
+        className="grid min-w-0 gap-2 rounded-xl border bg-card p-4 shadow-xs"
+        data-slot="resource-container-metric-history"
+      >
+        <h3 className="truncate text-sm font-medium">
+          {t("resources.detail.metricsContainerHistory")}
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          {t("resources.detail.metricsContainersUnavailable")}
+        </p>
+      </section>
+    ) : null;
+  }
+  return (
+    <section
+      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 shadow-xs"
+      data-slot="resource-container-metric-history"
+    >
+      <header className="flex min-w-0 items-center justify-between gap-3">
+        <h3 className="truncate text-sm font-medium">
+          {t("resources.detail.metricsContainerHistory")}
+        </h3>
+        {completeness === "exact" ? null : (
+          <Badge variant="outline">
+            {t("resources.detail.metricsContainersPartial")}
+          </Badge>
+        )}
+      </header>
+      <div className="grid min-w-0 gap-3">
+        {series.map((container) => (
+          <article className="grid min-w-0 gap-3 rounded-lg border p-3" key={container.name}>
+            <h4 className="truncate text-sm font-medium" title={container.name}>
+              {container.name}
+            </h4>
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+              <ContainerMetricHistoryChart
+                config={CPU_CONFIG}
+                data={container.points.map((point) => ({
+                  time: Date.parse(point.observedAt),
+                  value: point.cpuMillicores,
+                }))}
+                title={t("resources.detail.metricsCpu")}
+                unit="m"
+              />
+              <ContainerMetricHistoryChart
+                config={MEMORY_CONFIG}
+                data={container.points.map((point) => ({
+                  time: Date.parse(point.observedAt),
+                  value: point.memoryMebibytes,
+                }))}
+                title={t("resources.detail.metricsMemory")}
+                unit="MiB"
+              />
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ContainerMetricHistoryChart({
+  config,
+  data,
+  title,
+  unit,
+}: {
+  config: ChartConfig;
+  data: Array<{ time: number; value: number | null }>;
+  title: string;
+  unit: string;
+}) {
+  const gradientId = useId().replace(/:/g, "");
+  const points = data.filter((point) => Number.isFinite(point.time));
+  const hasValue = points.some((point) => point.value !== null);
+  const formatValue = (value: number) => `${formatNumber(value)}${unit}`;
+  return (
+    <div className="grid min-w-0 gap-2">
+      <span className="text-xs text-muted-foreground">{title}</span>
+      {hasValue ? (
+        <ChartContainer className="h-24 w-full aspect-auto" config={config}>
+          <AreaChart accessibilityLayer data={points} margin={{ left: 0, right: 4, top: 4 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              axisLine={false}
+              dataKey="time"
+              domain={["dataMin", "dataMax"]}
+              hide
+              type="number"
+            />
+            <YAxis axisLine={false} hide />
+            <Tooltip
+              content={({ active, label, payload }) => {
+                const value = payload?.[0]?.value;
+                if (!active || typeof value !== "number") return null;
+                return (
+                  <div className="grid gap-1 rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">
+                    <span className="text-muted-foreground">{formatDateTime(Number(label))}</span>
+                    <strong className="font-mono text-sm tabular-nums">{formatValue(value)}</strong>
+                  </div>
+                );
+              }}
+              cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
+            />
+            <Area
+              connectNulls={false}
+              dataKey="value"
+              fill={`url(#${gradientId})`}
+              isAnimationActive={false}
+              stroke="var(--color-value)"
+              strokeWidth={2}
+              type="monotone"
+            />
+          </AreaChart>
+        </ChartContainer>
+      ) : (
+        <span className="font-mono text-xs text-muted-foreground">—</span>
+      )}
     </div>
   );
 }

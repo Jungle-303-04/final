@@ -10,6 +10,7 @@ from typing import Any, Literal
 from packages.contracts.event_bus.interfaces import JsonObject
 
 Completeness = Literal["exact", "partial", "unavailable"]
+MAX_CONTAINER_METRIC_SERIES = 64
 
 
 def build_resource_metric_history(
@@ -34,6 +35,8 @@ def build_resource_metric_history(
         usage_collection = "pods" if resource_type == "pod" else "nodes"
         points: list[JsonObject] = []
         current_observations: list[JsonObject] = []
+        container_points: dict[str, list[JsonObject]] = {}
+        container_history_reasons: set[str] = set()
         for sample in samples_by_cluster.get(cluster_id, ()):
             observed_at = sample.get("sampled_at")
             if not observed_at:
@@ -42,9 +45,9 @@ def build_resource_metric_history(
             measurements = (
                 usage.get(usage_collection) if isinstance(usage.get(usage_collection), dict) else {}
             )
-            measured = (
-                measurements.get(usage_key) if isinstance(measurements.get(usage_key), dict) else {}
-            )
+            measured_value = measurements.get(usage_key)
+            measured_present = isinstance(measured_value, dict)
+            measured = measured_value if measured_present else {}
             cpu_mcores = _non_negative_number(measured.get("cpu_mcores"))
             mem_mib = _non_negative_number(measured.get("mem_mib", measured.get("memory_mib")))
             points.append(
@@ -66,6 +69,22 @@ def build_resource_metric_history(
             resource_identity_matches = resource_type != "pod" or (
                 expected_uid is not None and _non_empty_text(measured.get("uid")) == expected_uid
             )
+            if resource_type == "pod":
+                if not measured_present:
+                    container_history_reasons.add("container_metrics_history_partial")
+                elif not resource_identity_matches:
+                    container_history_reasons.add("container_metrics_identity_unavailable")
+                elif not container_metrics_complete:
+                    container_history_reasons.add("container_metrics_history_partial")
+                else:
+                    for container in container_metrics:
+                        container_points.setdefault(str(container["name"]), []).append(
+                            {
+                                "observed_at": str(observed_at),
+                                "cpu_mcores": container["cpu_mcores"],
+                                "mem_mib": container["mem_mib"],
+                            }
+                        )
             if (
                 metrics_observed_at is not None
                 and metrics_window is not None
@@ -94,6 +113,27 @@ def build_resource_metric_history(
             measured_count=cpu_count,
             projection_complete=projection_complete,
         )
+        (
+            container_history_completeness,
+            container_history_reason_codes,
+        ) = _container_history_completeness(
+            resource_type=resource_type,
+            container_points=container_points,
+            reasons=container_history_reasons,
+            projection_complete=projection_complete,
+        )
+        container_series = [
+            {
+                "name": container_name,
+                "points": sorted(
+                    container_points[container_name],
+                    key=lambda point: str(point["observed_at"]),
+                ),
+                "completeness": container_history_completeness,
+                "partial_reason_codes": container_history_reason_codes,
+            }
+            for container_name in sorted(container_points)
+        ]
         response_reasons.update(reasons)
         series.append(
             {
@@ -104,6 +144,9 @@ def build_resource_metric_history(
                 "name": name,
                 "points": points,
                 "current_observation": current_observation,
+                "container_series": container_series,
+                "container_history_completeness": container_history_completeness,
+                "container_history_reason_codes": container_history_reason_codes,
                 "has_sparkline_points": cpu_count > 0,
                 "completeness": completeness,
                 "partial_reason_codes": reasons,
@@ -144,6 +187,26 @@ def _response_completeness(
     if projection_complete and values == {"exact"}:
         return "exact"
     return "partial"
+
+
+def _container_history_completeness(
+    *,
+    resource_type: str,
+    container_points: Mapping[str, Sequence[Mapping[str, Any]]],
+    reasons: set[str],
+    projection_complete: bool,
+) -> tuple[Completeness, list[str]]:
+    if resource_type != "pod":
+        return "unavailable", ["container_metrics_not_applicable"]
+    normalized_reasons = set(reasons)
+    if not projection_complete:
+        normalized_reasons.add("inventory_projection_partial")
+    if not container_points:
+        normalized_reasons.add("container_metrics_history_unavailable")
+        return "unavailable", sorted(normalized_reasons)
+    if normalized_reasons:
+        return "partial", sorted(normalized_reasons)
+    return "exact", []
 
 
 def _non_negative_number(value: Any) -> float | None:
@@ -189,4 +252,4 @@ def _container_metrics(value: Any) -> list[JsonObject]:
             "cpu_mcores": cpu_mcores,
             "mem_mib": mem_mib,
         }
-    return [containers[name] for name in sorted(containers)]
+    return [containers[name] for name in sorted(containers)[:MAX_CONTAINER_METRIC_SERIES]]

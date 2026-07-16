@@ -261,6 +261,7 @@ export const resourcesKo = {
   "resources.detail.metricsCurrent": "현재",
   "resources.detail.metricsCurrentObservation": "현재 관측 {time} · 측정 창 {window}",
   "resources.detail.metricsContainers": "컨테이너 사용량",
+  "resources.detail.metricsContainerHistory": "컨테이너 사용 이력",
   "resources.detail.metricsContainersPartial": "일부 관측",
   "resources.detail.metricsContainersUnavailable": "컨테이너 측정값을 확인할 수 없습니다.",
   "resources.detail.metricsContainerValue": "{cpu} · {memory}",

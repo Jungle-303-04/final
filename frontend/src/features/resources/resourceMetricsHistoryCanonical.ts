@@ -40,6 +40,18 @@ export function toResourceMetricsHistory(
           })),
           containerMetricsComplete: series.current_observation.container_metrics_complete,
         },
+      containerSeries: series.container_series.map((container) => ({
+        name: container.name,
+        points: container.points.map((point) => ({
+          observedAt: point.observed_at,
+          cpuMillicores: point.cpu_mcores,
+          memoryMebibytes: point.mem_mib,
+        })),
+        completeness: container.completeness,
+        partialReasonCodes: container.partial_reason_codes,
+      })),
+      containerHistoryCompleteness: series.container_history_completeness,
+      containerHistoryReasonCodes: series.container_history_reason_codes,
       hasSparklinePoints: series.has_sparkline_points,
       completeness: series.completeness,
       partialReasonCodes: series.partial_reason_codes,

@@ -1109,12 +1109,33 @@ class ResourceMetricContainerObservation(StrictModel):
         return self
 
 
+class ResourceMetricContainerHistorySeries(StrictModel):
+    name: str = Field(min_length=1, max_length=253)
+    points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
+    completeness: FilterCountCompleteness
+    partial_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_history(self) -> Self:
+        observed_at = [point.observed_at for point in self.points]
+        if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
+            raise ValueError("container metric history points must be unique and ordered")
+        if self.completeness == "unavailable" and self.points:
+            raise ValueError("unavailable container history cannot expose points")
+        if self.completeness == "exact" and (not self.points or self.partial_reason_codes):
+            raise ValueError("exact container history requires points without reasons")
+        return self
+
+
 class ResourceMetricCurrentObservation(StrictModel):
     observed_at: str = Field(min_length=1)
     measurement_window: str = Field(min_length=1, max_length=64)
     cpu_mcores: float | None = Field(default=None, ge=0)
     mem_mib: float | None = Field(default=None, ge=0)
-    containers: list[ResourceMetricContainerObservation] = Field(default_factory=list)
+    containers: list[ResourceMetricContainerObservation] = Field(
+        default_factory=list,
+        max_length=64,
+    )
     container_metrics_complete: bool = False
 
     @model_validator(mode="after")
@@ -1137,6 +1158,12 @@ class ResourceMetricHistorySeries(StrictModel):
     name: str = Field(min_length=1)
     points: list[ResourceMetricHistoryPoint] = Field(default_factory=list)
     current_observation: ResourceMetricCurrentObservation | None = None
+    container_series: list[ResourceMetricContainerHistorySeries] = Field(
+        default_factory=list,
+        max_length=64,
+    )
+    container_history_completeness: FilterCountCompleteness = "unavailable"
+    container_history_reason_codes: list[str] = Field(default_factory=list)
     has_sparkline_points: bool
     completeness: FilterCountCompleteness
     partial_reason_codes: list[str] = Field(default_factory=list)
@@ -1147,15 +1174,32 @@ class ResourceMetricHistorySeries(StrictModel):
             raise ValueError("pod metric history requires a namespace")
         if self.resource_type == "node" and self.namespace is not None:
             raise ValueError("node metric history must be cluster scoped")
-        if (
-            self.resource_type == "node"
-            and self.current_observation is not None
-            and (
-                self.current_observation.containers
-                or self.current_observation.container_metrics_complete
+        if self.resource_type == "node" and (
+            self.container_series
+            or self.container_history_completeness != "unavailable"
+            or self.container_history_reason_codes != ["container_metrics_not_applicable"]
+            or (
+                self.current_observation is not None
+                and (
+                    self.current_observation.containers
+                    or self.current_observation.container_metrics_complete
+                )
             )
         ):
             raise ValueError("node current metrics cannot expose Pod containers")
+        container_names = [item.name for item in self.container_series]
+        if container_names != sorted(container_names) or len(set(container_names)) != len(
+            container_names
+        ):
+            raise ValueError("container metric history series must be unique and ordered")
+        if self.container_history_completeness == "unavailable" and self.container_series:
+            raise ValueError("unavailable container metric history cannot expose series")
+        if self.container_history_completeness == "exact" and (
+            not self.container_series
+            or self.container_history_reason_codes
+            or any(item.completeness != "exact" for item in self.container_series)
+        ):
+            raise ValueError("exact container metric history requires exact series")
         observed_at = [point.observed_at for point in self.points]
         if observed_at != sorted(observed_at) or len(set(observed_at)) != len(observed_at):
             raise ValueError("resource metric history points must be unique and ordered")

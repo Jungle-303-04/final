@@ -39,6 +39,18 @@ export interface ResourceMetricsHistoryEndpointResponse {
       }>;
       container_metrics_complete: boolean;
     } | null;
+    container_series: Array<{
+      name: string;
+      points: Array<{
+        observed_at: string;
+        cpu_mcores: number | null;
+        mem_mib: number | null;
+      }>;
+      completeness: Completeness;
+      partial_reason_codes: string[];
+    }>;
+    container_history_completeness: Completeness;
+    container_history_reason_codes: string[];
     has_sparkline_points: boolean;
     completeness: Completeness;
     partial_reason_codes: string[];

@@ -41,6 +41,13 @@ export interface ResourceMetricContainerObservation {
   memoryMebibytes: number | null;
 }
 
+export interface ResourceMetricContainerHistorySeries {
+  name: string;
+  points: ResourceMetricHistoryPoint[];
+  completeness: ResourcesFilterCompleteness;
+  partialReasonCodes: string[];
+}
+
 export interface ResourceMetricHistorySeries {
   resourceId: string;
   clusterId: string;
@@ -49,6 +56,9 @@ export interface ResourceMetricHistorySeries {
   name: string;
   points: ResourceMetricHistoryPoint[];
   currentObservation?: ResourceMetricCurrentObservation | null;
+  containerSeries?: ResourceMetricContainerHistorySeries[];
+  containerHistoryCompleteness?: ResourcesFilterCompleteness;
+  containerHistoryReasonCodes?: string[];
   hasSparklinePoints: boolean;
   completeness: ResourcesFilterCompleteness;
   partialReasonCodes: string[];

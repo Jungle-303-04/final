@@ -261,6 +261,7 @@ export const resourcesEn = {
   "resources.detail.metricsCurrent": "Current",
   "resources.detail.metricsCurrentObservation": "Current observation {time} · window {window}",
   "resources.detail.metricsContainers": "Container usage",
+  "resources.detail.metricsContainerHistory": "Container history",
   "resources.detail.metricsContainersPartial": "Partial",
   "resources.detail.metricsContainersUnavailable": "Container measurements are unavailable.",
   "resources.detail.metricsContainerValue": "{cpu} · {memory}",

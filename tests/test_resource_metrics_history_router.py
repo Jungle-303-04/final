@@ -194,6 +194,9 @@ def test_metric_history_returns_measured_node_series() -> None:
                 }
             ],
             "current_observation": None,
+            "container_series": [],
+            "container_history_completeness": "unavailable",
+            "container_history_reason_codes": ["container_metrics_not_applicable"],
             "has_sparkline_points": True,
             "completeness": "exact",
             "partial_reason_codes": [],

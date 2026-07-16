@@ -259,6 +259,7 @@ export type ResourcesMessageKey =
   | "resources.detail.metricsCurrent"
   | "resources.detail.metricsCurrentObservation"
   | "resources.detail.metricsContainers"
+  | "resources.detail.metricsContainerHistory"
   | "resources.detail.metricsContainersPartial"
   | "resources.detail.metricsContainersUnavailable"
   | "resources.detail.metricsContainerValue"
