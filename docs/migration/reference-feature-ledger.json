@@ -2617,11 +2617,11 @@
     {
       "id": "reference-feature-063",
       "contractId": "reference.feature.063",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:home:deferred-ready:dashboard-refetch:v1",
       "legacyContractIds": [
         "reference.feature.063"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "6.1 SSE",
       "line": 289,
       "cells": [
@@ -2633,17 +2633,33 @@
       "streaming": false,
       "area": "realtime-events",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.freshness.HomeDashboardEventFrame",
+      "frontendContract": "frontend/src/features/home/homeEndpointContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_home_dashboard_ready_stream.py",
+        "tests/test_inventory_timeline_ingest.py",
+        "frontend/src/api/home-dashboard-events.test.ts",
+        "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+        "frontend/src/pages/home/useHomePageState.test.tsx",
+        "scripts/reference-home-insights-parity.test.mjs"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/dashboard/fleet_router.py#stream_cluster_home_events",
+          "consumer": "src/domains/inventory/ingest.py#ingest_inventory_snapshot",
+          "reason": "Accepted inventory snapshots become visible only after the owning transaction commits; the authorized Home stream replays their exact PostgreSQL positions through a user, workspace, cluster, and authorization-revision bound signed cursor.",
+          "test": "tests/test_home_dashboard_ready_stream.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/home/useHomePageState.ts#useHomePageState",
+          "consumer": "frontend/src/features/home/createHomeAdapter.ts#createHomeAdapter",
+          "reason": "The active Home scope consumes deferred-ready invalidations, coalesces a section refresh, aborts hidden or obsolete subscriptions, and preserves each section's last successful projection when the refresh fails.",
+          "test": "frontend/src/pages/home/useHomePageState.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

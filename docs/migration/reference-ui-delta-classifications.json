@@ -171,6 +171,10 @@
       "destination": "frontend/src/pages/home/HomePage.semantics.test.tsx",
       "rationale": "Home must distinguish pending, partial, disconnected, and forbidden cluster evidence without converting an incomplete section into a completed dashboard."
     },
+    "home.deferred-ready.authorized-refetch": {
+      "destination": "frontend/src/features/home/createHomeAdapter.stream.test.ts",
+      "rationale": "Deferred readiness must resume an authorization-bound durable snapshot cursor, use the server reconnect budget, refresh only the active Home scope, and retain the last successful projection after a background failure."
+    },
     "home.issue-timing.disclosure": {
       "destination": "frontend/src/features/issues/issuePresentation.test.ts",
       "rationale": "Home issue timing remains unavailable until a server-owned event-time projection can distinguish creation-time failure from a verified healthy regression."
@@ -2745,6 +2749,44 @@
     "web/src/hooks/useEventSource.ts": {
       "classification": "classified",
       "interactions": [
+        {
+          "sourceKey": "upstream-ui:home:deferred-ready:dashboard-refetch:v1",
+          "legacyContractIds": [
+            "reference.feature.063"
+          ],
+          "symbol": "SSEBroadcaster.watchDeferredSync and useEventSource deferred_ready handler",
+          "interaction": "after the server finishes one accepted deferred inventory synchronization, the authorized active Home scope receives a readiness invalidation and refetches its dashboard sections without discarding the previous successful projection",
+          "transport": "sse",
+          "realtime": {
+            "resume": "Last-Event-ID carries the opaque cursor bound to user, workspace, cluster, and authorization revision; a changed binding is rejected and reconnect resumes strictly after the last accepted durable snapshot",
+            "backpressure": "the server drains at most one hundred ordered PostgreSQL positions per batch, process-local wakeups coalesce, the browser uses the server reconnect delay, and the shared refresh scheduler permits only one active section generation",
+            "merge": "only a frame for the active authorized cluster and current scope generation requests refresh; successful sections remain visible while a newer refresh is pending or fails"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/home-dashboard-events.ts",
+              "frontend/src/features/home/createHomeAdapter.ts",
+              "frontend/src/pages/home/useHomePageState.ts",
+              "src/domains/dashboard/fleet_router.py",
+              "src/domains/dashboard/ready_stream.py",
+              "src/domains/dashboard/repository.py",
+              "src/packages/contracts/freshness.py",
+              "tests/test_home_dashboard_ready_stream.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.freshness",
+              "packages.contracts.parity",
+              "domains.dashboard.ready_stream"
+            ],
+            "plannedTestIds": [
+              "home.deferred-ready.authorized-refetch"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The frozen server source is classified as a Python port and the browser handler as a frontend port. The product replaces one process-local empty event with a stronger committed-snapshot contract: PostgreSQL replay authority, authorization-bound signed cursor, explicit reconnect budget, active-scope cancellation, and last-success retention."
+          }
+        },
         {
           "sourceKey": "upstream-ui:topology:stream:connecting-lifecycle:v1",
           "legacyContractIds": [

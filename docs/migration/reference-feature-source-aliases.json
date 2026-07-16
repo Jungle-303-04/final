@@ -42,6 +42,7 @@
     "reference.feature.058": "upstream-ui:topology:stream:connecting-lifecycle:v1",
     "reference.feature.059": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
     "reference.feature.060": "upstream-ui:topology:stream:connecting-lifecycle:v1",
+    "reference.feature.063": "upstream-ui:home:deferred-ready:dashboard-refetch:v1",
     "reference.feature.064": "upstream-ui:shell:connection-state:authorized-refresh:v1",
     "reference.feature.065": "upstream-ui:shell:connection-state:authorized-refresh:v1",
     "reference.feature.066": "upstream-ui:home:dashboard-api:sectioned-projection:v1",
