@@ -552,36 +552,7 @@ class InventoryFilterRepository(DatabaseConnection):
             cluster_ids,
             at_revision=at_revision,
         )
-        reasons = {
-            str(reason)
-            for context in contexts.values()
-            for reason in (context.get("partial_reason_codes") or [])
-        }
-        observed = max(
-            (
-                context.get("observed_at")
-                for context in contexts.values()
-                if context.get("observed_at")
-            ),
-            default=None,
-        )
-        return {
-            "snapshot_revision": max(
-                (int(context.get("snapshot_revision") or 0) for context in contexts.values()),
-                default=0,
-            ),
-            "observed_at": iso_or_none(observed),
-            "labels_complete": all(
-                bool(context.get("labels_complete")) for context in contexts.values()
-            ),
-            "resources_complete": all(
-                bool(context.get("resources_complete")) for context in contexts.values()
-            ),
-            "application_bindings_complete": all(
-                bool(context.get("application_bindings_complete")) for context in contexts.values()
-            ),
-            "partial_reason_codes": sorted(reasons),
-        }
+        return aggregate_snapshot_contexts(contexts, cluster_ids)
 
     def filter_snapshot_contexts(
         self,
@@ -2078,6 +2049,48 @@ def _snapshot_context_by_cluster(row: Mapping[str, Any] | None) -> JsonObject:
         "partial_reason_codes": sorted(
             {str(reason) for reason in (row.get("partial_reason_codes") or [])}
         ),
+    }
+
+
+def aggregate_snapshot_contexts(
+    contexts: Mapping[str, Mapping[str, Any]],
+    cluster_ids: Collection[str],
+) -> JsonObject:
+    """Aggregate already-loaded cluster contexts without another database round trip."""
+    selected = [
+        contexts.get(cluster_id, _snapshot_context_by_cluster(None))
+        for cluster_id in _ids(cluster_ids)
+    ]
+    if not selected:
+        return {
+            "snapshot_revision": 0,
+            "observed_at": None,
+            "labels_complete": True,
+            "resources_complete": True,
+            "application_bindings_complete": True,
+            "partial_reason_codes": [],
+        }
+    reasons = {
+        str(reason)
+        for context in selected
+        for reason in (context.get("partial_reason_codes") or [])
+    }
+    observed = max(
+        (context.get("observed_at") for context in selected if context.get("observed_at")),
+        default=None,
+    )
+    return {
+        "snapshot_revision": max(
+            (int(context.get("snapshot_revision") or 0) for context in selected),
+            default=0,
+        ),
+        "observed_at": iso_or_none(observed),
+        "labels_complete": all(bool(context.get("labels_complete")) for context in selected),
+        "resources_complete": all(bool(context.get("resources_complete")) for context in selected),
+        "application_bindings_complete": all(
+            bool(context.get("application_bindings_complete")) for context in selected
+        ),
+        "partial_reason_codes": sorted(reasons),
     }
 
 
