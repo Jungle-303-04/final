@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from sqlalchemy import Integer, and_, cast, delete, func, select, update
+from sqlalchemy import BigInteger, Integer, and_, cast, delete, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from domains.gitops.models import Application
@@ -903,7 +903,10 @@ def _timeline_overview_bucket_index(
     predicate: TimelineEvidencePredicate,
     bucket_width_ms: int,
 ) -> Any:
-    from_ms = predicate.replay_identity.window.from_ms
+    from_ms = literal(
+        predicate.replay_identity.window.from_ms,
+        type_=BigInteger(),
+    )
     elapsed_ms = func.extract("epoch", ledger.c.occurred_at) * 1_000 - from_ms
     return cast(func.floor(elapsed_ms / bucket_width_ms), Integer)
 

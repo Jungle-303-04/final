@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import BigInteger
 from sqlalchemy.dialects import postgresql
 
 from domains.timeline.predicate import TimelineEvidencePredicate
@@ -76,6 +77,39 @@ def test_overview_aggregate_and_independent_facets_keep_scope_rbac_and_half_open
     assert "timeline_events.occurred_at <= now()" in later_sql
     assert "timeline_events.activity in ('change')" in later_sql
     assert "timeline_events.resource ->> 'kind'" in later_sql
+
+
+def test_overview_bucket_binds_current_epoch_milliseconds_as_64_bit_integers() -> None:
+    """A current Unix millisecond value must not be coerced to PostgreSQL INTEGER."""
+    from_ms = 1_784_223_572_056
+    scope = TimelineLedgerReadScope(
+        workspace_id="workspace-a",
+        scopes=(
+            ClusterScope(
+                workspace_id="workspace-a",
+                cluster_id="cluster-a",
+            ),
+        ),
+        inventory_cluster_ids=frozenset({"cluster-a"}),
+    )
+    query = TimelineQuery(
+        scopes=scope.scopes,
+        window=TimelineWindow(from_ms=from_ms, to_ms=from_ms + 3_600_000),
+        mode="live",
+    )
+    statement = _timeline_overview_buckets_statement(
+        scope,
+        predicate=TimelineEvidencePredicate.from_query(scope, query),
+        bucket_width_ms=60_000,
+    )
+
+    compiled = statement.compile(dialect=postgresql.dialect())
+    epoch_bindings = {
+        id(binding): binding for binding in compiled.binds.values() if binding.value == from_ms
+    }
+
+    assert epoch_bindings
+    assert all(isinstance(binding.type, BigInteger) for binding in epoch_bindings.values())
 
 
 def _sql(statement: object) -> str:
