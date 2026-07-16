@@ -9,7 +9,10 @@ import { useCostOverview } from "./useCostOverviewData";
 describe("useCostOverview", () => {
   it("uses the server refresh policy rather than a browser-owned Cost interval", async () => {
     const port: CostPort = { getOverview: vi.fn().mockResolvedValue(overview()) };
-    const rendered = renderHook(() => useCostOverview(port, { clusterIds: ["cluster-a"] }));
+    const rendered = renderHook(() => useCostOverview(port, {
+      clusterIds: ["cluster-a"],
+      timeRange: "24h",
+    }));
 
     await waitFor(() => {
       expect(port.getOverview).toHaveBeenCalledOnce();
@@ -47,6 +50,13 @@ function overview() {
       idleCost: null,
       efficiency: null,
       savingsRecommendations: null,
+      reasonCodes: ["cost_observation_not_integrated"],
+    },
+    trend: {
+      availability: "unavailable" as const,
+      timeRange: "24h" as const,
+      currency: null,
+      series: [] as const,
       reasonCodes: ["cost_observation_not_integrated"],
     },
     refreshAfterSeconds: 1,

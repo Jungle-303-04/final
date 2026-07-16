@@ -1,5 +1,6 @@
 export type CostAvailability = "available" | "partial" | "unavailable";
 export type CostFreshness = "live" | "stale" | "partial" | "disconnected";
+export type CostTimeRange = "6h" | "24h" | "7d";
 
 export interface CostClusterScope {
   workspaceId: string;
@@ -34,15 +35,46 @@ export interface CostUnavailableSummary {
   reasonCodes: readonly string[];
 }
 
+export interface CostTrendPoint {
+  timestamp: number;
+  rateMicros: number;
+}
+
+export interface CostTrendSeries {
+  key: string;
+  label: string;
+  points: readonly CostTrendPoint[];
+}
+
+export interface CostObservedTrend {
+  availability: "available" | "partial";
+  timeRange: CostTimeRange;
+  currency: string;
+  series: readonly CostTrendSeries[];
+  reasonCodes: readonly string[];
+}
+
+export interface CostUnavailableTrend {
+  availability: "unavailable";
+  timeRange: CostTimeRange;
+  currency: null;
+  series: readonly [];
+  reasonCodes: readonly string[];
+}
+
+export type CostTrend = CostObservedTrend | CostUnavailableTrend;
+
 export interface CostOverview {
   scopeCoverage: CostScopeCoverage;
   observation: CostUnavailableObservation;
   summary: CostUnavailableSummary;
+  trend: CostTrend;
   refreshAfterSeconds: number;
 }
 
 export interface CostOverviewRequest {
   clusterIds: readonly string[];
+  timeRange: CostTimeRange;
 }
 
 export type CostFailureCode =

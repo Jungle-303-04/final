@@ -8,6 +8,7 @@ import type { ShellMessageKey } from "./keys/shell";
 import type { AlertsMessageKey } from "./keys/alerts";
 import type { TimelineMessageKey } from "./keys/timeline";
 import type { DesktopMessageKey } from "./keys/desktop";
+import type { CostMessageKey } from "./keys/cost";
 
 export type SupportedLocale = "en" | "ko";
 
@@ -238,6 +239,7 @@ export type MessageKey =
   | AlertsMessageKey
   | DockMessageKey
   | DesktopMessageKey
+  | CostMessageKey
   | ShellMessageKey
   | ClustersMessageKey
   | IssuesMessageKey

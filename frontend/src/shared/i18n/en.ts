@@ -8,6 +8,7 @@ import { shellEn } from "./catalogs/en/shell";
 import { alertsEn } from "./catalogs/en/alerts";
 import { timelineEn } from "./catalogs/en/timeline";
 import { desktopEn } from "./catalogs/en/desktop";
+import { costEn } from "./catalogs/en/cost";
 
 export const en = {
   "product.name": "Opsia",
@@ -282,6 +283,7 @@ export const en = {
   ...alertsEn,
   ...timelineEn,
   ...desktopEn,
+  ...costEn,
   ...clustersEn,
   ...resourcesEn,
   ...issuesEn,

@@ -10,6 +10,8 @@ from packages.contracts.cost.observations import (
     CostObservationSummary,
     CostOverviewResponse,
     CostScopeCoverage,
+    CostTimeRange,
+    CostUnavailableTrend,
 )
 from packages.contracts.parity import ClusterScope
 
@@ -22,6 +24,7 @@ def cost_overview(
     workspace_id: str,
     contexts: Mapping[str, Mapping[str, Any]],
     selected_cluster_ids: Iterable[str],
+    time_range: CostTimeRange = "24h",
 ) -> CostOverviewResponse:
     """Expose scope/freshness without turning missing billing data into money."""
 
@@ -35,6 +38,7 @@ def cost_overview(
         scope_coverage=coverage,
         observation=CostObservationStatus(reason_codes=reasons),
         summary=CostObservationSummary(reason_codes=reasons),
+        trend=CostUnavailableTrend(range=time_range, reason_codes=reasons),
         refresh_after_seconds=COST_REFRESH_AFTER_SECONDS,
     )
 

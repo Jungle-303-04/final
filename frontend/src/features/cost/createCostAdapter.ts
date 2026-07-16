@@ -11,6 +11,7 @@ export function createCostAdapter(endpoints: CostEndpointDependencies): CostPort
     async getOverview(request, signal) {
       return withPortFailure(async () => toOverview(await endpoints.getCostOverview({
         clusterIds: request.clusterIds,
+        timeRange: request.timeRange,
       }, signal)));
     },
   };
@@ -45,6 +46,26 @@ function toOverview(value: Awaited<ReturnType<CostEndpointDependencies["getCostO
       efficiency: value.summary.efficiency,
       savingsRecommendations: value.summary.savings_recommendations,
       reasonCodes: value.summary.reason_codes,
+    },
+    trend: value.trend.availability === "unavailable" ? {
+      availability: "unavailable",
+      timeRange: value.trend.range,
+      currency: null,
+      series: [],
+      reasonCodes: value.trend.reason_codes,
+    } : {
+      availability: value.trend.availability,
+      timeRange: value.trend.range,
+      currency: value.trend.currency,
+      series: value.trend.series.map((series) => ({
+        key: series.key,
+        label: series.label,
+        points: series.points.map((point) => ({
+          timestamp: point.timestamp,
+          rateMicros: point.rate_micros,
+        })),
+      })),
+      reasonCodes: value.trend.reason_codes,
     },
     refreshAfterSeconds: value.refresh_after_seconds,
   };

@@ -7,6 +7,7 @@ export const COST_OVERVIEW_PATH = "/api/cost/overview" as const;
 
 export interface CostOverviewQuery {
   clusterIds?: readonly string[];
+  timeRange?: "6h" | "24h" | "7d";
 }
 
 export function getCostOverview(
@@ -16,5 +17,6 @@ export function getCostOverview(
   const clusterIds = canonicalFacetSelections("clusters", query.clusterIds);
   return apiRequest(withQuery(COST_OVERVIEW_PATH, [
     ["clusters", clusterIds.length === 0 ? undefined : clusterIds.join(",")],
+    ["range", query.timeRange],
   ]), costOverviewSchema, { signal });
 }

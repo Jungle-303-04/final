@@ -8,6 +8,7 @@ import { shellKo } from "./catalogs/ko/shell";
 import { alertsKo } from "./catalogs/ko/alerts";
 import { timelineKo } from "./catalogs/ko/timeline";
 import { desktopKo } from "./catalogs/ko/desktop";
+import { costKo } from "./catalogs/ko/cost";
 
 export const ko = {
   "product.name": "Opsia",
@@ -282,6 +283,7 @@ export const ko = {
   ...alertsKo,
   ...timelineKo,
   ...desktopKo,
+  ...costKo,
   ...clustersKo,
   ...resourcesKo,
   ...issuesKo,

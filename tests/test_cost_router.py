@@ -94,6 +94,13 @@ def test_cost_overview_is_scope_and_permission_bound_without_fabricating_money()
         "savings_recommendations": None,
         "reason_codes": ["cost_observation_not_integrated"],
     }
+    assert body["trend"] == {
+        "availability": "unavailable",
+        "range": "24h",
+        "currency": None,
+        "series": [],
+        "reason_codes": ["cost_observation_not_integrated"],
+    }
     assert body["refresh_after_seconds"] == 60
 
 
@@ -104,4 +111,15 @@ def test_cost_overview_hides_unauthorized_scope_and_rejects_invalid_cluster_synt
     invalid = client.get("/cost/overview?clusters=cluster-a,,cluster-b")
 
     assert denied.status_code == 404
+    assert invalid.status_code == 422
+
+
+def test_cost_overview_validates_and_forwards_the_trend_range() -> None:
+    client = _client()
+
+    selected = client.get("/cost/overview?clusters=cluster-a&range=7d")
+    invalid = client.get("/cost/overview?clusters=cluster-a&range=30d")
+
+    assert selected.status_code == 200
+    assert selected.json()["trend"]["range"] == "7d"
     assert invalid.status_code == 422

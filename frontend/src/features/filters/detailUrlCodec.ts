@@ -1,6 +1,7 @@
 import {
   createEmptyProductDetailQuery,
   type ProductDetailQuery,
+  type CostRange,
   type TimelineRange,
 } from "./filterContract";
 import { parseBooleanQuery } from "./filterUrlScalars";
@@ -18,6 +19,7 @@ const LEGACY_RESOURCE_KIND_QUERY_KEY = "kind";
 const WORKFLOW_VIEWS = ["overview", "edit", "runs", "yaml"] as const;
 const RESOURCE_TOPOLOGY_VIEWS = ["physical", "relations"] as const;
 const TIMELINE_RANGES = ["15m", "1h", "6h", "24h"] as const;
+const COST_RANGES = ["6h", "24h", "7d"] as const;
 
 export function appendProductDetail(pairs: string[], detail: ProductDetailQuery) {
   appendNullableStableText(pairs, "detail", detail.detail);
@@ -43,6 +45,9 @@ export function appendProductDetail(pairs: string[], detail: ProductDetailQuery)
   if (detail.timeRange && detail.timeRange !== "1h") {
     appendText(pairs, "t.range", detail.timeRange);
   }
+  if (detail.costRange && detail.costRange !== "24h") {
+    appendText(pairs, "cost.range", detail.costRange);
+  }
   if (detail.timeAt !== undefined) appendText(pairs, "t.at", String(detail.timeAt));
   if (detail.graphCollapsed) appendText(pairs, "graph", "0");
 }
@@ -51,6 +56,7 @@ export function parseProductDetailQuery(
   params: StrictQuery,
   invalidFull: string[],
   invalidTimeRange: string[] = [],
+  invalidCostRange: string[] = [],
   invalidTimeAt: string[] = [],
   invalidGraph: string[] = [],
 ): ProductDetailQuery {
@@ -78,6 +84,9 @@ export function parseProductDetailQuery(
   const timeRange = readScalar(params, "t.range", invalidTimeRange);
   if (timeRange !== null && isTimelineRange(timeRange)) detail.timeRange = timeRange;
   else if (timeRange !== null) invalidTimeRange.push(timeRange);
+  const costRange = readScalar(params, "cost.range", invalidCostRange);
+  if (costRange !== null && isCostRange(costRange)) detail.costRange = costRange;
+  else if (costRange !== null) invalidCostRange.push(costRange);
   const timeAt = readScalar(params, "t.at", invalidTimeAt);
   if (timeAt !== null && /^\d{1,16}$/.test(timeAt)) {
     const parsed = Number(timeAt);
@@ -98,6 +107,10 @@ function readScalar(params: StrictQuery, key: string, invalid: string[]): string
 
 function isTimelineRange(value: string): value is TimelineRange {
   return TIMELINE_RANGES.some((range) => range === value);
+}
+
+function isCostRange(value: string): value is CostRange {
+  return COST_RANGES.some((range) => range === value);
 }
 
 function isResourceTopologyView(

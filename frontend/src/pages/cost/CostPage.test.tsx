@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CostPortFailure, type CostPort } from "../../features/cost/costContract";
+import { I18nProvider } from "../../shared/i18n";
+import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { CostPage } from "./CostPage";
 
 const scopeState = vi.hoisted(() => ({ value: null as unknown }));
@@ -22,7 +24,7 @@ beforeEach(() => {
 describe("CostPage", () => {
   it("shows unavailable observation rather than invented currency, zero, or recommendations", async () => {
     const port = costPort();
-    render(<MemoryRouter><CostPage port={port} /></MemoryRouter>);
+    renderCostPage(port);
 
     expect(await screen.findByRole("heading", { name: "Cost" })).toBeTruthy();
     expect(screen.getByText("Cost observation is not integrated for this authorized scope.")).toBeTruthy();
@@ -32,12 +34,15 @@ describe("CostPage", () => {
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.queryByText("USD")).toBeNull();
     expect(screen.queryByText("$")).toBeNull();
-    await waitFor(() => expect(port.getOverview).toHaveBeenCalledWith({ clusterIds: ["cluster-a"] }, expect.any(AbortSignal)));
+    await waitFor(() => expect(port.getOverview).toHaveBeenCalledWith({
+      clusterIds: ["cluster-a"],
+      timeRange: "24h",
+    }, expect.any(AbortSignal)));
   });
 
   it("renders a forbidden response without querying a replacement scope", async () => {
     const port = costPort(new CostPortFailure("forbidden"));
-    render(<MemoryRouter><CostPage port={port} /></MemoryRouter>);
+    renderCostPage(port);
 
     expect(await screen.findByText("You cannot access this scope")).toBeTruthy();
     expect(port.getOverview).toHaveBeenCalledTimes(1);
@@ -46,8 +51,25 @@ describe("CostPage", () => {
   it("does not query while cluster authority is resolving", () => {
     scopeState.value = { selection: { kind: "resolving", requestedIds: [] } };
     const port = costPort();
-    render(<MemoryRouter><CostPage port={port} /></MemoryRouter>);
+    renderCostPage(port);
     expect(port.getOverview).not.toHaveBeenCalled();
+  });
+
+  it("preserves unrelated search state while cost tabs and ranges change", async () => {
+    const port = costPort();
+    renderCostPage(port, "/cost?clusters=cluster-a&namespaces=cluster-a%2Fshop");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Allocation trend" }));
+    expect(screen.getByTestId("location").textContent).toContain("clusters=cluster-a");
+    expect(screen.getByTestId("location").textContent).toContain("namespaces=cluster-a%2Fshop");
+    expect(screen.getByTestId("location").textContent).toContain("tab=trend");
+    fireEvent.click(await screen.findByRole("button", { name: "7 days" }));
+
+    await waitFor(() => expect(port.getOverview).toHaveBeenLastCalledWith({
+      clusterIds: ["cluster-a"],
+      timeRange: "7d",
+    }, expect.any(AbortSignal)));
+    expect(screen.getByTestId("location").textContent).toContain("cost.range=7d");
   });
 });
 
@@ -71,7 +93,32 @@ function costPort(error?: CostPortFailure): CostPort & { getOverview: ReturnType
         savingsRecommendations: null,
         reasonCodes: ["cost_observation_not_integrated"],
       },
+      trend: {
+        availability: "unavailable" as const,
+        timeRange: "24h" as const,
+        currency: null,
+        series: [] as const,
+        reasonCodes: ["cost_observation_not_integrated"],
+      },
       refreshAfterSeconds: 60,
     })),
   };
+}
+
+function renderCostPage(port: CostPort, entry = "/cost") {
+  return render(
+    <I18nProvider navigatorLanguage="en" storage={null}>
+      <MemoryRouter initialEntries={[entry]}>
+        <UnifiedFilterProvider>
+          <CostPage port={port} />
+          <LocationProbe />
+        </UnifiedFilterProvider>
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
 }

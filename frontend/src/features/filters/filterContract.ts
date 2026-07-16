@@ -12,6 +12,7 @@ export interface KubernetesLabelFilter {
 
 export type ResourceView = "graph" | "table";
 export type TimelineRange = "15m" | "1h" | "6h" | "24h";
+export type CostRange = "6h" | "24h" | "7d";
 
 export interface UnifiedFilterState {
   common: {
@@ -74,6 +75,7 @@ export interface ProductDetailQuery {
   workflowView?: "overview" | "edit" | "runs" | "yaml" | null;
   workflowMode?: "new" | null;
   timeRange?: TimelineRange;
+  costRange?: CostRange;
   timeAt?: number;
   graphCollapsed?: true;
 }
@@ -100,6 +102,7 @@ export interface InvalidFilterValues {
   checksCategory: readonly string[];
   detailFull: readonly string[];
   timeRange: readonly string[];
+  costRange: readonly string[];
   timeAt: readonly string[];
   graph: readonly string[];
 }

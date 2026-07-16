@@ -231,6 +231,34 @@
       "destination": "tests/test_cost_router.py",
       "rationale": "The Python boundary applies workspace and inventory-read scope and keeps every monetary field null until a provider-backed observation exists."
     },
+    "cost.trend.contract": {
+      "destination": "tests/test_cost_observation_projection.py",
+      "rationale": "Trend windows, integer micro-unit rates, series count, point count, and timestamp ordering are bounded by the Python contract before browser delivery."
+    },
+    "cost.trend.surface": {
+      "destination": "frontend/src/features/cost/CostTrendChart.test.tsx",
+      "rationale": "The cost chart renders only observed server series, keeps unavailable evidence empty, supports keyboard range selection, and does not depend on animation."
+    },
+    "cost.trend.projection": {
+      "destination": "frontend/src/features/cost/costTrendProjection.test.ts",
+      "rationale": "The memoized browser projection keeps bounded timestamps, explicit gaps, and integer micro-unit conversion without mutating observations."
+    },
+    "cost.tabs.keyboard": {
+      "destination": "frontend/src/features/cost/CostViewTabs.test.tsx",
+      "rationale": "Only product-supported cost views are exposed with roving keyboard selection and URL-owned state."
+    },
+    "cost.tabs.url": {
+      "destination": "frontend/src/features/filters/filterUrl.cost.test.ts",
+      "rationale": "Cost view and trend-range state round-trip through the shared URL codec without dropping cluster, namespace, or other product filters."
+    },
+    "cost.cloud-console.allowlist": {
+      "destination": "frontend/src/features/cost/cloudConsoleLink.test.ts",
+      "rationale": "External console links require typed provider identity and an allow-listed HTTPS host; ambiguous and hostile identities fail closed."
+    },
+    "cost.application.collector-gate": {
+      "destination": "frontend/src/features/applications/ApplicationDetailPanels.test.tsx",
+      "rationale": "Application cost remains explicitly unavailable until the Python contract exposes authorized workload allocation observations."
+    },
     "topology.graph.contract": {
       "destination": "tests/test_relations_topology_router.py",
       "rationale": "The Python topology boundary must keep the authorized cluster scope, graph evidence, unavailable projection, and server refresh policy explicit."
@@ -4215,6 +4243,288 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The collector is not integrated, so the vertical truthfully returns unavailable status and null counts/edges instead of inferred connections or synthetic zero values."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/ApplicationCostTab.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:application:collector-state-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationCostTab state tests",
+          "interaction": "application cost states distinguish observed allocation, partial history, observed zero, permission denial, and absent collector evidence without substituting browser-owned amounts",
+          "transport": "poll",
+          "realtime": {
+            "resume": "refresh only the currently authorized application scope using the server refresh policy",
+            "backpressure": "share and supersede one bounded read for the selected application and trend window",
+            "merge": "replace cost evidence only when the application identity and requested window still match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailPanels.test.tsx",
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.application.collector-gate",
+              "cost.trend.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The authorized application projection currently exposes only collector availability and no workload allocation observation, so observed, partial, and zero application-cost states cannot be exercised truthfully.",
+            "rationale": "The existing application panel preserves explicit unavailable evidence. It must not manufacture workload costs or reinterpret missing observations as zero while the Python collector contract is absent."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/ApplicationCostTab.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:application:allocation-surface:v1",
+          "legacyContractIds": [],
+          "symbol": "ApplicationCostTab",
+          "interaction": "the application detail cost view renders current and historical workload allocation only from an authorized application-level cost observation contract",
+          "transport": "poll",
+          "realtime": {
+            "resume": "resume from a fresh server response for the exact application and selected trend window",
+            "backpressure": "retain bounded server series and discard superseded application reads",
+            "merge": "never merge allocation rows across application, workspace, cluster, or time-window identities"
+          },
+          "motion": {
+            "reducedMotion": "loading and state feedback remain semantic and do not require decorative chart animation.",
+            "evidence": [
+              "references/upstream/web/src/components/cost/ApplicationCostTab.tsx",
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailPanels.tsx",
+              "frontend/src/features/cost/CostTrendChart.tsx",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "cost.application.collector-gate",
+              "cost.trend.surface"
+            ],
+            "state": "blocked",
+            "blockedReason": "No provider-backed application allocation repository or typed application trend field exists in the Python application response.",
+            "rationale": "The reusable bounded trend renderer is ready, while the application surface remains unavailable until real allocation evidence is bound to authorized workload identities."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/cloud-console.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:cloud-console:allowlist-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "cloud console link tests",
+          "interaction": "external cloud console destinations are derived only from typed provider, location, and resource identity and fail closed for ambiguous values or host injection",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/cloudConsoleLink.test.ts",
+              "frontend/src/features/cost/cloudConsoleLink.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.cloud-console.allowlist"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned builder validates resource identity and the final HTTPS host without parsing display names or source provider-ID strings."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/cloud-console.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:cloud-console:typed-resource-link:v1",
+          "legacyContractIds": [],
+          "symbol": "nodeCloudConsoleLink and clusterCloudConsoleLink",
+          "interaction": "a cost resource may expose a provider console link only when the backend supplies an explicit typed cloud resource identity",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/cloudConsoleLink.ts",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.cloud-console.allowlist"
+            ],
+            "state": "blocked",
+            "blockedReason": "The current Cost response has no typed provider, project/account, region/location, or resource identity fields, so no external console link is mounted in the product UI.",
+            "rationale": "The link builder is reusable and allow-listed, but the browser intentionally receives no fallback parser for Kubernetes context names or provider-ID strings."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/CostTrendChart.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:trend:bounded-allocation-chart:v1",
+          "legacyContractIds": [],
+          "symbol": "CostTrendChart and CostTimeRangeSelector",
+          "interaction": "the cost view selects a server-validated time range and renders bounded observed allocation-rate series with explicit gaps, currency, partial state, keyboard controls, and a non-animated accessible chart",
+          "transport": "poll",
+          "realtime": {
+            "resume": "request the active authorized scope again when its URL-owned time range changes or the server refresh interval elapses",
+            "backpressure": "accept at most eight series and 480 ordered points per series and project at most 480 timestamps for one paint",
+            "merge": "replace only the trend whose range and authorized cluster scope match the active request; missing samples remain null"
+          },
+          "motion": {
+            "reducedMotion": "area transitions are disabled so the same values, gaps, legend, and partial state are available without animation.",
+            "evidence": [
+              "references/upstream/web/src/components/cost/CostTrendChart.tsx",
+              "frontend/src/features/cost/CostTrendChart.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/CostTrendChart.tsx",
+              "frontend/src/features/cost/costTrendProjection.ts",
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "frontend/src/api/cost-overview-schemas.ts",
+              "src/packages/contracts/cost/observations.py",
+              "src/domains/cost/router.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "domains.cost.router"
+            ],
+            "plannedTestIds": [
+              "cost.trend.contract",
+              "cost.trend.surface",
+              "cost.trend.projection",
+              "cost.tabs.url"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The full typed and bounded rendering path is implemented. Until a collector persists observations, the same contract returns an explicit unavailable trend with no fake series or currency."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/CostView.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:workload:exact-resource-link:v1",
+          "legacyContractIds": [],
+          "symbol": "resourceKindForCostWorkload tests",
+          "interaction": "a cost allocation row links to resource detail only when its backend observation includes an exact supported workload resource identity",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailPanels.test.tsx",
+              "src/packages/contracts/cost/observations.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "cost.application.collector-gate"
+            ],
+            "state": "blocked",
+            "blockedReason": "The Cost contract exposes no allocation rows or ResourceRef, so no browser link can distinguish aggregate, static-pod, or exact workload identities.",
+            "rationale": "The application panel remains non-linking and unavailable instead of guessing a Kubernetes kind from a cost label."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/CostViewTabs.test.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:tabs:url-keyboard-tests:v1",
+          "legacyContractIds": [],
+          "symbol": "CostViewTabs tests",
+          "interaction": "cost view selection preserves unrelated URL state and supports roving arrow-key focus for only the views backed by product contracts",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/CostViewTabs.test.tsx",
+              "frontend/src/pages/cost/CostPage.test.tsx",
+              "frontend/src/features/filters/filterUrl.cost.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.tabs.keyboard",
+              "cost.tabs.url"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Overview and allocation-trend URL state use one controlled tab boundary. The unavailable upstream rightsizing route is not advertised as an active product tab."
+          }
+        }
+      ]
+    },
+    "web/src/components/cost/CostViewTabs.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:cost:tabs:contract-gated-views:v1",
+          "legacyContractIds": [],
+          "symbol": "CostViewTabs",
+          "interaction": "the cost surface exposes localized accessible tabs only for overview and bounded trend contracts while retaining all other query parameters",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "selection uses semantic state and a static token underline without motion-dependent feedback.",
+            "evidence": [
+              "references/upstream/web/src/components/cost/CostViewTabs.tsx",
+              "frontend/src/features/cost/CostViewTabs.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/cost/CostViewTabs.tsx",
+              "frontend/src/pages/cost/CostPage.tsx",
+              "frontend/src/features/filters/detailUrlCodec.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.cost.observations"
+            ],
+            "plannedTestIds": [
+              "cost.tabs.keyboard",
+              "cost.tabs.url",
+              "cost.trend.surface"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The component is reusable, localized, keyboard-accessible, and controlled by canonical URL parameters; rightsizing remains excluded until its Python contract exists."
           }
         }
       ]

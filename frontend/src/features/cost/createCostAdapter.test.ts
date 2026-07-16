@@ -6,11 +6,12 @@ describe("createCostAdapter", () => {
   it("maps scoped unavailable Cost evidence without manufacturing monetary values", async () => {
     const port = createCostAdapter({ getCostOverview: vi.fn().mockResolvedValue(endpoint()) });
 
-    const overview = await port.getOverview({ clusterIds: ["cluster-a"] });
+    const overview = await port.getOverview({ clusterIds: ["cluster-a"], timeRange: "24h" });
 
     expect(overview).toMatchObject({
       observation: { availability: "unavailable", currency: null, dataWindow: null },
       summary: { hourlyCost: null, monthlyProjection: null, savingsRecommendations: null },
+      trend: { availability: "unavailable", timeRange: "24h", series: [] },
       refreshAfterSeconds: 60,
     });
     expect(overview.scopeCoverage.scopes[0]).toMatchObject({ clusterId: "cluster-a", freshness: "live" });
@@ -34,6 +35,13 @@ function endpoint() {
       idle_cost: null,
       efficiency: null,
       savings_recommendations: null,
+      reason_codes: ["cost_observation_not_integrated"],
+    },
+    trend: {
+      availability: "unavailable" as const,
+      range: "24h" as const,
+      currency: null,
+      series: [],
       reason_codes: ["cost_observation_not_integrated"],
     },
     refresh_after_seconds: 60,
