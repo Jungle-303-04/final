@@ -2421,7 +2421,7 @@
       }
     },
     "reference.feature.167": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity.CommandReceipt",
       "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
@@ -2434,23 +2434,21 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/command/router.py#restart_deployment",
-          "consumer": "src/services/target/cluster-agent/agent.py#rollout_restart_command",
-          "reason": "Deployment restart has RBAC, one-time confirmation, audit receipt, and durable operation events; StatefulSet and DaemonSet restart executors are not registered.",
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#restart_workload",
+          "consumer": "src/services/target/cluster-agent/agent.py#restart_workload_command",
           "test": "tests/test_command_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
           "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
-          "reason": "The generic server-owned action handoff is complete for Deployment, but other restartable workload kinds are not projected.",
-          "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
+          "test": "tests/test_resource_capabilities_router.py"
         }
       }
     },
     "reference.feature.168": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.requests.DeploymentScaleRequest",
       "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
@@ -2462,18 +2460,16 @@
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/command/router.py#scale_deployment",
-          "consumer": "src/services/target/cluster-agent/agent.py#scale_deployment_command",
-          "reason": "Deployment scale is typed, bounded, confirmed, audited, and streamed; StatefulSet scale is not yet registered.",
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#scale_workload",
+          "consumer": "src/services/target/cluster-agent/agent.py#scale_workload_command",
           "test": "tests/test_target_agent_commands.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx#ResourceDetailActions",
           "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
-          "reason": "The server-owned replica input and confirmation flow work for Deployment only.",
-          "test": "frontend/src/features/resources/createResourceActionsAdapter.test.ts"
+          "test": "tests/test_resource_capabilities_router.py"
         }
       }
     },

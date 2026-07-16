@@ -107,6 +107,8 @@
     "reference.feature.161": "upstream-ui:service-access:service-port:capability-input:v1",
     "reference.feature.162": "upstream-ui:service-access:port-session:native-create:v1",
     "reference.feature.163": "upstream-ui:service-access:port-session:native-control:v1",
+    "reference.feature.167": "upstream-ui:workloads:restart-scale:audited-actions:v1",
+    "reference.feature.168": "upstream-ui:workloads:restart-scale:audited-actions:v1",
     "reference.feature.171": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
     "reference.feature.172": "upstream-ui:commands:cronjob-client:refresh-invalidation:v1",
     "reference.feature.177": "upstream-ui:service-access:http-request:bounded-session:v1",

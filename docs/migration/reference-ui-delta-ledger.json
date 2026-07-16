@@ -10171,6 +10171,51 @@
           }
         },
         {
+          "sourceKey": "upstream-ui:workloads:restart-scale:audited-actions:v1",
+          "legacyContractIds": [
+            "reference.feature.167",
+            "reference.feature.168"
+          ],
+          "symbol": "useRestartWorkload, useScaleWorkload, and workload mutation invalidation",
+          "interaction": "Deployment, StatefulSet, and DaemonSet restart plus Deployment and StatefulSet scale are exposed only as exact server-projected capabilities with bounded inputs, one target-impact confirmation, an audited command receipt, and durable operation progress",
+          "transport": "sse",
+          "realtime": {
+            "resume": "resume only the accepted workload command from its durable CommandReceipt sequence without replaying the mutation",
+            "backpressure": "coalesce progress by command and attempt while preserving denial, cancellation, failure, and terminal events",
+            "merge": "apply progress and refresh only when cluster, namespace, workload kind, name, command receipt, and attempt identity match"
+          },
+          "motion": {
+            "reducedMotion": "queued, running, cancellation, completion, and failure remain visible through text and semantic status without depending on a spinner",
+            "evidence": [
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/operations/OperationStatusFeedback.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/resource-capability-actions.ts",
+              "frontend/src/pages/resources/ResourceDetailActions.tsx",
+              "frontend/src/features/resources/createResourceActionsAdapter.ts",
+              "src/domains/inventory/action_catalog.py",
+              "src/domains/command/router.py",
+              "src/services/target/cluster-agent/agent.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.requests",
+              "packages.contracts.parity",
+              "domains.command.router"
+            ],
+            "plannedTestIds": [
+              "resources.detail.composition",
+              "api.client.transport",
+              "events.operation.resume"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product reuses one generic capability and operation-stream handoff while the Python gateway and target agent retain exact kind-specific Kubernetes executors and authorization."
+          }
+        },
+        {
           "sourceKey": "upstream-ui:helm:upgrade-client:values-payload:v1",
           "legacyContractIds": [
             "reference.feature.201"
