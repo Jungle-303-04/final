@@ -9415,6 +9415,7 @@
         {
           "sourceKey": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
           "legacyContractIds": [
+            "reference.feature.059",
             "reference.feature.119"
           ],
           "symbol": "runDeltaSyncFetch orchestration tests",
@@ -10063,6 +10064,81 @@
       "classification": "classified",
       "interactions": [
         {
+          "sourceKey": "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1",
+          "legacyContractIds": [
+            "reference.feature.014"
+          ],
+          "symbol": "primary rail, application frame, and shell-owned overlays",
+          "interaction": "one declarative shell renders the released primary navigation rail, account and settings entries, responsive collapse state, canonical main-content ownership, and focus-managed command, help, settings, resource, and diagnostic overlays",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "rail collapse, mobile sheet, overlay opening, and focus return retain the same state and keyboard semantics without transition dependence.",
+            "evidence": [
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/app/ProductShell.interaction.test.tsx",
+              "frontend/src/shared/ui/primitives/sidebar.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/ProductShell.tsx",
+              "frontend/src/app/ProductShellSidebar.tsx",
+              "frontend/src/app/ProductCommandPalette.tsx",
+              "frontend/src/app/ShortcutHelpDialog.tsx",
+              "frontend/src/shared/ui/primitives/sidebar.tsx",
+              "frontend/src/shared/ui/primitives/dialog.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shell.resource-navigation.contract",
+              "shell.command-palette.keyboard"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing ProductShell and shared primitives are the single layout and overlay authority. Released routes come from the product descriptor and overlays reuse tested focus, Escape, mobile-sheet, and URL state instead of duplicating source chrome."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
+          "legacyContractIds": [
+            "reference.feature.043",
+            "reference.feature.044",
+            "reference.feature.047",
+            "reference.feature.048",
+            "reference.feature.049",
+            "reference.feature.053",
+            "reference.feature.054",
+            "reference.feature.057"
+          ],
+          "symbol": "global route chords, command palette, theme, help, and Resources row grammar",
+          "interaction": "one collision-checked shortcut registry owns route chords, command palette, theme, help, Resources row movement and detail opening, editable-control suppression, chord timeout, overlay Escape, and focus return",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/app/shortcutRegistry.ts",
+              "frontend/src/app/useProductShortcuts.ts",
+              "frontend/src/app/resourcesShortcutDefinitions.ts",
+              "frontend/src/app/ProductShell.interaction.test.tsx",
+              "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shell.command-palette.keyboard",
+              "shell.resource-navigation.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product registry validates duplicate identifiers and sequences, keeps global and context scopes separate, suppresses unsafe editable-field activation, and dispatches Resources actions through one typed event boundary."
+          }
+        },
+        {
           "sourceKey": "upstream-ui:app-shell:connection-and-load:shared-state:v1",
           "legacyContractIds": [],
           "symbol": "header connection state, reconnect action, cluster warmup, and shared pane loaders",
@@ -10194,7 +10270,23 @@
         },
         {
           "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.021",
+            "reference.feature.022",
+            "reference.feature.023",
+            "reference.feature.024",
+            "reference.feature.025",
+            "reference.feature.027",
+            "reference.feature.028",
+            "reference.feature.029",
+            "reference.feature.030",
+            "reference.feature.031",
+            "reference.feature.032",
+            "reference.feature.033",
+            "reference.feature.034",
+            "reference.feature.035",
+            "reference.feature.036"
+          ],
           "symbol": "related resource, workflow run, Cost workload, and settings navigation",
           "interaction": "related resources, workflow runs, Cost workloads, settings, and drawer close actions use the shared canonical URL codec so exact identity and unrelated filters survive browser history and no component constructs product query strings independently",
           "transport": "none",
@@ -13086,6 +13178,38 @@
           }
         },
         {
+          "sourceKey": "upstream-ui:home:issues:authorized-rail:v1",
+          "legacyContractIds": [],
+          "symbol": "ProblemsPanel bounded issue rail",
+          "interaction": "the Home shell renders a bounded selected-cluster issue rail with incident and warning counts, exact resource identity when available, explicit empty and partial states, and one shared refresh authority",
+          "transport": "poll",
+          "realtime": {
+            "resume": "visible and manual refreshes reacquire the same authorized selected-cluster summary without clearing the last safe rail",
+            "backpressure": "the dashboard projection bounds incident and warning collections and shares one abortable Home request generation",
+            "merge": "only the active workspace, selected cluster, and refresh generation may replace the issue rail"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/home/HomeIssuesRail.tsx",
+              "frontend/src/pages/home/HomePage.tsx",
+              "frontend/src/pages/home/HomePage.semantics.test.tsx",
+              "src/domains/dashboard/fleet_router.py",
+              "src/packages/contracts/gateway/responses.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.dashboard.fleet_router"
+            ],
+            "plannedTestIds": [
+              "home.load-state.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The existing Home projection and rail already preserve authorization, bounded collections, last-success refresh semantics, and unavailable identity instead of synthesizing browser issue rows."
+          }
+        },
+        {
           "sourceKey": "upstream-ui:home:issues:onset-timing-disclosure:v1",
           "legacyContractIds": [],
           "symbol": "ProblemsPanel issueTiming chip",
@@ -15097,7 +15221,9 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.064"
+          ],
           "symbol": "ConnectionProvider status, reconnect, and cache refresh",
           "interaction": "the authenticated shell observes selected-cluster connection stage and freshness, preserves the last safe projection during a transient refresh, and exposes one bounded refresh action without letting browser state switch kubeconfig or impersonate an agent reconnect",
           "transport": "poll",
@@ -15330,7 +15456,10 @@
       "interactions": [
         {
           "sourceKey": "upstream-ui:topology:stream:connecting-lifecycle:v1",
-          "legacyContractIds": [],
+          "legacyContractIds": [
+            "reference.feature.058",
+            "reference.feature.060"
+          ],
           "symbol": "useEventSource connecting lifecycle",
           "interaction": "the topology consumer exposes a distinct connecting state until its authenticated realtime browser transport reports connected, and returns to connecting before each new connection attempt",
           "transport": "ws",

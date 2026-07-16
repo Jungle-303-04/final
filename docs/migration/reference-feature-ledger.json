@@ -441,11 +441,11 @@
     {
       "id": "reference-feature-014",
       "contractId": "reference.feature.014",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1",
       "legacyContractIds": [
         "reference.feature.014"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "2.1 레이아웃",
       "line": 65,
       "cells": [
@@ -457,17 +457,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "global-shell",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "domains.catalog",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/app/ProductShell.test.tsx",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The released navigation rail is browser composition metadata and does not require a Python endpoint.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductShell.tsx#ProductShell",
+          "consumer": "frontend/src/app/productRoutes.ts#productNavigationForReleasedSurfaces",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -679,11 +690,11 @@
     {
       "id": "reference-feature-021",
       "contractId": "reference.feature.021",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.021"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 105,
       "cells": [
@@ -696,17 +707,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/app/ProductRouter.filterCutover.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/ProductRouter.tsx#ProductFallbackRedirect",
+          "reason": "The root and Home route are client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductRouter.tsx#ProductRouter",
+          "consumer": "frontend/src/app/productRoutes.ts#landingProductRouteForReleasedSurfaces",
+          "test": "frontend/src/app/ProductRouter.filterCutover.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -714,11 +735,11 @@
     {
       "id": "reference-feature-022",
       "contractId": "reference.feature.022",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.022"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 106,
       "cells": [
@@ -731,17 +752,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The Resources landing route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductRouter.tsx#ProductRouter",
+          "consumer": "frontend/src/pages/resources/useResourcesPageState.ts#useResourcesPageState",
+          "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -749,11 +780,11 @@
     {
       "id": "reference-feature-023",
       "contractId": "reference.feature.023",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.023"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 107,
       "cells": [
@@ -766,17 +797,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.detail.test.tsx",
+        "frontend/src/pages/resources/resourcesUrlState.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/features/filters/detailUrlCodec.ts",
+          "reason": "Resource deep-link ownership is a canonical browser URL contract.",
+          "test": "frontend/src/pages/resources/resourcesUrlState.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage",
+          "consumer": "frontend/src/features/filters/detailUrlCodec.ts#parseProductDetailQuery",
+          "test": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -784,11 +826,11 @@
     {
       "id": "reference-feature-024",
       "contractId": "reference.feature.024",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.024"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 108,
       "cells": [
@@ -801,17 +843,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/features/issues/IssuesSurface.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The Issues route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/issues/IssuesSurface.tsx#IssuesSurface",
+          "consumer": "frontend/src/app/composition/surfaces/issues.ts#loadIssuesSurface",
+          "test": "frontend/src/features/issues/IssuesSurface.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -819,11 +871,11 @@
     {
       "id": "reference-feature-025",
       "contractId": "reference.feature.025",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.025"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 109,
       "cells": [
@@ -836,17 +888,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The Topology route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/composition/surfaces/topology.ts#loadTopologySurface",
+          "consumer": "frontend/src/pages/resources/PhysicalTopologyView.tsx#PhysicalTopologyView",
+          "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -903,11 +965,11 @@
     {
       "id": "reference-feature-027",
       "contractId": "reference.feature.027",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.027"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 111,
       "cells": [
@@ -920,17 +982,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/timeline/TimelineSurface.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The Timeline route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/timeline/TimelineSurface.tsx#TimelineSurface",
+          "consumer": "frontend/src/app/composition/surfaces/timeline.ts#loadTimelineSurface",
+          "test": "frontend/src/pages/timeline/TimelineSurface.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -938,11 +1010,11 @@
     {
       "id": "reference-feature-028",
       "contractId": "reference.feature.028",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.028"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 112,
       "cells": [
@@ -955,17 +1027,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/traffic/TrafficPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The Traffic route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficPage",
+          "consumer": "frontend/src/app/composition/surfaces/traffic.ts#loadTrafficSurface",
+          "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -973,11 +1055,11 @@
     {
       "id": "reference-feature-029",
       "contractId": "reference.feature.029",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.029"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 113,
       "cells": [
@@ -990,17 +1072,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The Helm route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmPage",
+          "consumer": "frontend/src/app/composition/surfaces/helm.ts#loadHelmSurface",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1008,11 +1100,11 @@
     {
       "id": "reference-feature-030",
       "contractId": "reference.feature.030",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.030"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 114,
       "cells": [
@@ -1025,17 +1117,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#ownsPath",
+          "reason": "Helm compare is owned by the Helm route family and canonical URL state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmPage",
+          "consumer": "frontend/src/shared/ui/UnifiedDiff.tsx#UnifiedDiff",
+          "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1043,11 +1145,11 @@
     {
       "id": "reference-feature-031",
       "contractId": "reference.feature.031",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.031"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 115,
       "cells": [
@@ -1060,17 +1162,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/gitops/GitOpsPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The GitOps route is client navigation state.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsPage.tsx#GitOpsPage",
+          "consumer": "frontend/src/app/composition/surfaces/gitops.ts#loadGitOpsSurface",
+          "test": "frontend/src/pages/gitops/GitOpsPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1078,11 +1190,11 @@
     {
       "id": "reference-feature-032",
       "contractId": "reference.feature.032",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.032"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 116,
       "cells": [
@@ -1095,17 +1207,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/ProductRouter.deepRoute.test.tsx",
+        "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#ownsPath",
+          "reason": "GitOps detail deep links are browser route identity.",
+          "test": "frontend/src/app/ProductRouter.deepRoute.test.tsx"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx#GitOpsApplicationDetailPage",
+          "consumer": "frontend/src/features/gitops/gitOpsApplicationDetailRoute.ts#parseGitOpsApplicationDetailRoute",
+          "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1113,11 +1235,11 @@
     {
       "id": "reference-feature-033",
       "contractId": "reference.feature.033",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.033"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 117,
       "cells": [
@@ -1130,17 +1252,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/checks/ChecksPage.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#productRoutePaths",
+          "reason": "The Checks route and audit alias are client navigation metadata.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage",
+          "consumer": "frontend/src/app/composition/surfaces/checks.ts#loadChecksSurface",
+          "test": "frontend/src/pages/checks/ChecksPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1148,11 +1280,11 @@
     {
       "id": "reference-feature-034",
       "contractId": "reference.feature.034",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.034"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 118,
       "cells": [
@@ -1167,17 +1299,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/pages/cost/CostPage.test.tsx",
+        "frontend/src/features/filters/filterUrl.cost.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/features/filters/filterUrl.ts",
+          "reason": "The Cost range and namespace route state are canonical browser URL state.",
+          "test": "frontend/src/features/filters/filterUrl.cost.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/cost/CostPage.tsx#CostPage",
+          "consumer": "frontend/src/app/composition/surfaces/cost.ts#loadCostSurface",
+          "test": "frontend/src/pages/cost/CostPage.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1185,11 +1328,11 @@
     {
       "id": "reference-feature-035",
       "contractId": "reference.feature.035",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.035"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 119,
       "cells": [
@@ -1202,17 +1345,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/pages/workload-detail/workloadDetailNavigation.test.ts",
+        "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/pages/workload-detail/workloadDetailNavigation.ts",
+          "reason": "Exact Workload detail identity and tab are browser route state.",
+          "test": "frontend/src/pages/workload-detail/workloadDetailNavigation.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx#WorkloadDetailRoute",
+          "consumer": "frontend/src/pages/workload-detail/workloadDetailNavigation.ts#parseWorkloadDetailRoute",
+          "test": "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1220,11 +1373,11 @@
     {
       "id": "reference-feature-036",
       "contractId": "reference.feature.036",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
       "legacyContractIds": [
         "reference.feature.036"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "3. Route 전수표",
       "line": 120,
       "cells": [
@@ -1237,17 +1390,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "application-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/test_feature_contract_router.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/pages/compare/compareNavigation.test.ts",
+        "frontend/src/pages/compare/CompareRoute.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/pages/compare/compareNavigation.ts",
+          "reason": "The two exact comparison targets are canonical browser route state.",
+          "test": "frontend/src/pages/compare/compareNavigation.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/compare/CompareRoute.tsx#CompareRoute",
+          "consumer": "frontend/src/pages/compare/compareNavigation.ts#parseCompareRoute",
+          "test": "frontend/src/pages/compare/CompareRoute.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1460,11 +1623,11 @@
     {
       "id": "reference-feature-043",
       "contractId": "reference.feature.043",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.043"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 256,
       "cells": [
@@ -1475,17 +1638,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "reason": "Route chords are browser keyboard composition.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1493,11 +1666,11 @@
     {
       "id": "reference-feature-044",
       "contractId": "reference.feature.044",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.044"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 257,
       "cells": [
@@ -1508,17 +1681,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/app/shortcutRegistry.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "Settings is a product route and does not require a separate dialog API.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/app/ProductRouter.tsx#ProductRouter",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1592,11 +1775,11 @@
     {
       "id": "reference-feature-047",
       "contractId": "reference.feature.047",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.047"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 260,
       "cells": [
@@ -1607,17 +1790,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/app/indexDocument.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/shared/ui/useProductTheme.ts",
+          "reason": "Theme switching is user-owned browser preference state.",
+          "test": "frontend/src/app/indexDocument.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "consumer": "frontend/src/shared/ui/useProductTheme.ts#useProductTheme",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1625,11 +1819,11 @@
     {
       "id": "reference-feature-048",
       "contractId": "reference.feature.048",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.048"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 261,
       "cells": [
@@ -1640,17 +1834,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/ShortcutHelpDialog.tsx",
+          "reason": "Shortcut help is derived from the browser registry.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ShortcutHelpDialog.tsx#ShortcutHelpDialog",
+          "consumer": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1658,11 +1862,11 @@
     {
       "id": "reference-feature-049",
       "contractId": "reference.feature.049",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.049"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 262,
       "cells": [
@@ -1673,17 +1877,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/ProductCommandPalette.tsx",
+          "reason": "Command-palette opening is browser keyboard state.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductCommandPalette.tsx#ProductCommandPalette",
+          "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1790,11 +2004,11 @@
     {
       "id": "reference-feature-053",
       "contractId": "reference.feature.053",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.053"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 266,
       "cells": [
@@ -1805,17 +2019,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/resourcesShortcutDefinitions.ts",
+          "reason": "Collection focus movement is browser keyboard state.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourcesTable.tsx#ResourcesTable",
+          "consumer": "frontend/src/app/resourcesShortcutDefinitions.ts#resourcesShortcutDefinitions",
+          "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1823,11 +2047,11 @@
     {
       "id": "reference-feature-054",
       "contractId": "reference.feature.054",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.054"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 267,
       "cells": [
@@ -1838,17 +2062,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/shortcutRegistry.test.ts",
+        "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/resourcesShortcutDefinitions.ts",
+          "reason": "Opening the focused row is browser keyboard state.",
+          "test": "frontend/src/app/shortcutRegistry.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/ResourcesTable.tsx#ResourcesTable",
+          "consumer": "frontend/src/pages/resources/ResourcesTable.tsx#useRowShortcuts",
+          "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1922,11 +2156,11 @@
     {
       "id": "reference-feature-057",
       "contractId": "reference.feature.057",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:app-shell:keyboard:single-authority:v1",
       "legacyContractIds": [
         "reference.feature.057"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "5. Keyboard 전수표",
       "line": 270,
       "cells": [
@@ -1937,17 +2171,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "keyboard-navigation",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.parity",
       "frontendContract": "frontend/src/app",
-      "desktopContract": "desktop",
+      "desktopContract": null,
       "verification": [
-        "tests/contracts/test_reference_parity.py",
-        "frontend/src/shared/parity/referenceParity.test.ts"
+        "frontend/src/app/ProductShell.interaction.test.tsx",
+        "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/shared/ui/primitives/dialog.tsx",
+          "reason": "Escape precedence and focus return are browser overlay state.",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts",
+          "consumer": "frontend/src/shared/ui/primitives/dialog.tsx#Dialog",
+          "test": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1955,11 +2199,11 @@
     {
       "id": "reference-feature-058",
       "contractId": "reference.feature.058",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:topology:stream:connecting-lifecycle:v1",
       "legacyContractIds": [
         "reference.feature.058"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "6.1 SSE",
       "line": 284,
       "cells": [
@@ -1970,17 +2214,27 @@
       "endpoints": [],
       "streaming": false,
       "area": "realtime-events",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.realtime",
+      "frontendContract": "frontend/src/features/resources/physicalTopologyRealtimeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_realtime_gateway.py",
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/app.py",
+          "consumer": "src/packages/contracts/realtime.py",
+          "test": "tests/test_realtime_gateway.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts#usePhysicalTopologyRealtime",
+          "consumer": "frontend/src/app/composition/surfaces/resources.ts#createRealtimeClient",
+          "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -1988,11 +2242,11 @@
     {
       "id": "reference-feature-059",
       "contractId": "reference.feature.059",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
       "legacyContractIds": [
         "reference.feature.059"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "6.1 SSE",
       "line": 285,
       "cells": [
@@ -2003,17 +2257,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "realtime-events",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.timeline",
+      "frontendContract": "frontend/src/features/timeline/timelineContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_timeline_sse_router.py",
+        "frontend/src/api/timeline.test.ts",
+        "frontend/src/pages/timeline/timelineFrameReducer.test.ts"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/timeline/router.py#stream_timeline_events",
+          "consumer": "src/domains/timeline/repository.py",
+          "test": "tests/test_timeline_sse_router.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/api/timeline.ts#subscribeTimelineEvents",
+          "consumer": "frontend/src/features/timeline/createTimelineAdapter.ts#createTimelineAdapter",
+          "test": "frontend/src/pages/timeline/timelineFrameReducer.test.ts"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -2021,11 +2286,11 @@
     {
       "id": "reference-feature-060",
       "contractId": "reference.feature.060",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:topology:stream:connecting-lifecycle:v1",
       "legacyContractIds": [
         "reference.feature.060"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "6.1 SSE",
       "line": 286,
       "cells": [
@@ -2036,17 +2301,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "realtime-events",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.realtime",
+      "frontendContract": "frontend/src/features/resources/physicalTopologyRealtimeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_realtime_gateway.py",
+        "frontend/src/app/composition/surfaces/resources.ts",
+        "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/services/realtime/realtime-gateway/app.py",
+          "consumer": "src/packages/contracts/realtime.py",
+          "test": "tests/test_realtime_gateway.py"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/composition/surfaces/resources.ts#loadResourcesSurface",
+          "consumer": "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts#usePhysicalTopologyRealtime",
+          "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }
@@ -2153,11 +2429,11 @@
     {
       "id": "reference-feature-064",
       "contractId": "reference.feature.064",
-      "sourceKey": null,
+      "sourceKey": "upstream-ui:shell:connection-state:authorized-refresh:v1",
       "legacyContractIds": [
         "reference.feature.064"
       ],
-      "identityStatus": "legacy-unmapped",
+      "identityStatus": "source-key",
       "section": "6.1 SSE",
       "line": 290,
       "cells": [
@@ -2168,17 +2444,28 @@
       "endpoints": [],
       "streaming": false,
       "area": "realtime-events",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.runtime.operation_events",
-      "frontendContract": "frontend/src/shared/streaming",
-      "desktopContract": "desktop",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
       "verification": [
-        "tests/test_operation_event_hub.py",
-        "frontend/src/api/operation-events.test.ts"
+        "tests/test_target_registration.py",
+        "frontend/src/api/cluster-connection.test.ts",
+        "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
       ],
       "coverage": {
-        "backend": null,
-        "frontend": null,
+        "backend": {
+          "state": "implemented",
+          "destination": "src/domains/target/router.py#get_cluster_connection_status",
+          "consumer": "src/domains/target/connectivity.py#cluster_connection_status",
+          "test": "tests/test_target_registration.py#test_cluster_connection_status_route_returns_agent_details"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider",
+          "consumer": "frontend/src/api/cluster-connection.ts#getClusterConnectionStatus",
+          "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"
+        },
         "desktop": null,
         "realtime": "not_required"
       }

@@ -1,6 +1,74 @@
 {
   "schemaVersion": 1,
   "features": {
+    "reference.feature.014": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": [
+        "frontend/src/app/productRoutes.test.ts",
+        "frontend/src/app/ProductShell.test.tsx",
+        "frontend/src/app/ProductShell.interaction.test.tsx"
+      ],
+      "coverage": {
+        "backend": {
+          "state": "not_required",
+          "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG",
+          "reason": "The released navigation rail is browser composition metadata and does not require a Python endpoint.",
+          "test": "frontend/src/app/productRoutes.test.ts"
+        },
+        "frontend": {
+          "state": "implemented",
+          "destination": "frontend/src/app/ProductShell.tsx#ProductShell",
+          "consumer": "frontend/src/app/productRoutes.ts#productNavigationForReleasedSurfaces",
+          "test": "frontend/src/app/ProductShell.interaction.test.tsx"
+        }
+      }
+    },
+    "reference.feature.021": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/app/ProductRouter.filterCutover.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/ProductRouter.tsx#ProductFallbackRedirect", "reason": "The root and Home route are client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/ProductRouter.tsx#ProductRouter", "consumer": "frontend/src/app/productRoutes.ts#landingProductRouteForReleasedSurfaces", "test": "frontend/src/app/ProductRouter.filterCutover.test.tsx"}
+      }
+    },
+    "reference.feature.022": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Resources landing route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/ProductRouter.tsx#ProductRouter", "consumer": "frontend/src/pages/resources/useResourcesPageState.ts#useResourcesPageState", "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"}
+      }
+    },
+    "reference.feature.023": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/resources/ResourcesPage.detail.test.tsx", "frontend/src/pages/resources/resourcesUrlState.test.ts"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/features/filters/detailUrlCodec.ts", "reason": "Resource deep-link ownership is a canonical browser URL contract.", "test": "frontend/src/pages/resources/resourcesUrlState.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/resources/ResourcesPage.tsx#ResourcesPage", "consumer": "frontend/src/features/filters/detailUrlCodec.ts#parseProductDetailQuery", "test": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"}
+      }
+    },
+    "reference.feature.024": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/features/issues/IssuesSurface.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Issues route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/features/issues/IssuesSurface.tsx#IssuesSurface", "consumer": "frontend/src/app/composition/surfaces/issues.ts#loadIssuesSurface", "test": "frontend/src/features/issues/IssuesSurface.test.tsx"}
+      }
+    },
+    "reference.feature.025": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Topology route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/composition/surfaces/topology.ts#loadTopologySurface", "consumer": "frontend/src/pages/resources/PhysicalTopologyView.tsx#PhysicalTopologyView", "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"}
+      }
+    },
     "reference.feature.026": {
       "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.gateway.responses.ApplicationProductDetailResponse",
@@ -27,6 +95,212 @@
           "consumer": "frontend/src/features/filters/detailUrlCodec.ts#parseProductDetailQuery",
           "test": "frontend/src/features/applications/ApplicationsSurface.test.tsx"
         }
+      }
+    },
+    "reference.feature.027": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/timeline/TimelineSurface.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Timeline route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/timeline/TimelineSurface.tsx#TimelineSurface", "consumer": "frontend/src/app/composition/surfaces/timeline.ts#loadTimelineSurface", "test": "frontend/src/pages/timeline/TimelineSurface.test.tsx"}
+      }
+    },
+    "reference.feature.028": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/traffic/TrafficPage.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Traffic route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/traffic/TrafficPage.tsx#TrafficPage", "consumer": "frontend/src/app/composition/surfaces/traffic.ts#loadTrafficSurface", "test": "frontend/src/pages/traffic/TrafficPage.test.tsx"}
+      }
+    },
+    "reference.feature.029": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/helm/HelmPage.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The Helm route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmPage", "consumer": "frontend/src/app/composition/surfaces/helm.ts#loadHelmSurface", "test": "frontend/src/pages/helm/HelmPage.test.tsx"}
+      }
+    },
+    "reference.feature.030": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/helm/HelmPage.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#ownsPath", "reason": "Helm compare is owned by the Helm route family and canonical URL state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/helm/HelmPage.tsx#HelmPage", "consumer": "frontend/src/shared/ui/UnifiedDiff.tsx#UnifiedDiff", "test": "frontend/src/pages/helm/HelmPage.test.tsx"}
+      }
+    },
+    "reference.feature.031": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/gitops/GitOpsPage.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "The GitOps route is client navigation state.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/gitops/GitOpsPage.tsx#GitOpsPage", "consumer": "frontend/src/app/composition/surfaces/gitops.ts#loadGitOpsSurface", "test": "frontend/src/pages/gitops/GitOpsPage.test.tsx"}
+      }
+    },
+    "reference.feature.032": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/ProductRouter.deepRoute.test.tsx", "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#ownsPath", "reason": "GitOps detail deep links are browser route identity.", "test": "frontend/src/app/ProductRouter.deepRoute.test.tsx"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.tsx#GitOpsApplicationDetailPage", "consumer": "frontend/src/features/gitops/gitOpsApplicationDetailRoute.ts#parseGitOpsApplicationDetailRoute", "test": "frontend/src/pages/gitops/GitOpsApplicationDetailPage.test.tsx"}
+      }
+    },
+    "reference.feature.033": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/checks/ChecksPage.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#productRoutePaths", "reason": "The Checks route and audit alias are client navigation metadata.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/checks/ChecksPage.tsx#ChecksPage", "consumer": "frontend/src/app/composition/surfaces/checks.ts#loadChecksSurface", "test": "frontend/src/pages/checks/ChecksPage.test.tsx"}
+      }
+    },
+    "reference.feature.034": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/pages/cost/CostPage.test.tsx", "frontend/src/features/filters/filterUrl.cost.test.ts"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/features/filters/filterUrl.ts", "reason": "The Cost range and namespace route state are canonical browser URL state.", "test": "frontend/src/features/filters/filterUrl.cost.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/cost/CostPage.tsx#CostPage", "consumer": "frontend/src/app/composition/surfaces/cost.ts#loadCostSurface", "test": "frontend/src/pages/cost/CostPage.test.tsx"}
+      }
+    },
+    "reference.feature.035": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/pages/workload-detail/workloadDetailNavigation.test.ts", "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/pages/workload-detail/workloadDetailNavigation.ts", "reason": "Exact Workload detail identity and tab are browser route state.", "test": "frontend/src/pages/workload-detail/workloadDetailNavigation.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/workload-detail/WorkloadDetailRoute.tsx#WorkloadDetailRoute", "consumer": "frontend/src/pages/workload-detail/workloadDetailNavigation.ts#parseWorkloadDetailRoute", "test": "frontend/src/pages/workload-detail/WorkloadDetailRoute.test.tsx"}
+      }
+    },
+    "reference.feature.036": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/pages/compare/compareNavigation.test.ts", "frontend/src/pages/compare/CompareRoute.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/pages/compare/compareNavigation.ts", "reason": "The two exact comparison targets are canonical browser route state.", "test": "frontend/src/pages/compare/compareNavigation.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/compare/CompareRoute.tsx#CompareRoute", "consumer": "frontend/src/pages/compare/compareNavigation.ts#parseCompareRoute", "test": "frontend/src/pages/compare/CompareRoute.test.tsx"}
+      }
+    },
+    "reference.feature.043": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/app/ProductShell.interaction.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "reason": "Route chords are browser keyboard composition.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
+      }
+    },
+    "reference.feature.044": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/productRoutes.test.ts", "frontend/src/app/shortcutRegistry.test.ts"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/productRoutes.ts#PRODUCT_ROUTE_CATALOG", "reason": "Settings is a product route and does not require a separate dialog API.", "test": "frontend/src/app/productRoutes.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "consumer": "frontend/src/app/ProductRouter.tsx#ProductRouter", "test": "frontend/src/app/shortcutRegistry.test.ts"}
+      }
+    },
+    "reference.feature.047": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/app/ProductShell.interaction.test.tsx", "frontend/src/app/indexDocument.test.ts"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/shared/ui/useProductTheme.ts", "reason": "Theme switching is user-owned browser preference state.", "test": "frontend/src/app/indexDocument.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "consumer": "frontend/src/shared/ui/useProductTheme.ts#useProductTheme", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
+      }
+    },
+    "reference.feature.048": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/app/ProductShell.interaction.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/ShortcutHelpDialog.tsx", "reason": "Shortcut help is derived from the browser registry.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/ShortcutHelpDialog.tsx#ShortcutHelpDialog", "consumer": "frontend/src/app/shortcutRegistry.ts#shellShortcutDefinitions", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
+      }
+    },
+    "reference.feature.049": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/app/ProductShell.interaction.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/ProductCommandPalette.tsx", "reason": "Command-palette opening is browser keyboard state.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/ProductCommandPalette.tsx#ProductCommandPalette", "consumer": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts", "test": "frontend/src/app/ProductShell.interaction.test.tsx"}
+      }
+    },
+    "reference.feature.053": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/resourcesShortcutDefinitions.ts", "reason": "Collection focus movement is browser keyboard state.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/resources/ResourcesTable.tsx#ResourcesTable", "consumer": "frontend/src/app/resourcesShortcutDefinitions.ts#resourcesShortcutDefinitions", "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"}
+      }
+    },
+    "reference.feature.054": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/shortcutRegistry.test.ts", "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/app/resourcesShortcutDefinitions.ts", "reason": "Opening the focused row is browser keyboard state.", "test": "frontend/src/app/shortcutRegistry.test.ts"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/resources/ResourcesTable.tsx#ResourcesTable", "consumer": "frontend/src/pages/resources/ResourcesTable.tsx#useRowShortcuts", "test": "frontend/src/pages/resources/ResourcesPage.keyboard.test.tsx"}
+      }
+    },
+    "reference.feature.057": {
+      "deliveryStatus": "implemented",
+      "desktopContract": null,
+      "verification": ["frontend/src/app/ProductShell.interaction.test.tsx", "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"],
+      "coverage": {
+        "backend": {"state": "not_required", "destination": "frontend/src/shared/ui/primitives/dialog.tsx", "reason": "Escape precedence and focus return are browser overlay state.", "test": "frontend/src/app/ProductShell.interaction.test.tsx"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/useProductShortcuts.ts#useProductShortcuts", "consumer": "frontend/src/shared/ui/primitives/dialog.tsx#Dialog", "test": "frontend/src/pages/resources/ResourcesPage.detail.test.tsx"}
+      }
+    },
+    "reference.feature.058": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.realtime",
+      "frontendContract": "frontend/src/features/resources/physicalTopologyRealtimeContract.ts",
+      "desktopContract": null,
+      "verification": ["tests/test_realtime_gateway.py", "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"],
+      "coverage": {
+        "backend": {"state": "implemented", "destination": "src/services/realtime/realtime-gateway/app.py", "consumer": "src/packages/contracts/realtime.py", "test": "tests/test_realtime_gateway.py"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts#usePhysicalTopologyRealtime", "consumer": "frontend/src/app/composition/surfaces/resources.ts#createRealtimeClient", "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"}
+      }
+    },
+    "reference.feature.059": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.timeline",
+      "frontendContract": "frontend/src/features/timeline/timelineContract.ts",
+      "desktopContract": null,
+      "verification": ["tests/test_timeline_sse_router.py", "frontend/src/api/timeline.test.ts", "frontend/src/pages/timeline/timelineFrameReducer.test.ts"],
+      "coverage": {
+        "backend": {"state": "implemented", "destination": "src/domains/timeline/router.py#stream_timeline_events", "consumer": "src/domains/timeline/repository.py", "test": "tests/test_timeline_sse_router.py"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/api/timeline.ts#subscribeTimelineEvents", "consumer": "frontend/src/features/timeline/createTimelineAdapter.ts#createTimelineAdapter", "test": "frontend/src/pages/timeline/timelineFrameReducer.test.ts"}
+      }
+    },
+    "reference.feature.060": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.realtime",
+      "frontendContract": "frontend/src/features/resources/physicalTopologyRealtimeContract.ts",
+      "desktopContract": null,
+      "verification": ["tests/test_realtime_gateway.py", "frontend/src/app/composition/surfaces/resources.ts", "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"],
+      "coverage": {
+        "backend": {"state": "implemented", "destination": "src/services/realtime/realtime-gateway/app.py", "consumer": "src/packages/contracts/realtime.py", "test": "tests/test_realtime_gateway.py"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/app/composition/surfaces/resources.ts#loadResourcesSurface", "consumer": "frontend/src/pages/resources/usePhysicalTopologyRealtime.ts#usePhysicalTopologyRealtime", "test": "frontend/src/pages/resources/usePhysicalTopologyRealtime.test.tsx"}
+      }
+    },
+    "reference.feature.064": {
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ClusterConnectionStatusResponse",
+      "frontendContract": "frontend/src/features/cluster-scope/clusterScopeContract.ts",
+      "desktopContract": null,
+      "verification": ["tests/test_target_registration.py", "frontend/src/api/cluster-connection.test.ts", "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"],
+      "coverage": {
+        "backend": {"state": "implemented", "destination": "src/domains/target/router.py#get_cluster_connection_status", "consumer": "src/domains/target/connectivity.py#cluster_connection_status", "test": "tests/test_target_registration.py#test_cluster_connection_status_route_returns_agent_details"},
+        "frontend": {"state": "implemented", "destination": "frontend/src/features/cluster-scope/ClusterScopeProvider.tsx#ClusterScopeProvider", "consumer": "frontend/src/api/cluster-connection.ts#getClusterConnectionStatus", "test": "frontend/src/features/cluster-scope/ClusterScopeProvider.test.tsx"}
       }
     },
     "reference.feature.117": {

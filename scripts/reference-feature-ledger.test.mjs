@@ -664,6 +664,54 @@ test("Applications 경로와 투영은 URL·Python 계약·갱신 증거를 연�
   }
 });
 
+test("전역 셸·라우트·키보드·실시간 bootstrap은 기존 제품 계약 증거로 승격한다", async () => {
+  const [portMap, aliases, classifications, ledger] = await Promise.all([
+    readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
+    readRepositoryJson("../docs/migration/reference-feature-source-aliases.json"),
+    readRepositoryJson("../docs/migration/reference-ui-delta-classifications.json"),
+    readRepositoryJson("../docs/migration/reference-feature-ledger.json"),
+  ]);
+  const expected = new Map([
+    ["reference.feature.014", "upstream-ui:app-shell:layout-and-overlays:descriptor-state:v1"],
+    ...[
+      "021", "022", "023", "024", "025", "027", "028", "029",
+      "030", "031", "032", "033", "034", "035", "036",
+    ].map((id) => [
+      `reference.feature.${id}`,
+      "upstream-ui:app-shell:canonical-navigation:detail-and-cost:v1",
+    ]),
+    ...["043", "044", "047", "048", "049", "053", "054", "057"].map((id) => [
+      `reference.feature.${id}`,
+      "upstream-ui:app-shell:keyboard:single-authority:v1",
+    ]),
+    ["reference.feature.058", "upstream-ui:topology:stream:connecting-lifecycle:v1"],
+    ["reference.feature.059", "upstream-ui:timeline:delta-sync:epoch-resync-test:v1"],
+    ["reference.feature.060", "upstream-ui:topology:stream:connecting-lifecycle:v1"],
+    ["reference.feature.064", "upstream-ui:shell:connection-state:authorized-refresh:v1"],
+  ]);
+  const interactionOwners = new Map();
+  for (const [path, classification] of Object.entries(classifications.classifications)) {
+    for (const interaction of classification.interactions ?? []) {
+      for (const contractId of interaction.legacyContractIds ?? []) {
+        interactionOwners.set(contractId, { path, sourceKey: interaction.sourceKey });
+      }
+    }
+  }
+
+  for (const [contractId, sourceKey] of expected) {
+    const port = portMap.features[contractId];
+    const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
+    assert.equal(port.deliveryStatus, "implemented", contractId);
+    assert.equal(port.desktopContract, null, contractId);
+    assert.ok(["implemented", "not_required"].includes(port.coverage.backend.state), contractId);
+    assert.equal(port.coverage.frontend.state, "implemented", contractId);
+    assert.equal(aliases.aliases[contractId], sourceKey, contractId);
+    assert.equal(feature.deliveryStatus, "implemented", contractId);
+    assert.equal(feature.sourceKey, sourceKey, contractId);
+    assert.equal(interactionOwners.get(contractId)?.sourceKey, sourceKey, contractId);
+  }
+});
+
 test("설정 권한과 호스트 설정 delta는 제품 계약과 명시적 차단 사유를 연결한다", async () => {
   const [portMap, aliases, classifications, ledger] = await Promise.all([
     readRepositoryJson("../docs/migration/reference-feature-port-map.json"),
