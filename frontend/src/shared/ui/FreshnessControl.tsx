@@ -81,7 +81,7 @@ export function FreshnessControl({
     paused,
   });
   const spinning = isFetching || phase === "pending";
-  const feedback = refreshFeedback(phase, state, copy);
+  const feedback = refreshFeedback(phase, copy);
 
   return (
     <div
@@ -157,14 +157,12 @@ export function FreshnessControl({
 
 function refreshFeedback(
   phase: RefreshPhase,
-  state: ReturnType<typeof useRefreshFeedback>["state"],
   copy: FreshnessCopy,
 ): string | null {
   if (phase === "pending") return copy.refreshPending;
   if (phase === "succeeded") return copy.refreshSucceeded;
   if (phase === "failed") return copy.refreshFailed;
   if (phase === "cancelled") return copy.refreshCancelled;
-  if (state === "reconnecting") return copy.reconnecting;
   return null;
 }
 

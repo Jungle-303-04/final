@@ -31,7 +31,7 @@ describe("FreshnessControl", () => {
       mode: "polling",
     });
 
-    expect(screen.getByText("다시 연결 중")).toBeTruthy();
+    expect(screen.getAllByText("다시 연결 중")).toHaveLength(1);
     expect(screen.queryByText("5초 폴링")).toBeNull();
     expect(screen.getByText(/12초 전 갱신/u)).toBeTruthy();
   });
