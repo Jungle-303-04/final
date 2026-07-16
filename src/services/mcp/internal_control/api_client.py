@@ -10,6 +10,7 @@ from packages.security.log_lines import redact_log_line
 from services.mcp.internal_control.config import McpSettings
 
 MAX_ERROR_DETAIL_LENGTH = 500
+SUPPORTED_MANAGEMENT_API_METHODS = frozenset({"GET", "POST"})
 
 
 @dataclass
@@ -33,11 +34,38 @@ class ManagementApiClient:
         self._client = http_client or httpx.AsyncClient(timeout=self.settings.timeout_seconds)
 
     async def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
+        return await self._request_json("GET", path, params=params)
+
+    async def post_json(
+        self,
+        path: str,
+        body: dict[str, Any],
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        return await self._request_json("POST", path, params=params, json_body=body)
+
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> Any:
+        if method not in SUPPORTED_MANAGEMENT_API_METHODS:
+            raise ManagementApiError(0, "unsupported management API method")
+        if method != "POST" and json_body is not None:
+            raise ManagementApiError(0, "management API request body is only allowed for POST")
+        kwargs: dict[str, Any] = {
+            "headers": self.settings.auth_headers(),
+            "params": _query_params(params or {}),
+        }
+        if json_body is not None:
+            kwargs["json"] = json_body
         async with self._client.stream(
-            "GET",
+            method,
             self._url(path),
-            headers=self.settings.auth_headers(),
-            params=_query_params(params or {}),
+            **kwargs,
         ) as response:
             content = await _read_limited_content(
                 response,

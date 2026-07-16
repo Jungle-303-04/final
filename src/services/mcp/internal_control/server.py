@@ -85,8 +85,11 @@ class InternalControlMcpServer:
                 "version": SERVER_VERSION,
             },
             "instructions": (
-                "Read-only Opsia control-plane tools. Every tool calls the existing "
-                "Opsia API Gateway and relies on Gateway authentication and RBAC."
+                "Opsia control-plane tools. Read tools issue authenticated GET "
+                "requests. Write tools default to dry-run proposals and only submit "
+                "existing Gateway POST requests when OPSIA_MCP_ENABLE_WRITES=true "
+                "and the call is explicitly confirmed, relying on Gateway "
+                "authentication, RBAC, audit, and workflow state checks."
             ),
         }
 

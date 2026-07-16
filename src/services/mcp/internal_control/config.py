@@ -7,10 +7,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 from packages.config.constants import Auth
 from packages.config.settings import env
-from packages.security.trusted_proxy import (
-    MINIMUM_SECRET_LENGTH,
-    TRUSTED_PROXY_AUTH_HEADER,
-)
 
 OPSIA_MCP_API_BASE_URL_ENV = "OPSIA_MCP_API_BASE_URL"
 OPSIA_MCP_BEARER_TOKEN_ENV = "OPSIA_MCP_BEARER_TOKEN"
@@ -18,6 +14,7 @@ OPSIA_MCP_COOKIE_ENV = "OPSIA_MCP_COOKIE"
 OPSIA_MCP_SESSION_COOKIE_ENV = "OPSIA_MCP_SESSION_COOKIE"
 OPSIA_MCP_SESSION_COOKIE_NAME_ENV = "OPSIA_MCP_SESSION_COOKIE_NAME"
 OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV = "OPSIA_MCP_TRUSTED_PROXY_SECRET"
+OPSIA_MCP_ENABLE_WRITES_ENV = "OPSIA_MCP_ENABLE_WRITES"
 OPSIA_MCP_TIMEOUT_SECONDS_ENV = "OPSIA_MCP_REQUEST_TIMEOUT_SECONDS"
 OPSIA_MCP_MAX_RESPONSE_BYTES_ENV = "OPSIA_MCP_MAX_RESPONSE_BYTES"
 MANAGEMENT_BASE_URL_ENV = "MANAGEMENT_BASE_URL"
@@ -41,6 +38,7 @@ class McpSettings:
     session_cookie: str = ""
     session_cookie_name: str = Auth.SESSION_COOKIE_NAME
     trusted_proxy_secret: str = ""
+    writes_enabled: bool = False
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES
 
@@ -53,6 +51,7 @@ class McpSettings:
             f"session_cookie={_redacted(self.session_cookie)!r}, "
             f"session_cookie_name={self.session_cookie_name!r}, "
             f"trusted_proxy_secret={_redacted(self.trusted_proxy_secret)!r}, "
+            f"writes_enabled={self.writes_enabled!r}, "
             f"timeout_seconds={self.timeout_seconds!r}, "
             f"max_response_bytes={self.max_response_bytes!r})"
         )
@@ -75,9 +74,13 @@ class McpSettings:
             (OPSIA_MCP_BEARER_TOKEN_ENV, self.bearer_token),
             (OPSIA_MCP_COOKIE_ENV, self.cookie_header),
             (OPSIA_MCP_SESSION_COOKIE_ENV, self.session_cookie),
-            (OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV, self.trusted_proxy_secret),
         ):
             _validate_header_value(name, value)
+        if self.trusted_proxy_secret.strip():
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV} is not supported for MCP; "
+                "use a user-scoped bearer token, cookie header, or session cookie"
+            )
         session_cookie_name = self.session_cookie_name.strip()
         if not COOKIE_NAME_RE.fullmatch(session_cookie_name):
             raise McpConfigurationError(f"{OPSIA_MCP_SESSION_COOKIE_NAME_ENV} is not a valid cookie name")
@@ -85,19 +88,11 @@ class McpSettings:
         if not auth_mechanisms:
             raise McpConfigurationError(
                 "exactly one of OPSIA_MCP_BEARER_TOKEN, OPSIA_MCP_COOKIE, "
-                "OPSIA_MCP_SESSION_COOKIE, or OPSIA_MCP_TRUSTED_PROXY_SECRET is required"
+                "or OPSIA_MCP_SESSION_COOKIE is required"
             )
         if len(auth_mechanisms) > 1:
             raise McpConfigurationError(
                 "only one MCP authentication mechanism may be configured at a time"
-            )
-        if (
-            self.trusted_proxy_secret.strip()
-            and len(self.trusted_proxy_secret.strip()) < MINIMUM_SECRET_LENGTH
-        ):
-            raise McpConfigurationError(
-                f"{OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV} must be at least "
-                f"{MINIMUM_SECRET_LENGTH} characters"
             )
         return replace(
             self,
@@ -120,11 +115,13 @@ class McpSettings:
             configured.append("cookie")
         if self.session_cookie.strip():
             configured.append("session_cookie")
-        if self.trusted_proxy_secret.strip():
-            configured.append("trusted_proxy")
         return tuple(configured)
 
     def auth_headers(self) -> dict[str, str]:
+        if self.trusted_proxy_secret.strip():
+            raise McpConfigurationError(
+                f"{OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV} is not supported for MCP"
+            )
         auth_mechanisms = self.auth_mechanisms()
         if len(auth_mechanisms) != 1:
             raise McpConfigurationError(
@@ -134,7 +131,6 @@ class McpSettings:
             (OPSIA_MCP_BEARER_TOKEN_ENV, self.bearer_token),
             (OPSIA_MCP_COOKIE_ENV, self.cookie_header),
             (OPSIA_MCP_SESSION_COOKIE_ENV, self.session_cookie),
-            (OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV, self.trusted_proxy_secret),
         ):
             _validate_header_value(name, value)
         session_cookie_name = self.session_cookie_name.strip()
@@ -147,8 +143,6 @@ class McpSettings:
             headers["cookie"] = self.cookie_header.strip()
         elif self.session_cookie.strip():
             headers["cookie"] = f"{session_cookie_name}={self.session_cookie.strip()}"
-        if self.trusted_proxy_secret.strip():
-            headers[TRUSTED_PROXY_AUTH_HEADER] = self.trusted_proxy_secret.strip()
         return headers
 
 
@@ -165,6 +159,7 @@ def load_settings() -> McpSettings:
         session_cookie=env(OPSIA_MCP_SESSION_COOKIE_ENV, ""),
         session_cookie_name=env(OPSIA_MCP_SESSION_COOKIE_NAME_ENV, Auth.SESSION_COOKIE_NAME),
         trusted_proxy_secret=env(OPSIA_MCP_TRUSTED_PROXY_SECRET_ENV, ""),
+        writes_enabled=_bool_env(OPSIA_MCP_ENABLE_WRITES_ENV, False),
         timeout_seconds=timeout,
         max_response_bytes=max_response_bytes,
     ).validate()
@@ -196,6 +191,17 @@ def _int_env(name: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise McpConfigurationError(f"{name} must be an integer") from exc
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = env(name, "").strip().casefold()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise McpConfigurationError(f"{name} must be a boolean")
 
 
 def _normalize_api_base_url(value: str) -> str:

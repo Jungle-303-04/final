@@ -8,7 +8,9 @@ from typing import Any
 from urllib.parse import quote
 
 from packages.contracts.gateway import routes
+from packages.security.log_lines import REDACTED_VALUE, redact_log_line
 from services.mcp.internal_control.api_client import ManagementApiClient, ManagementApiError
+from services.mcp.internal_control.config import OPSIA_MCP_ENABLE_WRITES_ENV
 
 ToolHandler = Callable[[ManagementApiClient, dict[str, Any]], Awaitable[dict[str, Any]]]
 
@@ -19,12 +21,41 @@ DEFAULT_RELATED_LIMIT = 100
 DEFAULT_EVENT_LIMIT = 50
 MAX_LIST_LIMIT = 1000
 MAX_QUERY_LIMIT = 200
+MAX_WRITE_PAYLOAD_BYTES = 64 * 1024
 LOG_EVIDENCE_SOURCE = "logs"
 READ_ONLY_TOOL_ANNOTATIONS = {
     "readOnlyHint": True,
     "destructiveHint": False,
     "idempotentHint": True,
 }
+WRITE_TOOL_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+}
+WRITE_HTTP_METHOD = "POST"
+SENSITIVE_PROPOSAL_KEY_PARTS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "authorization",
+        "cookie",
+        "credential",
+        "data",
+        "id_token",
+        "password",
+        "passwd",
+        "private_key",
+        "refresh_token",
+        "secret",
+        "ssh_key",
+        "stringdata",
+        "token",
+    }
+)
+DIRECT_EXECUTION_KEYS = frozenset(
+    {"confirmation", "direct_execution", "direct_execution_confirmed"}
+)
 
 
 class ToolInputError(ValueError):
@@ -38,6 +69,7 @@ class McpTool:
     description: str
     input_schema: dict[str, Any]
     handler: ToolHandler
+    annotations: dict[str, Any] | None = None
 
     def as_protocol_tool(self) -> dict[str, Any]:
         return {
@@ -45,7 +77,7 @@ class McpTool:
             "title": self.title,
             "description": self.description,
             "inputSchema": deepcopy(self.input_schema),
-            "annotations": dict(READ_ONLY_TOOL_ANNOTATIONS),
+            "annotations": dict(self.annotations or READ_ONLY_TOOL_ANNOTATIONS),
         }
 
 
@@ -235,6 +267,134 @@ def default_tool_registry() -> ToolRegistry:
                 ),
                 handler=get_log_evidence,
             ),
+            McpTool(
+                name="create_alert_rule",
+                title="Create Alert Rule",
+                description=(
+                    "Dry-run or submit an alert rule through the existing admin alert-rule "
+                    "API. The tool does not bypass Gateway admin-session checks."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "payload": _object(
+                            "Existing AlertRuleCreateRequest body from the Opsia API contract."
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["payload"],
+                ),
+                handler=create_alert_rule,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="request_recovery_action",
+                title="Request Recovery Action",
+                description=(
+                    "Dry-run or submit an existing RCA recovery action selection through "
+                    "the Gateway. The selected plan/action must already exist."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "plan_id": _string(
+                            "Existing recovery plan id. Provide either plan_id or correlation_id.",
+                            max_length=2048,
+                        ),
+                        "correlation_id": _string(
+                            "Existing incident correlation id. Provide either correlation_id or plan_id.",
+                            max_length=2048,
+                        ),
+                        "expected_plan_id": _string(
+                            "Required with correlation_id so the Gateway can reject stale selections.",
+                            max_length=2048,
+                        ),
+                        "action_id": _string(
+                            "Existing recovery action candidate id from the recovery plan.",
+                            max_length=2048,
+                        ),
+                        "reason": _string(
+                            "Optional user-visible reason recorded by the existing API.",
+                            max_length=500,
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["action_id"],
+                ),
+                handler=request_recovery_action,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="create_command_request",
+                title="Create Command Request",
+                description=(
+                    "Dry-run or submit a manual command request through the existing command "
+                    "API. MCP refuses direct-execution confirmation flags."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "payload": _object(
+                            "Existing CommandRequest body from the Opsia API contract."
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["payload"],
+                ),
+                handler=create_command_request,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
+            McpTool(
+                name="approve_or_reject_workflow",
+                title="Approve Or Reject Workflow",
+                description=(
+                    "Dry-run or submit an approval grant/reject decision through the existing "
+                    "approval API. The Gateway checks approval state and deployment access."
+                ),
+                input_schema=_schema(
+                    properties={
+                        "approval_id": _string("Existing approval id.", max_length=2048),
+                        "decision": {
+                            "type": "string",
+                            "description": "Approval decision to send to the Gateway.",
+                            "enum": ["grant", "reject"],
+                        },
+                        "reason": _string(
+                            "Optional user-visible reason recorded with the decision.",
+                            max_length=500,
+                        ),
+                        "dry_run": _boolean(
+                            "When true, return only a proposal and do not call the Gateway.",
+                            default=True,
+                        ),
+                        "approval_confirmed": _boolean(
+                            "Must be true with dry_run=false after the user has approved the proposal.",
+                            default=False,
+                        ),
+                    },
+                    required=["approval_id", "decision"],
+                ),
+                handler=approve_or_reject_workflow,
+                annotations=WRITE_TOOL_ANNOTATIONS,
+            ),
         ]
     )
 
@@ -357,6 +517,140 @@ async def get_log_evidence(
     return _read_result("get_log_evidence", path, data)
 
 
+async def create_alert_rule(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"payload", "dry_run", "approval_confirmed"})
+    payload = _required_object(arguments, "payload")
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="create_alert_rule",
+        api_path=routes.ALERT_RULES_PATH,
+        payload=payload,
+        operation_keys=("rule_id",),
+        reason=(
+            "Alert rule creation is a persistent admin operation, so MCP defaults to "
+            "dry_run and requires approval_confirmed=true before it submits the "
+            "existing alert-rule POST. Gateway admin-session checks still decide "
+            "whether the request is allowed."
+        ),
+    )
+
+
+async def request_recovery_action(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {
+            "plan_id",
+            "correlation_id",
+            "expected_plan_id",
+            "action_id",
+            "reason",
+            "dry_run",
+            "approval_confirmed",
+        },
+    )
+    plan_id = _optional_str(arguments, "plan_id", max_length=2048)
+    correlation_id = _optional_str(arguments, "correlation_id", max_length=2048)
+    if (plan_id is None) == (correlation_id is None):
+        raise ToolInputError("provide exactly one of plan_id or correlation_id")
+    action_id = _required_str(arguments, "action_id", max_length=2048)
+    reason = _optional_str(arguments, "reason", max_length=500)
+    if plan_id is not None:
+        api_path = _format_path(
+            routes.RCA_RECOVERY_ACTION_SELECT_PATH,
+            plan_id=plan_id,
+            action_id=action_id,
+        )
+        payload: dict[str, Any] = {}
+    else:
+        expected_plan_id = _required_str(arguments, "expected_plan_id", max_length=2048)
+        api_path = _format_path(
+            routes.RCA_RECOVERY_ACTION_SELECT_BY_CORRELATION_PATH,
+            correlation_id=correlation_id or "",
+        )
+        payload = {
+            "expected_plan_id": expected_plan_id,
+            "action_id": action_id,
+        }
+    if reason is not None:
+        payload["reason"] = reason
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="request_recovery_action",
+        api_path=api_path,
+        payload=payload,
+        operation_keys=("event_id", "correlation_id", "command_id"),
+        reason=(
+            "Recovery action selection can trigger follow-up workflow events, so MCP "
+            "defaults to dry_run and requires approval_confirmed=true before it "
+            "submits the existing RCA selection POST. The Gateway verifies that the "
+            "plan and action already exist for the authenticated workspace."
+        ),
+    )
+
+
+async def create_command_request(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(arguments, {"payload", "dry_run", "approval_confirmed"})
+    payload = _required_object(arguments, "payload")
+    _reject_direct_execution_flags(payload)
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="create_command_request",
+        api_path=routes.COMMANDS_PATH,
+        payload=payload,
+        operation_keys=("command_id", "event_id", "correlation_id", "audit_event_id"),
+        reason=(
+            "Command requests can affect clusters, so MCP defaults to dry_run, "
+            "requires approval_confirmed=true for submission, and refuses direct "
+            "execution confirmation flags. The existing command API still performs "
+            "RBAC, cluster-scope, diff, audit, and policy validation."
+        ),
+    )
+
+
+async def approve_or_reject_workflow(
+    client: ManagementApiClient, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    _reject_unknown(
+        arguments,
+        {"approval_id", "decision", "reason", "dry_run", "approval_confirmed"},
+    )
+    approval_id = _required_str(arguments, "approval_id", max_length=2048)
+    decision = _required_str(arguments, "decision", max_length=20)
+    if decision not in {"grant", "reject"}:
+        raise ToolInputError("decision must be grant or reject")
+    template = (
+        routes.APPROVAL_GRANT_PATH if decision == "grant" else routes.APPROVAL_REJECT_PATH
+    )
+    api_path = _format_path(template, approval_id=approval_id)
+    payload: dict[str, Any] = {}
+    reason = _optional_str(arguments, "reason", max_length=500)
+    if reason is not None:
+        payload["reason"] = reason
+    return await _post_or_propose(
+        client,
+        arguments,
+        tool_name="approve_or_reject_workflow",
+        api_path=api_path,
+        payload=payload,
+        operation_keys=("event_id", "correlation_id", "command_id"),
+        reason=(
+            "Approval decisions can unblock or stop workflows, so MCP defaults to "
+            "dry_run and requires approval_confirmed=true before it submits the "
+            "existing approval decision POST. The Gateway checks that the approval "
+            "is open and that the authenticated user has deployment access."
+        ),
+    )
+
+
 def _read_result(tool_name: str, api_path: str, data: Any) -> dict[str, Any]:
     return {
         "tool": tool_name,
@@ -375,6 +669,107 @@ def _read_result(tool_name: str, api_path: str, data: Any) -> dict[str, Any]:
             ),
         },
     }
+
+
+async def _post_or_propose(
+    client: ManagementApiClient,
+    arguments: dict[str, Any],
+    *,
+    tool_name: str,
+    api_path: str,
+    payload: dict[str, Any],
+    operation_keys: tuple[str, ...],
+    reason: str,
+) -> dict[str, Any]:
+    _validate_json_payload(payload, "payload")
+    dry_run = _optional_bool(arguments, "dry_run", default=True)
+    approval_confirmed = _optional_bool(arguments, "approval_confirmed", default=False)
+    proposal = _write_proposal(api_path, payload)
+    if dry_run:
+        return {
+            "tool": tool_name,
+            "data": None,
+            "safety": {
+                "mutating": False,
+                "dry_run": True,
+                "proposal": proposal,
+                "approval_required": True,
+                "operation_id": None,
+                "api_path": api_path,
+                "reason": reason,
+            },
+        }
+    if not approval_confirmed:
+        raise ToolInputError("approval_confirmed must be true when dry_run is false")
+    if not client.settings.writes_enabled:
+        raise ToolInputError(
+            f"{OPSIA_MCP_ENABLE_WRITES_ENV}=true is required before MCP write tools can submit"
+        )
+    data = await client.post_json(api_path, payload)
+    return {
+        "tool": tool_name,
+        "data": data,
+        "safety": {
+            "mutating": True,
+            "dry_run": False,
+            "proposal": proposal,
+            "approval_required": False,
+            "operation_id": _operation_id_from_response(
+                data,
+                operation_keys,
+            ),
+            "api_path": api_path,
+            "reason": reason,
+        },
+    }
+
+
+def _write_proposal(api_path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    redacted_body = _redact_proposal_value(payload)
+    return {
+        "method": WRITE_HTTP_METHOD,
+        "api_path": api_path,
+        "body": redacted_body,
+        "body_redacted": redacted_body != payload,
+        "uses_existing_gateway_api": True,
+    }
+
+
+def _operation_id_from_response(
+    data: Any,
+    keys: tuple[str, ...],
+) -> str | None:
+    if isinstance(data, dict):
+        for key in keys:
+            value = data.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def _redact_proposal_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if _is_sensitive_proposal_key(key_text):
+                redacted[key_text] = REDACTED_VALUE
+            else:
+                redacted[key_text] = _redact_proposal_value(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_proposal_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_log_line(value)
+    return deepcopy(value)
+
+
+def _is_sensitive_proposal_key(key: str) -> bool:
+    normalized = key.casefold().replace("-", "_")
+    return any(part in normalized for part in SENSITIVE_PROPOSAL_KEY_PARTS)
 
 
 def _schema(
@@ -400,6 +795,22 @@ def _string(description: str, *, max_length: int, default: str | None = None) ->
     if default is not None:
         schema["default"] = default
     return schema
+
+
+def _object(description: str) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": description,
+        "additionalProperties": True,
+    }
+
+
+def _boolean(description: str, *, default: bool) -> dict[str, Any]:
+    return {
+        "type": "boolean",
+        "description": description,
+        "default": default,
+    }
 
 
 def _integer(
@@ -429,6 +840,13 @@ def _required_str(arguments: dict[str, Any], name: str, *, max_length: int) -> s
     if value is None:
         raise ToolInputError(f"{name} is required")
     return value
+
+
+def _required_object(arguments: dict[str, Any], name: str) -> dict[str, Any]:
+    value = arguments.get(name)
+    if not isinstance(value, dict):
+        raise ToolInputError(f"{name} must be an object")
+    return _validate_json_payload(value, name)
 
 
 def _optional_str(arguments: dict[str, Any], name: str, *, max_length: int) -> str | None:
@@ -467,6 +885,30 @@ def _optional_bool(arguments: dict[str, Any], name: str, *, default: bool) -> bo
     if not isinstance(value, bool):
         raise ToolInputError(f"{name} must be a boolean")
     return value
+
+
+def _validate_json_payload(value: dict[str, Any], name: str) -> dict[str, Any]:
+    try:
+        encoded = json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ToolInputError(f"{name} must be a finite JSON object") from exc
+    if len(encoded) > MAX_WRITE_PAYLOAD_BYTES:
+        raise ToolInputError(
+            f"{name} must be at most {MAX_WRITE_PAYLOAD_BYTES} bytes when encoded as JSON"
+        )
+    return deepcopy(value)
+
+
+def _reject_direct_execution_flags(payload: dict[str, Any]) -> None:
+    if DIRECT_EXECUTION_KEYS.intersection(payload):
+        raise ToolInputError(
+            "create_command_request cannot set direct execution confirmation flags"
+        )
 
 
 def _format_path(template: str, **values: str) -> str:
