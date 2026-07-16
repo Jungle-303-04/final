@@ -92,6 +92,7 @@ describe("inventory resource API", () => {
       cluster_id: "cluster-1",
       identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
       resource: RESOURCE,
+      provider_detail: null,
       related: { owner: [] },
       events: [],
     };
@@ -109,6 +110,64 @@ describe("inventory resource API", () => {
       "/api/clusters/cluster-1/inventory/resource-detail?resource_type=pod&kind=Pod&name=api-abc&namespace=default&related_limit=100&event_limit=50",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("validates a redacted provider detail without accepting raw Kubernetes data", async () => {
+    const providerDetail = {
+      type: "aws-machine" as const,
+      instance_type: "m6i.large",
+      instance_id: "i-123",
+      instance_state: "running",
+      provider_id: "aws:///zone/i-123",
+      iam_instance_profile: null,
+      ssh_key_name: null,
+      subnet_id: "subnet-a",
+      secrets_backend: null,
+      addresses: [{ type: "InternalIP", address: "10.0.0.2" }],
+      conditions: [{
+        type: "Ready",
+        status: "True" as const,
+        reason: null,
+        message: null,
+        last_transition_time: null,
+      }],
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "cluster-1",
+      identity: { resource_type: "awsmachine", kind: "AWSMachine", name: "node-a", namespace: "default" },
+      resource: { ...RESOURCE, resource_type: "awsmachine", kind: "AWSMachine", name: "node-a" },
+      provider_detail: providerDetail,
+      related: {},
+      events: [],
+    }));
+
+    const response = await getInventoryResourceDetail("cluster-1", {
+      resourceType: "awsmachine",
+      kind: "AWSMachine",
+      name: "node-a",
+      namespace: "default",
+    });
+
+    expect(response.provider_detail).toEqual(providerDetail);
+    expect(JSON.stringify(response.provider_detail)).not.toContain("raw");
+  });
+
+  it("rejects an unknown provider detail discriminator", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({
+      cluster_id: "cluster-1",
+      identity: { resource_type: "pod", kind: "Pod", name: "api-abc", namespace: "default" },
+      resource: RESOURCE,
+      provider_detail: { type: "forged-provider", conditions: [] },
+      related: {},
+      events: [],
+    }));
+
+    await expect(getInventoryResourceDetail("cluster-1", {
+      resourceType: "pod",
+      kind: "Pod",
+      name: "api-abc",
+      namespace: "default",
+    })).rejects.toMatchObject({ kind: "invalid-payload", status: 200 });
   });
 
   it("rejects malformed resource rows instead of fabricating details", async () => {

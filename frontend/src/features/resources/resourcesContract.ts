@@ -1,3 +1,5 @@
+import type { ProviderResourceDetail } from "./providerResourceContract";
+
 export type ResourcesCollectionCompleteness = "unknown";
 
 export type ResourceHealthTone =
@@ -197,6 +199,8 @@ export interface ResourceDetail {
   clusterId: string;
   identity: ResourceIdentity;
   resource: ResourceSummary;
+  /** Canonical gateway adapters populate the redacted provider projection when available. */
+  providerDetail?: ProviderResourceDetail | null;
   relatedCompleteness: ResourcesCollectionCompleteness;
   related: ResourceRelatedGroup[];
   relatedExcludedCount?: number;

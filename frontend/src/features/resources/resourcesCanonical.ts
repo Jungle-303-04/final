@@ -36,6 +36,7 @@ import {
   responseTimestamp,
   safeAdd,
 } from "./resourcesValidation";
+import { toProviderResourceDetail } from "./providerResourceCanonical";
 
 export function toResourceCatalog(
   requestedClusterId: string,
@@ -166,6 +167,7 @@ export function toResourceDetail(
     clusterId: requestedClusterId,
     identity: requestedIdentity,
     resource,
+    providerDetail: toProviderResourceDetail(wire.provider_detail),
     relatedCompleteness: "unknown",
     related,
     relatedExcludedCount,

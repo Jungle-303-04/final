@@ -30,6 +30,7 @@ import { ResourceDetailLoadingPreview } from "./ResourcesLoadingPreview";
 import type { ResourcesResourceState } from "./resourcesPageStateModel";
 import { ResourceMetricsCharts } from "./ResourceMetricsCharts";
 import type { ResourceMetricsHistoryFrame } from "./useResourceMetricsHistoryDataFrame";
+import { ProviderResourceDetailPanel } from "./ProviderResourceDetailPanel";
 
 export function ResourceDetailBody({
   detail,
@@ -139,6 +140,9 @@ export function ResourceDetailBody({
           ]} />
         </section>
         <ResourceFactsPanel facts={resource.facts} />
+        {detail.data.providerDetail ? (
+          <ProviderResourceDetailPanel detail={detail.data.providerDetail} />
+        ) : null}
         {hasMetricPoints(metricHistory, resource.inventoryKey) ? (
           <ResourceMetricsCharts
             frame={metricHistory}

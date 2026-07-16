@@ -5,6 +5,7 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.contracts.gateway.base import StrictModel
+from packages.contracts.inventory_provider import ResourceProviderDetail
 from packages.contracts.parity import ResourceRef
 
 JsonMap = dict[str, Any]
@@ -730,6 +731,7 @@ class InventoryResourceDetailResponse(StrictModel):
     cluster_id: str
     identity: JsonMap
     resource: InventoryResourceResponse
+    provider_detail: ResourceProviderDetail | None = None
     related: dict[str, list[InventoryResourceResponse]] = Field(default_factory=dict)
     events: list[InventoryResourceResponse] = Field(default_factory=list)
 

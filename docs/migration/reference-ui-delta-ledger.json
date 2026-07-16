@@ -2044,8 +2044,45 @@
         "blobId": "462f82e7163527d8f28e439aeea684b2d08cb318",
         "sha256": "35d40455e2ca40c53d296fa921f6b71d0edc30665ec38ce7427f922066a43136"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:aws-machine:v1",
+          "legacyContractIds": [],
+          "symbol": "AWSMachineRenderer",
+          "interaction": "an authorized AWSMachine detail presents observed instance identity, lifecycle state, configuration, addresses, and Cluster API conditions without exposing the raw object",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The typed projection and reusable panel are implemented for stored AWSMachine observations. The default agent still needs dynamic CRD discovery and matching read RBAC before every cluster can produce these rows automatically."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -2059,8 +2096,45 @@
         "blobId": "aaad710c83463f8efeaac4ef425fa341c8dc51dd",
         "sha256": "27da719a10771567602fb884d4a569536cbe67bb66e3b2fae94af28cc476b1b9"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:aws-managed-cluster:v1",
+          "legacyContractIds": [],
+          "symbol": "AWSManagedClusterRenderer",
+          "interaction": "an authorized AWSManagedCluster detail presents its observed control-plane endpoint, failure domains, and Cluster API conditions from one redacted projection",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The typed projection and reusable panel are implemented for stored AWSManagedCluster observations. Automatic CRD discovery and read RBAC remain an agent collection extension rather than a browser heuristic."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -2074,8 +2148,45 @@
         "blobId": "66371e69057932b7e4d0a4c240d00504b3b8d360",
         "sha256": "af8f939971791cc0643bae46b4a0efe736210ab463833c99351b79933a3fc812"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:aws-managed-control-plane:v1",
+          "legacyContractIds": [],
+          "symbol": "AWSManagedControlPlaneRenderer",
+          "interaction": "an authorized AWS managed control-plane detail presents EKS identity, endpoint access, VPC, subnets, security groups, NAT addresses, add-ons, failure domains, and conditions from observed fields",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The server bounds every nested collection and returns only allow-listed EKS facts; the browser consumes the strict discriminator. Default-agent CRD discovery remains required for universal availability."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -2089,8 +2200,45 @@
         "blobId": "29d24eb59b1fe89c5bcecc527bf6a1964fff6e60",
         "sha256": "44f2a0cc6d10c64c641d6527f881f25d7e818368183618b51e4e6a6344de27b8"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:aws-managed-machine-pool:v1",
+          "legacyContractIds": [],
+          "symbol": "AWSManagedMachinePoolRenderer",
+          "interaction": "an authorized AWS managed machine-pool detail presents node-group configuration, scaling, subnets, labels, and Cluster API conditions from the current observation",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Scaling and labels are server-projected with explicit missing values instead of zero defaults. Dynamic CRD collection remains an agent-side follow-up."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -2104,8 +2252,45 @@
         "blobId": "9ec3c9ace66e5b745d0e8d55b6327f986ec000c2",
         "sha256": "dc9b5a9037d18c8228d9b08b0e13cf54e6399ba76f2d387e8ce9293753ed419b"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:azure-machine:v1",
+          "legacyContractIds": [],
+          "symbol": "AzureMachineRenderer",
+          "interaction": "an authorized AzureMachine detail presents observed VM, availability-zone, OS disk, provider, subnet, and condition facts without raw object access",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The typed projection and common detail panel cover stored AzureMachine observations while preserving absent facts. Automatic CRD collection remains agent-side work."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -2119,8 +2304,45 @@
         "blobId": "2a553c2b4861009b7c16c7833197c0a118550db4",
         "sha256": "7fc6a8c58c3e36035340013ef3bc08197ae2e7d4598794cdb649993ca803bd8e"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:azure-managed-control-plane:v1",
+          "legacyContractIds": [],
+          "symbol": "AzureManagedControlPlaneRenderer",
+          "interaction": "an authorized Azure managed control-plane detail presents location, Kubernetes version, SKU, network policy, private access, upgrade, authorized ranges, and conditions from observed AKS facts",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The strict backend and browser union preserve nullable AKS facts and bounded IP ranges. The standard collector must still discover and read these CRDs for universal availability."
+          }
+        }
+      ]
     },
     {
       "status": "M",
@@ -2134,8 +2356,45 @@
         "blobId": "508009eb9d387ef4bb0374c5bea2c66b66c7c712",
         "sha256": "50ecaa6ce5cbce7e9d9d9baba1acd6a55fe5ac03aed9df384ad9fecf24b5ed30"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:azure-managed-machine-pool:v1",
+          "legacyContractIds": [],
+          "symbol": "AzureManagedMachinePoolRenderer",
+          "interaction": "an authorized Azure managed machine-pool detail presents VM and OS configuration, scaling, zones, labels, taints, and conditions from the current observation",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it only after the final consumer unmounts",
+            "merge": "replace provider detail only when the response still matches the active exact identity; a missing projection remains absent"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.provider-detail.contract",
+              "resources.provider-detail.transport",
+              "resources.provider-detail.adapter",
+              "resources.provider-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The reusable panel renders typed scaling, labels, and taints without local defaults. Dynamic agent discovery and read RBAC remain outside this UI slice."
+          }
+        }
+      ]
     },
     {
       "status": "M",

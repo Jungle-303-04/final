@@ -462,6 +462,37 @@ def test_inventory_resource_detail_returns_related_resources_and_events_without_
     assert "raw" not in response.events[0].model_dump()
 
 
+def test_inventory_resource_detail_returns_typed_provider_projection_after_rbac() -> None:
+    machine = inventory_resource("awsmachine", "AWSMachine", "node-a")
+    machine["api_version"] = "infrastructure.cluster.x-k8s.io/v1beta2"
+    machine["raw"] = {
+        "spec": {"instanceType": "m6i.large", "instanceID": "i-123"},
+        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+        "secret": "must-not-leak",
+    }
+
+    async def run():
+        return await get_inventory_resource_detail(
+            "cluster-1",
+            resource_type="awsmachine",
+            kind="AWSMachine",
+            namespace="default",
+            name="node-a",
+            related_limit=10,
+            event_limit=10,
+            current=type("Current", (), {"user_id": "user-1", "workspace_id": "ws-1"})(),
+            db=StubInventoryDb([machine]),
+        )
+
+    response = asyncio.run(run())
+
+    assert response.provider_detail is not None
+    assert response.provider_detail.type == "aws-machine"
+    assert response.provider_detail.instance_type == "m6i.large"
+    assert "secret" not in response.provider_detail.model_dump()
+    assert "raw" not in response.resource.model_dump()
+
+
 def test_inventory_summary_route_returns_latest_snapshot_and_counts() -> None:
     async def run():
         return await get_inventory_summary(

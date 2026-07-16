@@ -15,6 +15,7 @@ from domains.identity.dependencies import (
 from domains.inventory.capabilities import resource_capabilities_response
 from domains.inventory.events import InventorySnapshotRecordedBody
 from domains.inventory.ingest import ingest_inventory_snapshot
+from domains.inventory.provider_detail import provider_detail_projection
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.requests import InventorySnapshotRequest
 from packages.contracts.gateway.responses import (
@@ -201,6 +202,7 @@ async def get_inventory_resource_detail(
             "name": name,
         },
         resource=InventoryResourceResponse(**public_resource),
+        provider_detail=provider_detail_projection(resource),
         related=related,
         events=events,
     )

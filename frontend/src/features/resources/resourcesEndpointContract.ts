@@ -1,3 +1,5 @@
+import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointContract";
+
 export type ResourcesEndpointJsonMap = Record<string, unknown>;
 
 export interface ResourcesEndpointInventorySummary {
@@ -41,6 +43,7 @@ export interface ResourcesEndpointResourceDetail {
   cluster_id: string;
   identity: ResourcesEndpointJsonMap;
   resource: ResourcesEndpointResource;
+  provider_detail?: ProviderResourceDetailEndpoint | null;
   related: Record<string, ResourcesEndpointResource[]>;
   events: ResourcesEndpointResource[];
 }

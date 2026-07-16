@@ -80,4 +80,54 @@ describe("canonical Resources detail mapping", () => {
     expect(result.related[0]?.items).toHaveLength(RESOURCE_DETAIL.related.pods?.length ?? 0);
     expect(result.events).toHaveLength(RESOURCE_DETAIL.events.length);
   });
+
+  it("maps only the typed provider projection and keeps raw summary fields isolated", async () => {
+    const dependencies = endpoints({
+      getInventoryResourceDetail: () => Promise.resolve({
+        ...RESOURCE_DETAIL,
+        identity: {
+          resource_type: "awsmachine",
+          kind: "AWSMachine",
+          namespace: "shop",
+          name: "node-a",
+        },
+        resource: {
+          ...RESOURCE_DETAIL.resource,
+          resource_type: "awsmachine",
+          api_version: "infrastructure.cluster.x-k8s.io/v1beta2",
+          kind: "AWSMachine",
+          name: "node-a",
+          summary: { must_not_reach_product_state: true },
+        },
+        provider_detail: {
+          type: "aws-machine",
+          instance_type: "m6i.large",
+          instance_id: "i-123",
+          instance_state: "running",
+          provider_id: null,
+          iam_instance_profile: null,
+          ssh_key_name: null,
+          subnet_id: "subnet-a",
+          secrets_backend: null,
+          addresses: [],
+          conditions: [],
+        },
+        related: {},
+        events: [],
+      }),
+    });
+
+    const result = await createResourcesAdapter(dependencies).loadResourceDetail(
+      "cluster-1",
+      { resourceType: "awsmachine", kind: "AWSMachine", namespace: "shop", name: "node-a" },
+    );
+
+    expect(result.providerDetail).toMatchObject({
+      type: "aws-machine",
+      instanceType: "m6i.large",
+      instanceId: "i-123",
+      subnetId: "subnet-a",
+    });
+    expect(JSON.stringify(result.providerDetail)).not.toContain("must_not_reach_product_state");
+  });
 });
