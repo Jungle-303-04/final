@@ -13,9 +13,11 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '..')
 const executeFile = promisify(execFile)
 const SOURCE_PROVENANCE = 'references/provenance/source.json'
+const SOURCE_CLASSIFICATION_INPUT = 'docs/migration/reference-ui-delta-classifications.json'
 const SOURCE_EVIDENCE_LEDGERS = new Set([
   'docs/migration/reference-source-ledger.json',
   'docs/migration/reference-ui-delta-ledger.json',
+  SOURCE_CLASSIFICATION_INPUT,
 ])
 
 function escaped(value) {
@@ -49,6 +51,19 @@ function sanitizeImmutableSourcePaths(relativePath, parsed) {
         if ('previousPath' in row) row.previousPath = '<immutable-source-path>'
       }
     })
+  }
+  if (
+    relativePath === SOURCE_CLASSIFICATION_INPUT
+    && copy.classifications
+    && typeof copy.classifications === 'object'
+    && !Array.isArray(copy.classifications)
+  ) {
+    copy.classifications = Object.fromEntries(
+      Object.values(copy.classifications).map((value, index) => [
+        `<immutable-source-path-${index}>`,
+        value,
+      ]),
+    )
   }
   return copy
 }

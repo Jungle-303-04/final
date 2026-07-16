@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 106,
+  "pendingCount": 105,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -10154,8 +10154,60 @@
         "blobId": "e2905ce684230adbba883013216ed0e151be60c3",
         "sha256": "474e0db41fcd05fb1d0139373d5e6a15d212aeed1d255cf7ccc0956556544ab5"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:runtime:provider:composition:v1",
+          "legacyContractIds": [],
+          "symbol": "top-level router, query, theme, toast, navigation, timeline, and diagnose providers",
+          "interaction": "the authenticated application composes one product-owned provider tree and isolates it behind session, workspace, cluster scope, error, loading, and localization boundaries",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/ProductApp.tsx",
+              "frontend/src/app/AuthenticatedProductRuntime.tsx",
+              "frontend/src/app/ProductShell.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline",
+              "shell.cluster-load.disclosure"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "ProductApp and AuthenticatedProductRuntime provide the single browser and desktop composition path; all server interactions enter through typed authenticated ports."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:runtime:embeddable:host-api:v1",
+          "legacyContractIds": [],
+          "symbol": "browser or memory router, host query client, nav slots, runtime setters, and chromeless embed props",
+          "interaction": "an external host embeds the complete source application and overrides router, API base, query client, navigation slots, diagnosis action, timeline source, and document-title ownership",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/ProductApp.tsx",
+              "frontend/src/app/buildBaseline.test.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "build.entrypoint.baseline"
+            ],
+            "state": "blocked",
+            "blockedReason": "External host injection would bypass the product's single authenticated workspace and cluster-scope composition boundary. The supported desktop host is Tauri and shares the same compiled React application instead.",
+            "rationale": "The standalone provider composition is retained, while the source-only embeddable browser-library contract remains intentionally outside the product build."
+          }
+        }
+      ]
     },
     {
       "status": "A",

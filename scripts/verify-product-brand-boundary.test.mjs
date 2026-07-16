@@ -40,3 +40,29 @@ test('canonical ledger는 immutable source path만 예외로 두고 다른 legac
   assert.deepEqual(clean, [])
   assert.equal(contaminated.length, 1)
 })
+
+test('classification input은 immutable source key만 예외로 두고 분류 내용의 legacy 문자열은 차단한다', () => {
+  const classification = JSON.stringify({
+    testPlans: {},
+    classifications: {
+      [`web/src/${legacyProduct}App.tsx`]: {
+        classification: 'classified',
+        interactions: [{ symbol: 'clean symbol' }],
+      },
+    },
+  })
+  const clean = inspectProductBoundaryFile(
+    'docs/migration/reference-ui-delta-classifications.json',
+    classification,
+  )
+  const contaminated = inspectProductBoundaryFile(
+    'docs/migration/reference-ui-delta-classifications.json',
+    JSON.stringify({
+      ...JSON.parse(classification),
+      note: legacyProduct,
+    }),
+  )
+
+  assert.deepEqual(clean, [])
+  assert.equal(contaminated.length, 1)
+})
