@@ -9,6 +9,7 @@ name: Dev Gate
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: dev-gate-${{ github.ref }}
@@ -52,10 +53,12 @@ jobs:
         run: scripts/commit-msg-gate.sh --range origin/dev..HEAD
 
       - name: Classify automatic deployment scope
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/dev-deploy-scope"
-          scripts/classify-deploy-scope.sh origin/dev HEAD \
+          scripts/classify-live-deploy-scope.sh HEAD \
             >"${RUNNER_TEMP}/dev-deploy-scope/scope"
 
       - name: Upload automatic deployment scope

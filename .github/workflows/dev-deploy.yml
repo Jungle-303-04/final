@@ -116,6 +116,11 @@ jobs:
       - name: Install deployment dependencies
         run: uv sync --frozen
 
+      - name: Install authenticated browser smoke dependencies
+        run: |
+          npm ci --prefix frontend
+          npm --prefix frontend exec -- playwright install --with-deps chromium
+
       - name: Prepare approved upstream delta evidence
         run: make reference-upstream-prepare
 
@@ -524,6 +529,9 @@ jobs:
           EXPECTED_CONSOLE_IMAGE: ${{ steps.console_image.outputs.image }}
           CONSOLE_ROLLBACK_PLAN: ${{ runner.temp }}/console-rollback-plan.json
         run: bash scripts/post-deploy-console-smoke.sh
+
+      - name: Run authenticated browser route smoke
+        run: npm --prefix frontend run smoke:routes
 
       - name: Record successful dev SHA in cluster
         if: env.DEPLOYMENT_SCOPE == 'FULL'

@@ -170,6 +170,43 @@ def test_deploy_orders_auth_migration_rollout_smoke_and_status_recording() -> No
     )
 
 
+def test_deploy_runs_authenticated_dynamic_browser_route_smoke_before_recording() -> None:
+    steps = steps_by_name()
+    names = [step["name"] for step in deploy_job()["steps"]]
+    install = steps["Install authenticated browser smoke dependencies"]
+    smoke = steps["Run authenticated browser route smoke"]
+    package = yaml.safe_load((ROOT / "frontend/package.json").read_text(encoding="utf-8"))
+    script = (ROOT / "frontend/scripts/post-deploy-route-smoke.mjs").read_text(encoding="utf-8")
+
+    assert install["run"] == (
+        "npm ci --prefix frontend\n"
+        "npm --prefix frontend exec -- playwright install --with-deps chromium\n"
+    )
+    assert smoke["run"] == "npm --prefix frontend run smoke:routes"
+    assert smoke.get("env", {}) == {}
+    assert package["scripts"]["smoke:routes"] == ("node scripts/post-deploy-route-smoke.mjs")
+    assert package["scripts"]["lint"] == "eslint src scripts/*.mjs --max-warnings 0"
+    assert "SIDEBAR_SELECTOR = 'aside[data-slot=\"sidebar\"]'" in script
+    assert "NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`" in script
+    assert "PRODUCT_ROUTE_CATALOG" not in script
+    assert 'page.on("pageerror"' in script
+    assert 'page.on("requestfailed"' in script
+    assert "isChangeTimelineLimitResponse(response.status(), response.url())" in script
+    assert 'requiredEnvironment("AUTH_PASSWORD", { trim: false })' in script
+    assert names.index("Run post-deploy smoke") < names.index(
+        "Run authenticated browser route smoke"
+    )
+    assert names.index("Run post-deploy console smoke") < names.index(
+        "Run authenticated browser route smoke"
+    )
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Record successful dev SHA in cluster"
+    )
+    assert names.index("Run authenticated browser route smoke") < names.index(
+        "Record successful console SHA in cluster"
+    )
+
+
 def test_workflow_sets_and_verifies_live_auth_bypass_without_manual_mutation() -> None:
     step = steps_by_name()["Enforce live auth bypass zero"]["run"]
 

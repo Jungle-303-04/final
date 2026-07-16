@@ -1,0 +1,248 @@
+import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
+
+import { chromium } from "playwright";
+
+const SIDEBAR_SELECTOR = 'aside[data-slot="sidebar"]';
+const NAVIGATION_LINK_SELECTOR = `${SIDEBAR_SELECTOR} nav a[href]`;
+const ROUTE_SETTLE_TIMEOUT_MS = 20_000;
+const NETWORK_OBSERVATION_MS = 3_000;
+
+export function normalizeSurfaceText(value) {
+  return value
+    .normalize("NFKC")
+    .replace(/\p{Number}+/gu, "#")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function orderRoutesForTraversal(routes, currentPathname) {
+  const otherRoutes = routes.filter(({ pathname }) => pathname !== currentPathname);
+  const currentRoutes = routes.filter(({ pathname }) => pathname === currentPathname);
+  return [...otherRoutes, ...currentRoutes];
+}
+
+export function isChangeTimelineLimitResponse(status, rawUrl) {
+  if (status !== 422) return false;
+  try {
+    return new URL(rawUrl).pathname.endsWith("/api/changes");
+  } catch {
+    return false;
+  }
+}
+
+export function isBenignNavigationAbort(errorText) {
+  const normalized = errorText.trim().toUpperCase();
+  return normalized === "NET::ERR_ABORTED" || normalized === "NS_BINDING_ABORTED";
+}
+
+async function run() {
+  const baseUrl = requiredEnvironment("BASE_URL");
+  const email = requiredEnvironment("AUTH_EMAIL");
+  const password = requiredEnvironment("AUTH_PASSWORD", { trim: false });
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--disable-dev-shm-usage", "--no-sandbox"],
+  });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const diagnostics = {
+    changeTimelineLimits: [],
+    pageErrors: [],
+    requestFailures: [],
+  };
+
+  page.on("pageerror", (error) => {
+    diagnostics.pageErrors.push(error.message);
+  });
+  page.on("requestfailed", (request) => {
+    const error = request.failure()?.errorText ?? "unknown request failure";
+    if (isBenignNavigationAbort(error)) return;
+    diagnostics.requestFailures.push({
+      error,
+      method: request.method(),
+      url: safeUrl(request.url()),
+    });
+  });
+  page.on("response", (response) => {
+    if (!isChangeTimelineLimitResponse(response.status(), response.url())) return;
+    diagnostics.changeTimelineLimits.push({
+      status: response.status(),
+      url: safeUrl(response.url()),
+    });
+  });
+
+  try {
+    await authenticate(page, baseUrl, email, password);
+    const initial = await waitForRouteSurface(page, null, new URL(page.url()).pathname);
+    const routes = await collectReleasedRoutes(page);
+    const traversal = orderRoutesForTraversal(routes, new URL(page.url()).pathname);
+
+    assert.ok(routes.length > 1, "released navigation must expose multiple DOM routes");
+
+    let previous = initial;
+    for (const route of traversal) {
+      const link = await releasedRouteLink(page, route.pathname);
+      const observedHref = await link.getAttribute("href");
+      assert.ok(observedHref, `released route ${route.pathname} lost its href`);
+      assert.equal(
+        new URL(observedHref, page.url()).pathname,
+        route.pathname,
+        `released route DOM order changed before ${route.pathname}`,
+      );
+
+      await Promise.all([
+        page.waitForURL(
+          (url) => url.pathname === route.pathname,
+          { timeout: ROUTE_SETTLE_TIMEOUT_MS },
+        ),
+        link.click(),
+      ]);
+      await waitForRouteSurface(page, previous, route.pathname);
+      await page.waitForTimeout(NETWORK_OBSERVATION_MS);
+      previous = await waitForRouteSurface(page, previous, route.pathname);
+      process.stdout.write(`route smoke passed: ${route.pathname}\n`);
+    }
+
+    assertDiagnostics(diagnostics);
+    process.stdout.write(`authenticated route smoke passed: ${routes.length} routes\n`);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function authenticate(page, baseUrl, email, password) {
+  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  const sidebar = page.locator(SIDEBAR_SELECTOR);
+
+  if (!(await sidebar.isVisible())) {
+    const emailInput = page.locator('input[name="email"]');
+    const passwordInput = page.locator('input[name="password"]');
+    await emailInput.waitFor({ state: "visible", timeout: ROUTE_SETTLE_TIMEOUT_MS });
+    await emailInput.fill(email);
+    await passwordInput.fill(password);
+    await page.locator('button[type="submit"]').click();
+  }
+
+  await sidebar.waitFor({ state: "visible", timeout: ROUTE_SETTLE_TIMEOUT_MS });
+}
+
+async function collectReleasedRoutes(page) {
+  const rawRoutes = await page.locator(NAVIGATION_LINK_SELECTOR).evaluateAll((links) =>
+    links.map((link) => ({
+      href: link.getAttribute("href") ?? "",
+    })),
+  );
+  const routes = [];
+  const seen = new Set();
+
+  for (const { href } of rawRoutes) {
+    if (!href) continue;
+    const url = new URL(href, page.url());
+    if (url.origin !== new URL(page.url()).origin || seen.has(url.pathname)) continue;
+    seen.add(url.pathname);
+    routes.push({ pathname: url.pathname });
+  }
+
+  return routes;
+}
+
+async function releasedRouteLink(page, pathname) {
+  const links = page.locator(NAVIGATION_LINK_SELECTOR);
+  const count = await links.count();
+  for (let index = 0; index < count; index += 1) {
+    const link = links.nth(index);
+    const href = await link.getAttribute("href");
+    if (href && new URL(href, page.url()).pathname === pathname) return link;
+  }
+  throw new Error(`released route link disappeared: ${pathname}`);
+}
+
+async function waitForRouteSurface(page, previous, expectedPathname) {
+  const deadline = Date.now() + ROUTE_SETTLE_TIMEOUT_MS;
+  let last = null;
+
+  while (Date.now() < deadline) {
+    last = await readRouteSurface(page);
+    const transitioned = previous === null
+      || (
+        last.routeTitle !== previous.routeTitle
+        && last.bodyFingerprint !== previous.bodyFingerprint
+      );
+    if (
+      last.pathname === expectedPathname
+      && last.documentTitle
+      && last.routeTitle
+      && last.mainText
+      && transitioned
+    ) {
+      return last;
+    }
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error(
+    `route surface did not transition to ${expectedPathname}: ${JSON.stringify({
+      bodyChanged: previous ? last?.bodyFingerprint !== previous.bodyFingerprint : null,
+      observedPathname: last?.pathname ?? null,
+      routeTitle: last?.routeTitle ?? null,
+      titleChanged: previous ? last?.routeTitle !== previous.routeTitle : null,
+    })}`,
+  );
+}
+
+async function readRouteSurface(page) {
+  const main = page.locator("#product-main");
+  const [documentTitle, routeTitle, mainText] = await Promise.all([
+    page.title(),
+    page.locator("header h1").first().innerText().catch(() => ""),
+    main.innerText().catch(() => ""),
+  ]);
+  return {
+    bodyFingerprint: normalizeSurfaceText(mainText),
+    documentTitle: documentTitle.trim(),
+    mainText: mainText.trim(),
+    pathname: new URL(page.url()).pathname,
+    routeTitle: routeTitle.trim(),
+  };
+}
+
+function assertDiagnostics(diagnostics) {
+  const failures = [];
+  if (diagnostics.pageErrors.length > 0) {
+    failures.push(`pageerror=${JSON.stringify(diagnostics.pageErrors)}`);
+  }
+  if (diagnostics.requestFailures.length > 0) {
+    failures.push(`requestfailed=${JSON.stringify(diagnostics.requestFailures)}`);
+  }
+  if (diagnostics.changeTimelineLimits.length > 0) {
+    failures.push(
+      `change_timeline_422=${JSON.stringify(diagnostics.changeTimelineLimits)}`,
+    );
+  }
+  assert.equal(failures.length, 0, failures.join("; "));
+}
+
+function requiredEnvironment(name, { trim = true } = {}) {
+  const rawValue = process.env[name];
+  const value = trim ? rawValue?.trim() : rawValue;
+  if (value === undefined || value.length === 0) {
+    throw new Error(`missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+function safeUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return "<invalid-url>";
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  run().catch((error) => {
+    process.stderr.write(`authenticated route smoke failed: ${error.message}\n`);
+    process.exitCode = 1;
+  });
+}
