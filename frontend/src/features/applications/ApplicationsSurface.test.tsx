@@ -82,7 +82,7 @@ describe("S10 Applications surface", () => {
     expect((refresh as HTMLButtonElement).disabled).toBe(true);
     expect(view.container.querySelector('[data-slot="product-page-frame"]')?.getAttribute("aria-busy"))
       .toBe("true");
-    expect(view.container.querySelector('[data-slot="applications-refresh-feedback"]')?.textContent)
+    expect(view.container.querySelector('[data-slot="refresh-action-feedback"]')?.textContent)
       .toBe("Refreshing applications.");
     expect(refresh.querySelector('[data-slot="refresh-feedback"]')?.getAttribute("data-refresh-feedback-state"))
       .toBe("pending");
@@ -99,7 +99,8 @@ describe("S10 Applications surface", () => {
     expect((refresh as HTMLButtonElement).disabled).toBe(false);
     expect(view.container.querySelector('[data-slot="product-page-frame"]')?.getAttribute("aria-busy"))
       .toBe("false");
-    expect(view.container.querySelector('[data-slot="applications-refresh-feedback"]')).toBeNull();
+    expect(view.container.querySelector('[data-slot="refresh-action-feedback"]')?.textContent)
+      .toBe("Applications refreshed.");
   });
 
   it("keeps successful catalog data after a background refresh failure and aborts it on unmount", async () => {

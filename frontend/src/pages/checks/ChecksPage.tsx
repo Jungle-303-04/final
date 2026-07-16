@@ -11,13 +11,12 @@ import {
 } from "../../features/checks/checksContract";
 import { CHECKS_COPY } from "../../features/checks/checksCopy";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import { RefreshAction } from "../../motion/RefreshAction";
 import { namespaceSelector, normalizeNamespaceRefs } from "../../features/filters/filterUrlSyntax";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
 import { ProductStateScreen } from "../../shared/ui/ProductStateScreen";
-import { RefreshAction } from "../../shared/ui/RefreshFeedback";
 import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/alert";
 import { Badge } from "../../shared/ui/primitives/badge";
-import { Button } from "../../shared/ui/primitives/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useChecksDetail, useChecksOverview } from "./useChecksData";
 
@@ -85,6 +84,13 @@ function ChecksOverviewContent({
           isRefreshing={frame.refreshing}
           label={CHECKS_COPY.refresh}
           onRefresh={onRefresh}
+          statusCopy={{
+            cancelled: CHECKS_COPY.refreshCancelled,
+            failed: CHECKS_COPY.refreshFailed,
+            pending: CHECKS_COPY.refreshPending,
+            reconnecting: CHECKS_COPY.refreshReconnecting,
+            succeeded: CHECKS_COPY.refreshSucceeded,
+          }}
         />
       </div>
       <UnavailableCard

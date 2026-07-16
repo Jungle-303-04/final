@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { RefreshFeedbackGlyph } from "../../motion/RefreshFeedbackGlyph";
 import { cn } from "@/shared/lib/cn";
 import { msToNextFreshnessBucket } from "./freshnessTime";
-import { RefreshFeedback, useRefreshFeedback } from "./RefreshFeedback";
+import { useRefreshFeedback } from "./RefreshFeedback";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./primitives/tooltip";
 import type { RefreshPhase } from "./useRefreshAnimation";
 
@@ -80,7 +81,7 @@ export function FreshnessControl({
     paused,
   });
   const spinning = isFetching || phase === "pending";
-  const feedback = refreshFeedback(phase, copy);
+  const feedback = refreshFeedback(phase, state, copy);
 
   return (
     <div
@@ -132,7 +133,7 @@ export function FreshnessControl({
               />
             }
           >
-            <RefreshFeedback iconClassName="size-3.5" state={state} />
+            <RefreshFeedbackGlyph iconClassName="size-3.5" state={state} />
           </TooltipTrigger>
           <TooltipContent side="bottom">{copy.refreshNow}</TooltipContent>
         </Tooltip>
@@ -156,12 +157,14 @@ export function FreshnessControl({
 
 function refreshFeedback(
   phase: RefreshPhase,
+  state: ReturnType<typeof useRefreshFeedback>["state"],
   copy: FreshnessCopy,
 ): string | null {
   if (phase === "pending") return copy.refreshPending;
   if (phase === "succeeded") return copy.refreshSucceeded;
   if (phase === "failed") return copy.refreshFailed;
   if (phase === "cancelled") return copy.refreshCancelled;
+  if (state === "reconnecting") return copy.reconnecting;
   return null;
 }
 

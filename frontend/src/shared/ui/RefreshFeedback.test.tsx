@@ -3,7 +3,20 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { RefreshAction, RefreshFeedback, refreshFeedbackState } from "./RefreshFeedback";
+import {
+  RefreshAction,
+  refreshFeedbackState,
+  type RefreshFeedbackState,
+  type RefreshStatusCopy,
+} from "./RefreshFeedback";
+
+const statusCopy: RefreshStatusCopy = {
+  cancelled: "Refresh was cancelled.",
+  failed: "Refresh failed safely.",
+  pending: "Refreshing data.",
+  reconnecting: "Reconnecting data.",
+  succeeded: "Data refreshed.",
+};
 
 afterEach(() => {
   cleanup();
@@ -11,33 +24,96 @@ afterEach(() => {
 });
 
 describe("RefreshFeedback", () => {
-  it("keeps the glyph decorative while its owner retains the refresh button semantics", () => {
-    render(<RefreshAction iconOnly label="Refresh applications" onRefresh={vi.fn()} />);
+  it("keeps the renderer decorative while its owner retains refresh semantics", () => {
+    render(
+      <RefreshAction
+        iconOnly
+        label="Refresh applications"
+        onRefresh={vi.fn()}
+        renderFeedback={renderFeedback}
+        statusCopy={statusCopy}
+      />,
+    );
 
     const action = screen.getByRole("button", { name: "Refresh applications" });
-    const visual = action.querySelector<HTMLElement>('[data-slot="refresh-feedback"]');
+    const visual = action.querySelector<HTMLElement>('[data-slot="test-refresh-feedback"]');
 
     expect(visual?.getAttribute("aria-hidden")).toBe("true");
-    expect(visual?.dataset.refreshFeedbackState).toBe("idle");
+    expect(visual?.dataset.state).toBe("idle");
 
     fireEvent.click(action);
 
     expect(action.getAttribute("aria-busy")).toBe("true");
-    expect(visual?.dataset.refreshFeedbackState).toBe("pending");
+    expect(visual?.dataset.state).toBe("pending");
+    expect(screen.getByRole("status").textContent).toBe(statusCopy.pending);
   });
 
-  it("uses only opacity and an immediate transition when reduced motion is requested", () => {
-    vi.stubGlobal("matchMedia", vi.fn(() => ({
-      addEventListener: vi.fn(),
-      matches: true,
-      removeEventListener: vi.fn(),
-    })));
+  it("announces success only after a refresh data frame completes", () => {
+    const view = render(
+      <RefreshAction
+        iconOnly
+        isRefreshing={false}
+        label="Refresh applications"
+        onRefresh={vi.fn()}
+        renderFeedback={renderFeedback}
+        statusCopy={statusCopy}
+      />,
+    );
 
-    render(<RefreshFeedback state="succeeded" />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh applications" }));
+    expect(screen.getByRole("status").textContent).toBe(statusCopy.pending);
 
-    const visual = document.querySelector<HTMLElement>('[data-slot="refresh-feedback"]');
-    expect(visual?.dataset.reducedMotion).toBe("true");
-    expect(visual?.style.transform ?? "").toBe("");
+    view.rerender(
+      <RefreshAction
+        iconOnly
+        isRefreshing
+        label="Refresh applications"
+        onRefresh={vi.fn()}
+        renderFeedback={renderFeedback}
+        statusCopy={statusCopy}
+      />,
+    );
+    view.rerender(
+      <RefreshAction
+        iconOnly
+        isRefreshing={false}
+        label="Refresh applications"
+        onRefresh={vi.fn()}
+        renderFeedback={renderFeedback}
+        statusCopy={statusCopy}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toBe(statusCopy.succeeded);
+    expect(document.querySelector<HTMLElement>('[data-slot="test-refresh-feedback"]')?.dataset.state).toBe("succeeded");
+  });
+
+  it("uses caller-owned safe copy for failure and reconnecting states", () => {
+    const { rerender } = render(
+      <RefreshAction
+        hasFailed
+        iconOnly
+        label="Refresh applications"
+        onRefresh={vi.fn()}
+        renderFeedback={renderFeedback}
+        statusCopy={statusCopy}
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toBe(statusCopy.failed);
+
+    rerender(
+      <RefreshAction
+        iconOnly
+        isReconnecting
+        label="Refresh applications"
+        onRefresh={vi.fn()}
+        renderFeedback={renderFeedback}
+        statusCopy={statusCopy}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toBe(statusCopy.reconnecting);
   });
 
   it("maps only supplied data-frame outcomes to a visual state", () => {
@@ -48,3 +124,7 @@ describe("RefreshFeedback", () => {
     expect(refreshFeedbackState({ isReconnecting: true, phase: "idle" })).toBe("reconnecting");
   });
 });
+
+function renderFeedback(state: RefreshFeedbackState) {
+  return <span aria-hidden="true" data-slot="test-refresh-feedback" data-state={state} />;
+}

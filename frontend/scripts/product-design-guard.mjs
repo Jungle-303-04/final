@@ -298,6 +298,29 @@ function checkImportSpecifier(filePath, sourceFile, node, specifier) {
   )
 }
 
+function isMotionImport(specifier) {
+  return specifier === 'motion' || specifier.startsWith('motion/')
+}
+
+function checkMotionImportOwnership(filePath, sourceFile, node, specifier) {
+  if (!isMotionImport(specifier) || isWithin(filePath, motionRoot)) {
+    return
+  }
+
+  addViolation(
+    filePath,
+    sourceFile,
+    node.getStart(sourceFile),
+    'motion-import-ownership',
+    'Motion package imports are allowed only under src/motion.',
+  )
+}
+
+function checkModuleSpecifier(filePath, sourceFile, node, specifier) {
+  checkImportSpecifier(filePath, sourceFile, node, specifier)
+  checkMotionImportOwnership(filePath, sourceFile, node, specifier)
+}
+
 function stringArgument(node) {
   const [argument] = node.arguments
   return argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))
@@ -839,13 +862,13 @@ function inspectScript(filePath, source, extension) {
       node.moduleSpecifier &&
       ts.isStringLiteralLike(node.moduleSpecifier)
     ) {
-      checkImportSpecifier(filePath, sourceFile, node.moduleSpecifier, node.moduleSpecifier.text)
+      checkModuleSpecifier(filePath, sourceFile, node.moduleSpecifier, node.moduleSpecifier.text)
     }
 
     if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
       const expression = node.moduleReference.expression
       if (expression && ts.isStringLiteralLike(expression)) {
-        checkImportSpecifier(filePath, sourceFile, expression, expression.text)
+        checkModuleSpecifier(filePath, sourceFile, expression, expression.text)
       }
     }
 
@@ -855,7 +878,7 @@ function inspectScript(filePath, source, extension) {
       const isRequire = ts.isIdentifier(node.expression) && node.expression.text === 'require'
 
       if (specifier && (isDynamicImport || isRequire)) {
-        checkImportSpecifier(filePath, sourceFile, node, specifier)
+        checkModuleSpecifier(filePath, sourceFile, node, specifier)
       }
 
       const expression = unwrapExpression(node.expression)
