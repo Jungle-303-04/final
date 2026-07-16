@@ -42,9 +42,17 @@ export const liveSummarySchema = z.strictObject({
   metrics_metadata: liveMetricsMetadataSchema.nullable().optional(),
 });
 
+export const realtimeStreamPolicySchema = z.strictObject({
+  revision: z.number().int().positive(),
+  max_frames_per_second: z.number().int().min(1).max(60),
+  hidden_tab: z.literal("coalesce"),
+  max_pending_messages: z.number().int().positive(),
+});
+
 export const helloMessageSchema = z.strictObject({
   type: z.literal("hello"),
   protocol: realtimeProtocolSchema,
+  stream_policy: realtimeStreamPolicySchema,
 });
 
 export const snapshotMessageSchema = z.strictObject({
@@ -88,6 +96,7 @@ export const realtimeMessageSchema = z.discriminatedUnion("type", [
 export type LiveSubscription = z.infer<typeof liveSubscriptionSchema>;
 export type HotPod = z.infer<typeof hotPodSchema>;
 export type LiveMetricsMetadata = z.infer<typeof liveMetricsMetadataSchema>;
+export type RealtimeStreamPolicy = z.infer<typeof realtimeStreamPolicySchema>;
 export type LiveSummary = z.infer<typeof liveSummarySchema>;
 export type HelloMessage = z.infer<typeof helloMessageSchema>;
 export type SnapshotMessage = z.infer<typeof snapshotMessageSchema>;

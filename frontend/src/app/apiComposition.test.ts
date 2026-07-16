@@ -21,6 +21,7 @@ const APPROVED_SURFACE_IDS = new Set<ProductSurfaceId>([
   "issues",
   "resources",
   "settings",
+  "topology",
   "traffic",
   "timeline",
 ]);

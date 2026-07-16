@@ -124,6 +124,8 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
     const pendingEvents: DesktopLocalTerminalEvent[] = [];
     let outputBuffer: LocalTerminalOutputBuffer | null = null;
     let outputFrame: number | null = null;
+    let outputWriteInFlight = false;
+    let pendingExit: Extract<DesktopLocalTerminalEvent, { kind: "exit" }> | null = null;
     const terminal = new Terminal({
       cursorBlink: !reducedMotion,
       fontFamily: "var(--font-mono)",
@@ -150,6 +152,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
     };
     const fail = (nextFailure: TerminalFailure, shouldCloseNativeSession = false) => {
       const activeSessionId = invalidateSession();
+      pendingExit = null;
       outputBuffer?.clear();
       if (shouldCloseNativeSession && activeSessionId) {
         void desktopBridge.closeLocalTerminal(activeSessionId).catch(() => undefined);
@@ -165,26 +168,58 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
         rows: terminal.rows || DEFAULT_TERMINAL_ROWS,
       };
     };
+    const finishPendingExit = () => {
+      if (
+        pendingExit === null
+        || outputWriteInFlight
+        || outputBuffer?.hasPendingOutput
+      ) return;
+      const exit = pendingExit;
+      pendingExit = null;
+      invalidateSession();
+      if (exit.exitCode === 0) {
+        setFailure(null);
+        setPhase("ended");
+        terminal.write(`\r\n[${t("desktop.localTerminal.ended")}]\r\n`);
+        return;
+      }
+      const exitCode = safeExitCode(exit.exitCode);
+      setFailure({ kind: "exit", exitCode });
+      setPhase("failed");
+      terminal.write(`\r\n[${t("desktop.localTerminal.failed")}]\r\n`);
+    };
     const scheduleOutputFlush = () => {
-      if (outputFrame !== null || !outputBuffer?.hasPendingOutput) return;
+      if (outputFrame !== null || outputWriteInFlight) return;
+      if (!outputBuffer?.hasPendingOutput) {
+        finishPendingExit();
+        return;
+      }
       outputFrame = requestAnimationFrame(() => {
         outputFrame = null;
         const activeSessionId = sessionId;
         const batch = outputBuffer?.takeFrame();
-        if (!activeSessionId || !batch) return;
+        if (!activeSessionId || !batch || outputWriteInFlight) {
+          finishPendingExit();
+          return;
+        }
+        outputWriteInFlight = true;
         terminal.write(batch.data, () => {
+          outputWriteInFlight = false;
           if (disposed || sessionId !== activeSessionId) return;
           void desktopBridge.acknowledgeLocalTerminalOutput({
             sessionId: activeSessionId,
             byteLength: batch.byteLength,
+          }).then(() => {
+            if (disposed || sessionId !== activeSessionId) return;
+            scheduleOutputFlush();
           }).catch(() => {
             if (!disposed) fail({ kind: "operation" }, true);
           });
         });
-        scheduleOutputFlush();
       });
     };
     const enqueueOutput = (event: Extract<DesktopLocalTerminalEvent, { kind: "output" }>) => {
+      if (pendingExit !== null) return;
       if (!outputBuffer?.enqueue(event)) {
         fail({ kind: "operation" }, true);
         return;
@@ -194,17 +229,8 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
     const writeEvent = (event: DesktopLocalTerminalEvent) => {
       if (event.kind === "output") return enqueueOutput(event);
       if (event.kind === "exit") {
-        invalidateSession();
-        if (event.exitCode === 0) {
-          setFailure(null);
-          setPhase("ended");
-          terminal.write(`\r\n[${t("desktop.localTerminal.ended")}]\r\n`);
-        } else {
-          const exitCode = safeExitCode(event.exitCode);
-          setFailure({ kind: "exit", exitCode });
-          setPhase("failed");
-          terminal.write(`\r\n[${t("desktop.localTerminal.failed")}]\r\n`);
-        }
+        pendingExit = event;
+        scheduleOutputFlush();
         return;
       }
       fail({ kind: "native" });
@@ -224,7 +250,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       }
     };
     const inputDisposable = terminal.onData((data) => {
-      if (!sessionId || disposed) return;
+      if (!sessionId || disposed || pendingExit !== null) return;
       void desktopBridge.sendLocalTerminalInput({ sessionId, data }).catch(() => {
         if (!disposed) {
           fail({ kind: "operation" }, true);
@@ -236,7 +262,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       resizeFrame = null;
       if (disposed) return;
       const next = dimensions();
-      if (sessionId) {
+      if (sessionId && pendingExit === null) {
         void desktopBridge.resizeLocalTerminal({ sessionId, ...next }).catch(() => {
           if (!disposed) {
             fail({ kind: "operation" }, true);
@@ -291,6 +317,7 @@ function DesktopLocalTerminalSurface({ onClose }: { onClose: () => void }) {
       observer.disconnect();
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
       if (outputFrame !== null) cancelAnimationFrame(outputFrame);
+      pendingExit = null;
       outputBuffer?.clear();
       inputDisposable.dispose();
       unlisten();

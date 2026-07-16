@@ -29,7 +29,10 @@ import { createResourceManifestAdapter } from "../../../features/resources/creat
 import { createResourceMetricsHistoryAdapter } from "../../../features/resources/createResourceMetricsHistoryAdapter";
 import { createResourcesAdapter } from "../../../features/resources/createResourcesAdapter";
 import { createResourcesFilterAdapter } from "../../../features/resources/createResourcesFilterAdapter";
-import type { PhysicalTopologyRealtimePort } from "../../../features/resources/physicalTopologyRealtimeContract";
+import type {
+  PhysicalTopologyRealtimePort,
+  PhysicalTopologyRealtimeStreamPolicy,
+} from "../../../features/resources/physicalTopologyRealtimeContract";
 import { createResourcesSurface } from "../../../pages/resources/createResourcesSurface";
 
 export function loadResourcesSurface(homePort: HomePort): ComponentType {
@@ -38,7 +41,14 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
       const client = createRealtimeClient({
         subscription,
         reconnect: { baseDelayMs: 3_000, maxDelayMs: 30_000 },
-        onMessage: handlers.onMessage,
+        onMessage: (message) => {
+          if (message.type === "hello") {
+            handlers.onPolicy(toPhysicalTopologyStreamPolicy(message.stream_policy));
+            return;
+          }
+          // Keep protocol keepalives outside the topology state reducer.
+          if (message.type !== "ping") handlers.onMessage(message);
+        },
         onStateChange: (state) => handlers.onStatusChange(state.status),
       });
       client.connect();
@@ -75,4 +85,18 @@ export function loadResourcesSurface(homePort: HomePort): ComponentType {
       previewResourceManifestEdit,
     }),
   );
+}
+
+function toPhysicalTopologyStreamPolicy(policy: {
+  revision: number;
+  max_frames_per_second: number;
+  hidden_tab: "coalesce";
+  max_pending_messages: number;
+}): PhysicalTopologyRealtimeStreamPolicy {
+  return {
+    revision: policy.revision,
+    maxFramesPerSecond: policy.max_frames_per_second,
+    hiddenTab: policy.hidden_tab,
+    maxPendingMessages: policy.max_pending_messages,
+  };
 }

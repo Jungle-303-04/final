@@ -84,7 +84,16 @@ def test_browser_receives_hello_then_snapshot() -> None:
     ) as browser:
         hello = browser.receive_json()
         snapshot = browser.receive_json()
-    assert hello == {"type": "hello", "protocol": "realtime.v1"}
+    assert hello == {
+        "type": "hello",
+        "protocol": "realtime.v1",
+        "stream_policy": {
+            "revision": 1,
+            "max_frames_per_second": 60,
+            "hidden_tab": "coalesce",
+            "max_pending_messages": 32,
+        },
+    }
     assert snapshot["type"] == "snapshot"
     assert snapshot["state"] == {"clusters": {}, "resources": {}}
 

@@ -32,6 +32,8 @@ MAX_WINDOW_MS = 60_000
 
 # browser fan-out 상한 — 느린 client 는 밀린 메시지를 버리고 최신 snapshot 으로 복구함.
 BROWSER_QUEUE_MAX = 32
+BROWSER_STREAM_POLICY_REVISION = 1
+BROWSER_STREAM_MAX_FRAMES_PER_SECOND = 60
 
 # resource.delta key 형식: "<cluster>/<namespace>/<kind>/<name>"
 DELTA_KEY_SEGMENTS = 4
@@ -86,9 +88,23 @@ class Subscription(StrictModel):
     app: str = ""
 
 
+class BrowserStreamPolicy(StrictModel):
+    """Browser delivery budget negotiated by the gateway before a snapshot."""
+
+    revision: int = Field(default=BROWSER_STREAM_POLICY_REVISION, ge=1)
+    max_frames_per_second: int = Field(
+        default=BROWSER_STREAM_MAX_FRAMES_PER_SECOND,
+        ge=1,
+        le=BROWSER_STREAM_MAX_FRAMES_PER_SECOND,
+    )
+    hidden_tab: Literal["coalesce"] = "coalesce"
+    max_pending_messages: int = Field(default=BROWSER_QUEUE_MAX, ge=1, le=BROWSER_QUEUE_MAX)
+
+
 class HelloMessage(StrictModel):
     type: Literal["hello"] = "hello"
     protocol: str = REALTIME_PROTOCOL
+    stream_policy: BrowserStreamPolicy = Field(default_factory=BrowserStreamPolicy)
 
 
 class SnapshotMessage(StrictModel):

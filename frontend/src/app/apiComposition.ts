@@ -87,6 +87,12 @@ export function createApiComposition(auth: AuthPort): ProductComposition {
       })),
     },
     {
+      id: "topology",
+      loader: registry.createSurfaceLoader(async () => ({
+        default: (await import("./composition/surfaces/topology")).loadTopologySurface(registry.homePort),
+      })),
+    },
+    {
       id: "issues",
       loader: registry.createSurfaceLoader(async () => ({
         default: (await import("./composition/surfaces/issues")).loadIssuesSurface(),
