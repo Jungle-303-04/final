@@ -12,6 +12,10 @@ from domains.command.actions import (
     registered_command_actions,
 )
 from packages.config.constants import Command, Sandbox
+from packages.contracts.helm import (
+    HELM_RELEASE_ARTIFACT_READ_ACTION,
+    HELM_RELEASE_ARTIFACT_READ_CAPABILITY,
+)
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
     SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
@@ -34,6 +38,7 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
         Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
         Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        HELM_RELEASE_ARTIFACT_READ_ACTION,
     }
     cronjob_actions = {
         Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
@@ -50,7 +55,10 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
             expected = (TARGET_NAMESPACE,)
-        elif spec.action == SERVICE_HTTP_REQUEST_ACTION:
+        elif spec.action in {
+            SERVICE_HTTP_REQUEST_ACTION,
+            HELM_RELEASE_ARTIFACT_READ_ACTION,
+        }:
             expected = ()
         elif spec.action in cronjob_actions | dynamic_workload_actions:
             expected = ()
@@ -64,6 +72,12 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     assert service.read_only is True
     assert service.enforce_control_namespace is False
     assert service.required_agent_capability == SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
+    helm_artifact = command_action_spec(HELM_RELEASE_ARTIFACT_READ_ACTION)
+    assert helm_artifact is not None
+    assert helm_artifact.allowed_namespaces == ()
+    assert helm_artifact.read_only is True
+    assert helm_artifact.enforce_control_namespace is False
+    assert helm_artifact.required_agent_capability == HELM_RELEASE_ARTIFACT_READ_CAPABILITY
     for action in cronjob_actions:
         cronjob = command_action_spec(action)
         assert cronjob is not None
