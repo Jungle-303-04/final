@@ -522,6 +522,38 @@
     "shell.external-link.policy": {
       "destination": "frontend/src/desktop/desktopBridge.test.ts",
       "rationale": "Desktop external navigation must accept only credential-free HTTP(S) URLs and cross the typed Tauri bridge rather than a server shell."
+    },
+    "applications.topology.projection": {
+      "destination": "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx",
+      "rationale": "Application topology must preserve bounded server nodes, exact API identity, source evidence, edge endpoints, completeness, and partial reasons without browser graph inference."
+    },
+    "applications.topology.generated-runtime": {
+      "destination": "tests/test_application_product_projection.py",
+      "rationale": "Generated runtime nodes and source-only inventory require a server-owned membership and collapse policy before the UI can hide or synthesize ReplicaSets and Pods."
+    },
+    "applications.identity.projection": {
+      "destination": "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+      "rationale": "Application identity, environments, source provenance, instance membership, and version comparisons must remain server-owned and canonical across clusters."
+    },
+    "applications.health.projection": {
+      "destination": "tests/test_application_product_projection.py",
+      "rationale": "Health, readiness, completeness, and source conflict must be projected from observed evidence with unavailable values preserved."
+    },
+    "applications.batch.projection": {
+      "destination": "frontend/src/features/applications/ApplicationCatalogItems.test.tsx",
+      "rationale": "Batch runtime status and activity must use bounded server counters and timestamps without assuming missing Jobs or CronJobs are healthy."
+    },
+    "resources.dynamic-navigation": {
+      "destination": "frontend/src/features/resources/createResourcesAdapter.detailMapping.test.ts",
+      "rationale": "Dynamic and built-in Kubernetes kinds must retain exact group, version, namespace, name, and UID through list, detail, topology, and URL navigation."
+    },
+    "timeline.hierarchy.projection": {
+      "destination": "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+      "rationale": "Timeline grouping, ownership, window filtering, event ordering, and resource identity must be driven by retained evidence and authorized relationship projections."
+    },
+    "timeline.hierarchy.pins": {
+      "destination": "frontend/src/features/timeline/timelinePinTargets.test.ts",
+      "rationale": "Pinned resource and application identities must be canonical, persistent, authorization-filtered, and stable across namespace order and history navigation."
     }
   },
   "classifications": {
@@ -5776,6 +5808,456 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The Tauri bridge is device-local and rejects file, credential-bearing, and non-HTTP URL schemes before invoking the operating system."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/application-topology.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:topology-layering:regression:v1",
+          "legacyContractIds": [],
+          "symbol": "application-topology tests",
+          "interaction": "application topology regression tests pin source-only membership, exact API groups, generated runtime collapsing, and bounded source overflow against product-owned server projections",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/ApplicationDetailWorkspace.test.tsx",
+              "tests/test_application_product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.topology.projection",
+              "applications.topology.generated-runtime"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The current application detail and Python projection suites preserve graph identity, completeness, partial reasons, and bounded graph evidence; the tests also document the remaining generated-runtime gap."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/application-topology.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:topology-layering:evidence:v1",
+          "legacyContractIds": [],
+          "symbol": "layerDeploymentInventory",
+          "interaction": "GitOps, Helm, and runtime topology evidence is layered by exact Kubernetes identity and returned with explicit completeness instead of browser-created source-only nodes",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/applications/product_projection.py",
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.repository"
+            ],
+            "plannedTestIds": [
+              "applications.topology.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python application projection owns graph membership, edge evidence, source conflict, node and edge budgets, and partial reasons; the React panel renders only that typed graph."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:replicaset-collapse:server-policy:v1",
+          "legacyContractIds": [],
+          "symbol": "collapseStableReplicaSets",
+          "interaction": "stable generated ReplicaSets and Pods may collapse only when a server-owned controller relationship and expanded-owner state prove the transformation",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/applications/product_projection.py",
+              "frontend/src/features/applications/ApplicationTopologyPanel.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.topology.generated-runtime"
+            ],
+            "state": "blocked",
+            "blockedReason": "The stored application graph does not yet label generated runtime membership or persist an expand/collapse policy, so collapsing ReplicaSets would be a client-side guess.",
+            "rationale": "The product exposes generated nodes truthfully today but does not hide them using browser heuristics."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/applications.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:catalog-model:regression:v1",
+          "legacyContractIds": [],
+          "symbol": "applications utility tests",
+          "interaction": "application catalog regression tests cover identity, environment, version ordering, health rollup, instance matching, batch activity, provenance, and membership without copying source heuristics into React",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/applications/createApplicationsAdapter.test.ts",
+              "frontend/src/features/applications/ApplicationCatalogItems.test.tsx",
+              "tests/test_application_product_projection.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.identity.projection",
+              "applications.health.projection",
+              "applications.batch.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The adapter and Python projection suites are the product authority for every application row and preserve unavailable or partial evidence explicitly."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/applications.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:applications:identity-membership:server-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "application identity, membership, environment, and provenance utilities",
+          "interaction": "application grouping, environment, source provenance, cluster instances, and workload membership come from registered bindings and authorized inventory rather than labels or name affixes inferred in the browser",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/applications/product_projection.py",
+              "frontend/src/features/applications/applicationsContract.ts",
+              "frontend/src/features/applications/createApplicationsAdapter.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.applications.repository"
+            ],
+            "plannedTestIds": [
+              "applications.identity.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The server materializes stable application, binding, source, environment, and cluster identities and the adapter rejects mismatched or incomplete wire values."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:health-readiness:server-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "applicationDisplayHealth, servingReadiness, worstHealth",
+          "interaction": "application health, serving readiness, resource counts, and source conflict are projected from observed inventory with exact, partial, or unavailable completeness",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/applications/product_projection.py",
+              "frontend/src/features/applications/applicationPresentation.ts",
+              "frontend/src/features/applications/ApplicationCatalogSignals.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.health.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The browser maps only the typed server status to shared semantic tones and never treats missing workload evidence as healthy."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:batch-runtime:server-projection:v1",
+          "legacyContractIds": [],
+          "symbol": "batchActivityForApp and batchRuntimeForApp",
+          "interaction": "CronJob, Job, and workflow batch activity uses bounded observed counters, suspension state, timestamps, and completeness without synthesizing absent runs",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/applications/product_projection.py",
+              "frontend/src/features/applications/ApplicationCatalogSignals.tsx",
+              "frontend/src/features/applications/applicationsContract.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection",
+              "domains.inventory.repository"
+            ],
+            "plannedTestIds": [
+              "applications.batch.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python projection owns active, failed, succeeded, and suspended facts while the UI renders an unavailable state when the collector omits batch workloads."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:applications:version-ordering:canonical:v1",
+          "legacyContractIds": [],
+          "symbol": "compareVersions, newestTag, foldAppGroups",
+          "interaction": "version, environment, and fleet instance ordering is deterministic and bound to server application identities rather than DOM order or presentation text",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/applications/product_projection.py",
+              "frontend/src/features/applications/ApplicationCatalogItems.test.tsx",
+              "frontend/src/features/applications/ApplicationsTable.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.gateway.responses",
+              "domains.applications.product_projection"
+            ],
+            "plannedTestIds": [
+              "applications.identity.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Server-sorted environments and instances plus stable application identifiers keep catalog ordering reusable across table, card, and detail views."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/navigation.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:dynamic-navigation:regression:v1",
+          "legacyContractIds": [],
+          "symbol": "navigation utility tests",
+          "interaction": "navigation regression tests preserve irregular Kubernetes plurals, discovered CRD groups, ResourceRef conversion, and collision-free topology identity",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/createResourcesAdapter.detailMapping.test.ts",
+              "frontend/src/features/filters/filterUrl.test.ts",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "packages.contracts.gateway.responses",
+              "domains.inventory.repository"
+            ],
+            "plannedTestIds": [
+              "resources.dynamic-navigation",
+              "shell.resource-navigation.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product tests exact API identity at the Python contract, adapter, and URL codec boundaries rather than duplicating pluralization maps in each component."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/navigation.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:dynamic-kind:resource-ref:v1",
+          "legacyContractIds": [],
+          "symbol": "kindToPlural, pluralToKind, refToSelectedResource",
+          "interaction": "dynamic and built-in resources retain exact server-issued API group, version, kind, namespace, name, UID, and resource type through navigation",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/resources/resourcesContract.ts",
+              "frontend/src/features/resources/createResourcesAdapter.ts",
+              "frontend/src/features/filters/detailUrlCodec.ts",
+              "src/packages/contracts/parity.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity",
+              "packages.contracts.gateway.responses",
+              "domains.inventory.repository"
+            ],
+            "plannedTestIds": [
+              "resources.dynamic-navigation",
+              "shell.resource-navigation.contract"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "ResourceRef and typed inventory responses replace a mutable browser pluralization registry; URLs serialize exact identities and reject malformed values."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:topology:lane-identity:canonical:v1",
+          "legacyContractIds": [],
+          "symbol": "laneId, laneResourceKey, parseLaneId",
+          "interaction": "topology and timeline lane identities include qualified API group and exact namespace/name so same-kind CRDs cannot collide",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/features/timeline/timelineEvidenceIdentity.ts",
+              "frontend/src/features/timeline/timelinePinTargets.ts",
+              "src/domains/timeline/repository.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "packages.contracts.parity",
+              "domains.timeline.repository"
+            ],
+            "plannedTestIds": [
+              "timeline.hierarchy.projection",
+              "timeline.hierarchy.pins"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product uses canonical resource subjects and server-issued persistent pin identities instead of parsing display labels."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/resource-hierarchy.test.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:resource-hierarchy:regression:v1",
+          "legacyContractIds": [],
+          "symbol": "resource hierarchy tests",
+          "interaction": "resource hierarchy regression coverage pins application and owner grouping, event-window visibility, generated workload ancestry, pinned lanes, collision handling, and evidence order against retained server facts",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/timeline/TimelineSurface.test.tsx",
+              "frontend/src/features/timeline/timelinePinTargets.test.ts",
+              "tests/test_timeline_service.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.repository",
+              "domains.timeline.service"
+            ],
+            "plannedTestIds": [
+              "timeline.hierarchy.projection",
+              "timeline.hierarchy.pins"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Timeline tests exercise server-authorized snapshot and replay frames, persistent pins, URL state, keyboard navigation, and focus restoration without localStorage authority."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/utils/resource-hierarchy.ts": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:timeline:hierarchy-grouping:server-relations:v1",
+          "legacyContractIds": [],
+          "symbol": "buildResourceHierarchy",
+          "interaction": "application, owner, and flat grouping uses authorized application membership and topology relationship evidence while exposing incomplete sources and collision-safe resource subjects",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/timeline/repository.py",
+              "src/domains/timeline/service.py",
+              "frontend/src/pages/timeline/TimelineSurface.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.repository",
+              "domains.timeline.service"
+            ],
+            "plannedTestIds": [
+              "timeline.hierarchy.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The retained Timeline service filters source-specific evidence by RBAC and returns canonical resource subjects; the UI groups only returned evidence and never attaches resources by name prefix."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:timeline:hierarchy-window:retained-stream:v1",
+          "legacyContractIds": [],
+          "symbol": "laneHasEventInWindow and laneTrackEvents",
+          "interaction": "window filtering and lane event order use retained occurred-at evidence plus resumable sequence cursors, preserving structural subjects even when a visible window is quiet",
+          "transport": "fetch_sse",
+          "realtime": {
+            "resume": "the client resumes from the server-bound opaque cursor after the retained snapshot or reconnect",
+            "backpressure": "server policy bounds snapshot and replay batches while the reducer rejects stale generations and resyncs across retention boundaries",
+            "merge": "events merge by immutable source identity and sequence only when workspace, scope, query, and cursor binding match"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/timeline/repository.py",
+              "src/domains/timeline/router.py",
+              "frontend/src/pages/timeline/timelineFrameReducer.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.repository",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.hierarchy.projection"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "PostgreSQL is replay authority, events are strictly sequenced, and the reducer merges only frames bound to the active query and cursor."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:timeline:hierarchy-pins:persistent:v1",
+          "legacyContractIds": [],
+          "symbol": "extractPinnedLanes, removePinnedLanes, isPinnedLaneRef",
+          "interaction": "pinned resource and application lanes are persisted per authenticated user with optimistic revision and current authorization rather than localStorage validation",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "src/domains/timeline/repository.py",
+              "src/domains/timeline/router.py",
+              "frontend/src/features/timeline/timelinePinTargets.ts"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.timeline",
+              "domains.timeline.repository",
+              "domains.timeline.router"
+            ],
+            "plannedTestIds": [
+              "timeline.hierarchy.pins"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Persistent pin subjects are materialized from current server rows, hidden when access is revoked, and updated under revision conflict checks."
           }
         }
       ]
