@@ -4650,26 +4650,30 @@
       "streaming": false,
       "area": "resource-inventory",
       "releasePhase": "baseline",
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.gateway.responses.InventoryResourceDetailResponse",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.responses.ResourceDeletePreviewResponse",
       "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
-        "tests/test_inventory_domain.py",
+        "tests/test_resource_deletion.py",
+        "frontend/src/api/resource-deletions.test.ts",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
         "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/inventory/router.py#get_inventory_resource_detail",
-          "reason": "The one-hop related-resource projection is not an authoritative Kubernetes garbage-collection cascade and cannot be used as a delete impact preview.",
-          "test": "tests/test_inventory_domain.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory/deletion.py#get_resource_delete_preview",
+          "consumer": "src/domains/inventory/repository.py#read_inventory_cascade",
+          "reason": "The server returns only a complete same-snapshot owner-UID cascade, fails closed on truncation or stale evidence, and signs the bounded preview with a revision hash.",
+          "test": "tests/test_resource_deletion.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "Delete confirmation remains unavailable until the server supplies an exact owner-reference cascade with completeness and current resource generation.",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "The browser opens one destructive confirmation only after loading the server-owned cascade and submits its exact preview revision.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
@@ -6358,26 +6362,32 @@
       "streaming": false,
       "area": "resource-commands",
       "releasePhase": "baseline",
-      "deliveryStatus": "planned",
-      "backendContract": "packages.contracts.parity",
-      "frontendContract": "frontend/src/pages/resources/ResourceDetailActions.tsx",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.gateway.requests.ResourceDeleteRequest",
+      "frontendContract": "frontend/src/features/resources/resourceCapabilitiesContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_command_catalog.py",
+        "tests/test_resource_deletion.py",
+        "tests/test_resource_capabilities_router.py",
         "tests/test_target_agent_commands.py",
+        "frontend/src/api/resource-deletions.test.ts",
+        "frontend/src/features/resources/createResourceActionsAdapter.test.ts",
         "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "blocked",
-          "destination": "src/domains/command/builtin_actions.py",
-          "reason": "No exact resource delete action, UID/resourceVersion precondition, bulk receipt, or target-agent delete executor is registered.",
-          "test": "tests/test_command_catalog.py"
+          "state": "implemented",
+          "destination": "src/domains/inventory/deletion.py#request_resource_delete",
+          "consumer": "src/services/target/cluster-agent/agent.py#delete_resource_command",
+          "reason": "The projected capability requires a preview revision and exact UID/resourceVersion, emits an idempotent audited CommandReceipt and OperationEvent stream, and the agent preserves bounded per-target partial results.",
+          "test": "tests/test_resource_deletion.py"
         },
         "frontend": {
-          "state": "blocked",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceDetailActions.tsx",
-          "reason": "The browser has no server-projected delete capability and must not infer destructive authority from resource kind.",
+          "consumer": "frontend/src/features/resources/createResourceActionsAdapter.ts#createResourceActionsAdapter",
+          "reason": "The browser renders only the server-projected resource.delete descriptor, confirms once, preserves a secure idempotency key, and hands the receipt to the common operation dock.",
           "test": "frontend/src/pages/resources/ResourceDetailActions.operationHandoff.test.tsx"
         },
         "desktop": null,
