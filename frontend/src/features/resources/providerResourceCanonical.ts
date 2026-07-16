@@ -2,6 +2,8 @@ import type { ProviderResourceDetailEndpoint } from "./providerResourceEndpointC
 import type {
   ProviderCondition,
   ProviderKeyValue,
+  ProviderReference,
+  ProviderReplicas,
   ProviderResourceDetail,
   ProviderScaling,
 } from "./providerResourceContract";
@@ -128,6 +130,115 @@ export function toProviderResourceDetail(
       effect: optionalString(item.effect),
     })),
   };
+  if (type === "capi-cluster") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    version: optionalString(raw.version),
+    clusterClass: optionalString(raw.cluster_class),
+    endpoint: optionalString(raw.endpoint),
+    provider: optionalString(raw.provider),
+    paused: requiredBoolean(raw.paused),
+    controlPlane: replicas(raw.control_plane),
+    workers: replicas(raw.workers),
+    controlPlaneRef: reference(raw.control_plane_ref),
+    infrastructureRef: reference(raw.infrastructure_ref),
+  };
+  if (type === "capi-kubeadm-control-plane") return {
+    type,
+    conditions,
+    clusterName: optionalString(raw.cluster_name),
+    version: optionalString(raw.version),
+    initialized: optionalBoolean(raw.initialized),
+    updateStrategy: optionalString(raw.update_strategy),
+    replicas: replicas(raw.replicas),
+    infrastructureRef: reference(raw.infrastructure_ref),
+    nodeDrainTimeout: optionalString(raw.node_drain_timeout),
+    nodeVolumeDetachTimeout: optionalString(raw.node_volume_detach_timeout),
+    nodeDeletionTimeout: optionalString(raw.node_deletion_timeout),
+    certificateSans: stringList(raw.certificate_sans),
+    remediationMachine: optionalString(raw.remediation_machine),
+    remediationRetryCount: optionalInteger(raw.remediation_retry_count),
+    remediationTimestamp: optionalString(raw.remediation_timestamp),
+  };
+  if (type === "capi-machine-deployment") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    clusterName: optionalString(raw.cluster_name),
+    version: optionalString(raw.version),
+    paused: requiredBoolean(raw.paused),
+    replicas: replicas(raw.replicas),
+    strategyType: optionalString(raw.strategy_type),
+    maxSurge: optionalString(raw.max_surge),
+    maxUnavailable: optionalString(raw.max_unavailable),
+    infrastructureRef: reference(raw.infrastructure_ref),
+    bootstrapRef: reference(raw.bootstrap_ref),
+  };
+  if (type === "capi-machine-health-check") return {
+    type,
+    conditions,
+    clusterName: optionalString(raw.cluster_name),
+    expectedMachines: optionalInteger(raw.expected_machines),
+    currentHealthy: optionalInteger(raw.current_healthy),
+    remediationsAllowed: optionalInteger(raw.remediations_allowed),
+    nodeStartupTimeout: optionalString(raw.node_startup_timeout),
+    maxUnhealthy: optionalString(raw.max_unhealthy),
+    unhealthyRange: optionalString(raw.unhealthy_range),
+    selector: keyValues(raw.selector),
+    unhealthyConditions: records(raw.unhealthy_conditions).map((item) => ({
+      type: requiredString(item.type),
+      status: optionalString(item.status),
+      timeout: optionalString(item.timeout),
+    })),
+    remediationTemplate: reference(raw.remediation_template),
+  };
+  if (type === "capi-machine-pool") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    clusterName: optionalString(raw.cluster_name),
+    minReadySeconds: optionalInteger(raw.min_ready_seconds),
+    replicas: replicas(raw.replicas),
+    infrastructureRef: reference(raw.infrastructure_ref),
+    bootstrapRef: reference(raw.bootstrap_ref),
+  };
+  if (type === "capi-machine") return {
+    type,
+    conditions,
+    phase: optionalString(raw.phase),
+    role: machineRole(raw.role),
+    clusterName: optionalString(raw.cluster_name),
+    version: optionalString(raw.version),
+    failureDomain: optionalString(raw.failure_domain),
+    provider: optionalString(raw.provider),
+    providerId: optionalString(raw.provider_id),
+    providerRegion: optionalString(raw.provider_region),
+    providerInstanceId: optionalString(raw.provider_instance_id),
+    nodeName: optionalString(raw.node_name),
+    nodeUid: optionalString(raw.node_uid),
+    bootstrapRef: reference(raw.bootstrap_ref),
+    infrastructureRef: reference(raw.infrastructure_ref),
+    addresses: records(raw.addresses).map((item) => ({
+      type: requiredString(item.type),
+      address: requiredString(item.address),
+    })),
+    osImage: optionalString(raw.os_image),
+    architecture: optionalString(raw.architecture),
+    kernelVersion: optionalString(raw.kernel_version),
+    containerRuntimeVersion: optionalString(raw.container_runtime_version),
+    kubeletVersion: optionalString(raw.kubelet_version),
+  };
+  if (type === "capi-machine-set") return {
+    type,
+    conditions,
+    clusterName: optionalString(raw.cluster_name),
+    deletePolicy: optionalString(raw.delete_policy),
+    minReadySeconds: optionalInteger(raw.min_ready_seconds),
+    replicas: replicas(raw.replicas),
+    infrastructureRef: reference(raw.infrastructure_ref),
+    bootstrapRef: reference(raw.bootstrap_ref),
+  };
   return invalidResponse();
 }
 
@@ -152,6 +263,33 @@ function scaling(value: unknown): ProviderScaling {
     maximum: optionalInteger(item.maximum),
     current: optionalInteger(item.current),
   };
+}
+
+function replicas(value: unknown): ProviderReplicas {
+  const item = record(value);
+  return {
+    desired: optionalInteger(item.desired),
+    ready: optionalInteger(item.ready),
+    available: optionalInteger(item.available),
+    upToDate: optionalInteger(item.up_to_date),
+  };
+}
+
+function reference(value: unknown): ProviderReference | null {
+  if (value === null) return null;
+  const item = record(value);
+  return {
+    apiVersion: optionalString(item.api_version),
+    kind: requiredString(item.kind),
+    namespace: optionalString(item.namespace),
+    name: requiredString(item.name),
+  };
+}
+
+function machineRole(value: unknown): "control-plane" | "worker" {
+  const normalized = requiredString(value);
+  if (normalized !== "control-plane" && normalized !== "worker") return invalidResponse();
+  return normalized;
 }
 
 function keyValues(value: unknown): ProviderKeyValue[] {
@@ -205,6 +343,11 @@ function optionalString(value: unknown): string | null {
 
 function optionalBoolean(value: unknown): boolean | null {
   if (value === null) return null;
+  if (typeof value !== "boolean") return invalidResponse();
+  return value;
+}
+
+function requiredBoolean(value: unknown): boolean {
   if (typeof value !== "boolean") return invalidResponse();
   return value;
 }

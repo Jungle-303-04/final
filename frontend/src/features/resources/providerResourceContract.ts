@@ -17,6 +17,20 @@ export interface ProviderScaling {
   current: number | null;
 }
 
+export interface ProviderReference {
+  apiVersion: string | null;
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
+
+export interface ProviderReplicas {
+  desired: number | null;
+  ready: number | null;
+  available: number | null;
+  upToDate: number | null;
+}
+
 interface ProviderDetailBase {
   conditions: ProviderCondition[];
 }
@@ -117,4 +131,99 @@ export type ProviderResourceDetail =
       availabilityZones: string[];
       labels: ProviderKeyValue[];
       taints: Array<{ key: string; value: string | null; effect: string | null }>;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-cluster";
+      phase: string | null;
+      version: string | null;
+      clusterClass: string | null;
+      endpoint: string | null;
+      provider: string | null;
+      paused: boolean;
+      controlPlane: ProviderReplicas;
+      workers: ProviderReplicas;
+      controlPlaneRef: ProviderReference | null;
+      infrastructureRef: ProviderReference | null;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-kubeadm-control-plane";
+      clusterName: string | null;
+      version: string | null;
+      initialized: boolean | null;
+      updateStrategy: string | null;
+      replicas: ProviderReplicas;
+      infrastructureRef: ProviderReference | null;
+      nodeDrainTimeout: string | null;
+      nodeVolumeDetachTimeout: string | null;
+      nodeDeletionTimeout: string | null;
+      certificateSans: string[];
+      remediationMachine: string | null;
+      remediationRetryCount: number | null;
+      remediationTimestamp: string | null;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-machine-deployment";
+      phase: string | null;
+      clusterName: string | null;
+      version: string | null;
+      paused: boolean;
+      replicas: ProviderReplicas;
+      strategyType: string | null;
+      maxSurge: string | null;
+      maxUnavailable: string | null;
+      infrastructureRef: ProviderReference | null;
+      bootstrapRef: ProviderReference | null;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-machine-health-check";
+      clusterName: string | null;
+      expectedMachines: number | null;
+      currentHealthy: number | null;
+      remediationsAllowed: number | null;
+      nodeStartupTimeout: string | null;
+      maxUnhealthy: string | null;
+      unhealthyRange: string | null;
+      selector: ProviderKeyValue[];
+      unhealthyConditions: Array<{ type: string; status: string | null; timeout: string | null }>;
+      remediationTemplate: ProviderReference | null;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-machine-pool";
+      phase: string | null;
+      clusterName: string | null;
+      minReadySeconds: number | null;
+      replicas: ProviderReplicas;
+      infrastructureRef: ProviderReference | null;
+      bootstrapRef: ProviderReference | null;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-machine";
+      phase: string | null;
+      role: "control-plane" | "worker";
+      clusterName: string | null;
+      version: string | null;
+      failureDomain: string | null;
+      provider: string | null;
+      providerId: string | null;
+      providerRegion: string | null;
+      providerInstanceId: string | null;
+      nodeName: string | null;
+      nodeUid: string | null;
+      bootstrapRef: ProviderReference | null;
+      infrastructureRef: ProviderReference | null;
+      addresses: Array<{ type: string; address: string }>;
+      osImage: string | null;
+      architecture: string | null;
+      kernelVersion: string | null;
+      containerRuntimeVersion: string | null;
+      kubeletVersion: string | null;
+    })
+  | (ProviderDetailBase & {
+      type: "capi-machine-set";
+      clusterName: string | null;
+      deletePolicy: string | null;
+      minReadySeconds: number | null;
+      replicas: ProviderReplicas;
+      infrastructureRef: ProviderReference | null;
+      bootstrapRef: ProviderReference | null;
     });

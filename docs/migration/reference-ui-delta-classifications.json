@@ -410,6 +410,26 @@
     "resources.provider-detail.presentation": {
       "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
       "rationale": "The detail panel must render observed provider fields and conditions, omit missing facts, and reuse one schema-driven presentation across AWS and Azure kinds."
+    },
+    "resources.capi-detail.contract": {
+      "destination": "tests/test_inventory_provider_detail.py",
+      "rationale": "Every supported Cluster API kind must use an exact API-group/kind projector, cap collections, preserve nullable observations, and exclude the raw Kubernetes object."
+    },
+    "resources.capi-detail.adapter": {
+      "destination": "frontend/src/features/resources/providerResourceCanonical.test.ts",
+      "rationale": "The strict browser adapter must map the server-owned CAPI discriminator and explicit fields without parsing provider identities or inferring replica state."
+    },
+    "resources.capi-detail.presentation": {
+      "destination": "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx",
+      "rationale": "The reusable detail panel must render CAPI machine, replica, reference, node, and condition evidence while omitting unavailable facts."
+    },
+    "resources.capi-cluster.secure-connect-command": {
+      "destination": "frontend/src/pages/clusters/ClusterConnectDialog.test.tsx",
+      "rationale": "A future CAPI workload-cluster connection must prove a dedicated capability, audited command receipt, exact target identity, and failure-safe progress stream."
+    },
+    "resources.capi-cluster.kubeconfig-export-policy": {
+      "destination": "tests/test_inventory_provider_detail.py",
+      "rationale": "A future kubeconfig export must prove one-time encrypted delivery, secret redaction, RBAC, expiry, and audit retention without exposing credentials in inventory responses."
     }
   },
   "classifications": {
@@ -696,6 +716,229 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The reusable panel renders typed scaling, labels, and taints without local defaults. Dynamic agent discovery and read RBAC remain outside this UI slice."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIClusterRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-cluster:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIClusterRenderer",
+          "interaction": "an authorized CAPI Cluster detail presents phase, topology version and class, endpoint, provider, pause state, replica readiness, references, and conditions from the current observation",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact resource identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed provider projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/api/provider-resource-schemas.ts",
+              "frontend/src/features/resources/providerResourceCanonical.ts",
+              "frontend/src/features/resources/providerResourceCanonical.test.ts",
+              "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx",
+              "src/domains/inventory/provider_detail.py",
+              "src/packages/contracts/inventory_provider.py",
+              "tests/test_inventory_provider_detail.py"
+            ],
+            "requiredBackendContracts": [
+              "domains.inventory.provider_detail",
+              "packages.contracts.inventory_provider"
+            ],
+            "plannedTestIds": [
+              "resources.capi-detail.contract",
+              "resources.capi-detail.adapter",
+              "resources.capi-detail.presentation"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The Python exact group-kind registry redacts raw objects into a bounded discriminated projection; the shared Resources refresh path supplies freshness without browser inference. Dynamic agent CRD discovery remains a collector follow-up."
+          }
+        },
+        {
+          "sourceKey": "upstream-ui:resources:capi-cluster:connect-kubeconfig-actions:v1",
+          "legacyContractIds": [],
+          "symbol": "handleConnectToCluster / handleDownloadKubeconfig",
+          "interaction": "an operator connects to a CAPI workload cluster or exports its kubeconfig through a capability-scoped audited command",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/clusters/ClusterConnectDialog.tsx",
+              "src/packages/contracts/reference_feature_catalog.json"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.commands",
+              "domains.cluster_registry"
+            ],
+            "plannedTestIds": [
+              "resources.capi-cluster.secure-connect-command",
+              "resources.capi-cluster.kubeconfig-export-policy"
+            ],
+            "state": "blocked",
+            "blockedReason": "The existing cluster registration flow cannot authorize or transport a management-cluster CAPI Secret as a downloadable credential. A dedicated capability, secret-redaction policy, one-time encrypted delivery contract, and audit retention policy are required before exposing either action.",
+            "rationale": "The product does not reuse the upstream unaudited browser fetch or pretend the existing agent bootstrap is an equivalent workload-cluster credential exchange."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIKubeadmControlPlaneRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-kubeadm-control-plane:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIKubeadmControlPlaneRenderer",
+          "interaction": "an authorized KubeadmControlPlane detail presents cluster, version, initialization, replicas, machine template, kubeadm certificate SANs, remediation, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared bounded projection preserves only allow-listed machine-template and remediation facts and reuses the existing authenticated Resources detail refresh."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIMachineDeploymentRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-machine-deployment:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIMachineDeploymentRenderer",
+          "interaction": "an authorized MachineDeployment detail presents phase, cluster, version, pause state, replicas, rollout strategy, references, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Integer-or-percentage rollout fields remain server-projected strings, so the browser neither normalizes nor invents strategy values."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIMachineHealthCheckRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-machine-health-check:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIMachineHealthCheckRenderer",
+          "interaction": "an authorized MachineHealthCheck detail presents observed health counts, bounded selectors and unhealthy conditions, remediation reference, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Selectors and condition collections are capped at the shared 100-row boundary and invalid rows are omitted by the server projector."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIMachinePoolRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-machine-pool:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIMachinePoolRenderer",
+          "interaction": "an authorized MachinePool detail presents phase, cluster, readiness window, replicas, template references, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "One reusable replica and reference contract covers this detail without kind-specific browser fetches."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIMachineRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-machine:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIMachineRenderer",
+          "interaction": "an authorized Machine detail presents role, cluster, version, provider identity, node reference and software, addresses, references, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/features/resources/providerResourceCanonical.test.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "frontend/src/pages/resources/ProviderResourceDetailPanel.test.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "Provider ID parsing occurs once in Python under a bounded allow-list; the browser consumes explicit provider, region, and instance fields and never parses credentials or raw Kubernetes data."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/resources/renderers/CAPIMachineSetRenderer.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:resources:provider-detail:capi-machine-set:v1",
+          "legacyContractIds": [],
+          "symbol": "CAPIMachineSetRenderer",
+          "interaction": "an authorized MachineSet detail presents cluster, delete policy, readiness window, replicas, template references, and conditions",
+          "transport": "poll",
+          "realtime": {
+            "resume": "restart the bounded detail read when the selected exact identity or explicit Resources refresh revision changes",
+            "backpressure": "share one request per exact cluster and resource identity and release it after the final consumer unmounts",
+            "merge": "replace the typed projection only while the response identity still matches the active selection"
+          },
+          "motion": null,
+          "opsiaPort": {
+            "destinations": ["frontend/src/api/provider-resource-schemas.ts", "frontend/src/features/resources/providerResourceCanonical.ts", "frontend/src/pages/resources/ProviderResourceDetailPanel.tsx", "src/domains/inventory/provider_detail.py", "src/packages/contracts/inventory_provider.py", "tests/test_inventory_provider_detail.py"],
+            "requiredBackendContracts": ["domains.inventory.provider_detail", "packages.contracts.inventory_provider"],
+            "plannedTestIds": ["resources.capi-detail.contract", "resources.capi-detail.adapter", "resources.capi-detail.presentation"],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The shared bounded replica and exact reference contracts preserve nullable observations without UI defaults."
           }
         }
       ]

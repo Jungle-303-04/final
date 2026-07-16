@@ -22,6 +22,20 @@ export interface ProviderScalingEndpoint {
   current: number | null;
 }
 
+export interface ProviderReferenceEndpoint {
+  api_version: string | null;
+  kind: string;
+  namespace: string | null;
+  name: string;
+}
+
+export interface ProviderReplicasEndpoint {
+  desired: number | null;
+  ready: number | null;
+  available: number | null;
+  up_to_date: number | null;
+}
+
 interface ProviderDetailBaseEndpoint {
   conditions: ProviderConditionEndpoint[];
 }
@@ -145,6 +159,108 @@ export interface AzureManagedMachinePoolProviderDetailEndpoint extends ProviderD
   taints: ProviderTaintEndpoint[];
 }
 
+export interface CapiClusterProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-cluster";
+  phase: string | null;
+  version: string | null;
+  cluster_class: string | null;
+  endpoint: string | null;
+  provider: string | null;
+  paused: boolean;
+  control_plane: ProviderReplicasEndpoint;
+  workers: ProviderReplicasEndpoint;
+  control_plane_ref: ProviderReferenceEndpoint | null;
+  infrastructure_ref: ProviderReferenceEndpoint | null;
+}
+
+export interface CapiKubeadmControlPlaneProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-kubeadm-control-plane";
+  cluster_name: string | null;
+  version: string | null;
+  initialized: boolean | null;
+  update_strategy: string | null;
+  replicas: ProviderReplicasEndpoint;
+  infrastructure_ref: ProviderReferenceEndpoint | null;
+  node_drain_timeout: string | null;
+  node_volume_detach_timeout: string | null;
+  node_deletion_timeout: string | null;
+  certificate_sans: string[];
+  remediation_machine: string | null;
+  remediation_retry_count: number | null;
+  remediation_timestamp: string | null;
+}
+
+export interface CapiMachineDeploymentProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-machine-deployment";
+  phase: string | null;
+  cluster_name: string | null;
+  version: string | null;
+  paused: boolean;
+  replicas: ProviderReplicasEndpoint;
+  strategy_type: string | null;
+  max_surge: string | null;
+  max_unavailable: string | null;
+  infrastructure_ref: ProviderReferenceEndpoint | null;
+  bootstrap_ref: ProviderReferenceEndpoint | null;
+}
+
+export interface CapiMachineHealthCheckProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-machine-health-check";
+  cluster_name: string | null;
+  expected_machines: number | null;
+  current_healthy: number | null;
+  remediations_allowed: number | null;
+  node_startup_timeout: string | null;
+  max_unhealthy: string | null;
+  unhealthy_range: string | null;
+  selector: ProviderKeyValueEndpoint[];
+  unhealthy_conditions: Array<{ type: string; status: string | null; timeout: string | null }>;
+  remediation_template: ProviderReferenceEndpoint | null;
+}
+
+export interface CapiMachinePoolProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-machine-pool";
+  phase: string | null;
+  cluster_name: string | null;
+  min_ready_seconds: number | null;
+  replicas: ProviderReplicasEndpoint;
+  infrastructure_ref: ProviderReferenceEndpoint | null;
+  bootstrap_ref: ProviderReferenceEndpoint | null;
+}
+
+export interface CapiMachineProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-machine";
+  phase: string | null;
+  role: "control-plane" | "worker";
+  cluster_name: string | null;
+  version: string | null;
+  failure_domain: string | null;
+  provider: string | null;
+  provider_id: string | null;
+  provider_region: string | null;
+  provider_instance_id: string | null;
+  node_name: string | null;
+  node_uid: string | null;
+  bootstrap_ref: ProviderReferenceEndpoint | null;
+  infrastructure_ref: ProviderReferenceEndpoint | null;
+  addresses: ProviderAddressEndpoint[];
+  os_image: string | null;
+  architecture: string | null;
+  kernel_version: string | null;
+  container_runtime_version: string | null;
+  kubelet_version: string | null;
+}
+
+export interface CapiMachineSetProviderDetailEndpoint extends ProviderDetailBaseEndpoint {
+  type: "capi-machine-set";
+  cluster_name: string | null;
+  delete_policy: string | null;
+  min_ready_seconds: number | null;
+  replicas: ProviderReplicasEndpoint;
+  infrastructure_ref: ProviderReferenceEndpoint | null;
+  bootstrap_ref: ProviderReferenceEndpoint | null;
+}
+
 export type ProviderResourceDetailEndpoint =
   | AwsMachineProviderDetailEndpoint
   | AwsManagedClusterProviderDetailEndpoint
@@ -152,4 +268,11 @@ export type ProviderResourceDetailEndpoint =
   | AwsManagedMachinePoolProviderDetailEndpoint
   | AzureMachineProviderDetailEndpoint
   | AzureManagedControlPlaneProviderDetailEndpoint
-  | AzureManagedMachinePoolProviderDetailEndpoint;
+  | AzureManagedMachinePoolProviderDetailEndpoint
+  | CapiClusterProviderDetailEndpoint
+  | CapiKubeadmControlPlaneProviderDetailEndpoint
+  | CapiMachineDeploymentProviderDetailEndpoint
+  | CapiMachineHealthCheckProviderDetailEndpoint
+  | CapiMachinePoolProviderDetailEndpoint
+  | CapiMachineProviderDetailEndpoint
+  | CapiMachineSetProviderDetailEndpoint;

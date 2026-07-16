@@ -167,6 +167,120 @@ function providerSections(
       ["resources.detail.provider.upgradeChannel", detail.upgradeChannel],
     ]),
   ];
+  if (detail.type === "capi-cluster") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.version", detail.version],
+      ["resources.detail.provider.clusterClass", detail.clusterClass],
+      ["resources.detail.provider.endpoint", detail.endpoint],
+      ["resources.detail.provider.provider", detail.provider],
+      ["resources.detail.provider.paused", yesNo(detail.paused, t)],
+    ]),
+    replicaSection("control-plane", "resources.detail.provider.controlPlane", detail.controlPlane),
+    replicaSection("workers", "resources.detail.provider.workers", detail.workers),
+    section("references", "resources.detail.provider.references", [
+      ["resources.detail.provider.controlPlane", referenceLabel(detail.controlPlaneRef)],
+      ["resources.detail.provider.infrastructure", referenceLabel(detail.infrastructureRef)],
+    ]),
+  ];
+  if (detail.type === "capi-kubeadm-control-plane") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.version", detail.version],
+      ["resources.detail.provider.initialized", yesNo(detail.initialized, t)],
+      ["resources.detail.provider.updateStrategy", detail.updateStrategy],
+    ]),
+    replicaSection("replicas", "resources.detail.provider.scaling", detail.replicas),
+    section("configuration", "resources.detail.provider.configuration", [
+      ["resources.detail.provider.infrastructure", referenceLabel(detail.infrastructureRef)],
+      ["resources.detail.provider.nodeDrainTimeout", detail.nodeDrainTimeout],
+      ["resources.detail.provider.volumeDetachTimeout", detail.nodeVolumeDetachTimeout],
+      ["resources.detail.provider.deletionTimeout", detail.nodeDeletionTimeout],
+      ["resources.detail.provider.certificateSans", join(detail.certificateSans)],
+    ]),
+    section("remediation", "resources.detail.provider.remediation", [
+      ["resources.detail.provider.nodeName", detail.remediationMachine],
+      ["resources.detail.provider.retryCount", number(detail.remediationRetryCount)],
+      ["resources.detail.provider.timestamp", detail.remediationTimestamp],
+    ]),
+  ];
+  if (detail.type === "capi-machine-deployment") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.version", detail.version],
+      ["resources.detail.provider.paused", yesNo(detail.paused, t)],
+    ]),
+    replicaSection("replicas", "resources.detail.provider.scaling", detail.replicas),
+    section("strategy", "resources.detail.provider.strategy", [
+      ["resources.detail.provider.strategy", detail.strategyType],
+      ["resources.detail.provider.maxSurge", detail.maxSurge],
+      ["resources.detail.provider.maxUnavailable", detail.maxUnavailable],
+    ]),
+    referencesSection(detail.bootstrapRef, detail.infrastructureRef),
+  ];
+  if (detail.type === "capi-machine-health-check") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.expectedMachines", number(detail.expectedMachines)],
+      ["resources.detail.provider.currentHealthy", number(detail.currentHealthy)],
+      ["resources.detail.provider.remediationsAllowed", number(detail.remediationsAllowed)],
+      ["resources.detail.provider.nodeStartupTimeout", detail.nodeStartupTimeout],
+      ["resources.detail.provider.maxUnhealthy", detail.maxUnhealthy],
+      ["resources.detail.provider.unhealthyRange", detail.unhealthyRange],
+    ]),
+    section("selector", "resources.detail.provider.selector", [
+      ["resources.detail.provider.selector", join(detail.selector.map(({ key, value }) => `${key}=${value}`))],
+    ]),
+    section("unhealthy", "resources.detail.provider.unhealthyConditions", [
+      ["resources.detail.provider.unhealthyConditions", join(detail.unhealthyConditions.map((item) => join([item.type, item.status, item.timeout])!).filter(Boolean))],
+      ["resources.detail.provider.remediation", referenceLabel(detail.remediationTemplate)],
+    ]),
+  ];
+  if (detail.type === "capi-machine-pool") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.minReadySeconds", number(detail.minReadySeconds)],
+    ]),
+    replicaSection("replicas", "resources.detail.provider.scaling", detail.replicas),
+    referencesSection(detail.bootstrapRef, detail.infrastructureRef),
+  ];
+  if (detail.type === "capi-machine") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.phase", detail.phase],
+      ["resources.detail.provider.role", detail.role],
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.version", detail.version],
+      ["resources.detail.provider.failureDomain", detail.failureDomain],
+      ["resources.detail.provider.provider", detail.provider],
+    ]),
+    section("infrastructure", "resources.detail.provider.infrastructure", [
+      ["resources.detail.provider.providerId", detail.providerId],
+      ["resources.detail.provider.region", detail.providerRegion],
+      ["resources.detail.provider.instanceId", detail.providerInstanceId],
+      ["resources.detail.provider.addresses", join(detail.addresses.map((item) => `${item.type}: ${item.address}`))],
+    ]),
+    section("node", "resources.detail.provider.node", [
+      ["resources.detail.provider.nodeName", detail.nodeName],
+      ["resources.detail.provider.nodeUid", detail.nodeUid],
+      ["resources.detail.provider.osImage", detail.osImage],
+      ["resources.detail.provider.architecture", detail.architecture],
+      ["resources.detail.provider.kernel", detail.kernelVersion],
+      ["resources.detail.provider.containerRuntime", detail.containerRuntimeVersion],
+      ["resources.detail.provider.kubelet", detail.kubeletVersion],
+    ]),
+    referencesSection(detail.bootstrapRef, detail.infrastructureRef),
+  ];
+  if (detail.type === "capi-machine-set") return [
+    section("overview", "resources.detail.provider.overview", [
+      ["resources.detail.provider.clusterName", detail.clusterName],
+      ["resources.detail.provider.deletePolicy", detail.deletePolicy],
+      ["resources.detail.provider.minReadySeconds", number(detail.minReadySeconds)],
+    ]),
+    replicaSection("replicas", "resources.detail.provider.scaling", detail.replicas),
+    referencesSection(detail.bootstrapRef, detail.infrastructureRef),
+  ];
   return [
     section("overview", "resources.detail.provider.overview", [
       ["resources.detail.provider.poolName", detail.poolName],
@@ -185,6 +299,35 @@ function providerSections(
       ["resources.detail.provider.taints", join(detail.taints.map((item) => join([item.key, item.value, item.effect])!).filter(Boolean))],
     ]),
   ];
+}
+
+function replicaSection(
+  id: string,
+  label: MessageKey,
+  value: { desired: number | null; ready: number | null; available: number | null; upToDate: number | null },
+): ProviderSection {
+  return section(id, label, [
+    ["resources.detail.provider.desired", number(value.desired)],
+    ["resources.detail.provider.ready", number(value.ready)],
+    ["resources.detail.provider.available", number(value.available)],
+    ["resources.detail.provider.upToDate", number(value.upToDate)],
+  ]);
+}
+
+function referencesSection(
+  first: { apiVersion: string | null; kind: string; namespace: string | null; name: string } | null,
+  second: { apiVersion: string | null; kind: string; namespace: string | null; name: string } | null,
+): ProviderSection {
+  return section("references", "resources.detail.provider.references", [
+    ["resources.detail.provider.bootstrap", referenceLabel(first)],
+    ["resources.detail.provider.infrastructure", referenceLabel(second)],
+  ]);
+}
+
+function referenceLabel(
+  value: { apiVersion: string | null; kind: string; namespace: string | null; name: string } | null,
+): string | null {
+  return value === null ? null : join([value.kind, value.namespace, value.name]);
 }
 
 function scalingSection(

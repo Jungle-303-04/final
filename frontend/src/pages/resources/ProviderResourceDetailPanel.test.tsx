@@ -62,6 +62,44 @@ describe("ProviderResourceDetailPanel", () => {
     expect(screen.getByText("CriticalAddonsOnly · NoSchedule")).toBeTruthy();
     expect(screen.getByText("12")).toBeTruthy();
   });
+
+  it("renders CAPI machine identity, node evidence, references, and bounded conditions", () => {
+    renderPanel({
+      type: "capi-machine",
+      phase: "Running",
+      role: "control-plane",
+      clusterName: "prod",
+      version: "v1.33.1",
+      failureDomain: "ap-northeast-2a",
+      provider: "AWS",
+      providerId: "aws:///ap-northeast-2a/i-123",
+      providerRegion: "ap-northeast-2a",
+      providerInstanceId: "i-123",
+      nodeName: "prod-control-plane-1",
+      nodeUid: "node-uid",
+      bootstrapRef: { apiVersion: "bootstrap.cluster.x-k8s.io/v1beta2", kind: "KubeadmConfig", namespace: "prod", name: "bootstrap-1" },
+      infrastructureRef: { apiVersion: "infrastructure.cluster.x-k8s.io/v1beta2", kind: "AWSMachine", namespace: "prod", name: "machine-1" },
+      addresses: [{ type: "InternalIP", address: "10.0.0.4" }],
+      osImage: "Flatcar",
+      architecture: "arm64",
+      kernelVersion: "6.6",
+      containerRuntimeVersion: "containerd://2.0",
+      kubeletVersion: "v1.33.1",
+      conditions: [{
+        type: "Ready",
+        status: "True",
+        reason: "Ready",
+        message: null,
+        lastTransitionTime: "2026-07-16T00:00:00Z",
+      }],
+    });
+
+    expect(screen.getByText("control-plane")).toBeTruthy();
+    expect(screen.getByText("InternalIP: 10.0.0.4")).toBeTruthy();
+    expect(screen.getByText("AWSMachine · prod · machine-1")).toBeTruthy();
+    expect(screen.getByText("containerd://2.0")).toBeTruthy();
+    expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
+  });
 });
 
 function renderPanel(detail: ProviderResourceDetail) {

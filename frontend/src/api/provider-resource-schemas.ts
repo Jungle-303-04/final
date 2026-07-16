@@ -16,6 +16,18 @@ const scaling = z.strictObject({
   maximum: nullableInteger,
   current: nullableInteger,
 });
+const reference = z.strictObject({
+  api_version: nullableString,
+  kind: z.string().min(1),
+  namespace: nullableString,
+  name: z.string().min(1),
+});
+const replicas = z.strictObject({
+  desired: nullableInteger,
+  ready: nullableInteger,
+  available: nullableInteger,
+  up_to_date: nullableInteger,
+});
 
 const awsMachine = z.strictObject({
   type: z.literal("aws-machine"),
@@ -135,6 +147,119 @@ const azureManagedMachinePool = z.strictObject({
   conditions,
 });
 
+const capiCluster = z.strictObject({
+  type: z.literal("capi-cluster"),
+  phase: nullableString,
+  version: nullableString,
+  cluster_class: nullableString,
+  endpoint: nullableString,
+  provider: nullableString,
+  paused: z.boolean(),
+  control_plane: replicas,
+  workers: replicas,
+  control_plane_ref: reference.nullable(),
+  infrastructure_ref: reference.nullable(),
+  conditions,
+});
+
+const capiKubeadmControlPlane = z.strictObject({
+  type: z.literal("capi-kubeadm-control-plane"),
+  cluster_name: nullableString,
+  version: nullableString,
+  initialized: z.boolean().nullable(),
+  update_strategy: nullableString,
+  replicas,
+  infrastructure_ref: reference.nullable(),
+  node_drain_timeout: nullableString,
+  node_volume_detach_timeout: nullableString,
+  node_deletion_timeout: nullableString,
+  certificate_sans: z.array(z.string()).max(100),
+  remediation_machine: nullableString,
+  remediation_retry_count: nullableInteger,
+  remediation_timestamp: nullableString,
+  conditions,
+});
+
+const capiMachineDeployment = z.strictObject({
+  type: z.literal("capi-machine-deployment"),
+  phase: nullableString,
+  cluster_name: nullableString,
+  version: nullableString,
+  paused: z.boolean(),
+  replicas,
+  strategy_type: nullableString,
+  max_surge: nullableString,
+  max_unavailable: nullableString,
+  infrastructure_ref: reference.nullable(),
+  bootstrap_ref: reference.nullable(),
+  conditions,
+});
+
+const capiMachineHealthCheck = z.strictObject({
+  type: z.literal("capi-machine-health-check"),
+  cluster_name: nullableString,
+  expected_machines: nullableInteger,
+  current_healthy: nullableInteger,
+  remediations_allowed: nullableInteger,
+  node_startup_timeout: nullableString,
+  max_unhealthy: nullableString,
+  unhealthy_range: nullableString,
+  selector: z.array(keyValue).max(100),
+  unhealthy_conditions: z.array(z.strictObject({
+    type: z.string().min(1),
+    status: nullableString,
+    timeout: nullableString,
+  })).max(100),
+  remediation_template: reference.nullable(),
+  conditions,
+});
+
+const capiMachinePool = z.strictObject({
+  type: z.literal("capi-machine-pool"),
+  phase: nullableString,
+  cluster_name: nullableString,
+  min_ready_seconds: nullableInteger,
+  replicas,
+  infrastructure_ref: reference.nullable(),
+  bootstrap_ref: reference.nullable(),
+  conditions,
+});
+
+const capiMachine = z.strictObject({
+  type: z.literal("capi-machine"),
+  phase: nullableString,
+  role: z.enum(["control-plane", "worker"]),
+  cluster_name: nullableString,
+  version: nullableString,
+  failure_domain: nullableString,
+  provider: nullableString,
+  provider_id: nullableString,
+  provider_region: nullableString,
+  provider_instance_id: nullableString,
+  node_name: nullableString,
+  node_uid: nullableString,
+  bootstrap_ref: reference.nullable(),
+  infrastructure_ref: reference.nullable(),
+  addresses: z.array(z.strictObject({ type: z.string().min(1), address: z.string().min(1) })).max(100),
+  os_image: nullableString,
+  architecture: nullableString,
+  kernel_version: nullableString,
+  container_runtime_version: nullableString,
+  kubelet_version: nullableString,
+  conditions,
+});
+
+const capiMachineSet = z.strictObject({
+  type: z.literal("capi-machine-set"),
+  cluster_name: nullableString,
+  delete_policy: nullableString,
+  min_ready_seconds: nullableInteger,
+  replicas,
+  infrastructure_ref: reference.nullable(),
+  bootstrap_ref: reference.nullable(),
+  conditions,
+});
+
 export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   awsMachine,
   awsManagedCluster,
@@ -143,4 +268,11 @@ export const providerResourceDetailSchema = z.discriminatedUnion("type", [
   azureMachine,
   azureManagedControlPlane,
   azureManagedMachinePool,
+  capiCluster,
+  capiKubeadmControlPlane,
+  capiMachineDeployment,
+  capiMachineHealthCheck,
+  capiMachinePool,
+  capiMachine,
+  capiMachineSet,
 ]);

@@ -16,9 +16,19 @@ from packages.contracts.inventory_provider import (
     AzureMachineProviderDetail,
     AzureManagedControlPlaneProviderDetail,
     AzureManagedMachinePoolProviderDetail,
+    CapiClusterProviderDetail,
+    CapiKubeadmControlPlaneProviderDetail,
+    CapiMachineDeploymentProviderDetail,
+    CapiMachineHealthCheckProviderDetail,
+    CapiMachinePoolProviderDetail,
+    CapiMachineProviderDetail,
+    CapiMachineSetProviderDetail,
+    CapiUnhealthyCondition,
     ProviderAddress,
     ProviderCondition,
     ProviderKeyValue,
+    ProviderReference,
+    ProviderReplicas,
     ProviderScaling,
     ProviderTaint,
     ResourceProviderDetail,
@@ -26,6 +36,7 @@ from packages.contracts.inventory_provider import (
 
 INFRASTRUCTURE_GROUP = "infrastructure.cluster.x-k8s.io"
 CONTROL_PLANE_GROUP = "controlplane.cluster.x-k8s.io"
+CAPI_GROUP = "cluster.x-k8s.io"
 MAX_COLLECTION_ITEMS = 100
 MAX_TEXT_LENGTH = 2_000
 
@@ -232,6 +243,185 @@ def _azure_managed_machine_pool(
     )
 
 
+def _capi_cluster(raw: Mapping[str, Any]) -> CapiClusterProviderDetail:
+    host = _text_at(raw, "spec", "controlPlaneEndpoint", "host")
+    port = _int_at(raw, "spec", "controlPlaneEndpoint", "port")
+    infrastructure_ref = _reference_at(raw, "spec", "infrastructureRef")
+    return CapiClusterProviderDetail(
+        phase=_text_at(raw, "status", "phase"),
+        version=_text_at(raw, "spec", "topology", "version"),
+        cluster_class=_text_at(raw, "spec", "topology", "class"),
+        endpoint=None if host is None else f"{host}:{port}" if port is not None else host,
+        provider=_provider_from_kind(infrastructure_ref.kind) if infrastructure_ref else None,
+        paused=_bool_at(raw, "spec", "paused") is True,
+        control_plane=ProviderReplicas(
+            desired=_first_present_int(
+                _int_at(raw, "status", "controlPlane", "desiredReplicas"),
+                _int_at(raw, "spec", "topology", "controlPlane", "replicas"),
+            ),
+            ready=_int_at(raw, "status", "controlPlane", "readyReplicas"),
+            available=_int_at(raw, "status", "controlPlane", "availableReplicas"),
+            up_to_date=_int_at(raw, "status", "controlPlane", "upToDateReplicas"),
+        ),
+        workers=ProviderReplicas(
+            desired=_int_at(raw, "status", "workers", "desiredReplicas"),
+            ready=_int_at(raw, "status", "workers", "readyReplicas"),
+            available=_int_at(raw, "status", "workers", "availableReplicas"),
+            up_to_date=_int_at(raw, "status", "workers", "upToDateReplicas"),
+        ),
+        control_plane_ref=_reference_at(raw, "spec", "controlPlaneRef"),
+        infrastructure_ref=infrastructure_ref,
+        conditions=_conditions(raw),
+    )
+
+
+def _capi_kubeadm_control_plane(
+    raw: Mapping[str, Any],
+) -> CapiKubeadmControlPlaneProviderDetail:
+    machine_template = _mapping_at(raw, "spec", "machineTemplate")
+    remediation = _mapping_at(raw, "status", "lastRemediation")
+    initialized = _bool_at(raw, "status", "initialized")
+    if initialized is None:
+        initialized = _condition_truth(raw, "Initialized")
+    return CapiKubeadmControlPlaneProviderDetail(
+        cluster_name=_cluster_name(raw),
+        version=_text_at(raw, "spec", "version"),
+        initialized=initialized,
+        update_strategy=(
+            "RollingUpdate"
+            if _value_at(raw, "spec", "rolloutStrategy") is not None
+            or _value_at(raw, "spec", "upgradeAfter") is not None
+            else None
+        ),
+        replicas=_standard_replicas(raw),
+        infrastructure_ref=_reference_at(machine_template, "infrastructureRef"),
+        node_drain_timeout=_text(machine_template.get("nodeDrainTimeout")),
+        node_volume_detach_timeout=_text(machine_template.get("nodeVolumeDetachTimeout")),
+        node_deletion_timeout=_text(machine_template.get("nodeDeletionTimeout")),
+        certificate_sans=_text_items_at(
+            raw,
+            "spec",
+            "kubeadmConfigSpec",
+            "clusterConfiguration",
+            "certSANs",
+        ),
+        remediation_machine=_text(remediation.get("machine")),
+        remediation_retry_count=_int(remediation.get("retryCount")),
+        remediation_timestamp=_text(remediation.get("timestamp")),
+        conditions=_conditions(raw),
+    )
+
+
+def _capi_machine_deployment(raw: Mapping[str, Any]) -> CapiMachineDeploymentProviderDetail:
+    template = _mapping_at(raw, "spec", "template", "spec")
+    return CapiMachineDeploymentProviderDetail(
+        phase=_text_at(raw, "status", "phase"),
+        cluster_name=_cluster_name(raw),
+        version=_text_at(raw, "spec", "template", "spec", "version"),
+        paused=_bool_at(raw, "spec", "paused") is True,
+        replicas=_standard_replicas(raw),
+        strategy_type=_text_at(raw, "spec", "strategy", "type"),
+        max_surge=_scalar_text_at(raw, "spec", "strategy", "rollingUpdate", "maxSurge"),
+        max_unavailable=_scalar_text_at(raw, "spec", "strategy", "rollingUpdate", "maxUnavailable"),
+        infrastructure_ref=_reference_at(template, "infrastructureRef"),
+        bootstrap_ref=_reference_at(template, "bootstrap", "configRef"),
+        conditions=_conditions(raw),
+    )
+
+
+def _capi_machine_health_check(raw: Mapping[str, Any]) -> CapiMachineHealthCheckProviderDetail:
+    unhealthy = [
+        CapiUnhealthyCondition(
+            type=condition_type,
+            status=_text(item.get("status")),
+            timeout=_text(item.get("timeout")),
+        )
+        for path in (
+            ("spec", "unhealthyConditions"),
+            ("spec", "unhealthyNodeConditions"),
+            ("spec", "unhealthyMachineConditions"),
+        )
+        for item in _mapping_items_at(raw, *path)
+        if (condition_type := _text(item.get("type"))) is not None
+    ][:MAX_COLLECTION_ITEMS]
+    return CapiMachineHealthCheckProviderDetail(
+        cluster_name=_text_at(raw, "spec", "clusterName") or _cluster_name(raw),
+        expected_machines=_int_at(raw, "status", "expectedMachines"),
+        current_healthy=_int_at(raw, "status", "currentHealthy"),
+        remediations_allowed=_int_at(raw, "status", "remediationsAllowed"),
+        node_startup_timeout=_text_at(raw, "spec", "nodeStartupTimeout"),
+        max_unhealthy=_scalar_text_at(raw, "spec", "maxUnhealthy"),
+        unhealthy_range=_text_at(raw, "spec", "unhealthyRange"),
+        selector=_key_values_at(raw, "spec", "selector", "matchLabels"),
+        unhealthy_conditions=unhealthy,
+        remediation_template=_reference_at(raw, "spec", "remediationTemplate"),
+        conditions=_conditions(raw),
+    )
+
+
+def _capi_machine_pool(raw: Mapping[str, Any]) -> CapiMachinePoolProviderDetail:
+    template = _mapping_at(raw, "spec", "template", "spec")
+    return CapiMachinePoolProviderDetail(
+        phase=_text_at(raw, "status", "phase"),
+        cluster_name=_cluster_name(raw),
+        min_ready_seconds=_int_at(raw, "spec", "minReadySeconds"),
+        replicas=_standard_replicas(raw),
+        infrastructure_ref=_reference_at(template, "infrastructureRef"),
+        bootstrap_ref=_reference_at(template, "bootstrap", "configRef"),
+        conditions=_conditions(raw),
+    )
+
+
+def _capi_machine(raw: Mapping[str, Any]) -> CapiMachineProviderDetail:
+    provider_id = _text_at(raw, "spec", "providerID")
+    provider, region, instance_id = _provider_id_parts(provider_id)
+    labels = _mapping_at(raw, "metadata", "labels")
+    control_plane = (
+        "cluster.x-k8s.io/control-plane" in labels
+        or _text(labels.get("cluster.x-k8s.io/control-plane-name")) is not None
+    )
+    return CapiMachineProviderDetail(
+        phase=_text_at(raw, "status", "phase"),
+        role="control-plane" if control_plane else "worker",
+        cluster_name=_cluster_name(raw),
+        version=_text_at(raw, "spec", "version"),
+        failure_domain=_text_at(raw, "spec", "failureDomain"),
+        provider=provider,
+        provider_id=provider_id,
+        provider_region=region,
+        provider_instance_id=instance_id,
+        node_name=_text_at(raw, "status", "nodeRef", "name"),
+        node_uid=_text_at(raw, "status", "nodeRef", "uid"),
+        bootstrap_ref=_reference_at(raw, "spec", "bootstrap", "configRef"),
+        infrastructure_ref=_reference_at(raw, "spec", "infrastructureRef"),
+        addresses=[
+            ProviderAddress(type=address_type, address=address)
+            for item in _mapping_items_at(raw, "status", "addresses")
+            if (address_type := _text(item.get("type"))) is not None
+            and (address := _text(item.get("address"))) is not None
+        ],
+        os_image=_text_at(raw, "status", "nodeInfo", "osImage"),
+        architecture=_text_at(raw, "status", "nodeInfo", "architecture"),
+        kernel_version=_text_at(raw, "status", "nodeInfo", "kernelVersion"),
+        container_runtime_version=_text_at(raw, "status", "nodeInfo", "containerRuntimeVersion"),
+        kubelet_version=_text_at(raw, "status", "nodeInfo", "kubeletVersion"),
+        conditions=_conditions(raw),
+    )
+
+
+def _capi_machine_set(raw: Mapping[str, Any]) -> CapiMachineSetProviderDetail:
+    template = _mapping_at(raw, "spec", "template", "spec")
+    return CapiMachineSetProviderDetail(
+        cluster_name=_cluster_name(raw),
+        delete_policy=_text_at(raw, "spec", "deletePolicy"),
+        min_ready_seconds=_int_at(raw, "spec", "minReadySeconds"),
+        replicas=_standard_replicas(raw),
+        infrastructure_ref=_reference_at(template, "infrastructureRef"),
+        bootstrap_ref=_reference_at(template, "bootstrap", "configRef"),
+        conditions=_conditions(raw),
+    )
+
+
 PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (INFRASTRUCTURE_GROUP, "AWSMachine"): _aws_machine,
     (INFRASTRUCTURE_GROUP, "AWSManagedCluster"): _aws_managed_cluster,
@@ -240,6 +430,13 @@ PROVIDER_DETAIL_PROJECTORS: dict[tuple[str, str], ProviderDetailProjector] = {
     (INFRASTRUCTURE_GROUP, "AzureMachine"): _azure_machine,
     (INFRASTRUCTURE_GROUP, "AzureManagedControlPlane"): _azure_managed_control_plane,
     (INFRASTRUCTURE_GROUP, "AzureManagedMachinePool"): _azure_managed_machine_pool,
+    (CAPI_GROUP, "Cluster"): _capi_cluster,
+    (CONTROL_PLANE_GROUP, "KubeadmControlPlane"): _capi_kubeadm_control_plane,
+    (CAPI_GROUP, "MachineDeployment"): _capi_machine_deployment,
+    (CAPI_GROUP, "MachineHealthCheck"): _capi_machine_health_check,
+    (CAPI_GROUP, "MachinePool"): _capi_machine_pool,
+    (CAPI_GROUP, "Machine"): _capi_machine,
+    (CAPI_GROUP, "MachineSet"): _capi_machine_set,
 }
 
 
@@ -327,7 +524,105 @@ def _bool_at(value: Mapping[str, Any], *path: str) -> bool | None:
 
 def _int_at(value: Mapping[str, Any], *path: str) -> int | None:
     raw = _value_at(value, *path)
-    return raw if isinstance(raw, int) and not isinstance(raw, bool) else None
+    return _int(raw)
+
+
+def _int(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _first_present_int(*values: int | None) -> int | None:
+    return next((value for value in values if value is not None), None)
+
+
+def _scalar_text_at(value: Mapping[str, Any], *path: str) -> str | None:
+    raw = _value_at(value, *path)
+    return _text(raw) if isinstance(raw, str) else str(raw) if _int(raw) is not None else None
+
+
+def _standard_replicas(raw: Mapping[str, Any]) -> ProviderReplicas:
+    return ProviderReplicas(
+        desired=_int_at(raw, "spec", "replicas"),
+        ready=_int_at(raw, "status", "readyReplicas"),
+        available=_int_at(raw, "status", "availableReplicas"),
+        up_to_date=_int_at(raw, "status", "upToDateReplicas")
+        if _int_at(raw, "status", "upToDateReplicas") is not None
+        else _int_at(raw, "status", "updatedReplicas"),
+    )
+
+
+def _reference_at(value: Mapping[str, Any], *path: str) -> ProviderReference | None:
+    item = _mapping_at(value, *path)
+    kind = _text(item.get("kind"))
+    name = _text(item.get("name"))
+    if kind is None or name is None:
+        return None
+    return ProviderReference(
+        api_version=_text(item.get("apiVersion")),
+        kind=kind,
+        namespace=_text(item.get("namespace")),
+        name=name,
+    )
+
+
+def _cluster_name(raw: Mapping[str, Any]) -> str | None:
+    return _text_at(raw, "spec", "clusterName") or _text_at(
+        raw, "metadata", "labels", "cluster.x-k8s.io/cluster-name"
+    )
+
+
+def _condition_truth(raw: Mapping[str, Any], condition_type: str) -> bool | None:
+    for condition in _conditions(raw):
+        if condition.type == condition_type:
+            return (
+                True
+                if condition.status == "True"
+                else False
+                if condition.status == "False"
+                else None
+            )
+    return None
+
+
+def _provider_from_kind(kind: str) -> str | None:
+    lowered = kind.lower()
+    for prefix, label in (
+        ("aws", "AWS"),
+        ("azure", "Azure"),
+        ("gcp", "GCP"),
+        ("vsphere", "vSphere"),
+        ("docker", "Docker"),
+    ):
+        if lowered.startswith(prefix):
+            return label
+    return None
+
+
+def _provider_id_parts(provider_id: str | None) -> tuple[str | None, str | None, str | None]:
+    if provider_id is None:
+        return None, None, None
+    if provider_id.startswith("aws://"):
+        parts = provider_id.removeprefix("aws://").lstrip("/").split("/")
+        return "AWS", parts[0] if parts else None, parts[1] if len(parts) > 1 else None
+    if provider_id.startswith("gce://"):
+        parts = provider_id.removeprefix("gce://").lstrip("/").split("/")
+        return "GCP", parts[1] if len(parts) > 1 else None, parts[2] if len(parts) > 2 else None
+    if provider_id.startswith("azure://"):
+        parts = provider_id.removeprefix("azure://").lstrip("/").split("/")
+        resource_group = _path_value(parts, "resourceGroups")
+        instance = _path_value(parts, "virtualMachines")
+        return "Azure", resource_group, instance
+    if provider_id.startswith("vsphere://"):
+        return "vSphere", None, provider_id.removeprefix("vsphere://").lstrip("/") or None
+    return None, None, None
+
+
+def _path_value(parts: list[str], marker: str) -> str | None:
+    try:
+        index = parts.index(marker)
+    except ValueError:
+        return None
+    return parts[index + 1] if index + 1 < len(parts) else None
 
 
 def _mapping_items_at(value: Mapping[str, Any], *path: str) -> list[dict[str, Any]]:

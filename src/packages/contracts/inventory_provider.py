@@ -33,6 +33,26 @@ class ProviderScaling(StrictModel):
     current: int | None = None
 
 
+class ProviderReference(StrictModel):
+    api_version: str | None = None
+    kind: str
+    namespace: str | None = None
+    name: str
+
+
+class ProviderReplicas(StrictModel):
+    desired: int | None = None
+    ready: int | None = None
+    available: int | None = None
+    up_to_date: int | None = None
+
+
+class CapiUnhealthyCondition(StrictModel):
+    type: str
+    status: str | None = None
+    timeout: str | None = None
+
+
 class AwsMachineProviderDetail(StrictModel):
     type: Literal["aws-machine"] = "aws-machine"
     instance_type: str | None = None
@@ -159,6 +179,115 @@ class AzureManagedMachinePoolProviderDetail(StrictModel):
     conditions: list[ProviderCondition] = Field(default_factory=list)
 
 
+class CapiClusterProviderDetail(StrictModel):
+    type: Literal["capi-cluster"] = "capi-cluster"
+    phase: str | None = None
+    version: str | None = None
+    cluster_class: str | None = None
+    endpoint: str | None = None
+    provider: str | None = None
+    paused: bool = False
+    control_plane: ProviderReplicas
+    workers: ProviderReplicas
+    control_plane_ref: ProviderReference | None = None
+    infrastructure_ref: ProviderReference | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CapiKubeadmControlPlaneProviderDetail(StrictModel):
+    type: Literal["capi-kubeadm-control-plane"] = "capi-kubeadm-control-plane"
+    cluster_name: str | None = None
+    version: str | None = None
+    initialized: bool | None = None
+    update_strategy: str | None = None
+    replicas: ProviderReplicas
+    infrastructure_ref: ProviderReference | None = None
+    node_drain_timeout: str | None = None
+    node_volume_detach_timeout: str | None = None
+    node_deletion_timeout: str | None = None
+    certificate_sans: list[str] = Field(default_factory=list)
+    remediation_machine: str | None = None
+    remediation_retry_count: int | None = None
+    remediation_timestamp: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CapiMachineDeploymentProviderDetail(StrictModel):
+    type: Literal["capi-machine-deployment"] = "capi-machine-deployment"
+    phase: str | None = None
+    cluster_name: str | None = None
+    version: str | None = None
+    paused: bool = False
+    replicas: ProviderReplicas
+    strategy_type: str | None = None
+    max_surge: str | None = None
+    max_unavailable: str | None = None
+    infrastructure_ref: ProviderReference | None = None
+    bootstrap_ref: ProviderReference | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CapiMachineHealthCheckProviderDetail(StrictModel):
+    type: Literal["capi-machine-health-check"] = "capi-machine-health-check"
+    cluster_name: str | None = None
+    expected_machines: int | None = None
+    current_healthy: int | None = None
+    remediations_allowed: int | None = None
+    node_startup_timeout: str | None = None
+    max_unhealthy: str | None = None
+    unhealthy_range: str | None = None
+    selector: list[ProviderKeyValue] = Field(default_factory=list)
+    unhealthy_conditions: list[CapiUnhealthyCondition] = Field(default_factory=list)
+    remediation_template: ProviderReference | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CapiMachinePoolProviderDetail(StrictModel):
+    type: Literal["capi-machine-pool"] = "capi-machine-pool"
+    phase: str | None = None
+    cluster_name: str | None = None
+    min_ready_seconds: int | None = None
+    replicas: ProviderReplicas
+    infrastructure_ref: ProviderReference | None = None
+    bootstrap_ref: ProviderReference | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CapiMachineProviderDetail(StrictModel):
+    type: Literal["capi-machine"] = "capi-machine"
+    phase: str | None = None
+    role: Literal["control-plane", "worker"]
+    cluster_name: str | None = None
+    version: str | None = None
+    failure_domain: str | None = None
+    provider: str | None = None
+    provider_id: str | None = None
+    provider_region: str | None = None
+    provider_instance_id: str | None = None
+    node_name: str | None = None
+    node_uid: str | None = None
+    bootstrap_ref: ProviderReference | None = None
+    infrastructure_ref: ProviderReference | None = None
+    addresses: list[ProviderAddress] = Field(default_factory=list)
+    os_image: str | None = None
+    architecture: str | None = None
+    kernel_version: str | None = None
+    container_runtime_version: str | None = None
+    kubelet_version: str | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
+class CapiMachineSetProviderDetail(StrictModel):
+    type: Literal["capi-machine-set"] = "capi-machine-set"
+    cluster_name: str | None = None
+    delete_policy: str | None = None
+    min_ready_seconds: int | None = None
+    replicas: ProviderReplicas
+    infrastructure_ref: ProviderReference | None = None
+    bootstrap_ref: ProviderReference | None = None
+    conditions: list[ProviderCondition] = Field(default_factory=list)
+
+
 ResourceProviderDetail = Annotated[
     AwsMachineProviderDetail
     | AwsManagedClusterProviderDetail
@@ -166,6 +295,13 @@ ResourceProviderDetail = Annotated[
     | AwsManagedMachinePoolProviderDetail
     | AzureMachineProviderDetail
     | AzureManagedControlPlaneProviderDetail
-    | AzureManagedMachinePoolProviderDetail,
+    | AzureManagedMachinePoolProviderDetail
+    | CapiClusterProviderDetail
+    | CapiKubeadmControlPlaneProviderDetail
+    | CapiMachineDeploymentProviderDetail
+    | CapiMachineHealthCheckProviderDetail
+    | CapiMachinePoolProviderDetail
+    | CapiMachineProviderDetail
+    | CapiMachineSetProviderDetail,
     Field(discriminator="type"),
 ]

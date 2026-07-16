@@ -46,7 +46,7 @@ export const inventoryResourceDetailSchema = z.strictObject({
   cluster_id: z.string(),
   identity: unknownRecordSchema,
   resource: inventoryResourceSchema,
-  provider_detail: providerResourceDetailSchema.nullable(),
+  provider_detail: providerResourceDetailSchema.nullable().optional(),
   related: z.record(z.string(), z.array(inventoryResourceSchema)),
   events: z.array(inventoryResourceSchema),
 });

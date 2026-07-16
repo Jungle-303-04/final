@@ -170,6 +170,120 @@ def test_provider_detail_projects_only_typed_allow_listed_facts(
     assert "raw" not in payload
 
 
+@pytest.mark.parametrize(
+    ("kind", "raw", "detail_type", "expected"),
+    [
+        (
+            "Cluster",
+            {
+                "spec": {
+                    "paused": True,
+                    "topology": {"class": "prod", "version": "v1.33.1"},
+                    "controlPlaneEndpoint": {"host": "api.example.test", "port": 6443},
+                    "infrastructureRef": {
+                        "apiVersion": "infrastructure.cluster.x-k8s.io/v1beta2",
+                        "kind": "AWSCluster",
+                        "name": "prod",
+                    },
+                },
+                "status": {
+                    "phase": "Provisioned",
+                    "controlPlane": {"desiredReplicas": 3, "readyReplicas": 2},
+                    "workers": {"desiredReplicas": 5, "readyReplicas": 4},
+                },
+            },
+            "capi-cluster",
+            {"endpoint": "api.example.test:6443", "provider": "AWS", "paused": True},
+        ),
+        (
+            "KubeadmControlPlane",
+            {
+                "metadata": {"labels": {"cluster.x-k8s.io/cluster-name": "prod"}},
+                "spec": {"version": "v1.33.1", "replicas": 3},
+                "status": {"initialized": True, "readyReplicas": 3},
+            },
+            "capi-kubeadm-control-plane",
+            {"cluster_name": "prod", "initialized": True},
+        ),
+        (
+            "MachineDeployment",
+            {
+                "spec": {
+                    "clusterName": "prod",
+                    "replicas": 4,
+                    "template": {"spec": {"version": "v1.33.1"}},
+                    "strategy": {"type": "RollingUpdate", "rollingUpdate": {"maxSurge": "25%"}},
+                },
+                "status": {"readyReplicas": 3},
+            },
+            "capi-machine-deployment",
+            {"cluster_name": "prod", "max_surge": "25%"},
+        ),
+        (
+            "MachineHealthCheck",
+            {
+                "spec": {
+                    "clusterName": "prod",
+                    "selector": {"matchLabels": {"pool": "workers"}},
+                    "unhealthyConditions": [{"type": "Ready", "status": "False", "timeout": "5m"}],
+                },
+                "status": {"expectedMachines": 4, "currentHealthy": 3},
+            },
+            "capi-machine-health-check",
+            {"expected_machines": 4, "current_healthy": 3},
+        ),
+        (
+            "MachinePool",
+            {"spec": {"clusterName": "prod", "replicas": 5}, "status": {"readyReplicas": 4}},
+            "capi-machine-pool",
+            {
+                "cluster_name": "prod",
+                "replicas": {"desired": 5, "ready": 4, "available": None, "up_to_date": None},
+            },
+        ),
+        (
+            "Machine",
+            {
+                "metadata": {
+                    "labels": {
+                        "cluster.x-k8s.io/cluster-name": "prod",
+                        "cluster.x-k8s.io/control-plane": "",
+                    }
+                },
+                "spec": {"providerID": "aws:///ap-northeast-2a/i-123", "version": "v1.33.1"},
+                "status": {"nodeRef": {"name": "node-a", "uid": "uid-a"}},
+            },
+            "capi-machine",
+            {"role": "control-plane", "provider_region": "ap-northeast-2a", "node_name": "node-a"},
+        ),
+        (
+            "MachineSet",
+            {
+                "spec": {"clusterName": "prod", "deletePolicy": "Newest", "replicas": 2},
+                "status": {"readyReplicas": 2},
+            },
+            "capi-machine-set",
+            {"cluster_name": "prod", "delete_policy": "Newest"},
+        ),
+    ],
+)
+def test_provider_detail_projects_capi_resources(
+    kind: str,
+    raw: dict[str, Any],
+    detail_type: str,
+    expected: dict[str, Any],
+) -> None:
+    group = "controlplane.cluster.x-k8s.io" if kind == "KubeadmControlPlane" else "cluster.x-k8s.io"
+    detail = provider_detail_projection(resource(kind, raw, api_version=f"{group}/v1beta2"))
+
+    assert detail is not None
+    payload = detail.model_dump()
+    assert payload["type"] == detail_type
+    for key, value in expected.items():
+        assert payload[key] == value
+    assert "raw" not in payload
+
+
 def test_provider_detail_rejects_kind_collision_outside_exact_api_group() -> None:
     assert (
         provider_detail_projection(
