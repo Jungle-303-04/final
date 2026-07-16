@@ -93,6 +93,7 @@ def load_agent_module():
 class StubKubernetesClient:
     def __init__(self) -> None:
         self.patches: list[dict[str, object]] = []
+        self.creates: list[dict[str, object]] = []
         self.namespaced_deletes: list[dict[str, object]] = []
         self.cluster_deletes: list[dict[str, object]] = []
 
@@ -102,6 +103,10 @@ class StubKubernetesClient:
     async def patch_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.patches.append(kwargs)
         return {"patched": True}
+
+    async def create_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.creates.append(kwargs)
+        return {"metadata": {"name": "nightly-manual-abc"}}
 
     async def delete_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.namespaced_deletes.append(kwargs)
@@ -178,6 +183,37 @@ class ServiceKubernetesClient(StubKubernetesClient):
     async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
         self.gets.append(kwargs)
         return self.service
+
+
+class CronJobKubernetesClient(StubKubernetesClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.gets: list[dict[str, object]] = []
+
+    async def get_namespaced_resource(self, **kwargs: object) -> dict[str, object]:
+        self.gets.append(kwargs)
+        return {
+            "apiVersion": "batch/v1",
+            "kind": "CronJob",
+            "metadata": {
+                "name": "nightly",
+                "namespace": str(kwargs["namespace"]),
+                "uid": "cronjob-uid-1",
+            },
+            "spec": {
+                "jobTemplate": {
+                    "metadata": {"labels": {"job": "nightly"}},
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "restartPolicy": "Never",
+                                "containers": [{"name": "job", "image": "example/job:v1"}],
+                            }
+                        }
+                    },
+                }
+            },
+        }
 
 
 def approval_evidence(
@@ -1738,6 +1774,128 @@ def test_kubernetes_command_uses_typed_payload_and_client() -> None:
     assert result["replicas"] == 3
     assert agent.kubernetes.patches[0]["subresource"] == "scale"
     assert agent.kubernetes.patches[0]["body"] == {"spec": {"replicas": 3}}
+
+
+def test_cronjob_trigger_uses_observed_template_and_advertised_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = CronJobKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+                "direct_execution": True,
+                "payload": {"namespace": "team-jobs", "name": "nightly"},
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["applied"] is True
+    assert module.Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY in (
+        module.AgentConfig.AGENT_CAPABILITIES
+    )
+    assert agent.kubernetes.gets == [
+        {
+            "api_group": "batch",
+            "version": "v1",
+            "namespace": "team-jobs",
+            "resource": "cronjobs",
+            "name": "nightly",
+        }
+    ]
+    created = agent.kubernetes.creates[0]
+    assert created["resource"] == "jobs"
+    assert created["namespace"] == "team-jobs"
+    assert created["body"]["metadata"]["generateName"] == "nightly-manual-"
+    assert (
+        created["body"]["metadata"]["annotations"]["opsia.io/source-cronjob-uid"] == "cronjob-uid-1"
+    )
+    assert created["body"]["spec"]["template"]["spec"]["restartPolicy"] == "Never"
+
+
+def test_cronjob_capability_is_hidden_when_direct_commands_are_disabled() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.direct_commands_enabled = False
+
+    assert (
+        module.Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY not in agent.advertised_capabilities()
+    )
+
+
+@pytest.mark.parametrize(
+    ("action", "suspended"),
+    [
+        ("KUBERNETES_CRONJOB_SUSPEND_ACTION", True),
+        ("KUBERNETES_CRONJOB_RESUME_ACTION", False),
+    ],
+)
+def test_cronjob_schedule_control_is_typed_and_namespace_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+    suspended: bool,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "management-1"
+    agent.cluster_role = "management"
+    agent.kubernetes = CronJobKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": getattr(module.Command, action),
+                "direct_execution": True,
+                "payload": {"namespace": "team-jobs", "name": "nightly"},
+            }
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert agent.kubernetes.patches == [
+        {
+            "api_group": "batch",
+            "version": "v1",
+            "namespace": "team-jobs",
+            "resource": "cronjobs",
+            "name": "nightly",
+            "body": {"spec": {"suspend": suspended}},
+        }
+    ]
+
+
+def test_cronjob_control_rejects_namespace_outside_agent_policy() -> None:
+    module = load_agent_module()
+    agent = object.__new__(module.TargetClusterAgent)
+    agent.cluster_id = "cluster-1"
+    agent.cluster_role = "target"
+    agent.kubernetes = CronJobKubernetesClient()
+    register_agent_commands(module, agent)
+
+    result = asyncio.run(
+        agent.execute_command(
+            {
+                "action": module.Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+                "direct_execution": True,
+                "payload": {"namespace": "kube-system", "name": "nightly"},
+            }
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["message"] == "namespace is not allowed by control policy"
+    assert agent.kubernetes.gets == []
+    assert agent.kubernetes.creates == []
 
 
 def test_kubernetes_scale_requires_approval_evidence() -> None:

@@ -47,6 +47,10 @@ class Command:
     RCA_TEST_SCENARIO_INJECT_ACTION: Final[str] = "rca.test.inject"
     RCA_TEST_SCENARIO_CLEANUP_ACTION: Final[str] = "rca.test.cleanup"
     KUBERNETES_DEPLOYMENT_SCALE_ACTION: Final[str] = "k8s.apps.v1.deployments.scale"
+    KUBERNETES_CRONJOB_TRIGGER_ACTION: Final[str] = "k8s.batch.v1.cronjobs.trigger"
+    KUBERNETES_CRONJOB_SUSPEND_ACTION: Final[str] = "k8s.batch.v1.cronjobs.suspend"
+    KUBERNETES_CRONJOB_RESUME_ACTION: Final[str] = "k8s.batch.v1.cronjobs.resume"
+    KUBERNETES_CRONJOB_CONTROL_CAPABILITY: Final[str] = "cronjob_control.v1"
     TELEMETRY_QUERY_RUN_ACTION: Final[str] = "telemetry.query.run"
     CLUSTER_AGENT_UNINSTALL_ACTION: Final[str] = "cluster.agent.uninstall"
 

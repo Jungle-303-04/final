@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -21,8 +22,11 @@ from domains.command.router import (
     commands,
     lease_next_command,
     restart_deployment,
+    resume_cronjob,
     retry_command,
     scale_deployment,
+    suspend_cronjob,
+    trigger_cronjob,
 )
 from domains.identity.dependencies import ClusterAgentIdentity
 from packages.config.constants import Command
@@ -33,6 +37,7 @@ from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
+    ConfirmedResourceActionRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
 )
@@ -819,6 +824,96 @@ def test_restart_deployment_receipt_matches_worker_command_id() -> None:
 
         assert isinstance(events.body, CommandRequestedBody)
         assert response.command_id == build_plan(events.body, response.correlation_id).command_id
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("route", "action"),
+    [
+        (trigger_cronjob, Command.KUBERNETES_CRONJOB_TRIGGER_ACTION),
+        (suspend_cronjob, Command.KUBERNETES_CRONJOB_SUSPEND_ACTION),
+        (resume_cronjob, Command.KUBERNETES_CRONJOB_RESUME_ACTION),
+    ],
+)
+def test_cronjob_control_uses_dynamic_namespace_and_audited_direct_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    route: Any,
+    action: str,
+) -> None:
+    monkeypatch.setenv("CONTROL_ALLOWED_NAMESPACES", "sandbox,team-jobs")
+
+    async def run() -> None:
+        events = SpyEvents()
+        response = await route(
+            "cluster-1",
+            "team-jobs",
+            "nightly",
+            ConfirmedResourceActionRequest(
+                confirmation=True,
+                reason="operator verified the exact CronJob",
+            ),
+            current_session(),
+            SpyAccessDb(allowed=True),
+            events,
+        )
+
+        assert response.accepted is True
+        assert response.audit_event_id == response.event_id
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.action == action
+        assert events.body.namespace == "team-jobs"
+        assert events.body.diff.resource == "cronjob/nightly"
+        assert events.body.payload == {"namespace": "team-jobs", "name": "nightly"}
+        assert events.body.direct_execution is True
+        assert events.body.direct_execution_confirmed is True
+        plan = build_plan(events.body, response.correlation_id)
+        assert (
+            plan.routing_constraint.required_capability
+            == Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY
+        )
+
+    asyncio.run(run())
+
+
+def test_cronjob_control_requires_one_explicit_confirmation() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        with pytest.raises(HTTPException) as excinfo:
+            await trigger_cronjob(
+                "cluster-1",
+                "sandbox",
+                "nightly",
+                ConfirmedResourceActionRequest(),
+                current_session(),
+                SpyAccessDb(allowed=True),
+                events,
+            )
+
+        assert excinfo.value.status_code == 422
+        assert "confirmation" in str(excinfo.value.detail)
+        assert events.body is None
+
+    asyncio.run(run())
+
+
+def test_cronjob_direct_confirmation_allows_management_cluster() -> None:
+    async def run() -> None:
+        events = SpyEvents()
+        response = await trigger_cronjob(
+            "management-1",
+            "sandbox",
+            "nightly",
+            ConfirmedResourceActionRequest(confirmation=True),
+            current_session(),
+            SpyAccessDb(allowed=True, cluster_role="management"),
+            events,
+        )
+
+        assert response.accepted is True
+        assert isinstance(events.body, CommandRequestedBody)
+        assert events.body.direct_execution is True
+        assert events.body.direct_execution_confirmed is True
 
     asyncio.run(run())
 

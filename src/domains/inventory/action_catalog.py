@@ -7,8 +7,9 @@ clients consume the resulting descriptor and never repeat an action list.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import quote
 
 from domains.command.actions import command_action_spec
@@ -26,6 +27,7 @@ from packages.contracts.identity import Permission
 
 NamespacePolicy = Literal["control", "terminal"]
 ExecutionTransport = Literal["command", "terminal"]
+ResourceState = Literal["always", "cronjob-running", "cronjob-suspended"]
 
 
 @dataclass(frozen=True)
@@ -43,8 +45,13 @@ class ResourceActionDefinition:
     namespace_policy: NamespacePolicy
     command_action: str | None = None
     inputs: tuple[ResourceCapabilityInput, ...] = ()
+    resource_state: ResourceState = "always"
 
-    def applies_to(self, subject: ResourceCapabilitySubject) -> bool:
+    def applies_to(
+        self,
+        subject: ResourceCapabilitySubject,
+        resource: Mapping[str, Any],
+    ) -> bool:
         if subject.resource_type.casefold() != self.resource_type:
             return False
         if subject.kind.casefold() != self.kind or subject.namespace is None:
@@ -55,6 +62,8 @@ class ResourceActionDefinition:
             allowed_namespace = pod_exec_namespace_allowed(subject.namespace)
         if not allowed_namespace:
             return False
+        if not _resource_state_matches(self.resource_state, resource):
+            return False
         return self.command_action is None or _command_action_allows(
             self.command_action, subject.namespace
         )
@@ -64,6 +73,7 @@ class ResourceActionDefinition:
             "cluster_id": quote(subject.cluster_id, safe=""),
             "namespace": quote(subject.namespace or "", safe=""),
             "deployment": quote(subject.name, safe=""),
+            "cronjob": quote(subject.name, safe=""),
         }
         return ResourceActionCapability(
             capability_id=self.capability_id,
@@ -136,11 +146,71 @@ RESOURCE_ACTIONS: tuple[ResourceActionDefinition, ...] = (
         agent_capability="pod_exec_stream",
         namespace_policy="terminal",
     ),
+    ResourceActionDefinition(
+        capability_id="cronjob.resume",
+        label="Resume",
+        description="Resume this CronJob and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_CRONJOB_RESUME_PATH,
+        resource_type="workload",
+        kind="cronjob",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        resource_state="cronjob-suspended",
+    ),
+    ResourceActionDefinition(
+        capability_id="cronjob.suspend",
+        label="Suspend",
+        description="Suspend this CronJob and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_CRONJOB_SUSPEND_PATH,
+        resource_type="workload",
+        kind="cronjob",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        resource_state="cronjob-running",
+    ),
+    ResourceActionDefinition(
+        capability_id="cronjob.trigger",
+        label="Trigger",
+        description="Create one Job from this CronJob and stream the operation result.",
+        execution="command",
+        method="POST",
+        path_template=gateway_routes.CLUSTER_CRONJOB_TRIGGER_PATH,
+        resource_type="workload",
+        kind="cronjob",
+        permission=Permission.DEPLOY_RUN.value,
+        agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+        namespace_policy="control",
+        command_action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+    ),
 )
 
 
 def applicable_resource_actions(
     subject: ResourceCapabilitySubject,
+    resource: Mapping[str, Any],
 ) -> tuple[ResourceActionDefinition, ...]:
     """Return only catalog definitions whose immutable resource policy applies."""
-    return tuple(definition for definition in RESOURCE_ACTIONS if definition.applies_to(subject))
+    return tuple(
+        definition for definition in RESOURCE_ACTIONS if definition.applies_to(subject, resource)
+    )
+
+
+def _resource_state_matches(state: ResourceState, resource: Mapping[str, Any]) -> bool:
+    if state == "always":
+        return True
+    raw = resource.get("raw")
+    raw_object = raw if isinstance(raw, Mapping) else {}
+    spec = raw_object.get("spec")
+    spec_object = spec if isinstance(spec, Mapping) else {}
+    suspended = spec_object.get("suspend")
+    if not isinstance(suspended, bool):
+        return False
+    return suspended if state == "cronjob-suspended" else not suspended

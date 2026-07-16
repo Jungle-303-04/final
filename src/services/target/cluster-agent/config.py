@@ -6,6 +6,7 @@ from packages.config.realtime import (
 )
 from packages.config.settings import env
 from packages.contracts.gateway import requests as gateway_requests
+from packages.contracts.service_access import SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
 
 TARGET_AGENT_SERVICE_NAME = "cluster-agent"
 
@@ -128,8 +129,11 @@ DEFAULT_AGENT_ID = "target-agent"
 AGENT_CAPABILITIES = [
     "collector",
     "command_receiver",
+    "command_control.cancel.v1",
     "pod_exec_stream",
     Command.CATALOG_HELM_INSTALL_CAPABILITY,
+    Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
 ]
 
 COMMAND_COMPLETED_STATUS = "completed"

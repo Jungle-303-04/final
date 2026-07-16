@@ -330,6 +330,15 @@ class DeploymentRestartRequest(StrictModel):
     direct_execution_confirmed: bool = False
 
 
+class ConfirmedResourceActionRequest(StrictModel):
+    """One server-discovered resource action acknowledged by the operator."""
+
+    reason: str | None = Field(default=None, max_length=500)
+    confirmation: Literal[True] | None = None
+    direct_execution: bool = False
+    direct_execution_confirmed: bool = False
+
+
 class AgentDebugQueryRequest(StrictModel):
     cluster_id: str = Target.DEFAULT_CLUSTER_ID
     query: dict[str, Any]

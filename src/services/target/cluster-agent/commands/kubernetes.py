@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,49 @@ class KubernetesScalePayload(KubernetesGetPayload):
         return {"spec": {"replicas": self.replicas}}
 
 
+class KubernetesCronJobPayload(KubernetesGetPayload):
+    pass
+
+
+def cronjob_job_body(cronjob: JsonObject, *, namespace: str, name: str) -> JsonObject:
+    """Build one exact Job from the observed CronJob jobTemplate."""
+
+    metadata = cronjob.get("metadata")
+    metadata_object = metadata if isinstance(metadata, dict) else {}
+    if str(metadata_object.get("name") or "") != name:
+        raise ValueError("CronJob identity changed before trigger")
+    if str(metadata_object.get("namespace") or namespace) != namespace:
+        raise ValueError("CronJob namespace changed before trigger")
+    spec = cronjob.get("spec")
+    spec_object = spec if isinstance(spec, dict) else {}
+    template = spec_object.get("jobTemplate")
+    template_object = template if isinstance(template, dict) else {}
+    job_spec = template_object.get("spec")
+    if not isinstance(job_spec, dict) or not job_spec:
+        raise ValueError("CronJob jobTemplate.spec is unavailable")
+    template_metadata = template_object.get("metadata")
+    template_metadata_object = template_metadata if isinstance(template_metadata, dict) else {}
+    job_metadata: JsonObject = {
+        "generateName": f"{name}-manual-",
+        "namespace": namespace,
+    }
+    for field in ("labels", "annotations"):
+        value = template_metadata_object.get(field)
+        if isinstance(value, dict):
+            job_metadata[field] = deepcopy(value)
+    uid = str(metadata_object.get("uid") or "")
+    if uid:
+        annotations = job_metadata.setdefault("annotations", {})
+        if isinstance(annotations, dict):
+            annotations["opsia.io/source-cronjob-uid"] = uid
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": job_metadata,
+        "spec": deepcopy(job_spec),
+    }
+
+
 class KubernetesCommandPolicy:
     def __init__(self, cluster_role: str) -> None:
         self.cluster_role = cluster_role
@@ -99,10 +143,16 @@ class KubernetesCommandPolicy:
     ) -> None:
         if self.cluster_role != TARGET_CLUSTER_ROLE and not direct_execution:
             raise PermissionError("user workload control is only enabled on target clusters")
-        if spec.verb != "patch":
-            raise PermissionError(f"{spec.verb} user workload commands are not enabled")
-        if spec.resource != "deployments":
-            raise PermissionError(f"user workload control is not enabled: {spec.resource}")
+        allowed = {
+            ("apps", "v1", "deployments", "patch"),
+            ("batch", "v1", "cronjobs", "create"),
+            ("batch", "v1", "cronjobs", "patch"),
+        }
+        if (spec.api_group, spec.version, spec.resource, spec.verb) not in allowed:
+            raise PermissionError(
+                f"user workload control is not enabled: "
+                f"{spec.api_group}/{spec.version}/{spec.resource}:{spec.verb}"
+            )
         namespace = str(self.field(payload, "namespace"))
         self.field(payload, "name")
         if not control_namespace_allowed(namespace):
@@ -202,6 +252,27 @@ class KubernetesApiClient:
         )
         return self.response_body(response)
 
+    async def create_namespaced_resource(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+        body: JsonObject,
+    ) -> JsonObject:
+        response = await self.request(
+            "POST",
+            self.namespaced_collection_path(
+                api_group=api_group,
+                version=version,
+                namespace=namespace,
+                resource=resource,
+            ),
+            body=body,
+        )
+        return self.response_body(response)
+
     async def delete_namespaced_resource(
         self,
         *,
@@ -287,6 +358,21 @@ class KubernetesApiClient:
             prefix = f"/apis/{api_group}/{version}"
         path = f"{prefix}/namespaces/{namespace}/{resource}/{name}"
         return f"{path}/{subresource}" if subresource else path
+
+    def namespaced_collection_path(
+        self,
+        *,
+        api_group: str,
+        version: str,
+        namespace: str,
+        resource: str,
+    ) -> str:
+        prefix = (
+            f"/api/{version}"
+            if api_group in {"", CORE_API_GROUP}
+            else f"/apis/{api_group}/{version}"
+        )
+        return f"{prefix}/namespaces/{namespace}/{resource}"
 
     def cluster_resource_path(
         self,

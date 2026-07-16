@@ -26,11 +26,21 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
         Command.DEFAULT_ACTION,
         Command.APPLY_MANIFEST_ACTION,
         Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+        Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+    }
+    cronjob_actions = {
+        Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        Command.KUBERNETES_CRONJOB_RESUME_ACTION,
     }
     for spec in actions:
         if spec.action == Command.CLUSTER_AGENT_UNINSTALL_ACTION:
             expected = (TARGET_NAMESPACE,)
         elif spec.action == SERVICE_HTTP_REQUEST_ACTION:
+            expected = ()
+        elif spec.action in cronjob_actions:
             expected = ()
         elif spec.action == Command.DEFAULT_ACTION:
             expected = (Sandbox.NAMESPACE, "color-turf")
@@ -42,6 +52,12 @@ def test_builtin_actions_registered_with_policy_metadata() -> None:
     assert service.read_only is True
     assert service.enforce_control_namespace is False
     assert service.required_agent_capability == SERVICE_HTTP_REQUEST_AGENT_CAPABILITY
+    for action in cronjob_actions:
+        cronjob = command_action_spec(action)
+        assert cronjob is not None
+        assert cronjob.allowed_namespaces == ()
+        assert cronjob.enforce_control_namespace is True
+        assert cronjob.required_agent_capability == Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY
 
 
 def test_spec_lookup_and_namespace_policy() -> None:

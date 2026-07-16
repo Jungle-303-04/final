@@ -56,6 +56,42 @@ class ScaleDeploymentCommand:
 
 
 @command.action(
+    Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+    requires_approval=False,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+)
+class TriggerCronJobCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+    requires_approval=False,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+)
+class SuspendCronJobCommand:
+    pass
+
+
+@command.action(
+    Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+    requires_approval=False,
+    supports_manual_retry=True,
+    max_attempts=DEFAULT_COMMAND_RETRY_MAX_ATTEMPTS,
+    retry_delay_seconds=DEFAULT_COMMAND_RETRY_DELAY_SECONDS,
+    required_agent_capability=Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY,
+)
+class ResumeCronJobCommand:
+    pass
+
+
+@command.action(
     Command.RCA_TEST_SCENARIO_INJECT_ACTION,
     allowed_namespaces=(Sandbox.NAMESPACE,),
     requires_approval=False,

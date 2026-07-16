@@ -66,6 +66,7 @@ from packages.contracts.gateway.requests import (
     CommandRequest,
     CommandResultRequest,
     CommandStartRequest,
+    ConfirmedResourceActionRequest,
     DeploymentRestartRequest,
     DeploymentScaleRequest,
 )
@@ -353,19 +354,20 @@ def require_not_management_cluster(
         raise HTTPException(status_code=400, detail=management_readonly_detail())
 
 
-def deployment_control_diff(
+def resource_control_diff(
     *,
     workspace_id: str,
     cluster_id: str,
     namespace: str,
-    deployment: str,
+    resource_kind: str,
+    resource_name: str,
     action: str,
     basis: JsonObject,
 ) -> Diff:
     return Diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
-        resource=f"deployment/{deployment}",
+        resource=f"{resource_kind}/{resource_name}",
         namespace=namespace,
         desired_image="",
         actual_image="resource-not-inspected",
@@ -375,11 +377,12 @@ def deployment_control_diff(
     )
 
 
-async def accept_deployment_control(
+async def accept_resource_control(
     *,
     cluster_id: str,
     namespace: str,
-    deployment: str,
+    resource_kind: str,
+    resource_name: str,
     action: str,
     reason: str,
     payload: JsonObject,
@@ -397,11 +400,12 @@ async def accept_deployment_control(
     workspace_id = getattr(current, "workspace_id", DEFAULT_WORKSPACE_ID)
     require_cluster_deploy_access(db, current, workspace_id, cluster_id)
     require_not_management_cluster(db, workspace_id, cluster_id, direct_execution=direct_execution)
-    diff = deployment_control_diff(
+    diff = resource_control_diff(
         workspace_id=workspace_id,
         cluster_id=cluster_id,
         namespace=namespace,
-        deployment=deployment,
+        resource_kind=resource_kind,
+        resource_name=resource_name,
         action=action,
         basis=payload,
     )
@@ -549,10 +553,11 @@ async def scale_deployment(
         "name": deployment,
         "replicas": payload.replicas,
     }
-    return await accept_deployment_control(
+    return await accept_resource_control(
         cluster_id=cluster_id,
         namespace=namespace,
-        deployment=deployment,
+        resource_kind="deployment",
+        resource_name=deployment,
         action=Command.KUBERNETES_DEPLOYMENT_SCALE_ACTION,
         reason=payload.reason or f"scale deployment/{deployment}",
         payload=command_payload,
@@ -585,10 +590,11 @@ async def restart_deployment(
         "namespace": namespace,
         "name": deployment,
     }
-    return await accept_deployment_control(
+    return await accept_resource_control(
         cluster_id=cluster_id,
         namespace=namespace,
-        deployment=deployment,
+        resource_kind="deployment",
+        resource_name=deployment,
         action=Command.DEFAULT_ACTION,
         reason=payload.reason or f"restart deployment/{deployment}",
         payload=command_payload,
@@ -599,6 +605,129 @@ async def restart_deployment(
         current=current,
         db=db,
         events=events,
+    )
+
+
+async def accept_cronjob_control(
+    *,
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    action: str,
+    reason: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any,
+    db: Any,
+    events: Any,
+    operation_events: Any,
+) -> CommandReceipt:
+    if payload.confirmation is not True:
+        raise HTTPException(
+            status_code=UNPROCESSABLE_CODE,
+            detail=DIRECT_EXECUTION_CONFIRMATION_REQUIRED_MESSAGE,
+        )
+    return await accept_resource_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        resource_kind="cronjob",
+        resource_name=cronjob,
+        action=action,
+        reason=payload.reason or reason,
+        payload={"namespace": namespace, "name": cronjob},
+        approval_ref=None,
+        policy_decision_ref=None,
+        execution_request=payload,
+        operation_events=operation_events,
+        current=current,
+        db=db,
+        events=events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CRONJOB_TRIGGER_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def trigger_cronjob(
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_cronjob_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        action=Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        reason=f"trigger cronjob/{cronjob}",
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CRONJOB_SUSPEND_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def suspend_cronjob(
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_cronjob_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        action=Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        reason=f"suspend cronjob/{cronjob}",
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
+    )
+
+
+@router.post(
+    gateway_routes.CLUSTER_CRONJOB_RESUME_PATH,
+    response_model=CommandReceipt,
+    response_model_exclude_none=True,
+)
+async def resume_cronjob(
+    cluster_id: str,
+    namespace: str,
+    cronjob: str,
+    payload: ConfirmedResourceActionRequest,
+    current: Any = Depends(require_session),
+    db: Any = Depends(get_db),
+    events: Any = Depends(get_events),
+    operation_events: Any = Depends(get_operation_events),
+) -> CommandReceipt:
+    return await accept_cronjob_control(
+        cluster_id=cluster_id,
+        namespace=namespace,
+        cronjob=cronjob,
+        action=Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        reason=f"resume cronjob/{cronjob}",
+        payload=payload,
+        current=current,
+        db=db,
+        events=events,
+        operation_events=operation_events,
     )
 
 

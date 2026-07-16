@@ -36,6 +36,16 @@ def pod_resource() -> dict[str, object]:
     }
 
 
+def cronjob_resource() -> dict[str, object]:
+    return {
+        **deployment_resource(),
+        "inventory_key": "resource-cronjob-nightly",
+        "kind": "CronJob",
+        "name": "nightly",
+        "raw": {"spec": {"suspend": False}},
+    }
+
+
 class ResourceCapabilitiesDb:
     def __init__(
         self,
@@ -44,6 +54,7 @@ class ResourceCapabilitiesDb:
         deploy_permitted: bool = True,
         pod_exec_permitted: bool = True,
         command_supported: bool = True,
+        cronjob_supported: bool = True,
         pod_exec_supported: bool = True,
         management: bool = False,
         resource: dict[str, object] | None = None,
@@ -52,6 +63,7 @@ class ResourceCapabilitiesDb:
         self.deploy_permitted = deploy_permitted
         self.pod_exec_permitted = pod_exec_permitted
         self.command_supported = command_supported
+        self.cronjob_supported = cronjob_supported
         self.pod_exec_supported = pod_exec_supported
         self.management = management
         self.resource = deployment_resource() if resource is None else resource
@@ -97,6 +109,8 @@ class ResourceCapabilitiesDb:
         capabilities = ["collector"]
         if self.command_supported:
             capabilities.append("command_receiver")
+        if self.cronjob_supported:
+            capabilities.append("cronjob_control.v1")
         if self.pod_exec_supported:
             capabilities.append("pod_exec_stream")
         return [{"status": "connected", "capabilities": capabilities}]
@@ -212,6 +226,62 @@ def test_capabilities_are_server_owned_execution_descriptors() -> None:
             "maximum": 100,
             "default": 1,
         }
+    ]
+
+
+def test_capabilities_expose_exact_cronjob_actions_only_with_permission_and_agent_support() -> None:
+    response = client(ResourceCapabilitiesDb(resource=cronjob_resource())).get(
+        "/capabilities",
+        params={"resource": "resource-cronjob-nightly"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["subject"] == {
+        "resource_id": "resource-cronjob-nightly",
+        "snapshot_id": "snapshot-42",
+        "cluster_id": "cluster-a",
+        "resource_type": "workload",
+        "kind": "CronJob",
+        "namespace": "sandbox",
+        "name": "nightly",
+    }
+    assert [item["capability_id"] for item in body["capabilities"]] == [
+        "cronjob.suspend",
+        "cronjob.trigger",
+    ]
+    assert [item["path"] for item in body["capabilities"]] == [
+        "/clusters/cluster-a/namespaces/sandbox/cronjobs/nightly/suspend",
+        "/clusters/cluster-a/namespaces/sandbox/cronjobs/nightly/trigger",
+    ]
+    assert all(item["confirmation_required"] is True for item in body["capabilities"])
+    assert all(item["realtime"] is True for item in body["capabilities"])
+
+    unsupported = client(
+        ResourceCapabilitiesDb(resource=cronjob_resource(), cronjob_supported=False)
+    ).get("/capabilities", params={"resource": "resource-cronjob-nightly"})
+    forbidden = client(
+        ResourceCapabilitiesDb(resource=cronjob_resource(), deploy_permitted=False)
+    ).get("/capabilities", params={"resource": "resource-cronjob-nightly"})
+
+    assert unsupported.status_code == 200
+    assert unsupported.json()["capabilities"] == []
+    assert forbidden.status_code == 200
+    assert forbidden.json()["capabilities"] == []
+
+
+def test_capabilities_switch_cronjob_schedule_action_from_observed_state() -> None:
+    suspended_resource = cronjob_resource()
+    suspended_resource["raw"] = {"spec": {"suspend": True}}
+    response = client(ResourceCapabilitiesDb(resource=suspended_resource)).get(
+        "/capabilities",
+        params={"resource": "resource-cronjob-nightly"},
+    )
+
+    assert response.status_code == 200
+    assert [item["capability_id"] for item in response.json()["capabilities"]] == [
+        "cronjob.resume",
+        "cronjob.trigger",
     ]
 
 

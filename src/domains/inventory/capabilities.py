@@ -27,7 +27,7 @@ def resource_capabilities_response(
 ) -> ResourceCapabilitiesResponse:
     """실제 route가 수용할 조건을 모두 만족하는 action만 반환한다."""
     subject = _subject(resource)
-    applicable = applicable_resource_actions(subject)
+    applicable = applicable_resource_actions(subject, resource)
     required_permissions = {definition.permission for definition in applicable}
     permissions = {
         permission: _has_cluster_permission(

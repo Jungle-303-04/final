@@ -223,6 +223,15 @@ METRICS_VALIDATE_PATH = "/metrics/validate"
 CLUSTER_DEPLOYMENT_SCALE_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/scale"
 )
+CLUSTER_CRONJOB_TRIGGER_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/trigger"
+)
+CLUSTER_CRONJOB_SUSPEND_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/suspend"
+)
+CLUSTER_CRONJOB_RESUME_PATH = (
+    "/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{cronjob}/resume"
+)
 CLUSTER_DEPLOYMENT_RESTART_PATH = (
     "/clusters/{cluster_id}/namespaces/{namespace}/deployments/{deployment}/restart"
 )

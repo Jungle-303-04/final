@@ -13,9 +13,11 @@ from commands import (
     CommandContext,
     CommandResultOutbox,
     KubernetesApiClient,
+    KubernetesCronJobPayload,
     KubernetesPatchPayload,
     KubernetesScalePayload,
     command,
+    cronjob_job_body,
 )
 from commands.helm import run_catalog_helm_install
 from commands.service_access import (
@@ -157,7 +159,6 @@ from packages.contracts.identity import DEFAULT_WORKSPACE_ID
 from packages.contracts.interfaces import CommandRecord, ManagementPlaneClient
 from packages.contracts.service_access import (
     SERVICE_HTTP_REQUEST_ACTION,
-    SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
     ServiceHttpRequestCommandPayload,
 )
 
@@ -245,13 +246,7 @@ class AgentConfig:
 
     HOSTNAME_ENV = "HOSTNAME"
     DEFAULT_AGENT_ID = "target-agent"
-    AGENT_CAPABILITIES = [
-        "collector",
-        "command_receiver",
-        "command_control.cancel.v1",
-        Command.CATALOG_HELM_INSTALL_CAPABILITY,
-        SERVICE_HTTP_REQUEST_AGENT_CAPABILITY,
-    ]
+    AGENT_CAPABILITIES = list(agent_config.AGENT_CAPABILITIES)
     EVIDENCE_SOURCE_ID = "cluster-snapshot"
     NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS = (
         agent_config.NODE_COLLECTOR_RECONCILE_INTERVAL_SECONDS
@@ -792,7 +787,7 @@ class TargetClusterAgent:
                 await client.register_agent(
                     self.cluster_id,
                     self.agent_id,
-                    AgentConfig.AGENT_CAPABILITIES,
+                    self.advertised_capabilities(),
                 )
                 return
             except Exception as exc:
@@ -807,6 +802,14 @@ class TargetClusterAgent:
                     },
                 )
                 await asyncio.sleep(AgentConfig.REGISTER_RETRY_DELAY_SECONDS)
+
+    def advertised_capabilities(self) -> list[str]:
+        """Advertise executable features only for the current runtime policy."""
+
+        capabilities = list(AgentConfig.AGENT_CAPABILITIES)
+        if not getattr(self, "direct_commands_enabled", True):
+            capabilities.remove(Command.KUBERNETES_CRONJOB_CONTROL_CAPABILITY)
+        return capabilities
 
     async def poll_commands(self, client: ManagementPlaneClient) -> None:
         while True:
@@ -1164,6 +1167,9 @@ class TargetClusterAgent:
             KUBERNETES_CONFIGMAP_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_PATCH_ACTION,
             KUBERNETES_DEPLOYMENT_SCALE_ACTION,
+            Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+            Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+            Command.KUBERNETES_CRONJOB_RESUME_ACTION,
             Command.RCA_TEST_SCENARIO_INJECT_ACTION,
             Command.RCA_TEST_SCENARIO_CLEANUP_ACTION,
             Command.CLUSTER_AGENT_UNINSTALL_ACTION,
@@ -1380,6 +1386,86 @@ class TargetClusterAgent:
             replicas=ctx.payload.replicas,
             result=result,
         )
+
+    @command.k8s(
+        Command.KUBERNETES_CRONJOB_TRIGGER_ACTION,
+        api_group="batch",
+        version="v1",
+        resource="cronjobs",
+        verb="create",
+        scope="user-workload",
+        payload_model=KubernetesCronJobPayload,
+    )
+    async def trigger_cronjob_command(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+    ) -> JsonObject:
+        cronjob = await ctx.kubernetes.get_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="cronjobs",
+            name=ctx.payload.name,
+        )
+        result = await ctx.kubernetes.create_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="jobs",
+            body=cronjob_job_body(
+                cronjob,
+                namespace=ctx.payload.namespace,
+                name=ctx.payload.name,
+            ),
+        )
+        return ctx.ok("CronJob triggered", applied=True, result=result)
+
+    @command.k8s(
+        Command.KUBERNETES_CRONJOB_SUSPEND_ACTION,
+        api_group="batch",
+        version="v1",
+        resource="cronjobs",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesCronJobPayload,
+    )
+    async def suspend_cronjob_command(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+    ) -> JsonObject:
+        return await self.set_cronjob_suspended(ctx, suspended=True)
+
+    @command.k8s(
+        Command.KUBERNETES_CRONJOB_RESUME_ACTION,
+        api_group="batch",
+        version="v1",
+        resource="cronjobs",
+        verb="patch",
+        scope="user-workload",
+        payload_model=KubernetesCronJobPayload,
+    )
+    async def resume_cronjob_command(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+    ) -> JsonObject:
+        return await self.set_cronjob_suspended(ctx, suspended=False)
+
+    async def set_cronjob_suspended(
+        self,
+        ctx: CommandContext[KubernetesCronJobPayload],
+        *,
+        suspended: bool,
+    ) -> JsonObject:
+        result = await ctx.kubernetes.patch_namespaced_resource(
+            api_group="batch",
+            version="v1",
+            namespace=ctx.payload.namespace,
+            resource="cronjobs",
+            name=ctx.payload.name,
+            body={"spec": {"suspend": suspended}},
+        )
+        state = "suspended" if suspended else "resumed"
+        return ctx.ok(f"CronJob {state}", applied=True, result=result)
 
     @command.k8s(
         KUBERNETES_CONFIGMAP_PATCH_ACTION,
