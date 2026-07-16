@@ -1195,15 +1195,108 @@ class InventoryResourceClusterIdentity(StrictModel):
     provider: str | None = None
 
 
+class ResourceTableMetricEvidence(StrictModel):
+    resource_uid: str | None = Field(default=None, min_length=1)
+    source_snapshot_id: str = Field(min_length=1)
+    observed_at: str | None = Field(default=None, min_length=1)
+    measurement_window: str | None = Field(default=None, min_length=1, max_length=64)
+    cpu_mcores: float | None = Field(default=None, ge=0)
+    memory_mib: float | None = Field(default=None, ge=0)
+    completeness: FilterCountCompleteness
+    reason_codes: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def validate_reason_codes(cls, values: list[str]) -> list[str]:
+        if values != sorted(set(values)) or any(not value for value in values):
+            raise ValueError("resource table metric reasons must be unique and ordered")
+        return values
+
+    def validate_evidence(self, required: tuple[float | int | str | None, ...]) -> Self:
+        if self.completeness == "exact" and (
+            any(value is None for value in required) or self.reason_codes
+        ):
+            raise ValueError("exact resource table metrics require complete evidence")
+        if self.completeness == "partial" and not self.reason_codes:
+            raise ValueError("partial resource table metrics require reason codes")
+        if self.completeness == "unavailable" and (
+            self.cpu_mcores is not None or self.memory_mib is not None or not self.reason_codes
+        ):
+            raise ValueError("unavailable resource table metrics cannot expose usage")
+        return self
+
+
+class ResourceTablePodMetrics(ResourceTableMetricEvidence):
+    kind: Literal["pod"] = "pod"
+    cpu_request_mcores: float | None = Field(default=None, gt=0)
+    cpu_limit_mcores: float | None = Field(default=None, gt=0)
+    memory_request_mib: float | None = Field(default=None, gt=0)
+    memory_limit_mib: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_pod_evidence(self) -> Self:
+        return self.validate_evidence(
+            (
+                self.resource_uid,
+                self.observed_at,
+                self.measurement_window,
+                self.cpu_mcores,
+                self.memory_mib,
+                self.cpu_request_mcores,
+                self.cpu_limit_mcores,
+                self.memory_request_mib,
+                self.memory_limit_mib,
+            )
+        )
+
+
+class ResourceTableNodeMetrics(ResourceTableMetricEvidence):
+    kind: Literal["node"] = "node"
+    cpu_allocatable_mcores: float | None = Field(default=None, ge=0)
+    memory_allocatable_mib: float | None = Field(default=None, ge=0)
+    pod_count: int | None = Field(default=None, ge=0)
+    pod_allocatable: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_node_evidence(self) -> Self:
+        return self.validate_evidence(
+            (
+                self.resource_uid,
+                self.observed_at,
+                self.measurement_window,
+                self.cpu_mcores,
+                self.memory_mib,
+                self.cpu_allocatable_mcores,
+                self.memory_allocatable_mib,
+                self.pod_count,
+                self.pod_allocatable,
+            )
+        )
+
+
 class FilteredInventoryResourceItem(StrictModel):
     resource: InventoryResourceResponse
     cluster: InventoryResourceClusterIdentity
     application_ids: list[str] = Field(default_factory=list)
     application_binding_completeness: FilterCountCompleteness
+    metrics: ResourceTablePodMetrics | ResourceTableNodeMetrics | None = None
+
+    @model_validator(mode="after")
+    def validate_metric_identity(self) -> Self:
+        metrics = self.metrics
+        if metrics is None:
+            return self
+        if metrics.kind != self.resource.resource_type:
+            raise ValueError("resource table metrics must match resource type")
+        if metrics.source_snapshot_id != self.resource.snapshot_id:
+            raise ValueError("resource table metrics must match source snapshot")
+        if metrics.resource_uid != self.resource.uid:
+            raise ValueError("resource table metrics must match resource uid")
+        return self
 
 
 class FilteredInventoryResourceListResponse(StrictModel):
-    items: list[FilteredInventoryResourceItem] = Field(default_factory=list)
+    items: list[FilteredInventoryResourceItem] = Field(default_factory=list, max_length=200)
     next_cursor: str | None = None
     has_more: bool
     counts: FilterResultCounts

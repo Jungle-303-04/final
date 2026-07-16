@@ -133,6 +133,12 @@ export function resourceTableSortValue(
   if (key === "health") return item.healthStatus;
   if (key === "observed") return item.observedAt ?? "";
   if (key === "trend") return "";
+  if (key === "cpu" && item.tableMetrics?.kind === item.facts.type) {
+    return item.tableMetrics.cpuMillicores ?? -1;
+  }
+  if (key === "memory" && item.tableMetrics?.kind === item.facts.type) {
+    return item.tableMetrics.memoryMebibytes ?? -1;
+  }
   return factSortValue(item.facts, key);
 }
 

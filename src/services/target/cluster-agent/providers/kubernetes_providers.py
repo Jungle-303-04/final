@@ -1275,6 +1275,7 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
     owner_kind, owner_name = owner_ref(item)
     measured = dict(metrics or {})
     cpu_request_mcores, mem_request_mib = pod_request_totals(pod_spec)
+    cpu_limit_mcores, mem_limit_mib = pod_limit_totals(pod_spec)
     containers, container_ports_complete = pod_container_summaries(pod_spec, pod_status)
     return {
         "uid": meta.get("uid"),
@@ -1304,7 +1305,9 @@ def pod_summary(item: JsonObject, metrics: JsonObject | None = None) -> JsonObje
         "container_metrics": measured.get("container_metrics", []),
         "container_metrics_complete": measured.get("container_metrics_complete", False),
         "cpu_request_mcores": cpu_request_mcores,
+        "cpu_limit_mcores": cpu_limit_mcores,
         "mem_request_mib": mem_request_mib,
+        "mem_limit_mib": mem_limit_mib,
         "restart_total": sum(int(container.get("restart_count", 0)) for container in containers),
         "waiting_reasons": [
             container.get("state_reason")
@@ -1423,6 +1426,19 @@ def container_port_observations(container: JsonObject) -> tuple[list[JsonObject]
 
 def pod_request_totals(pod_spec: JsonObject) -> tuple[float | None, float | None]:
     """Sum regular-container requests only when an entire resource axis is observed."""
+    return pod_resource_totals(pod_spec, "requests")
+
+
+def pod_limit_totals(pod_spec: JsonObject) -> tuple[float | None, float | None]:
+    """Sum regular-container limits only when an entire resource axis is observed."""
+    return pod_resource_totals(pod_spec, "limits")
+
+
+def pod_resource_totals(
+    pod_spec: JsonObject,
+    bucket: str,
+) -> tuple[float | None, float | None]:
+    """Sum one declared resource bucket without turning omissions into zero."""
     containers = pod_spec.get("containers")
     if not isinstance(containers, list) or not containers:
         return None, None
@@ -1437,19 +1453,19 @@ def pod_request_totals(pod_spec: JsonObject) -> tuple[float | None, float | None
             memory_complete = False
             continue
         resources = container.get("resources")
-        requests = resources.get("requests") if isinstance(resources, dict) else None
-        if not isinstance(requests, dict):
+        values = resources.get(bucket) if isinstance(resources, dict) else None
+        if not isinstance(values, dict):
             cpu_complete = False
             memory_complete = False
             continue
 
-        cpu = parse_cpu_mcores(requests.get("cpu"))
+        cpu = parse_cpu_mcores(values.get("cpu"))
         if _positive_finite(cpu):
             cpu_total += cpu
         else:
             cpu_complete = False
 
-        memory = parse_memory_mib(requests.get("memory"))
+        memory = parse_memory_mib(values.get("memory"))
         if _positive_finite(memory):
             memory_total += memory
         else:

@@ -14,6 +14,20 @@ describe("ResourceTableSmartCell server metrics", () => {
   it("shows Pod usage with request and limit evidence from the same snapshot", () => {
     const item = {
       ...POD_LIST.items[0],
+      facts: {
+        type: "pod",
+        phase: "Running",
+        nodeName: "worker-a",
+        owner: null,
+        readiness: { ready: 1, total: 1 },
+        restartCount: 0,
+        cpuMillicores: 250,
+        memoryMebibytes: 192,
+        podIp: null,
+        hostIp: null,
+        waitingReasons: [],
+        terminatedReasons: [],
+      },
       tableMetrics: {
         kind: "pod",
         resourceUid: POD_LIST.items[0]?.uid,

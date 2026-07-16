@@ -28,6 +28,7 @@ from domains.inventory_filter.query import (
     parse_facet_values,
     parse_resource_filters,
 )
+from domains.inventory_filter.resource_table_metrics import attach_resource_table_metrics
 from packages.config.settings import env
 from packages.contracts.gateway import routes as gateway_routes
 from packages.contracts.gateway.responses import (
@@ -682,7 +683,7 @@ async def list_filtered_resources(
         require_labels=bool(filters.labels),
     )
     return FilteredInventoryResourceListResponse(
-        items=result["items"],
+        items=attach_resource_table_metrics(result["items"]),
         next_cursor=next_cursor,
         has_more=bool(result["has_more"]),
         counts=counts,

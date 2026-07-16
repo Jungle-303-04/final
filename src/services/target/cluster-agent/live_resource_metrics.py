@@ -504,9 +504,11 @@ class PodResourceMetricsCollector:
         return {
             "cpu_mcores": cpu_mcores,
             "cpu_request_mcores": cpu_request,
+            "cpu_limit_mcores": cpu_limit,
             "mem_bytes": mem_bytes,
             "mem_mib": mem_mib,
             "mem_request_mib": mem_request,
+            "mem_limit_mib": mem_limit,
             **ratios,
             "observed_at": raw.get("observed_at"),
             "metrics_metadata": {

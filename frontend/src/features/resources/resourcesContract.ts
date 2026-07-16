@@ -11,6 +11,35 @@ export type ResourceHealthTone =
 
 export type ResourceIdentityStability = "uid" | "fallback";
 
+export interface ResourceTableMetricEvidence {
+  resourceUid: string | null;
+  sourceSnapshotId: string;
+  observedAt: string | null;
+  measurementWindow: string | null;
+  cpuMillicores: number | null;
+  memoryMebibytes: number | null;
+  completeness: "exact" | "partial" | "unavailable";
+  reasonCodes: string[];
+}
+
+export interface ResourceTablePodMetrics extends ResourceTableMetricEvidence {
+  kind: "pod";
+  cpuRequestMillicores: number | null;
+  cpuLimitMillicores: number | null;
+  memoryRequestMebibytes: number | null;
+  memoryLimitMebibytes: number | null;
+}
+
+export interface ResourceTableNodeMetrics extends ResourceTableMetricEvidence {
+  kind: "node";
+  cpuAllocatableMillicores: number | null;
+  memoryAllocatableMebibytes: number | null;
+  podCount: number | null;
+  podAllocatable: number | null;
+}
+
+export type ResourceTableMetrics = ResourceTablePodMetrics | ResourceTableNodeMetrics;
+
 export type ResourceDataQualityWarningCode =
   | "optional-fact-unavailable"
   | "invalid-resource-excluded"
@@ -173,6 +202,7 @@ export interface ResourceSummary {
   health: ResourceHealthTone;
   healthStatus: string;
   facts: ResourceFacts;
+  tableMetrics?: ResourceTableMetrics;
   observedAt: string | null;
   firstSeenAt: string | null;
   lastSeenAt: string | null;

@@ -198,7 +198,10 @@ describe("workspace Resources filter API", () => {
     const response = await listFilteredResources({ resourceTypes: ["pod"] });
 
     expect(response.items[0]?.metrics).toEqual(metrics);
-    expect(response.items[0]?.metrics?.memory_limit_mib).toBeNull();
+    const parsedMetrics = response.items[0]?.metrics;
+    expect(parsedMetrics?.kind).toBe("pod");
+    if (parsedMetrics?.kind !== "pod") throw new Error("expected Pod table metrics");
+    expect(parsedMetrics.memory_limit_mib).toBeNull();
   });
 
   it("loads server-computed Label facets without changing the selected AND set", async () => {
