@@ -47,13 +47,16 @@ export function createIssuesAdapter(
       return loadInjectedBrowserRefreshPolicy(refreshPolicies, "issues_audit", signal);
     },
 
-    async listIssues(clusterId, limit = 50, signal) {
+    async listIssues(clusterId, limit = 50, signal, filters) {
       return withCanonicalFailure(async () => {
-        const request = canonicalIssueListRequest(clusterId, limit);
+        const request = canonicalIssueListRequest(clusterId, limit, filters);
         return toIssueList(
           request,
           await loadIssueProjection({
             clusterId: request.clusterId ?? undefined,
+            namespaces: request.filters.namespaces,
+            severities: request.filters.severities,
+            categories: request.filters.categories,
             limit: request.limit,
             signal,
           }),

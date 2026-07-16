@@ -71,6 +71,11 @@ export function parseProductFilterUrl(search: string): FilterUrlParseResult {
     "issues.severity",
     invalid.issuesSeverity,
   );
+  state.issues.category = parseStableList(
+    params,
+    "issues.category",
+    invalid.issuesCategory,
+  );
   state.issues.status = parseStableList(params, "issues.status", invalid.issuesStatus);
   state.issues.environment = parseStableList(
     params,
@@ -178,6 +183,7 @@ function appendResourceFilters(pairs: string[], state: UnifiedFilterState) {
 
 function appendIssueFilters(pairs: string[], state: UnifiedFilterState) {
   appendList(pairs, "issues.severity", normalizeStableList(state.issues.severity));
+  appendList(pairs, "issues.category", normalizeStableList(state.issues.category));
   appendList(pairs, "issues.status", normalizeStableList(state.issues.status));
   appendList(pairs, "issues.environment", normalizeStableList(state.issues.environment));
   appendText(pairs, "issues.q", state.issues.query);
@@ -271,7 +277,7 @@ function createInvalidFilterValues(): MutableInvalidFilterValues {
   return {
     clusters: [], namespaces: [], applications: [], labels: [],
     resourcesTypes: [], resourcesHealth: [], resourcesIncludeDeleted: [], resourcesView: [],
-    issuesSeverity: [], issuesStatus: [],
+    issuesSeverity: [], issuesCategory: [], issuesStatus: [],
     issuesEnvironment: [], applicationsEnvironment: [], applicationsStatus: [],
     applicationsPendingPromotion: [],
     gitopsEnvironment: [], gitopsApproval: [], gitopsChangeType: [],

@@ -12,6 +12,7 @@ import {
   type IssueEvidencePage,
   type IssueList,
   type IssueRecentChanges,
+  type IssueQueueFilters,
   type IssueRcaReportPage,
   type IssueSummary,
   type IssuesPort,
@@ -26,17 +27,20 @@ import type {
 import { useIssueAuditPagination } from "./useIssueAuditPagination";
 import { useIssueDetailFocus } from "./useIssueDetailFocus";
 import { useServerRefreshScheduler } from "../../shared/data/useServerRefreshScheduler";
+import { EMPTY_ISSUE_QUEUE_FILTERS } from "./issuesValidation";
 
 export function IssuesSurface({
   clusterId,
   copy,
   port,
   recoverySelection,
+  filters = EMPTY_ISSUE_QUEUE_FILTERS,
 }: {
   clusterId: string | null;
   copy: IssuesSurfaceCopy;
   port: IssuesPort;
   recoverySelection: RecoverySelectionCapability;
+  filters?: IssueQueueFilters;
 }) {
   const [listRecord, setListRecord] = useState<{
     scope: string | null;
@@ -79,7 +83,7 @@ export function IssuesSurface({
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
-      port.listIssues(clusterId, 50, controller.signal),
+      port.listIssues(clusterId, 50, controller.signal, filters),
       port.loadIssuesAuditRefreshPolicy(controller.signal),
     ]).then(
       ([data, refreshPolicy]) => {
@@ -112,7 +116,7 @@ export function IssuesSurface({
       },
     );
     return () => controller.abort();
-  }, [clusterId, port, refreshController, revision]);
+  }, [clusterId, filters, port, refreshController, revision]);
 
   useEffect(() => {
     if (selectedCorrelationId === null) return;

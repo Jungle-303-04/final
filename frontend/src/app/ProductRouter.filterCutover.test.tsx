@@ -50,6 +50,7 @@ const FILTER_STATE: UnifiedFilterState = {
   },
   issues: {
     severity: ["critical", "warning"],
+    category: ["container_restart", "scheduling"],
     status: ["open", "resolved"],
     environment: ["production", "staging"],
     query: "packet loss",

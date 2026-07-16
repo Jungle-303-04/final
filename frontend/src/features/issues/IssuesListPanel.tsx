@@ -58,6 +58,10 @@ export function IssuesListPanel({
     );
   }
   if (list.data === null || list.data.items.length === 0) {
+    const visibilityState = list.data?.visibility?.state ?? "unknown";
+    if (visibilityState === "partial" || visibilityState === "restricted") {
+      return <VisibilityNotice copy={copy} state={visibilityState} />;
+    }
     const scope = list.data?.clusterId;
     const suffix = scope ? `?clusters=${encodeURIComponent(scope)}` : "";
     return (
@@ -79,10 +83,17 @@ export function IssuesListPanel({
       </div>
     );
   }
+  const total = list.data.total ?? list.data.returned;
+  const totalMatched = list.data.totalMatched ?? total;
+  const visibilityState = list.data.visibility?.state ?? "unknown";
   return (
     <div className="grid gap-3 py-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <Badge variant="secondary">{copy.listCount(list.data.returned)}</Badge>
+        <Badge variant="secondary">
+          {totalMatched > total
+            ? copy.listMatchedCount(total, totalMatched)
+            : copy.listCount(total)}
+        </Badge>
         {statusBreakdown(list.data.items).map(([status, count]) => (
           <Badge className="max-w-48" key={status} variant="outline">
             <IssueStatusMark label={copy.statusLabel(status)} labelMode="sr-only" tone={issueStatusTone(status)} />
@@ -91,6 +102,9 @@ export function IssuesListPanel({
           </Badge>
         ))}
       </div>
+      {visibilityState === "partial" || visibilityState === "restricted" ? (
+        <VisibilityNotice copy={copy} state={visibilityState} />
+      ) : null}
       {list.data.excludedCount > 0 ? (
         <p className="text-sm text-muted-foreground" role="status">
           {copy.partial(list.data.excludedCount)}
@@ -184,6 +198,7 @@ function IssueQueueRow({
                   {copy.severityLabel(issue.severity)}
                 </Badge>
               ) : null}
+              {issue.category ? <Badge variant="outline">{humanizeFilterValue(issue.category)}</Badge> : null}
               <IssueStatusMark label={copy.statusLabel(issue.status)} tone={tone} />
               <ChevronRight
                 aria-hidden="true"
@@ -248,6 +263,24 @@ function IssueQueueRow({
         </span>
       </Button>
     </li>
+  );
+}
+
+function VisibilityNotice({
+  copy,
+  state,
+}: {
+  copy: IssuesSurfaceCopy;
+  state: "partial" | "restricted";
+}) {
+  return (
+    <p
+      aria-label={copy.visibilityLabel}
+      className="rounded-lg border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-sm text-foreground"
+      role="status"
+    >
+      {state === "restricted" ? copy.visibilityRestricted : copy.visibilityPartial}
+    </p>
   );
 }
 

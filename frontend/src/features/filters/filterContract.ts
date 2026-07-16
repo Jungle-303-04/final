@@ -36,6 +36,7 @@ export interface UnifiedFilterState {
   };
   issues: {
     severity: readonly string[];
+    category: readonly string[];
     status: readonly string[];
     environment: readonly string[];
     query: string;
@@ -100,6 +101,7 @@ export interface InvalidFilterValues {
   resourcesIncludeDeleted: readonly string[];
   resourcesView: readonly string[];
   issuesSeverity: readonly string[];
+  issuesCategory: readonly string[];
   issuesStatus: readonly string[];
   issuesEnvironment: readonly string[];
   applicationsEnvironment: readonly string[];
@@ -185,6 +187,7 @@ export function createEmptyUnifiedFilterState(): UnifiedFilterState {
     },
     issues: {
       severity: [],
+      category: [],
       status: [],
       environment: [],
       query: "",

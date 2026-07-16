@@ -8,6 +8,9 @@ export interface IssuesEndpointRequestOptions {
 
 export interface IssuesEndpointTimelineOptions extends IssuesEndpointRequestOptions {
   clusterId?: string;
+  namespaces?: readonly string[];
+  severities?: readonly ("critical" | "warning")[];
+  categories?: readonly string[];
   limit?: number;
 }
 

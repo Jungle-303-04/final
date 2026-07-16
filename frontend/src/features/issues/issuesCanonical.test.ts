@@ -92,7 +92,13 @@ describe("Issues canonical list", () => {
       updatedAt: "2026-07-12T15:00:00.000Z",
     });
     expect(result.items[1]?.status).toBe("vendor_future_literal");
-    expect(result).not.toHaveProperty("total");
+    expect(result).toMatchObject({
+      total: 2,
+      totalMatched: 2,
+      visibility: { state: "unknown", completeness: "unknown" },
+      facets: { namespaces: [], severities: [], categories: [] },
+      recentChanges: [],
+    });
     expect(result).not.toHaveProperty("hasMore");
     expect(result).not.toHaveProperty("severityFacets");
     expect(result).not.toHaveProperty("categoryFacets");

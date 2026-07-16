@@ -424,7 +424,13 @@ class DashboardRepository(DatabaseConnection):
             key: func.coalesce(getattr(insert.excluded, key), getattr(table.c, key))
             for key in preserve_when_missing
         }
-        for value_name in ("severity", "environment", "application_ids", "labels"):
+        for value_name in (
+            "severity",
+            "category",
+            "environment",
+            "application_ids",
+            "labels",
+        ):
             complete_name = f"{value_name}_complete"
             existing_value = getattr(table.c, value_name)
             incoming_value = getattr(insert.excluded, value_name)
@@ -985,6 +991,8 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
     projection = _incident_projection(payload, cluster_id, incident_id, correlation_id)
     raw_severity = _first_string(payload, ("severity",))
     severity = raw_severity.casefold() if raw_severity is not None else None
+    raw_category = _first_string(payload, ("incident", "category"), ("category",))
+    category = raw_category.casefold() if raw_category is not None else None
     is_incident_detection = str(evt.subject) == EventSubject.INCIDENT_DETECTED.value
     row: JsonObject = {
         "workspace_id": workspace_id,
@@ -994,6 +1002,8 @@ def timeline_update_from_event(evt: EventEnvelope) -> JsonObject | None:
         **projection,
         "severity": severity if is_incident_detection else None,
         "severity_complete": is_incident_detection and severity is not None,
+        "category": category if is_incident_detection else None,
+        "category_complete": is_incident_detection and category is not None,
         "environment": None,
         "environment_complete": False,
         "application_ids": None,

@@ -185,8 +185,11 @@ describe("createIssuesAdapter", () => {
       correlationId: "correlation-1",
     });
     expect(dependencies.listRcaTimeline).toHaveBeenCalledWith({
+      categories: [],
       clusterId: "cluster-1",
       limit: 25,
+      namespaces: [],
+      severities: [],
       signal: undefined,
     });
     expect(dependencies.getRcaIncident).toHaveBeenCalledWith("incident-1", {

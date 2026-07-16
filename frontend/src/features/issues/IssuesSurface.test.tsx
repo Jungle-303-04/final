@@ -169,7 +169,19 @@ describe("IssuesSurface", () => {
         items: [],
         limit: 50,
         limitReached: false,
+        total: 0,
+        totalMatched: 0,
         returned: 0,
+        filters: { namespaces: [], severities: [], categories: [] },
+        visibility: {
+          state: "complete",
+          completeness: "exact",
+          authorizedClusterCount: 1,
+          requestedNamespaces: [],
+          reasonCodes: [],
+        },
+        facets: { namespaces: [], severities: [], categories: [] },
+        recentChanges: [],
       }),
     });
     renderSurface(

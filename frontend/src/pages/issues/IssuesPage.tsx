@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
+import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
 import type { ClusterScopeFailure } from "../../features/cluster-scope/clusterScopeContract";
 import { IssuesSurface } from "../../features/issues/IssuesSurface";
 import type {
@@ -56,10 +57,29 @@ const CAUSE_MESSAGE: Record<string, MessageKey> = {
 
 export function IssuesPage({ port }: { port: IssuesPort }) {
   const scope = useClusterScope();
+  const filters = useUnifiedFilter();
   const { formatDate, formatNumber, t } = useI18n();
   const copy = useMemo(
     () => createIssuesCopy(t, formatNumber, formatDate),
     [formatDate, formatNumber, t],
+  );
+  const issueFilters = useMemo(
+    () => ({
+      namespaces: filters.state.common.namespaces.map(
+        (item) => `${item.clusterId}/${item.namespace}`,
+      ),
+      severities: filters.state.issues.severity.filter(
+        (value): value is "critical" | "warning" => (
+          value === "critical" || value === "warning"
+        ),
+      ),
+      categories: filters.state.issues.category,
+    }),
+    [
+      filters.state.common.namespaces,
+      filters.state.issues.category,
+      filters.state.issues.severity,
+    ],
   );
 
   if (scope.selection.kind === "resolving") {
@@ -107,6 +127,7 @@ export function IssuesPage({ port }: { port: IssuesPort }) {
       <IssuesSurface
         clusterId={clusterId}
         copy={copy}
+        filters={issueFilters}
         port={port}
         recoverySelection={{ state: "enabled" }}
       />
@@ -124,6 +145,13 @@ function createIssuesCopy(
     listEmpty: t("issues.surface.listEmpty"),
     listLoading: t("issues.surface.listLoading"),
     listCount: (count) => formatNumber(count),
+    listMatchedCount: (returned, matched) => t("issues.surface.matchedCount", {
+      returned: formatNumber(returned),
+      matched: formatNumber(matched),
+    }),
+    visibilityLabel: t("issues.surface.visibility.label"),
+    visibilityPartial: t("issues.surface.visibility.partial"),
+    visibilityRestricted: t("issues.surface.visibility.restricted"),
     listBrowseResources: t("issues.empty.resources"),
     listBrowseAlerts: t("issues.empty.alerts"),
     detailLabel: t("issues.surface.detail"),

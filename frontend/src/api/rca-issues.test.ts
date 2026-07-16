@@ -70,7 +70,7 @@ describe("additive RCA Issues API", () => {
       limit: 25,
     })).resolves.toEqual(ISSUE_LIST);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/dashboard/rca/issues?cluster_id=cluster-1&namespaces=cluster-1%2Fpayments&severity=critical&category=container_restart&limit=25",
+      "/api/dashboard/rca/issues?cluster_id=cluster-1&namespaces=cluster-1%2Fpayments&severity=critical&category=container_restart&contract_version=2&limit=25",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });

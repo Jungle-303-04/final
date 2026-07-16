@@ -226,8 +226,92 @@ class RcaIssueItem(RcaTimelineItem):
         return self
 
 
-class RcaIssueListResponse(StrictModel):
+class RecentChangeItem(StrictModel):
+    event_id: str
+    changed_at: str
+    namespace: str
+    resource_kind: str
+    resource_name: str
+    image_before: str | None = None
+    image_after: str | None = None
+    pr_url: str | None = None
+    commit_sha: str
+    repository_id: str
+    repo_ref: str
+    workflow_run_id: str
+
+
+class RcaIssueLegacyListResponse(StrictModel):
     items: list[RcaIssueItem]
+
+
+class RcaIssueQueueItem(RcaIssueItem):
+    category: str | None = Field(default=None, min_length=1)
+    category_availability: Literal["available", "unavailable"]
+    category_reason_code: Literal["source_incomplete"] | None = None
+
+    @model_validator(mode="after")
+    def validate_category_projection(self) -> Self:
+        if self.category_availability == "available":
+            if self.category is None or self.category_reason_code is not None:
+                raise ValueError("available issue category requires a value without a reason")
+        elif self.category is not None or self.category_reason_code is None:
+            raise ValueError("unavailable issue category requires a reason without a value")
+        return self
+
+
+class RcaIssueQueueRecentChange(RecentChangeItem):
+    incident_id: str = Field(min_length=1)
+
+
+class RcaIssueQueueFacet(StrictModel):
+    value: str = Field(min_length=1)
+    count: int = Field(ge=0)
+
+
+class RcaIssueQueueFacets(StrictModel):
+    namespaces: list[RcaIssueQueueFacet] = Field(default_factory=list)
+    severities: list[RcaIssueQueueFacet] = Field(default_factory=list)
+    categories: list[RcaIssueQueueFacet] = Field(default_factory=list)
+
+
+class RcaIssueQueueVisibility(StrictModel):
+    state: Literal["complete", "partial", "restricted"]
+    completeness: Literal["exact", "partial", "unavailable"]
+    authorized_cluster_count: int = Field(ge=0)
+    requested_namespaces: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_visibility_reason(self) -> Self:
+        if self.state != "complete" and not self.reason_codes:
+            raise ValueError("incomplete issue visibility requires a reason")
+        if self.state == "complete" and self.completeness != "exact":
+            raise ValueError("complete issue visibility requires exact completeness")
+        if self.state == "restricted" and self.authorized_cluster_count != 0:
+            raise ValueError("restricted issue visibility cannot authorize clusters")
+        return self
+
+
+class RcaIssueListResponse(StrictModel):
+    items: list[RcaIssueQueueItem]
+    total: int = Field(ge=0)
+    total_matched: int = Field(ge=0)
+    count_completeness: Literal["exact"] = "exact"
+    recent_changes: list[RcaIssueQueueRecentChange] = Field(default_factory=list)
+    visibility: RcaIssueQueueVisibility
+    facets: RcaIssueQueueFacets
+
+    @model_validator(mode="after")
+    def validate_queue_counts(self) -> Self:
+        if self.total != len(self.items):
+            raise ValueError("issue queue total must equal returned items")
+        if self.total > self.total_matched:
+            raise ValueError("issue queue total cannot exceed matched total")
+        returned_incidents = {item.incident_id for item in self.items if item.incident_id}
+        if any(change.incident_id not in returned_incidents for change in self.recent_changes):
+            raise ValueError("issue queue changes must reference returned incidents")
+        return self
 
 
 class ResourceIssueOnset(StrictModel):
@@ -345,21 +429,6 @@ class AuditTimelineResponse(StrictModel):
     limit: int
     has_more: bool
     next_cursor: str | None = None
-
-
-class RecentChangeItem(StrictModel):
-    event_id: str
-    changed_at: str
-    namespace: str
-    resource_kind: str
-    resource_name: str
-    image_before: str | None = None
-    image_after: str | None = None
-    pr_url: str | None = None
-    commit_sha: str
-    repository_id: str
-    repo_ref: str
-    workflow_run_id: str
 
 
 class RecentChangeListResponse(StrictModel):
@@ -1745,6 +1814,7 @@ IssueFilterAxis = Literal[
     "namespaces",
     "applications",
     "severity",
+    "category",
     "status",
     "environment",
 ]
@@ -1763,6 +1833,8 @@ class IssueFilterItem(StrictModel):
     resource_name: str | None = None
     symptom: str | None = None
     severity: str | None = None
+    category: str | None = None
+    category_completeness: FilterCountCompleteness = "unavailable"
     issue_state: Literal["open", "resolved", "unknown"]
     current_subject: str = Field(min_length=1)
     pipeline_status: str = Field(min_length=1)
@@ -1799,6 +1871,7 @@ class IssueFilterCapability(StrictModel):
         "namespaces",
         "applications",
         "severity",
+        "category",
         "status",
         "environment",
         "labels",
@@ -1815,7 +1888,15 @@ class IssueFilterCapability(StrictModel):
 
 
 class IssueSelectedFacetResolution(StrictModel):
-    axis: Literal["cluster", "namespace", "application", "severity", "status", "environment"]
+    axis: Literal[
+        "cluster",
+        "namespace",
+        "application",
+        "severity",
+        "category",
+        "status",
+        "environment",
+    ]
     value: str = Field(min_length=1)
     status: Literal["resolved", "zero", "restricted", "unavailable"]
     display_label: str | None = None

@@ -67,6 +67,13 @@ SIGNAL_PROBE_FAILED = "ProbeFailed"
 SIGNAL_SERVICE_ENDPOINTS_EMPTY = "ServiceEndpointsEmpty"
 EVENT_SIGNAL_MAX_AGE = timedelta(minutes=10)
 
+INCIDENT_CATEGORY_IMAGE_PULL = "image_pull"
+INCIDENT_CATEGORY_CONTAINER_RESTART = "container_restart"
+INCIDENT_CATEGORY_SCHEDULING = "scheduling"
+INCIDENT_CATEGORY_PROBE = "probe"
+INCIDENT_CATEGORY_READINESS = "readiness"
+INCIDENT_CATEGORY_SERVICE_ROUTING = "service_routing"
+
 
 # 같은 우선순위 안에서의 근거 출처 순위 — 파드 상태가 1차 근거, 이벤트는 정황 보강,
 # service/endpoint 는 간접 신호. 대표 리소스 힌트가 워크로드(소유자)로 잡히게 한다.
@@ -152,6 +159,30 @@ def unique_signal_labels(signals: list[SymptomSignal], *, exclude: str) -> list[
             continue
         labels.append(signal.signal)
     return labels
+
+
+def incident_category_for_signal(signal: SymptomSignal | None) -> str | None:
+    """Map one detector-owned primary signal to its stable issue category."""
+    if signal is None:
+        return None
+    if signal.signal in IMAGE_PULL_WAITING_REASONS or signal.signal == SYMPTOM_IMAGE_PULL:
+        return INCIDENT_CATEGORY_IMAGE_PULL
+    if signal.signal in {SYMPTOM_CRASHLOOP, SIGNAL_OOM_KILLED}:
+        return INCIDENT_CATEGORY_CONTAINER_RESTART
+    if signal.signal == SIGNAL_FAILED_SCHEDULING:
+        return INCIDENT_CATEGORY_SCHEDULING
+    if signal.signal in {
+        SIGNAL_PROBE_FAILED,
+        "ReadinessProbeFailed",
+        "LivenessProbeFailed",
+        "StartupProbeFailed",
+    }:
+        return INCIDENT_CATEGORY_PROBE
+    if signal.signal == SIGNAL_POD_NOT_READY:
+        return INCIDENT_CATEGORY_READINESS
+    if signal.signal == SIGNAL_SERVICE_ENDPOINTS_EMPTY:
+        return INCIDENT_CATEGORY_SERVICE_ROUTING
+    return None
 
 
 def collect_signals(kubernetes: JsonObject) -> list[SymptomSignal]:

@@ -77,7 +77,7 @@ class DashboardApiDb:
             return [_timeline_row(sorted(allowed_cluster_ids)[0])]
         return [self.row]
 
-    def list_rca_issues(
+    def list_rca_issue_queue(
         self,
         workspace_id: str,
         allowed_cluster_ids: set[str] | None,
@@ -86,6 +86,7 @@ class DashboardApiDb:
         severities: tuple[str, ...],
         categories: tuple[str, ...],
         limit: int,
+        permission_scope_limited: bool = False,
     ) -> dict[str, object]:
         self.calls.append(
             (
@@ -96,6 +97,7 @@ class DashboardApiDb:
                 severities,
                 categories,
                 limit,
+                permission_scope_limited,
             )
         )
         if allowed_cluster_ids == set():
@@ -286,6 +288,7 @@ def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> 
             namespaces="cluster-2/payments",
             severity="critical",
             category="container_restart",
+            contract_version="2",
             limit=10,
             current=_current_session(),
             db=db,
@@ -308,6 +311,7 @@ def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> 
             ("critical",),
             ("container_restart",),
             10,
+            False,
         ) in db.calls
         assert db.calls[0] == (
             "has_access",
@@ -328,6 +332,34 @@ def test_rca_issues_uses_the_same_cluster_permission_and_additive_contract() -> 
     asyncio.run(run())
 
 
+def test_rca_issues_reports_permission_limited_workspace_visibility() -> None:
+    async def run() -> None:
+        db = DashboardApiDb(allowed={"cluster-1"})
+        await rca_issues(
+            cluster_id=None,
+            namespaces=None,
+            severity=None,
+            category=None,
+            contract_version="2",
+            limit=10,
+            current=_current_session(),
+            db=db,
+        )
+
+        assert (
+            "issues",
+            "workspace-1",
+            {"cluster-1"},
+            (),
+            (),
+            (),
+            10,
+            True,
+        ) in db.calls
+
+    asyncio.run(run())
+
+
 def test_rca_issues_denies_an_unauthorized_cluster_scope() -> None:
     async def run() -> None:
         db = DashboardApiDb(allowed=None, has_access=False)
@@ -337,6 +369,7 @@ def test_rca_issues_denies_an_unauthorized_cluster_scope() -> None:
                 namespaces=None,
                 severity=None,
                 category=None,
+                contract_version="2",
                 limit=10,
                 current=_current_session(),
                 db=db,
