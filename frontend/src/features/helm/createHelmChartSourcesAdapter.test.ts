@@ -108,8 +108,11 @@ describe("createHelmAdapter chart sources", () => {
 
 function endpointDependencies() {
   return {
+    checkHelmReleaseUpgrades: vi.fn(),
     listHelmReleases: vi.fn(),
     getHelmRelease: vi.fn(),
+    getHelmReleaseUpgradeInfo: vi.fn(),
+    listHelmReleaseVersions: vi.fn(),
     startHelmArtifactRead: vi.fn(),
     startHelmReleaseUpgrade: vi.fn(),
     deleteHelmChartSource: vi.fn().mockResolvedValue({

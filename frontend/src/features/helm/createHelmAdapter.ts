@@ -9,13 +9,15 @@ import {
   type HelmReleaseCommands,
   type HelmReleaseDetail,
   type HelmReleaseHistoryEntry,
+  type HelmReleaseUpgradeInfo,
+  type HelmReleaseVersionList,
   type HelmResourceRef,
   type HelmResourceHealth,
   type HelmUnavailableFeature,
 } from "./helmContract";
 import { recordValue, withHelmPortFailure } from "./helmAdapterRuntime";
 import { helmArtifactResultSchema } from "./helmArtifactSchemas";
-import { createHelmChartSourcesPort } from "./createHelmChartSourcesPort";
+import { createHelmChartSourcesPort, toChartSource } from "./createHelmChartSourcesPort";
 import type { HelmEndpointDependencies } from "./helmEndpointContract";
 
 export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort {
@@ -37,6 +39,33 @@ export function createHelmAdapter(endpoints: HelmEndpointDependencies): HelmPort
     },
     async getRelease(request, signal) {
       return withHelmPortFailure(async () => toDetail(await endpoints.getHelmRelease(request, signal)));
+    },
+    async getReleaseUpgradeInfo(request, signal) {
+      return withHelmPortFailure(async () => toUpgradeInfo(
+        await endpoints.getHelmReleaseUpgradeInfo(request, signal),
+      ));
+    },
+    async listReleaseVersions(request, signal) {
+      return withHelmPortFailure(async () => toVersionList(
+        await endpoints.listHelmReleaseVersions(request, signal),
+      ));
+    },
+    async checkReleaseUpgrades(request, signal) {
+      return withHelmPortFailure(async () => {
+        const value = await endpoints.checkHelmReleaseUpgrades({
+          clusterIds: request.clusterIds,
+          namespaces: request.namespaces,
+        }, signal);
+        return {
+          releases: Object.fromEntries(
+            Object.entries(value.releases).map(([key, item]) => [key, toUpgradeInfo(item)]),
+          ),
+          coverage: toCoverage(value.coverage),
+          truncated: value.truncated,
+          reasonCodes: value.reason_codes,
+          refreshAfterSeconds: value.refresh_after_seconds,
+        };
+      });
     },
     async readArtifact(request, signal) {
       return withHelmPortFailure(async () => {
@@ -189,11 +218,49 @@ function toRelease(value: Awaited<ReturnType<HelmEndpointDependencies["listHelmR
     storageNamespace: value.storage_namespace,
     storage: toResourceRef(value.storage),
     chart: value.chart,
+    chartVersion: value.chart_version,
+    chartReasonCodes: value.chart_reason_codes,
     appVersion: value.app_version,
     status: value.status,
     revision: value.revision,
     observedAt: value.observed_at,
     resourceHealth: toResourceHealth(value.resource_health),
+  };
+}
+
+function toUpgradeInfo(
+  value: Awaited<ReturnType<HelmEndpointDependencies["getHelmReleaseUpgradeInfo"]>>,
+): HelmReleaseUpgradeInfo {
+  return {
+    availability: value.availability,
+    chartName: value.chart_name,
+    currentVersion: value.current_version,
+    latestVersion: value.latest_version,
+    updateAvailable: value.update_available,
+    source: value.source ? toChartSource(value.source) : null,
+    observedAt: value.observed_at,
+    reasonCodes: value.reason_codes,
+    refreshAfterSeconds: value.refresh_after_seconds,
+  };
+}
+
+function toVersionList(
+  value: Awaited<ReturnType<HelmEndpointDependencies["listHelmReleaseVersions"]>>,
+): HelmReleaseVersionList {
+  return {
+    availability: value.availability,
+    chartName: value.chart_name,
+    currentVersion: value.current_version,
+    source: value.source ? toChartSource(value.source) : null,
+    versions: value.versions.map((item) => ({
+      version: item.version,
+      appVersion: item.app_version,
+      deprecated: item.deprecated,
+    })),
+    observedAt: value.observed_at,
+    truncated: value.truncated,
+    reasonCodes: value.reason_codes,
+    refreshAfterSeconds: value.refresh_after_seconds,
   };
 }
 

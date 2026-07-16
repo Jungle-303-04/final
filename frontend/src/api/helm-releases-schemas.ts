@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { helmChartSourceSchema } from "./helm-chart-sources-schemas";
+
 const availabilitySchema = z.enum(["available", "partial", "unavailable"]);
 const nullableTextSchema = z.string().min(1).nullable();
 
@@ -121,12 +123,24 @@ export const helmReleaseSchema = z.strictObject({
   name: z.string().min(1),
   storage_namespace: z.string().min(1),
   storage: helmResourceRefSchema,
-  chart: z.null(),
+  chart: nullableTextSchema,
+  chart_version: nullableTextSchema,
+  chart_reason_codes: z.array(z.string().min(1)),
   app_version: z.null(),
   status: nullableTextSchema,
   revision: z.number().int().positive().nullable(),
   observed_at: nullableTextSchema,
   resource_health: helmResourceHealthSchema,
+}).superRefine((value, context) => {
+  if ((value.chart === null) !== (value.chart_version === null)) {
+    context.addIssue({ code: "custom", message: "Helm chart identity is inconsistent" });
+  }
+  if (value.chart === null && value.chart_reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "Unavailable Helm chart identity requires reasons" });
+  }
+  if (value.chart !== null && value.chart_reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "Observed Helm chart identity cannot contain reasons" });
+  }
 });
 
 export const helmReleaseHistoryEntrySchema = z.strictObject({
@@ -156,8 +170,94 @@ export const helmReleaseDetailSchema = z.strictObject({
   }),
 });
 
+export const helmChartVersionSchema = z.strictObject({
+  version: z.string().min(1).max(256),
+  app_version: z.string().min(1).max(256).nullable(),
+  deprecated: z.boolean(),
+});
+
+export const helmReleaseUpgradeInfoSchema = z.strictObject({
+  availability: availabilitySchema,
+  chart_name: nullableTextSchema,
+  current_version: nullableTextSchema,
+  latest_version: nullableTextSchema,
+  update_available: z.boolean().nullable(),
+  source: helmChartSourceSchema.nullable(),
+  observed_at: nullableTextSchema,
+  reason_codes: z.array(z.string().min(1)),
+  refresh_after_seconds: z.number().int().min(1).max(3600),
+}).superRefine((value, context) => {
+  const complete = value.chart_name !== null
+    && value.current_version !== null
+    && value.latest_version !== null
+    && value.update_available !== null
+    && value.source !== null;
+  if (value.availability === "unavailable" && (complete || value.reason_codes.length === 0)) {
+    context.addIssue({ code: "custom", message: "Unavailable Helm upgrade info is inconsistent" });
+  }
+  if (value.availability !== "unavailable" && !complete) {
+    context.addIssue({ code: "custom", message: "Helm upgrade info lacks exact source evidence" });
+  }
+  if (value.availability === "partial" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "Partial Helm upgrade info requires reasons" });
+  }
+  if (value.availability === "available" && value.reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "Available Helm upgrade info cannot contain reasons" });
+  }
+});
+
+export const helmReleaseVersionListSchema = z.strictObject({
+  availability: availabilitySchema,
+  chart_name: nullableTextSchema,
+  current_version: nullableTextSchema,
+  source: helmChartSourceSchema.nullable(),
+  versions: z.array(helmChartVersionSchema).max(200),
+  observed_at: nullableTextSchema,
+  truncated: z.boolean(),
+  reason_codes: z.array(z.string().min(1)),
+  refresh_after_seconds: z.number().int().min(1).max(3600),
+}).superRefine((value, context) => {
+  const complete = value.chart_name !== null
+    && value.current_version !== null
+    && value.source !== null
+    && value.versions.length > 0;
+  if (value.availability === "unavailable" && (value.versions.length > 0 || value.source !== null || value.reason_codes.length === 0)) {
+    context.addIssue({ code: "custom", message: "Unavailable Helm versions are inconsistent" });
+  }
+  if (value.availability !== "unavailable" && !complete) {
+    context.addIssue({ code: "custom", message: "Helm versions lack exact source evidence" });
+  }
+  if (value.availability === "partial" && value.reason_codes.length === 0) {
+    context.addIssue({ code: "custom", message: "Partial Helm versions require reasons" });
+  }
+  if (value.availability === "available" && value.reason_codes.length > 0) {
+    context.addIssue({ code: "custom", message: "Available Helm versions cannot contain reasons" });
+  }
+  if (value.truncated && !value.reason_codes.includes("helm_chart_versions_truncated")) {
+    context.addIssue({ code: "custom", message: "Truncated Helm versions require a reason" });
+  }
+});
+
+export const helmReleaseUpgradeBatchSchema = z.strictObject({
+  releases: z.record(z.string().min(1), helmReleaseUpgradeInfoSchema),
+  coverage: helmObservationCoverageSchema,
+  truncated: z.boolean(),
+  reason_codes: z.array(z.string().min(1)),
+  refresh_after_seconds: z.number().int().min(1).max(3600),
+}).superRefine((value, context) => {
+  if (Object.keys(value.releases).length > 100) {
+    context.addIssue({ code: "custom", message: "Helm upgrade batch exceeds its bound" });
+  }
+  if (value.truncated !== value.reason_codes.includes("helm_upgrade_batch_truncated")) {
+    context.addIssue({ code: "custom", message: "Helm upgrade batch truncation is inconsistent" });
+  }
+});
+
 export type HelmReleaseListEndpoint = z.infer<typeof helmReleaseListSchema>;
 export type HelmReleaseDetailEndpoint = z.infer<typeof helmReleaseDetailSchema>;
+export type HelmReleaseUpgradeInfoEndpoint = z.infer<typeof helmReleaseUpgradeInfoSchema>;
+export type HelmReleaseVersionListEndpoint = z.infer<typeof helmReleaseVersionListSchema>;
+export type HelmReleaseUpgradeBatchEndpoint = z.infer<typeof helmReleaseUpgradeBatchSchema>;
 
 function upgradeScalarMatches(
   valueType: "string" | "integer" | "number" | "boolean",

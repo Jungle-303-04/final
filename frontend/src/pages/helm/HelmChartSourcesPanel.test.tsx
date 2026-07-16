@@ -176,8 +176,11 @@ function helmPort(): HelmPort & {
   deleteChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    checkReleaseUpgrades: vi.fn(),
     listReleases: vi.fn(),
     getRelease: vi.fn(),
+    getReleaseUpgradeInfo: vi.fn(),
+    listReleaseVersions: vi.fn(),
     readArtifact: vi.fn(),
     upgradeRelease: vi.fn(),
     deleteChartSource: vi.fn().mockResolvedValue({

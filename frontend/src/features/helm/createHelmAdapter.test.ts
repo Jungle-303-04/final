@@ -5,6 +5,7 @@ import { createHelmAdapter, toHelmArtifactOperationResult } from "./createHelmAd
 describe("createHelmAdapter", () => {
   it("keeps unavailable integrations explicit instead of casting provider data", async () => {
     const port = createHelmAdapter({
+      ...upgradeReadEndpoints(),
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint()),
       getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
       deleteHelmChartSource: vi.fn(),
@@ -60,6 +61,7 @@ describe("createHelmAdapter", () => {
 
   it("preserves server-derived stale freshness without frontend inference", async () => {
     const port = createHelmAdapter({
+      ...upgradeReadEndpoints(),
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint("stale")),
       getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
       deleteHelmChartSource: vi.fn(),
@@ -233,6 +235,7 @@ describe("createHelmAdapter", () => {
       },
     };
     const port = createHelmAdapter({
+      ...upgradeReadEndpoints(),
       listHelmReleases: vi.fn().mockResolvedValue(listEndpoint()),
       getHelmRelease: vi.fn().mockResolvedValue(detail),
       deleteHelmChartSource: vi.fn(),
@@ -269,6 +272,40 @@ describe("createHelmAdapter", () => {
       expectedRevision: 3,
       catalogItemId: "catalog-redis",
     }), undefined);
+  });
+
+  it("maps only server-resolved chart source versions and batch availability", async () => {
+    const endpoints = upgradeReadEndpoints();
+    const port = createHelmAdapter({
+      ...endpoints,
+      listHelmReleases: vi.fn().mockResolvedValue(listEndpoint()),
+      getHelmRelease: vi.fn().mockResolvedValue(detailEndpoint()),
+      deleteHelmChartSource: vi.fn(),
+      listHelmChartSources: vi.fn(),
+      registerHelmChartSource: vi.fn(),
+      startHelmArtifactRead: vi.fn().mockResolvedValue(receipt()),
+      startHelmReleaseUpgrade: vi.fn().mockResolvedValue(receipt()),
+    });
+
+    const request = {
+      clusterId: "cluster-a",
+      namespace: "storefront",
+      releaseName: "storefront",
+    };
+    const info = await port.getReleaseUpgradeInfo(request);
+    const versions = await port.listReleaseVersions(request);
+    const batch = await port.checkReleaseUpgrades({ clusterIds: ["cluster-a"] });
+
+    expect(info).toMatchObject({
+      currentVersion: "1.2.3",
+      latestVersion: "2.0.0",
+      updateAvailable: true,
+      source: { id: "source-a", provider: "repository" },
+    });
+    expect(versions.versions.map((item) => item.version)).toEqual(["2.0.0", "1.2.3"]);
+    expect(batch.releases["cluster-a/storefront/storefront"]).toMatchObject({
+      latestVersion: "2.0.0",
+    });
   });
 });
 
@@ -333,6 +370,8 @@ function releaseEndpoint(freshness: "live" | "stale" | "partial" | "disconnected
       uid: "storage-3",
     },
     chart: null,
+    chart_version: null,
+    chart_reason_codes: ["helm_chart_identity_unavailable"],
     app_version: null,
     status: "deployed",
     revision: 3,
@@ -344,6 +383,54 @@ function releaseEndpoint(freshness: "live" | "stale" | "partial" | "disconnected
       observed_at: "2026-07-16T09:01:00Z",
       reason_codes: [],
     },
+  };
+}
+
+function upgradeReadEndpoints() {
+  const source = {
+    source_id: "source-a",
+    provider: "repository" as const,
+    name: "Stable",
+    reference: "https://charts.example.test/stable",
+    status: "active" as const,
+    actions: [],
+    credentials_configured: false,
+    observed_at: "2026-07-17T00:00:00Z",
+  };
+  const info = {
+    availability: "available" as const,
+    chart_name: "storefront",
+    current_version: "1.2.3",
+    latest_version: "2.0.0",
+    update_available: true,
+    source,
+    observed_at: "2026-07-17T00:01:00Z",
+    reason_codes: [],
+    refresh_after_seconds: 10,
+  };
+  return {
+    getHelmReleaseUpgradeInfo: vi.fn().mockResolvedValue(info),
+    listHelmReleaseVersions: vi.fn().mockResolvedValue({
+      availability: "available" as const,
+      chart_name: "storefront",
+      current_version: "1.2.3",
+      source,
+      versions: [
+        { version: "2.0.0", app_version: null, deprecated: false },
+        { version: "1.2.3", app_version: null, deprecated: false },
+      ],
+      observed_at: "2026-07-17T00:01:00Z",
+      truncated: false,
+      reason_codes: [],
+      refresh_after_seconds: 10,
+    }),
+    checkHelmReleaseUpgrades: vi.fn().mockResolvedValue({
+      releases: { "cluster-a/storefront/storefront": info },
+      coverage: { availability: "available" as const, observed_at: null, reason_codes: [] },
+      truncated: false,
+      reason_codes: [],
+      refresh_after_seconds: 30,
+    }),
   };
 }
 

@@ -179,7 +179,9 @@ describe("Helm release API", () => {
       clusterId: "cluster-a",
       namespace: "team/a",
       releaseName: "shop/front",
-    })).resolves.toMatchObject({ versions: [{ version: "2.0.0" }] });
+    })).resolves.toMatchObject({
+      versions: [{ version: "2.0.0" }, { version: "1.2.3" }],
+    });
     await expect(checkHelmReleaseUpgrades({
       clusterIds: ["cluster-b", "cluster-a"],
       namespaces: ["team/a"],

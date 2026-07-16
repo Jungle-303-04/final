@@ -1,9 +1,12 @@
 import type { ComponentType } from "react";
 import {
+  checkHelmReleaseUpgrades,
   deleteHelmChartSource,
   getHelmRelease,
+  getHelmReleaseUpgradeInfo,
   listHelmChartSources,
   listHelmReleases,
+  listHelmReleaseVersions,
   registerHelmChartSource,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
@@ -13,10 +16,13 @@ import { createHelmSurface } from "../../../pages/helm/createHelmSurface";
 
 export function loadHelmSurface(): ComponentType {
   return createHelmSurface(createHelmAdapter({
+    checkHelmReleaseUpgrades,
     deleteHelmChartSource,
     getHelmRelease,
+    getHelmReleaseUpgradeInfo,
     listHelmChartSources,
     listHelmReleases,
+    listHelmReleaseVersions,
     registerHelmChartSource,
     startHelmArtifactRead,
     startHelmReleaseUpgrade,

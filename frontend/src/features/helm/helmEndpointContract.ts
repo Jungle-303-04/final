@@ -69,7 +69,9 @@ export interface HelmEndpointRelease {
   name: string;
   storage_namespace: string;
   storage: HelmEndpointResourceRef;
-  chart: null;
+  chart: string | null;
+  chart_version: string | null;
+  chart_reason_codes: string[];
   app_version: null;
   status: string | null;
   revision: number | null;
@@ -77,6 +79,44 @@ export interface HelmEndpointRelease {
   resource_health:
     | (HelmEndpointUnavailableFeature & { health: null })
     | HelmEndpointResourceHealthObservation;
+}
+
+export interface HelmEndpointChartVersion {
+  version: string;
+  app_version: string | null;
+  deprecated: boolean;
+}
+
+export interface HelmReleaseUpgradeInfoEndpoint {
+  availability: "available" | "partial" | "unavailable";
+  chart_name: string | null;
+  current_version: string | null;
+  latest_version: string | null;
+  update_available: boolean | null;
+  source: HelmChartSourceEndpoint | null;
+  observed_at: string | null;
+  reason_codes: string[];
+  refresh_after_seconds: number;
+}
+
+export interface HelmReleaseVersionListEndpoint {
+  availability: "available" | "partial" | "unavailable";
+  chart_name: string | null;
+  current_version: string | null;
+  source: HelmChartSourceEndpoint | null;
+  versions: HelmEndpointChartVersion[];
+  observed_at: string | null;
+  truncated: boolean;
+  reason_codes: string[];
+  refresh_after_seconds: number;
+}
+
+export interface HelmReleaseUpgradeBatchEndpoint {
+  releases: Record<string, HelmReleaseUpgradeInfoEndpoint>;
+  coverage: HelmReleaseListEndpoint["coverage"];
+  truncated: boolean;
+  reason_codes: string[];
+  refresh_after_seconds: number;
 }
 
 export interface HelmReleaseListEndpoint {
@@ -159,6 +199,18 @@ export interface HelmEndpointDependencies {
     input: { clusterId: string; namespace: string; releaseName: string },
     signal?: AbortSignal,
   ): Promise<HelmReleaseDetailEndpoint>;
+  getHelmReleaseUpgradeInfo(
+    input: { clusterId: string; namespace: string; releaseName: string },
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeInfoEndpoint>;
+  listHelmReleaseVersions(
+    input: { clusterId: string; namespace: string; releaseName: string },
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseVersionListEndpoint>;
+  checkHelmReleaseUpgrades(
+    query: { clusterIds?: readonly string[]; namespaces?: readonly string[] },
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeBatchEndpoint>;
   startHelmArtifactRead(
     input: {
       clusterId: string;

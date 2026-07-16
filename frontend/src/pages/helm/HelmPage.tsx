@@ -30,6 +30,7 @@ import type {
   HelmRenderedResourceRef,
   HelmRelease,
   HelmReleaseDetail,
+  HelmReleaseUpgradeInfo,
   HelmResourceHealth,
   HelmUnavailableFeature,
 } from "../../features/helm/helmContract";
@@ -57,7 +58,11 @@ import {
 import { HELM_RELEASE_DETAIL_MATCH, helmReleaseDetailHref } from "./helmNavigation";
 import { HelmChartSourcesPanel } from "./HelmChartSourcesPanel";
 import { HelmReleaseUpgradeDialog } from "./HelmReleaseUpgradeDialog";
-import { useHelmReleaseDetail, useHelmReleaseList } from "./useHelmReleaseData";
+import {
+  useHelmReleaseDetail,
+  useHelmReleaseList,
+  type HelmReleaseDetailView,
+} from "./useHelmReleaseData";
 
 const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
   helm_manifest_provider_not_integrated: HELM_COPY.manifestUnavailable,
@@ -175,7 +180,7 @@ function HelmListBoundary({
   }
   if (frame.phase === "failed") return <HelmFailureScreen failure={frame.failure} onRefresh={onRefresh} />;
 
-  const { coverage, releases } = frame.data;
+  const { coverage, releases, upgrades } = frame.data;
   return (
     <section aria-labelledby="helm-release-list-title" className="grid min-w-0 gap-3">
       <CoverageNotice availability={coverage.availability} reasons={coverage.reasonCodes} />
@@ -202,6 +207,7 @@ function HelmListBoundary({
         query={query}
         releases={releases}
         searchInputRef={searchInputRef}
+        upgrades={upgrades.releases}
       />
     </section>
   );
@@ -212,11 +218,13 @@ function HelmReleaseTable({
   query,
   releases,
   searchInputRef,
+  upgrades,
 }: {
   onOpen: (release: HelmRelease) => void;
   query: string;
   releases: readonly HelmRelease[];
   searchInputRef: RefObject<HTMLInputElement | null>;
+  upgrades: Readonly<Record<string, HelmReleaseUpgradeInfo>>;
 }) {
   const filtered = useMemo(() => releases.filter((release) => matchesRelease(release, query)), [query, releases]);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -262,6 +270,7 @@ function HelmReleaseTable({
           <TableHead>{HELM_COPY.chart}</TableHead>
           <TableHead>{HELM_COPY.status}</TableHead>
           <TableHead>{HELM_COPY.resourceHealth}</TableHead>
+          <TableHead>{HELM_COPY.upgradeAvailability}</TableHead>
           <TableHead>{HELM_COPY.revision}</TableHead>
           <TableHead>{HELM_COPY.observed}</TableHead>
         </TableRow>
@@ -274,6 +283,7 @@ function HelmReleaseTable({
             onOpen={() => onOpen(release)}
             onPointerEnter={() => setHighlightedIndex(index)}
             release={release}
+            upgrade={upgrades[releaseUpgradeKey(release)] ?? null}
           />
         ))}
       </TableBody>
@@ -286,11 +296,13 @@ function ReleaseRow({
   onOpen,
   onPointerEnter,
   release,
+  upgrade,
 }: {
   highlighted: boolean;
   onOpen: () => void;
   onPointerEnter: () => void;
   release: HelmRelease;
+  upgrade: HelmReleaseUpgradeInfo | null;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -311,9 +323,10 @@ function ReleaseRow({
       <TableCell className="max-w-56 truncate font-medium">{release.name}</TableCell>
       <TableCell className="max-w-40 truncate text-muted-foreground">{release.scope.clusterId}</TableCell>
       <TableCell className="max-w-40 truncate text-muted-foreground">{release.storageNamespace}</TableCell>
-      <TableCell className="text-muted-foreground">{HELM_COPY.unavailableValue}</TableCell>
+      <TableCell className="text-muted-foreground">{chartText(release)}</TableCell>
       <TableCell><StatusBadge status={release.status} /></TableCell>
       <TableCell><ResourceHealthBadge health={release.resourceHealth} /></TableCell>
+      <TableCell><UpgradeAvailability info={upgrade} /></TableCell>
       <TableCell className="text-muted-foreground">{release.revision ?? HELM_COPY.unavailableValue}</TableCell>
       <TableCell className="text-muted-foreground">{formatObservedAt(release.observedAt)}</TableCell>
     </TableRow>
@@ -394,6 +407,7 @@ function HelmDetailBoundary({
           />
         </div>
       </header>
+      <HelmUpgradeEvidence detail={detail} />
       <dl className="grid min-w-0 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4">
         <Fact label={HELM_COPY.status} value={<StatusBadge status={detail.release.status} />} />
         <Fact label={HELM_COPY.revision} value={detail.release.revision ?? HELM_COPY.unavailableValue} />
@@ -436,6 +450,37 @@ function HelmDetailBoundary({
         </dl>
       </section>
       <OwnedResourcesPanel ownedResources={detail.ownedResources} />
+    </section>
+  );
+}
+
+function HelmUpgradeEvidence({ detail }: { detail: HelmReleaseDetailView }) {
+  const { availableVersions, upgradeInfo } = detail;
+  const transition = upgradeInfo.currentVersion !== null && upgradeInfo.latestVersion !== null
+    ? `${upgradeInfo.currentVersion} → ${upgradeInfo.latestVersion}`
+    : HELM_COPY.unavailableValue;
+  const source = upgradeInfo.source ?? availableVersions.source;
+  const versions = availableVersions.versions.map((item) => item.version).join(", ");
+
+  return (
+    <section aria-labelledby="helm-release-upgrade-evidence-title" className="grid min-w-0 gap-2 rounded-lg border bg-card p-3">
+      <h2 className="text-base font-semibold" id="helm-release-upgrade-evidence-title">
+        {HELM_COPY.upgradeAvailability}
+      </h2>
+      <dl className="grid min-w-0 gap-2 sm:grid-cols-3">
+        <Fact label={HELM_COPY.upgradeVersionTransition} value={transition} />
+        <Fact
+          label={HELM_COPY.upgradeSource}
+          value={source ? `${source.name} · ${source.provider}` : HELM_COPY.upgradeSourceUnavailable}
+        />
+        <Fact
+          label={HELM_COPY.upgradeVersions}
+          value={versions || HELM_COPY.unavailableValue}
+        />
+      </dl>
+      {availableVersions.truncated ? (
+        <p className="text-xs text-muted-foreground">{HELM_COPY.upgradeVersionsTruncated}</p>
+      ) : null}
     </section>
   );
 }
@@ -1131,6 +1176,25 @@ function ResourceHealthBadge({ health }: { health: HelmResourceHealth }) {
 
 function HealthBadge({ health }: { health: string }) {
   return <Badge variant={health.toLowerCase() === "healthy" ? "secondary" : "outline"}>{health}</Badge>;
+}
+
+function UpgradeAvailability({ info }: { info: HelmReleaseUpgradeInfo | null }) {
+  if (info?.availability === "available" && info.updateAvailable === true && info.latestVersion) {
+    return <Badge variant="secondary">{info.latestVersion} {HELM_COPY.upgradeAvailableSuffix}</Badge>;
+  }
+  if (info?.availability === "available" && info.updateAvailable === false) {
+    return <span className="text-muted-foreground">{HELM_COPY.upgradeUpToDate}</span>;
+  }
+  return <span className="text-muted-foreground">{HELM_COPY.unavailableValue}</span>;
+}
+
+function chartText(release: HelmRelease): string {
+  if (release.chart === null || release.chartVersion === null) return HELM_COPY.unavailableValue;
+  return `${release.chart} ${release.chartVersion}`;
+}
+
+function releaseUpgradeKey(release: HelmRelease): string {
+  return [release.scope.clusterId, release.storageNamespace, release.name].join("/");
 }
 
 function matchesRelease(release: HelmRelease, query: string): boolean {

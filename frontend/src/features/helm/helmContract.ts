@@ -234,12 +234,52 @@ export interface HelmRelease {
   name: string;
   storageNamespace: string;
   storage: HelmResourceRef;
-  chart: null;
+  chart: string | null;
+  chartVersion: string | null;
+  chartReasonCodes: readonly string[];
   appVersion: null;
   status: string | null;
   revision: number | null;
   observedAt: string | null;
   resourceHealth: HelmResourceHealth;
+}
+
+export interface HelmChartVersion {
+  version: string;
+  appVersion: string | null;
+  deprecated: boolean;
+}
+
+export interface HelmReleaseUpgradeInfo {
+  availability: HelmAvailability;
+  chartName: string | null;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean | null;
+  source: HelmChartSource | null;
+  observedAt: string | null;
+  reasonCodes: readonly string[];
+  refreshAfterSeconds: number;
+}
+
+export interface HelmReleaseVersionList {
+  availability: HelmAvailability;
+  chartName: string | null;
+  currentVersion: string | null;
+  source: HelmChartSource | null;
+  versions: readonly HelmChartVersion[];
+  observedAt: string | null;
+  truncated: boolean;
+  reasonCodes: readonly string[];
+  refreshAfterSeconds: number;
+}
+
+export interface HelmReleaseUpgradeBatch {
+  releases: Readonly<Record<string, HelmReleaseUpgradeInfo>>;
+  coverage: HelmObservationCoverage;
+  truncated: boolean;
+  reasonCodes: readonly string[];
+  refreshAfterSeconds: number;
 }
 
 export interface HelmReleaseHistoryEntry {
@@ -312,6 +352,18 @@ export class HelmPortFailure extends Error {
 export interface HelmPort {
   listReleases(request: HelmReleaseListRequest, signal?: AbortSignal): Promise<HelmReleaseList>;
   getRelease(request: HelmReleaseDetailRequest, signal?: AbortSignal): Promise<HelmReleaseDetail>;
+  getReleaseUpgradeInfo(
+    request: HelmReleaseDetailRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeInfo>;
+  listReleaseVersions(
+    request: HelmReleaseDetailRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseVersionList>;
+  checkReleaseUpgrades(
+    request: HelmReleaseListRequest,
+    signal?: AbortSignal,
+  ): Promise<HelmReleaseUpgradeBatch>;
   readArtifact(
     request: HelmArtifactReadRequest,
     signal?: AbortSignal,

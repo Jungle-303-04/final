@@ -2,8 +2,14 @@ import { apiRequest, type ApiPath } from "./client";
 import {
   helmReleaseDetailSchema,
   helmReleaseListSchema,
+  helmReleaseUpgradeBatchSchema,
+  helmReleaseUpgradeInfoSchema,
+  helmReleaseVersionListSchema,
   type HelmReleaseDetailEndpoint,
   type HelmReleaseListEndpoint,
+  type HelmReleaseUpgradeBatchEndpoint,
+  type HelmReleaseUpgradeInfoEndpoint,
+  type HelmReleaseVersionListEndpoint,
 } from "./helm-releases-schemas";
 import {
   resourceActionAcceptedSchema,
@@ -18,6 +24,11 @@ export const HELM_RELEASE_ARTIFACT_PATH =
   "/api/helm/releases/{namespace}/{release_name}/artifacts" as const;
 export const HELM_RELEASE_UPGRADE_PATH =
   "/api/helm/releases/{namespace}/{release_name}/upgrade" as const;
+export const HELM_RELEASE_UPGRADE_INFO_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/upgrade-info" as const;
+export const HELM_RELEASE_VERSIONS_PATH =
+  "/api/helm/releases/{namespace}/{release_name}/versions" as const;
+export const HELM_UPGRADE_CHECK_PATH = "/api/helm/upgrade-check" as const;
 
 export interface HelmReleaseListQuery {
   clusterIds?: readonly string[];
@@ -45,6 +56,38 @@ export function getHelmRelease(
     .replace("{namespace}", encodePathSegment(namespace))
     .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
   return apiRequest(withQuery(path, [["cluster_id", clusterId]]), helmReleaseDetailSchema, { signal });
+}
+
+export function getHelmReleaseUpgradeInfo(
+  input: { clusterId: string; namespace: string; releaseName: string },
+  signal?: AbortSignal,
+): Promise<HelmReleaseUpgradeInfoEndpoint> {
+  return apiRequest(
+    releaseReadPath(HELM_RELEASE_UPGRADE_INFO_PATH, input),
+    helmReleaseUpgradeInfoSchema,
+    { signal },
+  );
+}
+
+export function listHelmReleaseVersions(
+  input: { clusterId: string; namespace: string; releaseName: string },
+  signal?: AbortSignal,
+): Promise<HelmReleaseVersionListEndpoint> {
+  return apiRequest(
+    releaseReadPath(HELM_RELEASE_VERSIONS_PATH, input),
+    helmReleaseVersionListSchema,
+    { signal },
+  );
+}
+
+export function checkHelmReleaseUpgrades(
+  query: HelmReleaseListQuery = {},
+  signal?: AbortSignal,
+): Promise<HelmReleaseUpgradeBatchEndpoint> {
+  return apiRequest(withQuery(HELM_UPGRADE_CHECK_PATH, [
+    ["clusters", joined("clusters", query.clusterIds)],
+    ["namespaces", joined("namespaces", query.namespaces)],
+  ]), helmReleaseUpgradeBatchSchema, { signal });
 }
 
 export function startHelmArtifactRead(
@@ -127,6 +170,18 @@ export function startHelmReleaseUpgrade(
   });
 }
 
+function releaseReadPath(
+  template: typeof HELM_RELEASE_UPGRADE_INFO_PATH | typeof HELM_RELEASE_VERSIONS_PATH,
+  input: { clusterId: string; namespace: string; releaseName: string },
+): ApiPath {
+  const clusterId = requiredIdentity(input.clusterId, "clusterId");
+  const namespace = requiredIdentity(input.namespace, "namespace");
+  const releaseName = requiredIdentity(input.releaseName, "releaseName");
+  const path = template
+    .replace("{namespace}", encodePathSegment(namespace))
+    .replace("{release_name}", encodePathSegment(releaseName)) as ApiPath;
+  return withQuery(path, [["cluster_id", clusterId]]);
+}
 
 function joined(
   axis: "clusters" | "namespaces",

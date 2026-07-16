@@ -103,11 +103,17 @@ export {
   type TimelineStreamSubscription,
 } from "./timeline";
 export {
+  checkHelmReleaseUpgrades,
   getHelmRelease,
+  getHelmReleaseUpgradeInfo,
   HELM_RELEASE_ARTIFACT_PATH,
   HELM_RELEASE_PATH,
   HELM_RELEASES_PATH,
   HELM_RELEASE_UPGRADE_PATH,
+  HELM_RELEASE_UPGRADE_INFO_PATH,
+  HELM_RELEASE_VERSIONS_PATH,
+  HELM_UPGRADE_CHECK_PATH,
+  listHelmReleaseVersions,
   listHelmReleases,
   startHelmArtifactRead,
   startHelmReleaseUpgrade,
@@ -117,9 +123,15 @@ export {
   helmReleaseDetailSchema,
   helmReleaseHistoryEntrySchema,
   helmReleaseListSchema,
+  helmReleaseUpgradeBatchSchema,
+  helmReleaseUpgradeInfoSchema,
+  helmReleaseVersionListSchema,
   helmReleaseSchema,
   type HelmReleaseDetailEndpoint,
   type HelmReleaseListEndpoint,
+  type HelmReleaseUpgradeBatchEndpoint,
+  type HelmReleaseUpgradeInfoEndpoint,
+  type HelmReleaseVersionListEndpoint,
 } from "./helm-releases-schemas";
 export {
   HELM_CHART_SOURCES_PATH,

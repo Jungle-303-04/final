@@ -47,7 +47,7 @@ export function createHelmChartSourcesPort(
   };
 }
 
-function toChartSource(
+export function toChartSource(
   value: Awaited<ReturnType<HelmEndpointDependencies["listHelmChartSources"]>>["items"][number],
 ): HelmChartSource {
   return {
