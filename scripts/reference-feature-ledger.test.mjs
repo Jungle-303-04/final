@@ -750,10 +750,10 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     ["reference.feature.068", ["upstream-ui:applications:projection:catalog-detail-refresh:v1", "implemented"]],
     ["reference.feature.069", ["upstream-ui:resources:view:guarded-count-and-query-identity:v1", "implemented"]],
     ["reference.feature.071", ["upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1", "implemented"]],
-    ["reference.feature.072", ["upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1", "in_progress"]],
+    ["reference.feature.072", ["upstream-ui:resources:metrics-grid:canonical-range-and-separation:v1", "implemented"]],
     ["reference.feature.073", ["upstream-ui:gitops:fleet:authorized-catalog:v1", "implemented"]],
     ["reference.feature.074", ["upstream-ui:gitops:fleet:authorized-catalog:v1", "implemented"]],
-    ["reference.feature.075", ["upstream-ui:helm:release-list:scope-rbac:v1", "in_progress"]],
+    ["reference.feature.075", ["upstream-ui:helm:release-list:scope-rbac:v1", "implemented"]],
     ["reference.feature.076", ["upstream-ui:cost:overview:availability-scope:v1", "in_progress"]],
     ["reference.feature.077", ["upstream-ui:service-access:port-session:list-and-layout:v1", "in_progress"]],
   ]);
@@ -766,10 +766,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     const feature = ledger.features.find((candidate) => candidate.contractId === contractId);
     const interaction = interactions.find((candidate) => candidate.sourceKey === sourceKey);
     assert.equal(port.deliveryStatus, deliveryStatus);
-    assert.equal(
-      port.coverage.backend.state,
-      contractId === "reference.feature.072" ? "in_progress" : "implemented",
-    );
+    assert.equal(port.coverage.backend.state, "implemented");
     assert.equal(aliases.aliases[contractId], sourceKey);
     assert.equal(feature.deliveryStatus, deliveryStatus);
     assert.equal(feature.sourceKey, sourceKey);
@@ -804,7 +801,7 @@ test("주요 REST 갱신 정책은 서버 계약과 화면별 소비 상태를 �
     "upstream-ui:timeline:delta-sync:epoch-resync-test:v1",
   );
 
-  assert.equal(portMap.features["reference.feature.075"].coverage.frontend.state, "in_progress");
+  assert.equal(portMap.features["reference.feature.075"].coverage.frontend.state, "implemented");
   assert.equal(portMap.features["reference.feature.076"].coverage.frontend.state, "in_progress");
   assert.equal(portMap.features["reference.feature.077"].coverage.desktop.state, "blocked");
 });

@@ -1091,31 +1091,33 @@
       }
     },
     "reference.feature.072": {
-      "deliveryStatus": "in_progress",
-      "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
+      "deliveryStatus": "implemented",
+      "backendContract": "packages.contracts.scoped_metrics.ScopedMetricQueryResponse",
       "frontendContract": "frontend/src/features/resources/resourceMetricsHistoryContract.ts",
       "desktopContract": null,
       "verification": [
         "tests/test_refresh_policies.py",
+        "tests/test_scoped_resource_metrics.py",
         "frontend/src/api/refresh-policies.test.ts",
+        "frontend/src/api/metrics-scoped.test.ts",
         "frontend/src/pages/resources/ResourceMetricsCharts.test.tsx",
         "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.test.tsx",
         "frontend/src/features/rightsizing/useRightsizingScans.test.tsx"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
-          "destination": "src/domains/inventory_filter/router.py#get_resource_metrics_history",
-          "consumer": "src/packages/config/refresh_policies.py#browser_refresh_policy",
-          "reason": "The response contract can select Prometheus, PVC, or rightsizing policies and rightsizing uses the server 10-minute cadence, but the current Python history producer emits Kubernetes metrics only; Prometheus and PVC producers remain absent.",
-          "test": "tests/test_resource_metrics_history_router.py"
+          "state": "implemented",
+          "destination": "src/domains/command/router.py#scoped_resource_metrics_query",
+          "consumer": "src/domains/command/scoped_metrics.py#build_scoped_metric_plans",
+          "reason": "The typed Python contract resolves authorized resource, namespace, cluster, and PVC scopes, queues server-owned Prometheus queries through telemetry.query.run, and returns explicit exact, partial, or unavailable coverage with 60-second Prometheus and 120-second PVC policy keys.",
+          "test": "tests/test_scoped_resource_metrics.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/resources/ResourceMetricsCharts.tsx#ResourceMetricsCharts",
           "consumer": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.ts#useResourceMetricsHistoryDataFrame",
-          "reason": "The shared consumer selects 60-second, 120-second, or 10-minute policies from the response source key and rightsizing uses the server cadence, but no real Prometheus or PVC data reaches the view yet.",
-          "test": "frontend/src/pages/resources/useResourceMetricsHistoryDataFrame.test.tsx"
+          "reason": "The existing Resources metrics view consumes real Prometheus CPU and memory plus PVC volume usage through a three-command bounded poller, uses response-selected 60-second or 120-second policies, and keeps rightsizing on the server-owned 10-minute policy without a browser cadence.",
+          "test": "frontend/src/api/metrics-scoped.test.ts"
         }
       }
     },
@@ -1176,7 +1178,7 @@
       }
     },
     "reference.feature.075": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.helm.releases",
       "frontendContract": "frontend/src/features/helm/helmContract.ts",
       "desktopContract": null,
@@ -1186,6 +1188,7 @@
         "tests/test_helm_release_projection.py",
         "frontend/src/api/helm-releases.test.ts",
         "frontend/src/features/helm/createHelmAdapter.test.ts",
+        "frontend/src/pages/helm/HelmReleaseUpgradeDialog.tsx",
         "frontend/src/pages/helm/HelmPage.test.tsx"
       ],
       "coverage": {
@@ -1196,11 +1199,18 @@
           "test": "tests/test_helm_release_router.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/pages/helm/useHelmReleaseData.ts#useHelmReleaseList",
           "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
-          "reason": "List and detail consume server-owned 30-second and 10-second policies after successful reads, but post-mutation immediate and 1.2-second refetch cannot complete until Helm mutations exist.",
+          "reason": "List and detail consume the server-owned 30-second and 10-second policies; a capability-gated real Upgrade receipt triggers immediate refresh and the server-owned 1.2-second follow-up through the shared scheduler.",
           "test": "frontend/src/pages/helm/HelmPage.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/helm/release_router.py#create_helm_release_upgrade",
+          "consumer": "frontend/src/features/operations/OperationStatusStore.ts",
+          "reason": "The supported digest-pinned Upgrade action returns the common CommandReceipt and uses the existing OperationEvent stream; unsupported rollback and uninstall are not advertised.",
+          "test": "tests/test_helm_release_router.py"
         }
       }
     },
@@ -1212,9 +1222,12 @@
       "verification": [
         "tests/test_refresh_policies.py",
         "tests/test_cost_router.py",
+        "tests/test_cost_node_projection.py",
         "tests/test_cost_observation_projection.py",
+        "frontend/src/api/cost-nodes.test.ts",
         "frontend/src/api/cost-overview.test.ts",
         "frontend/src/features/cost/createCostAdapter.test.ts",
+        "frontend/src/pages/cost/useCostNodesData.test.tsx",
         "frontend/src/pages/cost/useCostOverviewData.test.tsx"
       ],
       "coverage": {
@@ -1226,10 +1239,10 @@
         },
         "frontend": {
           "state": "in_progress",
-          "destination": "frontend/src/pages/cost/useCostOverviewData.ts#useCostOverview",
+          "destination": "frontend/src/pages/cost/CostPage.tsx#CostPage",
           "consumer": "frontend/src/shared/data/useServerRefreshScheduler.ts#useServerRefreshScheduler",
-          "reason": "The bundled summary and trend use the server 60-second policy and retain last-success after failure; a separate node-cost consumer for the declared 120-second cadence is unavailable.",
-          "test": "frontend/src/pages/cost/useCostOverviewData.test.tsx"
+          "reason": "Summary and trend use the server 60-second policy, while the paginated authorized Node identity, capacity, and observed usage panel uses the independent server 120-second policy with last-success retention. Monetary rate remains explicitly unavailable because no actual pricing or OpenCost observation source is integrated; no estimate is fabricated.",
+          "test": "frontend/src/pages/cost/useCostNodesData.test.tsx"
         }
       }
     },
