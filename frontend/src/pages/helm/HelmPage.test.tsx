@@ -49,6 +49,59 @@ describe("HelmPage", () => {
     ));
   });
 
+  it("decorates the release list only with server-resolved batch upgrade evidence", async () => {
+    const port = helmPort();
+    port.checkReleaseUpgrades.mockResolvedValue({
+      releases: {
+        "cluster-a/storefront/storefront": availableUpgradeInfo(),
+      },
+      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
+      truncated: false,
+      reasonCodes: [],
+      refreshAfterSeconds: 30,
+    });
+    renderRoute("/helm", port);
+
+    expect(await screen.findByText("2.0.0 available")).toBeTruthy();
+    await waitFor(() => expect(port.checkReleaseUpgrades).toHaveBeenCalledWith(
+      { clusterIds: ["cluster-a"] },
+      expect.any(AbortSignal),
+    ));
+  });
+
+  it("shows the exact source and newest-first versions in release detail", async () => {
+    const port = helmPort();
+    port.getRelease.mockResolvedValue({
+      ...detail(),
+      release: {
+        ...release(),
+        chart: "storefront",
+        chartVersion: "1.2.3",
+        chartReasonCodes: [],
+      },
+    });
+    port.getReleaseUpgradeInfo.mockResolvedValue(availableUpgradeInfo());
+    port.listReleaseVersions.mockResolvedValue({
+      availability: "available",
+      chartName: "storefront",
+      currentVersion: "1.2.3",
+      source: availableUpgradeInfo().source,
+      versions: [
+        { version: "2.0.0", appVersion: "4.0.0", deprecated: false },
+        { version: "1.2.3", appVersion: "3.0.0", deprecated: false },
+      ],
+      observedAt: "2026-07-17T00:01:00Z",
+      truncated: false,
+      reasonCodes: [],
+      refreshAfterSeconds: 10,
+    });
+    renderRoute("/helm/detail/cluster-a/storefront/storefront", port);
+
+    expect(await screen.findByText("1.2.3 → 2.0.0")).toBeTruthy();
+    expect(screen.getByText("Stable · repository")).toBeTruthy();
+    expect(screen.getByText("2.0.0, 1.2.3")).toBeTruthy();
+  });
+
   it("preserves a route identity when a row opens its read-only detail", async () => {
     const port = helmPort();
     renderRoute("/helm", port);
@@ -467,8 +520,11 @@ function LocationProbe() {
 }
 
 function helmPort(): HelmPort & {
+  checkReleaseUpgrades: ReturnType<typeof vi.fn>;
   listReleases: ReturnType<typeof vi.fn>;
   getRelease: ReturnType<typeof vi.fn>;
+  getReleaseUpgradeInfo: ReturnType<typeof vi.fn>;
+  listReleaseVersions: ReturnType<typeof vi.fn>;
   readArtifact: ReturnType<typeof vi.fn>;
   upgradeRelease: ReturnType<typeof vi.fn>;
   listChartSources: ReturnType<typeof vi.fn>;
@@ -476,6 +532,13 @@ function helmPort(): HelmPort & {
   deleteChartSource: ReturnType<typeof vi.fn>;
 } {
   return {
+    checkReleaseUpgrades: vi.fn().mockResolvedValue({
+      releases: {},
+      coverage: { availability: "available", observedAt: null, reasonCodes: [] },
+      truncated: false,
+      reasonCodes: [],
+      refreshAfterSeconds: 30,
+    }),
     listReleases: vi.fn().mockResolvedValue({
       releases: [release()],
       refreshAfterSeconds: 30,
@@ -483,6 +546,28 @@ function helmPort(): HelmPort & {
       coverage: { availability: "available", observedAt: "2026-07-16T09:00:00Z", reasonCodes: [] },
     }),
     getRelease: vi.fn().mockResolvedValue(detail()),
+    getReleaseUpgradeInfo: vi.fn().mockResolvedValue({
+      availability: "unavailable",
+      chartName: null,
+      currentVersion: null,
+      latestVersion: null,
+      updateAvailable: null,
+      source: null,
+      observedAt: null,
+      reasonCodes: ["helm_chart_identity_unavailable"],
+      refreshAfterSeconds: 10,
+    }),
+    listReleaseVersions: vi.fn().mockResolvedValue({
+      availability: "unavailable",
+      chartName: null,
+      currentVersion: null,
+      source: null,
+      versions: [],
+      observedAt: null,
+      truncated: false,
+      reasonCodes: ["helm_chart_identity_unavailable"],
+      refreshAfterSeconds: 10,
+    }),
     readArtifact: vi.fn().mockResolvedValue({
       accepted: true,
       eventId: "evt-helm-1",
@@ -520,6 +605,29 @@ function helmPort(): HelmPort & {
       credentialsConfigured: false,
       observedAt: null,
     }),
+  };
+}
+
+function availableUpgradeInfo() {
+  return {
+    availability: "available" as const,
+    chartName: "storefront",
+    currentVersion: "1.2.3",
+    latestVersion: "2.0.0",
+    updateAvailable: true,
+    source: {
+      id: "source-a",
+      provider: "repository" as const,
+      name: "Stable",
+      reference: "https://charts.example.test/stable",
+      status: "active" as const,
+      actions: [],
+      credentialsConfigured: false,
+      observedAt: "2026-07-17T00:00:00Z",
+    },
+    observedAt: "2026-07-17T00:01:00Z",
+    reasonCodes: [],
+    refreshAfterSeconds: 10,
   };
 }
 
@@ -590,6 +698,8 @@ function release(): HelmRelease {
       uid: "storage-3",
     },
     chart: null,
+    chartVersion: null,
+    chartReasonCodes: ["helm_chart_identity_unavailable"],
     appVersion: null,
     status: "deployed",
     revision: 3,
