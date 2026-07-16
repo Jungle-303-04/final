@@ -164,6 +164,42 @@ describe("canonical Home adapter mapping", () => {
         releaseCount: 2,
         statusCounts: { deployed: 1, failed: 1 },
       },
+      certificateExpiry: {
+        coverage: {
+          availability: "available",
+          observedAt: "2026-07-12T10:00:00.000Z",
+          reasonCodes: [],
+        },
+        items: [{
+          secret: {
+            apiGroup: "",
+            version: "v1",
+            kind: "Secret",
+            namespace: "shop",
+            name: "api-tls",
+            uid: "secret-api-tls",
+          },
+          sourceCertificate: {
+            apiGroup: "cert-manager.io",
+            version: "v1",
+            kind: "Certificate",
+            namespace: "shop",
+            name: "api-certificate",
+            uid: "certificate-api",
+          },
+          notAfter: "2026-07-20T10:00:00.000Z",
+          status: "expiring",
+          secondsRemaining: 345_600,
+          observedAt: "2026-07-12T10:00:00.000Z",
+        }],
+        tlsSecretCount: 1,
+        observedExpiryCount: 1,
+        expiringCount: 1,
+        expiredCount: 0,
+        earliestExpiry: "2026-07-20T10:00:00.000Z",
+        warningBeforeSeconds: 2_592_000,
+        hasMore: false,
+      },
       refreshAfterSeconds: 30,
     });
   });

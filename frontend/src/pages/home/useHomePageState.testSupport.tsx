@@ -125,6 +125,21 @@ export function insights(clusterId: string): HomeInsights {
       releaseCount: 0,
       statusCounts: {},
     },
+    certificateExpiry: {
+      coverage: {
+        availability: "unavailable",
+        observedAt: null,
+        reasonCodes: ["tls_secret_observation_unavailable"],
+      },
+      items: [],
+      tlsSecretCount: null,
+      observedExpiryCount: null,
+      expiringCount: null,
+      expiredCount: null,
+      earliestExpiry: null,
+      warningBeforeSeconds: 2_592_000,
+      hasMore: false,
+    },
     refreshAfterSeconds: 30,
   };
 }

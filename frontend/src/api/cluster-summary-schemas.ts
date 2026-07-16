@@ -66,6 +66,15 @@ const homeInsightCoverageSchema = z.strictObject({
   }
 });
 
+const homeInsightResourceRefSchema = z.strictObject({
+  api_group: z.string(),
+  version: z.string(),
+  kind: z.string().min(1),
+  namespace: nullableStringSchema,
+  name: z.string().min(1),
+  uid: z.string().min(1),
+});
+
 export const homeInsightsSchema = z.strictObject({
   cluster_id: z.string().min(1),
   custom_resources: z.strictObject({
@@ -84,6 +93,24 @@ export const homeInsightsSchema = z.strictObject({
     coverage: homeInsightCoverageSchema,
     release_count: z.number().int().nonnegative().nullable(),
     status_counts: z.record(z.string().min(1), z.number().int().positive()),
+  }),
+  certificate_expiry: z.strictObject({
+    coverage: homeInsightCoverageSchema,
+    items: z.array(z.strictObject({
+      secret: homeInsightResourceRefSchema,
+      source_certificate: homeInsightResourceRefSchema,
+      not_after: z.string().min(1),
+      status: z.enum(["valid", "expiring", "expired"]),
+      seconds_remaining: z.number().int(),
+      observed_at: nullableStringSchema,
+    })).max(20),
+    tls_secret_count: z.number().int().nonnegative().nullable(),
+    observed_expiry_count: z.number().int().nonnegative().nullable(),
+    expiring_count: z.number().int().nonnegative().nullable(),
+    expired_count: z.number().int().nonnegative().nullable(),
+    earliest_expiry: nullableStringSchema,
+    warning_before_seconds: z.number().int().min(1).max(315_360_000),
+    has_more: z.boolean(),
   }),
   refresh_after_seconds: z.number().int().min(1).max(3600),
 }).superRefine((value, context) => {
@@ -146,6 +173,57 @@ export const homeInsightsSchema = z.strictObject({
   }
   if (value.helm.release_count !== null && statusTotal > value.helm.release_count) {
     context.addIssue({ code: "custom", message: "Helm status counts exceed release count" });
+  }
+  const certificate = value.certificate_expiry;
+  const certificateUnavailable = certificate.coverage.availability === "unavailable";
+  const certificateCounts = [
+    certificate.tls_secret_count,
+    certificate.observed_expiry_count,
+    certificate.expiring_count,
+    certificate.expired_count,
+  ];
+  if (certificateUnavailable && (
+    certificateCounts.some((count) => count !== null) ||
+    certificate.items.length > 0 ||
+    certificate.earliest_expiry !== null ||
+    certificate.has_more
+  )) {
+    context.addIssue({ code: "custom", message: "unavailable certificate coverage exposes data" });
+  }
+  if (!certificateUnavailable && certificateCounts.some((count) => count === null)) {
+    context.addIssue({ code: "custom", message: "observed certificate coverage requires counts" });
+  }
+  if (
+    certificate.observed_expiry_count !== null &&
+    certificate.tls_secret_count !== null &&
+    certificate.observed_expiry_count > certificate.tls_secret_count
+  ) {
+    context.addIssue({ code: "custom", message: "certificate observations exceed TLS Secrets" });
+  }
+  if (
+    certificate.observed_expiry_count !== null &&
+    certificate.expiring_count !== null &&
+    certificate.expired_count !== null &&
+    certificate.expiring_count + certificate.expired_count >
+      certificate.observed_expiry_count
+  ) {
+    context.addIssue({ code: "custom", message: "certificate health counts exceed observations" });
+  }
+  if (
+    !certificateUnavailable && (
+      certificate.observed_expiry_count === 0 ||
+      certificate.earliest_expiry === null
+    )
+  ) {
+    context.addIssue({ code: "custom", message: "certificate coverage lacks an expiry" });
+  }
+  if (
+    certificate.has_more !== (
+      certificate.observed_expiry_count !== null &&
+      certificate.observed_expiry_count > certificate.items.length
+    )
+  ) {
+    context.addIssue({ code: "custom", message: "certificate has_more is inconsistent" });
   }
 });
 

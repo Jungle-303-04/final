@@ -61,6 +61,32 @@ describe("canonical Home adapter validation", () => {
         },
       },
     ],
+    [
+      "certificate count overflow",
+      {
+        ...HOME_INSIGHTS,
+        certificate_expiry: {
+          ...HOME_INSIGHTS.certificate_expiry,
+          observed_expiry_count: 2,
+        },
+      },
+    ],
+    [
+      "non-Secret certificate target",
+      {
+        ...HOME_INSIGHTS,
+        certificate_expiry: {
+          ...HOME_INSIGHTS.certificate_expiry,
+          items: [{
+            ...HOME_INSIGHTS.certificate_expiry.items[0],
+            secret: {
+              ...HOME_INSIGHTS.certificate_expiry.items[0].secret,
+              kind: "ConfigMap",
+            },
+          }],
+        },
+      },
+    ],
   ])("rejects Home insights with %s", async (_name, payload) => {
     const dependencies = endpoints({
       getHomeInsights: vi.fn().mockResolvedValue(payload),

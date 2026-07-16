@@ -48,6 +48,8 @@ POD_RESOURCE_TYPE = "pod"
 NODE_RESOURCE_TYPE = "node"
 WORKLOAD_RESOURCE_TYPE = "workload"
 EVENT_RESOURCE_TYPE = "event"
+TLS_SECRET_TYPE = "kubernetes.io/tls"
+CERT_MANAGER_API_GROUP = "cert-manager.io"
 FLEET_ROLLUP_RESOURCE_TYPES = (POD_RESOURCE_TYPE, NODE_RESOURCE_TYPE, WORKLOAD_RESOURCE_TYPE)
 POD_RUNNING_STATUS = "Running"
 NODE_READY_STATUS = "Ready"
@@ -250,6 +252,41 @@ def snapshot_resources(payload: JsonObject) -> list[JsonObject]:
             }
         )
     return resources
+
+
+def _certificate_observation(row: Mapping[str, Any]) -> JsonObject:
+    secret = {
+        "inventory_key": str(row["secret_inventory_key"]),
+        "api_version": str(row["secret_api_version"]),
+        "kind": str(row["secret_kind"]),
+        "namespace": (
+            str(row["secret_namespace"]) if row.get("secret_namespace") is not None else None
+        ),
+        "name": str(row["secret_name"]),
+        "uid": str(row["secret_uid"]) if row.get("secret_uid") is not None else None,
+        "observed_at": iso_or_none(row.get("secret_observed_at")),
+    }
+    if row.get("certificate_inventory_key") is None:
+        return {"secret": secret, "certificate": None}
+    return {
+        "secret": secret,
+        "certificate": {
+            "inventory_key": str(row["certificate_inventory_key"]),
+            "api_version": str(row["certificate_api_version"]),
+            "kind": str(row["certificate_kind"]),
+            "namespace": (
+                str(row["certificate_namespace"])
+                if row.get("certificate_namespace") is not None
+                else None
+            ),
+            "name": str(row["certificate_name"]),
+            "uid": (
+                str(row["certificate_uid"]) if row.get("certificate_uid") is not None else None
+            ),
+            "raw": dict(row.get("certificate_raw") or {}),
+            "observed_at": iso_or_none(row.get("certificate_observed_at")),
+        },
+    }
 
 
 def snapshot_summary(payload: JsonObject) -> JsonObject:
@@ -834,6 +871,120 @@ class InventoryRepository(DatabaseConnection):
         with self.connection() as conn:
             rows = conn.execute(statement).mappings().all()
         return [self.serialize_inventory_resource(dict(row)) for row in rows]
+
+    def list_tls_secret_certificate_observations(
+        self,
+        *,
+        workspace_id: str,
+        cluster_id: str,
+        limit: int,
+    ) -> JsonObject:
+        """Read TLS Secret identities with at most one matching cert-manager observation.
+
+        Secret ``raw`` and ``data`` columns are deliberately absent from the
+        selected response. Only the Certificate object is retained for the
+        existing redacted provider-detail projector.
+        """
+
+        effective_limit = max(1, min(limit, 500))
+        table = ClusterInventoryResourceRecord.__table__
+        secret = table.alias("certificate_expiry_secret")
+        certificate = table.alias("certificate_expiry_certificate")
+        certificate_secret_name = certificate.c.raw["spec"]["secretName"].astext
+        ranked_certificates = (
+            select(
+                certificate.c.inventory_key,
+                certificate.c.api_version,
+                certificate.c.kind,
+                certificate.c.namespace,
+                certificate.c.name,
+                certificate.c.uid,
+                certificate.c.raw,
+                certificate.c.observed_at,
+                certificate_secret_name.label("secret_name"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        certificate.c.workspace_id,
+                        certificate.c.cluster_id,
+                        certificate.c.namespace,
+                        certificate_secret_name,
+                    ),
+                    order_by=(
+                        certificate.c.observed_at.desc(),
+                        certificate.c.inventory_key.desc(),
+                    ),
+                )
+                .label("rank"),
+            )
+            .where(
+                certificate.c.workspace_id == workspace_id,
+                certificate.c.cluster_id == cluster_id,
+                func.split_part(certificate.c.api_version, "/", 1) == CERT_MANAGER_API_GROUP,
+                func.lower(certificate.c.kind) == "certificate",
+                certificate.c.deleted_at.is_(None),
+                certificate_secret_name.is_not(None),
+                certificate_secret_name != "",
+            )
+            .cte("ranked_certificate_expiry_sources")
+        )
+        latest_certificate = (
+            select(ranked_certificates)
+            .where(ranked_certificates.c.rank == 1)
+            .cte("latest_certificate_expiry_sources")
+        )
+        secret_type = func.coalesce(
+            secret.c.raw["type"].astext,
+            secret.c.summary["type"].astext,
+            "",
+        )
+        statement = (
+            select(
+                secret.c.inventory_key.label("secret_inventory_key"),
+                secret.c.api_version.label("secret_api_version"),
+                secret.c.kind.label("secret_kind"),
+                secret.c.namespace.label("secret_namespace"),
+                secret.c.name.label("secret_name"),
+                secret.c.uid.label("secret_uid"),
+                secret.c.observed_at.label("secret_observed_at"),
+                latest_certificate.c.inventory_key.label("certificate_inventory_key"),
+                latest_certificate.c.api_version.label("certificate_api_version"),
+                latest_certificate.c.kind.label("certificate_kind"),
+                latest_certificate.c.namespace.label("certificate_namespace"),
+                latest_certificate.c.name.label("certificate_name"),
+                latest_certificate.c.uid.label("certificate_uid"),
+                latest_certificate.c.raw.label("certificate_raw"),
+                latest_certificate.c.observed_at.label("certificate_observed_at"),
+            )
+            .select_from(
+                secret.outerjoin(
+                    latest_certificate,
+                    and_(
+                        latest_certificate.c.namespace == secret.c.namespace,
+                        latest_certificate.c.secret_name == secret.c.name,
+                    ),
+                )
+            )
+            .where(
+                secret.c.workspace_id == workspace_id,
+                secret.c.cluster_id == cluster_id,
+                func.lower(secret.c.kind) == "secret",
+                secret.c.deleted_at.is_(None),
+                secret_type == TLS_SECRET_TYPE,
+            )
+            .order_by(
+                secret.c.namespace.nullsfirst(),
+                secret.c.name,
+                secret.c.inventory_key,
+            )
+            .limit(effective_limit + 1)
+        )
+        with self.connection() as conn:
+            rows = [dict(row) for row in conn.execute(statement).mappings().all()]
+        return {
+            "items": [_certificate_observation(row) for row in rows[:effective_limit]],
+            "has_more": len(rows) > effective_limit,
+        }
 
     def get_inventory_resource(
         self,

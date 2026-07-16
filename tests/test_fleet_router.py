@@ -84,6 +84,7 @@ class FleetApiDb:
         latest_snapshot: dict[str, Any] | None = None,
         filter_contexts: dict[str, dict[str, Any]] | None = None,
         custom_resource_counts: dict[str, Any] | None = None,
+        certificate_observations: dict[str, Any] | None = None,
         helm_contexts: dict[str, dict[str, Any]] | None = None,
         helm_storage: list[dict[str, Any]] | None = None,
         pending_approvals: int = 0,
@@ -112,6 +113,10 @@ class FleetApiDb:
             "items": [],
             "total_kinds": 0,
             "total_resources": 0,
+        }
+        self.certificate_observations = certificate_observations or {
+            "items": [],
+            "has_more": False,
         }
         self.helm_contexts = helm_contexts or {}
         self.helm_storage = helm_storage or []
@@ -245,6 +250,10 @@ class FleetApiDb:
     def list_home_custom_resource_counts(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("custom_resource_counts", kwargs))
         return self.custom_resource_counts
+
+    def list_tls_secret_certificate_observations(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("certificate_observations", kwargs))
+        return self.certificate_observations
 
     def helm_release_observation_contexts(
         self,
@@ -388,6 +397,21 @@ def test_home_insights_composes_revisioned_custom_resources_and_helm_summary() -
             "release_count": 1,
             "status_counts": {"deployed": 1},
         },
+        "certificate_expiry": {
+            "coverage": {
+                "availability": "unavailable",
+                "observed_at": observed_at,
+                "reason_codes": ["tls_secret_observation_unavailable"],
+            },
+            "items": [],
+            "tls_secret_count": None,
+            "observed_expiry_count": None,
+            "expiring_count": None,
+            "expired_count": None,
+            "earliest_expiry": None,
+            "warning_before_seconds": 2_592_000,
+            "has_more": False,
+        },
         "refresh_after_seconds": 30,
     }
     assert (
@@ -421,7 +445,14 @@ def test_home_insights_never_turns_missing_inventory_into_zero_counts() -> None:
     assert body["helm"]["coverage"]["availability"] == "unavailable"
     assert body["helm"]["release_count"] is None
     assert body["helm"]["status_counts"] == {}
+    assert body["certificate_expiry"]["coverage"] == {
+        "availability": "unavailable",
+        "observed_at": None,
+        "reason_codes": [f"inventory_snapshot_unavailable:{CLUSTER_ID}"],
+    }
+    assert body["certificate_expiry"]["tls_secret_count"] is None
     assert not any(call[0] == "custom_resource_counts" for call in db.calls)
+    assert not any(call[0] == "certificate_observations" for call in db.calls)
 
 
 def test_fleet_summary_scopes_to_accessible_clusters() -> None:

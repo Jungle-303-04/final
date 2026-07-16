@@ -2,6 +2,7 @@ import type {
   HomeClusterChoice,
   HomeClusterChoices,
   HomeClusterOverview,
+  HomeCertificateResourceRef,
   HomeDataQualityWarning,
   HomeNodeCollection,
   HomeNodeSummary,
@@ -18,6 +19,7 @@ import type {
   HomeEndpointClusterSummary,
   HomeEndpointInsightCoverage,
   HomeEndpointInsights,
+  HomeEndpointResourceRef,
   HomeEndpointNode,
   HomeEndpointNodeCollection,
   HomeEndpointPod,
@@ -189,6 +191,67 @@ export function toHomeInsights(
   ) {
     invalidResponse();
   }
+  const certificateCoverage = toInsightCoverage(wire.certificate_expiry.coverage);
+  const certificateItems = wire.certificate_expiry.items.map((item) => {
+    const secret = toInsightResourceRef(item.secret);
+    const sourceCertificate = toInsightResourceRef(item.source_certificate);
+    if (secret.kind !== "Secret" || sourceCertificate.kind !== "Certificate") invalidResponse();
+    if (!["valid", "expiring", "expired"].includes(item.status)) invalidResponse();
+    const notAfter = canonicalTimestamp(item.not_after);
+    if (notAfter === null || !Number.isSafeInteger(item.seconds_remaining)) invalidResponse();
+    return {
+      secret,
+      sourceCertificate,
+      notAfter,
+      status: item.status,
+      secondsRemaining: item.seconds_remaining,
+      observedAt: canonicalTimestamp(item.observed_at),
+    };
+  });
+  assertUnique(certificateItems.map((item) => item.secret.uid));
+  const tlsSecretCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.tls_secret_count,
+  );
+  const observedExpiryCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.observed_expiry_count,
+  );
+  const expiringCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.expiring_count,
+  );
+  const expiredCount = nullableNonNegativeInteger(
+    wire.certificate_expiry.expired_count,
+  );
+  const earliestExpiry = canonicalTimestamp(wire.certificate_expiry.earliest_expiry);
+  const certificateUnavailable = certificateCoverage.availability === "unavailable";
+  const certificateCounts = [
+    tlsSecretCount,
+    observedExpiryCount,
+    expiringCount,
+    expiredCount,
+  ];
+  if (
+    (certificateUnavailable && (
+      certificateCounts.some((count) => count !== null) ||
+      certificateItems.length > 0 ||
+      earliestExpiry !== null ||
+      wire.certificate_expiry.has_more
+    )) ||
+    (!certificateUnavailable && certificateCounts.some((count) => count === null)) ||
+    (tlsSecretCount !== null && observedExpiryCount !== null &&
+      observedExpiryCount > tlsSecretCount) ||
+    (observedExpiryCount !== null && expiringCount !== null && expiredCount !== null &&
+      expiringCount + expiredCount > observedExpiryCount) ||
+    (!certificateUnavailable && (observedExpiryCount === 0 || earliestExpiry === null)) ||
+    wire.certificate_expiry.has_more !== (
+      observedExpiryCount !== null && observedExpiryCount > certificateItems.length
+    )
+  ) {
+    invalidResponse();
+  }
+  const warningBeforeSeconds = nonNegativeInteger(
+    wire.certificate_expiry.warning_before_seconds,
+  );
+  if (warningBeforeSeconds < 1 || warningBeforeSeconds > 315_360_000) invalidResponse();
   const refreshAfterSeconds = nonNegativeInteger(wire.refresh_after_seconds);
   if (refreshAfterSeconds < 1 || refreshAfterSeconds > 3600) invalidResponse();
   return {
@@ -205,6 +268,17 @@ export function toHomeInsights(
       releaseCount,
       statusCounts,
     },
+    certificateExpiry: {
+      coverage: certificateCoverage,
+      items: certificateItems,
+      tlsSecretCount,
+      observedExpiryCount,
+      expiringCount,
+      expiredCount,
+      earliestExpiry,
+      warningBeforeSeconds,
+      hasMore: wire.certificate_expiry.has_more,
+    },
     refreshAfterSeconds,
   };
 }
@@ -217,6 +291,18 @@ function toInsightCoverage(wire: HomeEndpointInsightCoverage) {
     availability: wire.availability,
     observedAt: canonicalTimestamp(wire.observed_at),
     reasonCodes,
+  };
+}
+
+function toInsightResourceRef(wire: HomeEndpointResourceRef): HomeCertificateResourceRef {
+  if (wire.api_group !== wire.api_group.trim()) invalidResponse();
+  return {
+    apiGroup: wire.api_group,
+    version: canonicalIdentity(wire.version),
+    kind: canonicalIdentity(wire.kind),
+    namespace: canonicalOptionalIdentity(wire.namespace),
+    name: canonicalIdentity(wire.name),
+    uid: canonicalIdentity(wire.uid),
   };
 }
 

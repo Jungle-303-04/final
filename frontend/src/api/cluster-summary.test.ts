@@ -169,6 +169,42 @@ describe("cluster summary API", () => {
         release_count: 2,
         status_counts: { deployed: 2 },
       },
+      certificate_expiry: {
+        coverage: {
+          availability: "available",
+          observed_at: "2026-07-16T09:00:00Z",
+          reason_codes: [],
+        },
+        items: [{
+          secret: {
+            api_group: "",
+            version: "v1",
+            kind: "Secret",
+            namespace: "shop",
+            name: "api-tls",
+            uid: "secret-api-tls",
+          },
+          source_certificate: {
+            api_group: "cert-manager.io",
+            version: "v1",
+            kind: "Certificate",
+            namespace: "shop",
+            name: "api-certificate",
+            uid: "certificate-api",
+          },
+          not_after: "2026-07-20T10:00:00Z",
+          status: "expiring",
+          seconds_remaining: 345_600,
+          observed_at: "2026-07-16T09:00:00Z",
+        }],
+        tls_secret_count: 1,
+        observed_expiry_count: 1,
+        expiring_count: 1,
+        expired_count: 0,
+        earliest_expiry: "2026-07-20T10:00:00Z",
+        warning_before_seconds: 2_592_000,
+        has_more: false,
+      },
       refresh_after_seconds: 30,
     };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(payload));

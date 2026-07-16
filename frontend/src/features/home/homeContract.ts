@@ -195,10 +195,43 @@ export interface HomeHelmSummary {
   statusCounts: Readonly<Record<string, number>>;
 }
 
+export type HomeCertificateExpiryStatus = "valid" | "expiring" | "expired";
+
+export interface HomeCertificateResourceRef {
+  apiGroup: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
+}
+
+export interface HomeCertificateExpiryItem {
+  secret: HomeCertificateResourceRef;
+  sourceCertificate: HomeCertificateResourceRef;
+  notAfter: string;
+  status: HomeCertificateExpiryStatus;
+  secondsRemaining: number;
+  observedAt: string | null;
+}
+
+export interface HomeCertificateExpirySummary {
+  coverage: HomeInsightCoverage;
+  items: readonly HomeCertificateExpiryItem[];
+  tlsSecretCount: number | null;
+  observedExpiryCount: number | null;
+  expiringCount: number | null;
+  expiredCount: number | null;
+  earliestExpiry: string | null;
+  warningBeforeSeconds: number;
+  hasMore: boolean;
+}
+
 export interface HomeInsights {
   clusterId: string;
   customResources: HomeCustomResourceSummary;
   helm: HomeHelmSummary;
+  certificateExpiry: HomeCertificateExpirySummary;
   refreshAfterSeconds: number;
 }
 

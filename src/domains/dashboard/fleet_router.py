@@ -26,11 +26,13 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from domains.helm.release_projection import helm_release_list
 from domains.identity.dependencies import require_cluster_access, require_session
+from domains.inventory.certificate_expiry import certificate_expiry_summary
 from domains.target.router import (
     BLOCKED_TEST_CLUSTER_IDS,
     BLOCKED_TEST_CLUSTER_NAME_PARTS,
     cluster_connection_status,
 )
+from packages.config.certificate_expiry import certificate_expiry_warning_seconds
 from packages.config.refresh_policies import integral_refresh_after_seconds
 from packages.contracts.event_bus.interfaces import JsonObject
 from packages.contracts.gateway import routes as gateway_routes
@@ -73,6 +75,7 @@ OPEN_INCIDENT_LIMIT = 20
 NODE_LIMIT = 1000
 POD_LIMIT = 1000
 HOME_CUSTOM_RESOURCE_LIMIT = 8
+HOME_CERTIFICATE_SCAN_LIMIT = 500
 NOT_FOUND_CODE = 404
 OBSERVABILITY_SYSTEM_NAMESPACES = {
     "cert-manager",
@@ -357,6 +360,22 @@ def build_home_insights(
         cluster_id=cluster_id,
         context=context,
     )
+    certificate_observations = (
+        db.list_tls_secret_certificate_observations(
+            workspace_id=workspace_id,
+            cluster_id=cluster_id,
+            limit=HOME_CERTIFICATE_SCAN_LIMIT,
+        )
+        if int((context or {}).get("snapshot_revision") or 0) > 0
+        else {"items": [], "has_more": False}
+    )
+    certificate_expiry = certificate_expiry_summary(
+        certificate_observations.get("items", ()),
+        cluster_id=cluster_id,
+        context=context,
+        scan_truncated=bool(certificate_observations.get("has_more")),
+        warning_before_seconds=certificate_expiry_warning_seconds(),
+    )
     helm_contexts = db.helm_release_observation_contexts(
         workspace_id=workspace_id,
         cluster_ids=(cluster_id,),
@@ -391,6 +410,7 @@ def build_home_insights(
             ),
             status_counts=status_counts,
         ),
+        certificate_expiry=certificate_expiry,
         refresh_after_seconds=integral_refresh_after_seconds("dashboard"),
     )
 

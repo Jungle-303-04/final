@@ -1890,10 +1890,68 @@ class HomeHelmSummary(StrictModel):
         return self
 
 
+HomeCertificateExpiryStatus = Literal["valid", "expiring", "expired"]
+
+
+class HomeCertificateExpiryItem(StrictModel):
+    secret: ResourceRef
+    source_certificate: ResourceRef
+    not_after: str = Field(min_length=1)
+    status: HomeCertificateExpiryStatus
+    seconds_remaining: int
+    observed_at: str | None = None
+
+
+class HomeCertificateExpirySummary(StrictModel):
+    coverage: HomeInsightCoverage
+    items: tuple[HomeCertificateExpiryItem, ...] = Field(default=(), max_length=20)
+    tls_secret_count: int | None = Field(default=None, ge=0)
+    observed_expiry_count: int | None = Field(default=None, ge=0)
+    expiring_count: int | None = Field(default=None, ge=0)
+    expired_count: int | None = Field(default=None, ge=0)
+    earliest_expiry: str | None = None
+    warning_before_seconds: int = Field(ge=1, le=315_360_000)
+    has_more: bool = False
+
+    @model_validator(mode="after")
+    def counts_match_coverage(self) -> Self:
+        counts = (
+            self.tls_secret_count,
+            self.observed_expiry_count,
+            self.expiring_count,
+            self.expired_count,
+        )
+        unavailable = self.coverage.availability == "unavailable"
+        if unavailable:
+            if any(value is not None for value in counts) or self.items or self.earliest_expiry:
+                raise ValueError("unavailable certificate coverage cannot expose observations")
+            if self.has_more:
+                raise ValueError("unavailable certificate coverage cannot be truncated")
+            return self
+        if any(value is None for value in counts):
+            raise ValueError("observed certificate coverage requires counts")
+        assert self.tls_secret_count is not None
+        assert self.observed_expiry_count is not None
+        assert self.expiring_count is not None
+        assert self.expired_count is not None
+        if self.observed_expiry_count > self.tls_secret_count:
+            raise ValueError("observed certificate expiries cannot exceed TLS Secrets")
+        if self.expiring_count + self.expired_count > self.observed_expiry_count:
+            raise ValueError("certificate health counts cannot exceed observations")
+        if self.observed_expiry_count == 0 or self.earliest_expiry is None:
+            raise ValueError("observed certificate coverage requires an earliest expiry")
+        if self.has_more != self.observed_expiry_count > len(self.items):
+            raise ValueError("certificate has_more must match the bounded result")
+        if len({item.secret.uid for item in self.items}) != len(self.items):
+            raise ValueError("certificate summary Secret identities must be unique")
+        return self
+
+
 class HomeInsightsResponse(StrictModel):
     cluster_id: str = Field(min_length=1)
     custom_resources: HomeCustomResourceSummary
     helm: HomeHelmSummary
+    certificate_expiry: HomeCertificateExpirySummary
     refresh_after_seconds: int = Field(ge=1, le=3600)
 
 

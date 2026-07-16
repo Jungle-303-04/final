@@ -122,7 +122,34 @@ export interface HomeEndpointInsights {
     release_count: number | null;
     status_counts: Record<string, number>;
   };
+  certificate_expiry: {
+    coverage: HomeEndpointInsightCoverage;
+    items: Array<{
+      secret: HomeEndpointResourceRef;
+      source_certificate: HomeEndpointResourceRef;
+      not_after: string;
+      status: "valid" | "expiring" | "expired";
+      seconds_remaining: number;
+      observed_at: string | null;
+    }>;
+    tls_secret_count: number | null;
+    observed_expiry_count: number | null;
+    expiring_count: number | null;
+    expired_count: number | null;
+    earliest_expiry: string | null;
+    warning_before_seconds: number;
+    has_more: boolean;
+  };
   refresh_after_seconds: number;
+}
+
+export interface HomeEndpointResourceRef {
+  api_group: string;
+  version: string;
+  kind: string;
+  namespace: string | null;
+  name: string;
+  uid: string;
 }
 
 export interface HomeEndpointPod {
