@@ -4,6 +4,10 @@ from typing import Any, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from packages.contracts.ai_conversation import (
+    BOUNDED_MESSAGE_HISTORY_REASON,
+    MAX_CONVERSATION_MESSAGE_LIMIT,
+)
 from packages.contracts.cost.observations import (
     CostObservedWorkloadAllocation,
     CostWorkloadAllocation,
@@ -2205,6 +2209,28 @@ class AiConversationAcceptedResponse(StrictModel):
 class AiConversationResponse(StrictModel):
     conversation: JsonMap
     messages: list[JsonMap]
+    limit: int = Field(ge=1, le=MAX_CONVERSATION_MESSAGE_LIMIT)
+    has_more: bool
+    next_cursor: str | None = None
+    messages_completeness: Literal["complete", "partial"]
+    partial_reason_codes: list[str]
+
+    @model_validator(mode="after")
+    def validate_message_page(self) -> Self:
+        if self.has_more:
+            if (
+                self.next_cursor is None
+                or self.messages_completeness != "partial"
+                or BOUNDED_MESSAGE_HISTORY_REASON not in self.partial_reason_codes
+            ):
+                raise ValueError("partial message page requires cursor and bounded history reason")
+        elif (
+            self.next_cursor is not None
+            or self.messages_completeness != "complete"
+            or self.partial_reason_codes
+        ):
+            raise ValueError("complete message page cannot carry partial pagination state")
+        return self
 
 
 class AiConversationListResponse(StrictModel):

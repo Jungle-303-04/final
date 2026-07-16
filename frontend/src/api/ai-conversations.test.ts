@@ -54,12 +54,43 @@ describe("AI conversation API", () => {
         jsonResponse({
           conversation: { conversation_id: "aic/123", status: "waiting" },
           messages: [{ role: "user", content: "Why is the Pod restarting?" }],
+          limit: 100,
+          has_more: false,
+          next_cursor: null,
+          messages_completeness: "complete",
+          partial_reason_codes: [],
         }),
       );
 
     await getAiConversation("aic/123");
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/ai/conversations/aic%2F123",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("passes bounded message pagination without changing the conversation identity", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonResponse({
+          conversation: { conversation_id: "aic-123" },
+          messages: [],
+          limit: 50,
+          has_more: true,
+          next_cursor: "next-page",
+          messages_completeness: "partial",
+          partial_reason_codes: ["bounded_message_history"],
+        }),
+      );
+
+    await getAiConversation("aic-123", undefined, {
+      limit: 50,
+      cursor: "current/page",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/conversations/aic-123?limit=50&cursor=current%2Fpage",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -140,6 +171,12 @@ describe("AI conversation API", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
     expect(() => getAiConversation(" ")).toThrow("conversationId must not be empty");
+    expect(() => getAiConversation("aic-123", undefined, { limit: 201 })).toThrow(
+      "AI conversation page limit must be between 1 and 200",
+    );
+    expect(() => getAiConversation("aic-123", undefined, { cursor: " " })).toThrow(
+      "AI conversation cursor must not be empty",
+    );
     await expect(appendAiMessage(" ", { message: "Continue" })).rejects.toThrow(
       "conversationId must not be empty",
     );
