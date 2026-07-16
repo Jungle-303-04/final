@@ -30,6 +30,7 @@ const IMPLEMENTED = new Set([
   "reference.feature.065",
   "reference.feature.114",
   "reference.feature.115",
+  "reference.feature.116",
   "reference.feature.117",
   "reference.feature.119",
   "reference.feature.123",
