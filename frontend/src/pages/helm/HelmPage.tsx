@@ -4,6 +4,7 @@ import { useMatch, useNavigate } from "react-router-dom";
 
 import { useClusterScope } from "../../features/cluster-scope/ClusterScopeProvider";
 import type {
+  HelmFailureCode,
   HelmPort,
   HelmPortFailure,
   HelmRelease,
@@ -32,6 +33,17 @@ const FEATURE_REASON_COPY: Readonly<Record<string, string>> = {
   owned_resources_not_correlated: HELM_COPY.resourceHealthUnavailable,
   agent_helm_executor_not_integrated: HELM_COPY.commandsUnavailable,
 };
+
+const FAILURE_DETAIL_COPY = {
+  unauthorized: HELM_COPY.sessionUnavailable,
+  forbidden: HELM_COPY.permissionDenied,
+  "invalid-request": HELM_COPY.requestInvalid,
+  "invalid-response": HELM_COPY.responseInvalid,
+  "not-found": HELM_COPY.releaseNotFound,
+  offline: HELM_COPY.connectionUnavailable,
+  "rate-limited": HELM_COPY.rateLimited,
+  error: HELM_COPY.requestFailed,
+} satisfies Readonly<Record<HelmFailureCode, string>>;
 
 export function HelmPage({ port }: { port: HelmPort }) {
   const detailMatch = useMatch(HELM_RELEASE_DETAIL_MATCH);
@@ -333,13 +345,18 @@ function CoverageNotice({
 }
 
 function HelmFailureScreen({ failure, onRefresh }: { failure: HelmPortFailure; onRefresh: () => void }) {
+  const safeDetail = helmFailureDetail(failure.code);
   if (failure.code === "forbidden") {
-    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail: HELM_COPY.permissionDenied }} placement="content" />;
+    return <ProductStateScreen kind="forbidden" issue={{ code: "forbidden", safeDetail }} placement="content" />;
   }
   if (failure.code === "offline") {
-    return <ProductStateScreen kind="offline" issue={{ code: "network", safeDetail: failure.code }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
+    return <ProductStateScreen kind="offline" issue={{ code: "network", safeDetail }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
   }
-  return <ProductStateScreen kind="error" issue={{ code: "server", safeDetail: failure.code }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
+  return <ProductStateScreen kind="error" issue={{ code: "server", safeDetail }} placement="content" retry={{ pending: false, onRetry: onRefresh }} />;
+}
+
+function helmFailureDetail(code: HelmFailureCode | string): string {
+  return FAILURE_DETAIL_COPY[code as HelmFailureCode] ?? HELM_COPY.requestFailed;
 }
 
 function EmptyReleaseList({ query }: { query: string }) {

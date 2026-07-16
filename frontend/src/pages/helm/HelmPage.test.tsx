@@ -4,7 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HelmPortFailure, type HelmPort, type HelmRelease } from "../../features/helm/helmContract";
+import {
+  HelmPortFailure,
+  type HelmFailureCode,
+  type HelmPort,
+  type HelmRelease,
+} from "../../features/helm/helmContract";
 import { HelmPage } from "./HelmPage";
 
 const scopeState = vi.hoisted(() => ({ value: null as unknown }));
@@ -109,6 +114,25 @@ describe("HelmPage", () => {
     expect(screen.getByText("Your account is not authorized to read Helm release metadata for this scope.")).toBeTruthy();
     // ProductStateScreen supplies the single standardized error code. Helm must not echo it as detail.
     expect(screen.getAllByText("forbidden", { exact: true })).toHaveLength(1);
+  });
+
+  it("uses safe offline copy without exposing the raw failure detail", async () => {
+    const port = helmPort();
+    port.listReleases.mockRejectedValue(new HelmPortFailure("offline"));
+    renderRoute("/helm", port);
+
+    expect(await screen.findByText("Helm release data cannot be reached right now. Check the connection and try again.")).toBeTruthy();
+    expect(screen.queryByText("offline", { exact: true })).toBeNull();
+  });
+
+  it("uses generic safe copy when a runtime failure code is unknown", async () => {
+    const port = helmPort();
+    const unknownCode = "unexpected_helm_failure";
+    port.listReleases.mockRejectedValue(new HelmPortFailure(unknownCode as HelmFailureCode));
+    renderRoute("/helm", port);
+
+    expect(await screen.findByText("Helm release data could not be loaded. Try again shortly.")).toBeTruthy();
+    expect(screen.queryByText(unknownCode, { exact: true })).toBeNull();
   });
 
   it("uses generic safe copy for an unknown unavailable feature reason", async () => {
