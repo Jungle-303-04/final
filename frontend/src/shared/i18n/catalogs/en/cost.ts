@@ -30,6 +30,7 @@ export const costEn = {
   "cost.tabs.label": "Cost views",
   "cost.tabs.overview": "Overview",
   "cost.tabs.trend": "Allocation trend",
+  "cost.tabs.rightsizing": "Request guidance",
   "cost.trend.title": "Cost rate trend",
   "cost.trend.description": "Observed allocation rate over the selected server window.",
   "cost.trend.unavailable": "No observed allocation trend is available for this scope.",

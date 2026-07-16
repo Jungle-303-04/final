@@ -8,7 +8,7 @@
     "packages/k8s-ui"
   ],
   "fileCount": 276,
-  "pendingCount": 80,
+  "pendingCount": 79,
   "statusCounts": {
     "A": 94,
     "M": 182,
@@ -10318,8 +10318,57 @@
         "blobId": "f9ae5324f806598cf77f5cb360f98e8c7e27a31c",
         "sha256": "e43d49fda8d2e2f109eb9199294d6a5a20565d1ec163911624b121dee29fd7c6"
       },
-      "classification": "pending",
-      "interactions": []
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:rightsizing:scan:manual-multicluster-surface:v1",
+          "legacyContractIds": [],
+          "symbol": "RightsizingScanView",
+          "interaction": "the Cost request-guidance tab waits for explicit user intent, scans every authorized selected cluster with its canonical namespace scope, retains same-scope verified results during partial refresh failure, preserves URL filters, and opens the exact ResourceRef workload",
+          "transport": "poll",
+          "realtime": {
+            "resume": "repeat only after explicit user intent using the same canonical cluster and namespace scope; a scope change exposes a fresh idle surface",
+            "backpressure": "run at most four cluster requests concurrently and accept no more than 200 server-validated workloads per cluster",
+            "merge": "replace successful cluster results by exact cluster identity while retaining prior same-scope evidence for clusters whose refresh failed"
+          },
+          "motion": {
+            "reducedMotion": "scan progress, disclosure state, and refresh feedback remain semantic while spinner, caret, and transition motion are disabled under reduced-motion preferences.",
+            "evidence": [
+              "references/upstream/web/src/components/rightsizing/RightsizingScanView.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.tsx",
+              "frontend/src/features/rightsizing/useRightsizingScans.ts"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/pages/cost/RightsizingScanView.tsx",
+              "frontend/src/pages/cost/RightsizingScanView.test.tsx",
+              "frontend/src/features/rightsizing/createRightsizingAdapter.ts",
+              "frontend/src/features/rightsizing/rightsizingModel.ts",
+              "frontend/src/features/rightsizing/useRightsizingScans.ts",
+              "frontend/src/api/rightsizing.ts",
+              "frontend/src/api/rightsizing-schemas.ts",
+              "src/domains/workload_detail/router.py",
+              "src/domains/workload_detail/rightsizing_projection.py",
+              "src/packages/contracts/rightsizing.py"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.rightsizing",
+              "domains.workload_detail"
+            ],
+            "plannedTestIds": [
+              "rightsizing.scan.surface",
+              "rightsizing.scan.lifecycle",
+              "rightsizing.model",
+              "rightsizing.api",
+              "rightsizing.contract"
+            ],
+            "state": "blocked",
+            "blockedReason": "The complete manual scan surface and strict unavailable branch are mounted, but production has no persisted provider-backed observation repository and the server contract does not yet classify application versus system workloads.",
+            "rationale": "Opsia reuses the existing Python RBAC and bounded scan contract instead of copying the source runtime or browser-owned Prometheus discovery. React only groups, filters, paginates, and presents server classifications; it never calculates thresholds, savings, safety decisions, or recommendations."
+          }
+        }
+      ]
     },
     {
       "status": "M",

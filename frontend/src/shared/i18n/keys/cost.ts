@@ -28,6 +28,7 @@ export type CostMessageKey =
   | "cost.tabs.label"
   | "cost.tabs.overview"
   | "cost.tabs.trend"
+  | "cost.tabs.rightsizing"
   | "cost.trend.title"
   | "cost.trend.description"
   | "cost.trend.unavailable"

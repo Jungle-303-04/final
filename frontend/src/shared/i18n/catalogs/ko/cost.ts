@@ -30,6 +30,7 @@ export const costKo = {
   "cost.tabs.label": "비용 화면",
   "cost.tabs.overview": "개요",
   "cost.tabs.trend": "할당 추세",
+  "cost.tabs.rightsizing": "요청량 가이드",
   "cost.trend.title": "비용률 추세",
   "cost.trend.description": "서버가 제공한 시간 범위의 관측 할당 비용률입니다.",
   "cost.trend.unavailable": "이 범위에서 관측된 할당 비용 추세가 없습니다.",

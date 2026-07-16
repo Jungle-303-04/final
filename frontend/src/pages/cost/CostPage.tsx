@@ -11,6 +11,9 @@ import {
 import { CostTrendChart } from "../../features/cost/CostTrendChart";
 import { CostViewTabs, type CostView } from "../../features/cost/CostViewTabs";
 import { useUnifiedFilter } from "../../features/filters/UnifiedFilterProvider";
+import type { NamespaceFilterRef } from "../../features/filters/filterContract";
+import type { RightsizingPort } from "../../features/rightsizing/rightsizingContract";
+import type { RightsizingClusterScope } from "../../features/rightsizing/useRightsizingScans";
 import { RefreshAction } from "../../motion/RefreshAction";
 import { useI18n, type TranslationFunction } from "../../shared/i18n";
 import { ProductPageFrame } from "../../shared/ui/ProductPageFrame";
@@ -19,13 +22,25 @@ import { Alert, AlertDescription, AlertTitle } from "../../shared/ui/primitives/
 import { Badge } from "../../shared/ui/primitives/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/primitives/card";
 import { useCostOverview } from "./useCostOverviewData";
+import { RightsizingScanView } from "./RightsizingScanView";
 
-export function CostPage({ port }: { port: CostPort }) {
+export function CostPage({
+  port,
+  rightsizingPort,
+}: {
+  port: CostPort;
+  rightsizingPort: RightsizingPort;
+}) {
   const { t } = useI18n();
   const filter = useUnifiedFilter();
-  const view = filter.detail.tab === "trend" ? "trend" : "overview";
+  const view = filter.detail.tab === "trend"
+    ? "trend"
+    : filter.detail.tab === "rightsizing"
+      ? "rightsizing"
+      : "overview";
   const timeRange = filter.detail.costRange ?? "24h";
-  const selection = scopeSelection(useClusterScope());
+  const clusterScope = useClusterScope();
+  const selection = scopeSelection(clusterScope);
   if (selection.kind === "loading") return <ProductStateScreen kind="loading" placement="content" />;
   if (selection.kind === "empty") return <ProductStateScreen kind="empty" placement="content" />;
   if (selection.kind === "error") {
@@ -40,9 +55,14 @@ export function CostPage({ port }: { port: CostPort }) {
       }), "time-range")}
       onViewChange={(value) => filter.updateDetail((current) => ({
         ...current,
-        tab: value === "trend" ? "trend" : null,
+        tab: value === "overview" ? null : value,
       }), "detail-tab")}
       port={port}
+      rightsizingPort={rightsizingPort}
+      rightsizingScopes={rightsizingScopes(
+        selection.rightsizingClusterIds,
+        filter.state.common.namespaces,
+      )}
       timeRange={timeRange}
       view={view}
     />
@@ -54,6 +74,8 @@ function CostReadyPage({
   onTimeRangeChange,
   onViewChange,
   port,
+  rightsizingPort,
+  rightsizingScopes: scanScopes,
   timeRange,
   view,
 }: {
@@ -61,11 +83,12 @@ function CostReadyPage({
   onTimeRangeChange(value: CostTimeRange): void;
   onViewChange(value: CostView): void;
   port: CostPort;
+  rightsizingPort: RightsizingPort;
+  rightsizingScopes: readonly RightsizingClusterScope[];
   timeRange: CostTimeRange;
   view: CostView;
 }) {
   const { t } = useI18n();
-  const data = useCostOverview(port, { clusterIds, timeRange });
   return (
     <ProductPageFrame className="gap-4">
       <header className="grid min-w-0 gap-1">
@@ -73,14 +96,43 @@ function CostReadyPage({
         <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{t("cost.description")}</p>
       </header>
       <CostViewTabs onSelect={onViewChange} value={view} />
-      <CostContent
-        frame={data.frame}
-        onRefresh={data.refresh}
-        onTimeRangeChange={onTimeRangeChange}
-        timeRange={timeRange}
-        view={view}
-      />
+      {view === "rightsizing" ? (
+        <RightsizingScanView port={rightsizingPort} scopes={scanScopes} />
+      ) : (
+        <CostObservedContent
+          clusterIds={clusterIds}
+          onTimeRangeChange={onTimeRangeChange}
+          port={port}
+          timeRange={timeRange}
+          view={view}
+        />
+      )}
     </ProductPageFrame>
+  );
+}
+
+function CostObservedContent({
+  clusterIds,
+  onTimeRangeChange,
+  port,
+  timeRange,
+  view,
+}: {
+  clusterIds: readonly string[];
+  onTimeRangeChange(value: CostTimeRange): void;
+  port: CostPort;
+  timeRange: CostTimeRange;
+  view: Exclude<CostView, "rightsizing">;
+}) {
+  const data = useCostOverview(port, { clusterIds, timeRange });
+  return (
+    <CostContent
+      frame={data.frame}
+      onRefresh={data.refresh}
+      onTimeRangeChange={onTimeRangeChange}
+      timeRange={timeRange}
+      view={view}
+    />
   );
 }
 
@@ -95,7 +147,7 @@ function CostContent({
   onRefresh: () => void;
   onTimeRangeChange(value: CostTimeRange): void;
   timeRange: CostTimeRange;
-  view: CostView;
+  view: Exclude<CostView, "rightsizing">;
 }) {
   const { t } = useI18n();
   if (frame.phase === "idle" || frame.phase === "loading") {
@@ -244,18 +296,42 @@ function scopeDescription(overview: CostOverview, notObserved: string): string {
 }
 
 function scopeSelection(scope: ReturnType<typeof useClusterScope>):
-  | { kind: "ready"; clusterIds: readonly string[] }
-  | { kind: "loading"; clusterIds: readonly string[] }
-  | { kind: "empty"; clusterIds: readonly string[] }
-  | { kind: "error"; clusterIds: readonly string[] } {
-  if (scope.selection.kind === "resolving") return { kind: "loading", clusterIds: [] };
-  if (scope.selection.kind === "empty") return { kind: "empty", clusterIds: [] };
-  if (scope.selection.kind === "unavailable") return { kind: "error", clusterIds: [] };
-  if (scope.selection.kind === "unknown") return { kind: "error", clusterIds: [] };
+  | { kind: "ready"; clusterIds: readonly string[]; rightsizingClusterIds: readonly string[] }
+  | { kind: "loading"; clusterIds: readonly string[]; rightsizingClusterIds: readonly string[] }
+  | { kind: "empty"; clusterIds: readonly string[]; rightsizingClusterIds: readonly string[] }
+  | { kind: "error"; clusterIds: readonly string[]; rightsizingClusterIds: readonly string[] } {
+  if (scope.selection.kind === "resolving") return { kind: "loading", clusterIds: [], rightsizingClusterIds: [] };
+  if (scope.selection.kind === "empty") return { kind: "empty", clusterIds: [], rightsizingClusterIds: [] };
+  if (scope.selection.kind === "unavailable") return { kind: "error", clusterIds: [], rightsizingClusterIds: [] };
+  if (scope.selection.kind === "unknown") return { kind: "error", clusterIds: [], rightsizingClusterIds: [] };
   if (scope.selection.kind === "multiple" && scope.selection.unresolvedIds.length > 0) {
-    return { kind: "error", clusterIds: [] };
+    return { kind: "error", clusterIds: [], rightsizingClusterIds: [] };
   }
-  if (scope.selection.kind === "unfiltered") return { kind: "ready", clusterIds: [] };
-  if (scope.selection.kind === "multiple") return { kind: "ready", clusterIds: scope.selection.clusters.map((cluster) => cluster.id) };
-  return { kind: "ready", clusterIds: [scope.selection.cluster.id] };
+  if (scope.selection.kind === "unfiltered") {
+    const allClusterIds = scope.collection?.phase === "ready"
+      ? scope.collection.data.clusters.map((cluster) => cluster.id)
+      : [];
+    return { kind: "ready", clusterIds: [], rightsizingClusterIds: allClusterIds };
+  }
+  if (scope.selection.kind === "multiple") {
+    const clusterIds = scope.selection.clusters.map((cluster) => cluster.id);
+    return { kind: "ready", clusterIds, rightsizingClusterIds: clusterIds };
+  }
+  return {
+    kind: "ready",
+    clusterIds: [scope.selection.cluster.id],
+    rightsizingClusterIds: [scope.selection.cluster.id],
+  };
+}
+
+function rightsizingScopes(
+  clusterIds: readonly string[],
+  namespaces: readonly NamespaceFilterRef[],
+): readonly RightsizingClusterScope[] {
+  return clusterIds.map((clusterId) => ({
+    clusterId,
+    namespaces: namespaces
+      .filter((namespace) => namespace.clusterId === clusterId)
+      .map((namespace) => namespace.namespace),
+  }));
 }

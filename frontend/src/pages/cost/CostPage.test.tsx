@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CostPortFailure, type CostPort } from "../../features/cost/costContract";
+import type { RightsizingPort } from "../../features/rightsizing/rightsizingContract";
 import { I18nProvider } from "../../shared/i18n";
 import { UnifiedFilterProvider } from "../../features/filters/UnifiedFilterProvider";
 import { CostPage } from "./CostPage";
@@ -110,12 +111,31 @@ function renderCostPage(port: CostPort, entry = "/cost") {
     <I18nProvider navigatorLanguage="en" storage={null}>
       <MemoryRouter initialEntries={[entry]}>
         <UnifiedFilterProvider>
-          <CostPage port={port} />
+          <CostPage port={port} rightsizingPort={rightsizingPort()} />
           <LocationProbe />
         </UnifiedFilterProvider>
       </MemoryRouter>
     </I18nProvider>,
   );
+}
+
+function rightsizingPort(): RightsizingPort {
+  return {
+    getScan: vi.fn().mockResolvedValue({
+      scope: {
+        workspaceId: "workspace-a",
+        clusterId: "cluster-a",
+        namespaces: [],
+        freshness: "live",
+      },
+      namespaceScope: [],
+      result: {
+        availability: "unavailable",
+        reasonCodes: ["rightsizing_observation_not_integrated"],
+      },
+      refreshAfterSeconds: 60,
+    }),
+  };
 }
 
 function LocationProbe() {

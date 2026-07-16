@@ -4,6 +4,7 @@ import type {
 } from "./rightsizingEndpointContract";
 import type {
   RightsizingObservedWorkload,
+  RightsizingScan,
   RightsizingWorkloadEvidence,
 } from "./rightsizingContract";
 
@@ -16,7 +17,7 @@ export function toRightsizingEvidence(
   return toObservedRightsizing(evidence);
 }
 
-function toObservedRightsizing(
+export function toObservedRightsizing(
   evidence: RightsizingObservedWorkloadEndpoint,
 ): RightsizingObservedWorkload {
   return {
@@ -63,5 +64,56 @@ function toObservedRightsizing(
       reasonCodes: [...row.reason_codes],
     })),
     reasonCodes: [...evidence.reason_codes],
+  };
+}
+
+export function toRightsizingScan(
+  scan: import("./rightsizingEndpointContract").RightsizingScanEndpoint,
+): RightsizingScan {
+  return {
+    scope: {
+      workspaceId: scan.scope.workspace_id,
+      clusterId: scan.scope.cluster_id,
+      namespaces: [...scan.scope.namespaces],
+      freshness: scan.scope.freshness,
+    },
+    namespaceScope: [...scan.namespace_scope],
+    result: scan.result.availability === "unavailable"
+      ? {
+        availability: "unavailable",
+        reasonCodes: [...scan.result.reason_codes],
+      }
+      : {
+        availability: scan.result.availability,
+        observedAt: scan.result.observed_at,
+        provenance: {
+          collector: scan.result.provenance.collector,
+          algorithmRevision: scan.result.provenance.algorithm_revision,
+          sourceRevision: scan.result.provenance.source_revision,
+          windowStartedAt: scan.result.provenance.window_started_at,
+          windowEndedAt: scan.result.provenance.window_ended_at,
+          sampleIntervalSeconds: scan.result.provenance.sample_interval_seconds,
+        },
+        coverage: {
+          workloadsDiscovered: scan.result.coverage.workloads_discovered,
+          workloadsEvaluated: scan.result.coverage.workloads_evaluated,
+          workloadsWithData: scan.result.coverage.workloads_with_data,
+          truncated: scan.result.coverage.truncated,
+        },
+        workloads: scan.result.workloads.map(toObservedRightsizing),
+        failures: scan.result.failures.map((failure) => ({
+          resource: failure.resource === null ? null : {
+            apiGroup: failure.resource.api_group,
+            version: failure.resource.version,
+            kind: failure.resource.kind,
+            namespace: failure.resource.namespace,
+            name: failure.resource.name,
+            uid: failure.resource.uid,
+          },
+          reasonCode: failure.reason_code,
+        })),
+        reasonCodes: [...scan.result.reason_codes],
+      },
+    refreshAfterSeconds: scan.refresh_after_seconds,
   };
 }

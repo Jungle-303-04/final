@@ -63,3 +63,71 @@ export interface RightsizingObservedWorkload {
 export type RightsizingWorkloadEvidence =
   | RightsizingObservedWorkload
   | { availability: "unavailable"; reasonCodes: readonly string[] };
+
+export interface RightsizingScanCoverage {
+  workloadsDiscovered: number;
+  workloadsEvaluated: number;
+  workloadsWithData: number;
+  truncated: boolean;
+}
+
+export interface RightsizingScanFailure {
+  resource: RightsizingObservedWorkload["resource"] | null;
+  reasonCode: string;
+}
+
+export type RightsizingScanResult =
+  | { availability: "unavailable"; reasonCodes: readonly string[] }
+  | {
+    availability: "available" | "partial";
+    observedAt: string;
+    provenance: RightsizingObservedWorkload["provenance"];
+    coverage: RightsizingScanCoverage;
+    workloads: readonly RightsizingObservedWorkload[];
+    failures: readonly RightsizingScanFailure[];
+    reasonCodes: readonly string[];
+  };
+
+export interface RightsizingScan {
+  scope: {
+    workspaceId: string;
+    clusterId: string;
+    namespaces: readonly string[];
+    freshness: RightsizingObservedWorkload["freshness"];
+  };
+  namespaceScope: readonly string[];
+  result: RightsizingScanResult;
+  refreshAfterSeconds: number;
+}
+
+export interface RightsizingScanRequest {
+  clusterId: string;
+  namespaces: readonly string[];
+  limit?: number;
+}
+
+export type RightsizingFailureCode =
+  | "unauthorized"
+  | "forbidden"
+  | "invalid-request"
+  | "invalid-response"
+  | "not-found"
+  | "offline"
+  | "rate-limited"
+  | "error";
+
+export class RightsizingPortFailure extends Error {
+  readonly code: RightsizingFailureCode;
+  readonly retryAfterSeconds: number | null;
+
+  constructor(code: RightsizingFailureCode, retryAfterSeconds: number | null = null) {
+    super(`Rightsizing port failed: ${code}`);
+    this.name = "RightsizingPortFailure";
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export interface RightsizingPort {
+  getScan(request: RightsizingScanRequest, signal?: AbortSignal): Promise<RightsizingScan>;
+}

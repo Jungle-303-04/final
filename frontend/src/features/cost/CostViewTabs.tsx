@@ -3,9 +3,9 @@ import { useRef, type KeyboardEvent } from "react";
 import { useI18n } from "../../shared/i18n";
 import { cn } from "../../shared/lib/cn";
 
-export type CostView = "overview" | "trend";
+export type CostView = "overview" | "trend" | "rightsizing";
 
-const COST_VIEWS: readonly CostView[] = ["overview", "trend"];
+const COST_VIEWS: readonly CostView[] = ["overview", "trend", "rightsizing"];
 
 export function CostViewTabs({
   onSelect,
@@ -55,7 +55,11 @@ export function CostViewTabs({
             tabIndex={selected ? 0 : -1}
             type="button"
           >
-            {t(view === "overview" ? "cost.tabs.overview" : "cost.tabs.trend")}
+            {t(view === "overview"
+              ? "cost.tabs.overview"
+              : view === "trend"
+                ? "cost.tabs.trend"
+                : "cost.tabs.rightsizing")}
           </button>
         );
       })}
