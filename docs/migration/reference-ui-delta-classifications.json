@@ -278,6 +278,18 @@
     "shared-ui.select-menu.dismissal": {
       "destination": "frontend/src/shared/ui/primitives/select.test.tsx",
       "rationale": "The shared select must preserve selection, keyboard Escape, outside-pointer dismissal, focus restoration, and a reduced-motion-safe open indicator."
+    },
+    "shared-ui.confirmation-dialog.safety": {
+      "destination": "frontend/src/shared/ui/primitives/confirmation-dialog.test.tsx",
+      "rationale": "The shared confirmation dialog must make owner-provided validation and pending state authoritative before an action can run or a modal can be dismissed."
+    },
+    "shared-ui.dialog.nested-escape": {
+      "destination": "frontend/src/shared/ui/primitives/primitives.accessibility.test.tsx",
+      "rationale": "Nested modal Escape handling must close only the topmost dialog and preserve the parent dialog's focus and interaction boundary."
+    },
+    "shared-ui.pane-loader.geometry": {
+      "destination": "frontend/src/shared/ui/primitives/pane-loader.test.tsx",
+      "rationale": "A pane-local loading status must keep its decorative spinner centered while owner-provided title and detail occupy a stable bounded label area below it."
     }
   },
   "classifications": {
@@ -511,6 +523,106 @@
             "state": "in_progress",
             "blockedReason": null,
             "rationale": "The product-owned Base UI Select supplies the source menu semantics with stronger keyboard and focus handling. Its trigger now owns a shared expanded-state caret motion token rather than feature-local chevrons."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/ConfirmDialog.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:confirmation-dialog:action-gate:v1",
+          "legacyContractIds": [],
+          "symbol": "ConfirmDialog confirmDisabled and className",
+          "interaction": "confirmation dialog keeps an owner-supplied action unavailable while validation is incomplete, supports custom panel width, and preserves pending dismissal policy",
+          "transport": "none",
+          "realtime": null,
+          "motion": null,
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/confirmation-dialog.tsx",
+              "frontend/src/shared/ui/primitives/confirmation-dialog.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.confirmation-dialog.safety"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product-owned ConfirmationDialog takes labels, detail, validation, pending state, and custom content from its caller. It centralizes action gating without deriving command data or hardcoding feature copy."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/DialogPortal.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:dialog-portal:nested-escape:v1",
+          "legacyContractIds": [],
+          "symbol": "DialogPortal Escape dispatch and modal ordering",
+          "interaction": "modal portal transfers focus, closes only the topmost dialog on Escape, and keeps nested dialog dismissal from leaking to an outer modal",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "Dialog backdrop and panel preserve their open/closed state while animation and duration are disabled for reduced-motion users.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/DialogPortal.tsx",
+              "frontend/src/shared/ui/primitives/dialog.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/dialog.tsx",
+              "frontend/src/shared/ui/primitives/primitives.accessibility.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.dialog.nested-escape"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product dialog delegates portal ordering, focus return, and nested dismissal to the shared Base UI primitive. The accessibility test now proves the source topmost-Escape invariant without importing the source runtime."
+          }
+        }
+      ]
+    },
+    "packages/k8s-ui/src/components/ui/PaneLoader.tsx": {
+      "classification": "classified",
+      "interactions": [
+        {
+          "sourceKey": "upstream-ui:shared-ui:pane-loader:stable-label:v1",
+          "legacyContractIds": [],
+          "symbol": "PaneLoader children and bounded label geometry",
+          "interaction": "pane-local loading indicator keeps the spinner at the geometric center while an owner-supplied label and optional detail render in a bounded region below it",
+          "transport": "none",
+          "realtime": null,
+          "motion": {
+            "reducedMotion": "The shared spinner keeps status semantics but stops its decorative rotation when reduced motion is requested.",
+            "evidence": [
+              "references/upstream/packages/k8s-ui/src/components/ui/PaneLoader.tsx",
+              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/primitives/spinner.tsx"
+            ]
+          },
+          "opsiaPort": {
+            "destinations": [
+              "frontend/src/shared/ui/primitives/pane-loader.tsx",
+              "frontend/src/shared/ui/primitives/pane-loader.test.tsx"
+            ],
+            "requiredBackendContracts": [
+              "packages.contracts.parity"
+            ],
+            "plannedTestIds": [
+              "shared-ui.pane-loader.geometry"
+            ],
+            "state": "in_progress",
+            "blockedReason": null,
+            "rationale": "The product PaneLoader ports the changed stable-label and optional-detail behavior with the shared accessible Spinner. The unchanged source-specific image asset is intentionally not imported into the product runtime."
           }
         }
       ]
