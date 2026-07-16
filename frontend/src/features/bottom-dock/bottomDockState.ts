@@ -32,6 +32,7 @@ export interface BottomDockTab {
   dropped: number;
   unseen: number;
   pods: string[];
+  containers: string[];
   endReason: string | null;
   diagnostic: LogStreamDiagnostic | null;
   failureCode: LogStreamFailureCode | string | null;
@@ -138,6 +139,7 @@ function applyEvents(
   const knownLineIds = new Set(tab.recentLineIds);
   const appendedLines: BottomDockLine[] = [];
   let pods: Set<string> | null = null;
+  let containers: string[] | null = null;
   let status = tab.status;
   let streamId = tab.streamId;
   let endReason = tab.endReason;
@@ -164,6 +166,7 @@ function applyEvents(
     if (event.type === "connected") {
       status = "streaming";
       streamId = event.streamId;
+      containers = [...new Set(event.containers)].sort();
     } else if (event.type === "pod-added" || event.type === "pod-removed") {
       pods ??= new Set(tab.pods);
       if (event.type === "pod-added") pods.add(event.pod);
@@ -208,6 +211,7 @@ function applyEvents(
     dropped: tab.dropped + overflow,
     unseen: appendedLines.length === 0 ? tab.unseen : active ? 0 : tab.unseen + appendedLines.length,
     pods: pods === null ? tab.pods : [...pods].sort(),
+    containers: containers ?? tab.containers,
     endReason,
     diagnostic,
     failureCode,
@@ -227,6 +231,7 @@ function newTab(id: string, target: LogStreamTarget): BottomDockTab {
     dropped: 0,
     unseen: 0,
     pods: [],
+    containers: [],
     endReason: null,
     diagnostic: null,
     failureCode: null,

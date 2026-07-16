@@ -48,6 +48,7 @@ describe("LogStreamTab", () => {
 
     expect(screen.getByText("스트림 종료: window_complete")).toBeTruthy();
     expect(screen.getByText("파드 1개: checkout")).toBeTruthy();
+    expect(screen.getByText("컨테이너 2개: app, sidecar")).toBeTruthy();
     expect(screen.getByText("request complete")).toBeTruthy();
   });
 
@@ -105,6 +106,7 @@ function tab(overrides: Partial<BottomDockTab>): BottomDockTab {
     dropped: 0,
     unseen: 0,
     pods: ["checkout"],
+    containers: ["app", "sidecar"],
     endReason: null,
     diagnostic: null,
     failureCode: null,

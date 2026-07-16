@@ -42,6 +42,13 @@ class LogStreamDiagnostic(StrictModel):
 class LogStreamConnected(StrictModel):
     type: Literal["connected"] = "connected"
     stream_id: str = Field(min_length=1, max_length=255)
+    containers: tuple[str, ...] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def containers_are_unique_and_ordered(self) -> Self:
+        if self.containers != tuple(sorted(set(self.containers))):
+            raise ValueError("containers must be unique and sorted")
+        return self
 
 
 class LogStreamLog(StrictModel):

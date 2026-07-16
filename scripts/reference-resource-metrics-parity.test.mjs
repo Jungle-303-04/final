@@ -13,16 +13,6 @@ const FEATURE_IDS = Array.from(
   (_, index) => `reference.feature.${String(index + 124).padStart(3, "0")}`,
 );
 
-const IMPLEMENTED = new Set([
-  "reference.feature.126",
-  "reference.feature.128",
-  "reference.feature.146",
-  "reference.feature.156",
-  "reference.feature.157",
-  "reference.feature.158",
-  "reference.feature.159",
-]);
-
 const PROVIDER_BLOCKED = new Set([
   "reference.feature.127",
   "reference.feature.129",
@@ -43,10 +33,7 @@ const PROVIDER_BLOCKED = new Set([
   "reference.feature.148",
   "reference.feature.149",
   "reference.feature.150",
-  "reference.feature.153",
-  "reference.feature.160",
-  "reference.feature.162",
-  "reference.feature.163",
+  "reference.feature.152",
 ]);
 
 test("resource, metrics, logs, and service access rows own immutable source evidence", async () => {
@@ -81,7 +68,7 @@ test("resource, metrics, logs, and service access rows own immutable source evid
     assert.ok(port.coverage?.backend, `${contractId} requires backend coverage`);
     assert.ok(port.coverage?.frontend, `${contractId} requires frontend coverage`);
 
-    if (IMPLEMENTED.has(contractId)) {
+    if (port.deliveryStatus === "implemented") {
       assert.equal(port.deliveryStatus, "implemented", contractId);
       assert.ok(
         ["implemented", "not_required"].includes(port.coverage.backend.state),
@@ -90,11 +77,17 @@ test("resource, metrics, logs, and service access rows own immutable source evid
       assert.equal(port.coverage.frontend.state, "implemented", contractId);
     } else {
       assert.equal(port.deliveryStatus, "in_progress", contractId);
+      assert.ok(
+        Object.values(port.coverage).some((item) =>
+          ["in_progress", "blocked"].includes(item?.state)
+        ),
+        `${contractId} requires an explicit incomplete boundary`,
+      );
     }
   }
 });
 
-test("unavailable providers and deferred native port sessions remain explicit", async () => {
+test("unavailable providers and native port authority remain explicit", async () => {
   const ports = await readJson("docs/migration/reference-feature-port-map.json");
   for (const contractId of PROVIDER_BLOCKED) {
     const coverage = ports.features[contractId].coverage;
@@ -106,11 +99,12 @@ test("unavailable providers and deferred native port sessions remain explicit", 
     );
   }
   for (const contractId of [
+    "reference.feature.159",
     "reference.feature.160",
     "reference.feature.162",
     "reference.feature.163",
   ]) {
-    assert.equal(ports.features[contractId].coverage.desktop.state, "blocked", contractId);
+    assert.equal(ports.features[contractId].coverage.desktop.state, "implemented", contractId);
   }
 });
 
@@ -121,6 +115,7 @@ test("pod and workload stream parity uses bounded authenticated realtime contrac
     "reference.feature.157",
     "reference.feature.158",
     "reference.feature.159",
+    "reference.feature.155",
   ]) {
     assert.equal(ports.features[contractId].coverage.realtime.state, "implemented", contractId);
   }

@@ -2311,7 +2311,7 @@
       }
     },
     "reference.feature.155": {
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.log_stream.LogStreamEnvelope",
       "frontendContract": "frontend/src/features/log-stream/logStreamContract.ts",
       "desktopContract": null,
@@ -2319,22 +2319,30 @@
         "tests/test_log_stream.py",
         "frontend/src/api/log-stream.test.ts",
         "frontend/src/features/log-stream/createLogStreamAdapter.test.ts",
+        "frontend/src/features/bottom-dock/bottomDockState.test.ts",
+        "frontend/src/app/LogStreamTab.test.tsx",
         "scripts/reference-resource-metrics-parity.test.mjs"
       ],
       "coverage": {
         "backend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "src/domains/log_stream/router.py#stream_pod_logs",
           "consumer": "src/domains/log_stream/service.py#stream_log_events",
-          "reason": "The authenticated stream sends an initial bounded batch, but no separate snapshot response returns container catalog and logs.",
+          "reason": "The normalized authenticated SSE contract starts with the exact server-observed container catalog and Pod membership, then sends the bounded initial log batch before continuing live updates; it avoids a second stale snapshot request.",
           "test": "tests/test_log_stream.py"
         },
         "frontend": {
-          "state": "in_progress",
+          "state": "implemented",
           "destination": "frontend/src/app/LogStreamTab.tsx#LogStreamTab",
           "consumer": "frontend/src/features/log-stream/createLogStreamAdapter.ts#createLogStreamAdapter",
-          "reason": "The dock starts directly from the strict SSE stream and has no independent initial-snapshot loading contract.",
-          "test": "frontend/src/features/log-stream/createLogStreamAdapter.test.ts"
+          "reason": "The dock consumes the container catalog, exact Pod membership, and bounded initial lines from one strict stream before coalescing live updates at the frame boundary.",
+          "test": "frontend/src/app/LogStreamTab.test.tsx"
+        },
+        "realtime": {
+          "state": "implemented",
+          "destination": "src/domains/log_stream/router.py#LogSseResponse",
+          "consumer": "frontend/src/api/log-stream.ts#openPodLogStream",
+          "test": "frontend/src/api/log-stream.test.ts"
         }
       }
     },
@@ -4526,7 +4534,7 @@
     },
     "6.2 주요 REST 갱신 주기": {
       "area": "freshness-policy",
-      "deliveryStatus": "in_progress",
+      "deliveryStatus": "implemented",
       "backendContract": "packages.contracts.freshness.BrowserRefreshPoliciesResponse",
       "frontendContract": "frontend/src/api/refresh-policies-schemas.ts",
       "desktopContract": null,

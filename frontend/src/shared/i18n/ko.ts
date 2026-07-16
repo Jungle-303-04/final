@@ -92,6 +92,7 @@ export const ko = {
   "shell.dock.newLines": "새 로그 {count}줄",
   "shell.dock.endReason": "스트림 종료: {reason}",
   "shell.dock.pods": "파드 {count}개",
+  "shell.dock.containers": "컨테이너 {count}개",
   "shell.dock.truncated": "서버에서 길이가 제한된 줄",
   "shell.dock.search": "로그 검색",
   "shell.dock.searchPlaceholder": "내용이나 메타데이터 검색",

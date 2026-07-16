@@ -23,6 +23,7 @@ export type DockMessageKey =
   | "shell.dock.newLines"
   | "shell.dock.endReason"
   | "shell.dock.pods"
+  | "shell.dock.containers"
   | "shell.dock.truncated"
   | "shell.dock.search"
   | "shell.dock.searchPlaceholder"

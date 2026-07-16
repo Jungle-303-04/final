@@ -5,6 +5,7 @@ const safeText = z.string().min(1);
 export const logStreamConnectedSchema = z.strictObject({
   type: z.literal("connected"),
   stream_id: safeText,
+  containers: z.array(safeText).max(1_000),
 });
 
 export const logStreamLineSchema = z.strictObject({

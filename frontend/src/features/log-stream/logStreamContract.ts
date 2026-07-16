@@ -23,7 +23,7 @@ export type LogStreamTarget =
     };
 
 export type LogStreamEvent =
-  | { type: "connected"; streamId: string }
+  | { type: "connected"; streamId: string; containers: readonly string[] }
   | {
       type: "log";
       id: string;

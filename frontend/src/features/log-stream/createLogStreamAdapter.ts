@@ -49,7 +49,13 @@ export function createLogStreamAdapter(
 }
 
 function toEvent(event: LogStreamEndpointEvent): LogStreamEvent {
-  if (event.type === "connected") return { type: "connected", streamId: required(event.stream_id) };
+  if (event.type === "connected") {
+    return {
+      type: "connected",
+      streamId: required(event.stream_id),
+      containers: [...event.containers],
+    };
+  }
   if (event.type === "log") {
     return {
       type: "log",

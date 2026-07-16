@@ -74,6 +74,7 @@ class LogStreamTarget:
     kind: str
     resource_type: str
     pods: tuple[str, ...]
+    containers: tuple[str, ...] = ()
     container: str | None = None
     uid: str | None = None
     owner_kind: str | None = None
@@ -90,6 +91,7 @@ class LogStreamTarget:
             "kind": self.kind,
             "resource_type": self.resource_type,
             "pods": list(self.pods),
+            "containers": list(self.containers),
             "container": self.container,
             "uid": self.uid,
             "owner_kind": self.owner_kind,
@@ -160,6 +162,7 @@ def resolve_pod_target(
         kind="Pod",
         resource_type="pod",
         pods=(name,),
+        containers=_container_names(resource),
         container=container,
         uid=str(resource.get("uid") or "") or None,
     )
@@ -220,6 +223,9 @@ def resolve_workload_target(
         kind=kubernetes_kind,
         resource_type="workload",
         pods=pod_names,
+        containers=tuple(
+            sorted({container for pod in pods for container in _container_names(pod)})
+        ),
         container=container,
         uid=str(resource.get("uid") or "") or None,
     )
@@ -418,6 +424,9 @@ def _scheduled_run_projection(
             kind=run_kind,
             resource_type="workload",
             pods=pod_names,
+            containers=tuple(
+                sorted({container for pod in matching_pods for container in _container_names(pod)})
+            ),
             uid=run_uid,
             owner_kind=owner_kind,
             owner_name=owner_name,
@@ -507,7 +516,10 @@ async def stream_log_events(
     initial_target: LogStreamTarget,
     initial_query: QueuedDebugQuery,
 ):
-    yield LogStreamConnected(stream_id=initial_query.command_id)
+    yield LogStreamConnected(
+        stream_id=initial_query.command_id,
+        containers=initial_target.containers,
+    )
     known_pods = set(initial_target.pods)
     for pod in sorted(known_pods):
         yield LogStreamPodAdded(pod=pod)
@@ -932,6 +944,7 @@ def _target_from_command(row: dict[str, Any]) -> LogStreamTarget | None:
             kind=str(value["kind"]),
             resource_type=str(value["resource_type"]),
             pods=tuple(str(pod) for pod in value.get("pods") or ()),
+            containers=tuple(str(name) for name in value.get("containers") or ()),
             container=(str(value["container"]) if value.get("container") is not None else None),
             uid=(str(value["uid"]) if value.get("uid") is not None else None),
             owner_kind=(str(value["owner_kind"]) if value.get("owner_kind") is not None else None),
@@ -963,6 +976,12 @@ def _valid_persisted_target(target: LogStreamTarget) -> bool:
         or len(target.pods) > 1000
         or len(set(target.pods)) != len(target.pods)
         or any(len(pod) > 253 or KUBERNETES_NAME_RE.fullmatch(pod) is None for pod in target.pods)
+        or len(target.containers) > 1000
+        or tuple(sorted(set(target.containers))) != target.containers
+        or any(
+            len(container) > 63 or KUBERNETES_CONTAINER_RE.fullmatch(container) is None
+            for container in target.containers
+        )
         or (
             target.container is not None
             and (
@@ -1257,6 +1276,23 @@ def _container_exists(resource: dict[str, Any], container: str | None) -> bool:
     containers = summary.get("containers") if isinstance(summary.get("containers"), list) else []
     return any(
         isinstance(item, dict) and str(item.get("name") or "") == container for item in containers
+    )
+
+
+def _container_names(resource: dict[str, Any]) -> tuple[str, ...]:
+    summary = resource.get("summary") if isinstance(resource.get("summary"), dict) else {}
+    containers = summary.get("containers") if isinstance(summary.get("containers"), list) else []
+    return tuple(
+        sorted(
+            {
+                name
+                for item in containers
+                if isinstance(item, dict)
+                and (name := str(item.get("name") or ""))
+                and len(name) <= 63
+                and KUBERNETES_CONTAINER_RE.fullmatch(name)
+            }
+        )
     )
 
 

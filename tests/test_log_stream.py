@@ -310,6 +310,7 @@ def test_pod_sse_is_default_message_strict_redacted_bounded_and_deduped(
         "end",
     ]
     assert messages[0]["stream_id"] in db.queued
+    assert messages[0]["containers"] == [CONTAINER]
     logs = [message for message in messages if message["type"] == "log"]
     assert len(logs) == 1
     assert "top-secret" not in logs[0]["line"]
@@ -342,7 +343,11 @@ def test_followup_batches_keep_first_handle_and_share_one_correlation(
     command_ids = list(db.queued)
     assert len(command_ids) == 2
     assert command_ids[0] != command_ids[1]
-    assert messages[0] == {"type": "connected", "stream_id": command_ids[0]}
+    assert messages[0] == {
+        "type": "connected",
+        "stream_id": command_ids[0],
+        "containers": [CONTAINER],
+    }
     assert {db.correlations[command_id] for command_id in command_ids} == {
         db.correlations[command_ids[0]]
     }

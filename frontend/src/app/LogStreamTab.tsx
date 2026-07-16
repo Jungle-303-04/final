@@ -81,6 +81,12 @@ export function LogStreamTab({
           {t("shell.dock.pods", { count: tab.pods.length })}: {tab.pods.join(", ")}
         </p>
       ) : null}
+      {tab.containers.length > 0 ? (
+        <p className="truncate border-b px-3 py-1 text-xs text-muted-foreground">
+          {t("shell.dock.containers", { count: tab.containers.length })}:{" "}
+          {tab.containers.join(", ")}
+        </p>
+      ) : null}
       <LogViewer lines={tab.lines} received={tab.received} targetName={tab.target.name} />
     </div>
   );

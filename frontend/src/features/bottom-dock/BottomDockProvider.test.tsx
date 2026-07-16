@@ -46,7 +46,11 @@ describe("BottomDockProvider", () => {
     expect(screen.getByTestId("dock-connection-announcer").textContent)
       .toBe("checkout: connecting");
     act(() => {
-      handlers?.onEvent({ type: "connected", streamId: "stream-1" });
+      handlers?.onEvent({
+        type: "connected",
+        streamId: "stream-1",
+        containers: ["app"],
+      });
       handlers?.onEvent(line("line-1"));
       handlers?.onEvent(line("line-2"));
     });
@@ -128,7 +132,11 @@ describe("BottomDockProvider", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     act(() => {
-      handlers?.onEvent({ type: "connected", streamId: "stream-1" });
+      handlers?.onEvent({
+        type: "connected",
+        streamId: "stream-1",
+        containers: ["app"],
+      });
       handlers?.onEvent(line("line-1"));
     });
     act(() => scheduledFrame?.(16));
@@ -165,7 +173,11 @@ describe("BottomDockProvider", () => {
     expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(17);
 
     expect(() => act(() => {
-      handlers?.onEvent({ type: "connected", streamId: "late-stream" });
+      handlers?.onEvent({
+        type: "connected",
+        streamId: "late-stream",
+        containers: ["app"],
+      });
       pendingFrame?.(16);
     })).not.toThrow();
     expect(rendered).toEqual(rendersBeforeUnmount);

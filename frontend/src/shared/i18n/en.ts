@@ -92,6 +92,7 @@ export const en = {
   "shell.dock.newLines": "{count} new lines",
   "shell.dock.endReason": "Stream ended: {reason}",
   "shell.dock.pods": "{count} pods",
+  "shell.dock.containers": "{count} containers",
   "shell.dock.truncated": "Line length was limited by the server",
   "shell.dock.search": "Search logs",
   "shell.dock.searchPlaceholder": "Search text or metadata",
